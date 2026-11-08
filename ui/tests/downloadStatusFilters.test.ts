@@ -21,3 +21,10 @@ test('proper download status subsets remain explicit API filters', () => {
     assert.ok(normalized)
     assert.deepEqual(normalized, Array.from(DEFAULT_DOWNLOAD_STATUS_FILTER).sort())
 })
+
+test('the default filter leaves out downloaded and locked downloads', () => {
+    for (const status of ['downloaded', 'redownloaded', 'locked']) {
+        assert.equal(DEFAULT_DOWNLOAD_STATUS_FILTER.has(status), false, status)
+    }
+    assert.ok(DEFAULT_DOWNLOAD_STATUS_FILTER.has('error'))
+})

@@ -6,6 +6,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.db.models import Video
+from backend.services.media_access import apply_source_access
 from backend.services.metadata_refresh import new_item_metadata_is_final
 from backend.services.sites import place_video
 from backend.services.thumbnails import is_own_thumbnail
@@ -31,7 +32,7 @@ def apply_video_details(video: Video, details: VideoDetails) -> None:
     video.author_url = details.author_url
     video.published_at = details.published_at
     video.drm_protected = details.drm_protected
-    video.needs_subscription = details.needs_subscription
+    apply_source_access(video, details.access)
     # Video thumbnails are landscape; they double as the page background. A frame VODLoft took stays.
     if not is_own_thumbnail(video.thumbnail_landscape_path):
         video.thumbnail_landscape_path = details.image_url

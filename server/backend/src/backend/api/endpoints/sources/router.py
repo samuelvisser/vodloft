@@ -10,9 +10,10 @@ from backend.app import db_session
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.site_cookies import (
-    SiteNotKnownError, list_site_authentication, remove_site_cookies, save_site_cookies,
+    SiteAuthentication, SiteNotKnownError, list_site_authentication, remove_site_cookies, save_site_cookies,
 )
 from backend.services.sites import SiteLinkError, add_site, site_of_link
+from backend.services.access_checks import access_changed
 from backend.services.site_settings import download_profile_defaults, offered_settings
 from backend.services.source_options import save_ytdlp_source_options, ytdlp_source_options
 from config.settings.site_settings import SiteSettingGroup
@@ -189,20 +190,30 @@ def save_site_cookie_file(site_key: str, body: CookiesAPIUpdate):
     """Store the Site's cookies of a cookies.txt file, which every Source uses for lookups and downloads on the Site."""
     with db_session() as s:
         try:
-            return SiteAuthenticationAPIRead.model_validate(save_site_cookies(s, site_key, body.content.encode()))
+            listing = save_site_cookies(s, site_key, body.content.encode())
         except SiteNotKnownError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _sign_in_changed(listing)
+    return SiteAuthenticationAPIRead.model_validate(listing)
 
 
 @router.delete("/sources/authentication/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
 def remove_site_cookie_file(site_key: str):
     with db_session() as s:
         try:
-            return SiteAuthenticationAPIRead.model_validate(remove_site_cookies(s, site_key))
+            listing = remove_site_cookies(s, site_key)
         except SiteNotKnownError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _sign_in_changed(listing)
+    return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+def _sign_in_changed(listing: SiteAuthentication) -> None:
+    # The new sign-in may give videos VODLoft could not download before.
+    for source_key in listing.cookie_source_keys:
+        access_changed(source_key)
 
 
 def _api_key_rejected(exc: ApiKeyRejected) -> HTTPException:

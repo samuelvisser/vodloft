@@ -8,7 +8,7 @@ from types import MappingProxyType
 from urllib.parse import urlsplit
 
 from ..contract import (
-    MIN_NEWEST_EPISODES, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Site, Source,
+    MIN_NEWEST_EPISODES, Access, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Site, Source,
     CookiesStatus, SourceProblem, VideoDetails,
 )
 from .. import ytdlp_runner as runner
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 _SEARCH_LIMIT = 20
 _EXPIRY_WARNING = timedelta(days=3)
+NPO_PLUS = Access("npo_plus", "NPO Plus", "Only NPO Plus subscribers can watch this.")
 
 
 def series_url(slug: str) -> str:
@@ -126,14 +127,13 @@ class NpoSource(Source):
     id = "npo"
     name = "NPO Start"
     domains = ("npo.nl",)
-    sites = (Site(account.SITE_KEY, "NPO Start", domains, cookies_help=(
+    sites = (Site(account.SITE_KEY, "NPO Start", domains, accesses=(NPO_PLUS,), cookies_help=(
         "Sign in with your NPO account to download programmes that need NPO Plus. Sign in on npo.nl in a "
         "private browser window, export a cookies.txt file for npo.nl, choose it here, and then close that "
         "window without signing out. VODLoft keeps the sign-in fresh by itself and never sees your password. "
         "Programmes protected by DRM still can't be downloaded."
     )),)
     features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
-    subscription_name = "NPO Plus"
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Series"})
 
     def collection_ref(self, url: str) -> str | None:
@@ -146,7 +146,7 @@ class NpoSource(Source):
     def _protected(self, program: dict) -> bool | None:
         """Whether the programme is protected by DRM, or None when NPO will not say right now,
         such as for a programme that is not out yet or needs a subscription."""
-        if needs_subscription(program) and not self.subscription_active:
+        if needs_subscription(program) and not self._subscribed:
             # NPO gives no stream to an anonymous player for it, so asking would only fail.
             return None
         product_id = program.get("productId")
@@ -172,7 +172,7 @@ class NpoSource(Source):
             author_url=series_url(series["slug"]) if series.get("slug") else None,
             published_at=_timestamp(program),
             drm_protected=drm_protected,
-            needs_subscription=needs_subscription(program),
+            access=NPO_PLUS.key if needs_subscription(program) else None,
             season=season,
             episode_number=_number(program.get("programKey")),
         )
@@ -223,7 +223,7 @@ class NpoSource(Source):
             collection_slug=series.get("slug") if in_series else None,
             collection_url=series_url(series["slug"]) if in_series else None,
             drm_protected=drm_protected,
-            needs_subscription=video.needs_subscription,
+            access=video.access,
         )
 
     def search(self, query: str) -> SearchResults:
@@ -278,7 +278,7 @@ class NpoSource(Source):
         rest is taken to match. Otherwise each programme is looked up. A clear
         programme that turns out to be protected is marked when it is downloaded.
         """
-        if not self.subscription_active:
+        if not self._subscribed:
             programs = [program for program in programs if not needs_subscription(program)]
         if not programs:
             return {}
@@ -325,8 +325,8 @@ class NpoSource(Source):
         parsed = parse_link(url)
         program = self._client.program_detail(parsed[1] if parsed else slug)
         premium = needs_subscription(program)
-        if premium and not self.subscription_active:
-            return Playback(url=program_url(program.get("slug") or slug), needs_subscription=True)
+        if premium and not self._subscribed:
+            return Playback(url=program_url(program.get("slug") or slug), access=NPO_PLUS.key)
         if not program.get("productId"):
             raise NpoError("NPO Start has no stream for this programme")
         try:
@@ -334,7 +334,7 @@ class NpoSource(Source):
         except NpoError:
             if premium:
                 # The sign-in no longer gives this account NPO Plus.
-                return Playback(url=program_url(program["slug"]), needs_subscription=True)
+                return Playback(url=program_url(program["slug"]), access=NPO_PLUS.key)
             raise
         stream = stream_link.get("stream") if isinstance(stream_link.get("stream"), dict) else {}
         stream_url = stream.get("streamURL")
@@ -349,12 +349,15 @@ class NpoSource(Source):
     @property
     def download_streams(self) -> int | None:
         # NPO Plus plays two streams at once; one is left for watching.
-        return 1 if self.subscription_active else None
+        return 1 if self._subscribed else None
 
     @property
-    def subscription_active(self) -> bool:
+    def _subscribed(self) -> bool:
         status = account.status(self._client)
         return status is not None and status.subscription
+
+    def has_access(self, key: str) -> bool | None:
+        return self._subscribed if key == NPO_PLUS.key else None
 
     def problems(self) -> list[SourceProblem]:
         status = account.status(self._client)

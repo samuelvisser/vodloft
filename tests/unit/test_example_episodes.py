@@ -220,6 +220,7 @@ def test_daily_wire_takes_the_show_page_and_fills_up_from_the_newest_season(monk
         duration: float = 60.0
         thumbnail_landscape_path: str | None = None
         background_image_path: str | None = None
+        available_for: tuple = ()
 
         @property
         def sharing_url(self):

@@ -43,8 +43,8 @@ export function activityLabel(stage: Pick<DownloadStage, 'code' | 'asset_id'>): 
 function terminal(status: string, label: string, detail: string, outcome?: ProgressPresentation['outcome']): DownloadPresentation {
     return {
         status, mode: 'terminal', active: false, percent: null, label, detail, outcome,
-        icon: faIcon('fass', outcome === 'success' ? 'circle-check' : outcome === 'error' ? 'triangle-exclamation' : 'download'),
-        canCancel: false, canRetry: status !== 'not_downloaded',
+        icon: faIcon('fass', outcome === 'success' ? 'circle-check' : outcome === 'error' ? 'triangle-exclamation' : outcome === 'locked' ? 'lock' : 'download'),
+        canCancel: false, canRetry: status !== 'not_downloaded' && status !== 'locked',
     }
 }
 
@@ -55,6 +55,22 @@ export function isPublicationDelayWait(operation?: TaskOperationRead): boolean {
     const main = execution?.stages.find(stage => stage.id === execution.main_activity)
     const wait = (main?.wait || operation.progressMeta?.wait_state) as DownloadWaitState | undefined
     return wait?.reason === 'publication_delay'
+}
+
+function formatCheckDate(value: Date | string): string {
+    return new Date(value).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})
+}
+
+/** Media the Source keeps for members or subscribers: VODLoft does not retry it, and it is not an error. */
+function lockedPresentation(download: MediaDownloadDomainViewRead): DownloadPresentation {
+    const check = download.accessCheckAt
+        ? ` VODLoft checks again on ${formatCheckDate(download.accessCheckAt)}.`
+        : ' VODLoft tries again when you ask it to check again, or sign in with that access.'
+    const detail = `${download.accessDescription ?? 'Only members or subscribers can watch this.'}${check}`
+    return {
+        ...terminal('locked', download.accessLabel ? `Locked: ${download.accessLabel}` : 'Locked', detail, 'locked'),
+        compactLabel: 'Locked',
+    }
 }
 
 export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, operation?: TaskOperationRead, starting = false): DownloadPresentation {
@@ -95,6 +111,7 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
             ...workingPresentation(label, `${label}.`, compact), secondary}
     }
     if (operation?.status === 'SUCCEEDED') return terminal(operation.context?.is_redownload ? 'redownloaded' : 'downloaded', 'Downloaded', 'All required outputs were published successfully.', 'success')
+    if (download?.accessLocked && download.artifactStatus !== 'available' && !operation?.status?.match(/SUCCEEDED|CANCELED/)) return lockedPresentation(download)
     if (operation?.status === 'FAILED' || operation?.status === 'PARTIAL') return terminal('error', 'Failed', operation.error || operation.message || 'Download failed.', 'error')
     if (operation?.status === 'CANCELED') return terminal('canceled', 'Canceled', 'The download was canceled.', 'canceled')
     // The live operation list holds a limited number of operations. After a

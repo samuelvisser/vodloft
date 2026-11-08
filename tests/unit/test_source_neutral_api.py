@@ -126,7 +126,7 @@ def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
     response = client.post("/api/resolve", json={"url": "stub.example/watch/clip-1"})
     assert response.status_code == 200
     body = response.json()
-    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "sitesLabel": None, "searchLabel": None, "kindNames": {}, "subscriptionName": None, "subscriptionActive": False,
+    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "sitesLabel": None, "searchLabel": None, "kindNames": {},
         "downloadOptions": {"videoHeights": [360, 480, 720, 1080, 1440, 2160, 4320], "audioOnly": True, "hlsBundle": False, "qualityChoices": True},
     }
     assert body["kind"] == "movie"
@@ -306,7 +306,7 @@ def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
         "results": [{
             "kind": "collection", "slug": "clips", "url": "https://stub.example/collection/clips", "title": "clip collection",
             "description": None, "imageUrl": None, "authorName": None, "collectionSlug": None, "collectionUrl": None,
-            "kindLabel": "Channel", "facts": ["3 videos"], "needsSubscription": False,
+            "kindLabel": "Channel", "facts": ["3 videos"], "access": None, "accessLabel": None,
         }],
         "notice": {
             "badge": "Search via stub", "text": "Answered by the stub", "tone": "neutral",

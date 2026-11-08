@@ -745,7 +745,7 @@ input[type="time"] {
 }
 .dw-card-title { font-size: 18px; font-weight: 800; line-height: 1.2; }
 .dw-card-author { color: var(--muted); font-weight: 600; }
-.dw-card-desc { font-size: 14px; opacity: 0.95; }
+.dw-card-desc { font-size: 14px; opacity: 0.95; overflow-wrap: anywhere; }
 
 /* 2-line clamp utility */
 .line-clamp-2 {
@@ -1396,6 +1396,7 @@ a.icon-btn { display: inline-block; text-decoration: none; }
 }
 .log-attempt-status-error { background: #fee2e2; color: #b91c1c; }
 .log-attempt-status-canceled { background: #fef3c7; color: #92400e; }
+.log-attempt-status-locked { background: #ede9fe; color: #6d28d9; }
 .log-attempt-status-downloaded, .log-attempt-status-redownloaded { background: #dcfce7; color: #15803d; }
 .log-attempt-type { color: var(--muted, #777); }
 .log-attempt-time { margin-left: auto; color: var(--muted, #777); }
@@ -1414,6 +1415,7 @@ a.icon-btn { display: inline-block; text-decoration: none; }
   .log-attempt-status { background: rgba(255,255,255,0.08); }
   .log-attempt-status-error { background: rgba(239,68,68,0.18); color: #fecaca; }
   .log-attempt-status-canceled { background: rgba(245,158,11,0.18); color: #fde68a; }
+  .log-attempt-status-locked { background: rgba(139,92,246,0.2); color: #ddd6fe; }
   .log-attempt-status-downloaded, .log-attempt-status-redownloaded { background: rgba(34,197,94,0.18); color: #86efac; }
 }
 
@@ -2000,6 +2002,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  overflow-wrap: anywhere;
 }
 .collection-summary-card > svg { color: var(--muted); }
 
@@ -2163,7 +2166,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .movie-detail-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 24px; }
 .movie-detail-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(290px, .8fr); gap: 24px; align-items: start; }
 .movie-description h2, .movie-download-panel h2, .movie-downloads h2, .movie-extras h2 { margin: 0 0 10px; font-size: 19px; }
-.movie-description > p { font-size: 15px; line-height: 1.65; color: var(--text); }
+.movie-description > p { font-size: 15px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }
 .movie-download-panel { padding: 18px; border: 1px solid rgba(100,116,139,.32); border-radius: 14px; background: rgba(148,163,184,.055); }
 .movie-download-panel > p { margin-bottom: 16px; font-size: 13px; line-height: 1.5; }
 .movie-download-panel label { display: block; margin-bottom: 6px; font-weight: 650; }
@@ -2335,6 +2338,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .add-media-preview-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .add-media-browse { margin-top: 32px; }

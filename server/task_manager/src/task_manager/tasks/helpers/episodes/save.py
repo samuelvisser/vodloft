@@ -9,12 +9,14 @@ from sqlalchemy.orm import Session
 from backend.db.model_mapping import update_database_fields, create_database_fields
 from backend.db.models import Collection, Season
 from backend.db.models.media_item import Episode
+from backend.services.media_access import apply_source_access
 from backend.services.metadata_refresh import site_refresh_offsets
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.helpers import generate_uuid
 from backend.types.media_types import MediaType
 from sources.dailywire.api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from sources.dailywire.api.records import DwEpisodeRecord
+from sources.dailywire.source import episode_access
 from .identifier import EpisodeWithIdentifier
 from .metadata import metadata_is_final_for_new_episode
 from .no_show import is_no_show_today_slug
@@ -95,6 +97,7 @@ def upsert_episode(
             ep.published_date,
             site_refresh_offsets(collection.site_key),
         )
+    apply_source_access(episode, episode_access(ep.available_for))
     s.flush()
     # The metadata refresh sweep follows a published episode whose metadata is not final.
     return episode

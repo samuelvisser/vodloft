@@ -18,6 +18,8 @@ from .service import (
     request_collection_download_delete,
     request_collection_episode_redownload,
     collection_check_suggestion,
+    count_collection_locked,
+    check_collection_locked,
 )
 from ...models.operations import (
     CollectionDeleteDownloadsOperationAccepted,
@@ -32,6 +34,7 @@ from ...models.collection import (
     CollectionAPICreate,
     CollectionAPIUpdate,
     CollectionCheckSuggestionAPIRead,
+    CollectionLockedAPIRead,
     CollectionSyncLogAPIRead,
     CollectionDeleteDownloadsAPIRequest,
     CollectionDownloadAllAPIRequest,
@@ -181,6 +184,28 @@ def collection_redownload_episodes(collection_slug: str, body: CollectionRedownl
         return result
 
     return run_write_transaction(work)
+
+
+@router.get(
+    "/{collection_slug}/locked",
+    dependencies=[requires(Area.LIBRARY, Level.VIEW)],
+    response_model=CollectionLockedAPIRead,
+)
+def collection_locked(collection_slug: str):
+    """How many episodes the Source refused for lack of an access, such as a membership."""
+    with db_session() as s:
+        return count_collection_locked(s, collection_slug)
+
+
+@router.post(
+    "/{collection_slug}/locked/check",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
+    response_model=CollectionLockedAPIRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def collection_locked_check(collection_slug: str):
+    """Check the locked episodes again now, as after gaining access, and download those the Source gives."""
+    return run_write_transaction(lambda s: check_collection_locked(s, collection_slug))
 
 
 @router.get("/{collection_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=CollectionAPIRead)

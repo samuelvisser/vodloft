@@ -6,7 +6,7 @@ from typing import Optional
 from pydantic import Field
 
 from backend.api.models.base import RequestBase
-from backend.api.models.source import SiteAPIRead, SourcedResponse
+from backend.api.models.source import LockableResponse, SiteAPIRead, SourcedResponse
 
 
 class VideoAPICreate(RequestBase):
@@ -17,7 +17,7 @@ class VideoAPICreate(RequestBase):
     source_key: str = Field(min_length=1)
 
 
-class VideoAPIRead(SourcedResponse):
+class VideoAPIRead(SourcedResponse, LockableResponse):
     """A single video added on its own, outside any collection."""
 
     id: int
@@ -27,7 +27,6 @@ class VideoAPIRead(SourcedResponse):
     description: Optional[str]
     duration: float
     drm_protected: bool = False
-    needs_subscription: bool = False
     added_by: Optional[str] = None
     """Who added it, with user accounts on."""
     sharing_url: str

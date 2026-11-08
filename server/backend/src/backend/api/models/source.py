@@ -4,9 +4,10 @@ from datetime import datetime
 from collections.abc import Iterable, Mapping
 from typing import Literal, Optional
 
-from pydantic import Field, computed_field, field_validator
+from pydantic import AliasChoices, AliasPath, Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.services.media_access import access_locked, site_access
 from backend.types.collection_types import CollectionType
 from config.settings.site_settings import AutoSubtitles, SponsorBlockAction, SponsorBlockCategory, UpgradeRepeat
 from sources import Feature, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source
@@ -34,6 +35,42 @@ class SourcedResponse(ResponseBase):
     @property
     def source_features(self) -> list[str]:
         return source_features(self.source_key)
+
+
+class LockableResponse(ResponseBase):
+    """Media that may need an access, such as a channel membership, and is locked without it."""
+
+    source_key: str
+    site_key: Optional[str] = Field(
+        default=None, exclude=True,
+        validation_alias=AliasChoices("site_key", AliasPath("collection", "site_key"), AliasPath("episode", "collection", "site_key")),
+    )
+    """The Site the media is on, which names the access."""
+    access: Optional[str] = None
+    """The key of the access the media needs; ``access_label`` is what its Site calls it."""
+    access_refused_at: Optional[datetime] = None
+    access_check_at: Optional[datetime] = None
+    """When VODLoft next checks whether the locked media opened up."""
+
+    @computed_field
+    @property
+    def access_locked(self) -> bool:
+        """VODLoft cannot download the media without the access, so it does not try."""
+        return access_locked(self.source_key, self.access, self.access_refused_at)
+
+    @computed_field
+    @property
+    def access_label(self) -> Optional[str]:
+        """What the media's Site calls the access, such as Members only or NPO Plus."""
+        found = site_access(self.source_key, self.site_key, self.access)
+        return found.label if found is not None else None
+
+    @computed_field
+    @property
+    def access_description(self) -> Optional[str]:
+        """One sentence from the media's Site on who can watch it, such as "Only NPO Plus subscribers can watch this."."""
+        found = site_access(self.source_key, self.site_key, self.access)
+        return found.description if found is not None else None
 
 
 class DownloadOptionsAPIRead(ResponseBase):
@@ -73,8 +110,6 @@ class SourceAPIRead(ResponseBase):
     sites_label: Optional[str] = None
     search_label: Optional[str] = None
     kind_names: dict[str, str] = {}
-    subscription_name: Optional[str] = None
-    subscription_active: bool = False
     download_options: DownloadOptionsAPIRead
 
     @field_validator("features", mode="before")
@@ -288,7 +323,14 @@ class ResolvedLinkAPIRead(ResponseBase):
     collection_url: Optional[str] = None
     site: Optional[str] = None
     drm_protected: bool = False
-    needs_subscription: bool = False
+    access: Optional[str] = None
+    """The key of the access the video needs."""
+    access_label: Optional[str] = None
+    """What the link's Site calls that access, such as Members only."""
+    access_description: Optional[str] = None
+    """One sentence from the link's Site on who can watch the video."""
+    access_locked: bool = False
+    """VODLoft does not have that access, so it cannot download the video."""
     preview: ResolvedLinkPreviewAPIRead
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
@@ -306,7 +348,9 @@ class SearchResultAPIRead(ResponseBase):
     collection_url: Optional[str] = None
     kind_label: Optional[str] = None
     facts: list[str] = []
-    needs_subscription: bool = False
+    access: Optional[str] = None
+    access_label: Optional[str] = None
+    """What the result's Site calls the access it needs, such as Members only."""
 
 
 class SearchNoticeAPIRead(ResponseBase):

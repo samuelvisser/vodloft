@@ -52,6 +52,33 @@ export default function DownloadLogDialog({row, onClose}: Props) {
     const qc = useQueryClient()
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [deleteBusy, setDeleteBusy] = useState(false)
+    const [checkBusy, setCheckBusy] = useState(false)
+
+    // Locked media: the user may have gained access, or the video may be open for everyone now.
+    const checkAgain = async () => {
+        if (!row || checkBusy) return
+        setCheckBusy(true)
+        try {
+            const response = await fetch(`${apiUrl()}/media-downloads/${row.id}/check-access`, {
+                method: 'POST',
+                credentials: 'include',
+            })
+            if (!response.ok) {
+                const {error} = await getErrorMessageFromResponse(response)
+                toast.error(error || 'Could not check the download again')
+                return
+            }
+            toast.success('VODLoft checks it again and downloads it when it can')
+            void qc.invalidateQueries({queryKey: ['mediaDownloadHistory', row.id]})
+            for (const queryKey of [['mediaDownloads'], ['mediaDownloadsView'], ['episodeDownloads'], ['videoDownloads']]) {
+                void qc.invalidateQueries({queryKey})
+            }
+        } catch {
+            toast.error('Could not check the download again')
+        } finally {
+            setCheckBusy(false)
+        }
+    }
 
     const deleteDownload = async () => {
         if (!row || deleteBusy) return
@@ -196,6 +223,18 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                         >
                             Delete download
                         </button>
+                        {row.accessLocked && row.accessRefusedAt && (
+                            <button
+                                type="button"
+                                className="btn"
+                                disabled={checkBusy || deleteBusy}
+                                onClick={() => void checkAgain()}
+                                title="Gained access? VODLoft tries to download it once more."
+                            >
+                                <FontAwesomeIcon icon={faIcon('fass', checkBusy ? 'spinner' : 'unlock')} spin={checkBusy} aria-hidden/>
+                                {' '}Check again
+                            </button>
+                        )}
                         <button type="button" className="btn" disabled={deleteBusy} onClick={onClose}>Close</button>
                     </div>
                 </div>

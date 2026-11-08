@@ -32,6 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.models import Collection, DownloadProfile, DownloadProfileFilter, Episode
+from backend.services.media_access import AccessLocks
 from backend.services.regex_check import PatternError, compile_pattern, search, split_inline_ignore_case
 from backend.types.download_profile_types import (
     DATE_FIELDS,
@@ -42,7 +43,6 @@ from backend.types.download_profile_types import (
 )
 from backend.types.episode_types import EpisodePublishStatus
 from config import get_settings
-from sources import UnknownSourceError, get_source
 
 
 class EpisodeFilter(Protocol):
@@ -156,14 +156,7 @@ def _in_date_line(item: EpisodeFilter, episodes: Sequence[Episode], now: datetim
     return {episode.id for episode in episodes}
 
 
-def _subscription_active(source_key: str) -> bool:
-    try:
-        return get_source(source_key).subscription_active
-    except UnknownSourceError:
-        return False
-
-
-def _available(selection: EpisodeSelection, episode: Episode, subscribed: bool) -> bool:
+def _available(selection: EpisodeSelection, episode: Episode, locks: AccessLocks) -> bool:
     eligible = {EpisodePublishStatus.PUBLISHED_FINAL.value}
     if selection.download_with_countdown:
         eligible.add(EpisodePublishStatus.PUBLISHED_PRELIMINARY.value)
@@ -172,8 +165,8 @@ def _available(selection: EpisodeSelection, episode: Episode, subscribed: bool) 
         # Media protected by DRM cannot be downloaded, nor can media the Source no longer has.
         and not episode.drm_protected
         and not episode.removed_from_source
-        # Nor can media that needs a subscription VODLoft is not signed in with.
-        and (subscribed or not episode.needs_subscription)
+        # Nor can media locked behind an access VODLoft does not have, such as a channel membership.
+        and not locks.locked(episode)
     )
 
 
@@ -227,13 +220,13 @@ def evaluate(
     """Walk the filters over the Collection's indexed episodes."""
     now = now or _utc_now()
     episodes = collection_episodes(s, selection.collection.id) if episodes is None else episodes
-    subscribed = _subscription_active(selection.collection.source_key)
+    locks = AccessLocks()
     filters = list(selection.filters)
 
     left_out_by: dict[int, str] = {}
     remaining: list[Episode] = []
     for episode in episodes:
-        if _available(selection, episode, subscribed):
+        if _available(selection, episode, locks):
             remaining.append(episode)
         else:
             left_out_by[episode.id] = "unavailable"

@@ -101,6 +101,14 @@ def _presentation(entry: MediaDownloadHistory) -> tuple[str, str, str | None]:
             "error",
             str(metadata.get("error")) if metadata.get("error") else None,
         )
+    if action == MediaDownloadHistoryAction.LOCKED:
+        return (
+            str(metadata.get("access_label") or "Locked"),
+            "locked",
+            str(metadata.get("error")) if metadata.get("error") else None,
+        )
+    if action == MediaDownloadHistoryAction.ACCESS_CHECK_REQUESTED:
+        return "Check for access requested", "pending", None
     if action == MediaDownloadHistoryAction.CANCEL_REQUESTED:
         reason = metadata.get("reason")
         return "Cancellation requested", "canceled", str(reason) if reason else None

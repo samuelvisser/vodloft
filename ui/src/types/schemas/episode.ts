@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {EpisodePublishStatus} from "../episode";
 import {ApiDateTimeSchema} from "./datetime";
-import {SourcedFields} from "./source";
+import {LockableFields, SourcedFields} from "./source";
 
 
 const EpisodeBaseSchema = z.object({
@@ -43,7 +43,7 @@ export const EpisodeReadSchema = z.looseObject({
     title: z.string(),
     publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
     drmProtected: z.boolean(),
-    needsSubscription: z.boolean().optional().default(false),
+    ...LockableFields,
     removedFromSource: z.boolean(),
     earlyDeleteAvailable: z.boolean().optional().default(false),
     downloadDelayPassed: z.boolean(),
@@ -80,7 +80,7 @@ export const EpisodeReadViewSchema = z.object({
     title: z.string(),
     publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
     drmProtected: z.boolean(),
-    needsSubscription: z.boolean().optional().default(false),
+    ...LockableFields,
     removedFromSource: z.boolean(),
     thumbnailLandscapePath: z.string().nullable().optional(),
     thumbnailPortraitPath: z.string().nullable().optional(),

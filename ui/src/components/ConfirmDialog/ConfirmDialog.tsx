@@ -1,7 +1,8 @@
 import type {ReactNode} from 'react'
-import {useId} from 'react'
+import {useEffect, useId, useRef, useState} from 'react'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {faIcon} from '../../icons/faIcon'
 
 import './ConfirmDialog.css'
 
@@ -51,12 +52,35 @@ export default function ConfirmDialog({
     const titleId = `confirm-dialog-title-${autoId}`
     const descriptionId = `confirm-dialog-description-${autoId}`
 
+    // While a button's async onClick is still running, every button is disabled and the
+    // pressed one shows a spinner, so a slow request can't be started twice.
+    const [pending, setPending] = useState<'confirm' | 'secondary' | 'cancel' | null>(null)
+    const pendingRef = useRef(false)
+    const mountedRef = useRef(true)
+    useEffect(() => () => {
+        mountedRef.current = false
+    }, [])
+
     if (!open) return null
 
+    const run = (which: 'confirm' | 'secondary' | 'cancel', onClick: () => void | Promise<void>) => {
+        if (pendingRef.current) return
+        const result = onClick()
+        if (!(result instanceof Promise)) return
+        pendingRef.current = true
+        setPending(which)
+        void result.finally(() => {
+            pendingRef.current = false
+            if (mountedRef.current) setPending(null)
+        })
+    }
+
+    const busy = pending !== null
     const onOverlayClick = () => {
-        if (dismissOnOverlayClick) onDismiss()
+        if (dismissOnOverlayClick && !busy) onDismiss()
     }
     const onCancel = cancelButton?.onClick ?? onDismiss
+    const spinnerIcon = faIcon('fass', 'spinner')
 
     return (
         <div className="modal-overlay" role="presentation" onClick={onOverlayClick}>
@@ -86,10 +110,12 @@ export default function ConfirmDialog({
                         <button
                             type="button"
                             className={cancelButton?.className ?? 'btn'}
-                            disabled={cancelButton?.disabled}
-                            onClick={() => void onCancel()}
+                            disabled={cancelButton?.disabled || busy}
+                            onClick={() => run('cancel', onCancel)}
                         >
-                            {cancelButton?.icon && (
+                            {pending === 'cancel' ? (
+                                <FontAwesomeIcon icon={spinnerIcon} spin aria-hidden="true"/>
+                            ) : cancelButton?.icon && (
                                 <FontAwesomeIcon
                                     icon={cancelButton.icon}
                                     spin={cancelButton.iconSpin}
@@ -103,10 +129,12 @@ export default function ConfirmDialog({
                         <button
                             type="button"
                             className={secondaryButton.className ?? 'btn'}
-                            disabled={secondaryButton.disabled}
-                            onClick={() => void secondaryButton.onClick()}
+                            disabled={secondaryButton.disabled || busy}
+                            onClick={() => run('secondary', secondaryButton.onClick)}
                         >
-                            {secondaryButton.icon && (
+                            {pending === 'secondary' ? (
+                                <FontAwesomeIcon icon={spinnerIcon} spin aria-hidden="true"/>
+                            ) : secondaryButton.icon && (
                                 <FontAwesomeIcon
                                     icon={secondaryButton.icon}
                                     spin={secondaryButton.iconSpin}
@@ -119,10 +147,13 @@ export default function ConfirmDialog({
                     <button
                         type="button"
                         className={confirmButton.className ?? 'btn btn-primary'}
-                        disabled={confirmButton.disabled}
-                        onClick={() => void confirmButton.onClick()}
+                        disabled={confirmButton.disabled || busy}
+                        aria-busy={pending === 'confirm' || undefined}
+                        onClick={() => run('confirm', confirmButton.onClick)}
                     >
-                        {confirmButton.icon && (
+                        {pending === 'confirm' ? (
+                            <FontAwesomeIcon icon={spinnerIcon} spin aria-hidden="true"/>
+                        ) : confirmButton.icon && (
                             <FontAwesomeIcon
                                 icon={confirmButton.icon}
                                 spin={confirmButton.iconSpin}

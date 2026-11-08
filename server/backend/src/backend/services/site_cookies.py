@@ -43,8 +43,9 @@ class SiteAuthentication:
     domains: tuple[str, ...]
     sign_in_source_key: Optional[str]
     """The Source made for the Site that has a sign-in of its own, such as The Daily Wire's."""
-    cookie_source_names: tuple[str, ...]
+    cookie_source_keys: tuple[str, ...]
     """The Sources that sign in on the Site with its cookies file."""
+    cookie_source_names: tuple[str, ...]
     cookies_help: Optional[str]
     cookie_count: int
     """How many cookies the Site's cookies file holds; 0 without one."""
@@ -128,6 +129,7 @@ def _authentication(site: Site, domains: tuple[str, ...]) -> SiteAuthentication:
     )
     return SiteAuthentication(
         key=site.key, name=site.name, domains=domains, sign_in_source_key=owner.id if owner is not None else None,
+        cookie_source_keys=tuple(source.id for source in sources),
         cookie_source_names=tuple(source.name for source in sources), cookies_help=site.cookies_help,
         cookie_count=count, cookies_status=_status(site.key, sources) if count else None,
         api_key_source_key=api_key.id if api_key is not None else None,

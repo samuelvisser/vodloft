@@ -19,6 +19,8 @@ from sqlalchemy.sql.selectable import Subquery
 
 from backend.db.json_sql import json_array_items
 from backend.db.models import MediaDownloadBase
+from backend.db.models.media_item import MediaItemBase
+from backend.services.media_access import locked_clause
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from task_manager.scheduler.db import (
     TaskDefinition,
@@ -58,6 +60,8 @@ _BULK_RETRYABLE_STATUSES = (
     "corrupted",
     "canceled",
 )
+_MEDIA = aliased(MediaItemBase, name="download_media")
+"""The download's media, for whether a Source locked it."""
 _CANCELABLE_STATUSES = (
     "pending",
     "preparing",
@@ -294,6 +298,8 @@ def _persistent_download_status():
             "corrupted",
         ),
         (TaskRun.status == TaskStatus.RUNNING, "preparing"),
+        # Media the Source keeps for members or subscribers is not an error.
+        (locked_clause(_MEDIA), "locked"),
         (TaskRun.status == TaskStatus.FAILED, "error"),
         (
             or_(
@@ -362,6 +368,7 @@ def _download_status_source() -> Subquery:
             _awaiting_admission(active_operation),
             _effective_download_status(active_operation),
         )
+        .outerjoin(_MEDIA, _MEDIA.id == MediaDownloadBase.media_item_id)
         .outerjoin(
             latest_run_ids,
             latest_run_ids.c.media_download_id == MediaDownloadBase.id,
@@ -482,7 +489,7 @@ def _workflow_terminal_at(status_source):
             ),
         ),
         (
-            status_source.c.status.in_(("error", "canceled")),
+            status_source.c.status.in_(("error", "locked", "canceled")),
             func.coalesce(
                 status_source.c.run_finished_at,
                 status_source.c.updated_at,

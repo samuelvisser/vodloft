@@ -9,7 +9,7 @@ export default function DownloadProgressStatus({presentation: state, compact = f
     presentation: DownloadPresentation; compact?: boolean; details?: boolean; labelOverride?: string
 }) {
     const label = labelOverride ?? (compact ? state.compactLabel || state.label : state.label)
-    return <span className={`download-progress download-progress-status${compact ? ' is-compact' : ''}`}>
+    return <span className={`download-progress download-progress-status${compact ? ' is-compact' : ''}${state.outcome === 'locked' ? ' is-locked' : ''}`}>
         <span className="download-progress-heading">
             <span className="download-progress-label" role="status" aria-live={state.mode === 'determinate' ? 'off' : 'polite'}><FontAwesomeIcon icon={state.icon} aria-hidden="true"/> {label}</span>
             {details && <ProgressExplanation detail={state.detail + (state.secondary ? ` ${state.secondary}.` : '')}/>}

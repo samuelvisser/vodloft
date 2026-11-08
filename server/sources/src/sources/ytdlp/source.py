@@ -398,6 +398,30 @@ _SIGN_IN_ERRORS = (
     "--cookies", "sign in to confirm", "login required", "login_required", "members-only", "members only",
     "join this channel", "registered users", "private video", "age-restricted",
 )
+# What yt-dlp says about a video that only the channel's members can watch.
+_MEMBERS_ERRORS = ("join this channel", "members-only", "members only", "available to this channel's members")
+_ACCESS_BY_AVAILABILITY = {"subscriber_only": sites.MEMBERS_KEY, "premium_only": sites.PREMIUM_KEY}
+_OPEN_AVAILABILITIES = frozenset({"public", "unlisted"})
+
+
+def _access(info: dict) -> str | None:
+    """yt-dlp marks a video only the channel's members can watch as ``subscriber_only``, and one only
+    the site's paying subscribers can watch as ``premium_only``."""
+    return _ACCESS_BY_AVAILABILITY.get(info.get("availability"))
+
+
+def _listed_open(entry: dict) -> bool:
+    """Whether a listing says anyone may watch the video.
+
+    YouTube marks every video in a listing that only members or paying
+    subscribers can watch, so there a video without that mark is open. Other
+    sites are only open when yt-dlp says so.
+    """
+    if entry.get("availability") in _OPEN_AVAILABILITIES:
+        return True
+    extractor = str(entry.get("ie_key") or entry.get("extractor_key") or "").lower()
+    return extractor.startswith("youtube") and _access(entry) is None
+
 
 class YtDlpSource(Source):
     """Every site yt-dlp supports, and any page with a plain video on it."""
@@ -563,6 +587,7 @@ class YtDlpSource(Source):
             author_name=info.get("uploader") or info.get("channel"),
             site=site,
             drm_protected=_drm_protected(info),
+            access=_access(info),
         )
 
     def video_details(self, url: str) -> VideoDetails:
@@ -610,6 +635,7 @@ class YtDlpSource(Source):
             author_url=info.get("uploader_url") or info.get("channel_url"),
             published_at=_published_at(info),
             drm_protected=_drm_protected(info),
+            access=_access(info),
             tag=_tag(info, url),
             publish_status=_publish_status(info),
             scheduled_at=_scheduled_at(info),
@@ -644,6 +670,11 @@ class YtDlpSource(Source):
 
         The API lists all of a channel's uploads in seconds. yt-dlp lists the
         Videos, Shorts and Live tabs and looks every new video up on its own.
+
+        A channel's uploads playlist leaves out the videos only its members can
+        watch, so the channel's tabs are listed with yt-dlp after the API too,
+        which costs no quota. What that finds is asked of the API first, which
+        still describes such a video by its ID, and only the rest is looked up.
         """
         catalogue = self._catalogue(adding=not known) if mapping.youtube_ref(collection_url(url)) else None
         if catalogue is not None:
@@ -655,7 +686,23 @@ class YtDlpSource(Source):
                 ids = None
             if ids is not None:
                 logger.info("Listing %s through the YouTube API", url)
-                yield from self._details_from_api(catalogue, [video_id for video_id in ids if video_id not in known])
+                listed = set(known)
+                for details in self._details_from_api(catalogue, [video_id for video_id in ids if video_id not in known]):
+                    listed.add(details.slug)
+                    yield details
+                if ref.kind != "playlist":
+                    try:
+                        # Also what the API listed but would not give details of, which yt-dlp may still see.
+                        entries = self._unseen_entries(url, frozenset(listed))
+                    except runner.YtDlpError as exc:
+                        logger.info("Not listing %s's members-only videos: %s", url, exc)
+                        return
+                    for details in self._details_from_api(catalogue, list(entries)):
+                        entry = entries.pop(details.slug, {})
+                        yield details if details.access else replace(details, access=_access(entry))
+                    for slug, entry in entries.items():
+                        if details := self._from_entry(entry):
+                            yield details
                 return
         yield from self._list_with_ytdlp(url, known)
 
@@ -735,10 +782,24 @@ class YtDlpSource(Source):
         return ItemRefresh(details=details, removed=frozenset(removed))
 
     def _list_with_ytdlp(self, url: str, known: frozenset[str]) -> Iterator[VideoDetails]:
-        seen = set(known)
+        for entry in self._unseen_entries(url, known).values():
+            if details := self._from_entry(entry):
+                yield details
+
+    @staticmethod
+    def _unseen_entries(url: str, known: frozenset[str]) -> dict[str, dict]:
+        """The collection's listed videos VODLoft does not know yet, by slug, in the listing's order.
+
+        YouTube's listing only says how long ago a video came out, which yt-dlp
+        turns into a date when asked: the only date a video it cannot look up has.
+        """
+        entries: dict[str, dict] = {}
         for index, listing_url in enumerate(_listing_urls(url)):
             try:
-                listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
+                listing = runner.run_json(
+                    "--flat-playlist", "--extractor-args", "youtubetab:approximate_date", listing_url,
+                    cookies=sites.cookies_for(listing_url),
+                )
             except runner.YtDlpError as exc:
                 if index == 0:
                     raise
@@ -747,14 +808,20 @@ class YtDlpSource(Source):
             for entry in listing.get("entries") or []:
                 if not isinstance(entry, dict) or not entry.get("id") or entry.get("title") in _UNAVAILABLE_TITLES:
                     continue
-                if video_slug(entry) in seen:
-                    continue
-                entry_url = entry.get("url") or entry.get("webpage_url")
-                if not entry_url:
-                    continue
-                seen.add(video_slug(entry))
-                if details := self._look_up(entry_url):
-                    yield details
+                if (entry.get("url") or entry.get("webpage_url")) and video_slug(entry) not in known:
+                    entries.setdefault(video_slug(entry), entry)
+        return entries
+
+    def _from_entry(self, entry: dict) -> VideoDetails | None:
+        """A listed video, looked up with yt-dlp."""
+        entry_url = entry.get("url") or entry.get("webpage_url")
+        if details := self._look_up(entry_url):
+            return details
+        if _access(entry):
+            # yt-dlp cannot look up a members-only or premium video without the right cookies,
+            # so it is kept from the listing, locked until VODLoft can download it.
+            return self._video(entry, entry_url)
+        return None
 
     def latest_items(self, url: str) -> list[ItemRef]:
         """A YouTube collection's 50 newest videos through the API, else its RSS feed's 15, else yt-dlp's listing."""
@@ -842,12 +909,17 @@ class YtDlpSource(Source):
     def refresh_items(self, url: str, items: Sequence[ItemRef]) -> ItemRefresh:
         """YouTube videos through the API, 50 a unit; the rest, or a batch the API could not answer, from yt-dlp's listing.
 
-        Only the API can say a video is gone: it leaves deleted and private
-        videos out of its answer. A video missing from yt-dlp's listing may
+        A video the API leaves out may be gone, and yt-dlp is asked whether it is
+        (see ``_missing_from_api``). A video missing from yt-dlp's listing may
         just be on a tab or page it did not list, so it stays as it is.
+
+        The API cannot tell a members-only video, so the listing is read for
+        those too: it marks the videos only members or paying subscribers can
+        watch, and a video it marks keeps that access in the API's details.
         """
         details: dict[str, VideoDetails] = {}
-        removed: set[str] = set()
+        missing: list[ItemRef] = []
+        listing, listed_open = self._refresh_from_listing(url, frozenset(item.slug for item in items))
         youtube = [item.slug for item in items if _is_youtube(item.url)]
         catalogue = self._catalogue(adding=False) if youtube else None
         listed = [item.slug for item in items] if catalogue is None else [item.slug for item in items if not _is_youtube(item.url)]
@@ -863,21 +935,59 @@ class YtDlpSource(Source):
                 for video_id in batch:
                     if video_id in found:
                         details[video_id] = mapping.video(found[video_id], short=False)
+                        if (listed_video := listing.get(video_id)) is not None and listed_video.access is not None:
+                            details[video_id] = replace(details[video_id], access=listed_video.access)
                     else:
-                        removed.add(video_id)
-        if listed:
-            details.update(self._refresh_from_listing(url, frozenset(listed)))
-        return ItemRefresh(details=details, removed=frozenset(removed))
+                        missing.append(ItemRef(video_id, mapping.video_url(video_id)))
+        details.update((slug, listing[slug]) for slug in listed if slug in listing)
+        checked = self._missing_from_api(missing)
+        return ItemRefresh(
+            details=details | checked.details, removed=checked.removed, refused=checked.refused,
+            open=listed_open | checked.open,
+        )
+
+    def _missing_from_api(self, items: Sequence[ItemRef]) -> ItemRefresh:
+        """What yt-dlp says about videos the YouTube API left out of its answer.
+
+        The API leaves deleted and private videos out, but not only those: it may
+        also keep back what only a channel's members can watch. So a video is only
+        gone when yt-dlp says so too. A video yt-dlp refuses for lack of a
+        membership is refused, and one it can look up is still there.
+        """
+        details: dict[str, VideoDetails] = {}
+        removed: set[str] = set()
+        refused: dict[str, str] = {}
+        for ref in items:
+            try:
+                details[ref.slug] = self._video(self._pending_info(ref.url), ref.url)
+            except runner.YtDlpError as exc:
+                if is_gone_message(str(exc)):
+                    removed.add(ref.slug)
+                elif (key := self.refused_access(str(exc))) is not None:
+                    refused[ref.slug] = key
+                else:
+                    logger.info("Could not check %s, which the YouTube API left out: %s", ref.url, exc)
+        return ItemRefresh(
+            details=details, removed=frozenset(removed), refused=refused,
+            open=frozenset(slug for slug, found in details.items() if found.access is None),
+        )
 
     def refresh_metadata(self, items: Sequence[ItemRef]) -> ItemRefresh:
         """YouTube videos through the API, 50 a unit; the rest, or a batch the API could not answer, one by one with yt-dlp.
 
-        Only the API can say a video is gone: it leaves deleted and private videos
-        out of its answer. A yt-dlp lookup that fails may just have been refused
-        this time, so the video stays as it is.
+        A video the API leaves out may be gone, and yt-dlp is asked whether it is
+        (see ``_missing_from_api``). Any other yt-dlp lookup that fails may just have
+        been refused this time, so the video stays as it is, unless yt-dlp says it is
+        for members.
+
+        The API cannot tell a members-only video, so a video it answered is looked
+        up with yt-dlp as well, for the access it needs.
         """
         details: dict[str, VideoDetails] = {}
-        removed: set[str] = set()
+        missing: list[ItemRef] = []
+        refused: dict[str, str] = {}
+        # What yt-dlp could look up and says needs no access.
+        looked_open: set[str] = set()
         youtube = [item for item in items if _is_youtube(item.url)]
         catalogue = self._catalogue(adding=False) if youtube else None
         looked_up = [item for item in items if catalogue is None or item not in youtube]
@@ -893,21 +1003,45 @@ class YtDlpSource(Source):
                 for ref in batch:
                     item = found.get(ref.slug)
                     if item is None:
-                        removed.add(ref.slug)
+                        missing.append(ref)
                     elif not mapping.is_pending(item):
                         details[ref.slug] = mapping.video(item, short=False)
+                        try:
+                            access = _access(self._pending_info(ref.url))
+                        except runner.YtDlpError as exc:
+                            if (key := self.refused_access(str(exc))) is not None:
+                                refused[ref.slug] = key
+                            continue
+                        if access is not None:
+                            details[ref.slug] = replace(details[ref.slug], access=access)
+                        else:
+                            looked_open.add(ref.slug)
         for ref in looked_up:
-            if found_details := self._look_up(ref.url):
-                details[ref.slug] = found_details
-        return ItemRefresh(details=details, removed=frozenset(removed))
+            try:
+                details[ref.slug] = self._video(self._pending_info(ref.url), ref.url)
+                if details[ref.slug].access is None:
+                    looked_open.add(ref.slug)
+            except runner.YtDlpError as exc:
+                if (key := self.refused_access(str(exc))) is not None:
+                    refused[ref.slug] = key
+                else:
+                    logger.info("Skipping %s for now: %s", ref.url, exc)
+        checked = self._missing_from_api(missing)
+        return ItemRefresh(
+            details=details | checked.details, removed=checked.removed, refused=refused | checked.refused,
+            open=frozenset(looked_open) | checked.open,
+        )
 
-    def _refresh_from_listing(self, url: str, wanted: frozenset[str]) -> dict[str, VideoDetails]:
+    def _refresh_from_listing(self, url: str, wanted: frozenset[str]) -> tuple[dict[str, VideoDetails], frozenset[str]]:
         """Titles from the collection's flat listing, which takes one request a page instead of one a video.
 
         The listing has no reliable description or picture, so those are kept. It
-        has the length of most YouTube videos, and the uploader when the site says.
+        has the length of most YouTube videos, the uploader when the site says, and
+        the badge YouTube shows on a video only members or paying subscribers can watch.
+        Returns those details, and which of the videos the listing says are open.
         """
         details: dict[str, VideoDetails] = {}
+        listed_open: set[str] = set()
         for listing_url in _listing_urls(url):
             try:
                 listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
@@ -925,8 +1059,11 @@ class YtDlpSource(Source):
                         slug=slug, url=entry_url, title=entry["title"], description=entry.get("description") or None,
                         duration=float(duration) if isinstance(duration, (int, float)) and duration > 0 else None,
                         author_name=entry.get("uploader") or entry.get("channel") or None,
+                        access=_access(entry),
                     ))
-        return details
+                    if _listed_open(entry):
+                        listed_open.add(slug)
+        return details, frozenset(listed_open)
 
     def search(self, query: str) -> SearchResults:
         """YouTube through the API while the search share has room, else through yt-dlp."""
@@ -997,6 +1134,10 @@ class YtDlpSource(Source):
     def needs_cookies(self, error: str) -> bool:
         text = error.lower()
         return any(sign in text for sign in _SIGN_IN_ERRORS)
+
+    def refused_access(self, error: str) -> str | None:
+        text = error.lower()
+        return sites.MEMBERS_KEY if any(sign in text for sign in _MEMBERS_ERRORS) else None
 
     def program_status(self) -> ProgramStatus:
         last_update_at, last_update_error = runner.last_update()

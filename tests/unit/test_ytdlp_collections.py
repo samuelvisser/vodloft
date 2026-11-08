@@ -258,7 +258,7 @@ def test_a_canceled_scan_stops_between_lookups_and_saves_nothing(lookups, sessio
 
     answers, calls = lookups
     collection = _collection(session, source_key="ytdlp")
-    answers[("--flat-playlist", collection.sharing_url)] = {"_type": "playlist", "entries": [
+    answers[("--flat-playlist", "--extractor-args", "youtubetab:approximate_date", collection.sharing_url)] = {"_type": "playlist", "entries": [
         {"id": slug, "ie_key": "Youtube", "url": f"https://www.youtube.com/watch?v={slug}"} for slug in ("v1", "v2")
     ]}
     for slug in ("v1", "v2"):
@@ -380,7 +380,7 @@ def lookups(monkeypatch):
 def test_ytdlp_lists_new_playlist_videos_and_skips_unavailable_ones(lookups):
     answers, calls = lookups
     playlist = "https://www.youtube.com/playlist?list=PL1"
-    answers[("--flat-playlist", playlist)] = {"_type": "playlist", "entries": [
+    answers[("--flat-playlist", "--extractor-args", "youtubetab:approximate_date", playlist)] = {"_type": "playlist", "entries": [
         {"id": "known1", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=known1"},
         {"id": "new1", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=new1"},
         {"id": "priv", "ie_key": "Youtube", "title": "[Private video]", "url": "https://www.youtube.com/watch?v=priv"},

@@ -18,7 +18,7 @@ import {getErrorMessageFromResponse} from '../../utils/helpers'
 import '../episode/EpisodePage.css'
 import {siteName} from '../../lib/siteName'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
-import {SubscriptionBadge, SubscriptionNotice, useSubscriptionLocked} from '../../components/common/NeedsSubscription'
+import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
 import {isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
 
@@ -39,7 +39,6 @@ export default function VideoPage() {
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
     const {data: downloads, error: downloadsError, hasDomainData: hasDownloadState} = useVideoDownloads(videoId)
     const sourceName = useSourceLookup().name(video?.sourceKey)
-    const subscriptionLocked = useSubscriptionLocked(video?.sourceKey, video?.needsSubscription)
     const [refreshing, setRefreshing] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [deleting, setDeleting] = useState(false)
@@ -65,8 +64,8 @@ export default function VideoPage() {
     const downloadByProfileId = new Map<number, MediaDownloadViewRead>(
         (downloads ?? []).map((download) => [download.localMediaProfileId, download]),
     )
-    // Media protected by DRM or only given to subscribers cannot be downloaded.
-    const locked = video.drmProtected || subscriptionLocked
+    // Media protected by DRM or only given to members or subscribers cannot be downloaded.
+    const locked = video.drmProtected || video.accessLocked
     const downloadStateError = (profiles === undefined ? profilesError : null)
         ?? (!hasDownloadState ? downloadsError : null)
     const cover = toImageUrl(video.thumbnailLandscapePath || video.backgroundImagePath)
@@ -162,7 +161,7 @@ export default function VideoPage() {
                     <div className="episode-summary" aria-label="Video metadata">
                         <SourceBadge sourceKey={video.sourceKey}/>
                         {video.drmProtected && <DrmBadge/>}
-                        {video.needsSubscription && <SubscriptionBadge sourceKey={video.sourceKey}/>}
+                        <ItemAccessBadge item={video}/>
                         {video.authorName && (
                             <>
                                 <span className="episode-summary-separator" aria-hidden="true"/>
@@ -219,7 +218,7 @@ export default function VideoPage() {
                 <div className="episode-downloads" aria-labelledby="video-downloads-title">
                     <h2 id="video-downloads-title">Downloads</h2>
                     {video.drmProtected && <DrmNotice/>}
-                    {!video.drmProtected && subscriptionLocked && <SubscriptionNotice sourceKey={video.sourceKey}/>}
+                    {!video.drmProtected && video.accessLocked && <AccessNotice item={video}/>}
                     {!locked && downloadStateError && (
                         <div className="form-error-card" role="alert">
                             Could not load download status: {downloadStateError.message}

@@ -21,7 +21,7 @@ from backend.db.core import get_session
 from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Collection, Video
 from sources.npo.client import NpoClient, NpoError
-from sources.npo.source import NpoSource, needs_subscription, parse_link
+from sources.npo.source import NPO_PLUS, NpoSource, needs_subscription, parse_link
 
 
 revision = "5e2b8c71d0a4"
@@ -38,12 +38,12 @@ def _unchecked() -> tuple[list[tuple[int, str]], list[tuple[str, str]]]:
         collections = session.execute(
             select(Collection.id, Collection.sharing_url)
             .where(Collection.source_key == NpoSource.id)
-            .where(Collection.id.in_(select(Episode.collection_id).where(Episode.needs_subscription.is_(False))))
+            .where(Collection.id.in_(select(Episode.collection_id).where(Episode.access.is_(None))))
             .order_by(Collection.id)
         ).all()
         videos = session.execute(
             select(Video.slug, Video.sharing_url)
-            .where(Video.source_key == NpoSource.id, Video.needs_subscription.is_(False))
+            .where(Video.source_key == NpoSource.id, Video.access.is_(None))
             .order_by(Video.id)
         ).all()
         return [(row.id, row.sharing_url) for row in collections], [(row.slug, row.sharing_url) for row in videos]
@@ -78,7 +78,7 @@ def _mark_episodes(collection_id: int, slugs: set[str]) -> None:
         for episode in session.scalars(
             select(Episode).where(Episode.collection_id == collection_id, Episode.source_slug.in_(slugs))
         ):
-            episode.needs_subscription = True
+            episode.access = NPO_PLUS.key
 
     run_write_transaction(work)
 
@@ -89,7 +89,7 @@ def _mark_video(slug: str) -> None:
             select(Video).where(Video.source_key == NpoSource.id, Video.slug == slug)
         ).one_or_none()
         if video is not None:
-            video.needs_subscription = True
+            video.access = NPO_PLUS.key
 
     run_write_transaction(work)
 

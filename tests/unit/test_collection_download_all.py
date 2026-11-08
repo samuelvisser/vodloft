@@ -559,10 +559,10 @@ def test_download_all_skips_media_that_cannot_be_downloaded(library, monkeypatch
     wanted = add_episode(collection, season, 1, "ep.1")
     add_episode(collection, season, 2, "ep.2").drm_protected = True
     add_episode(collection, season, 3, "ep.3").removed_from_source = True
-    add_episode(collection, season, 4, "ep.4").needs_subscription = True
+    members_only = add_episode(collection, season, 4, "ep.4")
+    members_only.access, members_only.access_refused_at = "members", datetime.now(timezone.utc)
     profile = add_profile("audio")
     session.flush()
-    monkeypatch.setattr(service, "_subscription_active", lambda _source_key: False)
 
     result = service.request_collection_download_all(session, collection.slug, _request(profile.id, types=["ep"]))
 

@@ -78,6 +78,7 @@ import {
     DailywireMovieReadSchema,
 } from "../types/schemas/dailywire_catalog";
 import {apiUrl, responseError} from './api'
+import {z} from 'zod'
 import {profilePageSchema} from '../types/schemas/profile_page'
 import {LibraryCountsSchema} from '../types/schemas/library'
 
@@ -529,6 +530,21 @@ export function useEpisodeTagsInCollection(collectionSlug?: string) {
             EpisodeTagReadSchema.array(),
             signal,
         ),
+    })
+}
+
+const CollectionLockedSchema = z.object({count: z.int()})
+
+/** How many of a Collection's episodes the Source refused for lack of an access, such as a channel membership. */
+export function useCollectionLocked(collectionSlug?: string, enabled = true) {
+    return useQuery<number, Error, number, readonly ['collectionLocked', string]>({
+        queryKey: ['collectionLocked', collectionSlug ?? ''] as const,
+        enabled: !!collectionSlug && enabled,
+        queryFn: async ({signal}) => (await fetchParsed(
+            `${apiUrl()}/collections/${encodeURIComponent(collectionSlug!)}/locked`,
+            CollectionLockedSchema,
+            signal,
+        )).count,
     })
 }
 
@@ -1061,6 +1077,12 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         id: operation.resourceId,
         sourceKey,
         sourceFeatures: [],
+        access: null,
+        accessRefusedAt: null,
+        accessCheckAt: null,
+        accessLocked: false,
+        accessLabel: null,
+        accessDescription: null,
         type: contextString(operation, 'media_type') || 'episode',
         mediaItemId,
         localMediaProfileId,
