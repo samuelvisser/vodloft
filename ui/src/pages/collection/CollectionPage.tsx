@@ -3,7 +3,7 @@ import {addedByLabel, can} from '../../lib/access'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { useCollectionDownloadProfilesView, useCollectionStreamProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionEpisodeDownloads, useCollectionDownloadedLocalMediaProfiles, useCollectionSeasons, useEpisodeTagsInCollection, useSkippedByFilter, useSourceLookup } from '../../lib/queries'
+import { useCollectionDownloadProfilesView, useCollectionStreamProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionEpisodeDownloads, useCollectionDownloadedLocalMediaProfiles, useCollectionSeasons, useEpisodeTagsInCollection, useSkippedByFilter, useSourceLookup, useCollectionLocked } from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
@@ -144,6 +144,26 @@ export default function CollectionPage() {
   const episodeSeasonId = isSeasonal ? selectedSeasonId : undefined
 
   const {data: episodeTags} = useEpisodeTagsInCollection(id)
+  const {data: lockedCount, refetch: refetchLocked} = useCollectionLocked(id, can('managed_downloads', 'manage'))
+  const [lockedCheckBusy, setLockedCheckBusy] = useState(false)
+  // Hidden on purpose: most users never gain the access, so only the Actions menu offers this.
+  const checkLockedAgain = async () => {
+    if (!id || lockedCheckBusy) return
+    setLockedCheckBusy(true)
+    try {
+      const response = await fetch(`${apiUrl()}/collections/${encodeURIComponent(id)}/locked/check`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (!response.ok) throw new Error()
+      toast.success('VODLoft checks the locked videos again and downloads those it can')
+      void refetchLocked()
+    } catch {
+      toast.error('Could not check the locked videos again')
+    } finally {
+      setLockedCheckBusy(false)
+    }
+  }
   const [storedEpisodeTypes, setEpisodeTypeFilter] = useEpisodeTypeFilter(id)
   // A remembered type can disappear from the collection. Once its types are known, only apply
   // the ones still present, and every type while the chips are hidden, so nothing stays
@@ -485,6 +505,12 @@ export default function CollectionPage() {
                   controls: operationControls(downloadAllOperation?.id, 'bulk download'),
                   onSelect: () => setDownloadAllConfirm(true),
                 },
+                ...(lockedCount ? [{
+                  label: `Check locked videos again (${lockedCount})`,
+                  icon: faIcon('fass', 'unlock') as [string, string],
+                  disabled: lockedCheckBusy,
+                  onSelect: () => void checkLockedAgain(),
+                }] : []),
                 ...(sourceControls(collection).metadataRefresh ? [{
                   label: 'Refresh all metadata',
                   icon: faIcon('fass', 'clipboard-list') as [string, string],

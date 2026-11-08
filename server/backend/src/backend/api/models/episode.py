@@ -8,7 +8,7 @@ from pydantic import AwareDatetime, computed_field, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.api.models.pagination import CursorPageRead
-from backend.api.models.source import SourcedResponse
+from backend.api.models.source import LockableResponse, SourcedResponse
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import EpisodeIdentifierInfo
 
@@ -80,7 +80,7 @@ class _EpisodeIdentifierAPIOut(ResponseBase):
         return values
 
 
-class _EpisodeAPIBaseOut(SourcedResponse, _EpisodeIdentifierAPIOut):
+class _EpisodeAPIBaseOut(SourcedResponse, LockableResponse, _EpisodeIdentifierAPIOut):
     """Complete episode response fields shared by full read models."""
 
 
@@ -90,7 +90,6 @@ class _EpisodeAPIBaseOut(SourcedResponse, _EpisodeIdentifierAPIOut):
     index: int
     publish_status: Union[EpisodePublishStatus, str]
     drm_protected: bool = False
-    needs_subscription: bool = False
     removed_from_source: bool = False
     went_live_date: Optional[datetime] = None
     published_date: Optional[datetime]
@@ -120,7 +119,7 @@ class EpisodeAPIRead(_EpisodeAPIBaseOut):
     updated_at: datetime
 
 
-class EpisodeAPIReadView(SourcedResponse, _EpisodeIdentifierAPIOut):
+class EpisodeAPIReadView(SourcedResponse, LockableResponse, _EpisodeIdentifierAPIOut):
     """Small episode representation used by collection grids and browser-side warm caches."""
 
     id: int
@@ -129,7 +128,6 @@ class EpisodeAPIReadView(SourcedResponse, _EpisodeIdentifierAPIOut):
     index: int
     publish_status: Union[EpisodePublishStatus, str]
     drm_protected: bool = False
-    needs_subscription: bool = False
     removed_from_source: bool = False
     title: str
     slug: str

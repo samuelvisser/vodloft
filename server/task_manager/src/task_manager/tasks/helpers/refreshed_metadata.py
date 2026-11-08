@@ -23,12 +23,14 @@ _UPGRADE_CHECK_TASK_KEY = "upgrade_check"
 def apply_refreshed_details(item: Episode | Video, details: VideoDetails) -> bool:
     """Take the title, description, uploader, length and picture the Source has now. Returns whether any changed.
 
-    A field the Source left out is kept.
+    A field the Source left out is kept. So is a lock: a refresh that says nothing about access does not prove
+    anyone may download the item, so it only stores the access the Source says the item needs now.
     """
     changes = {
         "title": details.title, "description": details.description, "author_name": details.author_name,
         # A length of zero means the Source did not say.
         "duration": details.duration or None,
+        "access": details.access,
     }
     # A frame VODLoft took stays until the Source has a picture again; refreshes do not say which.
     if details.image_url and not is_own_thumbnail(item.thumbnail_landscape_path):

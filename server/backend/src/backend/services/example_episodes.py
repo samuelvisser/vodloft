@@ -174,7 +174,7 @@ def _add(s: Session, form: ExampleCollection, videos: list[VideoDetails]) -> tup
             publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value, sharing_url=video.url,
             published_date=video.published_at, title=video.title, description=video.description,
             duration=video.duration or 0.0, author_name=video.author_name, thumbnail_landscape_path=video.image_url,
-            drm_protected=video.drm_protected, needs_subscription=video.needs_subscription,
+            drm_protected=video.drm_protected, access=video.access,
         )
         s.add(episode)
         examples.append(Example(episode=episode, pending=frozenset(pending)))

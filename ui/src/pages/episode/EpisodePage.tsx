@@ -20,7 +20,7 @@ import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge} from '../../components/common/RemovedFromSource'
-import {SubscriptionBadge, SubscriptionNotice, useSubscriptionLocked} from '../../components/common/NeedsSubscription'
+import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
 import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
 import {apiUrl} from '../../lib/api'
 
@@ -73,7 +73,6 @@ export default function EpisodePage() {
     } = useEpisode(episodeId)
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
     const sourceName = useSourceLookup().name(episode?.sourceKey ?? collection?.sourceKey)
-    const subscriptionLocked = useSubscriptionLocked(episode?.sourceKey, episode?.needsSubscription)
     const {data: publishStatusLabels} = usePublishStatusLabels(episode?.sourceKey)
     const {
         data: downloads,
@@ -156,8 +155,8 @@ export default function EpisodePage() {
         || publishStatus === 'published_final'
         || publishStatus === EpisodePublishStatus.publishedFinal
     )
-    // Media protected by DRM or only given to subscribers cannot be downloaded.
-    const locked = episode.drmProtected || subscriptionLocked
+    // Media protected by DRM or only given to members or subscribers cannot be downloaded.
+    const locked = episode.drmProtected || episode.accessLocked
     const downloadStateError = (profiles === undefined ? profilesError : null)
         ?? (!hasDownloadState ? downloadsError : null)
 
@@ -280,7 +279,7 @@ export default function EpisodePage() {
                             {statusLabel}
                         </span>
                         {episode.drmProtected && <DrmBadge/>}
-                        {episode.needsSubscription && <SubscriptionBadge sourceKey={episode.sourceKey}/>}
+                        <ItemAccessBadge item={episode}/>
                         {episode.removedFromSource && <RemovedBadge/>}
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <span className="episode-summary-item">
@@ -323,7 +322,7 @@ export default function EpisodePage() {
                     <div className="episode-downloads" aria-labelledby="episode-downloads-title">
                         <h2 id="episode-downloads-title">Downloads</h2>
                         {episode.drmProtected && <DrmNotice/>}
-                        {!episode.drmProtected && subscriptionLocked && <SubscriptionNotice sourceKey={episode.sourceKey}/>}
+                        {!episode.drmProtected && episode.accessLocked && <AccessNotice item={episode}/>}
                         {!locked && downloadStateError && (
                             <div className="form-error-card" role="alert">
                                 Could not load download status: {downloadStateError.message}

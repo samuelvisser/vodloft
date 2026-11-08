@@ -12,11 +12,12 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from backend.db.core import run_write_transaction
+from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Episode
 from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
 from backend.services.collection_cookies import note_failed_download
 from backend.services.download_plans import prepare_download_plan
+from backend.services.media_access import lock_refused, media_access, media_site_key, site_access
 from backend.services.sites import collection_site
 from backend.services.upgrade_check import schedule_first_upgrade_check
 from backend.services.notifications.emitters import episode_downloaded
@@ -27,8 +28,9 @@ from backend.services.media_download_history import (
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from config import get_settings
+from sources import UnknownSourceError, get_source
 from sources.pacing import RequestCanceled, request_context
-from downloader import DownloadCanceled, EncryptedMediaError, SubscriptionRequiredError, media_duration
+from downloader import AccessRequiredError, DownloadCanceled, EncryptedMediaError, media_duration
 from downloader.capacity import resources
 from downloader.coordinator import DownloadExecution, execute_download_plan
 from downloader.storage.replacement import (
@@ -100,13 +102,39 @@ def _mark_drm_protected(session: Session, media_download_id: int) -> bool:
     return True
 
 
-def _mark_needs_subscription(session: Session, media_download_id: int) -> bool:
+def _refused_access(media_download_id: int, exc: Exception) -> str | None:
+    """The key of the access the Source refused the download for lack of, or None for any other failure.
+
+    A failure that only asks for signing in is not refused access while the Collection just started
+    using the cookies file, because the retry downloads with it.
+    """
+    if isinstance(exc, AccessRequiredError) and exc.access is not None:
+        return exc.access
+    error = str(exc)
+    if run_write_transaction(lambda w: note_failed_download(w, media_download_id, error)):
+        return None
+    session = get_session()
+    try:
+        download = session.get(MediaDownloadBase, media_download_id)
+        source_key = download.media.source_key if download is not None else None
+    finally:
+        session.close()
+    if source_key is None:
+        return None
+    try:
+        return get_source(source_key).refused_access(error)
+    except UnknownSourceError:
+        return None
+
+
+def _lock_media(session: Session, media_download_id: int, access: str) -> str | None:
+    """Lock the download's media, and return what its Site calls the access."""
     download = session.get(MediaDownloadBase, media_download_id)
     if download is None:
-        return False
-    download.media.needs_subscription = True
-    download.automatic_retry_suppressed = True
-    return True
+        return None
+    lock_refused(download.media, access)
+    found = media_access(download.media)
+    return found.label if found is not None else "an access VODLoft does not have"
 
 
 def _retire_previous_after_commit(previous: PreviousDownload, execution: DownloadExecution) -> None:
@@ -326,12 +354,28 @@ def run_download(
             **attempt, error=exc, lifecycle=asdict(tracker.snapshot()),
         )
         canceled = isinstance(exc, (DownloadCanceled, RequestCanceled))
+        refused = None
+        if not canceled and not isinstance(exc, EncryptedMediaError):
+            try:
+                # A Collection with automatic cookies uses the cookies file from the retry on.
+                refused = _refused_access(media_download_id, exc)
+            except Exception:
+                logger.exception("Could not tell whether download %s was refused for lack of access", media_download_id)
 
         def record_failure(w: Session) -> None:
             if canceled:
                 record_media_download_operation_history_once(
                     w, media_download_id, MediaDownloadHistoryAction.CANCELED,
                     operation_ids=operation_ids, metadata=metadata, occurred_at=finished,
+                )
+            elif refused:
+                download = w.get(MediaDownloadBase, media_download_id)
+                media = download.media if download is not None else None
+                found = site_access(media.source_key, media_site_key(media), refused) if media is not None else None
+                record_media_download_history_if_exists(
+                    w, media_download_id, MediaDownloadHistoryAction.LOCKED,
+                    metadata={**metadata, "access": refused, "access_label": found.label if found else None},
+                    occurred_at=finished,
                 )
             else:
                 record_media_download_history_if_exists(
@@ -345,17 +389,11 @@ def run_download(
         ):
             # Retrying cannot help; the item now shows it cannot be downloaded.
             return TaskResult(summary=f"{title} is protected by DRM and cannot be downloaded", outcome="failed")
-        if isinstance(exc, SubscriptionRequiredError) and run_write_transaction(
-            lambda w: _mark_needs_subscription(w, media_download_id)
-        ):
-            return TaskResult(summary=f"{title} needs a subscription and cannot be downloaded", outcome="failed")
-        if not canceled:
-            try:
-                # A Collection with automatic cookies uses the cookies file from the retry on.
-                error = str(exc)
-                run_write_transaction(lambda w: note_failed_download(w, media_download_id, error))
-            except Exception:
-                logger.exception("Could not tell whether download %s needs the cookies file", media_download_id)
+        if refused is not None:
+            label = run_write_transaction(lambda w: _lock_media(w, media_download_id, refused))
+            if label is not None:
+                # Retrying cannot help until VODLoft has the access, so the media waits, locked.
+                return TaskResult(summary=f"{title} is locked: {label}", outcome="failed")
         raise
     finally:
         if execution is not None:

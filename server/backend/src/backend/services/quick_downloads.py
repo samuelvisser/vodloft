@@ -16,12 +16,13 @@ from typing import Any, Iterable, Literal
 
 from backend.services import quick_download_history
 from backend.services.playback import resolve_playback
+from backend.services.media_access import link_access
 from backend.utils.filenames import clean_value
 from backend.utils.output_template import sanitize_path_component
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 from downloader import (
-    DownloadError, EncryptedMediaError, MediaUnavailableError, SubscriptionRequiredError, measure_rendition, probe,
+    AccessRequiredError, DownloadError, EncryptedMediaError, MediaUnavailableError, measure_rendition, probe,
 )
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import MediaServerMetadata
@@ -135,13 +136,16 @@ class QuickDownloadRefused(ValueError):
     """The link cannot be quick downloaded; the message says why."""
 
 
-def check_quick_downloadable(source: Source, kind: LinkKind, *, drm_protected: bool, needs_subscription: bool) -> None:
+def check_quick_downloadable(
+    source: Source, kind: LinkKind, *, drm_protected: bool, access: str | None, url: str,
+) -> None:
     """Refuse a link before anything starts, with the same rules the download enforces later."""
     if drm_protected:
         raise QuickDownloadRefused(f"{source.name} protects this video with DRM, so VODLoft cannot download it")
-    if needs_subscription:
+    if access is not None and source.has_access(access) is False:
+        found = link_access(source.id, url, access)
         raise QuickDownloadRefused(
-            f"{source.name} only gives this video to {source.subscription_name or 'paying'} subscribers"
+            found.description if found else f"{source.name} only gives this video with an access VODLoft does not have"
         )
     if kind is LinkKind.COLLECTION:
         raise QuickDownloadRefused("Quick download takes one video, episode or movie, not a whole collection such as a channel")
@@ -316,7 +320,7 @@ def _streams(source: Source, request: QuickDownloadRequest, tracker) -> _Streams
         raise DownloadError("Quick download takes one video, episode or movie, not a whole collection")
     if request.kind is LinkKind.MOVIE:
         if source.has(Feature.MEMBERSHIP_LEVELS) and not request.members_only:
-            raise SubscriptionRequiredError(_NOT_A_MEMBER.format(source=source.name))
+            raise AccessRequiredError(_NOT_A_MEMBER.format(source=source.name))
         tracker.preparing("resolve_playback")
         playback = source.movie_playback(movie_slug=request.slug, title=request.title, duration=None)
         tracker.ensure_active()
@@ -334,7 +338,7 @@ def _streams(source: Source, request: QuickDownloadRequest, tracker) -> _Streams
     media = source.episode_media(slug=request.slug, members_only=False, interactive=True)
     if not (media.video_url or media.audio_url):
         if not request.members_only:
-            raise SubscriptionRequiredError(_NOT_A_MEMBER.format(source=source.name))
+            raise AccessRequiredError(_NOT_A_MEMBER.format(source=source.name))
         tracker.ensure_active()
         media = source.episode_media(slug=request.slug, members_only=True, interactive=True)
     tracker.ensure_active()

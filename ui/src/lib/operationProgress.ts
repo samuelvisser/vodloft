@@ -24,7 +24,16 @@ export function presentOperationProgress(operation?: TaskOperationRead, starting
 }
 
 /** A Collection's indexing: its percentage when the Source knows the total, otherwise how many episodes it found so far. */
+/** After the new episodes are saved, VODLoft looks at each one's picture; that takes a request per episode. */
+function thumbnailCheckLabel(operation: TaskOperationRead): string | null {
+    const check = operation.progressMeta?.thumbnails as {checked?: unknown, total?: unknown} | undefined
+    if (typeof check?.checked !== 'number' || typeof check.total !== 'number') return null
+    return `Checking thumbnails… ${check.checked.toLocaleString()} of ${check.total.toLocaleString()}`
+}
+
 export function presentIndexingLabel(operation: TaskOperationRead): string {
+    const thumbnails = thumbnailCheckLabel(operation)
+    if (thumbnails) return thumbnails
     if (typeof operation.progress === 'number' && operation.progress > 0) return `Indexing… ${operation.progress}%`
     const found = operation.progressMeta?.found
     return typeof found === 'number' ? `Indexing… ${found} episode${found === 1 ? '' : 's'} found` : 'Indexing…'
@@ -32,6 +41,8 @@ export function presentIndexingLabel(operation: TaskOperationRead): string {
 
 /** A Collection's Sync now scan: its percentage when the Source knows the total, otherwise the new episodes it found so far. */
 export function presentScanningLabel(operation: TaskOperationRead): string {
+    const thumbnails = thumbnailCheckLabel(operation)
+    if (thumbnails) return thumbnails
     if (typeof operation.progress === 'number' && operation.progress > 0) return `Scanning… ${operation.progress}%`
     const found = operation.progressMeta?.found
     return typeof found === 'number' ? `Scanning… ${found} new episode${found === 1 ? '' : 's'} found` : 'Scanning…'

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -25,6 +26,8 @@ logger = logging.getLogger(__name__)
 _PREFIX = "thumbnails/"
 _NAME = re.compile(r"^[0-9A-Za-z-]{1,64}\.jpg$")
 _PICTURE_FIELDS = ("thumbnail_landscape_path", "background_image_path")
+# Telling a missing picture takes a request per item, so a few are asked at once.
+_CONCURRENT_CHECKS = 8
 
 
 def thumbnail_root() -> Path:
@@ -53,11 +56,13 @@ def newest_media_item_id(s: Session) -> int:
     return s.scalar(select(func.max(MediaItemBase.id))) or 0
 
 
-def take_first_frames(item_ids: Sequence[int]) -> int:
+def take_first_frames(item_ids: Sequence[int], *, checking: Callable[[int, int], None] | None = None) -> int:
     """Give the episodes and videos among ``item_ids`` whose picture is missing a frame of the video.
 
     Their Source decides whether a picture is missing and takes the frame. No
-    transaction stays open while it does. Returns how many thumbnails were made.
+    transaction stays open while it does, and a few items are looked at at once.
+    ``checking`` is told how many items were checked so far, and of how many, as
+    each one is done. Returns how many thumbnails were made.
     """
     if not item_ids:
         return 0
@@ -72,30 +77,46 @@ def take_first_frames(item_ids: Sequence[int]) -> int:
     finally:
         s.rollback()
         s.close()
-    made = 0
-    for item_id, uuid, source_key, url, picture in items:
+    made = checked = 0
+    with ThreadPoolExecutor(max_workers=_CONCURRENT_CHECKS, thread_name_prefix="first-frame") as pool:
+        frames = {
+            pool.submit(get_source(source_key).first_frame, url, picture): (item_id, uuid, url)
+            for item_id, uuid, source_key, url, picture in items
+        }
         try:
-            frame = get_source(source_key).first_frame(url, picture)
-        except Exception as exc:
-            if is_no_internet_error(exc):
-                raise
-            logger.warning("Could not take a frame of %s: %s", url, exc)
-            continue
-        if frame is None:
-            continue
-        name = f"{uuid}.jpg"
-        try:
-            root = thumbnail_root()
-            root.mkdir(parents=True, exist_ok=True)
-            (root / name).write_bytes(frame)
-        except OSError as exc:
-            logger.warning("Could not save the thumbnail of %s: %s", url, exc)
-            continue
-        if run_write_transaction(lambda s: _use_thumbnail(s, item_id, _PREFIX + name), concurrent=True):
-            made += 1
+            for done in as_completed(frames):
+                if checking is not None:
+                    checking(checked, len(items))
+                checked += 1
+                made += _store_frame(done, *frames[done])
+        except BaseException:
+            pool.shutdown(cancel_futures=True)
+            raise
     if made:
         logger.info("Made %d %s from the first frames of their videos", made, "thumbnail" if made == 1 else "thumbnails")
     return made
+
+
+def _store_frame(done, item_id: int, uuid: str, url: str) -> bool:
+    """Save the frame a Source took, if it took one. Returns whether the item now uses it."""
+    try:
+        frame = done.result()
+    except Exception as exc:
+        if is_no_internet_error(exc):
+            raise
+        logger.warning("Could not take a frame of %s: %s", url, exc)
+        return False
+    if frame is None:
+        return False
+    name = f"{uuid}.jpg"
+    try:
+        root = thumbnail_root()
+        root.mkdir(parents=True, exist_ok=True)
+        (root / name).write_bytes(frame)
+    except OSError as exc:
+        logger.warning("Could not save the thumbnail of %s: %s", url, exc)
+        return False
+    return run_write_transaction(lambda s: _use_thumbnail(s, item_id, _PREFIX + name), concurrent=True)
 
 
 def _use_thumbnail(s: Session, item_id: int, path: str) -> bool:

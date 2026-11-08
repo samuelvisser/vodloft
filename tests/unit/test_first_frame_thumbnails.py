@@ -125,7 +125,10 @@ def test_new_episodes_without_a_picture_get_their_first_frame(framing, session, 
     session.commit()
 
     ids = [episode.id for episode in session.query(Episode).filter(Episode.id > newest)]
-    assert take_first_frames(ids) == 1
+    checks: list[tuple[int, int]] = []
+    assert take_first_frames(ids, checking=lambda checked, total: checks.append((checked, total))) == 1
+    # It says how far the check is before each episode.
+    assert checks == [(0, 2), (1, 2)]
 
     a, b = session.query(Episode).order_by(Episode.index).all()
     assert a.thumbnail_landscape_path == a.background_image_path == f"thumbnails/{a.uuid}.jpg"

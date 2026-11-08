@@ -8,6 +8,7 @@ from backend.api.models.source import (
 from backend.app import db_session
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
+from backend.services.access_checks import access_changed
 from backend.services.site_settings import download_profile_defaults, offered_settings
 from backend.services.source_options import save_ytdlp_source_options, ytdlp_source_options
 from config.settings.site_settings import SiteSettingGroup
@@ -174,6 +175,8 @@ def save_cookies(source_id: str, body: CookiesAPIUpdate):
         source.save_cookies(body.content.encode())
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # The new sign-in may give videos VODLoft could not download before.
+    access_changed(source.id)
     return _cookies(source)
 
 

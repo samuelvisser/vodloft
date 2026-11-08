@@ -15,6 +15,7 @@ from backend.db.models import Episode
 from backend.db.models import NotificationEvent as EventRow
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.health import disk_space
+from backend.services.media_access import media_locked
 from config import get_settings
 from sources import all_sources
 from task_manager.scheduler.db.TaskDefinition import TaskDefinition
@@ -59,6 +60,9 @@ def failed_downloads(session: Session, now: datetime) -> int:
         if download is None or _already(session, Event.DOWNLOAD_FAILED, marker):
             continue
         media = download.media
+        if media_locked(media):
+            # Members-only and subscriber content is not a failure to tell about.
+            continue
         episode = media if isinstance(media, Episode) else None
         reason = (run.last_error or "").strip().splitlines()[0][:160] if run.last_error else "It failed"
         emit(

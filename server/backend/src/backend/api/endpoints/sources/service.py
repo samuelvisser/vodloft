@@ -12,6 +12,7 @@ from backend.api.models.source import (
 from backend.db.models import Episode, Collection
 from backend.security.access import Access
 from backend.types.collection_types import CollectionType
+from backend.services.media_access import access_locked, link_access
 from backend.services.sites import preferred_sources, site_record
 from backend.services.source_requests import asking_source
 from backend.utils.helpers import slugify
@@ -72,8 +73,16 @@ def search_source(access: Access, source: Source, query: str) -> SearchResultsAP
         answer = source.search(query)
     results = SearchResultsAPIRead.model_validate(answer)
     return results.model_copy(update={
-        "results": [result for result in results.results if access.allows_link(source.id, result.url)],
+        "results": [
+            result.model_copy(update={"access_label": _access_label(source, result.url, result.access)})
+            for result in results.results if access.allows_link(source.id, result.url)
+        ],
     })
+
+
+def _access_label(source: Source, url: str, key: str | None) -> str | None:
+    found = link_access(source.id, url, key)
+    return found.label if found is not None else None
 
 
 def get_program_status(source: Source) -> ProgramStatusAPIRead:
@@ -121,6 +130,7 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         local_collection = _collection_of_local_episode(s, source, link.slug)
         if local_collection is not None:
             collection_slug, collection_url = local_collection.slug, local_collection.sharing_url
+    found = link_access(source.id, link.url, link.access)
     return ResolvedLinkAPIRead(
         source=SourceAPIRead.model_validate(source),
         kind=link.kind,
@@ -130,7 +140,10 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         collection_url=collection_url,
         site=link.site,
         drm_protected=link.drm_protected,
-        needs_subscription=link.needs_subscription,
+        access=link.access,
+        access_label=found.label if found is not None else None,
+        access_description=found.description if found is not None else None,
+        access_locked=access_locked(source.id, link.access, None),
         preview=ResolvedLinkPreviewAPIRead.model_validate(link),
         candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],
     )

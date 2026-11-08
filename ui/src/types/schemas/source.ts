@@ -1,4 +1,5 @@
 import {z} from "zod";
+import {ApiDateTimeSchema} from "./datetime";
 
 /** Optional capabilities of a Source, as the backend names them. */
 export const SourceFeature = {
@@ -38,6 +39,21 @@ export const SourcedFields = {
     sourceFeatures: z.array(z.string()),
 }
 
+/** Media that may need an access, such as a channel membership; accessLabel is what its Site calls it. */
+export const LockableFields = {
+    access: z.string().nullable().optional().default(null),
+    accessRefusedAt: ApiDateTimeSchema.nullable().optional().default(null),
+    /** When VODLoft next checks whether the locked media opened up. */
+    accessCheckAt: ApiDateTimeSchema.nullable().optional().default(null),
+    /** VODLoft cannot download the media without the access, so it does not try. */
+    accessLocked: z.boolean().optional().default(false),
+    /** What the Site calls the access, such as Members only or NPO Plus. */
+    accessLabel: z.string().nullable().optional().default(null),
+    /** One sentence from the Site on who can watch it, such as "Only NPO Plus subscribers can watch this." */
+    accessDescription: z.string().nullable().optional().default(null),
+}
+
+
 export function hasSourceFeature(
     item: {sourceFeatures?: readonly string[] | null} | null | undefined,
     feature: SourceFeatureValue,
@@ -67,12 +83,8 @@ export const SourceReadSchema = z.object({
     searchLabel: z.string().nullable().optional(),
     /** What the Source calls a kind of media in its own catalogue, such as Show for a Daily Wire collection. */
     kindNames: z.record(z.string(), z.string()).optional(),
-    /** What the Source calls the subscription some of its videos need, such as NPO Plus. */
-    subscriptionName: z.string().nullable().optional(),
     /** What a cookies file does for the Source, when it says so itself. */
     cookiesHelp: z.string().nullable().optional(),
-    /** VODLoft is signed in with that subscription, so media that needs it can be downloaded. */
-    subscriptionActive: z.boolean().optional(),
     /** What a Local Media Profile can download for media of this Source: what any of its Sites offers. */
     downloadOptions: DownloadOptionsSchema,
 })
@@ -91,7 +103,10 @@ export const ResolvedLinkReadSchema = z.object({
     collectionUrl: z.string().nullable(),
     site: z.string().nullable(),
     drmProtected: z.boolean(),
-    needsSubscription: z.boolean().optional().default(false),
+    access: z.string().nullable().optional().default(null),
+    accessLabel: z.string().nullable().optional().default(null),
+    accessDescription: z.string().nullable().optional().default(null),
+    accessLocked: z.boolean().optional().default(false),
     preview: z.object({
         title: z.string(),
         description: z.string().nullable(),
@@ -115,7 +130,8 @@ export const SearchResultReadSchema = z.object({
     collectionUrl: z.string().nullable(),
     kindLabel: z.string().nullable().optional(),
     facts: z.array(z.string()).optional(),
-    needsSubscription: z.boolean().optional(),
+    access: z.string().nullable().optional(),
+    accessLabel: z.string().nullable().optional(),
 })
 export type SearchResultRead = z.infer<typeof SearchResultReadSchema>
 

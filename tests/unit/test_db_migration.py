@@ -30,7 +30,8 @@ SITE_REFRESH_REVISION = "5b75b63e55f2"
 NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
 PROFILE_LOOKUP_INDEXES_REVISION = "5b8e1f3c2a90"
-HEAD_REVISION = "a0eceaa70db5"
+IMPORTED_DOWNLOAD_PROFILES_REVISION = "a0eceaa70db5"
+HEAD_REVISION = "7d3e9b2c41fa"
 
 
 @pytest.fixture
@@ -996,3 +997,37 @@ def test_imported_downloads_join_the_download_profile_of_their_collection(migrat
     with engine.connect() as connection:
         managed = dict(connection.execute(text("SELECT id, download_profile_id FROM media_downloads_episode")).all())
     assert managed == {1: 7, 2: None, 3: None, 4: 8}
+
+
+def test_media_that_needed_a_subscription_says_which_access_it_needs(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, IMPORTED_DOWNLOAD_PROFILES_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        for media_id, source_key, needs in ((1, "npo", 1), (2, "ytdlp", 1), (3, "dailywire", 1), (4, "ytdlp", 0)):
+            connection.execute(text(
+                "INSERT INTO media_items (id, uuid, type, source_key, needs_subscription) "
+                "VALUES (:id, :uuid, 'video', :source, :needs)"
+            ), {"id": media_id, "uuid": f"m{media_id}", "source": source_key, "needs": needs})
+            connection.execute(text(
+                "INSERT INTO media_downloads (id, type, media_item_id, local_media_profile_id, file_path, "
+                "artifact_status, automatic_retry_suppressed) VALUES (:id, 'video', :id, 1, '/d', 'absent', 1)"
+            ), {"id": media_id})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        media = {row.id: row for row in connection.execute(text(
+            "SELECT id, access, access_refused_at, access_check_at, access_checks FROM media_items"
+        ))}
+        suppressed = dict(connection.execute(text("SELECT id, automatic_retry_suppressed FROM media_downloads")).all())
+    assert {media_id: row.access for media_id, row in media.items()} == {
+        1: "npo_plus", 2: "members", 3: "INSIDER", 4: None,
+    }
+    # NPO knows from the account whether VODLoft may have it; elsewhere a download was refused.
+    assert [media_id for media_id, row in media.items() if row.access_refused_at is not None] == [2, 3]
+    assert [media_id for media_id, row in media.items() if row.access_check_at is not None] == [2, 3]
+    assert suppressed == {1: 0, 2: 0, 3: 0, 4: 1}

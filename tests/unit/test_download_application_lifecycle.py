@@ -148,21 +148,31 @@ def test_drm_marks_the_media_and_stops_retrying(library, monkeypatch):
         assert download.automatic_retry_suppressed is True
 
 
-def test_a_subscription_failure_marks_the_media_and_stops_retrying(library, monkeypatch):
+def test_refused_access_locks_the_media_without_an_error(library, monkeypatch):
     from backend.db.models.media_download import MediaDownloadBase
-    from downloader import SubscriptionRequiredError
+    from backend.services.media_access import media_locked
+    from backend.types.media_download_history_types import MediaDownloadHistoryAction
+    from downloader import AccessRequiredError
     from task_manager.tasks import download_adapter
     factory, (download_id, _) = library
 
     def prepare(session, _id, tracker):
-        raise SubscriptionRequiredError('NPO Start only gives this to NPO Plus subscribers')
+        raise AccessRequiredError('The site only gives this to channel members', 'INSIDER')
     monkeypatch.setattr(download_adapter, 'prepare_download_plan', prepare)
+    with factory() as session:
+        session.get(MediaDownloadBase, download_id).media.collection.site_key = 'dailywire'
+        session.commit()
     with factory() as session:
         result = download_adapter.run_download(session, media_download_id=download_id)
     assert result.outcome == 'failed'
-    assert 'needs a subscription' in result.summary
+    # The Daily Wire names its membership levels.
+    assert 'is locked: Insider' in result.summary
     with factory() as session:
         download = session.get(MediaDownloadBase, download_id)
-        assert download.media.needs_subscription is True
+        assert download.media.access == 'INSIDER'
+        assert media_locked(download.media)
+        # Checked again in a day, in case the video opens up for everyone.
+        assert download.media.access_check_at is not None and download.media.access_checks == 0
         assert download.media.drm_protected is False
-        assert download.automatic_retry_suppressed is True
+        assert download.automatic_retry_suppressed is False
+        assert MediaDownloadHistoryAction.LOCKED.value in {entry.action for entry in download.history}

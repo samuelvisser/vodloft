@@ -17,7 +17,7 @@ from backend.services.quick_downloads import (
 )
 from backend.services import quick_download_history as history
 from config import get_settings
-from downloader import DownloadCanceled, EncryptedMediaError, FileTooLargeError, SubscriptionRequiredError
+from downloader import AccessRequiredError, DownloadCanceled, EncryptedMediaError, FileTooLargeError
 from downloader.capacity import resources
 from downloader.coordinator import execute_download_plan
 from downloader.lifecycle import DownloadTracker
@@ -101,8 +101,8 @@ def run_quick_download(request_input: dict[str, Any], *, progress=None) -> TaskR
         # Retrying cannot help with any of these.
         if isinstance(exc, EncryptedMediaError):
             return _refused(request, f"{request.title} is protected by DRM and cannot be downloaded", "Protected by DRM")
-        if isinstance(exc, SubscriptionRequiredError):
-            return _refused(request, f"{request.title} needs a subscription and cannot be downloaded", "Needs a subscription")
+        if isinstance(exc, AccessRequiredError):
+            return _refused(request, f"{request.title}: {exc}", str(exc))
         if isinstance(exc, QuickDownloadRefused):
             return _refused(request, str(exc), str(exc))
         if isinstance(exc, FileTooLargeError):

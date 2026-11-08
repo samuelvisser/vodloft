@@ -199,7 +199,7 @@ def _members_request(kind: LinkKind, members_only: bool):
 
 
 def test_users_without_the_switch_only_get_what_a_free_account_gets(fake_sources, monkeypatch):
-    from downloader import SubscriptionRequiredError
+    from downloader import AccessRequiredError
     from backend.services import quick_downloads
 
     _, members = fake_sources
@@ -212,10 +212,10 @@ def test_users_without_the_switch_only_get_what_a_free_account_gets(fake_sources
     monkeypatch.setattr(members, "episode_media", episode_media)
     monkeypatch.setattr(quick_downloads, "get_settings", lambda: SimpleNamespace(download_settings=SimpleNamespace()))
     rules = quick_downloads.QuickRules()
-    with pytest.raises(SubscriptionRequiredError, match="may not use members-only Fake Members media"):
+    with pytest.raises(AccessRequiredError, match="may not use members-only Fake Members media"):
         quick_downloads._resolve_source(members, _members_request(LinkKind.EPISODE, False), _Tracker(), rules)
     assert asked == [False]
-    with pytest.raises(SubscriptionRequiredError):
+    with pytest.raises(AccessRequiredError):
         quick_downloads._resolve_source(members, _members_request(LinkKind.MOVIE, False), _Tracker(), rules)
 
     asked.clear()

@@ -8,13 +8,15 @@ import requests
 from downloader.hls import is_master_playlist, media_playlist_segments, parse_master_playlist
 
 from ..contract import (
-    MAIN_TAG, MIN_NEWEST_EPISODES, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
+    Access, MAIN_TAG, MIN_NEWEST_EPISODES, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
     DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, SiteSetting, SiteSettings, Source, StreamMethod,
     UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
 from .api.dw_api.client import ByShowSeason, MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
 from .api.records import DwEpisodeRecord
+from .api.types.user_info import DwMembershipLevel
+from .api.utils.validators.available_for_list import parse_tiers
 from .auth import DeviceAuthClient
 from .auth.storage import TokenStore
 from .links import _access_token, _first, parse_link, resolve_link
@@ -38,6 +40,24 @@ def _tag(record: DwEpisodeRecord) -> str:
     return MAIN_TAG
 
 
+# The Daily Wire's paid membership levels, cheapest first. Their keys are The Daily Wire's own names.
+MEMBERSHIP_ACCESSES = tuple(
+    Access(level.value, label, f"Only Daily Wire {label} members can watch this.")
+    for level, label in (
+        (DwMembershipLevel.INSIDER, "Insider"),
+        (DwMembershipLevel.INSIDER_PLUS, "Insider Plus"),
+        (DwMembershipLevel.ALL_ACCESS, "All Access"),
+    )
+)
+
+
+def episode_access(available_for: Sequence[object]) -> str | None:
+    """The cheapest membership level an episode is available for, or None when anyone can watch it."""
+    if DwMembershipLevel.FREE in available_for:
+        return None
+    return next((access.key for access in MEMBERSHIP_ACCESSES if DwMembershipLevel(access.key) in available_for), None)
+
+
 def _video(record: DwEpisodeRecord, season: SeasonRef | None) -> VideoDetails:
     return VideoDetails(
         slug=record.slug,
@@ -51,6 +71,7 @@ def _video(record: DwEpisodeRecord, season: SeasonRef | None) -> VideoDetails:
         episode_number=record.ep_number,
         number_text=record.episode_number or None,
         tag=_tag(record),
+        access=episode_access(record.available_for),
     )
 
 
@@ -83,6 +104,7 @@ class DailyWireSource(Source):
                 SiteSetting.UPGRADE_IMPROVEMENTS: [UpgradeImprovement.LENGTH.value],
             }),
         ),
+        accesses=MEMBERSHIP_ACCESSES,
     ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
     features = frozenset({
@@ -158,6 +180,10 @@ class DailyWireSource(Source):
         client = MiddlewareClient(request_priority="interactive") if interactive else MiddlewareClient()
         detail = client.get_episode_details(slug, require_member_exclusive=members_only)
         return EpisodeMedia(video_url=detail.video_url, audio_url=detail.audio_url)
+
+    def current_access(self, *, slug: str, url: str) -> str | None:
+        payload = MiddlewareClient().get_episode_payload(slug)
+        return episode_access(parse_tiers(payload.get("availableFor")))
 
     def upgrade_offer(self, url: str, *, sponsorblock_categories: Sequence[str] = ()) -> UpgradeOffer:
         """The length of the episode's stream as The Daily Wire serves it now. The listed runtime is

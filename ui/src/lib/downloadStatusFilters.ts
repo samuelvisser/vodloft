@@ -8,6 +8,7 @@ export type DownloadStatusFilterValue =
     | 'local_processing'
     | 'canceled'
     | 'error'
+    | 'locked'
     | 'missing'
     | 'corrupted'
 
@@ -25,6 +26,7 @@ export const DOWNLOAD_STATUS_FILTER_OPTIONS: readonly DownloadStatusFilterOption
     {value: 'downloaded', label: 'Downloaded', statuses: ['downloaded', 'redownloaded']},
     {value: 'canceled', label: 'Canceled', statuses: ['canceled']},
     {value: 'error', label: 'Error', statuses: ['error']},
+    {value: 'locked', label: 'Locked', statuses: ['locked']},
     {value: 'missing', label: 'Missing', statuses: ['missing']},
     {value: 'corrupted', label: 'Corrupted', statuses: ['corrupted']},
 ]
@@ -34,10 +36,12 @@ export const ALL_DOWNLOAD_STATUSES = new Set(
     DOWNLOAD_STATUS_FILTER_OPTIONS.flatMap((option) => option.statuses),
 )
 
-// Show everything by default except completed downloads.
+// Show everything by default except completed downloads, and locked ones, which wait for access rather than for you.
+const HIDDEN_BY_DEFAULT: ReadonlySet<DownloadStatusFilterValue> = new Set(['downloaded', 'locked'])
+
 export const DEFAULT_DOWNLOAD_STATUS_FILTER = new Set(
     DOWNLOAD_STATUS_FILTER_OPTIONS
-        .filter((option) => option.value !== 'downloaded')
+        .filter((option) => !HIDDEN_BY_DEFAULT.has(option.value))
         .flatMap((option) => option.statuses),
 )
 

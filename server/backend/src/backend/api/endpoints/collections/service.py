@@ -17,12 +17,14 @@ from fastapi import HTTPException
 from backend.db.models import Episode, Season, Collection, CollectionLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
+from backend.services.access_checks import ask_for_check, refused_media
+from backend.services.media_access import locked_clause
 from backend.services.local_media_profile_sources import profile_offered_for_source
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.types.collection_types import CollectionType
 from backend.api.endpoints.media_downloads.service import create_new_episode_download
 from config import get_settings
-from sources import UnknownSourceError, get_source
+from sources import get_source
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.services.metadata_refresh import refreshes_metadata
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -183,6 +185,27 @@ def get_collections_list(s: Session) -> list[CollectionAPIRead]:
     return [CollectionAPIRead.model_validate(collection) for collection in collections]
 
 
+def _collection_id(s: Session, collection_slug: str) -> int:
+    collection_id = s.scalar(select(Collection.id).where(Collection.slug == collection_slug))
+    if collection_id is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return collection_id
+
+
+def count_collection_locked(s: Session, collection_slug: str) -> CollectionLockedAPIRead:
+    collection_id = _collection_id(s, collection_slug)
+    count = s.scalar(select(func.count(Episode.id)).where(
+        Episode.collection_id == collection_id, Episode.access.is_not(None), Episode.access_refused_at.is_not(None),
+    ))
+    return CollectionLockedAPIRead(count=count or 0)
+
+
+def check_collection_locked(s: Session, collection_slug: str) -> CollectionLockedAPIRead:
+    """Check the episodes the Source refused again now, and download those it gives."""
+    collection_id = _collection_id(s, collection_slug)
+    return CollectionLockedAPIRead(count=ask_for_check(s, refused_media(s, Episode.collection_id == collection_id)))
+
+
 def get_collection(s: Session, collection_slug: str) -> CollectionAPIRead:
     collection = (
         s.query(Collection)
@@ -338,13 +361,6 @@ def request_collection_metadata_refresh(
     }
 
 
-def _subscription_active(source_key: str) -> bool:
-    try:
-        return get_source(source_key).subscription_active
-    except UnknownSourceError:
-        return False
-
-
 def request_collection_download_all(
         s: Session,
         collection_slug: str,
@@ -376,10 +392,9 @@ def request_collection_download_all(
         # Media protected by DRM, or no longer at the Source, cannot be downloaded.
         Episode.drm_protected.is_(False),
         Episode.removed_from_source.is_(False),
+        # Nor can media locked behind an access VODLoft does not have, such as a channel membership.
+        ~locked_clause(Episode),
     )
-    if not _subscription_active(collection.source_key):
-        # Nor can media that needs a subscription VODLoft is not signed in with.
-        statement = statement.where(Episode.needs_subscription.is_(False))
     if collection.type == CollectionType.SERIES.value:
         if not body.season_ids:
             raise HTTPException(status_code=422, detail="Select at least one season")

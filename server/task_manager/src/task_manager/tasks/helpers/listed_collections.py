@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Season, Collection
 from backend.db.core import run_write_transaction
+from backend.services.media_access import lock_refused
 from backend.services.seasons import create_season_record
 from backend.services.metadata_refresh import new_item_metadata_is_final
 from backend.services.pending_episodes import site_follows_pending
@@ -47,6 +48,8 @@ from sources import MAIN_TAG, Feature, ItemRef, Source, VideoDetails, get_source
 from .episodes.events import queue_episode_status_events
 from .general import datetime_to_string
 from .progress import update_progress
+from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
+from .locked_media import open_up
 from .refreshed_metadata import apply_refreshed_details, check_upgrades_after_refresh
 
 logger = logging.getLogger(__name__)
@@ -267,7 +270,7 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
             thumbnail_landscape_path=details.image_url,
             background_image_path=details.image_url,
             drm_protected=details.drm_protected,
-            needs_subscription=details.needs_subscription,
+            access=details.access,
         )
         s.add(episode)
         s.flush()
@@ -318,7 +321,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
 
 
 def _apply_refresh(s: Session, collection_id: int, refresh) -> RefreshCounts:
-    updated = removed = returned = 0
+    updated = removed = returned = opened = 0
     for episode in s.scalars(select(Episode).where(Episode.collection_id == collection_id)):
         if episode.source_slug in refresh.removed:
             if not episode.removed_from_source:
@@ -326,12 +329,19 @@ def _apply_refresh(s: Session, collection_id: int, refresh) -> RefreshCounts:
                 removed += 1
             continue
         details = refresh.details.get(episode.source_slug)
-        if details is None:
+        access = refresh.refused.get(episode.source_slug)
+        if episode.source_slug in refresh.open:
+            opened += open_up(s, episode)
+        if details is None and access is None:
             continue
         if episode.removed_from_source:
             episode.removed_from_source = False
             returned += 1
-        changed = apply_refreshed_details(episode, details)
-        updated += changed
-        check_upgrades_after_refresh(s, episode)
+        if access is not None and episode.access_refused_at is None:
+            lock_refused(episode, access)
+        if details is not None:
+            updated += apply_refreshed_details(episode, details)
+            check_upgrades_after_refresh(s, episode)
+    if opened:
+        dispatch_queued_media_download_operations(s)
     return RefreshCounts(updated=updated, removed=removed, returned=returned)

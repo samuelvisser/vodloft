@@ -5,6 +5,7 @@ This adapter alone knows Local Media Profiles, output templates and ORM models.
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from backend.services.playback import resolve_playback
 from backend.services.local_media_profile_sources import format_for_site
 from backend.services.sites import collection_site, video_site
 from backend.services.no_ascii_names import settle_no_ascii_name
+from backend.services.media_access import link_access
 from backend.db.core import run_write_transaction
 from backend.db.models import DownloadProfile, Episode, Movie, MovieExtra, Video
 from backend.db.models.media_download import MediaDownloadBase
@@ -32,14 +34,16 @@ from config import get_settings
 from config.network import is_no_internet_error
 from config.settings.submodels import MetadataMode, ThumbnailMode
 from downloader import (
-    DownloadCanceled, DownloadError, MediaUnavailableError,
+    AccessRequiredError, DownloadCanceled, DownloadError, MediaUnavailableError,
 )
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import render_nfo
 from downloader.plan import DownloadPlan, SidecarSpec, YtdlpSponsorBlock, build_download_plan
 from downloader.source import resolve_download_source
 from downloader.ytdlp import resolve_ytdlp_source
-from sources import Feature, PlaybackKind, SiteSetting, get_source
+from sources import Feature, PlaybackKind, SiteSetting, Source, get_source
+
+logger = logging.getLogger(__name__)
 
 
 def prepare_download_plan(session: Session, media_download_id: int, tracker: DownloadTracker) -> DownloadPlan:
@@ -124,6 +128,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     elif episode is not None:
         video_url, audio_url = episode.video_url, episode.audio_url
         member_only = episode.collection.membership_level != DwMembershipLevel.FREE.value
+        page_url = episode.sharing_url
         session.rollback()
         refreshed = False
         while True:
@@ -137,6 +142,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                         else "audio" if audio_only
                         else "video"
                     )
+                    _raise_if_access_required(media_source, slug=slug, url=page_url, title=title)
                     raise MediaUnavailableError(
                         f"{media_source.name} provides no playable {media_kind} for '{title}'"
                     )
@@ -167,6 +173,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                         else "audio" if audio_only
                         else "video"
                     )
+                    _raise_if_access_required(media_source, slug=slug, url=page_url, title=title)
                     raise MediaUnavailableError(
                         f"{media_source.name} provides no playable {media_kind} for '{title}'"
                     ) from exc
@@ -272,6 +279,20 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         attempt_id=tracker.attempt_id,
         media_lane=(f"source:{media_source.id}", streams) if (streams := media_source.download_streams) else None,
     )
+
+
+def _raise_if_access_required(source: Source, *, slug: str, url: str, title: str) -> None:
+    """A Source that gives no media for an episode may only give it to members: say so, so that the
+    episode is locked instead of retried."""
+    try:
+        access = source.current_access(slug=slug, url=url)
+    except Exception:
+        logger.info("Could not ask %s which access '%s' needs", source.name, title, exc_info=True)
+        return
+    if access is not None:
+        found = link_access(source.id, url, access)
+        label = found.label if found else "an access VODLoft does not have"
+        raise AccessRequiredError(f"{source.name} only gives '{title}' with {label}", access)
 
 
 def _download_profile(download: MediaDownloadBase, episode: Episode | None) -> DownloadProfile | None:

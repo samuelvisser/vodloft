@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, replace
 from typing import Any, Optional, Sequence
 
@@ -46,6 +47,8 @@ from ...types.general import RecordOrder
 
 
 logger = logging.getLogger(__name__)
+# After saving the new episodes, while their missing pictures are looked for.
+_CHECKING_THUMBNAILS_PROGRESS = 95
 
 COLLECTION_INDEXED_EVENT = "collection.indexed"
 
@@ -235,18 +238,20 @@ async def _index_collection(
                 )
             return result
         s.rollback()
-        finish_index(collection_id=collection_id, found=found, newest=newest)
+        finish_index(collection_id=collection_id, found=found, newest=newest, progress=progress)
     except Exception:
         s.rollback()
         raise
     return replace(result, episodes_found=found)
 
 
-def finish_index(*, collection_id: int, found: int, newest: int) -> None:
+def finish_index(*, collection_id: int, found: int, newest: int, progress=None) -> None:
     """What follows every search for a collection's new episodes, whichever Source found them.
 
     ``newest`` is the newest media item before the search, so the episodes added
-    after it get a frame of their video when they have no picture.
+    after it get a frame of their video when they have no picture. Whether a
+    picture is missing takes a request per episode, so the progress says how far
+    that check is.
     """
     from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 
@@ -259,7 +264,27 @@ def finish_index(*, collection_id: int, found: int, newest: int) -> None:
 
     added = run_write_transaction(work)
     if added:
-        take_first_frames(added)
+        take_first_frames(added, checking=_thumbnail_progress(progress))
+
+
+def _thumbnail_progress(progress):
+    """Report the thumbnail check about once a second: each report is a write."""
+    if not progress:
+        return None
+    last = 0.0
+
+    def report(checked: int, total: int) -> None:
+        nonlocal last
+        now = time.monotonic()
+        if checked and now - last < 1:
+            return
+        last = now
+        progress.set(
+            _CHECKING_THUMBNAILS_PROGRESS, f"Checking the thumbnails of {total} new episodes: {checked} done",
+            meta={"thumbnails": {"checked": checked, "total": total}},
+        )
+
+    return report
 
 
 async def _fetch_collection(

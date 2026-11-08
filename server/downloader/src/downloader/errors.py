@@ -17,8 +17,13 @@ class EncryptedMediaError(DownloadError):
     """The HLS stream is encrypted; this downloader does not support DRM."""
 
 
-class SubscriptionRequiredError(DownloadError):
-    """The Source only gives the media to a paying account, which VODLoft does not have."""
+class AccessRequiredError(DownloadError):
+    """The Source only gives the media with an access VODLoft does not have, such as a paid
+    subscription or a channel membership. ``access`` is the Source's key for it, when known."""
+
+    def __init__(self, message: str, access: str | None = None):
+        super().__init__(message)
+        self.access = access
 
 
 class FileTooLargeError(DownloadError):

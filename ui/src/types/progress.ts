@@ -12,7 +12,7 @@ export type ProgressPresentation = {
     estimated?: boolean
     canCancel: boolean
     canRetry: boolean
-    outcome?: 'success' | 'error' | 'canceled'
+    outcome?: 'success' | 'error' | 'canceled' | 'locked'
 }
 
 export type DownloadPresentation = ProgressPresentation & {status: string}
