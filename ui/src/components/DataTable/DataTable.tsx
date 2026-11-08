@@ -60,6 +60,40 @@ export type DataTableProps<T> = {
     mobileSummary?: (row: T) => ReactNode
     /** Adds a mobile-only action that opens rowHref after the card is expanded. */
     mobileRowActionLabel?: string
+    /** Bulk edit: a checkbox on every row, and clicking a row selects it instead of opening it. */
+    selection?: DataTableSelection
+}
+
+export type DataTableSelection = {
+    isSelected: (key: string) => boolean
+    onToggle: (key: string) => void
+    /** The header checkbox, for every row the filters match. */
+    allState: 'none' | 'some' | 'all'
+    onToggleAll: () => void
+}
+
+/** A click on a control inside a row, such as an Enabled switch, works the control and leaves the selection alone. */
+function isControlClick(target: EventTarget | null) {
+    return target instanceof Element && !!target.closest('a, button, input, select, textarea, label, [role="switch"], .react-switch-bg, .react-switch-handle')
+}
+
+function SelectCheckbox({checked, indeterminate = false, label, onChange}: {
+    checked: boolean
+    indeterminate?: boolean
+    label: string
+    onChange: () => void
+}) {
+    return (
+        <input
+            type="checkbox"
+            className="bulk-check"
+            aria-label={label}
+            checked={checked}
+            ref={(element) => { if (element) element.indeterminate = indeterminate }}
+            onChange={onChange}
+            onClick={(event) => event.stopPropagation()}
+        />
+    )
 }
 
 export function DataTable<T>(props: DataTableProps<T>) {
@@ -72,21 +106,23 @@ export function DataTable<T>(props: DataTableProps<T>) {
         loadingMessage = 'Loading... ',
         emptyMessage = 'No data found',
         rowKey,
-        rowHref,
         rowAriaLabel,
         getRowProps,
         className,
         wrapperClassName,
-        actions,
         mobileSummary,
         mobileRowActionLabel,
+        selection,
     } = props
+    // Bulk edit replaces opening a row and its own actions.
+    const actions = selection ? undefined : props.actions
+    const rowHref = selection ? undefined : props.rowHref
 
     const navigate = useNavigate()
     const tableId = useId().replace(/:/g, '')
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
-    const colSpan = useMemo(() => (columns.length + (actions ? 1 : 0)) || 1, [columns, actions])
+    const colSpan = (columns.length + (actions ? 1 : 0) + (selection ? 1 : 0)) || 1
 
     const [sortState, setSortState] = useState<SortState | null>(null)
     const toggleSort = (id: string) => {
@@ -144,6 +180,16 @@ export function DataTable<T>(props: DataTableProps<T>) {
             <table className={`${className ?? 'table'} desktop-data-table`} aria-label={ariaLabel}>
                 <thead>
                 <tr>
+                    {selection && (
+                        <th scope="col" className="bulk-check-cell">
+                            <SelectCheckbox
+                                label="Select every matching profile"
+                                checked={selection.allState === 'all'}
+                                indeterminate={selection.allState === 'some'}
+                                onChange={selection.onToggleAll}
+                            />
+                        </th>
+                    )}
                     {columns.map((c, idx) => {
                         const id = c.id ?? String(idx)
                         const style: CSSProperties = {
@@ -217,9 +263,27 @@ export function DataTable<T>(props: DataTableProps<T>) {
                         }
                         const aria = rowAriaLabel?.(row)
                         if (aria) (rowProps as any)['aria-label'] = aria
+                        const selected = selection?.isSelected(rowKeyValue) ?? false
+                        if (selection) {
+                            rowProps.onClick = (event) => {
+                                if (!isControlClick(event.target)) selection.onToggle(rowKeyValue)
+                            }
+                            rowProps.style = {cursor: 'pointer', ...(rowProps.style || {})}
+                            rowProps.className = [rowProps.className, 'bulk-row', selected && 'is-selected'].filter(Boolean).join(' ')
+                            rowProps['aria-selected'] = selected
+                        }
 
                         return (
                             <tr key={rowKeyValue} {...rowProps}>
+                                {selection && (
+                                    <td className="bulk-check-cell">
+                                        <SelectCheckbox
+                                            label={`Select ${aria ?? 'profile'}`}
+                                            checked={selected}
+                                            onChange={() => selection.onToggle(rowKeyValue)}
+                                        />
+                                    </td>
+                                )}
                                 {columns.map((c, idx) => {
                                     const content = cellContent(c, row)
                                     const style: CSSProperties = {
@@ -284,14 +348,25 @@ export function DataTable<T>(props: DataTableProps<T>) {
                         const showRowAction = Boolean(mobileRowActionLabel && href)
 
                         return (
-                            <article className={`mobile-data-card${isExpanded ? ' is-expanded' : ''}`} role="listitem" key={rowKeyValue}>
+                            <article
+                                className={`mobile-data-card${isExpanded ? ' is-expanded' : ''}${selection ? ' bulk-card' : ''}${selection?.isSelected(rowKeyValue) ? ' is-selected' : ''}`}
+                                role="listitem"
+                                key={rowKeyValue}
+                            >
+                                {selection && (
+                                    // The card's own button selects it; this box only shows that it is.
+                                    <span className="bulk-card-check" aria-hidden="true" onClick={() => selection.onToggle(rowKeyValue)}>
+                                        <input type="checkbox" className="bulk-check" tabIndex={-1} readOnly checked={selection.isSelected(rowKeyValue)}/>
+                                    </span>
+                                )}
                                 <button
                                     type="button"
                                     className="mobile-data-summary"
-                                    aria-expanded={isExpanded}
-                                    aria-controls={detailsId}
-                                    aria-label={rowAriaLabel ? `${rowAriaLabel(row)} details` : undefined}
-                                    onClick={() => toggleMobileRow(rowKeyValue)}
+                                    aria-expanded={selection ? undefined : isExpanded}
+                                    aria-controls={selection ? undefined : detailsId}
+                                    aria-label={rowAriaLabel ? (selection ? `Select ${rowAriaLabel(row)}` : `${rowAriaLabel(row)} details`) : undefined}
+                                    aria-pressed={selection ? selection.isSelected(rowKeyValue) : undefined}
+                                    onClick={() => selection ? selection.onToggle(rowKeyValue) : toggleMobileRow(rowKeyValue)}
                                 >
                                     <span className="mobile-data-summary-content">
                                         {mobileSummary ? mobileSummary(row) : cellContent(columns[0], row)}
@@ -303,7 +378,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                                     />
                                 </button>
 
-                                {isExpanded && (
+                                {isExpanded && !selection && (
                                     <div className="mobile-data-details" id={detailsId}>
                                         {columns.filter((column) => !column.mobileHidden).map((column, columnIndex) => (
                                             <div className="mobile-data-detail-row" key={(column.id ?? String(columnIndex)) + '-mobile'}>

@@ -1,4 +1,4 @@
-import {useCallback, useRef, useState} from 'react'
+import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
@@ -16,6 +16,19 @@ import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
 import {RssStreamProfileUpdateSchema} from '../types/schemas/rss_stream_profile'
 import {faIcon} from '../icons/faIcon'
 import {apiUrl} from '../lib/api'
+import {useBulkSelection} from '../components/ProfileBulkEdit/useBulkSelection'
+import {BulkEditButton, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
+import ProfileBulkEdit, {tableSelection} from '../components/ProfileBulkEdit/ProfileBulkEdit'
+import type {BulkFieldSpec} from '../components/ProfileBulkEdit/BulkChangeDialog'
+
+const BULK_FIELDS: BulkFieldSpec[] = [
+    {key: 'enableProfile', label: 'Enabled', kind: 'switch', defaultValue: true},
+    {key: 'useDownloads', label: 'Stream downloads', kind: 'switch', defaultValue: true},
+    {key: 'useSourceStream', label: 'Stream directly from the site', kind: 'switch', defaultValue: true},
+    {key: 'maxItems', label: 'Episodes in the feed', kind: 'number', defaultValue: 100, min: 0, help: '0 puts every episode in the feed.'},
+    {key: 'proxySourceStream', label: 'Stream through VODLoft', kind: 'switch', defaultValue: true},
+    {key: 'streamLiveEpisodes', label: 'Live episodes', kind: 'switch', defaultValue: true},
+]
 
 const STREAMS_FROM_OPTIONS = [
     {value: 'downloads', label: 'Downloads'},
@@ -33,6 +46,13 @@ export default function StreamProfilesPage() {
         .map((source) => ({value: source.id, label: source.name}))
     const activeCount = [filters.source, filters.status, filters.streamsFrom, filters.format].filter((value) => value?.length).length
     const onSearch = useCallback((search: string) => setFilters((current) => ({...current, search})), [])
+
+    const canManage = can('stream_profiles')
+    const selection = useBulkSelection('streamProfilesView', 'stream-profiles/as-view', filters)
+    const names = useMemo(
+        () => new Map(table.items.map((profile) => [profile.id, profile.streamProfileImpl.effectiveTitle])),
+        [table.items],
+    )
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
@@ -110,7 +130,8 @@ export default function StreamProfilesPage() {
                     <p>Use multiple profiles per collection to fit different listening or
                         viewing needs.</p>
                 </PageSubtitle>
-                {can('stream_profiles') && <Link className="btn btn-primary" to="/add-stream-profile">Add stream profile</Link>}
+                {canManage && <BulkEditButton selection={selection}/>}
+                {canManage && <Link className="btn btn-primary" to="/add-stream-profile">Add stream profile</Link>}
             </div>
 
             <ProfileTableFilters
@@ -121,6 +142,7 @@ export default function StreamProfilesPage() {
                 loading={table.isLoading}
                 activeCount={activeCount}
                 onReset={() => setFilters({})}
+                leading={<SelectAll selection={selection} filtered={activeCount > 0 || !!filters.search}/>}
             >
                 <ChipFilter label="Source" options={sourceOptions} selected={filters.source ?? []} onChange={(source) => setFilters((current) => ({...current, source}))}/>
                 <ChipFilter label="Status" options={STATUS_OPTIONS} selected={filters.status ?? []} onChange={(status) => setFilters((current) => ({...current, status}))}/>
@@ -135,7 +157,8 @@ export default function StreamProfilesPage() {
                     data={table.isLoading ? undefined : table.items}
                     loading={table.isLoading}
                     error={table.error}
-                    rowKey={(p) => `${p.type}-${p.id}`}
+                    rowKey={(p) => p.id}
+                    selection={tableSelection(selection)}
                     rowAriaLabel={(p) => `${p.type} ${p.streamProfileImpl.effectiveTitle}`}
                     mobileSummary={(p) => (
                         <>
@@ -168,6 +191,17 @@ export default function StreamProfilesPage() {
                 />
                 <LoadMore {...table} noun="profiles"/>
             </div>
+
+            <ProfileBulkEdit
+                selection={selection}
+                endpoint="stream-profiles"
+                noun={['stream profile', 'stream profiles']}
+                names={names}
+                fields={BULK_FIELDS}
+                canEnable
+                deleteNote="Their feed links stop working."
+                invalidate={[['streamProfilesView']]}
+            />
 
             <ConfirmDeleteDialog
                 ref={confirmRef}

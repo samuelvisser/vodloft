@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from .service import *
+from ....models.profile_bulk import ProfileIdsRead
 from ....models.download_profile_view import DownloadProfileAPIReadView, DownloadProfileViewPageRead
 from ....models.profile_list import DownloadProfileListQuery
 from backend.app import db_session
@@ -26,6 +27,15 @@ def download_profile_view_list(
     """
     with db_session() as s:
         return get_download_profile_views_page(s, filters)
+
+
+@router.get("/ids", dependencies=_VIEWERS, response_model=ProfileIdsRead)
+def download_profile_view_ids(
+        filters: Annotated[DownloadProfileListQuery, Query()],
+):
+    """The ids of every download profile the filters match, in table order, for Select all."""
+    with db_session() as s:
+        return get_download_profile_ids(s, filters)
 
 
 @router.get("/by-collection-slug/{collection_slug}", dependencies=_VIEWERS, response_model=list[DownloadProfileAPIReadView])

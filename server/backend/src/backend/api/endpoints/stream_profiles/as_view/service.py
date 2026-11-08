@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, contains_eager, joinedload, with_polymorphic
 from sqlalchemy.orm.util import AliasedClass
 
 from backend.api.list_filters import matches_any, matches_format, matches_status, matches_words, scope_of, search_words
+from backend.api.models.profile_bulk import ProfileIdsRead
 from backend.api.models.profile_list import StreamProfileListQuery, StreamsFrom
 from backend.api.models.stream_profile import StreamProfileAPIReadView, StreamProfileViewPageRead
 from backend.api.pagination import InvalidCursorError, SortKey, keyset_page
@@ -26,12 +27,8 @@ def _to_view(item: AliasedClass[StreamProfileBase]) -> StreamProfileAPIReadView:
     )
 
 
-def get_stream_profile_views_page(
-    s: Session,
-    access: Access,
-    filters: StreamProfileListQuery,
-) -> StreamProfileViewPageRead:
-    """One page of the Stream Profiles table, in collection title order."""
+def _filtered(s: Session, access: Access, filters: StreamProfileListQuery):
+    """The Stream Profiles the user may see that the filters match, and the alias to sort them by."""
     profile = with_polymorphic(StreamProfileBase, [RssStreamProfile])
     streams_from = {
         StreamsFrom.DOWNLOADS: profile.use_downloads.is_(True),
@@ -52,6 +49,16 @@ def get_stream_profile_views_page(
             matches_format(profile.preferred_format, filters.format),
         )
     )
+    return query, profile
+
+
+def get_stream_profile_views_page(
+    s: Session,
+    access: Access,
+    filters: StreamProfileListQuery,
+) -> StreamProfileViewPageRead:
+    """One page of the Stream Profiles table, in collection title order."""
+    query, profile = _filtered(s, access, filters)
     total = s.scalar(select(func.count()).select_from(query.with_entities(profile.id).subquery()))
     try:
         items, next_cursor = keyset_page(
@@ -64,6 +71,13 @@ def get_stream_profile_views_page(
     return StreamProfileViewPageRead(
         items=[_to_view(item) for item in items], limit=filters.limit, next_cursor=next_cursor, total=int(total or 0),
     )
+
+
+def get_stream_profile_ids(s: Session, access: Access, filters: StreamProfileListQuery) -> ProfileIdsRead:
+    """Every Stream Profile the filters match, for Select all in bulk edit."""
+    query, profile = _filtered(s, access, filters)
+    rows = query.with_entities(profile.id).order_by(func.lower(Collection.title), profile.id)
+    return ProfileIdsRead(ids=[row.id for row in rows])
 
 
 def get_stream_profile_views_by_collection(

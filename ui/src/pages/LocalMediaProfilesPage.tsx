@@ -1,4 +1,4 @@
-import {useCallback, useRef, useState} from 'react'
+import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
@@ -20,6 +20,11 @@ import OpaqueOutputTemplateCode from '../components/LocalMediaProfile/OpaqueOutp
 import {localMediaProfileEndpoint} from '../types/local_media_profile'
 import './LocalMediaProfilesPage.css'
 import {apiUrl} from '../lib/api'
+import {createSelectRegistry} from '../utils/selectRegistry'
+import {useBulkSelection} from '../components/ProfileBulkEdit/useBulkSelection'
+import {BulkEditButton, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
+import ProfileBulkEdit, {tableSelection} from '../components/ProfileBulkEdit/ProfileBulkEdit'
+import type {BulkFieldSpec} from '../components/ProfileBulkEdit/BulkChangeDialog'
 
 const USED_FOR_OPTIONS = [
     {value: 'podcast', label: 'Podcasts'},
@@ -31,6 +36,39 @@ const USED_FOR_OPTIONS = [
 const STORAGE_OPTIONS = [
     {value: 'files', label: 'Has files'},
     {value: 'empty', label: 'Empty'},
+]
+
+const BULK_FIELDS: BulkFieldSpec[] = [
+    {
+        key: 'downloadMode', label: 'Where downloads are saved first', kind: 'select', defaultValue: 'system',
+        registry: createSelectRegistry('BulkLocalMediaProfileDownloadMode', {
+            system: {label: 'System setting'},
+            direct: {label: 'Save directly to downloads'},
+            temporary: {label: 'Save to temporary folder first'},
+        }),
+    },
+    {
+        key: 'thumbnailMode', label: 'Thumbnails', kind: 'select', defaultValue: 'system',
+        registry: createSelectRegistry('BulkLocalMediaProfileThumbnailMode', {
+            system: {label: 'System setting'},
+            no_thumbnail: {label: 'No thumbnail'},
+            embed: {label: 'Embed in media'},
+            sidecar: {label: 'Download besides media'},
+            embed_and_sidecar: {label: 'Both embed and download'},
+        }),
+        help: 'Files downloaded before keep their thumbnails as they are.',
+    },
+    {
+        key: 'metadataMode', label: 'Metadata', kind: 'select', defaultValue: 'system',
+        registry: createSelectRegistry('BulkLocalMediaProfileMetadataMode', {
+            system: {label: 'System setting'},
+            no_metadata: {label: 'No metadata'},
+            embed: {label: 'Embed in media'},
+            nfo: {label: 'Download as NFO'},
+            embed_and_nfo: {label: 'Both embed and download'},
+        }),
+        help: 'Files downloaded before keep their metadata as it is.',
+    },
 ]
 
 function getAvailableForLabel(profile: LocalMediaProfileRead) {
@@ -105,6 +143,10 @@ export default function LocalMediaProfilesPage() {
     const activeCount = [filters.usedFor, filters.format, filters.storage].filter((value) => value?.length).length
     const onSearch = useCallback((search: string) => setFilters((current) => ({...current, search})), [])
 
+    const canManage = can('local_media_profiles', 'manage')
+    const selection = useBulkSelection('localMediaProfilesView', 'local-media-profiles/as-view', filters)
+    const names = useMemo(() => new Map(table.items.map((profile) => [profile.id, profile.name])), [table.items])
+
     return (
         <section className="view" aria-labelledby="profiles-title">
             <div className="view-header">
@@ -114,7 +156,8 @@ export default function LocalMediaProfilesPage() {
                         across collections and movies. You can create multiple profiles (e.g., “Podcasts to ABS”, “Videos to NAS”) and
                         reuse them.</p>
                 </PageSubtitle>
-                {can('local_media_profiles', 'manage') && <Link className="btn btn-primary" to="/add-local-media-profile">Add media profile</Link>}
+                {canManage && <BulkEditButton selection={selection}/>}
+                {canManage && <Link className="btn btn-primary" to="/add-local-media-profile">Add media profile</Link>}
             </div>
 
             <ProfileTableFilters
@@ -125,6 +168,7 @@ export default function LocalMediaProfilesPage() {
                 loading={table.isLoading}
                 activeCount={activeCount}
                 onReset={() => setFilters({})}
+                leading={<SelectAll selection={selection} filtered={activeCount > 0 || !!filters.search}/>}
             >
                 <ChipFilter label="Used for" options={USED_FOR_OPTIONS} selected={filters.usedFor ?? []} onChange={(usedFor) => setFilters((current) => ({...current, usedFor}))}/>
                 <ChipFilter label="Format" options={FORMAT_OPTIONS} selected={filters.format ?? []} onChange={(format) => setFilters((current) => ({...current, format}))}/>
@@ -139,6 +183,7 @@ export default function LocalMediaProfilesPage() {
                     loading={table.isLoading}
                     error={table.error}
                     rowKey={(p) => p.id}
+                    selection={tableSelection(selection)}
                     rowAriaLabel={(p) => p.name}
                     className="table local-media-profiles-table"
                     wrapperClassName="table-wrapper local-media-profiles-table-wrapper"
@@ -172,6 +217,16 @@ export default function LocalMediaProfilesPage() {
                 />
                 <LoadMore {...table} noun="profiles"/>
             </div>
+
+            <ProfileBulkEdit
+                selection={selection}
+                endpoint="local-media-profiles"
+                noun={['media profile', 'media profiles']}
+                names={names}
+                fields={BULK_FIELDS}
+                deleteNote="A media profile that is still used is left as it is. Downloaded files stay where they are."
+                invalidate={[['localMediaProfilesView'], ['localMediaProfiles']]}
+            />
 
             <ConfirmDeleteDialog
                 ref={confirmRef}

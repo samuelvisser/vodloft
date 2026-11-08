@@ -2,6 +2,10 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 from .service import *
 from .as_view import download_profile_view_router
+from .bulk import change_download_profiles, delete_download_profiles, summarize_download_profiles
+from ...models.profile_bulk import (
+    BulkChangeIn, BulkResultRead, BulkSelectionIn, BulkSummaryRead, DownloadProfileBulkChangesIn,
+)
 from ...models.download_profile import *
 from backend.app import db_session
 from backend.services.example_episodes import example_session
@@ -39,6 +43,25 @@ def download_profiles_by_collection_slug_list(collection_slug: str):
     """
     with db_session() as s:
         return get_download_profiles_list(s, collection_slug)
+
+
+@router.post("/bulk/summary", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE)], response_model=BulkSummaryRead)
+def download_profiles_bulk_summary(body: BulkSelectionIn):
+    """What the chosen profiles are set to now, for the bulk edit's Change settings."""
+    with db_session() as s:
+        return summarize_download_profiles(s, body)
+
+
+@router.post("/bulk/change", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE)], response_model=BulkResultRead)
+def download_profiles_bulk_change(body: BulkChangeIn[DownloadProfileBulkChangesIn]):
+    """Give the chosen profiles the same settings; a setting their Site doesn't have is left alone."""
+    return run_write_transaction(lambda s: change_download_profiles(s, body))
+
+
+@router.post("/bulk/delete", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE)], response_model=BulkResultRead)
+def download_profiles_bulk_delete(body: BulkSelectionIn):
+    """Delete the chosen profiles."""
+    return run_write_transaction(lambda s: delete_download_profiles(s, body))
 
 
 @router.post("/which-episodes", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=WhichEpisodesAPIRead)

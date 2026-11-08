@@ -45,7 +45,12 @@ from .maintenance import (
 from .move import get_move_preview, request_move
 from .advisory import router as advisory_router
 from .preview import router as preview_router
+from .bulk import change_local_media_profiles, delete_local_media_profiles, summarize_local_media_profiles
+from backend.api.models.profile_bulk import (
+    BulkChangeIn, BulkResultRead, BulkSelectionIn, BulkSummaryRead, LocalMediaProfileBulkChangesIn, ProfileIdsRead,
+)
 from .service import (
+    get_local_media_profile_ids,
     get_local_media_profile,
     get_local_media_profile_view,
     get_local_media_profile_views_page,
@@ -78,6 +83,34 @@ def local_media_profiles_view_list(
     """
     with db_session() as s:
         return get_local_media_profile_views_page(s, filters)
+
+
+@router.get("/as-view/ids", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=ProfileIdsRead)
+def local_media_profiles_view_ids(
+        filters: Annotated[LocalMediaProfileListQuery, Query()],
+):
+    """The ids of every Local Media Profile the filters match, in table order, for Select all."""
+    with db_session() as s:
+        return get_local_media_profile_ids(s, filters)
+
+
+@router.post("/bulk/summary", dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.MANAGE)], response_model=BulkSummaryRead)
+def local_media_profiles_bulk_summary(body: BulkSelectionIn):
+    """What the chosen profiles are set to now, for the bulk edit's Change settings."""
+    with db_session() as s:
+        return summarize_local_media_profiles(s, body)
+
+
+@router.post("/bulk/change", dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.MANAGE)], response_model=BulkResultRead)
+def local_media_profiles_bulk_change(body: BulkChangeIn[LocalMediaProfileBulkChangesIn]):
+    """Give the chosen profiles the same download, thumbnail and metadata behavior."""
+    return run_write_transaction(lambda s: change_local_media_profiles(s, body))
+
+
+@router.post("/bulk/delete", dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.MANAGE)], response_model=BulkResultRead)
+def local_media_profiles_bulk_delete(body: BulkSelectionIn):
+    """Delete the chosen profiles; one still in use is skipped."""
+    return run_write_transaction(lambda s: delete_local_media_profiles(s, body))
 
 
 @router.get("/template/variables", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[LocalMediaProfileTemplateVariable])
