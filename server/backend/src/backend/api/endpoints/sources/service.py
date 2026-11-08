@@ -130,6 +130,7 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         local_collection = _collection_of_local_episode(s, source, link.slug)
         if local_collection is not None:
             collection_slug, collection_url = local_collection.slug, local_collection.sharing_url
+    found = link_access(source.id, link.url, link.access)
     return ResolvedLinkAPIRead(
         source=SourceAPIRead.model_validate(source),
         kind=link.kind,
@@ -140,7 +141,8 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         site=link.site,
         drm_protected=link.drm_protected,
         access=link.access,
-        access_label=_access_label(source, link.url, link.access),
+        access_label=found.label if found is not None else None,
+        access_description=found.description if found is not None else None,
         access_locked=access_locked(source.id, link.access, None),
         preview=ResolvedLinkPreviewAPIRead.model_validate(link),
         candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],

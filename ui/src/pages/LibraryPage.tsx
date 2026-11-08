@@ -391,7 +391,7 @@ export default function LibraryPage() {
                                                 <DownloadStatusBadge download={download}/>
                                             </span>
                                         )}
-                                        {video.drmProtected ? <DrmBadge onCover/> : video.access && <AccessBadge label={video.accessLabel} onCover/>}
+                                        {video.drmProtected ? <DrmBadge onCover/> : video.access && <AccessBadge label={video.accessLabel} description={video.accessDescription} onCover/>}
                                         {!image && <FontAwesomeIcon icon={faIcon('fass', 'film')}/>}
                                         {duration && <span className="badge">{duration}</span>}
                                     </span>

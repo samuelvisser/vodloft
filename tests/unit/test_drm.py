@@ -99,6 +99,7 @@ def test_a_video_that_needs_a_subscription_cannot_be_downloaded(session):
     video, _ = index_video(session, "npo", replace(_details(), url="https://npo.nl/start/afspelen/clip_1", access="npo_plus"))
     read = VideoAPIRead.model_validate(video)
     assert (read.access, read.access_label, read.access_locked) == ("npo_plus", "NPO Plus", True)
+    assert read.access_description == "Only NPO Plus subscribers can watch this."
     profile = VideoLocalMediaProfile(
         slug="videos", name="Videos", preferred_format="format_1080p",
         output_template="/downloads/videos/{{ title }} [{{ slug }}].ext",

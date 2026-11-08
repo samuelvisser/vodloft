@@ -49,6 +49,8 @@ export const LockableFields = {
     accessLocked: z.boolean().optional().default(false),
     /** What the Site calls the access, such as Members only or NPO Plus. */
     accessLabel: z.string().nullable().optional().default(null),
+    /** One sentence from the Site on who can watch it, such as "Only NPO Plus subscribers can watch this." */
+    accessDescription: z.string().nullable().optional().default(null),
 }
 
 
@@ -103,6 +105,7 @@ export const ResolvedLinkReadSchema = z.object({
     drmProtected: z.boolean(),
     access: z.string().nullable().optional().default(null),
     accessLabel: z.string().nullable().optional().default(null),
+    accessDescription: z.string().nullable().optional().default(null),
     accessLocked: z.boolean().optional().default(false),
     preview: z.object({
         title: z.string(),

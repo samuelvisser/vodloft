@@ -63,11 +63,10 @@ function formatCheckDate(value: Date | string): string {
 
 /** Media the Source keeps for members or subscribers: VODLoft does not retry it, and it is not an error. */
 function lockedPresentation(download: MediaDownloadDomainViewRead): DownloadPresentation {
-    const access = download.accessLabel ? ` (${download.accessLabel})` : ''
     const check = download.accessCheckAt
         ? ` VODLoft checks again on ${formatCheckDate(download.accessCheckAt)}.`
         : ' VODLoft tries again when you ask it to check again, or sign in with that access.'
-    const detail = `The site keeps this for members or subscribers${access}.${check}`
+    const detail = `${download.accessDescription ?? 'Only members or subscribers can watch this.'}${check}`
     return {
         ...terminal('locked', download.accessLabel ? `Locked: ${download.accessLabel}` : 'Locked', detail, 'locked'),
         compactLabel: 'Locked',

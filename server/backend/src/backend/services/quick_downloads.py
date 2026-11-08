@@ -145,8 +145,7 @@ def check_quick_downloadable(
     if access is not None and source.has_access(access) is False:
         found = link_access(source.id, url, access)
         raise QuickDownloadRefused(
-            f"{source.name} only gives this video with {found.label}" if found
-            else f"{source.name} only gives this video with an access VODLoft does not have"
+            found.description if found else f"{source.name} only gives this video with an access VODLoft does not have"
         )
     if kind is LinkKind.COLLECTION:
         raise QuickDownloadRefused("Quick download takes one video, episode or movie, not a whole collection such as a channel")

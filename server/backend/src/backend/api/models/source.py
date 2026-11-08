@@ -65,6 +65,13 @@ class LockableResponse(ResponseBase):
         found = site_access(self.source_key, self.site_key, self.access)
         return found.label if found is not None else None
 
+    @computed_field
+    @property
+    def access_description(self) -> Optional[str]:
+        """One sentence from the media's Site on who can watch it, such as "Only NPO Plus subscribers can watch this."."""
+        found = site_access(self.source_key, self.site_key, self.access)
+        return found.description if found is not None else None
+
 
 class DownloadOptionsAPIRead(ResponseBase):
     """What a Local Media Profile can download for a Site, or for any Site of a Source."""
@@ -296,6 +303,8 @@ class ResolvedLinkAPIRead(ResponseBase):
     """The key of the access the video needs."""
     access_label: Optional[str] = None
     """What the link's Site calls that access, such as Members only."""
+    access_description: Optional[str] = None
+    """One sentence from the link's Site on who can watch the video."""
     access_locked: bool = False
     """VODLoft does not have that access, so it cannot download the video."""
     preview: ResolvedLinkPreviewAPIRead

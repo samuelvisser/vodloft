@@ -1084,6 +1084,7 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         accessCheckAt: null,
         accessLocked: false,
         accessLabel: null,
+        accessDescription: null,
         type: contextString(operation, 'media_type') || 'episode',
         mediaItemId,
         localMediaProfileId,
