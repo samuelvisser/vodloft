@@ -29,7 +29,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 SITE_REFRESH_REVISION = "5b75b63e55f2"
 NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
-PICTURE_COMMENTS_REVISION = "8124198d716f"
+PROFILE_LOOKUP_INDEXES_REVISION = "5b8e1f3c2a90"
 HEAD_REVISION = "a0eceaa70db5"
 
 
@@ -954,7 +954,7 @@ def test_imported_downloads_join_the_download_profile_of_their_collection(migrat
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, PICTURE_COMMENTS_REVISION)
+    command.upgrade(config, PROFILE_LOOKUP_INDEXES_REVISION)
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys = OFF"))
         connection.execute(text(

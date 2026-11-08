@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from backend.api.models.collection_example import ExampleCollectionAPIIn
@@ -10,7 +12,9 @@ from backend.api.models.local_media_profile import (
 from backend.api.models.local_media_profile_view import (
     LocalMediaProfileAPIRead,
     LocalMediaProfileViewAPIRead,
+    LocalMediaProfileViewPageRead,
 )
+from backend.api.models.profile_list import LocalMediaProfileListQuery
 from backend.api.models.local_media_profile_move import (
     LocalMediaProfileMoveAPIRequest,
     LocalMediaProfileMovePreviewAPIRead,
@@ -44,7 +48,7 @@ from .preview import router as preview_router
 from .service import (
     get_local_media_profile,
     get_local_media_profile_view,
-    get_local_media_profile_views_list,
+    get_local_media_profile_views_page,
     get_local_media_profiles_list,
 )
 from backend.security.access import Area, Level
@@ -64,11 +68,16 @@ def local_media_profiles_list():
         return get_local_media_profiles_list(s)
 
 
-@router.get("/as-view", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[LocalMediaProfileViewAPIRead])
-def local_media_profiles_view_list():
-    """List Local Media Profiles together with management statistics."""
+@router.get("/as-view", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileViewPageRead)
+def local_media_profiles_view_list(
+        filters: Annotated[LocalMediaProfileListQuery, Query()],
+):
+    """One page of Local Media Profiles together with management statistics, in name order.
+
+    The filters narrow the list and its total; `nextCursor` continues it.
+    """
     with db_session() as s:
-        return get_local_media_profile_views_list(s)
+        return get_local_media_profile_views_page(s, filters)
 
 
 @router.get("/template/variables", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[LocalMediaProfileTemplateVariable])

@@ -59,8 +59,9 @@ def test_aggregate_local_media_profiles_are_validated_before_session_closes() ->
 def test_local_media_profile_view_reports_managed_download_statistics() -> None:
     from backend.api.endpoints.local_media_profiles.service import (
         get_local_media_profile_view,
-        get_local_media_profile_views_list,
+        get_local_media_profile_views_page,
     )
+    from backend.api.models.profile_list import LocalMediaProfileListQuery
     from backend.db.models import Movie, MovieLocalMediaProfile, MovieMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
@@ -115,7 +116,8 @@ def test_local_media_profile_view_reports_managed_download_statistics() -> None:
         session.commit()
 
         view = get_local_media_profile_view(session, profile.slug)
-        list_views = get_local_media_profile_views_list(session)
+        list_views = get_local_media_profile_views_page(
+            session, LocalMediaProfileListQuery(cursor=None, limit=50)).items
 
         assert len(list_views) == 1
         assert list_views[0].profile.id == profile.id

@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def test_onboarding_status_creates_the_single_settings_row(monkeypatch):
+def test_onboarding_status_only_reads(monkeypatch):
     from backend.api.endpoints.onboarding import service
     from backend.db import Base
     from backend.db.models import Settings
@@ -21,12 +21,11 @@ def test_onboarding_status_creates_the_single_settings_row(monkeypatch):
 
     with Session(engine) as session:
         status = service.get_onboarding_status(session)
-        session.commit()
 
         assert status.completed is False
         assert status.admin_password_configured is True
-        [settings] = session.query(Settings).all()
-        assert settings.onboarding_completed is False
+        assert not session.new and not session.dirty
+        assert session.query(Settings).count() == 0
 
     engine.dispose()
 

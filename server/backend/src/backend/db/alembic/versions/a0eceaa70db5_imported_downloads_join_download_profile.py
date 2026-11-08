@@ -6,7 +6,7 @@ outside the profile's date line was never deleted by its retention. Every such d
 the Collection's Download Profile for its Local Media Profile, like a file the profile downloaded itself.
 
 Revision ID: a0eceaa70db5
-Revises: 8124198d716f
+Revises: 5b8e1f3c2a90
 Create Date: 2026-11-08
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "a0eceaa70db5"
-down_revision = "8124198d716f"
+down_revision = "5b8e1f3c2a90"
 branch_labels = None
 depends_on = None
 

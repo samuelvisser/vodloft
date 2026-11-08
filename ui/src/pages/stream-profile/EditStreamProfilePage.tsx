@@ -3,7 +3,7 @@ import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
-import {useDownloadProfilesView} from '../../lib/queries'
+import {useCollectionDownloadProfilesView} from '../../lib/queries'
 import {StreamProfileReadView} from '../../types/schemas/stream_profile_base'
 import StreamProfileForm from '../../components/StreamProfile/StreamProfileForm'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
@@ -22,7 +22,6 @@ export default function EditStreamProfilePage() {
     const qc = useQueryClient()
 
     const profileId = id ? Number(id) : undefined
-    const {data: downloadProfiles} = useDownloadProfilesView()
 
     const {data: streamProfile, isLoading, error} = useQuery<StreamProfileReadView | undefined>({
         queryKey: ['streamProfile', id],
@@ -35,11 +34,11 @@ export default function EditStreamProfilePage() {
         },
     })
 
+    const {data: downloadProfiles} = useCollectionDownloadProfilesView(streamProfile?.collectionSlug)
     const downloadProfileDefaults = useMemo(() => {
-        if (!downloadProfiles) return undefined
         if (!streamProfile) return []
+        if (!downloadProfiles) return undefined
         return downloadProfiles
-            .filter((profile) => profile.collectionSlug === streamProfile.collectionSlug)
             .map((profile) => ({
                 id: profile.id,
                 preferredFormat: profile.localMediaProfilePreferredFormat,
@@ -99,7 +98,6 @@ export default function EditStreamProfilePage() {
     }
 
     const onSuccess = async () => {
-        await qc.invalidateQueries({queryKey: ['rssStreamProfiles']})
         await qc.invalidateQueries({queryKey: ['streamProfilesView']})
         navigate('/stream-profiles')
     }

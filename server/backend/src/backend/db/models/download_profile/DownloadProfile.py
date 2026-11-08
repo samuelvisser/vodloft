@@ -32,7 +32,7 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     collection_id: Mapped[int] = mapped_column(ForeignKey("collections.id"))
-    local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"))
+    local_media_profile_id: Mapped[int] = mapped_column(ForeignKey("local_media_profiles.id"), index=True)
     enable_profile: Mapped[bool] = mapped_column(default=True)
 
     download_with_countdown: Mapped[bool] = mapped_column(default=False)

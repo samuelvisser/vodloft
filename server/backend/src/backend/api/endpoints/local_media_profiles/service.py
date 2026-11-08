@@ -4,19 +4,24 @@ from pathlib import Path
 
 from fastapi import HTTPException
 from pydantic import TypeAdapter
-from sqlalchemy import case, func
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, with_polymorphic
 
+from backend.api.list_filters import matches_any, matches_format, matches_words, scope_of, search_words
 from backend.api.models.local_media_profile_view import (
     LocalMediaProfileAPIRead,
     LocalMediaProfileStatisticsAPIRead,
     LocalMediaProfileViewAPIRead,
+    LocalMediaProfileViewPageRead,
 )
+from backend.api.models.profile_list import LocalMediaProfileListQuery, StorageUse, UsedFor
+from backend.api.pagination import InvalidCursorError, SortKey, keyset_page
 from backend.db.models import (
     DownloadProfile,
     LocalMediaProfileBase,
     MediaDownloadBase,
 )
+from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope, LocalMediaProfileType
 from backend.services.storage_used import is_physical_download, storage_size_bytes_sum
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from downloader import hls_asset_marker
@@ -197,26 +202,60 @@ def _get_local_media_profile_statistics(
     }
 
 
-def get_local_media_profile_views_list(
-    s: Session,
-) -> list[LocalMediaProfileViewAPIRead]:
-    profile = with_polymorphic(LocalMediaProfileBase, "*")
-    items = (
-        s.query(profile)
-        .order_by(profile.id)
-        .all()
-    )
-    statistics_by_profile_id = _get_local_media_profile_statistics(
-        s,
-        [item.id for item in items],
-    )
+def _views(s: Session, items: list[LocalMediaProfileBase]) -> list[LocalMediaProfileViewAPIRead]:
+    statistics_by_profile_id = _get_local_media_profile_statistics(s, [item.id for item in items])
     return [
-        LocalMediaProfileViewAPIRead(
-            profile=_to_read(item),
-            statistics=statistics_by_profile_id[item.id],
-        )
+        LocalMediaProfileViewAPIRead(profile=_to_read(item), statistics=statistics_by_profile_id[item.id])
         for item in items
     ]
+
+
+def get_local_media_profile_views_page(
+    s: Session,
+    filters: LocalMediaProfileListQuery,
+) -> LocalMediaProfileViewPageRead:
+    """One page of the Local Media Profiles table, in name order."""
+    profile = with_polymorphic(LocalMediaProfileBase, "*")
+    scope = profile.CollectionLocalMediaProfile.collection_scope
+    is_collection = profile.type == LocalMediaProfileType.COLLECTION.value
+    used_for = {
+        UsedFor.PODCAST: is_collection & scope.in_([
+            CollectionLocalMediaProfileScope.PODCAST.value, CollectionLocalMediaProfileScope.BOTH.value,
+        ]),
+        UsedFor.SERIES: is_collection & scope.in_([
+            CollectionLocalMediaProfileScope.SERIES.value, CollectionLocalMediaProfileScope.BOTH.value,
+        ]),
+        UsedFor.MOVIE: profile.type == LocalMediaProfileType.MOVIE.value,
+        UsedFor.VIDEO: profile.type == LocalMediaProfileType.VIDEO.value,
+    }
+    has_files = (
+        select(MediaDownloadBase.id)
+        .where(
+            MediaDownloadBase.local_media_profile_id == profile.id,
+            is_physical_download(),
+            MediaDownloadBase.artifact_size_bytes > 0,
+        )
+        .exists()
+    )
+    storage = {StorageUse.FILES: has_files, StorageUse.EMPTY: ~has_files}
+    query = s.query(profile).filter(
+        matches_words(search_words(filters.search), profile.name, profile.output_template),
+        matches_any([used_for[value] for value in set(filters.used_for)]),
+        matches_format(profile.preferred_format, filters.format),
+        matches_any([storage[value] for value in set(filters.storage)] if set(filters.storage) != set(StorageUse) else []),
+    )
+    total = s.scalar(select(func.count()).select_from(query.with_entities(profile.id).subquery()))
+    try:
+        items, next_cursor = keyset_page(
+            query,
+            [SortKey(func.lower(profile.name)), SortKey(profile.id)],
+            cursor=filters.cursor, limit=filters.limit, kind="local-media-profiles", scope=scope_of(filters),
+        )
+    except InvalidCursorError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return LocalMediaProfileViewPageRead(
+        items=_views(s, items), limit=filters.limit, next_cursor=next_cursor, total=int(total or 0),
+    )
 
 
 def get_local_media_profile(

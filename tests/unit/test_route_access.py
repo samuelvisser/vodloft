@@ -158,13 +158,13 @@ class _RequestWith:
         (
             "downloader",
             ["/api/quick-downloads", "/api/quick-downloads/history", "/api/quick-downloads/settings", "/api/auth/me", "/api/pull", "/api/sources"],
-            ["/api/collections", "/api/movies", "/api/videos", "/api/media-downloads", "/api/settings",
+            ["/api/collections", "/api/movies", "/api/videos", "/api/library/counts", "/api/media-downloads", "/api/settings",
              "/api/download-profiles", "/api/local-media-profiles", "/api/rss-stream-profiles",
              "/api/tasks/runs", "/api/logs", "/api/users", "/api/sources/problems", "/api/settings/library-defaults"],
         ),
         (
             "viewer",
-            ["/api/collections", "/api/movies", "/api/videos", "/api/media-downloads", "/api/rss-stream-profiles",
+            ["/api/collections", "/api/movies", "/api/videos", "/api/library/counts", "/api/media-downloads", "/api/rss-stream-profiles",
              "/api/settings/library-defaults"],
             ["/api/quick-downloads", "/api/settings", "/api/tasks/runs", "/api/logs", "/api/users",
              "/api/download-profiles"],

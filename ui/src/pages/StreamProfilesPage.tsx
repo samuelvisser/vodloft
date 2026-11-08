@@ -1,9 +1,12 @@
-import {useCallback, useRef} from 'react'
+import {useCallback, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
-import {useStreamProfilesView} from '../lib/queries'
+import {type StreamProfileTableFilters, useSources, useStreamProfilesTable} from '../lib/queries'
+import ProfileTableFilters, {ChipFilter, FORMAT_OPTIONS, STATUS_OPTIONS} from '../components/common/ProfileTableFilters'
+import {updateLazyCollectionEntities} from '../lib/lazyCollection'
+import LoadMore from '../components/common/LoadMore'
 import {StreamProfileReadView} from '../types/schemas/stream_profile_base'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
@@ -14,10 +17,22 @@ import {RssStreamProfileUpdateSchema} from '../types/schemas/rss_stream_profile'
 import {faIcon} from '../icons/faIcon'
 import {apiUrl} from '../lib/api'
 
+const STREAMS_FROM_OPTIONS = [
+    {value: 'downloads', label: 'Downloads'},
+    {value: 'source', label: 'Direct from Site'},
+]
+
 export default function StreamProfilesPage() {
     const queryClient = useQueryClient()
 
-    const {data: profiles, isLoading, error} = useStreamProfilesView()
+    const [filters, setFilters] = useState<StreamProfileTableFilters>({})
+    const table = useStreamProfilesTable(filters)
+    const {data: sources} = useSources()
+    const sourceOptions = (sources ?? [])
+        .filter((source) => source.features.includes('collections'))
+        .map((source) => ({value: source.id, label: source.name}))
+    const activeCount = [filters.source, filters.status, filters.streamsFrom, filters.format].filter((value) => value?.length).length
+    const onSearch = useCallback((search: string) => setFilters((current) => ({...current, search})), [])
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
@@ -36,18 +51,11 @@ export default function StreamProfilesPage() {
             })
             if (!response.ok) throw new Error(`Failed to update stream profile (${response.status})`)
 
-            queryClient.setQueryData<StreamProfileReadView[]>(['streamProfilesView'], (current) => (
-                current?.map((item) => (
-                    item.id === profile.id && item.type === profile.type
-                        ? {...item, enableProfile}
-                        : item
-                ))
+            updateLazyCollectionEntities<StreamProfileReadView>(queryClient, ['streamProfilesView'], (item) => (
+                item.id === profile.id && item.type === profile.type ? {...item, enableProfile} : item
             ))
 
-            await Promise.allSettled([
-                queryClient.invalidateQueries({queryKey: ['streamProfilesView']}),
-                queryClient.invalidateQueries({queryKey: ['rssStreamProfiles']}),
-            ])
+            await queryClient.invalidateQueries({queryKey: ['streamProfilesView']})
         } catch (updateError) {
             toast.error(`Failed to ${enableProfile ? 'enable' : 'disable'} stream profile`)
             throw updateError
@@ -74,7 +82,7 @@ export default function StreamProfilesPage() {
             align: 'center',
         },
         {
-            header: 'Stream from DW',
+            header: 'Direct from Site',
             accessor: (p) => (p.useSourceStream ? '✓' : '✕'),
             align: 'center',
         },
@@ -105,13 +113,28 @@ export default function StreamProfilesPage() {
                 {can('stream_profiles') && <Link className="btn btn-primary" to="/add-stream-profile">Add stream profile</Link>}
             </div>
 
+            <ProfileTableFilters
+                search={filters.search ?? ''}
+                onSearch={onSearch}
+                searchPlaceholder="Search stream profiles"
+                total={table.total}
+                loading={table.isLoading}
+                activeCount={activeCount}
+                onReset={() => setFilters({})}
+            >
+                <ChipFilter label="Source" options={sourceOptions} selected={filters.source ?? []} onChange={(source) => setFilters((current) => ({...current, source}))}/>
+                <ChipFilter label="Status" options={STATUS_OPTIONS} selected={filters.status ?? []} onChange={(status) => setFilters((current) => ({...current, status}))}/>
+                <ChipFilter label="Streams from" options={STREAMS_FROM_OPTIONS} selected={filters.streamsFrom ?? []} onChange={(streamsFrom) => setFilters((current) => ({...current, streamsFrom}))}/>
+                <ChipFilter label="Format" options={FORMAT_OPTIONS} selected={filters.format ?? []} onChange={(format) => setFilters((current) => ({...current, format}))}/>
+            </ProfileTableFilters>
+
             <div className="form-row">
                 <DataTable<StreamProfileReadView>
                     ariaLabel="Existing stream profiles"
                     columns={columns}
-                    data={profiles}
-                    loading={isLoading}
-                    error={error}
+                    data={table.isLoading ? undefined : table.items}
+                    loading={table.isLoading}
+                    error={table.error}
                     rowKey={(p) => `${p.type}-${p.id}`}
                     rowAriaLabel={(p) => `${p.type} ${p.streamProfileImpl.effectiveTitle}`}
                     mobileSummary={(p) => (
@@ -143,6 +166,7 @@ export default function StreamProfilesPage() {
                         },
                     ]}
                 />
+                <LoadMore {...table} noun="profiles"/>
             </div>
 
             <ConfirmDeleteDialog
@@ -153,7 +177,7 @@ export default function StreamProfilesPage() {
                     const path = `${p.type === 'rss' ? 'rss-stream-profiles' : 'stream-profiles'}/${p.id}`
                     return fetch(`${apiUrl()}/${path}`, {method: 'DELETE', credentials: 'include'})
                 }}
-                invalidateQueries={[["streamProfilesView"], ["rssStreamProfiles"]]}
+                invalidateQueries={[["streamProfilesView"]]}
                 inUseMessage="This stream profile is in use, it cannot be deleted"
             />
         </section>

@@ -24,6 +24,7 @@ from backend.api.pagination import (
     keyset_after,
 )
 from backend.api.models.media_download import (
+    DownloadedLocalMediaProfileAPIRead,
     EpisodeDownloadAPICreate,
     MediaDownloadAPIRead,
     MediaDownloadAPIReadView,
@@ -272,6 +273,8 @@ def _media_download_view_statement(
         limit: Optional[int],
         ids: Optional[list[int]] = None,
         video_id: Optional[int] = None,
+        media_types: Optional[list[MediaType]] = None,
+        episode_ids: Optional[list[int]] = None,
 ):
     """Build the scoped download query while returning complete ORM models."""
     download = with_polymorphic(MediaDownloadBase, "*")
@@ -295,6 +298,12 @@ def _media_download_view_statement(
 
     if ids is not None:
         stmt = stmt.where(download.id.in_(ids))
+
+    if media_types:
+        stmt = stmt.where(download.type.in_([media_type.value for media_type in media_types]))
+
+    if episode_ids:
+        stmt = stmt.where(download.type == MediaType.EPISODE.value, download.media_item_id.in_(episode_ids))
 
     if episode_slug is not None:
         episode_ids = select(Episode.id).where(Episode.slug == episode_slug)
@@ -367,6 +376,8 @@ def get_media_downloads_view(
         movie_slug: Optional[str] = None,
         collection_slug: Optional[str] = None,
         video_id: Optional[int] = None,
+        media_types: Optional[list[MediaType]] = None,
+        episode_ids: Optional[list[int]] = None,
         statuses: Optional[list[str]] = None,
         limit: Optional[int] = None,
 ) -> list[MediaDownloadAPIReadView]:
@@ -376,10 +387,31 @@ def get_media_downloads_view(
         movie_slug=movie_slug,
         collection_slug=collection_slug,
         video_id=video_id,
+        media_types=media_types,
+        episode_ids=episode_ids,
         statuses=statuses,
         limit=limit,
     )))
     return _build_media_download_views(s, downloads)
+
+
+def get_downloaded_local_media_profiles(s: Session, collection_slug: str) -> list[DownloadedLocalMediaProfileAPIRead]:
+    """The Local Media Profiles with an episode download of the Collection that is not absent, by name."""
+    has_download = (
+        select(EpisodeMediaDownload.id)
+        .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+        .join(Collection, Collection.id == Episode.collection_id)
+        .where(
+            Collection.slug == collection_slug,
+            EpisodeMediaDownload.local_media_profile_id == LocalMediaProfileBase.id,
+            EpisodeMediaDownload.artifact_status != MediaDownloadArtifactStatus.ABSENT.value,
+        )
+        .exists()
+    )
+    profiles = s.scalars(
+        select(LocalMediaProfileBase).where(has_download).order_by(LocalMediaProfileBase.name)
+    )
+    return [DownloadedLocalMediaProfileAPIRead.model_validate(profile) for profile in profiles]
 
 
 def get_media_downloads_page(

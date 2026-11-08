@@ -26,7 +26,9 @@ def _as_response(settings: Settings) -> OnboardingStatusAPIRead:
 
 
 def get_onboarding_status(s: Session) -> OnboardingStatusAPIRead:
-    return _as_response(_get_or_create_settings(s))
+    """Read-only: every page asks for this, so it must never wait for the writer's turn."""
+    settings = s.query(Settings).order_by(Settings.id).first()
+    return _as_response(settings or Settings(onboarding_completed=False))
 
 
 def start_fresh(s: Session) -> None:

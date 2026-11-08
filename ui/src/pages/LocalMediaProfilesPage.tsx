@@ -1,8 +1,10 @@
-import {useRef} from 'react'
+import {useCallback, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
-import {useLocalMediaProfilesView} from '../lib/queries'
+import {type LocalMediaProfileTableFilters, type LocalMediaProfileTableRow, useLocalMediaProfilesTable} from '../lib/queries'
+import ProfileTableFilters, {ChipFilter, FORMAT_OPTIONS} from '../components/common/ProfileTableFilters'
+import LoadMore from '../components/common/LoadMore'
 import {LocalMediaProfileRead} from "../types/schemas/local_media_profile";
 import {formatBytes} from '../utils/formatting'
 import {
@@ -19,9 +21,17 @@ import {localMediaProfileEndpoint} from '../types/local_media_profile'
 import './LocalMediaProfilesPage.css'
 import {apiUrl} from '../lib/api'
 
-type LocalMediaProfileOverviewRow = LocalMediaProfileRead & {
-    storageSizeBytes: number
-}
+const USED_FOR_OPTIONS = [
+    {value: 'podcast', label: 'Podcasts'},
+    {value: 'series', label: 'Series'},
+    {value: 'movie', label: 'Movies'},
+    {value: 'video', label: 'Videos'},
+]
+
+const STORAGE_OPTIONS = [
+    {value: 'files', label: 'Has files'},
+    {value: 'empty', label: 'Empty'},
+]
 
 function getAvailableForLabel(profile: LocalMediaProfileRead) {
     return profile.type === 'collection'
@@ -35,7 +45,7 @@ export default function LocalMediaProfilesPage() {
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
-    const columns: Column<LocalMediaProfileOverviewRow>[] = [
+    const columns: Column<LocalMediaProfileTableRow>[] = [
         {
             header: 'Name',
             cell: (p) => (
@@ -90,13 +100,10 @@ export default function LocalMediaProfilesPage() {
         }
     ]
 
-    const {data: profileViews, isLoading, error} = useLocalMediaProfilesView()
-    const profiles = profileViews?.map(
-        ({profile, statistics}): LocalMediaProfileOverviewRow => ({
-            ...profile,
-            storageSizeBytes: statistics.storageSizeBytes,
-        }),
-    ).sort((left, right) => left.name.localeCompare(right.name, undefined, {sensitivity: 'base', numeric: true}))
+    const [filters, setFilters] = useState<LocalMediaProfileTableFilters>({})
+    const table = useLocalMediaProfilesTable(filters)
+    const activeCount = [filters.usedFor, filters.format, filters.storage].filter((value) => value?.length).length
+    const onSearch = useCallback((search: string) => setFilters((current) => ({...current, search})), [])
 
     return (
         <section className="view" aria-labelledby="profiles-title">
@@ -110,13 +117,27 @@ export default function LocalMediaProfilesPage() {
                 {can('local_media_profiles', 'manage') && <Link className="btn btn-primary" to="/add-local-media-profile">Add media profile</Link>}
             </div>
 
+            <ProfileTableFilters
+                search={filters.search ?? ''}
+                onSearch={onSearch}
+                searchPlaceholder="Search names or output paths"
+                total={table.total}
+                loading={table.isLoading}
+                activeCount={activeCount}
+                onReset={() => setFilters({})}
+            >
+                <ChipFilter label="Used for" options={USED_FOR_OPTIONS} selected={filters.usedFor ?? []} onChange={(usedFor) => setFilters((current) => ({...current, usedFor}))}/>
+                <ChipFilter label="Format" options={FORMAT_OPTIONS} selected={filters.format ?? []} onChange={(format) => setFilters((current) => ({...current, format}))}/>
+                <ChipFilter label="Storage" options={STORAGE_OPTIONS} selected={filters.storage ?? []} onChange={(storage) => setFilters((current) => ({...current, storage}))}/>
+            </ProfileTableFilters>
+
             <div className="form-row">
-                <DataTable<LocalMediaProfileOverviewRow>
+                <DataTable<LocalMediaProfileTableRow>
                     ariaLabel="Existing media profiles"
                     columns={columns}
-                    data={profiles}
-                    loading={isLoading}
-                    error={error}
+                    data={table.isLoading ? undefined : table.items}
+                    loading={table.isLoading}
+                    error={table.error}
                     rowKey={(p) => p.id}
                     rowAriaLabel={(p) => p.name}
                     className="table local-media-profiles-table"
@@ -149,6 +170,7 @@ export default function LocalMediaProfilesPage() {
                         },
                     ]}
                 />
+                <LoadMore {...table} noun="profiles"/>
             </div>
 
             <ConfirmDeleteDialog
