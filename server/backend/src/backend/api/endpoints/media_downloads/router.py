@@ -21,6 +21,7 @@ from ...models.operations import (
     MediaDownloadOperationAccepted,
 )
 from backend.app import db_session
+from backend.types.media_types import MediaType
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
     prioritize_media_download_operation,
@@ -69,12 +70,25 @@ def media_downloads_page(
         )
 
 
+@router.get(
+    "/as-view/local-media-profiles",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.VIEW)],
+    response_model=list[DownloadedLocalMediaProfileAPIRead],
+)
+def media_downloads_local_media_profiles(collection_slug: str):
+    """The Local Media Profiles holding downloads of a Collection's episodes."""
+    with db_session() as s:
+        return get_downloaded_local_media_profiles(s, collection_slug)
+
+
 @router.get("/as-view", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.VIEW)], response_model=list[MediaDownloadAPIReadView])
 def media_downloads_view(
         episode_slug: Optional[str] = None,
         movie_slug: Optional[str] = None,
         collection_slug: Optional[str] = None,
         video_id: Optional[int] = None,
+        media_type: Optional[list[MediaType]] = Query(default=None, alias="type"),
+        episode_id: Optional[list[int]] = Query(default=None, max_length=200),
         status_filter: Optional[list[str]] = Query(default=None, alias="status"),
         limit: Optional[int] = None,
 ):
@@ -85,6 +99,8 @@ def media_downloads_view(
             movie_slug=movie_slug,
             collection_slug=collection_slug,
             video_id=video_id,
+            media_types=media_type,
+            episode_ids=episode_id,
             statuses=status_filter,
             limit=limit,
         )

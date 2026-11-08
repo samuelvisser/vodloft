@@ -304,7 +304,6 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
         await Promise.all([
             qc.invalidateQueries({queryKey: ['localMediaProfiles']}),
             qc.invalidateQueries({queryKey: ['downloadProfiles']}),
-            qc.invalidateQueries({queryKey: ['rssStreamProfiles']}),
             qc.invalidateQueries({queryKey: ['streamProfilesView']}),
             qc.invalidateQueries({queryKey: ['collections']}),
             qc.invalidateQueries({queryKey: ['seasons']}),

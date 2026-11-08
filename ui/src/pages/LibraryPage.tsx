@@ -18,7 +18,7 @@ import {DrmBadge} from '../components/common/DrmProtected'
 import {SubscriptionBadge} from '../components/common/NeedsSubscription'
 import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
 import DownloadStatusBadge from '../components/DownloadProgress/DownloadStatusBadge'
-import {useMediaDownloadsView, useMovies, useCollectionsView, useVideos} from '../lib/queries'
+import {useLibraryDownloads, useMovies, useCollectionsView, useVideos} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg, CollectionTypeValue} from '../types/collection'
 
@@ -67,7 +67,7 @@ function loadLibraryCollectionTypeFilter(): Set<CollectionTypeValue> {
 }
 
 function latestMovieDownload(downloads: MediaDownloadViewRead[] | undefined, slug: string) {
-    return downloads?.find((download) => download.movieSlug === slug)
+    return downloads?.find((download) => download.type === 'movie' && download.movieSlug === slug)
 }
 
 function latestVideoDownload(downloads: MediaDownloadViewRead[] | undefined, videoId: number) {
@@ -132,7 +132,7 @@ export default function LibraryPage() {
     const {data: collections, isLoading: collectionsLoading, error: collectionsError} = useCollectionsView()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
     const {data: videos, isLoading: videosLoading, error: videosError} = useVideos()
-    const {data: downloads} = useMediaDownloadsView()
+    const {data: downloads} = useLibraryDownloads()
     const sourceKeys = useMemo(
         () => [...new Set([...(collections ?? []), ...(movies ?? []), ...(videos ?? [])].map((item) => item.sourceKey))].sort(),
         [collections, movies, videos],

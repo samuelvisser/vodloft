@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import AliasPath, Field
 
 from backend.api.models.download_profile import DownloadProfileAPIRead
+from backend.api.models.pagination import CursorPageRead
 
 
 class DownloadProfileAPIReadView(DownloadProfileAPIRead):
@@ -22,3 +23,9 @@ class DownloadProfileAPIReadView(DownloadProfileAPIRead):
         validation_alias=AliasPath("profile", "local_media_profile", "preferred_format")
     )
     storage_size_bytes: int = Field(validation_alias=AliasPath("storage_size_bytes"))
+
+
+class DownloadProfileViewPageRead(CursorPageRead[DownloadProfileAPIReadView]):
+    """One page of the Download Profiles table, and how many profiles its filters leave."""
+
+    total: int

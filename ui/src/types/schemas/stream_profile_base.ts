@@ -21,6 +21,7 @@ export type StreamProfileRead = z.infer<typeof StreamProfileReadSchema>
 export const StreamProfileReadViewSchema = StreamProfileReadSchema.extend({
     collectionTitle: z.string(),
     collectionSlug: z.string(),
+    collectionSourceKey: z.string(),
     streamProfileImpl: RssStreamProfileReadSchema,
 })
 export type StreamProfileReadView = z.infer<typeof StreamProfileReadViewSchema>

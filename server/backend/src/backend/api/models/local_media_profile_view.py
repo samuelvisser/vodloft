@@ -5,6 +5,7 @@ from typing import Annotated
 from pydantic import Field
 
 from backend.api.models.base import ResponseBase
+from backend.api.models.pagination import CursorPageRead
 from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPIRead
 from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPIRead
 from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPIRead
@@ -26,3 +27,9 @@ class LocalMediaProfileStatisticsAPIRead(ResponseBase):
 class LocalMediaProfileViewAPIRead(ResponseBase):
     profile: LocalMediaProfileAPIRead
     statistics: LocalMediaProfileStatisticsAPIRead
+
+
+class LocalMediaProfileViewPageRead(CursorPageRead[LocalMediaProfileViewAPIRead]):
+    """One page of the Local Media Profiles table, and how many profiles its filters leave."""
+
+    total: int

@@ -3,7 +3,9 @@ import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
-import {useStreamProfilesView} from '../lib/queries'
+import {useStreamProfilesTable} from '../lib/queries'
+import {updateLazyCollectionEntities} from '../lib/lazyCollection'
+import LoadMore from '../components/common/LoadMore'
 import {StreamProfileReadView} from '../types/schemas/stream_profile_base'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
@@ -17,7 +19,7 @@ import {apiUrl} from '../lib/api'
 export default function StreamProfilesPage() {
     const queryClient = useQueryClient()
 
-    const {data: profiles, isLoading, error} = useStreamProfilesView()
+    const table = useStreamProfilesTable()
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
@@ -36,18 +38,11 @@ export default function StreamProfilesPage() {
             })
             if (!response.ok) throw new Error(`Failed to update stream profile (${response.status})`)
 
-            queryClient.setQueryData<StreamProfileReadView[]>(['streamProfilesView'], (current) => (
-                current?.map((item) => (
-                    item.id === profile.id && item.type === profile.type
-                        ? {...item, enableProfile}
-                        : item
-                ))
+            updateLazyCollectionEntities<StreamProfileReadView>(queryClient, ['streamProfilesView'], (item) => (
+                item.id === profile.id && item.type === profile.type ? {...item, enableProfile} : item
             ))
 
-            await Promise.allSettled([
-                queryClient.invalidateQueries({queryKey: ['streamProfilesView']}),
-                queryClient.invalidateQueries({queryKey: ['rssStreamProfiles']}),
-            ])
+            await queryClient.invalidateQueries({queryKey: ['streamProfilesView']})
         } catch (updateError) {
             toast.error(`Failed to ${enableProfile ? 'enable' : 'disable'} stream profile`)
             throw updateError
@@ -109,9 +104,9 @@ export default function StreamProfilesPage() {
                 <DataTable<StreamProfileReadView>
                     ariaLabel="Existing stream profiles"
                     columns={columns}
-                    data={profiles}
-                    loading={isLoading}
-                    error={error}
+                    data={table.isLoading ? undefined : table.items}
+                    loading={table.isLoading}
+                    error={table.error}
                     rowKey={(p) => `${p.type}-${p.id}`}
                     rowAriaLabel={(p) => `${p.type} ${p.streamProfileImpl.effectiveTitle}`}
                     mobileSummary={(p) => (
@@ -143,6 +138,7 @@ export default function StreamProfilesPage() {
                         },
                     ]}
                 />
+                <LoadMore {...table} noun="profiles"/>
             </div>
 
             <ConfirmDeleteDialog
@@ -153,7 +149,7 @@ export default function StreamProfilesPage() {
                     const path = `${p.type === 'rss' ? 'rss-stream-profiles' : 'stream-profiles'}/${p.id}`
                     return fetch(`${apiUrl()}/${path}`, {method: 'DELETE', credentials: 'include'})
                 }}
-                invalidateQueries={[["streamProfilesView"], ["rssStreamProfiles"]]}
+                invalidateQueries={[["streamProfilesView"]]}
                 inUseMessage="This stream profile is in use, it cannot be deleted"
             />
         </section>

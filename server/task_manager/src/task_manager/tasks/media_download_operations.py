@@ -41,6 +41,7 @@ from task_manager.scheduler.operations import (
     OperationDependencySpec,
     OperationTargetSpec,
     add_operation_dependencies,
+    OPERATION_ADMISSION_WAIT_CONTEXT_KEY,
     clear_operation_admission_wait,
     create_operation,
     link_run_to_operations,
@@ -425,6 +426,11 @@ def set_media_download_operation_not_before(
         and operation.context.get(_PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY) is True
     ):
         return operation
+    delayed = not_before is not None and not_before > datetime.now(timezone.utc)
+    if not delayed and OPERATION_ADMISSION_WAIT_CONTEXT_KEY not in (operation.context or {}):
+        # Nothing to set and nothing to clear. The download profile worker asks this
+        # of every queued download on each pass, so it must not touch the operation.
+        return operation
     # A Download Profile may also target this artifact while a manual bulk action
     # awaits final publication. Do not let a countdown-enabled profile clear that
     # explicit wait until the episode has actually reached its final version.
@@ -441,7 +447,7 @@ def set_media_download_operation_not_before(
     if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
         return operation
 
-    if not_before is not None and not_before > datetime.now(timezone.utc):
+    if delayed:
         set_operation_admission_wait(
             operation,
             reason=MEDIA_DOWNLOAD_PUBLICATION_DELAY_REASON,

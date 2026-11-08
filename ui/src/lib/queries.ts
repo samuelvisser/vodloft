@@ -5,6 +5,7 @@ import {
     keepPreviousData,
     QueryClient,
     useInfiniteQuery,
+    useQueries,
     useQuery,
     useQueryClient,
 } from '@tanstack/react-query'
@@ -47,10 +48,10 @@ import {
     EpisodeReadView,
     EpisodeReadViewPage,
 } from "../types/schemas/episode";
-import {RssStreamProfileRead, RssStreamProfileReadSchema} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
 import {
+    DownloadedLocalMediaProfileSchema,
     MediaDownloadDomainViewRead,
     MediaDownloadPageReadSchema,
     MediaDownloadViewRead,
@@ -75,6 +76,7 @@ import {
     DailywireMovieReadSchema,
 } from "../types/schemas/dailywire_catalog";
 import {apiUrl, responseError} from './api'
+import {profilePageSchema} from '../types/schemas/profile_page'
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
     const r = await fetch(url, {signal, credentials: 'include'})
@@ -112,16 +114,86 @@ export function useLocalMediaProfiles() {
     return result
 }
 
-export function useLocalMediaProfilesView() {
-    return useQuery<LocalMediaProfileViewRead[], Error, LocalMediaProfileViewRead[], readonly ['localMediaProfilesView']>({
-        queryKey: ['localMediaProfilesView'] as const,
+/** A row of the Local Media Profiles table. */
+export type LocalMediaProfileTableRow = LocalMediaProfileRead & {storageSizeBytes: number}
+
+/** The chips and search box of a profile table; an empty list leaves that filter off. */
+export type ProfileTableFilters = {
+    search?: string
+    format?: readonly string[]
+}
+
+export type DownloadProfileTableFilters = ProfileTableFilters & {
+    source?: readonly string[]
+    status?: readonly string[]
+    localMediaProfileId?: number | null
+}
+
+export type StreamProfileTableFilters = ProfileTableFilters & {
+    source?: readonly string[]
+    status?: readonly string[]
+    streamsFrom?: readonly string[]
+}
+
+export type LocalMediaProfileTableFilters = ProfileTableFilters & {
+    usedFor?: readonly string[]
+    storage?: readonly string[]
+}
+
+/** How many profile rows each table asks for at a time. */
+export const PROFILE_TABLE_PAGE_SIZE = 50
+
+/** The filters as the API reads them, with each list sorted so equal filters share one query. */
+function profileTableParams(filters: Record<string, string | number | null | undefined | readonly string[]>) {
+    const params: [string, string][] = []
+    for (const [key, value] of Object.entries(filters).sort(([a], [b]) => a.localeCompare(b))) {
+        const name = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+        if (Array.isArray(value)) for (const item of [...value].sort()) params.push([name, item])
+        else if (typeof value === 'string' ? value.trim() : value != null) params.push([name, String(value).trim()])
+    }
+    return params
+}
+
+function useProfileTable<T extends {id: string | number}, TItem>({
+    prefix, path, filters, enabled, schema, toRow,
+}: {
+    prefix: readonly string[]
+    path: string
+    filters: Record<string, string | number | null | undefined | readonly string[]>
+    enabled: boolean
+    schema: {parse(value: unknown): {items: TItem[], limit: number, total: number, nextCursor?: string | null}}
+    toRow: (item: TItem) => T
+}) {
+    const params = profileTableParams(filters)
+    return useLazyCollection<T>({
+        collectionPrefix: prefix,
+        queryKey: [params] as const,
+        initialCount: PROFILE_TABLE_PAGE_SIZE,
+        batchSize: PROFILE_TABLE_PAGE_SIZE,
+        enabled,
+        fetchPage: async ({cursor, limit}, signal) => {
+            const search = new URLSearchParams(params)
+            search.set('limit', String(limit))
+            if (cursor) search.set('cursor', cursor)
+            const page = await fetchParsed(`${apiUrl()}/${path}?${search}`, schema, signal)
+            return {...page, items: page.items.map(toRow)}
+        },
+    })
+}
+
+const LocalMediaProfileViewPageSchema = profilePageSchema(LocalMediaProfileViewReadSchema)
+const DownloadProfileViewPageSchema = profilePageSchema(DownloadProfileReadViewSchema)
+const StreamProfileViewPageSchema = profilePageSchema(StreamProfileReadViewSchema)
+
+/** The Local Media Profiles table, 50 rows at a time in name order. */
+export function useLocalMediaProfilesTable(filters: LocalMediaProfileTableFilters = {}) {
+    return useProfileTable<LocalMediaProfileTableRow, LocalMediaProfileViewRead>({
+        prefix: ['localMediaProfilesView'],
+        path: 'local-media-profiles/as-view',
+        filters,
         enabled: profileListsReadable('local_media_profiles'),
-        queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/local-media-profiles/as-view`,
-            LocalMediaProfileViewReadSchema.array(),
-            signal,
-        ),
-        refetchOnMount: 'always',
+        schema: LocalMediaProfileViewPageSchema,
+        toRow: ({profile, statistics}) => ({...profile, storageSizeBytes: statistics.storageSizeBytes}),
     })
 }
 
@@ -138,12 +210,25 @@ export function useLocalMediaProfileView(slug?: string) {
     })
 }
 
-export function useDownloadProfilesView() {
-    return useQuery<DownloadProfileReadView[], Error, DownloadProfileReadView[], readonly ['downloadProfilesView']>({
-        queryKey: ['downloadProfilesView'] as const,
+/** The Download Profiles table, 50 rows at a time in collection title order. */
+export function useDownloadProfilesTable(filters: DownloadProfileTableFilters = {}) {
+    return useProfileTable<DownloadProfileReadView, DownloadProfileReadView>({
+        prefix: ['downloadProfilesView'],
+        path: 'download-profiles/as-view',
+        filters,
         enabled: profileListsReadable('download_profiles'),
+        schema: DownloadProfileViewPageSchema,
+        toRow: (profile) => profile,
+    })
+}
+
+/** Every Download Profile of one collection. */
+export function useCollectionDownloadProfilesView(collectionSlug?: string) {
+    return useQuery<DownloadProfileReadView[], Error, DownloadProfileReadView[], readonly ['downloadProfilesView', 'collection', string | undefined]>({
+        queryKey: ['downloadProfilesView', 'collection', collectionSlug] as const,
+        enabled: !!collectionSlug && profileListsReadable('download_profiles'),
         queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/download-profiles/as-view`,
+            `${apiUrl()}/download-profiles/as-view/by-collection-slug/${encodeURIComponent(collectionSlug!)}`,
             DownloadProfileReadViewSchema.array(),
             signal,
         ),
@@ -151,25 +236,25 @@ export function useDownloadProfilesView() {
     })
 }
 
-export function useRssStreamProfiles() {
-    return useQuery<RssStreamProfileRead[], Error, RssStreamProfileRead[], readonly ['rssStreamProfiles']>({
-        queryKey: ['rssStreamProfiles'] as const,
+/** The Stream Profiles table, 50 rows at a time in collection title order. */
+export function useStreamProfilesTable(filters: StreamProfileTableFilters = {}) {
+    return useProfileTable<StreamProfileReadView, StreamProfileReadView>({
+        prefix: ['streamProfilesView'],
+        path: 'stream-profiles/as-view',
+        filters,
         enabled: can('stream_profiles') || can('library', 'manage'),
-        queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/rss-stream-profiles`,
-            RssStreamProfileReadSchema.array(),
-            signal,
-        ),
-        refetchOnMount: 'always',
+        schema: StreamProfileViewPageSchema,
+        toRow: (profile) => profile,
     })
 }
 
-export function useStreamProfilesView() {
-    return useQuery<StreamProfileReadView[], Error, StreamProfileReadView[], readonly ['streamProfilesView']>({
-        queryKey: ['streamProfilesView'] as const,
-        enabled: can('stream_profiles') || can('library', 'manage'),
+/** Every Stream Profile of one collection that the user may see. */
+export function useCollectionStreamProfilesView(collectionSlug?: string) {
+    return useQuery<StreamProfileReadView[], Error, StreamProfileReadView[], readonly ['streamProfilesView', 'collection', string | undefined]>({
+        queryKey: ['streamProfilesView', 'collection', collectionSlug] as const,
+        enabled: !!collectionSlug && (can('stream_profiles') || can('library', 'manage')),
         queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/stream-profiles/as-view`,
+            `${apiUrl()}/stream-profiles/as-view/by-collection-slug/${encodeURIComponent(collectionSlug!)}`,
             StreamProfileReadViewSchema.array(),
             signal,
         ),
@@ -879,7 +964,7 @@ function operationDate(value: string | null | undefined): Date | null {
 }
 
 function operationForDownload(
-    operations: TaskOperationRead[],
+    operations: readonly TaskOperationRead[],
     mediaDownloadId: number,
 ): TaskOperationRead | undefined {
     return operations.filter((operation) => (
@@ -972,10 +1057,9 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
 }
 
 type MediaDownloadScope =
-    | {kind: 'all'}
+    | {kind: 'library'}
     | {kind: 'episode'; slug?: string}
     | {kind: 'movie'; slug?: string}
-    | {kind: 'collection'; slug?: string}
     | {kind: 'video'; id?: number}
 
 function mediaDownloadScopeKey(scope: MediaDownloadScope) {
@@ -984,23 +1068,20 @@ function mediaDownloadScopeKey(scope: MediaDownloadScope) {
             return ['episodeDownloads', scope.slug] as const
         case 'movie':
             return ['movieDownloads', scope.slug] as const
-        case 'collection':
-            return ['collectionDownloads', scope.slug] as const
         case 'video':
             return ['videoDownloads', scope.id] as const
-        default:
-            return ['mediaDownloadsView'] as const
+        case 'library':
+            return ['mediaDownloadsView', 'library'] as const
     }
 }
 
 function mediaDownloadScopeUrl(scope: MediaDownloadScope) {
     const base = `${apiUrl()}/media-downloads/as-view`
-    if (scope.kind === 'all') return base
+    if (scope.kind === 'library') return `${base}?type=movie&type=video`
 
     const params = new URLSearchParams()
     if (scope.kind === 'episode' && scope.slug) params.set('episode_slug', scope.slug)
     if (scope.kind === 'movie' && scope.slug) params.set('movie_slug', scope.slug)
-    if (scope.kind === 'collection' && scope.slug) params.set('collection_slug', scope.slug)
     if (scope.kind === 'video' && scope.id !== undefined) params.set('video_id', String(scope.id))
     return `${base}?${params}`
 }
@@ -1009,7 +1090,10 @@ function operationMatchesMediaDownloadScope(
     operation: TaskOperationRead,
     scope: MediaDownloadScope,
 ) {
-    if (scope.kind === 'all') return true
+    if (scope.kind === 'library') {
+        const mediaType = contextString(operation, 'media_type')
+        return mediaType === 'movie' || mediaType === 'video'
+    }
     if (scope.kind === 'video') {
         return scope.id !== undefined
             && contextString(operation, 'media_type') === 'video'
@@ -1017,12 +1101,37 @@ function operationMatchesMediaDownloadScope(
     }
     if (!scope.slug) return false
     if (scope.kind === 'episode') return contextString(operation, 'episode_slug') === scope.slug
-    if (scope.kind === 'movie') return contextString(operation, 'movie_slug') === scope.slug
-    return contextString(operation, 'collection_slug') === scope.slug
+    return contextString(operation, 'movie_slug') === scope.slug
+}
+
+/** Stored downloads with the live state of their operations, and the downloads only an operation knows of yet. */
+function presentDownloads(
+    domain: readonly MediaDownloadDomainViewRead[] | undefined,
+    operations: readonly TaskOperationRead[],
+) {
+    if (domain === undefined && operations.length === 0) return undefined
+
+    const downloads = new Map<number, MediaDownloadDomainViewRead>()
+    for (const download of domain ?? []) downloads.set(download.id, download)
+    for (const operation of operations) {
+        if (operation.kind !== 'media.download' || operation.resourceId == null) continue
+        if (!downloads.has(operation.resourceId)) {
+            const synthetic = syntheticDownload(operation)
+            if (synthetic) downloads.set(synthetic.id, synthetic)
+        }
+    }
+
+    return [...downloads.values()]
+        .map((download) => presentDownload(
+            download,
+            operationForDownload(operations, download.id),
+        ))
+        .sort((left, right) => right.id - left.id)
 }
 
 function useMediaDownloadPresentation(scope: MediaDownloadScope) {
-    const enabled = scope.kind === 'all' || (scope.kind === 'video' ? scope.id !== undefined : Boolean(scope.slug))
+    const enabled = scope.kind === 'library'
+        || (scope.kind === 'video' ? scope.id !== undefined : Boolean(scope.slug))
     const domainQuery = useQuery({
         queryKey: mediaDownloadScopeKey(scope),
         enabled,
@@ -1040,26 +1149,7 @@ function useMediaDownloadPresentation(scope: MediaDownloadScope) {
         (operation) => operationMatchesMediaDownloadScope(operation, scope),
     )
 
-    const data = useMemo(() => {
-        if (domainQuery.data === undefined && operations.length === 0) return undefined
-
-        const downloads = new Map<number, MediaDownloadDomainViewRead>()
-        for (const download of domainQuery.data ?? []) downloads.set(download.id, download)
-        for (const operation of operations) {
-            if (operation.kind !== 'media.download' || operation.resourceId == null) continue
-            if (!downloads.has(operation.resourceId)) {
-                const synthetic = syntheticDownload(operation)
-                if (synthetic) downloads.set(synthetic.id, synthetic)
-            }
-        }
-
-        return [...downloads.values()]
-            .map((download) => presentDownload(
-                download,
-                operationForDownload(operations, download.id),
-            ))
-            .sort((left, right) => right.id - left.id)
-    }, [domainQuery.data, operations])
+    const data = useMemo(() => presentDownloads(domainQuery.data, operations), [domainQuery.data, operations])
 
     return {
         ...domainQuery,
@@ -1080,12 +1170,61 @@ export function useVideoDownloads(videoId?: number) {
     return useMediaDownloadPresentation({kind: 'video', id: videoId})
 }
 
-export function useCollectionDownloads(collectionSlug?: string) {
-    return useMediaDownloadPresentation({kind: 'collection', slug: collectionSlug})
+/**
+ * The downloads of the episodes a collection page has loaded, one request per page of episodes,
+ * so a show with thousands of episodes never loads all of their downloads at once.
+ */
+export function useCollectionEpisodeDownloads(
+    collectionSlug: string | undefined,
+    episodePages: readonly (readonly number[])[],
+) {
+    const domain = useQueries({
+        queries: episodePages.map((episodeIds) => ({
+            queryKey: ['collectionDownloads', collectionSlug, 'episodes', episodeIds] as const,
+            enabled: !!collectionSlug && episodeIds.length > 0,
+            queryFn: async ({signal}: {signal: AbortSignal}) => {
+                const params = new URLSearchParams({collection_slug: collectionSlug!})
+                for (const id of episodeIds) params.append('episode_id', String(id))
+                const value = await fetchJSON<unknown[]>(`${apiUrl()}/media-downloads/as-view?${params}`, signal)
+                return MediaDownloadViewReadSchema.array().parse(value)
+            },
+            refetchOnMount: 'always' as const,
+        })),
+        combine: (results) => ({
+            data: results.some((result) => result.data !== undefined)
+                ? results.flatMap((result) => result.data ?? [])
+                : undefined,
+            isLoading: results.some((result) => result.isLoading),
+            error: results.find((result) => result.error)?.error ?? null,
+        }),
+    })
+    const loadedEpisodeIds = useMemo(() => new Set(episodePages.flat()), [episodePages])
+    const {data: pullData} = useFrontendPuller()
+    const operations = (pullData?.operations ?? []).filter((operation) => (
+        contextString(operation, 'collection_slug') === collectionSlug
+        && loadedEpisodeIds.has(contextNumber(operation, 'media_item_id') ?? -1)
+    ))
+    const data = useMemo(() => presentDownloads(domain.data, operations), [domain.data, operations])
+    return {...domain, data}
 }
 
-export function useMediaDownloadsView() {
-    return useMediaDownloadPresentation({kind: 'all'})
+/** The Local Media Profiles holding downloads of a collection's episodes. */
+export function useCollectionDownloadedLocalMediaProfiles(collectionSlug?: string) {
+    return useQuery({
+        queryKey: ['collectionDownloads', collectionSlug, 'localMediaProfiles'] as const,
+        enabled: !!collectionSlug,
+        queryFn: ({signal}) => fetchParsed(
+            `${apiUrl()}/media-downloads/as-view/local-media-profiles?${new URLSearchParams({collection_slug: collectionSlug!})}`,
+            DownloadedLocalMediaProfileSchema.array(),
+            signal,
+        ),
+        refetchOnMount: 'always',
+    })
+}
+
+/** The downloads of the Library's movies and videos. */
+export function useLibraryDownloads() {
+    return useMediaDownloadPresentation({kind: 'library'})
 }
 
 
@@ -1400,29 +1539,4 @@ export function prefetchCoreData(qc: QueryClient) {
             const profiles = qc.getQueryData<LocalMediaProfileRead[]>(['localMediaProfiles'])
             if (profiles) saveProfilesToStorage(profiles)
         })
-    if (profileListsReadable('download_profiles')) void qc.prefetchQuery({
-        queryKey: ['downloadProfilesView'],
-        queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/download-profiles/as-view`,
-            DownloadProfileReadViewSchema.array(),
-            signal,
-        ),
-    })
-    const streamProfiles = can('stream_profiles') || can('library', 'manage')
-    if (streamProfiles) void qc.prefetchQuery({
-        queryKey: ['rssStreamProfiles'],
-        queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/rss-stream-profiles`,
-            RssStreamProfileReadSchema.array(),
-            signal,
-        ),
-    })
-    if (streamProfiles) void qc.prefetchQuery({
-        queryKey: ['streamProfilesView'],
-        queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/stream-profiles/as-view`,
-            StreamProfileReadViewSchema.array(),
-            signal,
-        ),
-    })
 }

@@ -5,6 +5,7 @@ from backend.api.models.onboarding import OnboardingStatusAPIRead
 from .service import complete_onboarding, get_onboarding_status, start_fresh, undo_start_fresh
 from backend.security.access import Area, Level
 from backend.security.deps import requires, signed_in
+from backend.app import db_session
 from backend.db.core import run_write_transaction
 
 
@@ -14,10 +15,8 @@ router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 @router.get("/status", dependencies=[signed_in()], response_model=OnboardingStatusAPIRead)
 def onboarding_status():
     """Return whether the one-time first-run experience has been completed."""
-    def work(s):
+    with db_session() as s:
         return get_onboarding_status(s)
-
-    return run_write_transaction(work)
 
 
 @router.post("/complete", dependencies=[requires(Area.SETTINGS, Level.MANAGE)], response_model=OnboardingStatusAPIRead)

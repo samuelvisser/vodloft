@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import AliasPath, Field
 
 from backend.api.models.base import ResponseBase, response_model_config
+from backend.api.models.pagination import CursorPageRead
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.types.stream_profile_types import StreamProfileType
 
@@ -38,6 +39,13 @@ class StreamProfileAPIReadView(StreamProfileAPIRead):
 
     collection_title: str = Field(validation_alias=AliasPath("profile", "collection", "title"))
     collection_slug: str = Field(validation_alias=AliasPath("profile", "collection", "slug"))
+    collection_source_key: str = Field(validation_alias=AliasPath("profile", "collection", "source_key"))
     stream_profile_impl: RssStreamProfileAPIRead = Field(
         validation_alias="profile"
     )
+
+
+class StreamProfileViewPageRead(CursorPageRead[StreamProfileAPIReadView]):
+    """One page of the Stream Profiles table, and how many profiles its filters leave."""
+
+    total: int

@@ -16,9 +16,15 @@ _ACTIVE_OPERATION_STATUSES = {
 }
 
 
+# Every open page asks for this about once a second while work runs. Running work and what a person
+# started come first; with thousands of queued downloads, a longer list only repeats queued ones,
+# whose place in the queue the Downloads page reads from the server anyway.
+PULL_OPERATION_LIMIT = 200
+
+
 def get_frontend_pull(access: Access) -> FrontendPullAPIRead:
     """Return the frontend's generic changing-execution snapshot."""
-    operations = list_operations(access, relevant=True, limit=500)
+    operations = list_operations(access, relevant=True, limit=PULL_OPERATION_LIMIT)
     has_active_operation = any(
         operation.status in _ACTIVE_OPERATION_STATUSES
         for operation in operations

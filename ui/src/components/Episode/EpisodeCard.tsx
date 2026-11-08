@@ -67,7 +67,7 @@ export function toImageUrl(path?: string | null): string | undefined {
     return `${base}/assets/${path}`
 }
 
-/** Groups a flat list of downloads (e.g. from useMediaDownloadsView) by episode slug. */
+/** Groups a flat list of downloads (e.g. from useCollectionDownloads) by episode slug. */
 export function groupDownloadsByEpisodeSlug(
     downloads?: MediaDownloadViewRead[] | null,
 ): Map<string, MediaDownloadViewRead[]> {

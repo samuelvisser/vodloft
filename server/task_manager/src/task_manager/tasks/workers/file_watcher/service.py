@@ -494,6 +494,10 @@ def _apply_reconciliation(
     return True
 
 
+# How many artifact changes one write transaction stores.
+CHANGES_PER_TRANSACTION = 200
+
+
 def _apply_reconciliations(
     s: Session,
     changes: list[tuple[MediaDownloadBase, _ArtifactUpdates]],
@@ -502,7 +506,15 @@ def _apply_reconciliations(
         return 0
 
     if is_read_session(s):
-        return run_write_transaction(lambda w: sum(_apply_reconciliation(w, original, values) for original, values in changes))
+        # A missing drive changes every download on it at once. Store the changes a batch at a
+        # time, so other writes are not held up for the whole library.
+        updated = 0
+        for start in range(0, len(changes), CHANGES_PER_TRANSACTION):
+            batch = changes[start:start + CHANGES_PER_TRANSACTION]
+            updated += run_write_transaction(
+                lambda w: sum(_apply_reconciliation(w, original, values) for original, values in batch)
+            )
+        return updated
 
     updated = 0
     expire_on_commit = s.expire_on_commit

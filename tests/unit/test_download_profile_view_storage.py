@@ -14,8 +14,9 @@ def test_download_profile_view_reports_storage_of_its_own_downloads() -> None:
     import task_manager.scheduler.db  # noqa: F401
     from backend.api.endpoints.download_profiles.as_view.service import (
         get_download_profile_view,
-        get_download_profile_views_list,
+        get_download_profile_views_page,
     )
+    from backend.api.models.profile_list import DownloadProfileListQuery
     from backend.db import Base
     from backend.db.models import (
         Collection, DownloadProfile, Episode, EpisodeMediaDownload, LocalMediaProfile, Season,
@@ -80,7 +81,8 @@ def test_download_profile_view_reports_storage_of_its_own_downloads() -> None:
         add_download(episodes[0], video, video_profile, **(available_artifact() | {"artifact_size_bytes": 7000}))
         session.commit()
 
-        views = {view.id: view for view in get_download_profile_views_list(session)}
+        views = {view.id: view for view in get_download_profile_views_page(
+            session, DownloadProfileListQuery(cursor=None, limit=50)).items}
 
         assert views[audio_profile.id].storage_size_bytes == 1500
         assert views[video_profile.id].storage_size_bytes == 7000

@@ -28,7 +28,7 @@ class StreamProfileBase(Base):
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     type: Mapped[str]
-    collection_id: Mapped[int] = mapped_column(ForeignKey("collections.id"))
+    collection_id: Mapped[int] = mapped_column(ForeignKey("collections.id"), index=True)
     overwrite_collection_title: Mapped[Optional[str]] = mapped_column(nullable=True, default=None)
     enable_profile: Mapped[bool] = mapped_column(default=True)
     # Secret path segment identifying this profile's feed/media routes. Stays

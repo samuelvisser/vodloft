@@ -3,7 +3,7 @@ import {addedByLabel, can} from '../../lib/access'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { useDownloadProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionDownloads, useCollectionSeasons, useEpisodeTagsInCollection, useSkippedByFilter, useSourceLookup, useStreamProfilesView } from '../../lib/queries'
+import { useCollectionDownloadProfilesView, useCollectionStreamProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionEpisodeDownloads, useCollectionDownloadedLocalMediaProfiles, useCollectionSeasons, useEpisodeTagsInCollection, useSkippedByFilter, useSourceLookup } from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
@@ -204,14 +204,19 @@ export default function CollectionPage() {
     && episodesLoading
   )
 
+  const episodeIdPages = useMemo(
+    () => episodePagesData?.pages.map((page) => page.items.map((episode) => episode.id)) ?? [],
+    [episodePagesData],
+  )
+  const {data: downloads} = useCollectionEpisodeDownloads(id, episodeIdPages)
   const {
-    data: downloads,
+    data: downloadedLocalMediaProfiles,
     isLoading: downloadsLoading,
     error: downloadsError,
-  } = useCollectionDownloads(id)
-  const { data: downloadProfiles } = useDownloadProfilesView()
+  } = useCollectionDownloadedLocalMediaProfiles(id)
+  const { data: downloadProfiles } = useCollectionDownloadProfilesView(id)
   const { data: localMediaProfiles } = useLocalMediaProfiles()
-  const { data: streamProfiles } = useStreamProfilesView()
+  const { data: streamProfiles } = useCollectionStreamProfilesView(id)
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
 
   const operationResourceId = collection?.id ?? null
@@ -229,28 +234,18 @@ export default function CollectionPage() {
   const redownloadBusy = redownloadOperation !== undefined
   const downloadAllBusy = downloadAllOperation !== undefined
 
-  const attachedDownloadProfiles = useMemo(
-    () => (downloadProfiles ?? []).filter((profile) => profile.collectionSlug === id),
-    [downloadProfiles, id],
+  const attachedDownloadProfiles = useMemo(() => downloadProfiles ?? [], [downloadProfiles])
+  const attachedStreamProfiles = useMemo(() => streamProfiles ?? [], [streamProfiles])
+  const downloadLocalMediaProfiles = useMemo(
+    () => (downloadedLocalMediaProfiles ?? [])
+      .map((profile) => ({
+        id: profile.id,
+        name: profile.name.trim() || `Local Media Profile #${profile.id}`,
+        preferredFormat: profile.preferredFormat ?? null,
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    [downloadedLocalMediaProfiles],
   )
-  const attachedStreamProfiles = useMemo(
-    () => (streamProfiles ?? []).filter((profile) => profile.collectionSlug === id),
-    [streamProfiles, id],
-  )
-  const downloadLocalMediaProfiles = useMemo(() => {
-    const profiles = new Map<number, {id: number; name: string; preferredFormat: string | null}>()
-    for (const download of downloads ?? []) {
-      if (download.type !== 'episode' || download.collectionSlug !== id) continue
-      if (download.artifactStatus === 'absent') continue
-      if (profiles.has(download.localMediaProfileId)) continue
-      profiles.set(download.localMediaProfileId, {
-        id: download.localMediaProfileId,
-        name: download.localMediaProfileName?.trim() || `Local Media Profile #${download.localMediaProfileId}`,
-        preferredFormat: download.preferredFormat ?? null,
-      })
-    }
-    return [...profiles.values()].sort((left, right) => left.name.localeCompare(right.name))
-  }, [downloads, id])
   const actionLocalMediaProfiles = useMemo<ActionConfirmDialogueLocalMediaProfile[]>(
     () => downloadLocalMediaProfiles.map((profile) => ({
       id: profile.id,
@@ -344,8 +339,8 @@ export default function CollectionPage() {
         ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} episodes have finished.`
         : ''}`
     : undefined
-  const downloadStateUnknown = downloadsLoading && downloads === undefined
-  const downloadStateFailed = Boolean(downloadsError) && downloads === undefined
+  const downloadStateUnknown = downloadsLoading && downloadedLocalMediaProfiles === undefined
+  const downloadStateFailed = Boolean(downloadsError) && downloadedLocalMediaProfiles === undefined
   const downloadStateDisabledReason = downloadStateUnknown
     ? 'VODLoft is still checking for downloaded episodes in this show.'
     : downloadStateFailed
