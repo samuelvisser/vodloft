@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import (
+    DownloadProfile,
     Episode,
     EpisodeMediaDownload,
     LocalMediaProfileBase,
@@ -208,6 +209,13 @@ def adopt(
     download.downloaded_at = found.modified_at
     if isinstance(download, EpisodeMediaDownload) and isinstance(media, Episode):
         download.downloaded_publish_status = media.publish_status
+        if download.download_profile_id is None:
+            # The Collection's Download Profile for this Local Media Profile manages the file from now on,
+            # so its retention deletes it like a file it downloaded itself.
+            download.download_profile_id = session.scalar(select(DownloadProfile.id).where(
+                DownloadProfile.collection_id == media.collection_id,
+                DownloadProfile.local_media_profile_id == local_media_profile.id,
+            ))
     download.assets.clear()
     session.flush()
     for asset in found.assets:
