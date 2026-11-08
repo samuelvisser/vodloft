@@ -10,18 +10,11 @@ from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Video
 from backend.db.models.media_item import MediaItemBase
 from backend.services.media_access import media_locked, record_check
-from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from config.network import is_no_internet_error
 from sources import UnknownSourceError, get_source
-from task_manager.events.transactional import queue_event
 from task_manager.scheduler.results import TaskResult
-from task_manager.scheduler.types import OperationSource
-from task_manager.tasks.media_download_operations import (
-    create_media_download_operation,
-    dispatch_queued_media_download_operations,
-    get_active_media_download_operation,
-)
-from task_manager.tasks.workers.download_profile_worker.event_adapter import DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT
+from task_manager.tasks.helpers.locked_media import download_again
+from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
 
 logger = logging.getLogger(__name__)
 
@@ -97,16 +90,5 @@ def _record(s: Session, media_id: int, access: str | None, now: datetime) -> boo
     record_check(media, access, now=now)
     if media_locked(media):
         return False
-    for download in media.downloads:
-        if (
-            download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value
-            and not download.automatic_retry_suppressed
-            and get_active_media_download_operation(s, download.id) is None
-        ):
-            create_media_download_operation(
-                s, download, source=OperationSource.SYSTEM.value, prepare_existing_artifact=True,
-            )
-    if isinstance(media, Episode):
-        # A Download Profile that skipped the episode while it was locked plans it now.
-        queue_event(s, DOWNLOAD_PROFILE_RUN_REQUESTED_EVENT, {"resource_type": "episode", "resource_id": media.id})
+    download_again(s, media)
     return True

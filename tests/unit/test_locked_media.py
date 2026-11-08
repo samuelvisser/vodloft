@@ -142,3 +142,68 @@ def test_each_site_names_the_access_its_videos_need():
     assert site_access("npo", "npo", "npo_plus").label == "NPO Plus"
     assert site_access("ytdlp", None, "members") is None
     assert link_access("ytdlp", "https://www.twitch.tv/videos/123", "members").label == "Subscribers only"
+
+
+def test_a_refused_video_a_scan_finds_open_is_downloaded_again_at_once(locked_download):
+    from backend.db.core import run_write_transaction
+    from backend.db.models.media_item import MediaItemBase
+    from task_manager.tasks.helpers.locked_media import open_up
+
+    factory, ids = locked_download
+    assert run_write_transaction(lambda s: open_up(s, s.get(MediaItemBase, ids[1])))
+    # No waiting for its next check: the lock is gone and the download is queued.
+    assert _state(factory, ids) == (False, 0, True)
+    with factory() as session:
+        media = session.get(MediaItemBase, ids[1])
+        assert (media.access, media.access_check_at) == (None, None)
+
+
+def test_a_badge_a_scan_finds_gone_is_dropped_without_downloading(locked_download):
+    from backend.db.core import run_write_transaction
+    from backend.db.models.media_item import MediaItemBase
+    from backend.services.media_access import unlock
+    from task_manager.tasks.helpers.locked_media import open_up
+
+    factory, ids = locked_download
+
+    def badge_only(s):
+        media = s.get(MediaItemBase, ids[1])
+        unlock(media)
+        media.access = "INSIDER"
+
+    run_write_transaction(badge_only)
+    assert not run_write_transaction(lambda s: open_up(s, s.get(MediaItemBase, ids[1])))
+    with factory() as session:
+        assert session.get(MediaItemBase, ids[1]).access is None
+    assert _state(factory, ids)[2] is False
+
+
+def test_a_listing_says_which_videos_anyone_may_watch(monkeypatch):
+    from sources import ItemRef, ytdlp_runner as runner
+    from sources.ytdlp import YtDlpSource
+
+    channel = "https://www.youtube.com/channel/UC1/videos"
+    entries = [
+        {"id": "pub", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=pub", "title": "Public"},
+        {"id": "mem", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=mem", "title": "Members",
+         "availability": "subscriber_only"},
+    ]
+    monkeypatch.setattr(runner, "run_json", lambda *args: (
+        {"entries": entries} if args[-1] == channel else (_ for _ in ()).throw(runner.YtDlpError("no such tab"))
+    ))
+    monkeypatch.setattr(YtDlpSource, "_catalogue", lambda self, adding: None)
+
+    refresh = YtDlpSource().refresh_items(channel, [
+        ItemRef(slug, f"https://www.youtube.com/watch?v={slug}") for slug in ("pub", "mem")
+    ])
+
+    # YouTube marks every members-only video in its listings, so one without that mark is open.
+    assert refresh.open == {"pub"}
+    assert refresh.details["mem"].access == "members"
+
+
+def test_elsewhere_a_listing_without_a_mark_says_nothing_about_access():
+    from sources.ytdlp.source import _listed_open
+
+    assert not _listed_open({"id": "1", "ie_key": "Vimeo"})
+    assert _listed_open({"id": "1", "ie_key": "Vimeo", "availability": "public"})

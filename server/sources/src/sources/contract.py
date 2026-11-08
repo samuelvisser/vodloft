@@ -494,13 +494,16 @@ class ItemRefresh:
     and picture are refreshed from them, and a field the Source left out is kept.
     ``removed`` holds the items the Source says it no longer has. ``refused``
     holds, by the key of the access they need, the items the Source would not
-    show VODLoft for lack of that access. An item in none of them could not be
-    checked this time and stays as it is.
+    show VODLoft for lack of that access, and ``open`` the items it saw anyone
+    may watch now. An item in none of them could not be checked this time and
+    stays as it is, and a detail that leaves out the access it needs says nothing
+    about whether it is open.
     """
 
     details: dict[str, VideoDetails] = field(default_factory=dict)
     removed: frozenset[str] = frozenset()
     refused: dict[str, str] = field(default_factory=dict)
+    open: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

@@ -48,6 +48,8 @@ from sources import MAIN_TAG, Feature, ItemRef, Source, VideoDetails, get_source
 from .episodes.events import queue_episode_status_events
 from .general import datetime_to_string
 from .progress import update_progress
+from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
+from .locked_media import open_up
 from .refreshed_metadata import apply_refreshed_details, check_upgrades_after_refresh
 
 logger = logging.getLogger(__name__)
@@ -319,7 +321,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
 
 
 def _apply_refresh(s: Session, collection_id: int, refresh) -> RefreshCounts:
-    updated = removed = returned = 0
+    updated = removed = returned = opened = 0
     for episode in s.scalars(select(Episode).where(Episode.collection_id == collection_id)):
         if episode.source_slug in refresh.removed:
             if not episode.removed_from_source:
@@ -328,6 +330,8 @@ def _apply_refresh(s: Session, collection_id: int, refresh) -> RefreshCounts:
             continue
         details = refresh.details.get(episode.source_slug)
         access = refresh.refused.get(episode.source_slug)
+        if episode.source_slug in refresh.open:
+            opened += open_up(s, episode)
         if details is None and access is None:
             continue
         if episode.removed_from_source:
@@ -338,4 +342,6 @@ def _apply_refresh(s: Session, collection_id: int, refresh) -> RefreshCounts:
         if details is not None:
             updated += apply_refreshed_details(episode, details)
             check_upgrades_after_refresh(s, episode)
+    if opened:
+        dispatch_queued_media_download_operations(s)
     return RefreshCounts(updated=updated, removed=removed, returned=returned)

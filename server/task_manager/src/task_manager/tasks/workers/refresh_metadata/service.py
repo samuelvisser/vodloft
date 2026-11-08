@@ -44,6 +44,8 @@ from backend.services.metadata_refresh import (
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
 from sources import ItemRef, VideoDetails, all_sources, get_source
+from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
+from ...helpers.locked_media import open_up
 from ...helpers.refreshed_metadata import apply_refreshed_details, check_upgrades_after_refresh
 from ..refresh_episode_metadata.service import refresh_dailywire_episode
 
@@ -140,6 +142,7 @@ class _Answers:
     details: dict[str, VideoDetails] = field(default_factory=dict)
     removed: set[str] = field(default_factory=set)
     refused: dict[str, str] = field(default_factory=dict)
+    open: set[str] = field(default_factory=set)
 
 
 def _look_up(source_key: str, refs: list[ItemRef]) -> _Answers:
@@ -156,6 +159,7 @@ def _look_up(source_key: str, refs: list[ItemRef]) -> _Answers:
             answers.details.update(refresh.details)
             answers.removed.update(refresh.removed)
             answers.refused.update(refresh.refused)
+            answers.open.update(refresh.open)
         pending = [
             ref for ref in pending
             if ref.slug not in answers.details and ref.slug not in answers.removed and ref.slug not in answers.refused
@@ -227,6 +231,8 @@ def _store(w: Session, item: _Watched, answer: _Answers | None, now: datetime) -
                     check_upgrades_after_refresh(w, row)
             if (access := answer.refused.get(item.ref.slug)) is not None and row.access_refused_at is None:
                 lock_refused(row, access, now=now)
+            if item.ref.slug in answer.open and open_up(w, row):
+                dispatch_queued_media_download_operations(w)
         else:
             counts.failed += 1
     if refresh_watch_expired(item.published, item.offsets, now=now):
