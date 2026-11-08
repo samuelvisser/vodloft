@@ -615,6 +615,9 @@ class Site:
     upgrade_checks: UpgradeChecks = UpgradeChecks()
     settings: SiteSettings = field(default_factory=SiteSettings, hash=False)
     """Which settings the Site shows in Settings and on its Download Profiles, and its presets."""
+    takes_cookies: bool = True
+    """Sources sign in on the Site with its cookies file. A Site with a sign-in of its own that cookies
+    can't stand in for, such as The Daily Wire, has none."""
     cookies_help: str | None = None
     """How to export a cookies file that signs in on the Site, when the Site needs more than the usual."""
 

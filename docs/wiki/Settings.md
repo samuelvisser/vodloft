@@ -263,7 +263,7 @@ VODLoft knows: the sites a Source is made for, and every site you added somethin
 signed in; open it to change that.
 
 - **The Daily Wire** has a sign-in of its own: follow the steps shown and authorize VODLoft on The Daily Wire's site.
-  See [[Daily-Wire-Integration]].
+  It takes no cookies file. See [[Daily-Wire-Integration]].
 - **Every other site** signs in with a **cookies file**: a `cookies.txt` file (Netscape format) exported from a browser
   where you are signed in on that site, with a browser extension made for that. Every Source that fetches the site uses
   the site's own file, for every lookup and download there: yt-dlp on YouTube, and both NPO Start and yt-dlp on npo.nl.

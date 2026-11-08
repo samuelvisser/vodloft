@@ -90,11 +90,11 @@ def site_for(url: str) -> Site:
 def cookies_for(url: str, use: bool = True) -> Path | None:
     """The cookies file of the link's Site, which yt-dlp signs in with there; ``use`` False leaves it out.
 
-    A Site some Source is made for, such as NPO Start, has its cookies file whichever Source fetches it.
+    A Site some Source is made for, such as NPO Start, has its cookies file whichever Source fetches it,
+    and a Site that takes no cookies, such as The Daily Wire, never gets one.
     """
-    if not use:
-        return None
-    return site_cookies((named_site_for(url) or site_for(url)).key)
+    site = named_site_for(url) or site_for(url)
+    return site_cookies(site.key) if use and site.takes_cookies else None
 
 
 def site_of(key: str, host: str | None = None) -> Site:

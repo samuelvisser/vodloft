@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 from urllib.parse import unquote
 
@@ -75,7 +75,7 @@ def _known_sites(s: Session) -> dict[str, tuple[Site, tuple[str, ...]]]:
     for record in s.scalars(select(SiteRecord)).all():
         site, domains = found.get(record.key, (site_of(record.key), ()))
         merged = tuple(dict.fromkeys((*domains, *record.domains)))
-        found[record.key] = (Site(record.key, record.name, merged, cookies_help=site.cookies_help), merged)
+        found[record.key] = (replace(site, key=record.key, name=record.name, domains=merged), merged)
     directory = cookie_files.cookies_directory()
     if directory.is_dir():
         for path in directory.glob("*.txt"):
@@ -86,8 +86,10 @@ def _known_sites(s: Session) -> dict[str, tuple[Site, tuple[str, ...]]]:
     return found
 
 
-def _cookie_sources(domains: tuple[str, ...]) -> list[Source]:
-    """The Sources that sign in with cookies on a Site with these domains."""
+def _cookie_sources(site: Site, domains: tuple[str, ...]) -> list[Source]:
+    """The Sources that sign in with cookies on the Site, with these domains; none on a Site that takes no cookies."""
+    if not site.takes_cookies:
+        return []
     candidates = sources_for(f"https://{domains[0]}/") if domains else [
         source for source in all_sources() if ANY_DOMAIN in source.domains
     ]
@@ -109,7 +111,7 @@ def _status(site_key: str, sources: list[Source]) -> Optional[CookiesStatus]:
 
 
 def _sign_in(site: Site, domains: tuple[str, ...]) -> SiteSignIn:
-    sources = _cookie_sources(domains)
+    sources = _cookie_sources(site, domains)
     count = _cookie_count(site.key)
     owner = next(
         (source for source in all_sources() if source.has(Feature.LOGIN) and any(own.key == site.key for own in source.sites)),
@@ -137,9 +139,9 @@ def site_sign_in(s: Session, site_key: str) -> SiteSignIn:
     return _sign_in(*known[site_key])
 
 
-def _changed(site_key: str, domains: tuple[str, ...]) -> None:
-    for source in _cookie_sources(domains):
-        source.cookies_changed(site_key)
+def _changed(site: Site, domains: tuple[str, ...]) -> None:
+    for source in _cookie_sources(site, domains):
+        source.cookies_changed(site.key)
 
 
 def save_site_cookies(s: Session, site_key: str, content: bytes) -> SiteSignIn:
@@ -151,6 +153,8 @@ def save_site_cookies(s: Session, site_key: str, content: bytes) -> SiteSignIn:
     if site_key not in known:
         raise SiteNotKnownError(f"VODLoft does not know the Site '{site_key}'")
     site, domains = known[site_key]
+    if not site.takes_cookies:
+        raise ValueError(f"{site.name} takes no cookies file; it has a sign-in of its own")
     lines = cookie_files.cookie_lines(cookie_files.cookies_text(content))
     if domains:
         lines = [line for line in lines if cookie_files.on_site(line, domains)]
@@ -159,7 +163,7 @@ def save_site_cookies(s: Session, site_key: str, content: bytes) -> SiteSignIn:
                 f"This cookies file has no cookies for {domains[0]}. Export it while signed in on {domains[0]}."
             )
     cookie_files.store_site_cookies(site_key, lines)
-    _changed(site_key, domains)
+    _changed(site, domains)
     logger.info("Stored a cookies file for %s with %s cookies", site.name, len(lines))
     return _sign_in(site, domains)
 
@@ -170,7 +174,7 @@ def remove_site_cookies(s: Session, site_key: str) -> SiteSignIn:
         raise SiteNotKnownError(f"VODLoft does not know the Site '{site_key}'")
     site, domains = known[site_key]
     cookie_files.remove_site_cookies(site_key)
-    _changed(site_key, domains)
+    _changed(site, domains)
     return _sign_in(site, domains)
 
 
@@ -229,13 +233,13 @@ def sort_cookies(s: Session, content: bytes) -> SortedCookies:
     placed: set[str] = set()
     sorted_sites = []
     for site, domains in _known_sites(s).values():
-        if not domains:
+        if not domains or not site.takes_cookies:
             continue
         own = [line for line in lines if cookie_files.on_site(line, domains)]
         if not own:
             continue
         cookie_files.store_site_cookies(site.key, own)
-        _changed(site.key, domains)
+        _changed(site, domains)
         placed.update(own)
         sorted_sites.append(SortedSite(site.key, site.name, len(own)))
     other = sorted({cookie_files.cookie_domain(line) for line in lines if line not in placed})

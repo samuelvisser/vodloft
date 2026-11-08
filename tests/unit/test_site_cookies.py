@@ -135,7 +135,8 @@ def test_every_site_lists_how_it_signs_in(session):
     site_cookies.save_site_cookies(session, "youtube", _file(YOUTUBE))
     sites = {site.key: site for site in site_cookies.list_site_sign_ins(session)}
     assert sites["dailywire"].sign_in_source_key == "dailywire"
-    assert sites["dailywire"].cookie_source_names == ("yt-dlp",)
+    # The Daily Wire signs in its own way only, so no Source uses a cookies file there.
+    assert sites["dailywire"].cookie_source_names == ()
     assert sites["npo"].cookie_source_names == ("NPO Start", "yt-dlp") and sites["npo"].cookies_help
     assert (sites["youtube"].cookie_source_names, sites["youtube"].cookie_count) == (("yt-dlp",), 1)
 
@@ -174,3 +175,18 @@ def test_pinchflats_cookies_file_is_sorted_into_the_sites(session):
     assert _stored("youtube") == [YOUTUBE]
     with pytest.raises(imports.ImportServiceError, match="no cookies for a Site"):
         imports._import_cookies(session, _file(GOOGLE))
+
+
+def test_a_site_that_takes_no_cookies_never_gets_a_cookies_file(session):
+    from backend.services import site_cookies
+    from sources.ytdlp.sites import cookies_for
+
+    dailywire = ".dailywire.com\tTRUE\t/\tTRUE\t0\tsession\tdw"
+    with pytest.raises(ValueError, match="takes no cookies file"):
+        site_cookies.save_site_cookies(session, "dailywire", _file(dailywire))
+    result = site_cookies.add_cookies_file(_file(dailywire, YOUTUBE))
+    assert [site.name for site in result.sites] == ["YouTube"]
+    assert result.other_domains == ("dailywire.com",)
+    assert _stored("dailywire") is None
+    # yt-dlp fetching a Daily Wire link signs in with nothing.
+    assert cookies_for("https://www.dailywire.com/episode/an-episode") is None

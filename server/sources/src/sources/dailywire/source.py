@@ -63,6 +63,8 @@ class DailyWireSource(Source):
     domains = ("dailywire.com",)
     sites = (Site(
         "dailywire", "The Daily Wire", domains,
+        # Its own sign-in is how VODLoft signs in; no Source signs in on it with cookies.
+        takes_cookies=False,
         stream_methods=frozenset({StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE}),
         stream_video_heights=_VIDEO_HEIGHTS,
         # Fixed versions: an HLS stream of 480p, 720p and 1080p, and audio.
