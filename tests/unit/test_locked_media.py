@@ -135,7 +135,8 @@ def test_each_site_names_the_access_its_videos_need():
 
     assert site_access("ytdlp", "youtube", "premium").label == "YouTube Premium"
     assert site_access("ytdlp", "twitch", "members").label == "Subscribers only"
-    assert site_access("ytdlp", "vimeo", "members").label == "Members only"
+    assert site_access("ytdlp", "vimeo", "members").label == "Subscribers only"
+    assert site_access("ytdlp", "youtube", "members").label == "Members only"
     assert site_access("ytdlp", "generic:example.com", "premium").label == "Premium only"
     assert site_access("dailywire", "dailywire", "ALL_ACCESS").label == "All Access"
     assert site_access("npo", "npo", "npo_plus").label == "NPO Plus"

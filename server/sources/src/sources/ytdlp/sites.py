@@ -56,7 +56,7 @@ _SITE_SETTINGS = {"youtube": SiteSettings(
 # site's paid subscription. Each Site calls them its own way; others get the general names.
 MEMBERS_KEY, PREMIUM_KEY = "members", "premium"
 _ACCESSES = (
-    Access(MEMBERS_KEY, "Members only", "Only members of the channel can watch this."),
+    Access(MEMBERS_KEY, "Subscribers only", "Only subscribers of the channel can watch this."),
     Access(PREMIUM_KEY, "Premium only", "Only the site's paying subscribers can watch this."),
 )
 _SITE_ACCESSES = {
@@ -64,8 +64,6 @@ _SITE_ACCESSES = {
         Access(MEMBERS_KEY, "Members only", "Only members of the channel can watch this."),
         Access(PREMIUM_KEY, "YouTube Premium", "Only YouTube Premium subscribers can watch this."),
     ),
-    "twitch": (Access(MEMBERS_KEY, "Subscribers only", "Only subscribers of the channel can watch this."),),
-    "kick": (Access(MEMBERS_KEY, "Subscribers only", "Only subscribers of the channel can watch this."),),
     "floatplane": (Access(MEMBERS_KEY, "Subscribers only", "Only subscribers of the creator can watch this."),),
     "niconico": (
         Access(MEMBERS_KEY, "Channel members only", "Only members of the channel can watch this."),
