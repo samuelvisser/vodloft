@@ -68,7 +68,12 @@ function g(area: Area, element: React.ReactNode, level: Level = 'view') {
 
 function AddCollectionRoute() {
   const navigate = useNavigate()
-  return <AddCollectionPage onCancel={() => navigate('/library')} />
+  return (
+    <AddCollectionPage
+      onCancel={() => navigate('/library')}
+      onCreated={(path) => navigate(path, { replace: true })}
+    />
+  )
 }
 
 export const router = createBrowserRouter(

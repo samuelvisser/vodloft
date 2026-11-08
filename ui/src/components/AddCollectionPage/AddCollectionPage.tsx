@@ -7,10 +7,9 @@ import DownloadProfileStep from './DownloadProfileStep'
 import StreamProfileStep from './StreamProfileStep'
 import ExistingFilesStep, {defaultExistingFilesFolder, type ExistingFilesChoice} from './ExistingFilesStep'
 import {layoutTemplate} from '../ExistingFiles/ExistingFilesSetup'
-import {useNavigate} from 'react-router-dom'
 
 import type {Versioned} from '../../types/data'
-import {CollectionCreatePayloadOut, CollectionCreatePayloadIn, CollectionCreatePayloadSchema} from "../../types/schemas/collection";
+import {CollectionCreatePayloadOut, CollectionRead, CollectionCreatePayloadIn, CollectionCreatePayloadSchema} from "../../types/schemas/collection";
 import {getZodDefaults} from "../../utils/defaultZod";
 import {
     DownloadProfileBundleSchema, DownloadProfileBundleIn, DownloadProfileBundleOut,
@@ -32,6 +31,8 @@ import {apiUrl} from '../../lib/api'
 
 export type Props = {
     onCancel: () => void
+    // Receives the path of the new collection's page once the collection is saved.
+    onCreated: (path: string) => void
     initialUrl?: string
 }
 
@@ -126,14 +127,13 @@ const defaultStreamProfile = (action?: CollectionAction): Partial<RssStreamProfi
     preferredFormat: 'format_1080p',
 })
 
-export default function AddCollectionPage({onCancel, initialUrl}: Props) {
+export default function AddCollectionPage({onCancel, onCreated, initialUrl}: Props) {
     const persisted = initialUrl ? null : loadWizardState()
     const [globalMessage, setGlobalMessage] = useState<WizardMessage | null>(() => persisted?.globalMessage ?? null)
     const [isFinishing, setIsFinishing] = useState(false)
     const setWizardMessage = (message: string, type: WizardType) => setGlobalMessage({text: message, type})
     const clearWizardMessage = () => setGlobalMessage(null)
     const qc = useQueryClient()
-    const navigate = useNavigate()
 
     const [step, setStep] = useState<WizardStep>(() => persisted?.step ?? 1)
     const previousStepRef = useRef(step)
@@ -279,6 +279,7 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
             } : {}),
         }
 
+        let created: CollectionRead
         try {
             const response = await fetch(`${apiUrl()}/collections/as-bundle`, {
                 method: 'POST',
@@ -293,6 +294,7 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
                 setWizardMessage(error ?? `HTTP ${response.status}`, 'ERROR')
                 return
             }
+            created = await response.json() as CollectionRead
             clearWizardMessage()
         } catch {
             setWizardMessage('Network error, please try again.', 'ERROR')
@@ -309,12 +311,9 @@ export default function AddCollectionPage({onCancel, initialUrl}: Props) {
             qc.invalidateQueries({queryKey: ['seasons']}),
         ])
         clearWizardState()
-        if (downloadProfile && existingFiles.enabled) {
-            // The scan waits for the episodes; its review opens on the collection's page.
-            navigate(`/collection/${encodeURIComponent(collection.slug)}?existingFiles=open`)
-            return
-        }
-        onCancel()
+        const path = `/collection/${encodeURIComponent(created.slug)}`
+        // The scan of existing files waits for the episodes; its review opens on the collection's page.
+        onCreated(downloadProfile && existingFiles.enabled ? `${path}?existingFiles=open` : path)
     }
 
     async function handleActionContinue() {

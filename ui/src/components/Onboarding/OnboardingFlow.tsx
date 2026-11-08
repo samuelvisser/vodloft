@@ -363,6 +363,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                     <AddCollectionPage
                         initialUrl={selectedCollection.url}
                         onCancel={() => void leaveCollectionWizard()}
+                        onCreated={(path) => void completeOnboarding(path)}
                     />
                 </main>
             )}
