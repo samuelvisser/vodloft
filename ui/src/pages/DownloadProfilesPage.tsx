@@ -19,6 +19,11 @@ import {DownloadProfileUpdateSchema} from '../types/schemas/download_profile'
 import {faIcon} from '../icons/faIcon'
 import {formatBytes} from '../utils/formatting'
 import {apiUrl} from '../lib/api'
+import {UpgradeRepeatReg} from '../types/schemas/siteSettings'
+import {useBulkSelection} from '../components/ProfileBulkEdit/useBulkSelection'
+import {BulkEditButton, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
+import ProfileBulkEdit, {tableSelection} from '../components/ProfileBulkEdit/ProfileBulkEdit'
+import type {BulkFieldSpec} from '../components/ProfileBulkEdit/BulkChangeDialog'
 
 export default function DownloadProfilesPage() {
     const queryClient = useQueryClient()
@@ -41,6 +46,34 @@ export default function DownloadProfilesPage() {
     const activeCount = [filters.source, filters.status, filters.format].filter((value) => value?.length).length
         + (filters.localMediaProfileId ? 1 : 0)
     const onSearch = useCallback((search: string) => setFilters((current) => ({...current, search})), [])
+
+    const canManage = can('download_profiles', 'manage')
+    const selection = useBulkSelection('downloadProfilesView', 'download-profiles/as-view', filters)
+    const names = useMemo(
+        () => new Map(table.items.map((profile) => [profile.id, `${profile.collectionTitle} (${profile.localMediaProfileName})`])),
+        [table.items],
+    )
+    const bulkFields = useMemo<BulkFieldSpec[]>(() => {
+        const ProfileReg = createSelectRegistry('BulkDownloadProfileMediaProfile', Object.fromEntries(
+            MediaProfileReg.values.filter((value) => value).map((value) => [value, {label: MediaProfileReg.getLabel(value)}]),
+        ), MediaProfileReg.values.filter((value) => value))
+        return [
+            {key: 'enableProfile', label: 'Enabled', kind: 'switch', defaultValue: true},
+            {
+                key: 'localMediaProfileId', label: 'Local Media Profile', kind: 'select', defaultValue: '',
+                registry: ProfileReg, toApi: Number,
+                valueLabel: (value) => ProfileReg.getLabelLoose(String(value)),
+                help: 'Episodes downloaded before keep their files where they are.',
+            },
+            {key: 'downloadWithCountdown', label: 'Download with countdown', kind: 'switch', defaultValue: true},
+            {key: 'upgradeCheck', label: 'Check for better versions', kind: 'switch', defaultValue: true},
+            {key: 'upgradeRepeat', label: 'How often to check', kind: 'select', defaultValue: 'once', registry: UpgradeRepeatReg},
+            {
+                key: 'sponsorblockEnabled', label: 'SponsorBlock', kind: 'switch', defaultValue: true,
+                missingReason: 'only YouTube has SponsorBlock',
+            },
+        ]
+    }, [MediaProfileReg])
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
@@ -115,7 +148,8 @@ export default function DownloadProfilesPage() {
                     <p>Download Profiles are always connected to a Local Media Profile, which defines where your
                         downloads will be stored and what their file name should be.</p>
                 </PageSubtitle>
-                {can('download_profiles', 'manage') && <Link className="btn btn-primary" to="/add-download-profile">Add download profile</Link>}
+                {canManage && <BulkEditButton selection={selection}/>}
+                {canManage && <Link className="btn btn-primary" to="/add-download-profile">Add download profile</Link>}
             </div>
 
             <ProfileTableFilters
@@ -135,6 +169,7 @@ export default function DownloadProfilesPage() {
                 loading={table.isLoading}
                 activeCount={activeCount}
                 onReset={() => setFilters({})}
+                leading={<SelectAll selection={selection} filtered={activeCount > 0 || !!filters.search}/>}
             >
                 <ChipFilter label="Source" options={sourceOptions} selected={filters.source ?? []} onChange={(source) => setFilters((current) => ({...current, source}))}/>
                 <ChipFilter label="Status" options={STATUS_OPTIONS} selected={filters.status ?? []} onChange={(status) => setFilters((current) => ({...current, status}))}/>
@@ -149,6 +184,7 @@ export default function DownloadProfilesPage() {
                     loading={table.isLoading}
                     error={table.error}
                     rowKey={(p) => String(p.id)}
+                    selection={tableSelection(selection)}
                     rowAriaLabel={(p) => p.collectionTitle}
                     mobileSummary={(p) => (
                         <>
@@ -183,6 +219,17 @@ export default function DownloadProfilesPage() {
                 />
                 <LoadMore {...table} noun="profiles"/>
             </div>
+
+            <ProfileBulkEdit
+                selection={selection}
+                endpoint="download-profiles"
+                noun={['download profile', 'download profiles']}
+                names={names}
+                fields={bulkFields}
+                canEnable
+                deleteNote="Their downloaded files stay where they are."
+                invalidate={[['downloadProfilesView'], ['downloadProfilesByCollectionSlug']]}
+            />
 
             <ConfirmDeleteDialog
                 ref={confirmRef}

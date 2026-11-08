@@ -14,6 +14,7 @@ from backend.api.models.local_media_profile_view import (
     LocalMediaProfileViewAPIRead,
     LocalMediaProfileViewPageRead,
 )
+from backend.api.models.profile_bulk import ProfileIdsRead
 from backend.api.models.profile_list import LocalMediaProfileListQuery, StorageUse, UsedFor
 from backend.api.pagination import InvalidCursorError, SortKey, keyset_page
 from backend.db.models import (
@@ -210,11 +211,8 @@ def _views(s: Session, items: list[LocalMediaProfileBase]) -> list[LocalMediaPro
     ]
 
 
-def get_local_media_profile_views_page(
-    s: Session,
-    filters: LocalMediaProfileListQuery,
-) -> LocalMediaProfileViewPageRead:
-    """One page of the Local Media Profiles table, in name order."""
+def _filtered(s: Session, filters: LocalMediaProfileListQuery):
+    """The Local Media Profiles the filters match, and the alias to sort them by."""
     profile = with_polymorphic(LocalMediaProfileBase, "*")
     scope = profile.CollectionLocalMediaProfile.collection_scope
     is_collection = profile.type == LocalMediaProfileType.COLLECTION.value
@@ -244,6 +242,15 @@ def get_local_media_profile_views_page(
         matches_format(profile.preferred_format, filters.format),
         matches_any([storage[value] for value in set(filters.storage)] if set(filters.storage) != set(StorageUse) else []),
     )
+    return query, profile
+
+
+def get_local_media_profile_views_page(
+    s: Session,
+    filters: LocalMediaProfileListQuery,
+) -> LocalMediaProfileViewPageRead:
+    """One page of the Local Media Profiles table, in name order."""
+    query, profile = _filtered(s, filters)
     total = s.scalar(select(func.count()).select_from(query.with_entities(profile.id).subquery()))
     try:
         items, next_cursor = keyset_page(
@@ -291,3 +298,10 @@ def delete_local_media_profile_record(
     s.flush()
     s.delete(local_media_profile)
     s.flush()
+
+
+def get_local_media_profile_ids(s: Session, filters: LocalMediaProfileListQuery) -> ProfileIdsRead:
+    """Every Local Media Profile the filters match, for Select all in bulk edit."""
+    query, profile = _filtered(s, filters)
+    rows = query.with_entities(profile.id).order_by(func.lower(profile.name), profile.id)
+    return ProfileIdsRead(ids=[row.id for row in rows])

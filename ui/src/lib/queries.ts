@@ -38,6 +38,8 @@ import {
 } from "../types/schemas/local_media_profile";
 import {AutoSubtitlesUseSchema, DownloadProfileRead, DownloadProfileReadSchema, SiteOptionsSchema, SkippedByFilterSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
+import {ProfileIdsSchema} from '../types/schemas/profile_bulk'
+
 import {StreamProfileRead, StreamProfileReadSchema, StreamProfileReadView, StreamProfileReadViewSchema} from "../types/schemas/stream_profile_base";
 import {CollectionRead, CollectionReadView, CollectionReadViewSchema} from "../types/schemas/collection";
 import {
@@ -179,6 +181,24 @@ function useProfileTable<T extends {id: string | number}, TItem>({
             const page = await fetchParsed(`${apiUrl()}/${path}?${search}`, schema, signal)
             return {...page, items: page.items.map(toRow)}
         },
+    })
+}
+
+/**
+ * Every profile id a table's filters match, for Select all in its bulk edit. ``path`` is the table's list, such
+ * as ``download-profiles/as-view``, and ``prefix`` names the table. Loaded only while bulk edit is on.
+ */
+export function useProfileTableIds(
+    prefix: string,
+    path: string,
+    filters: Record<string, string | number | null | undefined | readonly string[]>,
+    enabled: boolean,
+) {
+    const params = profileTableParams(filters)
+    return useQuery({
+        queryKey: ['profileTableIds', prefix, params] as const,
+        enabled,
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/${path}/ids?${new URLSearchParams(params)}`, ProfileIdsSchema, signal),
     })
 }
 

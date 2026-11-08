@@ -73,11 +73,13 @@ type ProfileTableFiltersProps = {
     /** How many chip groups or selects narrow the list, shown on the phone's Filters button. */
     activeCount: number
     onReset: () => void
+    /** Shown before the count, such as bulk edit's Select all. */
+    leading?: ReactNode
 }
 
 /** The search box, filter chips and count above a profile table. On phones the chips fold behind a Filters button. */
 export default function ProfileTableFilters({
-    search, onSearch, searchPlaceholder, beside, children, total, loading, activeCount, onReset,
+    search, onSearch, searchPlaceholder, beside, children, total, loading, activeCount, onReset, leading,
 }: ProfileTableFiltersProps) {
     const [open, setOpen] = useState(false)
     const [typed, setTyped] = useState(search)
@@ -123,6 +125,7 @@ export default function ProfileTableFilters({
                 {children}
             </div>
             <div className="profile-filters-count" aria-live="polite">
+                {leading}
                 {!loading && (
                     <strong>{total.toLocaleString()} {filtered ? `matching ${noun}` : noun}</strong>
                 )}

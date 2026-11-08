@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from .service import *
+from ....models.profile_bulk import ProfileIdsRead
 from ....models.profile_list import StreamProfileListQuery
 from ....models.stream_profile import StreamProfileAPIReadView, StreamProfileViewPageRead
 from backend.app import db_session
@@ -27,6 +28,16 @@ def stream_profile_view_list(
     """
     with db_session() as s:
         return get_stream_profile_views_page(s, access, filters)
+
+
+@router.get("/ids", dependencies=_VIEWERS, response_model=ProfileIdsRead)
+def stream_profile_view_ids(
+        filters: Annotated[StreamProfileListQuery, Query()],
+        access: Access = signed_in(),
+):
+    """The ids of every stream profile the filters match, in table order, for Select all."""
+    with db_session() as s:
+        return get_stream_profile_ids(s, access, filters)
 
 
 @router.get("/by-collection-slug/{collection_slug}", dependencies=_VIEWERS, response_model=list[StreamProfileAPIReadView])

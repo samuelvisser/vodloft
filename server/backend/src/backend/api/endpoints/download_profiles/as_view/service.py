@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, contains_eager, joinedload, selectinload
 
 from backend.api.list_filters import matches_any, matches_format, matches_status, matches_words, scope_of, search_words
 from backend.api.models.download_profile_view import DownloadProfileAPIReadView, DownloadProfileViewPageRead
+from backend.api.models.profile_bulk import ProfileIdsRead
 from backend.api.models.profile_list import DownloadProfileListQuery
 from backend.api.pagination import InvalidCursorError, SortKey, keyset_page
 from backend.db.models import (
@@ -89,6 +90,12 @@ def get_download_profile_views_page(
     return DownloadProfileViewPageRead(
         items=_to_views(s, items), limit=filters.limit, next_cursor=next_cursor, total=int(total or 0),
     )
+
+
+def get_download_profile_ids(s: Session, filters: DownloadProfileListQuery) -> ProfileIdsRead:
+    """Every Download Profile the filters match, for Select all in bulk edit."""
+    rows = _filtered(s, filters).with_entities(DownloadProfile.id).order_by(func.lower(Collection.title), DownloadProfile.id)
+    return ProfileIdsRead(ids=[row.id for row in rows])
 
 
 def get_download_profile_views_by_collection(s: Session, collection_slug: str) -> list[DownloadProfileAPIReadView]:
