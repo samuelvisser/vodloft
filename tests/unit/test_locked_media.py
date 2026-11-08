@@ -117,3 +117,15 @@ def test_checking_again_by_hand_tries_one_more_download(locked_download, monkeyp
     with factory() as session:
         run_access_checks(session, now=NOW)
     assert _state(factory, ids) == (False, 0, True)
+
+
+def test_yt_dlp_locks_members_only_and_premium_videos_of_any_site():
+    from sources.ytdlp.source import YtDlpSource, _access
+
+    assert _access({"availability": "subscriber_only"}) == "members"
+    assert _access({"availability": "premium_only"}) == "premium"
+    assert _access({"availability": "needs_auth"}) is None
+    assert _access({}) is None
+    assert [access.label for access in YtDlpSource.accesses] == ["Members only", "Premium only"]
+    assert YtDlpSource().refused_access("ERROR: Join this channel to get access to members-only content") == "members"
+    assert YtDlpSource().refused_access("HTTP Error 500") is None

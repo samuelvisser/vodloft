@@ -400,11 +400,14 @@ _SIGN_IN_ERRORS = (
 # What yt-dlp says about a video that only the channel's members can watch.
 _MEMBERS_ERRORS = ("join this channel", "members-only", "members only", "available to this channel's members")
 MEMBERS = Access("members", "Members only", "Only members of the channel can watch this.")
+PREMIUM = Access("premium", "Premium only", "Only paying subscribers of the site can watch this.")
+_ACCESS_BY_AVAILABILITY = {"subscriber_only": MEMBERS.key, "premium_only": PREMIUM.key}
 
 
 def _access(info: dict) -> str | None:
-    """yt-dlp marks a video only the channel's members can watch as ``subscriber_only``."""
-    return MEMBERS.key if info.get("availability") == "subscriber_only" else None
+    """yt-dlp marks a video only the channel's members can watch as ``subscriber_only``, and one only
+    the site's paying subscribers can watch as ``premium_only``."""
+    return _ACCESS_BY_AVAILABILITY.get(info.get("availability"))
 
 
 class YtDlpSource(Source):
@@ -420,7 +423,7 @@ class YtDlpSource(Source):
         Feature.PENDING_CHECKS,
     })
     episode_tags = _YOUTUBE_TAGS
-    accesses = (MEMBERS,)
+    accesses = (MEMBERS, PREMIUM)
     # Search covers YouTube only; other sites are added by link.
     sites_label = "YouTube, and many more"
     search_label = "YouTube"
@@ -767,7 +770,7 @@ class YtDlpSource(Source):
                 if details := self._look_up(entry_url):
                     yield details
                 elif _access(entry):
-                    # yt-dlp cannot look up a members-only video without a member's cookies,
+                    # yt-dlp cannot look up a members-only or premium video without the right cookies,
                     # so it is kept from the listing, locked until VODLoft can download it.
                     yield self._video(entry, entry_url)
 
