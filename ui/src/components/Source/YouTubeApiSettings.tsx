@@ -58,7 +58,9 @@ function shareLine(status: ApiStatusRead): string {
     ].filter(Boolean).join(' · ')
 }
 
-function ApiKeyPanel() {
+/** The key itself: paste, test or remove it, today's quota and how to get one. ``onboarding`` leaves the
+ * heading to the onboarding step around it and opens the guide, since a first-time visitor has no key yet. */
+function ApiKeyPanel({onboarding = false}: {onboarding?: boolean}) {
     const queryClient = useQueryClient()
     const {data: status, error: loadError} = useSourceApi(SOURCE_ID)
     const [key, setKey] = useState('')
@@ -97,10 +99,13 @@ function ApiKeyPanel() {
                     YouTube Data API{' '}
                     {hasKey && <span className={`youtube-api-state ${status?.problem ? 'is-problem' : 'is-ok'}`}>{status?.problem ? 'Not working' : 'Connected'}</span>}
                 </h4>
-                <p>
-                    Optional. With a free API key, VODLoft lists YouTube channels and finds new videos much faster.
-                    yt-dlp still downloads everything, and VODLoft works without a key.
-                </p>
+                {!onboarding && (
+                    <p>
+                        Optional. With a free API key, VODLoft lists YouTube channels and finds new videos much faster,
+                        and its daily re-scan notices removed and private videos. yt-dlp still downloads everything, and
+                        VODLoft works without a key.
+                    </p>
+                )}
                 {loadError && <p className="source-setting-error" role="alert">Could not load the API key status: {loadError.message}</p>}
                 <form
                     className="youtube-api-key"
@@ -151,7 +156,7 @@ function ApiKeyPanel() {
                     </div>
                 )}
                 {!hasKey && (
-                    <details className="youtube-api-guide">
+                    <details className="youtube-api-guide" open={onboarding || undefined}>
                         <summary>Get a free key in about three minutes</summary>
                         <ol>
                             {KEY_STEPS.map((step) => (
@@ -164,12 +169,53 @@ function ApiKeyPanel() {
                         </ol>
                         <p>
                             The key only reads public YouTube data. Google gives every project 10,000 units a day for
-                            free, and VODLoft stays inside the split below.
+                            free, and VODLoft stays inside {onboarding ? 'its own daily split, which you can change in Settings › Sources' : 'the split below'}.
                         </p>
                     </details>
                 )}
             </div>
         </div>
+    )
+}
+
+/** The optional onboarding step that asks for a YouTube Data API key, and why it is worth one. */
+export function YouTubeApiOnboardingStep({onBack, onContinue}: {onBack: () => void; onContinue: () => void}) {
+    const {data: status} = useSourceApi(SOURCE_ID)
+    return (
+        <>
+            <div className="onboarding-section-heading">
+                <span className="onboarding-eyebrow">Optional</span>
+                <h1>Add a YouTube API key</h1>
+                <p>
+                    VODLoft works with YouTube without a key, and yt-dlp downloads every video either way. A free key
+                    from Google makes VODLoft much better at keeping your YouTube collections up to date.
+                </p>
+            </div>
+            <ul className="onboarding-api-benefits">
+                <li>
+                    <strong>Notices removed and private videos.</strong> Without a key, the daily re-scan reads the
+                    channel's yt-dlp listing, which cannot tell a removed video from one it just did not list.
+                </li>
+                <li>
+                    <strong>Keeps descriptions and thumbnails current.</strong> The daily re-scan refreshes them from
+                    YouTube, which the yt-dlp listing does not have.
+                </li>
+                <li>
+                    <strong>Faster everywhere else.</strong> Adding channels, checking for new videos and searching
+                    YouTube get much quicker.
+                </li>
+            </ul>
+            <ApiKeyPanel onboarding/>
+            <p className="onboarding-security-note">
+                You can skip this and add a key later in Settings › Sources.
+            </p>
+            <div className="onboarding-stage-actions">
+                <button className="btn" type="button" onClick={onBack}>Back</button>
+                <button className="btn btn-primary" type="button" onClick={onContinue}>
+                    {status?.keyHint ? 'Continue' : 'Skip for now'}
+                </button>
+            </div>
+        </>
     )
 }
 

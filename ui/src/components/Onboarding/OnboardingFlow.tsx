@@ -21,7 +21,7 @@ import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
 
 
-type OnboardingStep = 'welcome' | 'sources' | 'security' | 'media' | 'import' | 'add' | 'browse' | 'search' | 'collection' | 'movie-profile' | 'movie'
+type OnboardingStep = 'welcome' | 'sources' | 'api-key' | 'security' | 'media' | 'import' | 'add' | 'browse' | 'search' | 'collection' | 'movie-profile' | 'movie'
 
 /** The collection or movie picked as the first media, from a link or from browsing. */
 type SelectedMedia = {slug: string; title: string; url: string}
@@ -38,13 +38,24 @@ function onboardingSourceOrder(sources: SourceRead[]): SourceRead[] {
     return [...sources.filter(anySite), ...sources.filter((source) => !anySite(source))]
 }
 
-const STEP_LABELS = ['Welcome', 'Sources', 'Security', 'Your media']
+/** The first Source that asks for an API key during onboarding, with the step it brings. */
+function apiKeyOnboarding(sources: SourceRead[]) {
+    for (const source of sources) {
+        const {ApiKeyOnboarding} = sourceComponents(source.id)
+        if (ApiKeyOnboarding && sourceHas(source, SourceFeature.API_KEY)) return ApiKeyOnboarding
+    }
+    return null
+}
 
-function visibleStepIndex(step: OnboardingStep) {
-    if (step === 'welcome') return 0
-    if (step === 'sources') return 1
-    if (step === 'security') return 2
-    return 3
+/** The steps in the progress bar; every step after these counts as "Your media". */
+function progressSteps(apiKeyLabel: string | null): {step: OnboardingStep; label: string}[] {
+    return [
+        {step: 'welcome', label: 'Welcome'},
+        {step: 'sources', label: 'Sources'},
+        ...(apiKeyLabel ? [{step: 'api-key' as const, label: apiKeyLabel}] : []),
+        {step: 'security', label: 'Security'},
+        {step: 'media', label: 'Your media'},
+    ]
 }
 
 export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Props) {
@@ -150,7 +161,10 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
         }
     }, [completeOnboarding, localMovies, selectedMovie, step])
 
-    const progress = visibleStepIndex(step)
+    const apiKeyStep = apiKeyOnboarding(sources ?? [])
+    const steps = progressSteps(apiKeyStep?.label ?? null)
+    const stepIndex = steps.findIndex((item) => item.step === step)
+    const progress = stepIndex === -1 ? steps.length - 1 : stepIndex
     const showTopbar = step !== 'welcome'
 
     return (
@@ -161,7 +175,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                 <header className="onboarding-topbar">
                     <img src="/logo-wide-full.png" alt="VODLoft"/>
                     <ol className="onboarding-progress" aria-label="Onboarding progress">
-                        {STEP_LABELS.map((label, index) => (
+                        {steps.map(({label}, index) => (
                             <li key={label} className={index === progress ? 'is-active' : index < progress ? 'is-complete' : ''}>
                                 <span>{index < progress ? <FontAwesomeIcon icon={faIcon('fass', 'check')}/> : index + 1}</span>
                                 <small>{label}</small>
@@ -222,10 +236,16 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                     })}
                     <div className="onboarding-stage-actions">
                         <button className="btn" type="button" onClick={() => setStep('welcome')}>Back</button>
-                        <button className="btn btn-primary" type="button" onClick={() => setStep('security')}>
+                        <button className="btn btn-primary" type="button" onClick={() => setStep(apiKeyStep ? 'api-key' : 'security')}>
                             Continue
                         </button>
                     </div>
+                </main>
+            )}
+
+            {step === 'api-key' && apiKeyStep && (
+                <main className="onboarding-stage onboarding-stage-narrow">
+                    <apiKeyStep.Step onBack={() => setStep('sources')} onContinue={() => setStep('security')}/>
                 </main>
             )}
 
@@ -275,7 +295,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                     </p>
 
                     <div className="onboarding-stage-actions">
-                        <button className="btn" type="button" onClick={() => setStep('sources')}>Back</button>
+                        <button className="btn" type="button" onClick={() => setStep(apiKeyStep ? 'api-key' : 'sources')}>Back</button>
                         <button className="btn btn-primary" type="button" onClick={() => setStep('media')}>
                             Continue to library setup
                         </button>

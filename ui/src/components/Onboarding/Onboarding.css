@@ -543,3 +543,17 @@
 .onboarding-media-choice small {
     opacity: 0.75;
 }
+
+.onboarding-api-benefits {
+    display: grid;
+    gap: 10px;
+    margin: 0 0 18px;
+    padding-left: 1.2em;
+    line-height: 1.55;
+}
+.onboarding-api-benefits strong { color: rgba(240, 246, 255, .95); }
+.onboarding-step-api-key .youtube-api {
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 14px;
+    padding: 14px 16px;
+}

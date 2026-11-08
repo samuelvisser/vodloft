@@ -1,6 +1,6 @@
 # First-Run Setup
 
-On first launch, VODLoft shows the services it can add media from, helps you review security, and either imports your library from Pinchflat or WireLoft or adds your first media. You can skip optional steps and finish them later from the normal interface.
+On first launch, VODLoft shows the services it can add media from, offers to add a YouTube API key, helps you review security, and either imports your library from Pinchflat or WireLoft or adds your first media. You can skip optional steps and finish them later from the normal interface.
 
 ## 1. Sources
 
@@ -14,7 +14,17 @@ Signing in is only needed for member-exclusive content. You can continue without
 
 You can sign in, reconnect or change the session later from **Settings → Sources**.
 
-## 2. Decide how VODLoft should be protected
+## 2. Add a YouTube API key (optional)
+
+Next, VODLoft offers to add a free YouTube Data API key. yt-dlp downloads every video with or without one, but a key makes VODLoft much better at keeping YouTube collections up to date:
+
+- The daily re-scan notices when a video was removed or made private. Without a key it reads the channel's list from yt-dlp, which cannot tell a removed video from one it just did not list.
+- The daily re-scan also refreshes descriptions and thumbnails, which that list does not have.
+- Adding channels, checking for new videos and searching YouTube get much quicker.
+
+The step links to everything you need in Google Cloud, which takes about three minutes. Choose **Skip for now** to continue without a key; you can add one later in **Settings → Sources**. See [[Settings#youtube-data-api-key]].
+
+## 3. Decide how VODLoft should be protected
 
 VODLoft's administrator login is separate from your The Daily Wire account.
 
@@ -31,13 +41,13 @@ To share VODLoft with other people, each with their own username and password an
 
 Private RSS feeds do not use this administrator login. Each feed has its own secret URL. See [[Security-and-Remote-Access]].
 
-## 3. Your media: start fresh or bring your library
+## 4. Your media: start fresh or bring your library
 
 Choose **Start fresh** to build a new library, or **Move over from Pinchflat** or **Move over from WireLoft** to bring an existing one. Moving over opens the same screens as **Settings › Import**: upload the other program's config folder, check the preview, and start the import. When the import finishes, setup finishes too. **Skip and start fresh** goes back to a new library. See [[Existing-Files-and-Imports]].
 
 Starting fresh adds two Local Media Profiles for collections, **VODLoft Collections (Video)** and **VODLoft Collections (Audio)**. An import during setup doesn't add them, so your profiles are the imported ones, plus **VODLoft Movies** and **VODLoft Videos**, which every installation has.
 
-## 4. Add your first collection, movie or video
+## 5. Add your first collection, movie or video
 
 Paste a link to a collection, an episode, a movie or a video, such as a Daily Wire show, a YouTube channel or playlist, or an NPO Start series. VODLoft finds the Source that recognises the link, shows a preview, and continues to the normal Add Collection wizard or movie page. A link to an episode opens its collection, and a single video is added under **Videos**. You can also search YouTube or NPO Start, or browse The Daily Wire's catalogue, instead.
 
