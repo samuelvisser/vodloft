@@ -27,7 +27,7 @@ const BULK_FIELDS: BulkFieldSpec[] = [
     {key: 'useSourceStream', label: 'Stream directly from the site', kind: 'switch', defaultValue: true},
     {key: 'maxItems', label: 'Episodes in the feed', kind: 'number', defaultValue: 100, min: 0, help: '0 puts every episode in the feed.'},
     {key: 'proxySourceStream', label: 'Stream through VODLoft', kind: 'switch', defaultValue: true},
-    {key: 'streamLiveEpisodes', label: 'Live episodes', kind: 'switch', defaultValue: true, missingReason: 'only video feeds that stream live can have them'},
+    {key: 'streamLiveEpisodes', label: 'Live episodes', kind: 'switch', defaultValue: true},
 ]
 
 const STREAMS_FROM_OPTIONS = [

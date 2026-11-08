@@ -97,6 +97,8 @@ def test_download_profile_changes_skip_settings_a_site_does_not_have(session) ->
     assert summary.count == 4
     assert {item.value: item.count for item in summary.fields["enableProfile"].values} == {True: 2, False: 2}
     assert summary.fields["sponsorblockEnabled"].offered == 2  # only the YouTube ones
+    assert summary.fields["sponsorblockEnabled"].sites_without == ["The Daily Wire"]
+    assert summary.fields["enableProfile"].sites_without == []
 
     body = BulkChangeIn[DownloadProfileBulkChangesIn].model_validate(
         {"ids": ids, "changes": {"enableProfile": True, "sponsorblockEnabled": True}})

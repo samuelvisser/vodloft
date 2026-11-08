@@ -91,6 +91,8 @@ class BulkValueCountRead(ResponseBase):
 class BulkFieldSummaryRead(ResponseBase):
     offered: int
     """How many of the profiles have the setting at all, such as SponsorBlock only on YouTube."""
+    sites_without: list[str] = []
+    """The Sites of the other profiles, when it is their Site that doesn't have the setting."""
     values: list[BulkValueCountRead]
     """What the profiles that have it are set to now, most common first."""
 

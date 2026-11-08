@@ -38,9 +38,7 @@ tr.bulk-row.is-selected > td { background: rgba(59, 130, 246, .12); }
 .bulk-fields { display: grid; gap: 8px; margin-bottom: 18px; }
 .bulk-field { border: 1px solid #e2e8f0; border-radius: 12px; }
 .bulk-field.is-active { border-color: #3b82f6; }
-.bulk-field.is-unavailable { opacity: .6; }
 .bulk-field__head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 12px; cursor: pointer; }
-.bulk-field.is-unavailable .bulk-field__head { cursor: default; }
 .bulk-field__label { font-weight: 600; }
 .bulk-field__current { color: var(--muted); font-size: 12.5px; text-align: right; }
 .bulk-field__control { display: grid; gap: 6px; padding: 0 12px 12px 40px; }

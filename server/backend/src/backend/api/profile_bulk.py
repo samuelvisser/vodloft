@@ -28,14 +28,18 @@ def summarize(
     items: list[ItemT],
     changes_model: type[BulkChangesIn],
     offers: Callable[[ItemT, str], bool],
+    site_name: Callable[[ItemT], str] | None = None,
 ) -> BulkSummaryRead:
-    """For each setting the bulk edit can change: how many of ``items`` have it, and their values now."""
+    """For each setting the bulk edit can change: how many of ``items`` have it, and their values now.
+    ``site_name`` names the Site of an item that lacks a setting, for offers that only depend on the Site."""
     fields: dict[str, BulkFieldSummaryRead] = {}
     for name in changes_model.model_fields:
         having = [item for item in items if offers(item, name)]
         counts = Counter(_plain(getattr(item, name)) for item in having)
+        without = sorted({site_name(item) for item in items if not offers(item, name)}) if site_name else []
         fields[to_camel(name)] = BulkFieldSummaryRead(
             offered=len(having),
+            sites_without=without,
             values=[BulkValueCountRead(value=value, count=count) for value, count in counts.most_common()],
         )
     return BulkSummaryRead(count=len(items), fields=fields)

@@ -50,7 +50,10 @@ def _name(profile: DownloadProfile) -> str:
 
 
 def summarize_download_profiles(s: Session, body: BulkSelectionIn) -> BulkSummaryRead:
-    return summarize(_profiles(s, body.ids), DownloadProfileBulkChangesIn, _offers)
+    return summarize(
+        _profiles(s, body.ids), DownloadProfileBulkChangesIn, _offers,
+        site_name=lambda profile: collection_site(profile.collection).name,
+    )
 
 
 def change_download_profiles(s: Session, body: BulkChangeIn[DownloadProfileBulkChangesIn]) -> BulkResultRead:

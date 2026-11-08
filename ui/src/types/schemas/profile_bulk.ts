@@ -15,6 +15,7 @@ export const BulkSummarySchema = z.object({
     count: z.int(),
     fields: z.record(z.string(), z.object({
         offered: z.int(),
+        sitesWithout: z.string().array(),
         values: BulkValueCountSchema.array(),
     })),
 })

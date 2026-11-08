@@ -31,8 +31,6 @@ export type BulkFieldSpec = {
     toApi?: (value: FieldValue) => unknown
     /** Shown under the control once the setting is ticked. */
     help?: string
-    /** Why some of the chosen profiles don't have the setting, such as "only YouTube has SponsorBlock". */
-    missingReason?: string
 }
 
 function valueSchema(spec: BulkFieldSpec) {
@@ -62,6 +60,12 @@ function valueLabel(spec: BulkFieldSpec, value: string | number | boolean | null
     if (typeof value === 'boolean') return value ? 'on' : 'off'
     if (spec.registry && value !== null) return spec.registry.getLabelLoose(String(value))
     return String(value)
+}
+
+/** "The Daily Wire doesn't", or "The Daily Wire and NPO Start don't". */
+function sitesWithout(sites: string[]): string {
+    if (sites.length === 1) return `${sites[0]} doesn’t`
+    return `${sites.slice(0, -1).join(', ')} and ${sites[sites.length - 1]} don’t`
 }
 
 /** "2 on, 1 off", or "All on" when they agree. */
@@ -122,6 +126,8 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields, on
     )
 
     const shownNames = names.slice(0, 3)
+    // A setting none of the chosen profiles have is left out.
+    const shownFields = fields.filter((spec) => !summary.data || (summary.data.fields[spec.key]?.offered ?? 1) > 0)
     const errors = form.formState.errors
 
     return (
@@ -156,79 +162,77 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields, on
                             Tick the settings you want to change. Everything you leave unticked keeps its own value on each profile.
                         </p>
                         {summary.isError && <div className="form-error-card" role="alert">Could not load the current settings.</div>}
-                        <div className="bulk-fields">
-                            {fields.map((spec) => {
-                                const fieldSummary = summary.data?.fields[spec.key]
-                                const count = summary.data?.count ?? ids.length
-                                const offered = fieldSummary?.offered ?? count
-                                const unavailable = !!fieldSummary && offered === 0
-                                const active = !!values[spec.key]?.apply && !unavailable
-                                const controlId = `${titleId}-${spec.key}`
-                                const error = (errors[spec.key] as {value?: {message?: string}} | undefined)?.value?.message
-                                return (
-                                    <div className={`bulk-field${active ? ' is-active' : ''}${unavailable ? ' is-unavailable' : ''}`} key={spec.key}>
-                                        <label className="bulk-field__head">
-                                            <input
-                                                type="checkbox"
-                                                className="bulk-check"
-                                                disabled={unavailable}
-                                                {...form.register(`${spec.key}.apply`)}
-                                            />
-                                            <span className="bulk-field__label">{spec.label}</span>
-                                            <span className="bulk-field__current">
-                                                {!fieldSummary ? '…' : unavailable ? 'None of these have it' : currentValues(spec, fieldSummary)}
-                                            </span>
-                                        </label>
-                                        {active && (
-                                            <div className="bulk-field__control">
-                                                <Controller
-                                                    control={form.control}
-                                                    name={`${spec.key}.value`}
-                                                    render={({field}) => spec.kind === 'switch' ? (
-                                                        <SegmentedOptions<string>
-                                                            name={controlId}
-                                                            ariaLabel={spec.label}
-                                                            value={field.value ? 'on' : 'off'}
-                                                            onChange={(value) => field.onChange(value === 'on')}
-                                                            options={[{value: 'on', label: 'On'}, {value: 'off', label: 'Off'}]}
-                                                        />
-                                                    ) : spec.kind === 'number' ? (
-                                                        <NumberInput
-                                                            id={controlId}
-                                                            aria-label={spec.label}
-                                                            inputMode="numeric"
-                                                            min={spec.min}
-                                                            step={1}
-                                                            value={field.value === undefined || Number.isNaN(field.value) ? '' : String(field.value)}
-                                                            onChange={(event) => field.onChange(event.target.value === '' ? NaN : Number(event.target.value))}
-                                                            aria-invalid={!!error}
-                                                        />
-                                                    ) : (
-                                                        <SimpleSelect
-                                                            inputId={controlId}
-                                                            aria-label={spec.label}
-                                                            registry={spec.registry!}
-                                                            value={String(field.value ?? '')}
-                                                            onChange={field.onChange}
-                                                            menuPortalTarget={document.body}
-                                                            styles={{menuPortal: (base) => ({...base, zIndex: 2000})}}
-                                                        />
+                        {summary.isPending ? (
+                            <p className="bulk-dialog-hint" aria-live="polite">Loading the current settings…</p>
+                        ) : (
+                            <div className="bulk-fields">
+                                {shownFields.map((spec) => {
+                                    const fieldSummary = summary.data?.fields[spec.key]
+                                    const count = summary.data?.count ?? ids.length
+                                    const offered = fieldSummary?.offered ?? count
+                                    const active = !!values[spec.key]?.apply
+                                    const controlId = `${titleId}-${spec.key}`
+                                    const error = (errors[spec.key] as {value?: {message?: string}} | undefined)?.value?.message
+                                    return (
+                                        <div className={`bulk-field${active ? ' is-active' : ''}`} key={spec.key}>
+                                            <label className="bulk-field__head">
+                                                <input type="checkbox" className="bulk-check" {...form.register(`${spec.key}.apply`)}/>
+                                                <span className="bulk-field__label">{spec.label}</span>
+                                                {fieldSummary && <span className="bulk-field__current">{currentValues(spec, fieldSummary)}</span>}
+                                            </label>
+                                            {active && (
+                                                <div className="bulk-field__control">
+                                                    <Controller
+                                                        control={form.control}
+                                                        name={`${spec.key}.value`}
+                                                        render={({field}) => spec.kind === 'switch' ? (
+                                                            <SegmentedOptions<string>
+                                                                name={controlId}
+                                                                ariaLabel={spec.label}
+                                                                value={field.value ? 'on' : 'off'}
+                                                                onChange={(value) => field.onChange(value === 'on')}
+                                                                options={[{value: 'on', label: 'On'}, {value: 'off', label: 'Off'}]}
+                                                            />
+                                                        ) : spec.kind === 'number' ? (
+                                                            <NumberInput
+                                                                id={controlId}
+                                                                aria-label={spec.label}
+                                                                inputMode="numeric"
+                                                                min={spec.min}
+                                                                step={1}
+                                                                value={field.value === undefined || Number.isNaN(field.value) ? '' : String(field.value)}
+                                                                onChange={(event) => field.onChange(event.target.value === '' ? NaN : Number(event.target.value))}
+                                                                aria-invalid={!!error}
+                                                            />
+                                                        ) : (
+                                                            <SimpleSelect
+                                                                inputId={controlId}
+                                                                aria-label={spec.label}
+                                                                registry={spec.registry!}
+                                                                value={String(field.value ?? '')}
+                                                                onChange={field.onChange}
+                                                                menuPortalTarget={document.body}
+                                                                styles={{menuPortal: (base) => ({...base, zIndex: 2000})}}
+                                                            />
+                                                        )}
+                                                    />
+                                                    {error && <div className="error" role="alert">{error}</div>}
+                                                    {fieldSummary && offered < count && (
+                                                        <div className="help">
+                                                            Only changes {offered.toLocaleString()} of the {countOf(count, noun)}
+                                                            {fieldSummary.sitesWithout.length
+                                                                ? `; ${sitesWithout(fieldSummary.sitesWithout)} have this setting.`
+                                                                : '; the others don’t have this setting.'}
+                                                        </div>
                                                     )}
-                                                />
-                                                {error && <div className="error" role="alert">{error}</div>}
-                                                {fieldSummary && offered < count && (
-                                                    <div className="help">
-                                                        Only changes {offered.toLocaleString()} of the {countOf(count, noun)}
-                                                        {spec.missingReason ? `: ${spec.missingReason}` : '; the others don’t have this setting'}.
-                                                    </div>
-                                                )}
-                                                {spec.help && <div className="help">{spec.help}</div>}
-                                            </div>
-                                        )}
-                                    </div>
-                                )
-                            })}
-                        </div>
+                                                    {spec.help && <div className="help">{spec.help}</div>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
                         {errors.root && <div className="form-error-card" role="alert">{String(errors.root.message)}</div>}
                     </>
                 )}
