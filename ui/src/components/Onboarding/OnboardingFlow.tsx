@@ -9,7 +9,7 @@ import BrowsePage from '../../pages/BrowsePage'
 import SourceSearchPage from '../../pages/SourceSearchPage'
 import MoviePage from '../../pages/movie/MoviePage'
 import {useMovies, useSources} from '../../lib/queries'
-import {SiteSignIns} from '../Source/SiteSignInsCard'
+import {SiteAuthentication} from '../Source/SiteAuthenticationCard'
 import {ANY_DOMAIN, SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {CollectionRead} from '../../types/schemas/collection'
@@ -210,8 +210,8 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                             </li>
                         ))}
                     </ul>
-                    <div className="onboarding-sign-ins">
-                        <SiteSignIns/>
+                    <div className="onboarding-authentication">
+                        <SiteAuthentication/>
                     </div>
                     <div className="onboarding-stage-actions">
                         <button className="btn" type="button" onClick={() => setStep('welcome')}>Back</button>

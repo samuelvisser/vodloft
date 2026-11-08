@@ -5,7 +5,7 @@ Site now has a cookies file in ``cookies/`` in the config directory, which every
 that Site. yt-dlp's file is sorted into the Sites its cookies are for, adding the Sites a domain
 alone tells, such as YouTube. Cookies of a domain no Site is known for yet, such as twitch.tv
 before a Twitch collection is added, are kept in ``yt-dlp/cookies-not-sorted.txt``, to choose
-again under Settings › Sources › Sign-ins once the Site is there. NPO Start's file becomes the
+again under Settings › Sources › Authentication once the Site is there. NPO Start's file becomes the
 NPO Start Site's file.
 
 Revision ID: 305a9510537f

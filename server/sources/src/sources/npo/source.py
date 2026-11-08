@@ -364,7 +364,7 @@ class NpoSource(Source):
             return [SourceProblem(
                 "NPO sign-in expired",
                 "The NPO cookies file no longer signs in, so programmes that need NPO Plus wait. Sign in on npo.nl "
-                "and choose a new cookies file under Settings › Sources › Sign-ins. Free programmes keep downloading.",
+                "and choose a new cookies file under Settings › Sources › Authentication. Free programmes keep downloading.",
                 fix_url=f"{ORIGIN}/start",
             )]
         if not status.subscription:
@@ -378,7 +378,7 @@ class NpoSource(Source):
             return [SourceProblem(
                 "NPO sign-in expires soon",
                 f"The NPO cookies file stops working on {status.expires_at:%d %B}. Sign in on npo.nl and choose a "
-                "new cookies file under Settings › Sources › Sign-ins.",
+                "new cookies file under Settings › Sources › Authentication.",
                 fix_url=f"{ORIGIN}/start",
             )]
         return []

@@ -224,7 +224,7 @@ export const SourceProblemReadSchema = z.object({
 })
 export type SourceProblemRead = z.infer<typeof SourceProblemReadSchema>
 
-export const SiteSignInReadSchema = z.object({
+export const SiteAuthenticationReadSchema = z.object({
     key: z.string(),
     name: z.string(),
     domains: z.array(z.string()),
@@ -238,8 +238,10 @@ export const SiteSignInReadSchema = z.object({
     cookieCount: z.number(),
     /** What the cookies file signs in as, for a Site whose Source can tell. */
     cookiesStatus: z.object({label: z.string(), ok: z.boolean(), detail: z.string().nullable()}).nullable(),
+    /** The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key. */
+    apiKeySourceKey: z.string().nullable(),
 })
-export type SiteSignInRead = z.infer<typeof SiteSignInReadSchema>
+export type SiteAuthenticationRead = z.infer<typeof SiteAuthenticationReadSchema>
 
 /** A Site added by a link to it. */
 export const SiteAddedReadSchema = z.object({key: z.string(), name: z.string()})

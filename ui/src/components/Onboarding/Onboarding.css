@@ -511,7 +511,7 @@
     font-size: 14px;
 }
 .onboarding-source-list strong { color: var(--text); }
-.onboarding-sign-ins {
+.onboarding-authentication {
     border: 1px solid rgba(148, 163, 184, 0.28);
     border-radius: 14px;
     padding: 16px;

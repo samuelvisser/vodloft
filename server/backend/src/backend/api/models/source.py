@@ -135,8 +135,9 @@ class CookiesStatusAPIRead(ResponseBase):
     detail: Optional[str] = None
 
 
-class SiteSignInAPIRead(ResponseBase):
-    """A Site, and how VODLoft signs in on it: with a Source's own sign-in, or with the Site's cookies file."""
+class SiteAuthenticationAPIRead(ResponseBase):
+    """A Site, and how VODLoft signs in on it or gets at its API: a Source's own sign-in, the Site's cookies
+    file, or a Source's API key."""
 
     key: str
     name: str
@@ -149,6 +150,8 @@ class SiteSignInAPIRead(ResponseBase):
     has_cookies: bool
     cookie_count: int
     cookies_status: Optional[CookiesStatusAPIRead] = None
+    api_key_source_key: Optional[str] = None
+    """The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key."""
 
 
 class SiteAddAPIRequest(RequestBase):

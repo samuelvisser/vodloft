@@ -13,7 +13,7 @@ const AddSiteSchema = z.object({
 })
 type AddSiteValues = z.input<typeof AddSiteSchema>
 
-/** Add a Site by a link to it, before VODLoft has anything from it, so it gets its own settings and sign-in.
+/** Add a Site by a link to it, before VODLoft has anything from it, so it gets its own settings and authentication.
  *  Every list of Sites shows it once it is added. */
 export default function AddSiteByLink() {
     const queryClient = useQueryClient()
@@ -35,7 +35,7 @@ export default function AddSiteByLink() {
             onSuccess: async (_site, {resetForm}) => {
                 resetForm({url: ''})
                 await Promise.all([
-                    queryClient.invalidateQueries({queryKey: ['siteSignIns']}),
+                    queryClient.invalidateQueries({queryKey: ['siteAuthentication']}),
                     queryClient.invalidateQueries({queryKey: ['sitesSettings']}),
                 ])
             },

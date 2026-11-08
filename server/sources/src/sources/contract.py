@@ -620,6 +620,9 @@ class Site:
     can't stand in for, such as The Daily Wire, has none."""
     cookies_help: str | None = None
     """How to export a cookies file that signs in on the Site, when the Site needs more than the usual."""
+    takes_api_key: bool = False
+    """A Source with ``Feature.API_KEY`` that fetches the Site uses its key there, such as yt-dlp's
+    YouTube Data API key on YouTube."""
 
     @property
     def streams(self) -> bool:

@@ -393,7 +393,7 @@ def signed_in():
 
 
 def _sign_in():
-    """Give the NPO Start Site its cookies file, as Settings › Sources › Sign-ins does."""
+    """Give the NPO Start Site its cookies file, as Settings › Sources › Authentication does."""
     from sources import cookies
     from sources.npo import account
 
@@ -542,7 +542,7 @@ def test_the_cookies_file_says_what_it_signs_in_as(npo, signed_in):
     assert source.cookies_status("npo").label == "Signed out"
 
 
-def test_the_sign_ins_endpoint_reports_the_npo_account(npo, signed_in, session, monkeypatch):
+def test_the_authentication_endpoint_reports_the_npo_account(npo, signed_in, session, monkeypatch):
     from contextlib import contextmanager
 
     from backend.api.endpoints.sources import router
@@ -556,7 +556,7 @@ def test_the_sign_ins_endpoint_reports_the_npo_account(npo, signed_in, session, 
     _sign_in()
     # Checked once with npo.nl; every NPO Start instance shares the answer.
     assert source.subscription_active is True
-    npo_site = next(site for site in router.site_sign_ins() if site.key == "npo")
+    npo_site = next(site for site in router.site_authentication() if site.key == "npo")
     assert npo_site.has_cookies is True and npo_site.cookies_status.label == "NPO Plus"
     assert "NPO Start" in npo_site.cookie_source_names and npo_site.cookies_help
     assert router.remove_site_cookie_file("npo").cookies_status is None

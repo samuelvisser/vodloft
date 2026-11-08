@@ -4,13 +4,13 @@ from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
     ApiKeyAPIUpdate, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
-    SiteAddAPIRequest, SiteAddedAPIRead, SiteSignInAPIRead,
+    SiteAddAPIRequest, SiteAddedAPIRead, SiteAuthenticationAPIRead,
 )
 from backend.app import db_session
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.site_cookies import (
-    SiteNotKnownError, list_site_sign_ins, remove_site_cookies, save_site_cookies,
+    SiteNotKnownError, list_site_authentication, remove_site_cookies, save_site_cookies,
 )
 from backend.services.sites import SiteLinkError, add_site, site_of_link
 from backend.services.site_settings import download_profile_defaults, offered_settings
@@ -59,7 +59,7 @@ def source_sites():
 
 @router.post("/sources/sites", dependencies=[requires_any((Area.SOURCES, Level.MANAGE), (Area.SETTINGS, Level.MANAGE))], response_model=SiteAddedAPIRead)
 def add_site_by_link(body: SiteAddAPIRequest):
-    """Add the Site of a link before VODLoft has anything from it, so it gets its own settings and sign-in."""
+    """Add the Site of a link before VODLoft has anything from it, so it gets its own settings and authentication."""
     with db_session() as s:
         try:
             site = site_of_link(s, body.url.strip())
@@ -177,30 +177,30 @@ def update_program(source_id: str):
     return update_source_program(_source(source_id, Feature.PROGRAM_UPDATES))
 
 
-@router.get("/sources/sign-ins", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=list[SiteSignInAPIRead])
-def site_sign_ins():
-    """Every Site VODLoft knows, with its sign-in and its cookies file."""
+@router.get("/sources/authentication", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=list[SiteAuthenticationAPIRead])
+def site_authentication():
+    """Every Site VODLoft knows, with its sign-in, its cookies file and its API key."""
     with db_session() as s:
-        return [SiteSignInAPIRead.model_validate(listing) for listing in list_site_sign_ins(s)]
+        return [SiteAuthenticationAPIRead.model_validate(listing) for listing in list_site_authentication(s)]
 
 
-@router.put("/sources/sign-ins/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteSignInAPIRead)
+@router.put("/sources/authentication/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
 def save_site_cookie_file(site_key: str, body: CookiesAPIUpdate):
     """Store the Site's cookies of a cookies.txt file, which every Source uses for lookups and downloads on the Site."""
     with db_session() as s:
         try:
-            return SiteSignInAPIRead.model_validate(save_site_cookies(s, site_key, body.content.encode()))
+            return SiteAuthenticationAPIRead.model_validate(save_site_cookies(s, site_key, body.content.encode()))
         except SiteNotKnownError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.delete("/sources/sign-ins/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteSignInAPIRead)
+@router.delete("/sources/authentication/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
 def remove_site_cookie_file(site_key: str):
     with db_session() as s:
         try:
-            return SiteSignInAPIRead.model_validate(remove_site_cookies(s, site_key))
+            return SiteAuthenticationAPIRead.model_validate(remove_site_cookies(s, site_key))
         except SiteNotKnownError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

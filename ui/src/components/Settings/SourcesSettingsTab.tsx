@@ -1,6 +1,6 @@
 import {useSources} from '../../lib/queries'
 import {ANY_DOMAIN, SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
-import SiteSignInsCard from '../Source/SiteSignInsCard'
+import SiteAuthenticationCard from '../Source/SiteAuthenticationCard'
 import SourceSitesCard from '../Source/SourceSitesCard'
 import SourceProgramCard from '../Source/SourceProgramCard'
 import SourceSection from '../Source/SourceSection'
@@ -62,10 +62,9 @@ export default function SourcesSettingsTab(tabProps: SettingsTabProps) {
         <div className="source-card-list">
             <p className="view-description">
                 The services VODLoft can add media from. A link you paste on the Add media page goes to the Source that
-                recognises it. Signing in is optional, and only needed for content that requires an account. It is
-                per site, under Sign-ins.
+                recognises it. Signing in and API keys are optional, and set up per site under Authentication.
             </p>
-            <SiteSignInsCard/>
+            <SiteAuthenticationCard/>
             {(sources ?? []).map((source) => (
                 <SourceCard key={source.id} source={source} tabProps={tabProps}/>
             ))}

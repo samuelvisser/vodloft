@@ -131,17 +131,20 @@ def test_a_cookies_file_adds_the_sites_its_domains_tell(session):
         router.add_site_by_link(SiteAddAPIRequest(url="twitch.tv"))
 
 
-def test_every_site_lists_how_it_signs_in(session):
+def test_every_site_lists_how_it_authenticates(session):
     from backend.services import site_cookies
 
     _site(session, "youtube", "YouTube", "youtube.com")
     site_cookies.save_site_cookies(session, "youtube", _file(YOUTUBE))
-    sites = {site.key: site for site in site_cookies.list_site_sign_ins(session)}
+    sites = {site.key: site for site in site_cookies.list_site_authentication(session)}
     assert sites["dailywire"].sign_in_source_key == "dailywire"
     # The Daily Wire signs in its own way only, so no Source uses a cookies file there.
     assert sites["dailywire"].cookie_source_names == ()
     assert sites["npo"].cookie_source_names == ("NPO Start", "yt-dlp") and sites["npo"].cookies_help
     assert (sites["youtube"].cookie_source_names, sites["youtube"].cookie_count) == (("yt-dlp",), 1)
+    # yt-dlp's API key is the YouTube Data API key, so it shows on YouTube only.
+    assert sites["youtube"].api_key_source_key == "ytdlp"
+    assert sites["npo"].api_key_source_key is None
 
 
 def test_the_migration_gives_each_site_its_own_cookies_file(session, tmp_path, monkeypatch):

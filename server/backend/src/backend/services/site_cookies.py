@@ -1,4 +1,5 @@
-"""Signing in per Site: a Site's own sign-in, such as The Daily Wire's, and a cookies file per Site.
+"""Authentication per Site: a Site's own sign-in, such as The Daily Wire's, a cookies file per Site,
+and the API key a Source uses on a Site, such as YouTube's.
 
 Every Source that signs in with cookies uses the cookies file of the Site it fetches, so YouTube and Twitch
 each have their own file, and yt-dlp uses NPO Start's file when it fetches npo.nl. A cookies file that another
@@ -34,8 +35,8 @@ class SiteNotKnownError(LookupError):
 
 
 @dataclass(frozen=True)
-class SiteSignIn:
-    """A Site, and how VODLoft signs in on it."""
+class SiteAuthentication:
+    """A Site, and how VODLoft signs in on it or gets at its API."""
 
     key: str
     name: str
@@ -48,6 +49,8 @@ class SiteSignIn:
     cookie_count: int
     """How many cookies the Site's cookies file holds; 0 without one."""
     cookies_status: Optional[CookiesStatus]
+    api_key_source_key: Optional[str]
+    """The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key."""
 
     @property
     def has_cookies(self) -> bool:
@@ -111,33 +114,39 @@ def _status(site_key: str, sources: list[Source]) -> Optional[CookiesStatus]:
     return next((status for source in sources if (status := source.cookies_status(site_key)) is not None), None)
 
 
-def _sign_in(site: Site, domains: tuple[str, ...]) -> SiteSignIn:
+def _authentication(site: Site, domains: tuple[str, ...]) -> SiteAuthentication:
     sources = _cookie_sources(site, domains)
     count = _cookie_count(site.key)
     owner = next(
         (source for source in all_sources() if source.has(Feature.LOGIN) and any(own.key == site.key for own in source.sites)),
         None,
     )
-    return SiteSignIn(
+    api_key = next(
+        (source for source in (sources_for(f"https://{domains[0]}/") if domains and site.takes_api_key else [])
+         if source.has(Feature.API_KEY)),
+        None,
+    )
+    return SiteAuthentication(
         key=site.key, name=site.name, domains=domains, sign_in_source_key=owner.id if owner is not None else None,
         cookie_source_names=tuple(source.name for source in sources), cookies_help=site.cookies_help,
         cookie_count=count, cookies_status=_status(site.key, sources) if count else None,
+        api_key_source_key=api_key.id if api_key is not None else None,
     )
 
 
-def list_site_sign_ins(s: Session) -> list[SiteSignIn]:
-    """Every Site VODLoft knows, with how it signs in there. Sites with a sign-in or cookies come first."""
-    listings = [_sign_in(site, domains) for site, domains in _known_sites(s).values()]
+def list_site_authentication(s: Session) -> list[SiteAuthentication]:
+    """Every Site VODLoft knows, with how it signs in there. Sites with a sign-in, cookies or an API key come first."""
+    listings = [_authentication(site, domains) for site, domains in _known_sites(s).values()]
     return sorted(listings, key=lambda listing: (
-        not (listing.sign_in_source_key or listing.has_cookies), listing.name.lower(),
+        not (listing.sign_in_source_key or listing.has_cookies or listing.api_key_source_key), listing.name.lower(),
     ))
 
 
-def site_sign_in(s: Session, site_key: str) -> SiteSignIn:
+def site_authentication(s: Session, site_key: str) -> SiteAuthentication:
     known = _known_sites(s)
     if site_key not in known:
         raise SiteNotKnownError(f"VODLoft does not know the Site '{site_key}'")
-    return _sign_in(*known[site_key])
+    return _authentication(*known[site_key])
 
 
 def _changed(site: Site, domains: tuple[str, ...]) -> None:
@@ -145,7 +154,7 @@ def _changed(site: Site, domains: tuple[str, ...]) -> None:
         source.cookies_changed(site.key)
 
 
-def save_site_cookies(s: Session, site_key: str, content: bytes) -> SiteSignIn:
+def save_site_cookies(s: Session, site_key: str, content: bytes) -> SiteAuthentication:
     """Keep the Site's cookies of a cookies file as the Site's cookies file.
 
     Raises ValueError for a file that is no cookies file, or has no cookies for the Site.
@@ -166,17 +175,17 @@ def save_site_cookies(s: Session, site_key: str, content: bytes) -> SiteSignIn:
     cookie_files.store_site_cookies(site_key, lines)
     _changed(site, domains)
     logger.info("Stored a cookies file for %s with %s cookies", site.name, len(lines))
-    return _sign_in(site, domains)
+    return _authentication(site, domains)
 
 
-def remove_site_cookies(s: Session, site_key: str) -> SiteSignIn:
+def remove_site_cookies(s: Session, site_key: str) -> SiteAuthentication:
     known = _known_sites(s)
     if site_key not in known:
         raise SiteNotKnownError(f"VODLoft does not know the Site '{site_key}'")
     site, domains = known[site_key]
     cookie_files.remove_site_cookies(site_key)
     _changed(site, domains)
-    return _sign_in(site, domains)
+    return _authentication(site, domains)
 
 
 def sites_for_cookies(s: Session, content: bytes) -> list[Site]:
