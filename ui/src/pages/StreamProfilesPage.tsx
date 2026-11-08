@@ -1,9 +1,10 @@
-import {useCallback, useRef} from 'react'
+import {useCallback, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
-import {useStreamProfilesTable} from '../lib/queries'
+import {type StreamProfileTableFilters, useSources, useStreamProfilesTable} from '../lib/queries'
+import ProfileTableFilters, {ChipFilter, FORMAT_OPTIONS, STATUS_OPTIONS} from '../components/common/ProfileTableFilters'
 import {updateLazyCollectionEntities} from '../lib/lazyCollection'
 import LoadMore from '../components/common/LoadMore'
 import {StreamProfileReadView} from '../types/schemas/stream_profile_base'
@@ -16,10 +17,22 @@ import {RssStreamProfileUpdateSchema} from '../types/schemas/rss_stream_profile'
 import {faIcon} from '../icons/faIcon'
 import {apiUrl} from '../lib/api'
 
+const STREAMS_FROM_OPTIONS = [
+    {value: 'downloads', label: 'Downloads'},
+    {value: 'source', label: 'Direct from Site'},
+]
+
 export default function StreamProfilesPage() {
     const queryClient = useQueryClient()
 
-    const table = useStreamProfilesTable()
+    const [filters, setFilters] = useState<StreamProfileTableFilters>({})
+    const table = useStreamProfilesTable(filters)
+    const {data: sources} = useSources()
+    const sourceOptions = (sources ?? [])
+        .filter((source) => source.features.includes('collections'))
+        .map((source) => ({value: source.id, label: source.name}))
+    const activeCount = [filters.source, filters.status, filters.streamsFrom, filters.format].filter((value) => value?.length).length
+    const onSearch = useCallback((search: string) => setFilters((current) => ({...current, search})), [])
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
@@ -69,7 +82,7 @@ export default function StreamProfilesPage() {
             align: 'center',
         },
         {
-            header: 'Stream from DW',
+            header: 'Direct from Site',
             accessor: (p) => (p.useSourceStream ? '✓' : '✕'),
             align: 'center',
         },
@@ -99,6 +112,21 @@ export default function StreamProfilesPage() {
                 </PageSubtitle>
                 {can('stream_profiles') && <Link className="btn btn-primary" to="/add-stream-profile">Add stream profile</Link>}
             </div>
+
+            <ProfileTableFilters
+                search={filters.search ?? ''}
+                onSearch={onSearch}
+                searchPlaceholder="Search stream profiles"
+                total={table.total}
+                loading={table.isLoading}
+                activeCount={activeCount}
+                onReset={() => setFilters({})}
+            >
+                <ChipFilter label="Source" options={sourceOptions} selected={filters.source ?? []} onChange={(source) => setFilters((current) => ({...current, source}))}/>
+                <ChipFilter label="Status" options={STATUS_OPTIONS} selected={filters.status ?? []} onChange={(status) => setFilters((current) => ({...current, status}))}/>
+                <ChipFilter label="Streams from" options={STREAMS_FROM_OPTIONS} selected={filters.streamsFrom ?? []} onChange={(streamsFrom) => setFilters((current) => ({...current, streamsFrom}))}/>
+                <ChipFilter label="Format" options={FORMAT_OPTIONS} selected={filters.format ?? []} onChange={(format) => setFilters((current) => ({...current, format}))}/>
+            </ProfileTableFilters>
 
             <div className="form-row">
                 <DataTable<StreamProfileReadView>

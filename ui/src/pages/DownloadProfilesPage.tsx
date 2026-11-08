@@ -1,9 +1,12 @@
-import {useCallback, useRef} from 'react'
+import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
-import {useDownloadProfilesTable} from '../lib/queries'
+import {type DownloadProfileTableFilters, useDownloadProfilesTable, useLocalMediaProfiles, useSources} from '../lib/queries'
+import ProfileTableFilters, {ChipFilter, FORMAT_OPTIONS, STATUS_OPTIONS} from '../components/common/ProfileTableFilters'
+import SimpleSelect from '../components/common/SimpleSelect'
+import {createSelectRegistry} from '../utils/selectRegistry'
 import {updateLazyCollectionEntities} from '../lib/lazyCollection'
 import LoadMore from '../components/common/LoadMore'
 import {DownloadProfileReadView} from '../types/schemas/download_profile_view'
@@ -20,7 +23,24 @@ import {apiUrl} from '../lib/api'
 export default function DownloadProfilesPage() {
     const queryClient = useQueryClient()
 
-    const table = useDownloadProfilesTable()
+    const [filters, setFilters] = useState<DownloadProfileTableFilters>({})
+    const table = useDownloadProfilesTable(filters)
+    const {data: sources} = useSources()
+    const sourceOptions = (sources ?? [])
+        .filter((source) => source.features.includes('collections'))
+        .map((source) => ({value: source.id, label: source.name}))
+    const {data: mediaProfiles} = useLocalMediaProfiles()
+    const MediaProfileReg = useMemo(() => {
+        const collectionProfiles = (mediaProfiles ?? [])
+            .filter((profile) => profile.type === 'collection')
+            .sort((left, right) => left.name.localeCompare(right.name, undefined, {sensitivity: 'base', numeric: true}))
+        const spec: Record<string, {label: string}> = {'': {label: 'All media profiles'}}
+        for (const profile of collectionProfiles) spec[String(profile.id)] = {label: profile.name}
+        return createSelectRegistry('DownloadProfileMediaProfileFilter', spec, ['', ...collectionProfiles.map((profile) => String(profile.id))])
+    }, [mediaProfiles])
+    const activeCount = [filters.source, filters.status, filters.format].filter((value) => value?.length).length
+        + (filters.localMediaProfileId ? 1 : 0)
+    const onSearch = useCallback((search: string) => setFilters((current) => ({...current, search})), [])
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
@@ -97,6 +117,29 @@ export default function DownloadProfilesPage() {
                 </PageSubtitle>
                 {can('download_profiles', 'manage') && <Link className="btn btn-primary" to="/add-download-profile">Add download profile</Link>}
             </div>
+
+            <ProfileTableFilters
+                search={filters.search ?? ''}
+                onSearch={onSearch}
+                searchPlaceholder="Search collections or media profiles"
+                beside={(
+                    <SimpleSelect
+                        className="profile-filters-select"
+                        aria-label="Filter by local media profile"
+                        registry={MediaProfileReg}
+                        value={filters.localMediaProfileId ? String(filters.localMediaProfileId) : ''}
+                        onChange={(value) => setFilters((current) => ({...current, localMediaProfileId: value ? Number(value) : null}))}
+                    />
+                )}
+                total={table.total}
+                loading={table.isLoading}
+                activeCount={activeCount}
+                onReset={() => setFilters({})}
+            >
+                <ChipFilter label="Source" options={sourceOptions} selected={filters.source ?? []} onChange={(source) => setFilters((current) => ({...current, source}))}/>
+                <ChipFilter label="Status" options={STATUS_OPTIONS} selected={filters.status ?? []} onChange={(status) => setFilters((current) => ({...current, status}))}/>
+                <ChipFilter label="Format" options={FORMAT_OPTIONS} selected={filters.format ?? []} onChange={(format) => setFilters((current) => ({...current, format}))}/>
+            </ProfileTableFilters>
 
             <div className="form-row">
                 <DataTable<DownloadProfileReadView>
