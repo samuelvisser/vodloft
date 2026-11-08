@@ -17,11 +17,9 @@ from sqlalchemy.orm import (
 
 from backend.api.pagination import (
     InvalidCursorError,
-    KeysetField,
     cursor_key_values,
     decode_cursor,
     encode_cursor,
-    keyset_after,
 )
 from backend.api.models.media_download import (
     DownloadedLocalMediaProfileAPIRead,
@@ -59,11 +57,10 @@ from backend.types.media_types import MediaType
 from downloader.storage.artifacts import remove_download_artifacts
 from backend.services.episode_download_delay import episode_download_delay_passed
 from backend.services.media_download_collection import (
-    MediaDownloadCollectionQuery,
     latest_download_runs,
-    media_download_collection_revision,
+    media_download_bulk_action_ids,
     media_download_queue_positions,
-    stored_sort_text,
+    read_media_download_page_window,
 )
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import (
@@ -422,16 +419,11 @@ def get_media_downloads_page(
         cursor: str | None = None,
         limit: int = 50,
 ) -> MediaDownloadPageRead:
-    """Return one SQL-filtered cursor page in the requested UI ordering."""
-    collection = MediaDownloadCollectionQuery.build()
-    source = collection.source
+    """Return one cursor page in the requested UI ordering."""
     requested_statuses = sorted(set(statuses or []))
-    revision = media_download_collection_revision(
-        s, collection=collection, statuses=requested_statuses, order=order,
-    )
 
-    after = None
-    cursor_id: int | None = None
+    after_id: int | None = None
+    after_revision: str | None = None
     if cursor:
         try:
             values = decode_cursor(cursor)
@@ -441,72 +433,30 @@ def get_media_downloads_page(
                 or values.get("statuses") != requested_statuses
             ):
                 raise InvalidCursorError("Cursor does not match this download collection")
-            if values.get("revision") == revision:
-                cursor_value = cursor_key_values(values, length=1)[0]
-                if isinstance(cursor_value, int) and not isinstance(cursor_value, bool):
-                    cursor_id = cursor_value
-                else:
-                    raise InvalidCursorError("Invalid download cursor key")
+            cursor_value = cursor_key_values(values, length=1)[0]
+            if not isinstance(cursor_value, int) or isinstance(cursor_value, bool):
+                raise InvalidCursorError("Invalid download cursor key")
+            after_id = cursor_value
+            after_revision = values.get("revision")
         except InvalidCursorError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    if cursor_id is not None:
-        # The revision checks membership and relative order, not timestamps.
-        # Resolve the boundary's *current* sort keys so continuation stays
-        # correct when a timestamp changes without moving the row.
-        anchor = s.execute(collection.cursor_anchor_statement(
-            media_download_id=cursor_id,
+    try:
+        window = read_media_download_page_window(
+            s,
             statuses=requested_statuses,
             order=order,
-        )).mappings().first()
-        if anchor is None:
-            raise HTTPException(status_code=422, detail="Invalid download cursor key")
-        if order == "recent":
-            after = keyset_after([
-                KeysetField(stored_sort_text(source.c.recent_at), anchor["recent_at"], descending=True),
-                KeysetField(source.c.id, cursor_id, descending=True),
-            ])
-        else:
-            after = keyset_after([
-                KeysetField(source.c.workflow_bucket, anchor["workflow_bucket"]),
-                KeysetField(source.c.workflow_queue, anchor["workflow_queue"]),
-                KeysetField(
-                    stored_sort_text(source.c.workflow_active_started_at),
-                    anchor["workflow_active_started_at"],
-                ),
-                KeysetField(
-                    stored_sort_text(source.c.workflow_terminal_at),
-                    anchor["workflow_terminal_at"],
-                    descending=True,
-                ),
-                KeysetField(source.c.id, cursor_id, descending=True),
-            ])
-
-    page_rows = list(s.execute(
-        collection.page_statement(
-            statuses=requested_statuses,
-            order=order,
-            after=after,
             limit=limit,
+            after_id=after_id,
+            after_revision=after_revision,
         )
-    ).mappings())
-    has_more = len(page_rows) > limit
-    page_rows = page_rows[:limit]
-    selected_ids = [int(row["id"]) for row in page_rows]
+    except LookupError:
+        raise HTTPException(status_code=422, detail="Invalid download cursor key")
 
-    status_counts = {
-        str(status): int(count)
-        for status, count in s.execute(collection.facets_statement())
-    }
-
-    total, retry_count, cancel_count, delete_count = s.execute(
-        collection.summary_statement(statuses=requested_statuses)
-    ).one()
-    action_counts = {
-        "retry": int(retry_count),
-        "cancel": int(cancel_count),
-        "delete-unavailable": int(delete_count),
-    }
+    has_more = len(window.rows) > limit
+    page_rows = window.rows[:limit]
+    selected_ids = [int(row.id) for row in page_rows]
+    revision = window.revision
 
     if selected_ids:
         selected_downloads_by_id = {
@@ -529,9 +479,9 @@ def get_media_downloads_page(
         ]
         latest_runs = latest_download_runs(s, selected_ids)
         queue_positions = {
-            int(row["id"]): int(row["queue_position"])
+            int(row.id): int(row.queue_position)
             for row in page_rows
-            if row["queue_position"] is not None
+            if row.queue_position is not None
         }
     else:
         selected_downloads = []
@@ -540,9 +490,8 @@ def get_media_downloads_page(
 
     next_cursor = None
     if has_more and page_rows:
-        last = page_rows[-1]
-        # Re-evaluate ordering keys on continuation, so store only the row ID.
-        cursor_key = [int(last["id"])]
+        # The next page continues after this row while the order stays the same.
+        cursor_key = [int(page_rows[-1].id)]
         next_cursor = encode_cursor({
             "kind": "media-download",
             "order": order,
@@ -558,12 +507,12 @@ def get_media_downloads_page(
             latest_runs=latest_runs,
             queue_positions=queue_positions,
         ),
-        total=int(total),
+        total=window.total,
         limit=limit,
         next_cursor=next_cursor,
         revision=revision,
-        facets=status_counts,
-        actions=action_counts,
+        facets=window.facets,
+        actions=window.actions,
     )
 
 
@@ -574,17 +523,7 @@ def get_media_download_bulk_action_ids(
         action: str,
 ) -> list[int]:
     """Return every row in the filtered collection that supports one bulk action"""
-    requested_statuses = sorted(set(statuses or []))
-    collection = MediaDownloadCollectionQuery.build()
-    return [
-        int(media_download_id)
-        for media_download_id in s.scalars(
-            collection.bulk_action_ids_statement(
-                statuses=requested_statuses,
-                action=action,
-            )
-        )
-    ]
+    return media_download_bulk_action_ids(s, statuses=sorted(set(statuses or [])), action=action)
 
 
 def get_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRead:
