@@ -657,7 +657,8 @@ class YtDlpSource(Source):
 
         A channel's uploads playlist leaves out the videos only its members can
         watch, so the channel's tabs are listed with yt-dlp after the API too,
-        which costs no quota, and only what the API did not answer is looked up.
+        which costs no quota. What that finds is asked of the API first, which
+        still describes such a video by its ID, and only the rest is looked up.
         """
         catalogue = self._catalogue(adding=not known) if mapping.youtube_ref(collection_url(url)) else None
         if catalogue is not None:
@@ -676,9 +677,16 @@ class YtDlpSource(Source):
                 if ref.kind != "playlist":
                     try:
                         # Also what the API listed but would not give details of, which yt-dlp may still see.
-                        yield from self._list_with_ytdlp(url, frozenset(listed))
+                        entries = self._unseen_entries(url, frozenset(listed))
                     except runner.YtDlpError as exc:
                         logger.info("Not listing %s's members-only videos: %s", url, exc)
+                        return
+                    for details in self._details_from_api(catalogue, list(entries)):
+                        entry = entries.pop(details.slug, {})
+                        yield details if details.access else replace(details, access=_access(entry))
+                    for slug, entry in entries.items():
+                        if details := self._from_entry(entry):
+                            yield details
                 return
         yield from self._list_with_ytdlp(url, known)
 
@@ -758,10 +766,21 @@ class YtDlpSource(Source):
         return ItemRefresh(details=details, removed=frozenset(removed))
 
     def _list_with_ytdlp(self, url: str, known: frozenset[str]) -> Iterator[VideoDetails]:
-        seen = set(known)
+        for entry in self._unseen_entries(url, known).values():
+            if details := self._from_entry(entry):
+                yield details
+
+    @staticmethod
+    def _unseen_entries(url: str, known: frozenset[str]) -> dict[str, dict]:
+        """The collection's listed videos VODLoft does not know yet, by slug, in the listing's order.
+
+        YouTube's listing only says how long ago a video came out, which yt-dlp
+        turns into a date when asked: the only date a video it cannot look up has.
+        """
+        entries: dict[str, dict] = {}
         for index, listing_url in enumerate(_listing_urls(url)):
             try:
-                listing = runner.run_json("--flat-playlist", listing_url)
+                listing = runner.run_json("--flat-playlist", "--extractor-args", "youtubetab:approximate_date", listing_url)
             except runner.YtDlpError as exc:
                 if index == 0:
                     raise
@@ -770,18 +789,20 @@ class YtDlpSource(Source):
             for entry in listing.get("entries") or []:
                 if not isinstance(entry, dict) or not entry.get("id") or entry.get("title") in _UNAVAILABLE_TITLES:
                     continue
-                if video_slug(entry) in seen:
-                    continue
-                entry_url = entry.get("url") or entry.get("webpage_url")
-                if not entry_url:
-                    continue
-                seen.add(video_slug(entry))
-                if details := self._look_up(entry_url):
-                    yield details
-                elif _access(entry):
-                    # yt-dlp cannot look up a members-only or premium video without the right cookies,
-                    # so it is kept from the listing, locked until VODLoft can download it.
-                    yield self._video(entry, entry_url)
+                if (entry.get("url") or entry.get("webpage_url")) and video_slug(entry) not in known:
+                    entries.setdefault(video_slug(entry), entry)
+        return entries
+
+    def _from_entry(self, entry: dict) -> VideoDetails | None:
+        """A listed video, looked up with yt-dlp."""
+        entry_url = entry.get("url") or entry.get("webpage_url")
+        if details := self._look_up(entry_url):
+            return details
+        if _access(entry):
+            # yt-dlp cannot look up a members-only or premium video without the right cookies,
+            # so it is kept from the listing, locked until VODLoft can download it.
+            return self._video(entry, entry_url)
+        return None
 
     def latest_items(self, url: str) -> list[ItemRef]:
         """A YouTube collection's 50 newest videos through the API, else its RSS feed's 15, else yt-dlp's listing."""

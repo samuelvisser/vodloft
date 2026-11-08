@@ -199,16 +199,23 @@ def test_with_a_key_members_only_videos_come_from_the_channel_tabs(youtube, look
     channel = "https://www.youtube.com/channel/UC1"
     youtube.playlists["UU1"] = ["v1"]
     youtube.videos["v1"] = _video_item("v1")
-    answers[("--flat-playlist", f"{channel}/videos")] = {"_type": "playlist", "entries": [
+    answers[("--flat-playlist", "--extractor-args", "youtubetab:approximate_date", f"{channel}/videos")] = {"_type": "playlist", "entries": [
         {"id": "v1", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=v1", "title": "v1"},
         {"id": "m1", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=m1", "title": "Weekly digest",
+         "availability": "subscriber_only", "timestamp": 1762041600},
+        {"id": "m2", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=m2", "title": "Older digest",
          "availability": "subscriber_only"},
     ]}
+    # The API still describes a members-only video by its ID.
+    youtube.videos["m2"] = _video_item("m2", published="2024-03-01T10:00:00Z")
 
-    found = list(YtDlpSource().list_episodes(f"{channel}/videos", known=frozenset()))
+    found = {video.slug: video for video in YtDlpSource().list_episodes(f"{channel}/videos", known=frozenset())}
 
-    assert [(video.slug, video.access) for video in found] == [("v1", None), ("m1", "members")]
-    # Only the video the API did not list is looked up with yt-dlp.
+    assert {slug: video.access for slug, video in found.items()} == {"v1": None, "m2": "members", "m1": "members"}
+    assert found["m2"].published_at.year == 2024 and found["m2"].description == "About m2"
+    # yt-dlp cannot look m1 up without a membership, so it keeps the listing's approximate date.
+    assert found["m1"].published_at.date().isoformat() == "2025-11-02"
+    # Only the video neither the uploads playlist nor the API described is looked up with yt-dlp.
     assert [args[-1] for args in calls if args[0] == "--no-playlist"] == ["https://www.youtube.com/watch?v=m1"]
 
 
@@ -301,7 +308,7 @@ def test_without_the_api_a_channel_lists_its_videos_shorts_and_live_tabs(lookups
     answers, calls = lookups
     base = "https://www.youtube.com/@a-channel"
     for tab, slug in (("videos", "v1"), ("streams", "l1")):
-        answers[("--flat-playlist", f"{base}/{tab}")] = {"_type": "playlist", "entries": [
+        answers[("--flat-playlist", "--extractor-args", "youtubetab:approximate_date", f"{base}/{tab}")] = {"_type": "playlist", "entries": [
             {"id": slug, "ie_key": "Youtube", "url": f"https://www.youtube.com/watch?v={slug}"},
         ]}
     for slug, info in (
