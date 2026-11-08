@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from sources import Feature, ItemRef, ItemRefresh, VideoDetails, registry
+from sources import ytdlp_runner as runner
 from sources.ytdlp import YtDlpSource
 
 from test_quick_check import _collection, session  # noqa: F401
@@ -22,6 +23,7 @@ class SweptSource(ListedSource):
         self.calls: list[list[str]] = []
         self.titles: dict[str, str] = {}
         self.removed: set[str] = set()
+        self.refused: set[str] = set()
 
     def refresh_metadata(self, items):
         self.calls.append([item.slug for item in items])
@@ -31,6 +33,7 @@ class SweptSource(ListedSource):
                 for item in items if item.slug in self.titles
             },
             removed=frozenset(item.slug for item in items if item.slug in self.removed),
+            refused={item.slug: "members" for item in items if item.slug in self.refused},
         )
 
 
@@ -138,6 +141,23 @@ def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, se
     assert _episode(session, "gone").removed_from_source
     assert not _episode(session, "flaky").removed_from_source
     assert result.sites["Tube"].failed == 1 and result.sites["Tube"].removed == 1
+
+
+def test_an_upload_only_members_may_see_is_locked_and_checked_again_later(swept, session, site_settings):
+    from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
+
+    collection = _site_collection(session, site_settings)
+    now = datetime.now(timezone.utc)
+    _add(session, collection, "members", now - timedelta(minutes=5))
+    swept.refused.add("members")
+
+    result = run_metadata_refresh(session, now=now)
+
+    episode = _episode(session, "members")
+    # Refused is an answer, so it is not asked again within the sweep.
+    assert swept.calls == [["members"]] and result.sites["Tube"].failed == 0
+    assert episode.access == "members" and episode.access_refused_at is not None
+    assert episode.access_check_at is not None
 
 
 def test_a_site_with_its_refresh_off_is_never_looked_up(swept, session, site_settings):
@@ -330,3 +350,44 @@ def test_a_daily_wire_episode_that_changed_hands_is_not_made_final(daily_wire, s
     run_metadata_refresh(session, now=now)
     session.expire_all()
     assert not _episode(session, "show").metadata_is_final
+
+
+
+_MEMBERS_ERROR = "ERROR: [youtube] v2: Join this channel to get access to members-only content like this video"
+
+
+def _refusing(monkeypatch, slug: str) -> None:
+    """yt-dlp refuses to look up this one video for lack of a channel membership."""
+    answer = runner.run_json
+
+    def run_json(*args):
+        if args[-1].endswith(f"v={slug}"):
+            raise runner.YtDlpError(_MEMBERS_ERROR)
+        return answer(*args)
+
+    monkeypatch.setattr(runner, "run_json", run_json)
+
+
+def test_with_a_key_ytdlp_says_which_youtube_videos_are_for_members(youtube, lookups, monkeypatch):
+    answers, _ = lookups
+    youtube.videos["v1"] = _video_item("v1")
+    youtube.videos["v2"] = _video_item("v2")
+    answers[("--no-playlist", "https://www.youtube.com/watch?v=v1")] = {
+        "id": "v1", "extractor_key": "Youtube", "title": "v1", "availability": "subscriber_only",
+    }
+    _refusing(monkeypatch, "v2")
+
+    refresh = YtDlpSource().refresh_metadata(_refs("v1", "v2"))
+
+    # The API still gives the details; yt-dlp only adds the access.
+    assert refresh.details["v1"].access == "members" and refresh.details["v1"].description == "About v1"
+    assert refresh.details["v2"].access is None
+    assert refresh.refused == {"v2": "members"}
+
+
+def test_without_a_key_a_refused_lookup_says_the_video_is_for_members(lookups, monkeypatch):
+    _refusing(monkeypatch, "v1")
+
+    refresh = YtDlpSource().refresh_metadata(_refs("v1", "v2"))
+
+    assert refresh.details == {} and refresh.refused == {"v1": "members"}

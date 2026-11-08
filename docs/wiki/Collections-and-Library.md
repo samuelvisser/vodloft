@@ -150,7 +150,7 @@ VODLoft cannot download media that is protected by DRM. Such an episode, movie o
 
 Some videos are only for paying viewers: channel members or subscribers on YouTube and other sites, a site's premium subscribers, NPO Plus subscribers, or a Daily Wire membership level such as Insider or All Access. When VODLoft knows a video needs such access, it shows a lock badge with what it needs, such as **Members only** or **All Access**. When the site refuses a download for that reason, the download shows as **Locked** on the Downloads page instead of as an error, and VODLoft does not keep retrying it or send a "download failed" notification.
 
-For YouTube, VODLoft spots members-only videos from the badge YouTube shows on the channel page, both when it first finds a video and in its daily check of the channel, with or without a YouTube API key. Not every site shows such a badge, so on other sites VODLoft may only find out when a download is refused.
+For YouTube, VODLoft spots members-only videos from the badge YouTube shows on the channel page, both when it first finds a video and in its daily check of the channel, with or without a YouTube API key. While VODLoft keeps refreshing a new video's title and thumbnail in its first days, it also asks yt-dlp each time whether the video is for members only, on YouTube and every other site yt-dlp supports. When a site gives no such sign, VODLoft only finds out when a download is refused.
 
 Some channels keep a video for members for a few days and then open it up for everyone. VODLoft therefore checks locked videos again on its own: a day after they were refused, then after three days and a week, and then weekly for about five weeks. When a video has opened up, its Download Profile downloads it as usual.
 

@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session
 from backend.db.datetime_types import utc_datetime
 from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode, Site, Video
+from backend.services.media_access import lock_refused
 from backend.services.metadata_refresh import (
     refresh_watch_expired,
     refreshes_one_by_one,
@@ -138,6 +139,7 @@ def _watched(s: Session, source_keys: list[str]) -> Iterator[_Watched]:
 class _Answers:
     details: dict[str, VideoDetails] = field(default_factory=dict)
     removed: set[str] = field(default_factory=set)
+    refused: dict[str, str] = field(default_factory=dict)
 
 
 def _look_up(source_key: str, refs: list[ItemRef]) -> _Answers:
@@ -153,7 +155,11 @@ def _look_up(source_key: str, refs: list[ItemRef]) -> _Answers:
         else:
             answers.details.update(refresh.details)
             answers.removed.update(refresh.removed)
-        pending = [ref for ref in pending if ref.slug not in answers.details and ref.slug not in answers.removed]
+            answers.refused.update(refresh.refused)
+        pending = [
+            ref for ref in pending
+            if ref.slug not in answers.details and ref.slug not in answers.removed and ref.slug not in answers.refused
+        ]
         if not pending:
             break
     return answers
@@ -213,11 +219,14 @@ def _store(w: Session, item: _Watched, answer: _Answers | None, now: datetime) -
             if not row.removed_from_source:
                 row.removed_from_source = True
                 counts.removed += 1
-        elif (details := answer.details.get(item.ref.slug)) is not None:
+        elif (details := answer.details.get(item.ref.slug)) is not None or item.ref.slug in answer.refused:
             row.removed_from_source = False
-            counts.updated += apply_refreshed_details(row, details)
-            if isinstance(row, Episode):
-                check_upgrades_after_refresh(w, row)
+            if details is not None:
+                counts.updated += apply_refreshed_details(row, details)
+                if isinstance(row, Episode):
+                    check_upgrades_after_refresh(w, row)
+            if (access := answer.refused.get(item.ref.slug)) is not None and row.access_refused_at is None:
+                lock_refused(row, access, now=now)
         else:
             counts.failed += 1
     if refresh_watch_expired(item.published, item.offsets, now=now):

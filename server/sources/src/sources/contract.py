@@ -492,12 +492,15 @@ class ItemRefresh:
 
     ``details`` holds the items it could look up. Only the title, description
     and picture are refreshed from them, and a field the Source left out is kept.
-    ``removed`` holds the items the Source says it no longer has. An item in
-    neither could not be checked this time and stays as it is.
+    ``removed`` holds the items the Source says it no longer has. ``refused``
+    holds, by the key of the access they need, the items the Source would not
+    show VODLoft for lack of that access. An item in none of them could not be
+    checked this time and stays as it is.
     """
 
     details: dict[str, VideoDetails] = field(default_factory=dict)
     removed: frozenset[str] = frozenset()
+    refused: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

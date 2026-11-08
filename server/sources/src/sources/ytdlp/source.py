@@ -890,10 +890,14 @@ class YtDlpSource(Source):
 
         Only the API can say a video is gone: it leaves deleted and private videos
         out of its answer. A yt-dlp lookup that fails may just have been refused
-        this time, so the video stays as it is.
+        this time, so the video stays as it is, unless yt-dlp says it is for members.
+
+        The API cannot tell a members-only video, so a video it answered is looked
+        up with yt-dlp as well, for the access it needs.
         """
         details: dict[str, VideoDetails] = {}
         removed: set[str] = set()
+        refused: dict[str, str] = {}
         youtube = [item for item in items if _is_youtube(item.url)]
         catalogue = self._catalogue(adding=False) if youtube else None
         looked_up = [item for item in items if catalogue is None or item not in youtube]
@@ -912,10 +916,23 @@ class YtDlpSource(Source):
                         removed.add(ref.slug)
                     elif not mapping.is_pending(item):
                         details[ref.slug] = mapping.video(item, short=False)
+                        try:
+                            access = _access(self._pending_info(ref.url))
+                        except runner.YtDlpError as exc:
+                            if (key := self.refused_access(str(exc))) is not None:
+                                refused[ref.slug] = key
+                            continue
+                        if access is not None:
+                            details[ref.slug] = replace(details[ref.slug], access=access)
         for ref in looked_up:
-            if found_details := self._look_up(ref.url):
-                details[ref.slug] = found_details
-        return ItemRefresh(details=details, removed=frozenset(removed))
+            try:
+                details[ref.slug] = self._video(self._pending_info(ref.url), ref.url)
+            except runner.YtDlpError as exc:
+                if (key := self.refused_access(str(exc))) is not None:
+                    refused[ref.slug] = key
+                else:
+                    logger.info("Skipping %s for now: %s", ref.url, exc)
+        return ItemRefresh(details=details, removed=frozenset(removed), refused=refused)
 
     def _refresh_from_listing(self, url: str, wanted: frozenset[str]) -> dict[str, VideoDetails]:
         """Titles from the collection's flat listing, which takes one request a page instead of one a video.
