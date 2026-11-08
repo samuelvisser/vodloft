@@ -29,7 +29,8 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 SITE_REFRESH_REVISION = "5b75b63e55f2"
 NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
-HEAD_REVISION = "5b8e1f3c2a90"
+PROFILE_LOOKUP_INDEXES_REVISION = "5b8e1f3c2a90"
+HEAD_REVISION = "a0eceaa70db5"
 
 
 @pytest.fixture
@@ -946,3 +947,52 @@ def test_collections_keep_the_episode_order_their_identification_gave_them(migra
         assert connection.execute(text("SELECT id, episode_order FROM collections ORDER BY id")).all() == [
             (1, "newest_first"), (2, "newest_first"), (3, "oldest_first"),
         ]
+
+
+def test_imported_downloads_join_the_download_profile_of_their_collection(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, PROFILE_LOOKUP_INDEXES_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key, episode_order) VALUES (1, 'c1', 'c1', 'C', "
+            "'https://example.test/c1', 'free', 'series', 'date_based', 'Host', 'host', 'youtube', 'newest_first')"
+        ))
+        connection.execute(text(
+            "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, "
+            "sponsorblock_segments) VALUES (7, 1, 5, 1, '[]')"
+        ))
+        # 1 imported, 2 imported for a Local Media Profile without a Download Profile,
+        # 3 downloaded by hand, 4 imported and already managed by another profile.
+        for download_id, profile_id, action, managed in (
+            (1, 5, "imported", None), (2, 6, "imported", None), (3, 5, "created", None), (4, 5, "imported", 8),
+        ):
+            connection.execute(text(
+                "INSERT INTO media_items (id, uuid, type, source_key) VALUES (:id, :uuid, 'episode', 'youtube')"
+            ), {"id": 10 + download_id, "uuid": f"e{download_id}"})
+            connection.execute(text(
+                "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, "
+                "slug, publish_status, sharing_url, source_slug) VALUES (:id, 1, 1, :id, :identifier, :slug, "
+                "'published_final', 'https://example.test', :slug)"
+            ), {"id": 10 + download_id, "identifier": f"video.{download_id}", "slug": f"e{download_id}"})
+            connection.execute(text(
+                "INSERT INTO media_downloads (id, type, media_item_id, local_media_profile_id, file_path, artifact_status) "
+                "VALUES (:id, 'episode', :media, :profile, '/downloads/' || :id, 'missing')"
+            ), {"id": download_id, "media": 10 + download_id, "profile": profile_id})
+            connection.execute(text(
+                "INSERT INTO media_downloads_episode (id, download_profile_id) VALUES (:id, :managed)"
+            ), {"id": download_id, "managed": managed})
+            connection.execute(text(
+                "INSERT INTO media_download_history (media_download_id, action, metadata, occurred_at) "
+                "VALUES (:id, :action, '{}', '2026-11-04 10:00:00')"
+            ), {"id": download_id, "action": action})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        managed = dict(connection.execute(text("SELECT id, download_profile_id FROM media_downloads_episode")).all())
+    assert managed == {1: 7, 2: None, 3: None, 4: 8}

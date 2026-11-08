@@ -405,3 +405,27 @@ def test_a_profile_scan_looks_for_every_collection_in_its_own_folder(library, mo
     )
     # A scan started by hand holds no Download Profile.
     assert download_profile.enable_profile is True
+
+
+def test_an_adopted_file_belongs_to_the_download_profile_and_its_retention(library):
+    """A file adopted for an episode the profile no longer wants is still deleted by its retention, even once missing."""
+    from profile_filters import published_days, with_filters
+
+    from backend.db.models import EpisodeMediaDownload
+    from backend.services.adoption import adopt, find_file
+    from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
+
+    session, _collection, profile, download_profile, episodes, root = library
+    with_filters(download_profile, published_days(30))
+    download_profile.delete_older_episodes = True
+    path = root / "YouTube" / "Veritasium" / "2019-11-08 Why Machines That Bend Are Better.mkv"
+    adopted = adopt(session, media=episodes[1], local_media_profile=profile, found=find_file(path))
+    assert adopted.download.download_profile_id == download_profile.id
+
+    # Something else deleted the file first.
+    path.unlink()
+    adopted.download.artifact_status = "missing"
+    session.flush()
+
+    assert cleanup_older_episodes(session, download_profile) == 1
+    assert session.scalars(select(EpisodeMediaDownload)).all() == []
