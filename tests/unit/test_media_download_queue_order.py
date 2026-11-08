@@ -1268,7 +1268,7 @@ def test_download_statuses_join_their_operations_through_an_index():
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
-    statement = MediaDownloadCollectionQuery.build().facets_statement()
+    statement = MediaDownloadCollectionQuery.build().walk_statement(order="workflow")
     sql = str(statement.compile(engine, compile_kwargs={"literal_binds": True}))
 
     with engine.connect() as connection:
