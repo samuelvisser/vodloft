@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from backend.api.models.dailywire_auth import *
 from sources.dailywire.auth import DeviceAuthClient
 from backend.security.access import Area, Level
+from backend.services.access_checks import access_changed
 from backend.security.deps import requires, signed_in
 
 router = APIRouter(prefix="/auth", tags=["DailyWire Auth"])
@@ -129,6 +130,8 @@ async def poll_for_authorization(request: PollRequest):
             # Clean up the flow tracking
             _active_flows.pop(request.device_code, None)
             _cancel_events.pop(request.device_code, None)
+            # The account may have a membership level that gives what The Daily Wire refused before.
+            await run_in_threadpool(access_changed, "dailywire")
 
             return PollResponse(
                 status="authorized",

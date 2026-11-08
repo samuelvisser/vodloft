@@ -13,3 +13,9 @@
 .download-stage-timings table {width:100%;border-collapse:collapse;text-align:left}
 .download-stage-timings th,.download-stage-timings td {padding:6px;border-bottom:1px solid var(--divider);vertical-align:top}
 .download-stage-timings p {color:var(--muted);line-height:1.5}
+
+/* Locked media is not an error: the site keeps it for members or subscribers. */
+.download-progress-status.is-locked .download-progress-label {color:#6d28d9}
+@media (prefers-color-scheme: dark) {
+    .download-progress-status.is-locked .download-progress-label {color:#c4b5fd}
+}

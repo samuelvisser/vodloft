@@ -51,6 +51,7 @@ from backend.db.models.media_download import (
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.episode_types import EpisodePublishStatus
+from backend.services.media_access import AccessLocks, media_locked, source_access
 from backend.services.local_media_profile_sources import profile_offered_for_source
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
@@ -178,6 +179,9 @@ def _load_media_items_for_view(
                     Episode.title,
                     Episode.episode_identifier,
                     Episode.source_key,
+                    Episode.access,
+                    Episode.access_refused_at,
+                    Episode.access_check_at,
                     raiseload=True,
                 ),
                 joinedload(Episode.collection).load_only(
@@ -202,6 +206,9 @@ def _load_media_items_for_view(
                     Movie.slug,
                     Movie.title,
                     Movie.source_key,
+                    Movie.access,
+                    Movie.access_refused_at,
+                    Movie.access_check_at,
                     raiseload=True,
                 ),
                 raiseload("*"),
@@ -221,6 +228,9 @@ def _load_media_items_for_view(
                     MovieExtra.source_id,
                     MovieExtra.movie_extra_type,
                     MovieExtra.source_key,
+                    MovieExtra.access,
+                    MovieExtra.access_refused_at,
+                    MovieExtra.access_check_at,
                     raiseload=True,
                 ),
                 joinedload(MovieExtra.movie).load_only(
@@ -251,6 +261,9 @@ def _load_media_items_for_view(
                     Video.slug,
                     Video.title,
                     Video.source_key,
+                    Video.access,
+                    Video.access_refused_at,
+                    Video.access_check_at,
                     raiseload=True,
                 ),
                 raiseload("*"),
@@ -549,11 +562,9 @@ DRM_PROTECTED_MESSAGE = "Protected by DRM, cannot be downloaded"
 def _ensure_downloadable(media) -> None:
     if media.drm_protected:
         raise HTTPException(status_code=422, detail=DRM_PROTECTED_MESSAGE)
-    if media.needs_subscription:
-        source = get_source(media.source_key)
-        if not source.subscription_active:
-            name = source.subscription_name or "a subscription"
-            raise HTTPException(status_code=422, detail=f"Needs {name}, cannot be downloaded")
+    if media_locked(media):
+        access = source_access(media.source_key, media.access)
+        raise HTTPException(status_code=422, detail=f"Locked: {access.label if access else media.access}")
 
 
 def create_new_episode_download(

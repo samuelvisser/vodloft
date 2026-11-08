@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import List, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
-from sqlalchemy import false, func
+from sqlalchemy import String, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -28,9 +28,17 @@ class MediaItemBase(Base):
     drm_protected: Mapped[bool] = mapped_column(
         default=False, server_default=false(), comment="The media is protected by DRM and cannot be downloaded",
     )
-    needs_subscription: Mapped[bool] = mapped_column(
-        default=False, server_default=false(),
-        comment="The Source only gives the media to a paying account, such as NPO Plus",
+    access: Mapped[Optional[str]] = mapped_column(
+        String(40), comment="Key of the Source's Access the media needs, such as NPO Plus or a channel membership",
+    )
+    access_refused_at: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(), comment="When the Source last refused to give VODLoft the media for lack of its access",
+    )
+    access_check_at: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(), index=True, comment="When VODLoft next checks whether locked media opened up",
+    )
+    access_checks: Mapped[int] = mapped_column(
+        default=0, server_default="0", comment="How often VODLoft checked whether the locked media opened up",
     )
     removed_from_source: Mapped[bool] = mapped_column(
         default=False, server_default=false(), comment="The Source no longer has the media; downloaded files are kept",

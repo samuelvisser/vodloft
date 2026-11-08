@@ -85,14 +85,14 @@ def start_quick_download(access: Access, body: QuickDownloadAPICreate) -> dict:
     quick_id = new_quick_download_id()
     try:
         check_quick_downloadable(
-            source, kind, drm_protected=link.drm_protected, needs_subscription=link.needs_subscription,
+            source, kind, drm_protected=link.drm_protected, access=link.access,
         )
     except QuickDownloadRefused as exc:
-        if link.drm_protected or link.needs_subscription:
+        if link.drm_protected or link.access_locked:
             # Remembered on its own, because the refusal rolls the request back.
             history.record_refused(
                 quick_id=quick_id, title=link.preview.title, source_key=source.id, source_name=source.name,
-                url=link.url, choice=choice, message="Protected by DRM" if link.drm_protected else "Needs a subscription",
+                url=link.url, choice=choice, message="Protected by DRM" if link.drm_protected else str(exc),
                 owner=owner_of(access),
             )
         raise
@@ -178,7 +178,7 @@ def quick_download_options(s: Session, access: Access, body: QuickDownloadOption
     source = get_source(link.source.id)
     try:
         check_quick_downloadable(
-            source, LinkKind(link.kind), drm_protected=link.drm_protected, needs_subscription=link.needs_subscription,
+            source, LinkKind(link.kind), drm_protected=link.drm_protected, access=link.access,
         )
     except QuickDownloadRefused as exc:
         return QuickDownloadOptionsAPIRead.model_validate(_OptionsSource(link, refused=str(exc)))

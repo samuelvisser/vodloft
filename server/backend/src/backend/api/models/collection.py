@@ -90,6 +90,11 @@ class CollectionCheckSuggestionAPIRead(ResponseBase):
     suggestion: Optional[str] = None
 
 
+class CollectionLockedAPIRead(ResponseBase):
+    """How many of the Collection's episodes the Source refused for lack of an access."""
+    count: int
+
+
 class CollectionFileRenameAPIRequest(RequestBase):
     """Select one Local Media Profile, or every profile with existing episode media."""
 

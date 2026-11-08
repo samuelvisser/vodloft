@@ -267,7 +267,7 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
             thumbnail_landscape_path=details.image_url,
             background_image_path=details.image_url,
             drm_protected=details.drm_protected,
-            needs_subscription=details.needs_subscription,
+            access=details.access,
         )
         s.add(episode)
         s.flush()

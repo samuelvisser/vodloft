@@ -8,6 +8,7 @@ export type DownloadStatusFilterValue =
     | 'local_processing'
     | 'canceled'
     | 'error'
+    | 'locked'
     | 'missing'
     | 'corrupted'
 
@@ -25,6 +26,7 @@ export const DOWNLOAD_STATUS_FILTER_OPTIONS: readonly DownloadStatusFilterOption
     {value: 'downloaded', label: 'Downloaded', statuses: ['downloaded', 'redownloaded']},
     {value: 'canceled', label: 'Canceled', statuses: ['canceled']},
     {value: 'error', label: 'Error', statuses: ['error']},
+    {value: 'locked', label: 'Locked', statuses: ['locked']},
     {value: 'missing', label: 'Missing', statuses: ['missing']},
     {value: 'corrupted', label: 'Corrupted', statuses: ['corrupted']},
 ]

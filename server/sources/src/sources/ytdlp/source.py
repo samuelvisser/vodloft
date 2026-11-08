@@ -16,6 +16,7 @@ from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
+    Access,
     ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
@@ -396,6 +397,15 @@ _SIGN_IN_ERRORS = (
     "--cookies", "sign in to confirm", "login required", "login_required", "members-only", "members only",
     "join this channel", "registered users", "private video", "age-restricted",
 )
+# What yt-dlp says about a video that only the channel's members can watch.
+_MEMBERS_ERRORS = ("join this channel", "members-only", "members only", "available to this channel's members")
+MEMBERS = Access("members", "Members only", "Only members of the channel can watch this.")
+
+
+def _access(info: dict) -> str | None:
+    """yt-dlp marks a video only the channel's members can watch as ``subscriber_only``."""
+    return MEMBERS.key if info.get("availability") == "subscriber_only" else None
+
 
 class YtDlpSource(Source):
     """Every site yt-dlp supports, and any page with a plain video on it."""
@@ -410,6 +420,7 @@ class YtDlpSource(Source):
         Feature.PENDING_CHECKS,
     })
     episode_tags = _YOUTUBE_TAGS
+    accesses = (MEMBERS,)
     # Search covers YouTube only; other sites are added by link.
     sites_label = "YouTube, and many more"
     search_label = "YouTube"
@@ -561,6 +572,7 @@ class YtDlpSource(Source):
             author_name=info.get("uploader") or info.get("channel"),
             site=site,
             drm_protected=_drm_protected(info),
+            access=_access(info),
         )
 
     def video_details(self, url: str) -> VideoDetails:
@@ -608,6 +620,7 @@ class YtDlpSource(Source):
             author_url=info.get("uploader_url") or info.get("channel_url"),
             published_at=_published_at(info),
             drm_protected=_drm_protected(info),
+            access=_access(info),
             tag=_tag(info, url),
             publish_status=_publish_status(info),
             scheduled_at=_scheduled_at(info),
@@ -753,6 +766,10 @@ class YtDlpSource(Source):
                 seen.add(video_slug(entry))
                 if details := self._look_up(entry_url):
                     yield details
+                elif _access(entry):
+                    # yt-dlp cannot look up a members-only video without a member's cookies,
+                    # so it is kept from the listing, locked until VODLoft can download it.
+                    yield self._video(entry, entry_url)
 
     def latest_items(self, url: str) -> list[ItemRef]:
         """A YouTube collection's 50 newest videos through the API, else its RSS feed's 15, else yt-dlp's listing."""
@@ -991,6 +1008,10 @@ class YtDlpSource(Source):
     def needs_cookies(self, error: str) -> bool:
         text = error.lower()
         return any(sign in text for sign in _SIGN_IN_ERRORS)
+
+    def refused_access(self, error: str) -> str | None:
+        text = error.lower()
+        return MEMBERS.key if any(sign in text for sign in _MEMBERS_ERRORS) else None
 
     def program_status(self) -> ProgramStatus:
         last_update_at, last_update_error = runner.last_update()

@@ -311,8 +311,8 @@ class Playback:
     url: str
     metadata: Any = None
     drm_protected: bool = False
-    needs_subscription: bool = False
-    """The Source only plays this to a paying account, which VODLoft does not have."""
+    access: str | None = None
+    """The key of the ``Access`` the Source only plays this with, which VODLoft does not have."""
     kind: PlaybackKind = PlaybackKind.URL
     command: tuple[str, ...] = ()
 
@@ -355,8 +355,8 @@ class ResolvedLink:
     """The site the link is on, for a Source that serves many sites."""
     drm_protected: bool = False
     """The video is protected by DRM, so it can be added but not downloaded."""
-    needs_subscription: bool = False
-    """The Source only gives the video to a paying account, so it can be added but not downloaded."""
+    access: str | None = None
+    """The key of the ``Access`` the Source only gives the video with, such as a paid subscription."""
     kind_label: str | None = None
     """What the Source calls this kind of result, such as Channel or Playlist for a collection."""
     facts: tuple[str, ...] = ()
@@ -458,9 +458,9 @@ class VideoDetails:
     published_at: datetime | None = None
     drm_protected: bool = False
     """The video is protected by DRM, so it can be added but not downloaded."""
-    needs_subscription: bool = False
-    """The Source only gives the video to a paying account, such as NPO Plus. VODLoft
-    indexes it, but does not download it."""
+    access: str | None = None
+    """The key of the ``Access`` the Source only gives the video with, such as NPO Plus or a
+    channel membership. VODLoft indexes it, and downloads it only while it has that access."""
     season: SeasonRef | None = None
     """The collection season a listed episode belongs to, for a Source with real seasons.
     Without one, VODLoft puts the episode in a season per upload year."""
@@ -577,6 +577,21 @@ class ApiStatus:
     """What one full re-scan of those collections costs, so the settings can say how often each gets checked."""
 
 
+@dataclass(frozen=True)
+class Access:
+    """Something a Source only gives some of its videos with, such as a paid subscription,
+    a membership level or a channel membership.
+
+    ``key`` is stored with every media item that needs it, so it never changes.
+    """
+
+    key: str
+    label: str
+    """What the Source calls it, such as NPO Plus, as the badge on a locked item shows it."""
+    description: str
+    """One sentence on who can watch what needs it, such as "Only NPO Plus subscribers can watch this"."""
+
+
 class ApiKeyRejected(ValueError):
     """The service does not accept the key; the message says what to do about it."""
 
@@ -649,8 +664,8 @@ class Source(ABC):
         EpisodeTag(MAIN_TAG, "Episode", "An episode of the collection", "episode", "episodes", main=True),
     )
     """Every tag the Source gives episodes, the main one first."""
-    subscription_name: ClassVar[str | None] = None
-    """What the Source calls the paid subscription some of its videos need, such as NPO Plus."""
+    accesses: ClassVar[tuple[Access, ...]] = ()
+    """Everything the Source only gives some of its videos with, such as NPO Plus."""
     cookies_help: ClassVar[str | None] = None
     """What a cookies file does for this Source, for a Source with ``Feature.COOKIES``."""
     sites: ClassVar[tuple[Site, ...]] = ()
@@ -871,11 +886,29 @@ class Source(ABC):
         such as the streams an account may play at the same time."""
         return None
 
-    @property
-    def subscription_active(self) -> bool:
-        """True while VODLoft is signed in with the subscription some of this Source's
-        videos need, so it can download them."""
-        return False
+    def access(self, key: str | None) -> Access | None:
+        """One of ``accesses`` by its key."""
+        return next((access for access in self.accesses if access.key == key), None)
+
+    def has_access(self, key: str) -> bool | None:
+        """True when VODLoft can download what needs this access, False when it cannot, and None
+        when only a download can tell, such as for a channel membership a cookies file may have."""
+        return None
+
+    def refused_access(self, error: str) -> str | None:
+        """The key of the access a failed download or lookup says the video needs, or None
+        when the failure has nothing to do with access."""
+        return None
+
+    def current_access(self, *, slug: str, url: str) -> str | None:
+        """The key of the access the video needs right now, or None when anyone can download it.
+        Raises when the Source could not be asked. Only Sources with ``accesses`` implement it."""
+        try:
+            return self.video_details(url).access
+        except Exception as exc:
+            if (key := self.refused_access(str(exc))) is not None:
+                return key
+            raise
 
     def problems(self) -> list[SourceProblem]:
         """What the user should fix about this Source right now."""

@@ -7,6 +7,7 @@ from typing import Literal, Optional
 from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.services.media_access import access_locked, source_access
 from backend.types.collection_types import CollectionType
 from config.settings.site_settings import AutoSubtitles, SponsorBlockAction, SponsorBlockCategory, UpgradeRepeat
 from sources import Feature, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source
@@ -34,6 +35,38 @@ class SourcedResponse(ResponseBase):
     @property
     def source_features(self) -> list[str]:
         return source_features(self.source_key)
+
+
+class AccessAPIRead(ResponseBase):
+    """Something a Source only gives some of its videos with, such as NPO Plus."""
+
+    key: str
+    label: str
+    description: str
+
+
+class LockableResponse(ResponseBase):
+    """Media that may need an access, such as a channel membership, and is locked without it."""
+
+    source_key: str
+    access: Optional[str] = None
+    """The key of the Source's Access the media needs; its label is in the Source's ``accesses``."""
+    access_refused_at: Optional[datetime] = None
+    access_check_at: Optional[datetime] = None
+    """When VODLoft next checks whether the locked media opened up."""
+
+    @computed_field
+    @property
+    def access_locked(self) -> bool:
+        """VODLoft cannot download the media without the access, so it does not try."""
+        return access_locked(self.source_key, self.access, self.access_refused_at)
+
+    @computed_field
+    @property
+    def access_label(self) -> Optional[str]:
+        """What the Source calls the access, such as Members only or NPO Plus."""
+        found = source_access(self.source_key, self.access) if self.access is not None else None
+        return found.label if found is not None else None
 
 
 class DownloadOptionsAPIRead(ResponseBase):
@@ -73,9 +106,8 @@ class SourceAPIRead(ResponseBase):
     sites_label: Optional[str] = None
     search_label: Optional[str] = None
     kind_names: dict[str, str] = {}
-    subscription_name: Optional[str] = None
+    accesses: list[AccessAPIRead] = []
     cookies_help: Optional[str] = None
-    subscription_active: bool = False
     download_options: DownloadOptionsAPIRead
 
     @field_validator("features", mode="before")
@@ -264,7 +296,10 @@ class ResolvedLinkAPIRead(ResponseBase):
     collection_url: Optional[str] = None
     site: Optional[str] = None
     drm_protected: bool = False
-    needs_subscription: bool = False
+    access: Optional[str] = None
+    """The key of the Source's Access the video needs."""
+    access_locked: bool = False
+    """VODLoft does not have that access, so it cannot download the video."""
     preview: ResolvedLinkPreviewAPIRead
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
@@ -282,7 +317,7 @@ class SearchResultAPIRead(ResponseBase):
     collection_url: Optional[str] = None
     kind_label: Optional[str] = None
     facts: list[str] = []
-    needs_subscription: bool = False
+    access: Optional[str] = None
 
 
 class SearchNoticeAPIRead(ResponseBase):

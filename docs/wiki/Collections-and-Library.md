@@ -146,6 +146,14 @@ Many NPO programmes are protected by DRM, often whole seasons, and VODLoft marks
 
 VODLoft cannot download media that is protected by DRM. Such an episode, movie or video shows a DRM badge, and its page says "Protected by DRM, cannot be downloaded" where the download controls would be. VODLoft marks an item this way when its Source reports DRM, or when a download fails because of it. Download Profiles skip protected episodes, and a download that fails because of DRM is not retried.
 
+## Locked media: members and subscribers only
+
+Some videos are only for paying viewers: YouTube channel members, NPO Plus subscribers, or a Daily Wire membership level such as Insider or All Access. When VODLoft knows a video needs such access, it shows a lock badge with what it needs, such as **Members only** or **All Access**. When the site refuses a download for that reason, the download shows as **Locked** on the Downloads page instead of as an error, and VODLoft does not keep retrying it or send a "download failed" notification.
+
+Some channels keep a video for members for a few days and then open it up for everyone. VODLoft therefore checks locked videos again on its own: a day after they were refused, then after three days and a week, and then weekly for about five weeks. When a video has opened up, its Download Profile downloads it as usual.
+
+If you gained access yourself, for example by joining a channel and adding a new cookies file, or by signing in with a higher Daily Wire membership, VODLoft checks its locked videos again right away. You can also ask for this yourself: **Check again** in a locked download's log, or **Check locked videos again** in a collection's **Actions** menu, which only appears while the collection has locked videos.
+
 ## Profiles and files are separate
 
 A Local Media Profile describes the local file VODLoft should create. A Download Profile describes which collection episodes should be downloaded automatically. An RSS Stream Profile describes a private feed. A download record represents actual file activity.

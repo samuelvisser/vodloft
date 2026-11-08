@@ -15,7 +15,7 @@ import CollectionTypeFilter, {
 import SourceBadge from '../components/Source/SourceBadge'
 import CollectionTileArt from '../components/CollectionTileArt/CollectionTileArt'
 import {DrmBadge} from '../components/common/DrmProtected'
-import {SubscriptionBadge} from '../components/common/NeedsSubscription'
+import {AccessBadge} from '../components/common/AccessLocked'
 import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
 import DownloadStatusBadge from '../components/DownloadProgress/DownloadStatusBadge'
 import {useLibraryCounts, useLibraryDownloads, useMovies, useCollectionsView, useVideos} from '../lib/queries'
@@ -391,7 +391,7 @@ export default function LibraryPage() {
                                                 <DownloadStatusBadge download={download}/>
                                             </span>
                                         )}
-                                        {video.drmProtected ? <DrmBadge onCover/> : video.needsSubscription && <SubscriptionBadge sourceKey={video.sourceKey} onCover/>}
+                                        {video.drmProtected ? <DrmBadge onCover/> : video.access && <AccessBadge label={video.accessLabel} onCover/>}
                                         {!image && <FontAwesomeIcon icon={faIcon('fass', 'film')}/>}
                                         {duration && <span className="badge">{duration}</span>}
                                     </span>

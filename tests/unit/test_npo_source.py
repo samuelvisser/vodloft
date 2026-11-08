@@ -283,23 +283,23 @@ def test_programmes_that_need_npo_plus_are_listed_and_not_looked_up(npo):
     source, client = npo
     client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
     episodes = list(source.list_episodes("https://npo.nl/start/serie/een-huis-vol", known=frozenset()))
-    assert {e.slug: (e.needs_subscription, e.drm_protected) for e in episodes} == {
+    assert {e.slug: (e.access == "npo_plus", e.drm_protected) for e in episodes} == {
         "een-huis-vol_3": (True, False), "een-huis-vol_2": (True, False), "een-huis-vol_1": (True, False),
         "een-huis-vol_12": (False, True), "een-huis-vol_11": (False, True),
     }
     # Only the free season's two ends asked for a stream.
     assert client.stream_requests == ["NCRV_een-huis-vol_12", "NCRV_een-huis-vol_11"]
-    assert source.subscription_name == "NPO Plus"
+    assert [access.label for access in source.accesses] == ["NPO Plus"]
 
 
 def test_a_programme_that_needs_npo_plus_resolves_and_plays_as_such(npo):
     source, client = npo
     client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
     link = source.resolve("https://npo.nl/start/afspelen/een-huis-vol_2")
-    assert (link.needs_subscription, link.drm_protected) == (True, False)
-    assert source.video_details("https://npo.nl/start/afspelen/een-huis-vol_2").needs_subscription is True
+    assert (link.access == "npo_plus", link.drm_protected) == (True, False)
+    assert source.video_details("https://npo.nl/start/afspelen/een-huis-vol_2").access == "npo_plus"
     playback = source.video_playback(slug="een-huis-vol_2", url="https://npo.nl/start/afspelen/een-huis-vol_2")
-    assert playback.needs_subscription is True
+    assert playback.access == "npo_plus"
     assert client.stream_requests == []
 
 
@@ -319,7 +319,7 @@ def test_episodes_that_need_npo_plus_are_stored_but_not_planned(npo, session):
     session.add(collection)
     session.commit()
     index_listed_collection(session, collection_id=collection.id, source=source)
-    assert {e.slug: e.needs_subscription for e in session.query(Episode)} == {
+    assert {e.slug: e.access == "npo_plus" for e in session.query(Episode)} == {
         "een-huis-vol_1": True, "een-huis-vol_2": True, "een-huis-vol_3": True,
         "een-huis-vol_11": False, "een-huis-vol_12": False,
     }
@@ -374,10 +374,10 @@ def test_the_background_migration_marks_stored_programmes_that_need_npo_plus(npo
     session.commit()
     asyncio.run(migration.migrate(Context()))
     session.expire_all()
-    assert {e.slug for e in session.query(Episode).filter_by(needs_subscription=True)} == {
+    assert {e.slug for e in session.query(Episode).filter_by(access="npo_plus")} == {
         "een-huis-vol_1", "een-huis-vol_2", "een-huis-vol_3",
     }
-    assert session.query(Video).one().needs_subscription is True
+    assert session.query(Video).one().access == "npo_plus"
 
 
 COOKIES = "# Netscape HTTP Cookie File\n.npo.nl\tTRUE\t/\tTRUE\t0\tsession\tabc\n"
@@ -396,16 +396,16 @@ def signed_in(tmp_path, monkeypatch):
 def test_a_cookies_file_signs_npo_start_in(npo, signed_in):
     source, _ = npo
     assert source.has(Feature.COOKIES) and source.cookies_help
-    assert source.subscription_active is False
+    assert source.has_access("npo_plus") is False
     with pytest.raises(ValueError, match="no npo.nl cookies"):
         source.save_cookies(b"# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\tsession\tabc\n")
     with pytest.raises(ValueError, match="Netscape"):
         source.save_cookies(b"not a cookies file")
     source.save_cookies(COOKIES.encode())
-    assert source.has_cookies() and source.subscription_active is True
+    assert source.has_cookies() and source.has_access("npo_plus") is True
     assert [cookie.name for cookie in signed_in.load_cookies()] == ["session"]
     source.remove_cookies()
-    assert source.subscription_active is False
+    assert source.has_access("npo_plus") is False
 
 
 def test_signed_in_programmes_that_need_npo_plus_are_checked_and_played(npo, signed_in):
@@ -414,11 +414,11 @@ def test_signed_in_programmes_that_need_npo_plus_are_checked_and_played(npo, sig
     client.programs["s2"] = [_premium(program) for program in client.programs["s2"]]
     client.protected = {"NCRV_een-huis-vol_1"}
     episodes = list(source.list_episodes("https://npo.nl/start/serie/een-huis-vol", known=frozenset()))
-    assert {e.slug: (e.needs_subscription, e.drm_protected) for e in episodes if e.season.number == 2} == {
+    assert {e.slug: (e.access == "npo_plus", e.drm_protected) for e in episodes if e.season.number == 2} == {
         "een-huis-vol_3": (True, False), "een-huis-vol_2": (True, False), "een-huis-vol_1": (True, True),
     }
     playback = source.video_playback(slug="een-huis-vol_2", url="https://npo.nl/start/afspelen/een-huis-vol_2")
-    assert (playback.needs_subscription, playback.url) == (False, CLEAR)
+    assert (playback.access is not None, playback.url) == (False, CLEAR)
 
 
 def test_a_sign_in_without_npo_plus_still_cannot_play_them(npo, signed_in):
@@ -432,7 +432,7 @@ def test_a_sign_in_without_npo_plus_still_cannot_play_them(npo, signed_in):
         raise NpoError("NPO Start answered with HTTP 403")
     client.stream_link = refused
     playback = source.video_playback(slug="een-huis-vol_2", url="https://npo.nl/start/afspelen/een-huis-vol_2")
-    assert playback.needs_subscription is True
+    assert playback.access == "npo_plus"
 
 
 def test_signed_in_episodes_that_need_npo_plus_are_planned(npo, session, signed_in):
@@ -464,7 +464,7 @@ def test_signed_in_episodes_that_need_npo_plus_are_planned(npo, session, signed_
     assert len(get_download_profile_episodes(session, profile)) == 2
     source.save_cookies(COOKIES.encode())
     # Checked once with npo.nl; every NPO Start instance shares the answer.
-    assert source.subscription_active is True
+    assert source.has_access("npo_plus") is True
     assert len(get_download_profile_episodes(session, profile)) == 5
 
 
@@ -490,21 +490,21 @@ def test_the_npo_account_decides_whether_npo_plus_downloads(npo, signed_in):
     source, client = npo
     assert source.problems() == []
     source.save_cookies(COOKIES.encode())
-    assert source.subscription_active is True and source.problems() == []
+    assert source.has_access("npo_plus") is True and source.problems() == []
 
     client.account = {"user": {"name": "Samuël"}, "hasSubscription": False, "expires": "2099-11-26T13:45:38.000Z"}
     account.status(client, refresh=True)
-    assert source.subscription_active is False
+    assert source.has_access("npo_plus") is False
     assert [p.title for p in source.problems()] == ["No NPO Plus on this NPO account"]
 
     client.account = {}
     account.status(client, refresh=True)
-    assert source.subscription_active is False
+    assert source.has_access("npo_plus") is False
     assert [p.title for p in source.problems()] == ["NPO sign-in expired"]
 
     client.account = {"user": {"name": "Samuël"}, "hasSubscription": True, "expires": datetime.now(timezone.utc).isoformat()}
     account.status(client, refresh=True)
-    assert source.subscription_active is True
+    assert source.has_access("npo_plus") is True
     assert [p.title for p in source.problems()] == ["NPO sign-in expires soon"]
 
     # An unreachable npo.nl keeps the last answer.

@@ -30,6 +30,7 @@ from task_manager.tasks.media_download_operations import (
 from backend.security.access import Area, Level
 from backend.security.deps import may_delete_files, requires
 from backend.db.core import run_write_transaction
+from backend.services.access_checks import ask_for_check
 
 router = APIRouter(prefix="/media-downloads", tags=["Media Downloads"])
 
@@ -177,6 +178,24 @@ def media_downloads_retry(
         "operation_id": operation_id,
         "media_download_id": media_download_id,
     }
+
+
+@router.post(
+    "/{media_download_id}/check-access",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)],
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def media_downloads_check_access(media_download_id: int):
+    """Check a locked download again now, as after gaining access, and download it when the Source gives it."""
+    def work(s):
+        download = s.get(MediaDownloadBase, media_download_id)
+        if download is None:
+            raise HTTPException(status_code=404, detail="Media download not found")
+        if download.media.access is None:
+            raise HTTPException(status_code=409, detail="This download is not locked")
+        ask_for_check(s, [download.media])
+
+    run_write_transaction(work)
 
 
 @router.post(

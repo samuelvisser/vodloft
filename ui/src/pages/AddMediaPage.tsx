@@ -11,7 +11,7 @@ import {addVideo, resolveLink, useMovies, useCollections, useSources, useVideos}
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
 import {ResolvedLinkRead, SourceFeature, SourceRead, kindName, searchName, sourceHas} from '../types/schemas/source'
 import {DrmNotice} from '../components/common/DrmProtected'
-import {SubscriptionNotice} from '../components/common/NeedsSubscription'
+import {AccessNotice} from '../components/common/AccessLocked'
 import {ClearInputButton} from '../components/common/ClearInputButton'
 
 type AddMediaPageProps = {
@@ -159,7 +159,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     }
 
     // Hand the link to the Quick download page: one video, episode or movie that can be downloaded.
-    const quickDownloadable = !!link && link.kind !== 'collection' && !link.drmProtected && !link.needsSubscription
+    const quickDownloadable = !!link && link.kind !== 'collection' && !link.drmProtected && !link.accessLocked
     const quickDownload = () => {
         if (!link) return
         navigate(`/quick-download?url=${encodeURIComponent(link.url)}&source=${encodeURIComponent(link.source.id)}`)
@@ -251,7 +251,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                             <p className="add-media-preview-description">{link.preview.description}</p>
                         )}
                         {link.drmProtected && <DrmNotice/>}
-                        {!link.drmProtected && link.needsSubscription && !link.source.subscriptionActive && <SubscriptionNotice sourceKey={link.source.id}/>}
+                        {!link.drmProtected && link.accessLocked && <AccessNotice item={{accessLabel: link.source.accesses.find((a) => a.key === link.access)?.label}}/>}
                         {target ? (
                             <div className="add-media-preview-actions">
                                 <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>

@@ -5,7 +5,7 @@ import {linkAreaHandlers} from '../../lib/linkClicks'
 import {EpisodeReadView} from '../../types/schemas/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {DrmBadge} from '../common/DrmProtected'
-import {SubscriptionBadge} from '../common/NeedsSubscription'
+import {AccessBadge} from '../common/AccessLocked'
 import {RemovedBadge} from '../common/RemovedFromSource'
 import {useEpisodeTags} from '../../lib/queries'
 import {episodeTagLabel} from '../../types/schemas/source'
@@ -158,7 +158,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: 
             <div className="cover" style={style} {...linkAreaHandlers(episodeHref, navigate)}>
                 <DownloadStatusIcons downloads={downloads ?? []}/>
                 {ep.drmProtected ? <DrmBadge onCover/>
-                    : ep.needsSubscription ? <SubscriptionBadge sourceKey={ep.sourceKey} onCover/>
+                    : ep.access ? <AccessBadge label={ep.accessLabel} onCover/>
                     : ep.removedFromSource && <RemovedBadge onCover/>}
                 {isLive && (
                     <span style={LIVE_BADGE_STYLE} aria-label="Episode is live">

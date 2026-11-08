@@ -1,7 +1,7 @@
 import {z} from 'zod'
 
 import {ApiDateTimeSchema} from './datetime'
-import {SiteReadSchema, SourcedFields} from './source'
+import {LockableFields, SiteReadSchema, SourcedFields} from './source'
 
 
 export const VideoReadSchema = z.looseObject({
@@ -12,7 +12,7 @@ export const VideoReadSchema = z.looseObject({
     description: z.string().nullable(),
     duration: z.number(),
     drmProtected: z.boolean(),
-    needsSubscription: z.boolean().optional().default(false),
+    ...LockableFields,
     /** Who added it, with user accounts on. */
     addedBy: z.string().nullable().optional(),
     sharingUrl: z.string(),

@@ -8,7 +8,7 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import {useCollections, useSourceLookup, useSourceSearch} from '../lib/queries'
 import {SearchNoticeRead, SearchResultRead, SourceFeature, kindName, searchName, sourceHas} from '../types/schemas/source'
-import {SubscriptionBadge} from '../components/common/NeedsSubscription'
+import {AccessBadge} from '../components/common/AccessLocked'
 
 const KIND_LABEL: Record<SearchResultRead['kind'], string> = {
     collection: 'Collection',
@@ -139,7 +139,7 @@ export default function SourceSearchPage({sourceId: givenSourceId, onChoose}: So
                                     <strong className="collection-summary-title">{result.title}</strong>
                                     <span className="collection-summary-author">{[result.kindLabel ?? kindName(source, result.kind, KIND_LABEL[result.kind]), result.authorName, ...(result.facts ?? [])].filter(Boolean).join(' · ')}</span>
                                     {result.description && <span className="collection-summary-description">{result.description}</span>}
-                                    {result.needsSubscription && <span><SubscriptionBadge sourceKey={sourceId}/></span>}
+                                    {result.access && <span><AccessBadge label={source?.accesses.find((a) => a.key === result.access)?.label}/></span>}
                                 </span>
                                 {added && <span className="catalog-added"><FontAwesomeIcon icon={faIcon('fass', 'check')}/> In library</span>}
                             </button>

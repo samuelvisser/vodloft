@@ -16,7 +16,7 @@
     background: #4b5563;
 }
 
-.subscription-badge {
+.access-badge {
     background: #5b21b6;
 }
 
@@ -26,11 +26,6 @@
     left: 8px;
     z-index: 2;
     box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
-}
-
-.subscription-notice {
-    border-color: rgba(91, 33, 182, 0.3);
-    background: rgba(124, 58, 237, 0.08);
 }
 
 .drm-notice {
@@ -47,6 +42,11 @@
     line-height: 1.45;
 }
 
+.access-notice {
+    border-color: rgba(91, 33, 182, 0.3);
+    background: rgba(124, 58, 237, 0.08);
+}
+
 @media (prefers-color-scheme: dark) {
     .drm-badge {
         background: #fdba74;
@@ -58,7 +58,7 @@
         color: #111827;
     }
 
-    .subscription-badge {
+    .access-badge {
         background: #c4b5fd;
         color: #2e1065;
     }
@@ -66,5 +66,10 @@
     .drm-notice {
         border-color: rgba(253, 186, 116, 0.3);
         background: rgba(253, 186, 116, 0.08);
+    }
+
+    .access-notice {
+        border-color: rgba(196, 181, 253, 0.3);
+        background: rgba(196, 181, 253, 0.08);
     }
 }
