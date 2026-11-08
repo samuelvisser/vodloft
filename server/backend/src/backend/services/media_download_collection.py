@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 from datetime import datetime, timezone
 from hashlib import blake2b
 
 from sqlalchemy import String, and_, case, exists, func, literal, or_, select, type_coerce
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.selectable import Subquery
 
 from backend.db.json_sql import json_array_items
@@ -133,21 +134,18 @@ def media_download_queue_positions(
     }
 
 
-def _latest_active_download_operation() -> Subquery:
-    """Newest active media.download operation per MediaDownload."""
+def _latest_active_download_operation_ids() -> Subquery:
+    """The newest active media.download operation of each MediaDownload, by id.
+
+    Grouped by download, so SQLite knows each download appears once and indexes the
+    result when it joins it. Without that it can guess the active operations are a few
+    rows and scan them all for every download: with thousands of downloads queued, the
+    Downloads page then took minutes to load.
+    """
     ranked = (
         select(
             TaskOperation.resource_id.label("media_download_id"),
             TaskOperation.id.label("operation_id"),
-            TaskOperation.status.label("operation_status"),
-            TaskOperation.context.label("operation_context"),
-            TaskOperation.started_at.label("operation_started_at"),
-            TaskOperation.created_at.label("operation_created_at"),
-            exists(
-                select(TaskOperationRun.task_run_id).where(
-                    TaskOperationRun.operation_id == TaskOperation.id,
-                )
-            ).label("operation_admitted"),
             func.row_number().over(
                 partition_by=TaskOperation.resource_id,
                 order_by=(
@@ -165,24 +163,44 @@ def _latest_active_download_operation() -> Subquery:
         .subquery()
     )
     return (
-        select(
-            ranked.c.media_download_id,
-            ranked.c.operation_id,
-            ranked.c.operation_status,
-            ranked.c.operation_context,
-            ranked.c.operation_started_at,
-            ranked.c.operation_created_at,
-            ranked.c.operation_admitted,
-        )
+        select(ranked.c.media_download_id, func.max(ranked.c.operation_id).label("operation_id"))
         .where(ranked.c.operation_rank == 1)
+        .group_by(ranked.c.media_download_id)
         .subquery()
     )
+
+
+@dataclass(frozen=True)
+class _ActiveOperation:
+    """The columns of a download's newest active operation, joined by its primary key."""
+
+    operation_id: Any
+    operation_status: Any
+    operation_context: Any
+    operation_started_at: Any
+    operation_created_at: Any
+    operation_admitted: Any
+
+    @classmethod
+    def of(cls, operation) -> "_ActiveOperation":
+        return cls(
+            operation_id=operation.id,
+            operation_status=operation.status,
+            operation_context=operation.context,
+            operation_started_at=operation.started_at,
+            operation_created_at=operation.created_at,
+            operation_admitted=exists(
+                select(TaskOperationRun.task_run_id).where(
+                    TaskOperationRun.operation_id == operation.id,
+                )
+            ),
+        )
 
 
 def _download_is_canceling(active_operation, progress_meta, execution):
     return or_(
         func.coalesce(
-            active_operation.c.operation_context["cancel_requested"].as_boolean(),
+            active_operation.operation_context["cancel_requested"].as_boolean(),
             False,
         ).is_(True),
         func.coalesce(progress_meta["canceling"].as_boolean(), False).is_(True),
@@ -202,7 +220,7 @@ def _main_download_stage_is_waiting(execution):
 
 def _download_is_waiting(active_operation, progress_meta, execution):
     return or_(
-        active_operation.c.operation_status == OperationStatus.WAITING.value,
+        active_operation.operation_status == OperationStatus.WAITING.value,
         _main_download_stage_is_waiting(execution),
         progress_meta["wait_state"]["reason"].as_string().is_not(None),
     )
@@ -238,7 +256,7 @@ def _active_download_status(active_operation, progress_meta, execution):
             "canceling",
         ),
         (
-            active_operation.c.operation_status == OperationStatus.QUEUED.value,
+            active_operation.operation_status == OperationStatus.QUEUED.value,
             "pending",
         ),
         (
@@ -293,7 +311,7 @@ def _effective_download_status(active_operation):
     execution = progress_meta["download"]
     return case(
         (
-            active_operation.c.operation_id.is_not(None),
+            active_operation.operation_id.is_not(None),
             _active_download_status(
                 active_operation,
                 progress_meta,
@@ -311,15 +329,17 @@ def _awaiting_admission(active_operation):
     started, unlike runs that report a wait while they execute.
     """
     return func.coalesce(and_(
-        active_operation.c.operation_status == OperationStatus.WAITING.value,
-        active_operation.c.operation_admitted.is_(False),
+        active_operation.operation_status == OperationStatus.WAITING.value,
+        active_operation.operation_admitted.is_(False),
     ), False).label("awaiting_admission")
 
 
 def _download_status_source() -> Subquery:
     """One SQL relation containing the effective UI status for every download."""
     latest_run_ids = _latest_download_run_ids()
-    active_operation = _latest_active_download_operation()
+    active_operation_ids = _latest_active_download_operation_ids()
+    operation = aliased(TaskOperation, name="active_operation")
+    active_operation = _ActiveOperation.of(operation)
     queue = media_download_queue_position_subquery()
     # Delayed downloads sort where they will dispatch once their wait ends.
     sort_queue = media_download_queue_position_subquery(include_admission_waits=True)
@@ -335,8 +355,8 @@ def _download_status_source() -> Subquery:
             TaskRun.status.label("run_status"),
             TaskRun.started_at.label("run_started_at"),
             TaskRun.created_at.label("run_created_at"),
-            active_operation.c.operation_started_at,
-            active_operation.c.operation_created_at,
+            active_operation.operation_started_at.label("operation_started_at"),
+            active_operation.operation_created_at.label("operation_created_at"),
             queue.c.queue_position.label("queue_position"),
             sort_queue.c.queue_position.label("sort_queue_position"),
             _awaiting_admission(active_operation),
@@ -348,9 +368,10 @@ def _download_status_source() -> Subquery:
         )
         .outerjoin(TaskRun, TaskRun.id == latest_run_ids.c.run_id)
         .outerjoin(
-            active_operation,
-            active_operation.c.media_download_id == MediaDownloadBase.id,
+            active_operation_ids,
+            active_operation_ids.c.media_download_id == MediaDownloadBase.id,
         )
+        .outerjoin(operation, operation.id == active_operation_ids.c.operation_id)
         .outerjoin(
             queue,
             queue.c.media_download_id == MediaDownloadBase.id,

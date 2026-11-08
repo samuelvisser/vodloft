@@ -1152,7 +1152,7 @@ def media_download_queue_position_subquery(*, include_admission_waits: bool = Fa
             TaskOperationRun.operation_id == TaskOperation.id,
         )
     )
-    return (
+    ranked = (
         select(
             TaskOperation.resource_id.label("media_download_id"),
             func.row_number().over(order_by=queue_order).label("queue_position"),
@@ -1174,6 +1174,14 @@ def media_download_queue_position_subquery(*, include_admission_waits: bool = Fa
             TaskOperationTarget.resource_id == TaskOperation.resource_id,
             ~has_run,
         )
+        .subquery()
+    )
+    # Grouped by download, so SQLite knows each download appears once. Without that it can guess
+    # the queue holds a few rows and scan all of it for every download it joins it to: with
+    # thousands of downloads queued, the Downloads page then took minutes to load.
+    return (
+        select(ranked.c.media_download_id, func.min(ranked.c.queue_position).label("queue_position"))
+        .group_by(ranked.c.media_download_id)
         .subquery()
     )
 
