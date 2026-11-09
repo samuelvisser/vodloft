@@ -6,7 +6,7 @@ and the metadata refresh is done with them. Each show's seasons are listed
 once, 50 episodes a request, and every episode they list gets its level.
 
 Revision ID: 536d9eeb6f76
-Revises: 305a9510537f
+Revises: c85008e6cb25
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from sources.dailywire.auth import DeviceAuthClient
 from sources.dailywire.source import episode_access
 
 revision = "536d9eeb6f76"
-down_revision = "305a9510537f"
+down_revision = "c85008e6cb25"
 title = "Give older Daily Wire episodes their membership level"
 
 logger = logging.getLogger(__name__)
