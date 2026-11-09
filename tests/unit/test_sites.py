@@ -62,7 +62,7 @@ def test_what_a_site_offers_comes_from_the_source_that_fetches_it():
 
     # yt-dlp has no contract for The Daily Wire, so it offers what it offers any site.
     assert not by_ytdlp.settings.offers(SiteSetting.DOWNLOAD_WITH_COUNTDOWN)
-    assert UpgradeImprovement.LENGTH not in by_ytdlp.upgrade_checks.improvements
+    assert by_ytdlp.upgrade_checks.improvements[-1] is UpgradeImprovement.LENGTH
     assert not by_ytdlp.streams
     assert by_ytdlp.upgrade_checks == source_site("https://www.example.com/clip.mp4", "ytdlp").upgrade_checks
 
@@ -71,9 +71,31 @@ def test_only_youtube_offers_sponsorblock_as_a_better_version():
     youtube = source_site("https://www.youtube.com/@channel", "ytdlp").upgrade_checks
     assert youtube.improvements == (
         UpgradeImprovement.RESOLUTION, UpgradeImprovement.SPONSORBLOCK, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC,
+        UpgradeImprovement.LENGTH,
     )
     assert UpgradeImprovement.SPONSORBLOCK not in source_site("https://rumble.com/c/someone", "ytdlp").upgrade_checks.improvements
-    assert not source_site("https://npo.nl/start/serie/a-series", "npo").upgrade_checks.improvements
+
+
+def test_every_site_offers_a_different_length_as_a_better_version():
+    from backend.services.site_settings import download_profile_defaults
+
+    youtube = source_site("https://www.youtube.com/@channel", "ytdlp")
+    other = source_site("https://rumble.com/c/someone", "ytdlp")
+    npo = source_site("https://npo.nl/start/serie/a-series", "npo")
+    dailywire = source_site("https://www.dailywire.com/show/the-ben-shapiro-show", "dailywire")
+    for site in (youtube, other, npo, dailywire):
+        assert UpgradeImprovement.LENGTH in site.upgrade_checks.improvements
+
+    # Only The Daily Wire counts it by default; YouTube starts at 3 minutes when it is turned on.
+    assert "length" not in download_profile_defaults(youtube)["upgrade_improvements"]
+    assert download_profile_defaults(youtube)["upgrade_length_minutes"] == 3
+    assert "length" not in download_profile_defaults(other)["upgrade_improvements"]
+    assert download_profile_defaults(other)["upgrade_length_minutes"] == 5
+    assert download_profile_defaults(dailywire)["upgrade_improvements"] == ["length"]
+    assert download_profile_defaults(dailywire)["upgrade_length_minutes"] == 5
+    # Nothing NPO Start offers counts as better by default, so its check starts off.
+    assert download_profile_defaults(npo)["upgrade_check"] is False
+    assert download_profile_defaults(npo)["upgrade_improvements"] == []
 
 
 def test_the_daily_wire_measures_the_stream_it_serves(monkeypatch):

@@ -217,6 +217,23 @@ def test_a_different_length_counts_only_beyond_the_profiles_minutes(db_session):
     assert _findings(download, UpgradeOffer(duration=3600), DAILY_WIRE).improvements == ()
 
 
+def test_sponsorblock_segments_the_download_cut_out_are_not_a_different_length(db_session):
+    youtube = Site("youtube", "YouTube", upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,)))
+    download = _download(db_session, profile_values={"upgrade_improvements": ["length"], "upgrade_length_minutes": 3}, download_values={
+        "duration": 20 * 60,
+        "sponsorblock_segments": [
+            {"category": "sponsor", "start": 60.0, "end": 180.0, "action": "cut"},
+            # Overlapping segments only count their seconds once.
+            {"category": "selfpromo", "start": 120.0, "end": 240.0, "action": "cut"},
+            {"category": "intro", "start": 0.0, "end": 30.0, "action": "chapter"},
+        ],
+    })
+
+    # The video was 23 minutes; the file is 20 because 3 minutes were cut out.
+    assert _findings(download, UpgradeOffer(duration=23 * 60), youtube).improvements == ()
+    assert [value.value for value in _findings(download, UpgradeOffer(duration=19 * 60), youtube).improvements] == ["length"]
+
+
 def test_only_what_the_site_offers_counts(db_session):
     from backend.services.upgrade_check import checks_profile
 
@@ -381,3 +398,14 @@ def test_keeping_every_sponsorblock_type_saves_sponsorblock_as_off():
     assert saved({category: "keep" for category in DEFAULT_SPONSORBLOCK_SEGMENTS}) is False
     with pytest.raises(ValueError):
         saved({**DEFAULT_SPONSORBLOCK_SEGMENTS, "chapter": "cut"})
+
+
+def test_ytdlp_and_npo_offer_the_length_they_serve_now(monkeypatch):
+    from sources.npo.source import NpoSource
+    from sources.ytdlp import source as ytdlp
+
+    monkeypatch.setattr(ytdlp, "_lookup", lambda *args: {"id": "abcdefghijk", "duration": 1385, "formats": []})
+    assert ytdlp.YtDlpSource().upgrade_offer("https://www.youtube.com/watch?v=abcdefghijk").duration == 1385.0
+
+    client = SimpleNamespace(program_detail=Mock(return_value={"durationInSeconds": 2700}))
+    assert NpoSource(client).upgrade_offer("https://npo.nl/start/afspelen/episode-1").duration == 2700.0

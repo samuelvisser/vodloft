@@ -624,7 +624,10 @@ class YtDlpSource(Source):
         sponsorblock = None
         if sponsorblock_categories and self.site_for(url).settings.offers(SiteSetting.SPONSORBLOCK) and info.get("id"):
             sponsorblock = _sponsorblock_segments(str(info["id"]), sponsorblock_categories)
-        return UpgradeOffer(videos=video_formats(info).videos, subtitle_languages=languages, sponsorblock=sponsorblock)
+        formats = video_formats(info)
+        return UpgradeOffer(
+            videos=formats.videos, subtitle_languages=languages, sponsorblock=sponsorblock, duration=formats.duration,
+        )
 
     @staticmethod
     def _video(info: dict, url: str) -> VideoDetails:

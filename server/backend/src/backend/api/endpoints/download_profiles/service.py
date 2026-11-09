@@ -155,17 +155,24 @@ def count_which_episodes(s: Session, collection: Collection, body: WhichEpisodes
     episodes = collection_episodes(s, collection.id)
     result = evaluate(s, selection, episodes=episodes)
     page = None
+    listed = None
     if body.include_episodes:
+        shown = body.episodes_shown
+        if shown is not None:
+            wanted = None if shown == "downloads" else shown
+            episodes = [episode for episode in episodes if result.left_out_by.get(episode.id) == wanted]
+        listed = len(episodes)
         page = [
             WhichEpisodesEpisodeAPIRead.model_validate({
                 "id": episode.id, "slug": episode.slug, "title": episode.title,
-                "published_at": published_at(episode), "left_out_by": result.left_out_by.get(episode.id),
+                "published_at": published_at(episode), "episode_type": episode.episode_type,
+                "duration": episode.duration or None, "left_out_by": result.left_out_by.get(episode.id),
             })
             for episode in episodes[body.episodes_offset:body.episodes_offset + body.episodes_limit]
         ]
     return WhichEpisodesAPIRead(
         total=result.total, unavailable=result.unavailable, filters=result.counts,
-        downloaded=len(result.wanted), episodes=page,
+        downloaded=len(result.wanted), episodes=page, episodes_total=listed,
     )
 
 

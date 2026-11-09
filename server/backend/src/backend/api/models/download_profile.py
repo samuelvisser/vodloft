@@ -130,6 +130,14 @@ class DownloadProfileAPIBaseIn(RequestBase):
     def _unique_improvements(cls, value: list) -> list:
         return list(dict.fromkeys(value))
 
+    @model_validator(mode="after")
+    def _upgrade_check_needs_an_improvement(self):
+        # With nothing that counts as better, the check could never find anything: it is saved off, so the
+        # form opens with it collapsed.
+        if not self.upgrade_improvements:
+            self.upgrade_check = False
+        return self
+
     _one_line_per_date = field_validator("filters")(classmethod(lambda cls, value: _one_line_per_date(value)))
 
 
@@ -197,6 +205,8 @@ class WhichEpisodesAPIRequest(RequestBase):
     # The episode list is read a page at a time, newest first, as the form scrolls through it.
     episodes_offset: int = Field(default=0, ge=0)
     episodes_limit: int = Field(default=50, ge=1, le=200)
+    # Only list the episodes that download, that can't be downloaded, or that one filter leaves out (filter:<index>).
+    episodes_shown: str | None = Field(default=None, pattern=r"^(downloads|unavailable|filter:\d+)$")
 
     @model_validator(mode="after")
     def _one_collection(self) -> "WhichEpisodesAPIRequest":
@@ -210,6 +220,9 @@ class WhichEpisodesEpisodeAPIRead(ResponseBase):
     slug: str
     title: str
     published_at: datetime | None
+    episode_type: str | None
+    duration: float | None
+    """In seconds; None while it is not known."""
     left_out_by: str | None
     """None when the episode will be downloaded; otherwise unavailable, or filter:<index>."""
 
@@ -222,6 +235,8 @@ class WhichEpisodesAPIRead(ResponseBase):
     downloaded: int
     episodes: list[WhichEpisodesEpisodeAPIRead] | None = None
     """One page of the Collection's indexed episodes, from episodes_offset; None unless include_episodes."""
+    episodes_total: int | None = None
+    """How many episodes the list holds with episodes_shown; None unless include_episodes."""
 
 
 class SkippedByFilterAPIRead(ResponseBase):

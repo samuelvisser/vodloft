@@ -92,6 +92,8 @@ def download_profile_defaults(site: Site) -> dict[str, Any]:
     values["upgrade_improvements"] = [
         improvement.value for improvement in site.upgrade_checks.improvements if improvement.value in chosen
     ]
+    # With nothing that counts as better by default, the check starts off.
+    values["upgrade_check"] = bool(values["upgrade_check"]) and bool(values["upgrade_improvements"])
     if not site.settings.offers(SiteSetting.DOWNLOAD_WITH_COUNTDOWN):
         values["download_with_countdown"] = False
     values["sponsorblock_enabled"] = sponsorblock_in_use(values["sponsorblock_enabled"], values["sponsorblock_segments"])

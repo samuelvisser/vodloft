@@ -344,3 +344,14 @@ def test_download_profile_run_event_dispatches_exact_scope_to_worker(
         resource_type=resource_type,
         resource_id=resource_id,
     )
+
+
+def test_a_saved_profile_with_nothing_that_counts_as_better_has_the_check_off():
+    from backend.api.models.download_profile import DownloadProfileAPIUpdate
+
+    body = {**PROFILE_CHOICES, "enable_profile": True, "download_with_countdown": False, "redownload_final": False,
+            "delete_older_episodes": False, "local_media_profile_id": 1}
+    assert DownloadProfileAPIUpdate.model_validate({**body, "upgrade_check": True}).upgrade_check is False
+    kept = DownloadProfileAPIUpdate.model_validate({**body, "upgrade_check": True, "upgrade_improvements": ["length"]})
+    assert kept.upgrade_check is True
+

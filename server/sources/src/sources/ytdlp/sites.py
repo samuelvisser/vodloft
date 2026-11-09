@@ -43,11 +43,14 @@ _STREAM_PROXY_CHOICE = {"youtube"}
 _HLS_DOWNLOADS = {"youtube"}
 _API_KEY_SITES = {"youtube"}
 """The Sites yt-dlp's API key is for: the YouTube Data API key."""
-# yt-dlp tells a video's resolutions, codecs and subtitles on every site; SponsorBlock only has YouTube's videos.
-_UPGRADE_CHECKS = UpgradeChecks((UpgradeImprovement.RESOLUTION, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC))
-_SITE_UPGRADE_CHECKS = {"youtube": UpgradeChecks(
-    (UpgradeImprovement.RESOLUTION, UpgradeImprovement.SPONSORBLOCK, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC),
-)}
+# yt-dlp tells a video's resolutions, codecs, subtitles and length on every site; SponsorBlock only has YouTube's videos.
+_UPGRADE_CHECKS = UpgradeChecks((
+    UpgradeImprovement.RESOLUTION, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC, UpgradeImprovement.LENGTH,
+))
+_SITE_UPGRADE_CHECKS = {"youtube": UpgradeChecks((
+    UpgradeImprovement.RESOLUTION, UpgradeImprovement.SPONSORBLOCK, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC,
+    UpgradeImprovement.LENGTH,
+))}
 _SITE_SETTINGS = {"youtube": SiteSettings(
     # SponsorBlock only has YouTube's videos.
     shows=frozenset({SiteSetting.SPONSORBLOCK, SiteSetting.SPONSORBLOCK_SEGMENTS}),
@@ -55,6 +58,8 @@ _SITE_SETTINGS = {"youtube": SiteSettings(
         # Creators keep changing titles and thumbnails for days, and YouTube tests them for up to two weeks.
         SiteSetting.METADATA_REFRESH: "30m,2h,6h,24h,3d,7d,14d",
         SiteSetting.UPGRADE_IMPROVEMENTS: [UpgradeImprovement.RESOLUTION.value, UpgradeImprovement.SPONSORBLOCK.value],
+        # A creator trimming a video in YouTube Studio usually cuts a few minutes at most.
+        SiteSetting.UPGRADE_LENGTH_MINUTES: 3,
     }),
 )}
 # What yt-dlp says a video needs: ``subscriber_only`` is a membership of the channel and ``premium_only`` the

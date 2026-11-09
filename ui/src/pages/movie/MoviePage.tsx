@@ -38,6 +38,8 @@ import {createSelectRegistry} from '../../utils/selectRegistry'
 import './MoviePage.css'
 import {isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
+import {type DownloadStarts, startLabel, useDownloadStarts} from '../../lib/downloadStarts'
+import {refreshFrontendPuller} from '../../lib/puller'
 
 type MovieExtraSummary = {
     id?: number
@@ -60,6 +62,7 @@ type MovieDownloadControlProps = {
     primary?: boolean
     panel?: boolean
     controlBusy: boolean
+    starts: DownloadStarts
     onStart: () => void
     onOpenLog: (downloadId: number) => void
     onRetry: (download: MediaDownloadViewRead) => void
@@ -67,12 +70,15 @@ type MovieDownloadControlProps = {
 }
 
 function MovieDownloadControl({download, label, downloadedLabel, progressLabel, queueing, disabled, primary = true,
-    panel = false, controlBusy, onStart, onOpenLog, onRetry, onCancel}: MovieDownloadControlProps) {
+    panel = false, controlBusy, starts, onStart, onOpenLog, onRetry, onCancel}: MovieDownloadControlProps) {
+    // While a re-download is on its way, the button already shows it starting and can cancel it.
+    const starting = starts.isStarting(download)
     return <div className={`movie-media-download-control${panel ? ' is-panel' : ''}`}>
-        <DownloadProgressButton download={download} label={label} downloadedLabel={downloadedLabel} ariaLabel={progressLabel} starting={queueing}
+        <DownloadProgressButton download={download && starts.present(download)} label={label} downloadedLabel={downloadedLabel}
+            ariaLabel={progressLabel} starting={queueing}
             onStart={onStart} onRetry={download ? () => onRetry(download) : undefined}
             onCancel={download ? () => onCancel(download) : undefined}
-            disabled={disabled} controlBusy={controlBusy} primary={primary}/>
+            disabled={disabled} controlBusy={controlBusy && !starting} primary={primary}/>
         {download && <button type="button" className="icon-btn movie-download-log-button" onClick={() => onOpenLog(download.id)}
                              title="View download log" aria-label={`View download log for ${progressLabel}`}>
             <FontAwesomeIcon icon={faIcon('fass', 'file-lines')}/>
@@ -162,6 +168,7 @@ export default function MoviePage() {
     const [refreshingExtrasStarting, setRefreshingExtrasStarting] = useState(false)
     const [logDownloadId, setLogDownloadId] = useState<number | null>(null)
     const [downloadControlBusy, setDownloadControlBusy] = useState<string | null>(null)
+    const downloadStarts = useDownloadStarts()
     const [operationControlBusy, setOperationControlBusy] = useState<string | null>(null)
     const refreshingExtras = refreshingExtrasStarting || refreshExtrasOperation !== undefined
 
@@ -277,10 +284,10 @@ export default function MoviePage() {
         }
     }
 
-    const controlDownload = async (download: MediaDownloadViewRead, action: 'retry' | 'cancel') => {
-        if (downloadControlBusy !== null) return
+    const sendDownloadControl = async (download: MediaDownloadViewRead, action: 'retry' | 'cancel'): Promise<boolean> => {
         const busyKey = `${download.id}:${action}`
         setDownloadControlBusy(busyKey)
+        let accepted = false
         try {
             const base = apiUrl()
             const response = await fetch(`${base}/media-downloads/${download.id}/${action}`, {
@@ -290,8 +297,9 @@ export default function MoviePage() {
             if (!response.ok) {
                 const {error: message} = await getErrorMessageFromResponse(response)
                 toast.error(message || `Could not ${action} the download`)
-                return
+                return false
             }
+            accepted = true
             const retryLabel = download.artifactStatus === 'available' ? 'Re-download queued' : 'Download queued for retry'
             toast.success(action === 'retry' ? retryLabel : 'Download canceled')
         } catch {
@@ -301,9 +309,25 @@ export default function MoviePage() {
                 queryClient.invalidateQueries({queryKey: ['movieDownloads', slug]}),
                 queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
                 queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+                refreshFrontendPuller(queryClient),
             ])
             setDownloadControlBusy((current) => current === busyKey ? null : current)
         }
+        return accepted
+    }
+
+    const controlDownload = async (download: MediaDownloadViewRead, action: 'retry' | 'cancel') => {
+        if (action === 'cancel') {
+            await downloadStarts.cancel(download, () => sendDownloadControl(download, 'cancel'))
+            return
+        }
+        if (downloadControlBusy !== null) return
+        await downloadStarts.start(
+            download,
+            startLabel(download),
+            () => sendDownloadControl(download, 'retry'),
+            () => sendDownloadControl(download, 'cancel'),
+        )
     }
 
     const addMovie = async () => {
@@ -592,6 +616,7 @@ export default function MoviePage() {
                                     disabled={submitting !== null || addingMovie || !profileId}
                                     panel
                                     controlBusy={controlBusy}
+                                    starts={downloadStarts}
                                     onStart={() => void startMovieDownload()}
                                     onOpenLog={setLogDownloadId}
                                     onRetry={(download) => void controlDownload(download, 'retry')}
@@ -617,6 +642,7 @@ export default function MoviePage() {
                                     primary={false}
                                     panel
                                     controlBusy={controlBusy}
+                                    starts={downloadStarts}
                                     onStart={() => void startExtraDownload(featuredTrailer)}
                                     onOpenLog={setLogDownloadId}
                                     onRetry={(download) => void controlDownload(download, 'retry')}
@@ -676,6 +702,7 @@ export default function MoviePage() {
                                                 queueing={submitting === `extra:${extra.slug}`}
                                                 disabled={submitting !== null || addingMovie || !profileId}
                                                 controlBusy={controlBusy}
+                                                starts={downloadStarts}
                                                 onStart={() => void startExtraDownload(extra)}
                                                 onOpenLog={setLogDownloadId}
                                                 onRetry={(download) => void controlDownload(download, 'retry')}

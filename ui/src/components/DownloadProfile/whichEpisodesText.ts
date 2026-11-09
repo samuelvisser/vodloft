@@ -16,6 +16,17 @@ const ACTION_WORDS: Record<string, string> = {
 
 const UNITS: Array<[number, string]> = [[86_400, 'day'], [3_600, 'hour'], [60, 'minute'], [1, 'second']]
 
+/** An episode's length in short, such as "1 h 4 min" or "45 sec". */
+export function formatRunningTime(seconds: number): string {
+    const total = Math.max(0, Math.round(seconds))
+    if (total < 60) return `${total} sec`
+    const allMinutes = Math.round(total / 60)
+    const hours = Math.floor(allMinutes / 60)
+    const minutes = allMinutes % 60
+    if (!hours) return `${minutes} min`
+    return minutes ? `${hours} h ${minutes} min` : `${hours} h`
+}
+
 /** A length in seconds as words, such as "1 hour 30 minutes". */
 export function formatDuration(seconds: number): string {
     let rest = Math.max(0, Math.round(seconds))
