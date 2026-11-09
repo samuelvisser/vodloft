@@ -89,7 +89,7 @@ def test_a_new_download_profile_starts_with_its_sites_settings(site_settings):
     assert youtube["sponsorblock_enabled"] is True and youtube["download_with_countdown"] is False
 
     # A Site only checks for what it can find, whatever the system default lists.
-    site_settings(**{"generic:vimeo.com": {"upgrade_improvements": ["length", "codec", "resolution"], "auto_subtitles": "never"}})
+    site_settings(**{"generic:vimeo.com": {"upgrade_improvements": ["sponsorblock", "codec", "resolution"], "auto_subtitles": "never"}})
     vimeo = download_profile_defaults(site_of("generic:vimeo.com"))
     assert vimeo["upgrade_improvements"] == ["resolution", "codec"]
     assert vimeo["auto_subtitles"] == "never"

@@ -12,7 +12,7 @@ from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.media_download_history import record_media_download_history
 from backend.services.sites import collection_site
 from backend.services.upgrade_check import (
-    checks_profile, next_upgrade_check_at, sponsorblock_categories, upgrade_findings,
+    checks_profile, kept_length, next_upgrade_check_at, sponsorblock_categories, upgrade_findings,
 )
 from backend.types.download_profile_types import MediaDownloadArtifactStatus, UpgradeResult
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
@@ -136,7 +136,7 @@ def _record_offer(s: Session, download_id: int, offer, now: datetime) -> Upgrade
             "best_height": findings.best_height,
             "kept_height": download.video_height,
             "offered_duration": offer.duration,
-            "kept_duration": download.duration,
+            "kept_duration": kept_length(download),
         },
         occurred_at=now,
     )
