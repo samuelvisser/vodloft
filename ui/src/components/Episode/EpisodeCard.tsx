@@ -12,6 +12,7 @@ import {episodeTagLabel} from '../../types/schemas/source'
 import type {EpisodeFilter} from '../../types/schemas/download_profile'
 import {filterSentence, plainText} from '../DownloadProfile/whichEpisodesText'
 import {apiUrl} from '../../lib/api'
+import DurationPill from '../common/DurationPill'
 
 // Beyond this many downloads for one episode, collapse the rest into a "+N" pill
 // instead of letting icons overflow the thumbnail.
@@ -172,8 +173,11 @@ export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: 
             {initials}
           </span>
                 )}
-                {cornerBadgeText && (
-                    <span className={`badge badge-${type}`}>{cornerBadgeText}</span>
+                {(cornerBadgeText || ep.duration > 0) && (
+                    <span className="thumb-corner">
+                        {cornerBadgeText && <span className={`badge badge-${type}`}>{cornerBadgeText}</span>}
+                        <DurationPill seconds={ep.duration}/>
+                    </span>
                 )}
             </div>
             <div className="episode-title" title={ep.title}>{ep.title}</div>

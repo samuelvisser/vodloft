@@ -21,6 +21,7 @@ import DownloadStatusBadge from '../components/DownloadProgress/DownloadStatusBa
 import {useLibraryCounts, useLibraryDownloads, useMovies, useCollectionsView, useVideos} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg, CollectionTypeValue} from '../types/collection'
+import DurationPill from '../components/common/DurationPill'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SOURCE_FILTER_STORAGE_KEY = 'librarySourceFilter'
@@ -103,15 +104,6 @@ function matchesLibrarySearch(item: {title: string, authorName?: string | null},
     if (words.length === 0) return true
     const haystack = foldForSearch(`${item.title} ${item.authorName ?? ''}`)
     return words.every((word) => haystack.includes(word))
-}
-
-function formatVideoDuration(seconds: number) {
-    if (!seconds) return null
-    const total = Math.round(seconds)
-    const hours = Math.floor(total / 3600)
-    const minutes = Math.floor((total % 3600) / 60)
-    const rest = String(total % 60).padStart(2, '0')
-    return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`
 }
 
 function NoMatches({search, what}: {search: boolean, what: string}) {
@@ -381,7 +373,6 @@ export default function LibraryPage() {
                     <div className="episodes-grid" role="list" aria-label="Videos">
                         {filteredVideos.map((video) => {
                             const image = toImageUrl(video.thumbnailLandscapePath || video.backgroundImagePath)
-                            const duration = formatVideoDuration(video.duration)
                             const download = latestVideoDownload(downloads, video.id)
                             return (
                                 <Link className="episode-card" to={`/video/${video.id}`} key={video.id} role="listitem" aria-label={video.title}>
@@ -393,7 +384,9 @@ export default function LibraryPage() {
                                         )}
                                         {video.drmProtected ? <DrmBadge onCover/> : video.access && <AccessBadge label={video.accessLabel} description={video.accessDescription} onCover/>}
                                         {!image && <FontAwesomeIcon icon={faIcon('fass', 'film')}/>}
-                                        {duration && <span className="badge">{duration}</span>}
+                                        {video.duration > 0 && (
+                                            <span className="thumb-corner"><DurationPill seconds={video.duration}/></span>
+                                        )}
                                     </span>
                                     <span className="episode-title" title={video.title}>{video.title}</span>
                                 </Link>

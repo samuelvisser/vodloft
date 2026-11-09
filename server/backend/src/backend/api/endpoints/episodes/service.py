@@ -114,6 +114,7 @@ def _episode_view_stmt(
             Episode.access_check_at.label("access_check_at"),
             Episode.removed_from_source.label("removed_from_source"),
             Episode.title.label("title"),
+            Episode.duration.label("duration"),
             Episode.slug.label("slug"),
             Episode.thumbnail_landscape_path.label("thumbnail_landscape_path"),
             Episode.thumbnail_portrait_path.label("thumbnail_portrait_path"),

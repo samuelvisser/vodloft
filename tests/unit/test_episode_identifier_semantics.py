@@ -759,6 +759,7 @@ def test_episode_read_view_derives_identifier_fields_during_model_validation():
             "dw_episode_number": "42.10",
             "publish_status": "published_final",
             "title": "Episode",
+            "duration": 0,
             "slug": "episode",
             "thumbnail_landscape_path": None,
             "thumbnail_portrait_path": None,

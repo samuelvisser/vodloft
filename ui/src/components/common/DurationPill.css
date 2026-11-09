@@ -1,0 +1,57 @@
+/* The bottom-right corner of a thumbnail: the length pill, with any episode number or type badge beside it. */
+.thumb-corner {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap-reverse;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+    max-width: calc(100% - 16px);
+    pointer-events: none;
+}
+
+.thumb-corner > .badge {
+    position: static;
+}
+
+.duration-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 60%);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+.thumb-corner-large {
+    right: 14px;
+    bottom: 14px;
+}
+
+.duration-pill-large {
+    padding: 4px 10px;
+    font-size: 14px;
+}
+
+@media (max-width: 720px) {
+    .thumb-corner-large {
+        right: 10px;
+        bottom: 10px;
+    }
+
+    .duration-pill-large {
+        padding: 3px 8px;
+        font-size: 12.5px;
+    }
+}

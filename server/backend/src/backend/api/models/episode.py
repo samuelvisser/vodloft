@@ -130,6 +130,7 @@ class EpisodeAPIReadView(SourcedResponse, LockableResponse, _EpisodeIdentifierAP
     drm_protected: bool = False
     removed_from_source: bool = False
     title: str
+    duration: float
     slug: str
     thumbnail_landscape_path: Optional[str]
     thumbnail_portrait_path: Optional[str]
