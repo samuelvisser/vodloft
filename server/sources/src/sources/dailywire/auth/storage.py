@@ -42,6 +42,10 @@ class TokenStore:
         """Store a record that is already in this store's JSON form, such as one another program kept."""
         self._set(key, record)
 
+    def load_record(self, key: str) -> Optional[str]:
+        """A record as it is stored, such as one that is not a sign-in."""
+        return self._get(key)
+
     def _delete(self, key: str) -> None:
         try:
             keyring.delete_password(self.service_name, key)

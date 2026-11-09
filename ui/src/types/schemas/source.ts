@@ -47,6 +47,8 @@ export const LockableFields = {
     accessCheckAt: ApiDateTimeSchema.nullable().optional().default(null),
     /** VODLoft cannot download the media without the access, so it does not try. */
     accessLocked: z.boolean().optional().default(false),
+    /** VODLoft has the access the media needs, such as through the account it signs in with. */
+    accessGranted: z.boolean().optional().default(false),
     /** What the Site calls the access, such as Members only or NPO Plus. */
     accessLabel: z.string().nullable().optional().default(null),
     /** One sentence from the Site on who can watch it, such as "Only NPO Plus subscribers can watch this." */

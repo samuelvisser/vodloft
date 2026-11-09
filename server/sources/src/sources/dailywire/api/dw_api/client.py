@@ -314,6 +314,8 @@ class MiddlewareClient:
         except ValidationError as e:
             raise MiddlewareAPIError("Invalid user info response") from e
 
+        from sources.dailywire.membership import remember_level
+        remember_level(record.access_level)
         return record
 
     def get_episodes_paginated(self, collection_slug: str, selector: ByNextPage | ByShowSeason | ByPodcastSeason) -> EpisodesPaginatedResult:

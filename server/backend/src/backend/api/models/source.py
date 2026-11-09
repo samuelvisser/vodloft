@@ -7,7 +7,7 @@ from typing import Literal, Optional
 from pydantic import AliasChoices, AliasPath, Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.services.media_access import access_locked, site_access
+from backend.services.media_access import access_granted, access_locked, site_access
 from backend.types.collection_types import CollectionType
 from config.settings.site_settings import AutoSubtitles, SponsorBlockAction, SponsorBlockCategory, UpgradeRepeat
 from sources import Feature, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source
@@ -57,6 +57,12 @@ class LockableResponse(ResponseBase):
     def access_locked(self) -> bool:
         """VODLoft cannot download the media without the access, so it does not try."""
         return access_locked(self.source_key, self.access, self.access_refused_at)
+
+    @computed_field
+    @property
+    def access_granted(self) -> bool:
+        """VODLoft has the access the media needs, such as through the account it signs in with."""
+        return access_granted(self.source_key, self.access, self.access_refused_at)
 
     @computed_field
     @property

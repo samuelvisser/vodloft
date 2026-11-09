@@ -127,6 +127,22 @@ def _refused_access(media_download_id: int, exc: Exception) -> str | None:
         return None
 
 
+def _tell_source_refused(media_download_id: int, access: str) -> None:
+    """Let the Source check whether what VODLoft has changed, such as the account's membership level."""
+    session = get_session()
+    try:
+        download = session.get(MediaDownloadBase, media_download_id)
+        source_key = download.media.source_key if download is not None else None
+    finally:
+        session.close()
+    if source_key is None:
+        return
+    try:
+        get_source(source_key).download_refused(access)
+    except Exception:
+        logger.exception("Could not let the Source check its access after download %s was refused", media_download_id)
+
+
 def _lock_media(session: Session, media_download_id: int, access: str) -> str | None:
     """Lock the download's media, and return what its Site calls the access."""
     download = session.get(MediaDownloadBase, media_download_id)
@@ -361,6 +377,8 @@ def run_download(
                 refused = _refused_access(media_download_id, exc)
             except Exception:
                 logger.exception("Could not tell whether download %s was refused for lack of access", media_download_id)
+            if refused:
+                _tell_source_refused(media_download_id, refused)
 
         def record_failure(w: Session) -> None:
             if canceled:
