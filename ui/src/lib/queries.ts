@@ -525,6 +525,10 @@ export function useEpisodeTagsInCollection(collectionSlug?: string) {
         queryKey: ['collectionEpisodeTags', collectionSlug ?? ''] as const,
         enabled: !!collectionSlug,
         refetchOnMount: 'always',
+        // Without the tags the type filter is missing, so ride out a backend that restarts.
+        retry: 4,
+        refetchOnWindowFocus: (query) => query.state.status === 'error',
+        refetchOnReconnect: (query) => query.state.status === 'error',
         queryFn: ({signal}) => fetchParsed(
             `${apiUrl()}/collections/${encodeURIComponent(collectionSlug!)}/episode-tags`,
             EpisodeTagReadSchema.array(),

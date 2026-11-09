@@ -364,11 +364,17 @@ a.episode-card { display: block; min-width: 0; color: inherit; text-decoration: 
 }
 
 .episodes-load-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
   padding: 24px 0;
   text-align: center;
   color: var(--muted);
   font-size: 13px;
 }
+.episodes-load-failed { color: var(--text); }
 
 .cover {
   position: relative;
