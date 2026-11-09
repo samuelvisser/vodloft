@@ -16,8 +16,12 @@ import {
     shouldPromptForSafeDelay,
 } from './SafeDelayDownloadDialogs'
 
-/** What the upgrade check did or will do for a download, such as "Checks for a better version on Nov 10". */
+/** What happens to a download later, such as "Checks for a better version on Nov 10". */
 function upgradeText(download: MediaDownloadViewRead): string | null {
+    // A download of the countdown version is replaced once the countdown is gone; the upgrade check waits for that.
+    if (download.redownloadWhenFinal && download.presentation.outcome === 'success') {
+        return 'Re-downloads once the countdown is removed'
+    }
     if (download.upgradeResult === 'upgraded') return 'Upgraded to a better version'
     if (download.upgradeCheckAt) {
         const day = download.upgradeCheckAt.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})
