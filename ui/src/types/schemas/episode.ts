@@ -79,6 +79,7 @@ export const EpisodeReadViewSchema = z.object({
     slug: z.string(),
     title: z.string(),
     duration: z.number(),
+    publishedDate: ApiDateTimeSchema.nullable(),
     publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
     drmProtected: z.boolean(),
     ...LockableFields,

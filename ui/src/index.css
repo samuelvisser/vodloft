@@ -830,8 +830,7 @@ input[type="time"] {
   white-space: nowrap;
 }
 
-/* Bottom-right badge color variants: episode number (ep/ep-extra) or content-type
-   label (trailer/aux) in the same corner slot. */
+/* Episode type pill colours (see EpisodeTypePill), one per type a Source catalogues. */
 .badge-ep-extra { background: rgba(217, 119, 6, 0.92); }
 .badge-trailer { background: rgba(59, 130, 246, 0.92); }
 .badge-aux { background: rgba(100, 116, 139, 0.92); }
@@ -941,6 +940,30 @@ input[type="time"] {
 
 
 /* Episode title (below thumbnail) - two-line clamp like YouTube */
+.episode-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.episode-meta > .episode-type-pill {
+  flex: 0 0 auto;
+  padding: 0 7px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.episode-meta > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .episode-upgrade {
   margin-top: 3px;
   font-size: 12px;

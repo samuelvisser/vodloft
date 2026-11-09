@@ -1,20 +1,11 @@
-/* The bottom-right corner of a thumbnail: the length pill, with any episode number or type badge beside it. */
+/* The bottom-right corner of a thumbnail, which holds the length pill. */
 .thumb-corner {
     position: absolute;
     right: 8px;
     bottom: 8px;
     z-index: 2;
     display: flex;
-    flex-wrap: wrap-reverse;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 4px;
-    max-width: calc(100% - 16px);
     pointer-events: none;
-}
-
-.thumb-corner > .badge {
-    position: static;
 }
 
 .duration-pill {

@@ -129,6 +129,7 @@ class EpisodeAPIReadView(SourcedResponse, LockableResponse, _EpisodeIdentifierAP
     publish_status: Union[EpisodePublishStatus, str]
     drm_protected: bool = False
     removed_from_source: bool = False
+    published_date: Optional[datetime] = None
     title: str
     duration: float
     slug: str

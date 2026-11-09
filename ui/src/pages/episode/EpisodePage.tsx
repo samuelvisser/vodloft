@@ -24,6 +24,7 @@ import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocke
 import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../../components/common/DurationPill'
+import EpisodeTypePill from '../../components/Episode/EpisodeTypePill'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -278,6 +279,7 @@ export default function EpisodePage() {
                         />
                     </div>
                     <div className="episode-summary" aria-label="Episode metadata">
+                        <EpisodeTypePill sourceKey={episode.sourceKey} type={episode.episodeType}/>
                         <span className={`episode-status${isLive ? ' is-live' : ''}`} title={sourceStatus?.help}>
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
                             {statusLabel}

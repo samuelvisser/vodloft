@@ -133,6 +133,7 @@ function compactEpisodes(data: EpisodeReadView[]): EpisodeReadView[] {
     slug: episode.slug,
     title: episode.title,
     duration: episode.duration,
+    publishedDate: episode.publishedDate,
     publishStatus: episode.publishStatus,
     drmProtected: episode.drmProtected,
     access: episode.access,
