@@ -438,6 +438,7 @@ class YtDlpSource(Source):
     episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.
     sites_label = "YouTube, and many more"
+    api_key_sites = sites.api_key_sites()
     search_label = "YouTube"
 
     def __init__(self):

@@ -109,20 +109,18 @@ def test_one_cookies_file_is_sorted_into_the_sites(session):
         site_cookies.sort_cookies(session, b"not a cookies file")
 
 
-def test_a_cookies_file_adds_the_sites_its_domains_tell(session):
+def test_a_cookies_file_goes_to_known_sites_and_others_wait_for_a_link(session):
     from fastapi import HTTPException
 
     from backend.api.endpoints.sources import router
     from backend.api.models.source import SiteAddAPIRequest
-    from backend.db.models import Site
     from backend.services import site_cookies
 
     result = site_cookies.add_cookies_file(_file(YOUTUBE, TWITCH))
-    session.expire_all()
-    # youtube.com alone tells YouTube; twitch.tv alone tells no Site, so it waits for a link.
+    # YouTube is always known, for its API key, so its cookies go there; twitch.tv alone tells no Site,
+    # so it waits for a link.
     assert [site.name for site in result.sites] == ["YouTube"]
     assert result.other_domains == ("twitch.tv",)
-    assert session.get(Site, "youtube").domains == ["youtube.com"]
 
     added = router.add_site_by_link(SiteAddAPIRequest(url="https://www.twitch.tv/somechannel"))
     assert (added.key, added.name) == ("twitch", "Twitch")
@@ -145,6 +143,15 @@ def test_every_site_lists_how_it_authenticates(session):
     # yt-dlp's API key is the YouTube Data API key, so it shows on YouTube only.
     assert sites["youtube"].api_key_source_key == "ytdlp"
     assert sites["npo"].api_key_source_key is None
+
+
+def test_youtube_is_listed_for_its_api_key_before_anything_from_it(session):
+    from backend.services import site_cookies
+
+    # A fresh install has seen no YouTube video yet, but onboarding still offers the YouTube API key.
+    youtube = {site.key: site for site in site_cookies.list_site_authentication(session)}["youtube"]
+    assert (youtube.name, youtube.domains, youtube.api_key_source_key) == ("YouTube", ("youtube.com",), "ytdlp")
+    assert youtube.cookie_source_names == ("yt-dlp",)
 
 
 def test_the_migration_gives_each_site_its_own_cookies_file(session, tmp_path, monkeypatch):

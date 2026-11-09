@@ -692,6 +692,9 @@ class Source(ABC):
     each. A Source that serves many sites, as yt-dlp does, names none and tells them apart in
     ``site_for``. Another Source never uses these: on a Site it has no contract for, a Source
     offers a Site's defaults."""
+    api_key_sites: ClassVar[tuple[Site, ...]] = ()
+    """The Sites a Source with ``Feature.API_KEY`` uses its key on, such as YouTube for yt-dlp. They
+    are listed under Authentication from the start, so the key can be added before anything from them."""
     sites_label: ClassVar[str | None] = None
     """What the Source downloads from, in a few words, when its name does not say so, such as
     "YouTube, and many more" for yt-dlp."""

@@ -129,6 +129,11 @@ def site_of(key: str, host: str | None = None) -> Site:
     )
 
 
+def api_key_sites() -> tuple[Site, ...]:
+    """The Sites the YouTube Data API key is for, with the domain yt-dlp names them by."""
+    return tuple(site_of(key, f"{key}.com") for key in sorted(_API_KEY_SITES))
+
+
 def _accesses(key: str) -> tuple[Access, ...]:
     """The Site's own names for the accesses yt-dlp tells, and the general ones for those it has none for."""
     own = _SITE_ACCESSES.get(key, ())
