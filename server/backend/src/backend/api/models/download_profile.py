@@ -16,6 +16,8 @@ from backend.types.download_profile_types import (
     AutoSubtitles,
     SponsorBlockAction,
     SponsorBlockCategory,
+    check_sponsorblock_segments,
+    sponsorblock_in_use,
     UpgradeImprovement,
     UpgradeRepeat,
 )
@@ -114,7 +116,14 @@ class DownloadProfileAPIBaseIn(RequestBase):
     def _validate_sponsorblock_segments(cls, value: dict) -> dict:
         if set(value) != {category.value for category in SponsorBlockCategory}:
             raise ValueError("Choose Keep, Chapter or Cut out for every SponsorBlock segment type")
+        check_sponsorblock_segments(value)
         return value
+
+    @model_validator(mode="after")
+    def _sponsorblock_off_when_every_type_is_kept(self):
+        # Keeping every segment type does nothing, so the profile saves SponsorBlock as off.
+        self.sponsorblock_enabled = sponsorblock_in_use(self.sponsorblock_enabled, self.sponsorblock_segments)
+        return self
 
     @field_validator("upgrade_improvements")
     @classmethod

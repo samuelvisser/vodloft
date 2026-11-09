@@ -34,8 +34,6 @@ _VIDEO = "[vodloft-video]"
 _TRACK = "[vodloft-track]"
 _MARKS = (_FILE, _SPONSORBLOCK, _VIDEO, _TRACK)
 _CODECS = (("avc", "h264"), ("h264", "h264"), ("hev", "h265"), ("hvc", "h265"), ("h265", "h265"), ("vp09", "vp9"), ("vp9", "vp9"), ("av01", "av1"), ("av1", "av1"))
-# SponsorBlock's Highlight is a moment, not a part to skip: always a chapter.
-_HIGHLIGHT = "poi_highlight"
 _SUBTITLE_FORMAT = ("--sub-format", "srt/vtt/best")
 # Every language, never YouTube's live chat.
 _EVERY_LANGUAGE = "all,-live_chat"
@@ -146,7 +144,9 @@ def ytdlp_sponsorblock_options(sponsorblock: YtdlpSponsorBlock) -> tuple[str, ..
     """yt-dlp options that mark SponsorBlock segments as chapters and cut others out."""
     if not sponsorblock.enabled:
         return ()
-    options: tuple[str, ...] = ("--sponsorblock-mark", ",".join((*sponsorblock.chapter, _HIGHLIGHT)))
+    options: tuple[str, ...] = ()
+    if sponsorblock.chapter:
+        options += ("--sponsorblock-mark", ",".join(sponsorblock.chapter))
     if sponsorblock.cut:
         options += ("--sponsorblock-remove", ",".join(sponsorblock.cut))
     return options

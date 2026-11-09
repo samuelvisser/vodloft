@@ -359,7 +359,11 @@ def live_of(info: dict, heights: Sequence[int]) -> LiveStream | None:
 def _sponsorblock_segments(video_id: str, categories: Sequence[str]) -> tuple[SponsorBlockSegment, ...]:
     """The video's SponsorBlock segments of the given types; a video nobody submitted segments for has none."""
     response = requests.get(
-        _SPONSORBLOCK_URL, params={"videoID": video_id, "categories": json.dumps(list(categories))},
+        _SPONSORBLOCK_URL, params={
+            "videoID": video_id, "categories": json.dumps(list(categories)),
+            # The highlight and viewer chapters have action types of their own, which SponsorBlock leaves out unless asked.
+            "actionTypes": json.dumps(["skip", "mute", "poi", "chapter"]),
+        },
         timeout=_SPONSORBLOCK_TIMEOUT_SECONDS,
     )
     if response.status_code == 404:

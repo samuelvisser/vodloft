@@ -20,6 +20,7 @@ from config.settings.site_settings import (
     SiteSettingGroup,
     UpgradeImprovement,
     resolve_site_setting,
+    sponsorblock_in_use,
 )
 from sources import Site, site_of
 
@@ -93,6 +94,7 @@ def download_profile_defaults(site: Site) -> dict[str, Any]:
     ]
     if not site.settings.offers(SiteSetting.DOWNLOAD_WITH_COUNTDOWN):
         values["download_with_countdown"] = False
+    values["sponsorblock_enabled"] = sponsorblock_in_use(values["sponsorblock_enabled"], values["sponsorblock_segments"])
     return values
 
 

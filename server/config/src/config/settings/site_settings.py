@@ -75,7 +75,17 @@ class SponsorBlockCategory(StrEnum):
     OUTRO = "outro"
     PREVIEW = "preview"
     FILLER = "filler"
+    HOOK = "hook"
+    """The greeting and teaser at the start of a video."""
     MUSIC_OFFTOPIC = "music_offtopic"
+    POI_HIGHLIGHT = "poi_highlight"
+    """The one moment viewers mark as where the video gets going: a point in time, never cut out."""
+    CHAPTER = "chapter"
+    """Chapter titles viewers wrote for a video. They name parts of it, so they are never cut out."""
+
+
+CHAPTER_ONLY_SPONSORBLOCK_CATEGORIES = frozenset({SponsorBlockCategory.POI_HIGHLIGHT.value, SponsorBlockCategory.CHAPTER.value})
+"""Segment types that can only be kept or made a chapter: they mark a moment or name a part, nothing to cut out."""
 
 
 DEFAULT_SPONSORBLOCK_SEGMENTS: dict[str, str] = {
@@ -86,9 +96,26 @@ DEFAULT_SPONSORBLOCK_SEGMENTS: dict[str, str] = {
     SponsorBlockCategory.OUTRO.value: SponsorBlockAction.CHAPTER.value,
     SponsorBlockCategory.PREVIEW.value: SponsorBlockAction.KEEP.value,
     SponsorBlockCategory.FILLER.value: SponsorBlockAction.KEEP.value,
+    SponsorBlockCategory.HOOK.value: SponsorBlockAction.KEEP.value,
     SponsorBlockCategory.MUSIC_OFFTOPIC.value: SponsorBlockAction.KEEP.value,
+    SponsorBlockCategory.POI_HIGHLIGHT.value: SponsorBlockAction.CHAPTER.value,
+    SponsorBlockCategory.CHAPTER.value: SponsorBlockAction.KEEP.value,
 }
-"""Chapters of sponsors, intros and outros, and everything else kept."""
+"""Chapters of sponsors, intros, outros and the highlight, and everything else kept."""
+
+
+def sponsorblock_in_use(enabled: bool, segments: Mapping[str, str]) -> bool:
+    """Whether SponsorBlock does anything: on, and some segment type is not kept. Keeping every type is the same as off."""
+    return enabled and any(action != SponsorBlockAction.KEEP.value for action in segments.values())
+
+
+def check_sponsorblock_segments(value: Mapping[str, str]) -> None:
+    """Refuse a choice to cut out a segment type that can only be a chapter."""
+    refused = sorted(
+        category for category in CHAPTER_ONLY_SPONSORBLOCK_CATEGORIES if value.get(category) == SponsorBlockAction.CUT.value
+    )
+    if refused:
+        raise ValueError(f"SponsorBlock can't cut out {', '.join(refused)}: choose Keep or Chapter")
 
 DEFAULT_UPGRADE_IMPROVEMENTS = (UpgradeImprovement.RESOLUTION.value,)
 
@@ -191,10 +218,12 @@ class SiteSettingValues(SubmodelBase):
 
     @field_validator("sponsorblock_segments")
     @classmethod
-    def _every_segment_type(cls, value):
-        if value is not None and set(value) != set(SponsorBlockCategory):
-            raise ValueError("Choose Keep, Chapter or Cut out for every SponsorBlock segment type")
-        return value
+    def _segment_types(cls, value):
+        if value is None:
+            return value
+        check_sponsorblock_segments(value)
+        # A type the file leaves out follows VODLoft's default.
+        return {**DEFAULT_SPONSORBLOCK_SEGMENTS, **value}
 
     def own(self, key: SiteSetting) -> Any:
         """The Site's value for the setting: None when left out, ``default`` to follow the system default."""

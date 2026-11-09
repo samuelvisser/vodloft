@@ -22,7 +22,7 @@ import {
     UpgradeRepeatReg,
 } from '../../types/schemas/siteSettings'
 import {AutoSubtitlesReg} from '../../types/quality'
-import {SponsorBlockActionReg, SponsorBlockCategoryReg} from '../../types/sponsorblock'
+import {SponsorBlockCategoryReg, sponsorBlockActionReg} from '../../types/sponsorblock'
 import type {SelectRegistry} from '../../utils/selectRegistry'
 import NumberInput from '../common/NumberInput'
 import SimpleSelect from '../common/SimpleSelect'
@@ -225,7 +225,7 @@ const DEFINITIONS: Record<SiteSettingKey, Definition> = {
                         <span title={SponsorBlockCategoryReg.getHelp(category)}>{SponsorBlockCategoryReg.getLabel(category)}</span>
                         <SimpleSelect
                             aria-label={`${SponsorBlockCategoryReg.getLabel(category)}, ${label}`}
-                            registry={SponsorBlockActionReg} value={value[category]} menuPlacement="auto"
+                            registry={sponsorBlockActionReg(category)} value={value[category]} menuPlacement="auto"
                             onChange={(action) => onChange({...value, [category]: action})}
                         />
                     </div>

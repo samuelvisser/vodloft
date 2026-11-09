@@ -2,7 +2,7 @@ import {useWatch, type UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 
 import {
-    SPONSORBLOCK_COLORS, SPONSORBLOCK_GROUPS, SponsorBlockActionReg, SponsorBlockCategoryReg,
+    SPONSORBLOCK_COLORS, SPONSORBLOCK_GROUPS, SponsorBlockActionReg, SponsorBlockCategoryReg, sponsorBlockActionReg,
 } from '../../types/sponsorblock'
 import ReadMore from '../../utils/ReadMore'
 
@@ -45,7 +45,7 @@ export default function SponsorBlockFields({form}: {form: UseFormReturn<any>}) {
                                             aria-labelledby={`sponsorblock-${category}-label`}
                                             aria-describedby={`sponsorblock-${category}-help`}
                                         >
-                                            {SponsorBlockActionReg.values.map((action) => (
+                                            {sponsorBlockActionReg(category).values.map((action) => (
                                                 <label key={action} title={SponsorBlockActionReg.getHelp(action)}>
                                                     <input
                                                         type="radio"
@@ -72,7 +72,7 @@ export default function SponsorBlockFields({form}: {form: UseFormReturn<any>}) {
                         A part becomes a chapter your player can skip, or is cut out of the file. Most parts are submitted in the days after a video comes out,
                         so a download right after upload may have few of them. The episode page shows what was found.</p>
                     <p><strong>Chapter</strong> is the safe choice: nothing is removed, and your player can skip it.
-                        {' '}<strong>Cut out</strong> is final; the cut part isn’t kept anywhere. SponsorBlock’s Highlight is always a chapter.</p>
+                        {' '}<strong>Cut out</strong> is final; the cut part isn’t kept anywhere. The Highlight and viewer chapters mark a moment or name a part, so they can only be kept or made a chapter.</p>
                 </ReadMore>
             </div>
         </div>

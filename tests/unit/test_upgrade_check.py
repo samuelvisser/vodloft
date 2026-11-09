@@ -363,3 +363,21 @@ def test_an_imported_file_is_checked_from_its_publish_date(db_session):
     profile.upgrade_check = False
     schedule_imported_upgrade_check(download, profile, NOW - timedelta(days=2), YOUTUBE, NOW)
     assert download.upgrade_check_at is None
+
+
+def test_keeping_every_sponsorblock_type_saves_sponsorblock_as_off():
+    from backend.api.models.download_profile import DownloadProfileAPIUpdate
+    from backend.types.download_profile_types import DEFAULT_SPONSORBLOCK_SEGMENTS
+
+    def saved(segments):
+        return DownloadProfileAPIUpdate.model_validate({
+            "enableProfile": True, "downloadWithCountdown": False, "redownloadFinal": False, "deleteOlderEpisodes": False,
+            "autoSubtitles": "never", "sponsorblockEnabled": True, "sponsorblockSegments": segments,
+            "upgradeCheck": False, "upgradeAfterDays": 7, "upgradeRepeat": "once", "upgradeImprovements": [],
+            "upgradeLengthMinutes": 5, "localMediaProfileId": 1,
+        }).sponsorblock_enabled
+
+    assert saved(dict(DEFAULT_SPONSORBLOCK_SEGMENTS)) is True
+    assert saved({category: "keep" for category in DEFAULT_SPONSORBLOCK_SEGMENTS}) is False
+    with pytest.raises(ValueError):
+        saved({**DEFAULT_SPONSORBLOCK_SEGMENTS, "chapter": "cut"})

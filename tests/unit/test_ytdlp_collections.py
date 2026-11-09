@@ -491,7 +491,7 @@ def test_a_bundle_that_matches_existing_files_holds_its_download_profile(listed,
         "downloadProfile": {
             "enableProfile": True, "downloadWithCountdown": False, "redownloadFinal": False,
             "deleteOlderEpisodes": False, "autoSubtitles": "fallback", "sponsorblockEnabled": False,
-            "sponsorblockSegments": {"sponsor": "keep", "intro": "keep", "outro": "keep", "selfpromo": "keep", "preview": "keep", "filler": "keep", "interaction": "keep", "music_offtopic": "keep"}, "upgradeCheck": False, "upgradeAfterDays": 7, "upgradeRepeat": "once",
+            "sponsorblockSegments": {"sponsor": "keep", "intro": "keep", "outro": "keep", "selfpromo": "keep", "preview": "keep", "filler": "keep", "interaction": "keep", "hook": "keep", "music_offtopic": "keep", "poi_highlight": "keep", "chapter": "keep"}, "upgradeCheck": False, "upgradeAfterDays": 7, "upgradeRepeat": "once",
             "upgradeImprovements": [], "upgradeLengthMinutes": 5,
             "filters": [{"action": "only", "field": "types", "episodeTypes": ["ep"]}],
         },
@@ -600,13 +600,13 @@ def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(lis
         "--concurrent-fragments", "4", "--extractor-args", "youtube:player_client=web", "--concurrent-fragments", "8",
     )
 
-    # A new profile's default: chapters for sponsors, intros and outros; nothing is cut out.
+    # A new profile's default: chapters for sponsors, intros, outros and the highlight; nothing is cut out.
     _site_of.cache_clear()
     monkeypatch.setattr(ListedSource, "sites", (Site(
         "youtube", "YouTube", ("youtube.com",), settings=SiteSettings(shows=frozenset({SiteSetting.SPONSORBLOCK})),
     ),))
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
-    assert plan.source.ytdlp_sponsorblock == YtdlpSponsorBlock(chapter=("sponsor", "intro", "outro"))
+    assert plan.source.ytdlp_sponsorblock == YtdlpSponsorBlock(chapter=("sponsor", "intro", "outro", "poi_highlight"))
     assert "--sponsorblock-mark" in plan.source.ytdlp_command
     assert "--sponsorblock-remove" not in plan.source.ytdlp_command
 
