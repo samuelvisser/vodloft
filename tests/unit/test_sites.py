@@ -93,7 +93,7 @@ def test_every_site_offers_a_different_length_as_a_better_version():
     assert download_profile_defaults(other)["upgrade_length_minutes"] == 5
     assert download_profile_defaults(dailywire)["upgrade_improvements"] == ["length"]
     assert download_profile_defaults(dailywire)["upgrade_length_minutes"] == 5
-    # NPO Start has nothing else to check, so its check starts off.
+    # Nothing NPO Start offers counts as better by default, so its check starts off.
     assert download_profile_defaults(npo)["upgrade_check"] is False
     assert download_profile_defaults(npo)["upgrade_improvements"] == []
 

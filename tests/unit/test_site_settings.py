@@ -93,3 +93,26 @@ def test_a_new_download_profile_starts_with_its_sites_settings(site_settings):
     vimeo = download_profile_defaults(site_of("generic:vimeo.com"))
     assert vimeo["upgrade_improvements"] == ["resolution", "codec"]
     assert vimeo["auto_subtitles"] == "never"
+
+
+def test_a_new_download_profile_starts_with_the_check_off_when_nothing_counts_as_better(site_settings):
+    from dataclasses import replace
+
+    from backend.services.site_settings import download_profile_defaults
+    from sources import UpgradeChecks, UpgradeImprovement
+
+    # NPO Start can only check the length, which no default counts as better.
+    npo = download_profile_defaults(site_of("npo"))
+    assert (npo["upgrade_check"], npo["upgrade_improvements"]) == (False, [])
+
+    # As soon as a default counts something the Site offers, the check starts on.
+    site_settings(npo={"upgrade_improvements": ["length"]})
+    assert download_profile_defaults(site_of("npo"))["upgrade_check"] is True
+    site_settings(npo={"upgrade_improvements": "default"})
+    with_resolution = replace(site_of("npo"), upgrade_checks=UpgradeChecks((UpgradeImprovement.RESOLUTION, UpgradeImprovement.LENGTH)))
+    assert download_profile_defaults(with_resolution)["upgrade_check"] is True
+
+    # A user who turned the check off keeps it off, whatever counts as better.
+    site_settings(youtube={"upgrade_check": False})
+    assert download_profile_defaults(site_of("youtube"))["upgrade_check"] is False
+

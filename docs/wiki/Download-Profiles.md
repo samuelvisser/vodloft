@@ -123,11 +123,13 @@ Which episodes, downloads an episode again after a while, but only when somethin
 What the card shows depends on the Collection's site, and on the Source that downloads it. Every site can check for a
 different length. The Daily Wire also has countdown downloads; YouTube also checks for a higher resolution, SponsorBlock
 segments, subtitles and the preferred codec; other sites yt-dlp downloads check for all of those except SponsorBlock.
-NPO Start can only check for a different length, so its check starts off. A Daily Wire show added through yt-dlp gets
+NPO Start can only check for a different length. A Daily Wire show added through yt-dlp gets
 what yt-dlp offers any site.
 Subtitles only show when the Local Media Profile stores them.
 
-- **Download again when a better version is out** turns the check on. New profiles have it on.
+- **Download again when a better version is out** turns the check on. A new profile has it on when something counts
+  as better by default, and off when nothing does, such as on NPO Start. Saving a profile with nothing ticked under
+  **Better means** turns the check off.
 
 A new profile starts with its site's Download profile defaults (see [[Settings#download-profile-defaults]]), which you can
 change under **Settings → Downloads**. The defaults below are the ones VODLoft comes with.

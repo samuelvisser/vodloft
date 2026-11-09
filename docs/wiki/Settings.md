@@ -125,7 +125,7 @@ never changes a Download Profile you already have.
 Below the system defaults, each Site has a row of its own, the same way as [Per-Site scheduling](#per-site-scheduling):
 **Default** follows the system default, and a Site with a preset starts on its own value. The Daily Wire checks after
 3 days for a different length; YouTube checks for a higher resolution and new SponsorBlock segments, and counts
-3 minutes as a different length; NPO Start starts with the check off. Some settings only
+3 minutes as a different length. Some settings only
 exist on the Sites they are made for, so they have no Default: downloading with the countdown on The Daily Wire, and
 SponsorBlock and its segments on YouTube. The Daily Wire makes no subtitles, so it has no auto-generated subtitles.
 

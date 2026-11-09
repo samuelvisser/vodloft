@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 from ..contract import (
     MIN_NEWEST_EPISODES, Access, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Site, Source,
-    CookiesStatus, SiteSetting, SiteSettings, SourceProblem, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails,
+    CookiesStatus, SourceProblem, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails,
 )
 from .. import ytdlp_runner as runner
 from . import account
@@ -129,10 +129,8 @@ class NpoSource(Source):
     domains = ("npo.nl",)
     sites = (Site(
         account.SITE_KEY, "NPO Start", domains, accesses=(NPO_PLUS,),
-        # Its programme pages only tell the length, which is all the upgrade check can compare. With nothing to
-        # count as better yet, the check starts off.
+        # Its programme pages only tell the length, which is all the upgrade check can compare.
         upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,)),
-        settings=SiteSettings(presets=MappingProxyType({SiteSetting.UPGRADE_CHECK: False})),
         cookies_help=(
             "Sign in with your NPO account to download programmes that need NPO Plus. Sign in on npo.nl in a "
             "private browser window, export a cookies.txt file for npo.nl, choose it here, and then close that "
