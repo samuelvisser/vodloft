@@ -195,6 +195,55 @@ def test_the_episode_list_comes_a_page_at_a_time(db_session):
     assert (first.filters, first.downloaded) == ([2], 3)
 
 
+def test_the_episode_list_can_show_only_what_one_filter_leaves_out(db_session):
+    from backend.api.endpoints.download_profiles.service import count_which_episodes
+    from backend.api.models.download_profile import WhichEpisodesAPIRequest
+
+    collection, season = _collection(db_session)
+    for index in range(1, 7):
+        title = f"Trailer {index}" if index % 2 else f"Episode {index}"
+        _episode(db_session, collection, season, index, title, days_ago=index, duration=60.0 * index)
+
+    def page(shown, offset=0, limit=50):
+        body = WhichEpisodesAPIRequest.model_validate({
+            "collectionId": collection.id, "downloadWithCountdown": False,
+            "filters": [
+                {"action": "skip", "field": "title", "pattern": "Trailer"},
+                {"action": "only", "field": "published", "count": 1},
+            ],
+            "includeEpisodes": True, "episodesShown": shown, "episodesOffset": offset, "episodesLimit": limit,
+        })
+        return count_which_episodes(db_session, collection, body)
+
+    trailers = page("filter:0")
+    assert [episode.title for episode in trailers.episodes] == ["Trailer 1", "Trailer 3", "Trailer 5"]
+    assert trailers.episodes_total == 3
+    # The counts still cover every episode, whichever ones the list shows.
+    assert (trailers.total, trailers.filters, trailers.downloaded) == (6, [3, 2], 1)
+    assert [episode.title for episode in page("filter:1").episodes] == ["Episode 4", "Episode 6"]
+    assert [episode.title for episode in page("downloads").episodes] == ["Episode 2"]
+    assert page(None).episodes_total == 6
+
+    # The filtered list still comes a page at a time.
+    second = page("filter:0", offset=2, limit=2)
+    assert [episode.title for episode in second.episodes] == ["Trailer 5"]
+    assert second.episodes_total == 3
+
+    episode = page("downloads").episodes[0]
+    assert (episode.episode_type, episode.duration) == ("ep", 120.0)
+
+
+def test_the_episode_list_shows_only_known_groups():
+    from pydantic import ValidationError
+
+    from backend.api.models.download_profile import WhichEpisodesAPIRequest
+
+    with pytest.raises(ValidationError):
+        WhichEpisodesAPIRequest.model_validate({
+            "collectionId": 1, "downloadWithCountdown": False, "includeEpisodes": True, "episodesShown": "everything",
+        })
+
+
 def _download(session, profile, episode, **values):
     from backend.db.models.media_download import EpisodeMediaDownload
 

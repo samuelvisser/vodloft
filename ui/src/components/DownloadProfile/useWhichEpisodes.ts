@@ -11,6 +11,8 @@ export type WhichEpisodesRequest = {
     downloadWithCountdown: boolean
     filters: EpisodeFilter[]
     includeEpisodes: boolean
+    /** Lists only the episodes that download (downloads), can't be downloaded (unavailable) or one filter leaves out (filter:<index>). */
+    episodesShown?: string
 }
 
 export type WhichEpisode = NonNullable<WhichEpisodes['episodes']>[number]
@@ -82,12 +84,12 @@ export function useWhichEpisodes(request: WhichEpisodesRequest | null): State & 
         }
     }, [serialized])
 
-    const hasMore = !!state.result && !!state.episodes && state.episodes.length < state.result.total
+    const hasMore = !!state.result && !!state.episodes && state.episodes.length < (state.result.episodesTotal ?? 0)
 
     const loadMore = useCallback(() => {
         const {serialized: body, state: value} = current.current
         if (!body || !value.result || !value.episodes || value.loading || value.loadingMore) return
-        if (value.episodes.length >= value.result.total) return
+        if (value.episodes.length >= (value.result.episodesTotal ?? 0)) return
         const controller = new AbortController()
         more.current = controller
         const offset = value.episodes.length
