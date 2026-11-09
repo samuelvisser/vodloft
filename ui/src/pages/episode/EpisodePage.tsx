@@ -4,7 +4,7 @@ import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, usePublishStatusLabels, useSkippedByFilter, useSourceLookup} from '../../lib/queries'
+import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, usePublishStatusLabels, useSkippedByFilter, useSourceLookup, useWaitingForCountdown} from '../../lib/queries'
 import {useLibraryDefaults} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
@@ -74,6 +74,10 @@ export default function EpisodePage() {
         isFetching: isEpisodeFetching,
     } = useEpisode(episodeId)
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
+    const {data: waitingForCountdown} = useWaitingForCountdown(
+        collection?.id,
+        String(episode?.publishStatus) === 'published_preliminary',
+    )
     const sourceName = useSourceLookup().name(episode?.sourceKey ?? collection?.sourceKey)
     const {data: publishStatusLabels} = usePublishStatusLabels(episode?.sourceKey)
     const {
@@ -352,6 +356,9 @@ export default function EpisodePage() {
                                     const skippedBy = skipped?.find((item) => (
                                         item.episodeId === episode.id && item.localMediaProfileId === profile.id
                                     ))?.filter
+                                    const waitsForCountdown = !!waitingForCountdown?.some((item) => (
+                                        item.episodeId === episode.id && item.localMediaProfileId === profile.id
+                                    ))
                                     return (
                                         <EpisodeDownloadRow
                                             key={profile.id}
@@ -363,6 +370,7 @@ export default function EpisodePage() {
                                             confirmSafeDelayDownload={!containsCountdown && !episode.downloadDelayPassed}
                                             safeDelayReadyAt={episode.downloadDelayReadyAt}
                                             skippedBy={skippedBy}
+                                            waitsForCountdown={containsCountdown && waitsForCountdown}
                                         />
                                     )
                                 })}

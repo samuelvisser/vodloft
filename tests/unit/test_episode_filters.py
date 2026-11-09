@@ -372,6 +372,28 @@ def test_skipped_by_filter_names_the_filter(db_session):
     assert skipped.filter.pattern == "Trailer"
 
 
+def test_waiting_for_countdown_lists_the_profiles_that_wait_for_it(db_session):
+    from backend.api.endpoints.download_profiles.service import waiting_for_countdown
+
+    collection, season = _collection(db_session)
+    live = _episode(db_session, collection, season, 1, "Countdown", days_ago=1)
+    live.publish_status = "published_preliminary"
+    trailer = _episode(db_session, collection, season, 2, "Trailer countdown", days_ago=1)
+    trailer.publish_status = "published_preliminary"
+    _episode(db_session, collection, season, 3, "Final", days_ago=2)
+    waits = _profile(db_session, collection, line("skip", "title", pattern="Trailer"))
+    # A profile that downloads with the countdown does not wait, nor does a disabled one.
+    _profile(db_session, collection).download_with_countdown = True
+    _profile(db_session, collection).enable_profile = False
+    db_session.flush()
+
+    [waiting] = waiting_for_countdown(db_session, collection.id)
+
+    assert (waiting.episode_id, waiting.download_profile_id, waiting.local_media_profile_id) == (
+        live.id, waits.id, waits.local_media_profile_id,
+    )
+
+
 def test_without_an_episode_types_line_every_type_is_downloaded(db_session):
     collection, season = _collection(db_session)
     _episode(db_session, collection, season, 1, "Regular")

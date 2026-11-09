@@ -42,6 +42,7 @@ export function EpisodeDownloadRow({
     confirmSafeDelayDownload,
     safeDelayReadyAt,
     skippedBy,
+    waitsForCountdown = false,
 }: {
     profile: LocalMediaProfileRead
     download?: MediaDownloadViewRead
@@ -52,6 +53,8 @@ export function EpisodeDownloadRow({
     safeDelayReadyAt: Date | null
     /** The Which episodes filter that keeps this episode from downloading automatically. */
     skippedBy?: EpisodeFilter
+    /** Whether its Download Profile downloads this episode by itself once the countdown is gone. */
+    waitsForCountdown?: boolean
 }) {
     const {busy, request, cancel, retry, present, isStarting} = useDownloadRowRequest(['episodeDownloads', episodeSlug])
     const starting = isStarting(download)
@@ -222,6 +225,8 @@ export function EpisodeDownloadRow({
     ) : null
     const skippedNote = skippedBy && !download ? (
         <span title="Which episodes on its Download Profile">Skipped by filter: {plainText(filterSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}</span>
+    ) : waitsForCountdown && !download ? (
+        <span title="Its Download Profile does not download episodes that still contain the countdown">Waiting for the countdown to be removed</span>
     ) : kept ? <span>Kept</span> : null
     const upgrade = download && upgradeText(download)
     const note = skippedNote || upgrade
@@ -248,7 +253,7 @@ export function EpisodeDownloadRow({
             onDownload={requestDownload}
             onCancel={() => download && void cancel(download)}
             note={note}
-            downloadLabel={skippedBy && !download ? 'Download anyway' : 'Download'}
+            downloadLabel={(skippedBy || waitsForCountdown) && !download ? 'Download anyway' : 'Download'}
             actions={keepButton}
         >
             <ConfirmDialog

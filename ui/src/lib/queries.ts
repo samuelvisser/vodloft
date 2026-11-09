@@ -36,7 +36,7 @@ import {
     LocalMediaProfileViewRead,
     LocalMediaProfileViewReadSchema,
 } from "../types/schemas/local_media_profile";
-import {AutoSubtitlesUseSchema, DownloadProfileRead, DownloadProfileReadSchema, SiteOptionsSchema, SkippedByFilterSchema} from "../types/schemas/download_profile";
+import {AutoSubtitlesUseSchema, DownloadProfileRead, DownloadProfileReadSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {ProfileIdsSchema} from '../types/schemas/profile_bulk'
 
@@ -938,6 +938,19 @@ export function useSkippedByFilter(collectionId?: number) {
         queryFn: ({signal}) => fetchParsed(
             `${apiUrl()}/download-profiles/skipped-by-filter/${collectionId}`,
             SkippedByFilterSchema.array(),
+            signal,
+        ),
+    })
+}
+
+/** Episodes of a Collection that still contain their countdown, which its Download Profiles download once it is gone. */
+export function useWaitingForCountdown(collectionId?: number, enabled = true) {
+    return useQuery({
+        queryKey: ['waitingForCountdown', collectionId] as const,
+        enabled: enabled && collectionId !== undefined,
+        queryFn: ({signal}) => fetchParsed(
+            `${apiUrl()}/download-profiles/waiting-for-countdown/${collectionId}`,
+            WaitingForCountdownSchema.array(),
             signal,
         ),
     })
