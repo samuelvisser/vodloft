@@ -249,6 +249,14 @@ class SkippedByFilterAPIRead(ResponseBase):
     filter: DownloadProfileFilterAPIRead
 
 
+class WaitingForCountdownAPIRead(ResponseBase):
+    """An episode that still contains its countdown, which a Download Profile downloads once the countdown is gone."""
+
+    episode_id: int
+    download_profile_id: int
+    local_media_profile_id: int
+
+
 class AutoSubtitlesUseAPIRead(ResponseBase):
     """A YouTube Download Profile that uses a Local Media Profile, and its auto-generated subtitle choice."""
 

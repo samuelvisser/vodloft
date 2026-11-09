@@ -94,6 +94,16 @@ def download_profiles_skipped_by_filter(collection_id: int, request: Request):
         return skipped_by_filter(s, collection_id)
 
 
+@router.get("/waiting-for-countdown/{collection_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.LIBRARY, Level.VIEW))], response_model=list[WaitingForCountdownAPIRead])
+def download_profiles_waiting_for_countdown(collection_id: int, request: Request):
+    """Episodes of the Collection that a Download Profile downloads once their countdown is gone."""
+    with db_session() as s:
+        collection = s.get(Collection, collection_id)
+        if collection is None or not deps.request_access(request).allows_source(collection.source_key):
+            raise HTTPException(status_code=404, detail="Collection not found")
+        return waiting_for_countdown(s, collection_id)
+
+
 @router.get("/site-options/{collection_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=SiteOptionsAPIRead)
 def download_profiles_site_options(collection_id: int, request: Request):
     """Choices only some sites offer, such as YouTube's auto-generated subtitles, for a saved Collection."""

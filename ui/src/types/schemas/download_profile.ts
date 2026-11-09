@@ -229,6 +229,14 @@ export const SkippedByFilterSchema = z.object({
 })
 export type SkippedByFilter = z.infer<typeof SkippedByFilterSchema>
 
+/** An episode that still contains its countdown, which a Download Profile downloads once the countdown is gone. */
+export const WaitingForCountdownSchema = z.object({
+    episodeId: z.int(),
+    downloadProfileId: z.int(),
+    localMediaProfileId: z.int(),
+})
+export type WaitingForCountdown = z.infer<typeof WaitingForCountdownSchema>
+
 export const AutoSubtitlesUseSchema = z.object({
     downloadProfileId: z.number(),
     collectionId: z.number(),

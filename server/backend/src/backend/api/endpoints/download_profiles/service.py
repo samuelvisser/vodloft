@@ -12,6 +12,7 @@ from backend.api.models.download_profile import (
     DownloadProfileAPIRead,
     DownloadProfileAPIUpdate,
     SkippedByFilterAPIRead,
+    WaitingForCountdownAPIRead,
     WhichEpisodesAPIRead,
     WhichEpisodesAPIRequest,
     WhichEpisodesEpisodeAPIRead,
@@ -22,6 +23,7 @@ from backend.db.models.download_profile import DownloadProfile
 from backend.services.episode_filters import (
     EpisodeSelection, collection_episodes, evaluate, is_date_line, published_at, set_profile_filters,
 )
+from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.utils.local_media_profiles import require_local_media_profile_type
 from backend.services.sites import collection_site
@@ -198,6 +200,32 @@ def skipped_by_filter(s: Session, collection_id: int) -> list[SkippedByFilterAPI
                 "filter": profile.filters[index],
             }))
     return skipped
+
+
+def waiting_for_countdown(s: Session, collection_id: int) -> list[WaitingForCountdownAPIRead]:
+    """Episodes of the Collection that still contain their countdown, which an enabled Download Profile
+    that waits for the countdown to be gone will download then."""
+    episodes = collection_episodes(s, collection_id)
+    if not any(episode.publish_status == EpisodePublishStatus.PUBLISHED_PRELIMINARY.value for episode in episodes):
+        return []
+    waiting: list[WaitingForCountdownAPIRead] = []
+    profiles = s.scalars(select(DownloadProfile).where(
+        DownloadProfile.collection_id == collection_id,
+        DownloadProfile.enable_profile.is_(True),
+        DownloadProfile.download_with_countdown.is_(False),
+    ))
+    for profile in profiles:
+        # Which episodes the profile wants once the countdown is gone: as if it took them with the countdown.
+        selection = EpisodeSelection(collection=profile.collection, download_with_countdown=True, filters=list(profile.filters))
+        for episode in evaluate(s, selection, episodes=episodes).wanted:
+            if episode.publish_status != EpisodePublishStatus.PUBLISHED_PRELIMINARY.value:
+                continue
+            waiting.append(WaitingForCountdownAPIRead.model_validate({
+                "episode_id": episode.id,
+                "download_profile_id": profile.id,
+                "local_media_profile_id": profile.local_media_profile_id,
+            }))
+    return waiting
 
 
 def auto_subtitles_uses(s: Session, local_media_profile_id: int, access) -> list[AutoSubtitlesUseAPIRead]:

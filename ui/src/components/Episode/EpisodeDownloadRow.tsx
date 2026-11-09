@@ -16,8 +16,12 @@ import {
     shouldPromptForSafeDelay,
 } from './SafeDelayDownloadDialogs'
 
-/** What the upgrade check did or will do for a download, such as "Checks for a better version on Nov 10". */
+/** What happens to a download later, such as "Checks for a better version on Nov 10". */
 function upgradeText(download: MediaDownloadViewRead): string | null {
+    // A download of the countdown version is replaced once the countdown is gone; the upgrade check waits for that.
+    if (download.redownloadWhenFinal && download.presentation.outcome === 'success') {
+        return 'Re-downloads once the countdown is removed'
+    }
     if (download.upgradeResult === 'upgraded') return 'Upgraded to a better version'
     if (download.upgradeCheckAt) {
         const day = download.upgradeCheckAt.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})
@@ -42,6 +46,7 @@ export function EpisodeDownloadRow({
     confirmSafeDelayDownload,
     safeDelayReadyAt,
     skippedBy,
+    waitsForCountdown = false,
 }: {
     profile: LocalMediaProfileRead
     download?: MediaDownloadViewRead
@@ -52,6 +57,8 @@ export function EpisodeDownloadRow({
     safeDelayReadyAt: Date | null
     /** The Which episodes filter that keeps this episode from downloading automatically. */
     skippedBy?: EpisodeFilter
+    /** Whether its Download Profile downloads this episode by itself once the countdown is gone. */
+    waitsForCountdown?: boolean
 }) {
     const {busy, request, cancel, retry, present, isStarting} = useDownloadRowRequest(['episodeDownloads', episodeSlug])
     const starting = isStarting(download)
@@ -222,6 +229,8 @@ export function EpisodeDownloadRow({
     ) : null
     const skippedNote = skippedBy && !download ? (
         <span title="Which episodes on its Download Profile">Skipped by filter: {plainText(filterSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}</span>
+    ) : waitsForCountdown && !download ? (
+        <span title="Its Download Profile does not download episodes that still contain the countdown">Waiting for the countdown to be removed</span>
     ) : kept ? <span>Kept</span> : null
     const upgrade = download && upgradeText(download)
     const note = skippedNote || upgrade
@@ -248,7 +257,7 @@ export function EpisodeDownloadRow({
             onDownload={requestDownload}
             onCancel={() => download && void cancel(download)}
             note={note}
-            downloadLabel={skippedBy && !download ? 'Download anyway' : 'Download'}
+            downloadLabel={(skippedBy || waitsForCountdown) && !download ? 'Download anyway' : 'Download'}
             actions={keepButton}
         >
             <ConfirmDialog
