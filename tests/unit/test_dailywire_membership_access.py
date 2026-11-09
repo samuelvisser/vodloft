@@ -141,3 +141,23 @@ def test_the_background_migration_learns_the_level_of_an_existing_sign_in(keyrin
 
     assert calls == [DwMembershipLevel.INSIDER]
     assert get_source("dailywire").has_access("INSIDER") is True
+
+
+def test_the_level_the_daily_wire_gives_as_text_is_kept(keyring_store, monkeypatch):
+    from sources.dailywire.api.dw_api.client import MiddlewareClient
+    from sources.dailywire.auth import DeviceAuthClient
+
+    _sign_in(keyring_store, expires_in=3600)
+    payload = {
+        "personId": "p", "subscriptionId": "s", "recurlyAccountCode": "r", "username": "u", "email": "e",
+        "firstName": "f", "lastName": "l", "avatar": "a", "accessLevel": "ALL_ACCESS", "planType": "t",
+        "accountCreatedAt": "2024-01-01T00:00:00Z",
+    }
+    monkeypatch.setattr(MiddlewareClient, "_get", lambda self, *args, **kwargs: payload)
+    assert DeviceAuthClient().get_token() is not None
+
+    membership.look_up_level()
+
+    assert membership.account_level() is DwMembershipLevel.ALL_ACCESS
+    membership._loaded = False
+    assert get_source("dailywire").has_access("INSIDER") is True
