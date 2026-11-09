@@ -16,6 +16,17 @@ import {
     shouldPromptForSafeDelay,
 } from './SafeDelayDownloadDialogs'
 
+/** What the upgrade check did or will do for a download, such as "Checks for a better version on Nov 10". */
+function upgradeText(download: MediaDownloadViewRead): string | null {
+    if (download.upgradeResult === 'upgraded') return 'Upgraded to a better version'
+    if (download.upgradeCheckAt) {
+        const day = download.upgradeCheckAt.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})
+        return `${download.upgradeCheckAt.getTime() > Date.now() ? 'Checks' : 'Checked'} for a better version on ${day}`
+    }
+    if (download.upgradeResult === 'checked') return 'Checked: no better version'
+    return null
+}
+
 type SafeDelayAction = 'download' | 'retry'
 type SafeDelayDialogState = {
     action: SafeDelayAction
@@ -212,6 +223,10 @@ export function EpisodeDownloadRow({
     const skippedNote = skippedBy && !download ? (
         <span title="Which episodes on its Download Profile">Skipped by filter: {plainText(filterSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}</span>
     ) : kept ? <span>Kept</span> : null
+    const upgrade = download && upgradeText(download)
+    const note = skippedNote || upgrade
+        ? <>{skippedNote}{skippedNote && upgrade && ' · '}{upgrade}</>
+        : null
     return (
         <DownloadRow
             profile={profile}
@@ -232,7 +247,7 @@ export function EpisodeDownloadRow({
                 : null}
             onDownload={requestDownload}
             onCancel={() => download && void cancel(download)}
-            note={skippedNote}
+            note={note}
             downloadLabel={skippedBy && !download ? 'Download anyway' : 'Download'}
             actions={keepButton}
         >

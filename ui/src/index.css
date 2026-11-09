@@ -964,11 +964,6 @@ input[type="time"] {
   text-overflow: ellipsis;
 }
 
-.episode-upgrade {
-  margin-top: 3px;
-  font-size: 12px;
-  color: var(--muted);
-}
 
 
 .episode-title {
