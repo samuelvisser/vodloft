@@ -99,8 +99,9 @@ export function YouTubeApiKey() {
                     {hasKey && <span className={`youtube-api-state ${status?.problem ? 'is-problem' : 'is-ok'}`}>{status?.problem ? 'Not working' : 'Connected'}</span>}
                 </h4>
                 <p>
-                    Optional. With a free API key, VODLoft lists YouTube channels and finds new videos much faster.
-                    yt-dlp still downloads everything, and VODLoft works without a key.
+                    Optional. With a free API key, VODLoft lists YouTube channels and finds new videos much faster,
+                    and its daily re-scan notices removed and private videos and keeps descriptions and thumbnails
+                    current. yt-dlp still downloads everything, and VODLoft works without a key.
                 </p>
                 {loadError && <p className="source-setting-error" role="alert">Could not load the API key status: {loadError.message}</p>}
                 <form

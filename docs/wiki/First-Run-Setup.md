@@ -6,6 +6,8 @@ On first launch, VODLoft shows the services it can add media from, helps you rev
 
 VODLoft calls the services it adds media from **Sources**: The Daily Wire, yt-dlp for YouTube and many other sites, and NPO Start. The first-run setup lists each Source, and offers signing in per site as an optional step: The Daily Wire has a sign-in of its own, and other sites, such as YouTube or NPO Start, sign in with a cookies file. See [[Sources]] and [[Settings#authentication]].
 
+YouTube's row also takes an optional, free YouTube Data API key. yt-dlp downloads every video with or without one, but with a key the daily re-scan notices removed and private videos and keeps descriptions and thumbnails current, and adding channels, checking for new videos and searching YouTube get much quicker. See [[Settings#youtube-data-api-key]].
+
 For The Daily Wire, VODLoft uses The Daily Wire's device authorization flow. Follow the instructions shown by VODLoft and authorize the connection on The Daily Wire's own site.
 
 VODLoft does **not** ask for your The Daily Wire password.

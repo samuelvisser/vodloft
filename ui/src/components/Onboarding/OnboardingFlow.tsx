@@ -198,8 +198,9 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         <h1>Where your media comes from</h1>
                         <p>
                             VODLoft adds collections and movies from these services. Signing in is per site, and
-                            optional: it is only needed for content that requires an account, and you can do it later in
-                            Settings › Sources.
+                            optional: it is only needed for content that requires an account. A free YouTube API key,
+                            on the YouTube row, keeps your YouTube collections up to date much better. You can do all of
+                            this later in Settings › Sources.
                         </p>
                     </div>
                     <ul className="onboarding-source-list">

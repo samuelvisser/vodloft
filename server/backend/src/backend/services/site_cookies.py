@@ -74,9 +74,13 @@ class SortedCookies:
 
 
 def _known_sites(s: Session) -> dict[str, tuple[Site, tuple[str, ...]]]:
-    """Every Site VODLoft knows, with every domain it knows for it: the Sites a Source is made for,
-    the Sites it has seen, and the Sites that still have a cookies file."""
+    """Every Site VODLoft knows, with every domain it knows for it: the Sites a Source is made for or
+    takes an API key for, the Sites it has seen, and the Sites that still have a cookies file."""
     found: dict[str, tuple[Site, tuple[str, ...]]] = {site.key: (site, site.domains) for site in named_sites()}
+    for source in all_sources():
+        if source.has(Feature.API_KEY):
+            for site in source.api_key_sites:
+                found.setdefault(site.key, (site, site.domains))
     for record in s.scalars(select(SiteRecord)).all():
         site, domains = found.get(record.key, (site_of(record.key), ()))
         merged = tuple(dict.fromkeys((*domains, *record.domains)))
