@@ -378,7 +378,7 @@ def _refusing(monkeypatch, slug: str) -> None:
     """yt-dlp refuses to look up this one video for lack of a channel membership."""
     answer = runner.run_json
 
-    def run_json(*args):
+    def run_json(*args, **_kwargs):
         if args[-1].endswith(f"v={slug}"):
             raise runner.YtDlpError(_MEMBERS_ERROR)
         return answer(*args)

@@ -1,4 +1,4 @@
-"""When a Collection's downloads use the Source's cookies file, as chosen on its edit page.
+"""When a Collection's downloads use its Site's cookies file, as chosen on its edit page.
 
 Signing in for every download can get an account flagged, so by default a Collection downloads without the cookies
 file. When a download fails because the Source wanted someone signed in, the Collection uses the cookies file for a
@@ -17,6 +17,7 @@ from backend.db.models.media_download import MediaDownloadBase
 from backend.types.collection_types import CookiesMode
 from sources import get_source
 from sources.contract import Feature
+from sources.cookies import site_cookies
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ def note_failed_download(session: Session, media_download_id: int, error: str) -
     if (
         collection.cookies_mode != CookiesMode.AUTOMATIC
         or not source.has(Feature.OPTIONAL_COOKIES)
-        or not source.has_cookies()
+        or site_cookies(collection.site_key) is None
         or not source.needs_cookies(error)
     ):
         return False

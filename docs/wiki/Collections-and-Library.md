@@ -53,8 +53,8 @@ A Collection's edit page has two choices that are normally best left alone.
 After about three weeks VODLoft knows how often a Collection posts, and the edit page suggests a choice when another
 one would suit it better.
 
-**Use the cookies file** appears for Collections from the yt-dlp Source, once you added a cookies file under
-Settings, Sources. Signing in for every download can get an account flagged, so by default (**Only when needed**) a
+**Use the cookies file** appears for Collections from the yt-dlp Source. It uses the cookies file of the Collection's
+site, added under Settings › Sources › Authentication. Signing in for every download can get an account flagged, so by default (**Only when needed**) a
 Collection downloads without the cookies file. When a download fails because the site wants you signed in, such as a
 bot check or a members-only video, the Collection uses the cookies file for a week, starting with the retry. The edit
 page shows when that is the case. **Always** and **Never** do what they say.

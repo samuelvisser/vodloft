@@ -2,12 +2,17 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
-    ApiKeyAPIUpdate, ApiStatusAPIRead, CookiesAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
+    ApiKeyAPIUpdate, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
+    SiteAddAPIRequest, SiteAddedAPIRead, SiteAuthenticationAPIRead,
 )
 from backend.app import db_session
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
+from backend.services.site_cookies import (
+    SiteAuthentication, SiteNotKnownError, list_site_authentication, remove_site_cookies, save_site_cookies,
+)
+from backend.services.sites import SiteLinkError, add_site, site_of_link
 from backend.services.access_checks import access_changed
 from backend.services.site_settings import download_profile_defaults, offered_settings
 from backend.services.source_options import save_ytdlp_source_options, ytdlp_source_options
@@ -51,6 +56,17 @@ def source_sites():
     """Every Site a Source is made for, with the Sources that can handle its links."""
     with db_session() as s:
         return list_source_sites(s)
+
+
+@router.post("/sources/sites", dependencies=[requires_any((Area.SOURCES, Level.MANAGE), (Area.SETTINGS, Level.MANAGE))], response_model=SiteAddedAPIRead)
+def add_site_by_link(body: SiteAddAPIRequest):
+    """Add the Site of a link before VODLoft has anything from it, so it gets its own settings and authentication."""
+    with db_session() as s:
+        try:
+            site = site_of_link(s, body.url.strip())
+        except SiteLinkError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return run_write_transaction(lambda s: SiteAddedAPIRead.model_validate(add_site(s, site)), concurrent=True)
 
 
 @router.put("/sources/sites/{key}", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SourceSiteAPIRead)
@@ -162,34 +178,42 @@ def update_program(source_id: str):
     return update_source_program(_source(source_id, Feature.PROGRAM_UPDATES))
 
 
-@router.get("/sources/{source_id}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=CookiesAPIRead)
-def cookies(source_id: str):
-    return _cookies(_source(source_id, Feature.COOKIES))
+@router.get("/sources/authentication", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=list[SiteAuthenticationAPIRead])
+def site_authentication():
+    """Every Site VODLoft knows, with its sign-in, its cookies file and its API key."""
+    with db_session() as s:
+        return [SiteAuthenticationAPIRead.model_validate(listing) for listing in list_site_authentication(s)]
 
 
-@router.put("/sources/{source_id}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=CookiesAPIRead)
-def save_cookies(source_id: str, body: CookiesAPIUpdate):
-    """Store a cookies.txt file that the Source uses for every lookup and download."""
-    source = _source(source_id, Feature.COOKIES)
-    try:
-        source.save_cookies(body.content.encode())
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+@router.put("/sources/authentication/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def save_site_cookie_file(site_key: str, body: CookiesAPIUpdate):
+    """Store the Site's cookies of a cookies.txt file, which every Source uses for lookups and downloads on the Site."""
+    with db_session() as s:
+        try:
+            listing = save_site_cookies(s, site_key, body.content.encode())
+        except SiteNotKnownError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _sign_in_changed(listing)
+    return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+@router.delete("/sources/authentication/{site_key}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def remove_site_cookie_file(site_key: str):
+    with db_session() as s:
+        try:
+            listing = remove_site_cookies(s, site_key)
+        except SiteNotKnownError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _sign_in_changed(listing)
+    return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+def _sign_in_changed(listing: SiteAuthentication) -> None:
     # The new sign-in may give videos VODLoft could not download before.
-    access_changed(source.id)
-    return _cookies(source)
-
-
-@router.delete("/sources/{source_id}/cookies", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=CookiesAPIRead)
-def remove_cookies(source_id: str):
-    source = _source(source_id, Feature.COOKIES)
-    source.remove_cookies()
-    return _cookies(source)
-
-
-def _cookies(source: Source) -> CookiesAPIRead:
-    has_cookies = source.has_cookies()
-    return CookiesAPIRead(has_cookies=has_cookies, status=source.cookies_status() if has_cookies else None)
+    for source_key in listing.cookie_source_keys:
+        access_changed(source_key)
 
 
 def _api_key_rejected(exc: ApiKeyRejected) -> HTTPException:

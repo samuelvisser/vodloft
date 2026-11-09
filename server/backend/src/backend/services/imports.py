@@ -804,10 +804,20 @@ def _apply_setting(key: str, value: object, session: Session | None = None) -> N
     source = get_source("ytdlp")
     if key == "ytdlp.youtube_api_key":
         source.save_api_key(str(value))
-    elif key == "ytdlp.cookies":
-        source.save_cookies(Path(str(value)).read_bytes())
+    elif key == "ytdlp.cookies" and session is not None:
+        _import_cookies(session, Path(str(value)).read_bytes())
     else:
         raise ImportServiceError(f"VODLoft can't apply the setting {key}")
+
+
+def _import_cookies(session: Session, content: bytes) -> None:
+    """Sort the other program's cookies file into VODLoft's Sites, adding the Sites its domains tell."""
+    from backend.services.site_cookies import add_sites, sites_for_cookies, sort_cookies
+
+    add_sites(session, sites_for_cookies(session, content))
+    session.flush()
+    if not sort_cookies(session, content).sites:
+        raise ImportServiceError("The cookies file has no cookies for a Site VODLoft knows")
 
 
 IMPORTED_DESTINATION = "Pinchflat"

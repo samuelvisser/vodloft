@@ -188,7 +188,7 @@ def test_a_listing_says_which_videos_anyone_may_watch(monkeypatch):
         {"id": "mem", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=mem", "title": "Members",
          "availability": "subscriber_only"},
     ]
-    monkeypatch.setattr(runner, "run_json", lambda *args: (
+    monkeypatch.setattr(runner, "run_json", lambda *args, **_kwargs: (
         {"entries": entries} if args[-1] == channel else (_ for _ in ()).throw(runner.YtDlpError("no such tab"))
     ))
     monkeypatch.setattr(YtDlpSource, "_catalogue", lambda self, adding: None)

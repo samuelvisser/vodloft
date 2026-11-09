@@ -1,6 +1,6 @@
 import {useSources} from '../../lib/queries'
 import {ANY_DOMAIN, SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
-import SourceCookiesCard from '../Source/SourceCookiesCard'
+import SiteAuthenticationCard from '../Source/SiteAuthenticationCard'
 import SourceSitesCard from '../Source/SourceSitesCard'
 import SourceProgramCard from '../Source/SourceProgramCard'
 import SourceSection from '../Source/SourceSection'
@@ -31,11 +31,9 @@ const SETTING_FEATURES: readonly string[] = [
 ]
 
 function SourceCard({source, tabProps}: {source: SourceRead; tabProps: SettingsTabProps}) {
-    const {SignIn, Settings} = sourceComponents(source.id)
+    const {Settings} = sourceComponents(source.id)
     const parts = [
-        sourceHas(source, SourceFeature.LOGIN) && SignIn ? <SignIn key="sign-in"/> : null,
         sourceHas(source, SourceFeature.PROGRAM_UPDATES) ? <SourceProgramCard key="program" source={source}/> : null,
-        sourceHas(source, SourceFeature.COOKIES) ? <SourceCookiesCard key="cookies" source={source}/> : null,
         Settings ? <Settings key="settings" {...tabProps}/> : null,
         sourceHas(source, SourceFeature.YTDLP_OPTIONS) ? <SourceYtdlpOptionsCard key="ytdlp-options" source={source}/> : null,
     ].filter(Boolean)
@@ -64,8 +62,9 @@ export default function SourcesSettingsTab(tabProps: SettingsTabProps) {
         <div className="source-card-list">
             <p className="view-description">
                 The services VODLoft can add media from. A link you paste on the Add media page goes to the Source that
-                recognises it. Signing in is optional, and only needed for content that requires an account.
+                recognises it. Signing in and API keys are optional, and set up per site under Authentication.
             </p>
+            <SiteAuthenticationCard/>
             {(sources ?? []).map((source) => (
                 <SourceCard key={source.id} source={source} tabProps={tabProps}/>
             ))}

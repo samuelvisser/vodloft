@@ -25,7 +25,7 @@ def lookups(monkeypatch):
     answers: dict[tuple[str, ...], dict | str] = {}
     calls: list[tuple[str, ...]] = []
 
-    def run_json(*args):
+    def run_json(*args, **_kwargs):
         calls.append(args)
         answer = answers.get(args, "Video unavailable")
         if isinstance(answer, str):

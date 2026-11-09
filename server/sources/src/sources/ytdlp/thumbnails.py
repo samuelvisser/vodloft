@@ -18,6 +18,7 @@ import requests
 from config import get_settings
 from downloader.ytdlp import error_message
 from .. import ytdlp_runner as runner
+from .sites import cookies_for
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ def first_frame(url: str) -> bytes | None:
         try:
             result = subprocess.run(
                 [
-                    *runner.command(), "--no-playlist", "--no-progress", "--ffmpeg-location", ffmpeg_program,
+                    *runner.command(cookies=cookies_for(url)), "--no-playlist", "--no-progress", "--ffmpeg-location", ffmpeg_program,
                     "-f", _FRAME_FORMAT, "--download-sections", f"*0-{_FRAME_SECONDS}",
                     "--merge-output-format", "mp4", "-o", str(clip), url,
                 ],

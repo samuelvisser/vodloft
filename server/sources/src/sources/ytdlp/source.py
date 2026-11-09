@@ -374,13 +374,15 @@ def _sponsorblock_segments(video_id: str, categories: Sequence[str]) -> tuple[Sp
 
 
 def _lookup(*args: str) -> dict:
-    """Look up a link. A video protected by DRM is looked up again for its details alone."""
+    """Look up a link, the last argument, signed in on its Site. A video protected by DRM is looked up
+    again for its details alone."""
+    cookies = sites.cookies_for(args[-1])
     try:
-        return runner.run_json(*args)
+        return runner.run_json(*args, cookies=cookies)
     except runner.YtDlpError as exc:
         if not is_drm_message(str(exc)):
             raise
-    info = runner.run_json("--allow-unplayable-formats", *args)
+    info = runner.run_json("--allow-unplayable-formats", *args, cookies=cookies)
     return {**info, "_has_drm": True}
 
 
@@ -753,7 +755,7 @@ class YtDlpSource(Source):
         finally:
             pacing.pause(_LISTING_PAUSE_SECONDS)
         try:
-            info = runner.run_json("--no-playlist", "--ignore-no-formats-error", url)
+            info = runner.run_json("--no-playlist", "--ignore-no-formats-error", url, cookies=sites.cookies_for(url))
         except runner.YtDlpError:
             raise error from None
         finally:
@@ -794,7 +796,10 @@ class YtDlpSource(Source):
         entries: dict[str, dict] = {}
         for index, listing_url in enumerate(_listing_urls(url)):
             try:
-                listing = runner.run_json("--flat-playlist", "--extractor-args", "youtubetab:approximate_date", listing_url)
+                listing = runner.run_json(
+                    "--flat-playlist", "--extractor-args", "youtubetab:approximate_date", listing_url,
+                    cookies=sites.cookies_for(listing_url),
+                )
             except runner.YtDlpError as exc:
                 if index == 0:
                     raise
@@ -861,7 +866,9 @@ class YtDlpSource(Source):
                     return youtube_rss.latest_videos(**_feed(ref))
             except (youtube_rss.FeedError, runner.YtDlpError) as exc:
                 logger.info("Reading the newest videos of %s with yt-dlp, because its RSS feed could not be read: %s", url, exc)
-        listing = runner.run_json("--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", _listing_urls(url)[0])
+        listing = runner.run_json(
+            "--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", _listing_urls(url)[0], cookies=sites.cookies_for(url),
+        )
         return [
             self._video(entry, entry.get("url") or entry.get("webpage_url"))
             for entry in listing.get("entries") or []
@@ -873,7 +880,9 @@ class YtDlpSource(Source):
         items: dict[str, ItemRef] = {}
         for index, listing_url in enumerate(_listing_urls(url)):
             try:
-                listing = runner.run_json("--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", listing_url)
+                listing = runner.run_json(
+                    "--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", listing_url, cookies=sites.cookies_for(listing_url),
+                )
             except runner.YtDlpError as exc:
                 if index == 0:
                     raise
@@ -1035,7 +1044,7 @@ class YtDlpSource(Source):
         listed_open: set[str] = set()
         for listing_url in _listing_urls(url):
             try:
-                listing = runner.run_json("--flat-playlist", listing_url)
+                listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
             except runner.YtDlpError as exc:
                 logger.info("Not refreshing from %s: %s", listing_url, exc)
                 continue
@@ -1103,24 +1112,24 @@ class YtDlpSource(Source):
         return interval or settings.min_check_interval_minutes
 
     def video_playback(self, *, slug: str, url: str, use_cookies: bool = True) -> Playback:
-        return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command(cookies=use_cookies))
+        return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command(cookies=sites.cookies_for(url, use_cookies)))
 
     def media_stream(self, url: str, *, audio: bool, use_cookies: bool = True) -> MediaStream | None:
         if not self.site_for(url).streams:
             raise NotImplementedError(f"{self.site_for(url).name} cannot stream episodes")
-        return stream_of(runner.run_json("--no-playlist", url, cookies=use_cookies), audio=audio)
+        return stream_of(runner.run_json("--no-playlist", url, cookies=sites.cookies_for(url, use_cookies)), audio=audio)
 
     def live_stream(self, url: str, *, use_cookies: bool = True) -> LiveStream | None:
         site = self.site_for(url)
         if StreamMethod.LIVE not in site.stream_methods:
             raise NotImplementedError(f"{site.name} cannot stream live episodes")
-        return live_of(runner.run_json("--no-playlist", url, cookies=use_cookies), site.stream_video_heights)
+        return live_of(runner.run_json("--no-playlist", url, cookies=sites.cookies_for(url, use_cookies)), site.stream_video_heights)
 
     def media_tracks(self, url: str, *, use_cookies: bool = True) -> MediaTracks | None:
         site = self.site_for(url)
         if StreamMethod.HLS not in site.stream_methods:
             raise NotImplementedError(f"{site.name} cannot stream episodes as tracks")
-        return tracks_of(runner.run_json("--no-playlist", url, cookies=use_cookies), site.stream_video_heights)
+        return tracks_of(runner.run_json("--no-playlist", url, cookies=sites.cookies_for(url, use_cookies)), site.stream_video_heights)
 
     def needs_cookies(self, error: str) -> bool:
         text = error.lower()
@@ -1143,15 +1152,6 @@ class YtDlpSource(Source):
     def update_program(self) -> ProgramStatus:
         runner.update()
         return self.program_status()
-
-    def has_cookies(self) -> bool:
-        return runner.cookies_path().is_file()
-
-    def save_cookies(self, content: bytes) -> None:
-        runner.save_cookies(content)
-
-    def remove_cookies(self) -> None:
-        runner.remove_cookies()
 
     def problems(self) -> list[SourceProblem]:
         if api_key.load() is None:

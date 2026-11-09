@@ -39,7 +39,7 @@ def test_a_video_the_api_leaves_out_is_only_removed_when_ytdlp_says_it_is_gone(y
     }
     answer = runner.run_json
 
-    def run_json(*args):
+    def run_json(*args, **_kwargs):
         if args[-1].endswith("v=members"):
             raise runner.YtDlpError("ERROR: [youtube] members: Join this channel to get access to members-only content")
         return answer(*args)

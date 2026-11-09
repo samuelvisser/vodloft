@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Site, Video
-from sources import Site as SourceSite, collection_on_site, site_for, source_site
+from sources import Site as SourceSite, collection_on_site, site_for, source_site, sources_for
 
 
 class CollectionAlreadyAddedError(ValueError):
@@ -81,3 +81,22 @@ def place_video(s: Session, video: Video) -> None:
 def preferred_sources(s: Session) -> dict[str, str]:
     """The Source the user asks first, per Site key."""
     return dict(s.execute(select(Site.key, Site.preferred_source_key).where(Site.preferred_source_key.is_not(None))).all())
+
+
+class SiteLinkError(ValueError):
+    pass
+
+
+def site_of_link(s: Session, url: str) -> SourceSite:
+    """The Site of a link, as the Source VODLoft asks first for it tells, without a network request."""
+    candidates = sources_for(url, preferred_sources(s))
+    if not candidates or not url.lower().startswith(("http://", "https://")):
+        raise SiteLinkError("Paste a link to a page on the site, starting with https://")
+    return site_for(url, candidates[0].id)
+
+
+def add_site(s: Session, site: SourceSite) -> Site:
+    """Remember a Site before VODLoft has anything from it, so it can get its own settings and sign-in."""
+    record = site_record(s, site)
+    s.flush()
+    return record

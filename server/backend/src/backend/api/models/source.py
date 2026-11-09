@@ -110,7 +110,6 @@ class SourceAPIRead(ResponseBase):
     sites_label: Optional[str] = None
     search_label: Optional[str] = None
     kind_names: dict[str, str] = {}
-    cookies_help: Optional[str] = None
     download_options: DownloadOptionsAPIRead
 
     @field_validator("features", mode="before")
@@ -171,9 +170,34 @@ class CookiesStatusAPIRead(ResponseBase):
     detail: Optional[str] = None
 
 
-class CookiesAPIRead(ResponseBase):
+class SiteAuthenticationAPIRead(ResponseBase):
+    """A Site, and how VODLoft signs in on it or gets at its API: a Source's own sign-in, the Site's cookies
+    file, or a Source's API key."""
+
+    key: str
+    name: str
+    domains: list[str]
+    sign_in_source_key: Optional[str] = None
+    """The Source made for the Site with a sign-in of its own, such as The Daily Wire's."""
+    cookie_source_names: list[str]
+    """The Sources that sign in on the Site with its cookies file; none when nothing uses one there."""
+    cookies_help: Optional[str] = None
     has_cookies: bool
-    status: Optional[CookiesStatusAPIRead] = None
+    cookie_count: int
+    cookies_status: Optional[CookiesStatusAPIRead] = None
+    api_key_source_key: Optional[str] = None
+    """The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key."""
+
+
+class SiteAddAPIRequest(RequestBase):
+    url: str = Field(min_length=1, max_length=2048)
+
+
+class SiteAddedAPIRead(ResponseBase):
+    """A Site added by a link to it."""
+
+    key: str
+    name: str
 
 
 def checked_ytdlp_options(value: str) -> str:

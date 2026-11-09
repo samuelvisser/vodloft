@@ -1,0 +1,8 @@
+.site-authentication__body.site-settings-site__body {
+    padding: 14px 16px 16px;
+}
+
+.site-authentication__body > .source-setting:first-child {
+    padding-top: 0;
+    border-top: 0;
+}

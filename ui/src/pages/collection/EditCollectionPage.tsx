@@ -404,7 +404,7 @@ export default function EditCollectionPage() {
                     ? 'Every download of this Collection signs in with the cookies file.'
                     : 'Downloads of this Collection never sign in, even when that makes them fail.'
               }>
-                <p>The cookies file is added in Settings, under Sources. Signing in for every download can get an account
+                <p>The cookies file is added per site in Settings, under Sources › Authentication. Signing in for every download can get an account
                   flagged, so by default VODLoft only uses it after a download failed because the site asked for a
                   sign-in, such as a bot check or a members-only video. It then keeps using it for a week, starting with
                   the retry.</p>

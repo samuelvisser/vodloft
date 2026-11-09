@@ -58,7 +58,8 @@ function shareLine(status: ApiStatusRead): string {
     ].filter(Boolean).join(' · ')
 }
 
-function ApiKeyPanel() {
+/** The YouTube Data API key: paste, test or remove it, today's quota and how to get one. */
+export function YouTubeApiKey() {
     const queryClient = useQueryClient()
     const {data: status, error: loadError} = useSourceApi(SOURCE_ID)
     const [key, setKey] = useState('')
@@ -164,7 +165,7 @@ function ApiKeyPanel() {
                         </ol>
                         <p>
                             The key only reads public YouTube data. Google gives every project 10,000 units a day for
-                            free, and VODLoft stays inside the split below.
+                            free, and VODLoft stays inside the split under the yt-dlp Source's settings.
                         </p>
                     </details>
                 )}
@@ -173,7 +174,8 @@ function ApiKeyPanel() {
     )
 }
 
-/** The yt-dlp Source's own settings: the optional YouTube Data API key and how to spend its quota. */
+/** The yt-dlp Source's own settings: how to spend the YouTube API quota. The key itself is on YouTube's
+ *  row under Authentication. */
 export default function YouTubeApiSettings({draft, updateDraft, environmentVariableFor, errorFor}: SettingsTabProps) {
     const {data: status} = useSourceApi(SOURCE_ID)
     const quota = draft.youtubeApi
@@ -191,7 +193,6 @@ export default function YouTubeApiSettings({draft, updateDraft, environmentVaria
 
     return (
         <>
-            <ApiKeyPanel/>
             <SettingsSection
                 className="youtube-api-split"
                 defaultOpen={false}

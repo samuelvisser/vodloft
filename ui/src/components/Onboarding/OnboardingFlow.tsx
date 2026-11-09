@@ -9,8 +9,7 @@ import BrowsePage from '../../pages/BrowsePage'
 import SourceSearchPage from '../../pages/SourceSearchPage'
 import MoviePage from '../../pages/movie/MoviePage'
 import {useMovies, useSources} from '../../lib/queries'
-import {sourceComponents} from '../Source/sourceComponents'
-import SourceCookiesCard from '../Source/SourceCookiesCard'
+import {SiteAuthentication} from '../Source/SiteAuthenticationCard'
 import {ANY_DOMAIN, SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {CollectionRead} from '../../types/schemas/collection'
@@ -198,28 +197,22 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         <span className="onboarding-eyebrow">Sources</span>
                         <h1>Where your media comes from</h1>
                         <p>
-                            VODLoft adds collections and movies from these services. Signing in or adding a cookies file
-                            is optional: it is only needed for content that requires an account, and you can do it later in
+                            VODLoft adds collections and movies from these services. Signing in is per site, and
+                            optional: it is only needed for content that requires an account, and you can do it later in
                             Settings › Sources.
                         </p>
                     </div>
-                    {onboardingSourceOrder(sources ?? []).map((source) => {
-                        const {SignIn} = sourceComponents(source.id)
-                        const canSignIn = sourceHas(source, SourceFeature.LOGIN) && SignIn
-                        const takesCookies = sourceHas(source, SourceFeature.COOKIES)
-                        return (
-                            <details className="onboarding-source" key={source.id} open={(sources?.length ?? 0) === 1}>
-                                <summary>
-                                    <strong>{source.sitesLabel ? `${source.name} (${source.sitesLabel})` : source.name}</strong>
-                                    <small>
-                                        {canSignIn ? 'Optional sign-in' : takesCookies ? 'Optional cookies file' : 'No sign-in needed'}
-                                    </small>
-                                </summary>
-                                {canSignIn ? <SignIn/> : null}
-                                {takesCookies ? <SourceCookiesCard source={source}/> : null}
-                            </details>
-                        )
-                    })}
+                    <ul className="onboarding-source-list">
+                        {onboardingSourceOrder(sources ?? []).map((source) => (
+                            <li key={source.id}>
+                                <strong>{source.name}</strong>
+                                {source.sitesLabel ? ` · ${source.sitesLabel}` : ''}
+                            </li>
+                        ))}
+                    </ul>
+                    <div className="onboarding-authentication">
+                        <SiteAuthentication/>
+                    </div>
                     <div className="onboarding-stage-actions">
                         <button className="btn" type="button" onClick={() => setStep('welcome')}>Back</button>
                         <button className="btn btn-primary" type="button" onClick={() => setStep('security')}>

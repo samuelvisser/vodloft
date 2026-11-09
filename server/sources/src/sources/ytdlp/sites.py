@@ -13,11 +13,14 @@ from __future__ import annotations
 import threading
 
 from dataclasses import replace
+from pathlib import Path
 from types import MappingProxyType
 
 from ..contract import (
     Access, DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
 )
+from ..cookies import site_cookies
+from ..registry import named_site_for
 
 # How VODLoft names the sites most people use; any other Site is named after its domain.
 _NAMES = {
@@ -38,6 +41,8 @@ _STREAM_FILE_HEIGHTS = {"youtube": 360}
 _STREAM_PROXY_CHOICE = {"youtube"}
 # The Sites whose separate H.264 video and M4A audio Local Media Profiles can keep as an HLS bundle.
 _HLS_DOWNLOADS = {"youtube"}
+_API_KEY_SITES = {"youtube"}
+"""The Sites yt-dlp's API key is for: the YouTube Data API key."""
 # yt-dlp tells a video's resolutions, codecs and subtitles on every site; SponsorBlock only has YouTube's videos.
 _UPGRADE_CHECKS = UpgradeChecks((UpgradeImprovement.RESOLUTION, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC))
 _SITE_UPGRADE_CHECKS = {"youtube": UpgradeChecks(
@@ -102,6 +107,16 @@ def site_for(url: str) -> Site:
     return site_of(_family(extractor), host)
 
 
+def cookies_for(url: str, use: bool = True) -> Path | None:
+    """The cookies file of the link's Site, which yt-dlp signs in with there; ``use`` False leaves it out.
+
+    A Site some Source is made for, such as NPO Start, has its cookies file whichever Source fetches it,
+    and a Site that takes no cookies, such as The Daily Wire, never gets one.
+    """
+    site = named_site_for(url) or site_for(url)
+    return site_cookies(site.key) if use and site.takes_cookies else None
+
+
 def site_of(key: str, host: str | None = None) -> Site:
     """The Site with the key, as yt-dlp fetches it; a link's host names a Site without a name of its own."""
     return Site(
@@ -110,6 +125,7 @@ def site_of(key: str, host: str | None = None) -> Site:
         stream_proxy_choice=key in _STREAM_PROXY_CHOICE,
         downloads=_downloads(key), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
         settings=_SITE_SETTINGS.get(key, SiteSettings()), accesses=_accesses(key),
+        takes_api_key=key in _API_KEY_SITES,
     )
 
 

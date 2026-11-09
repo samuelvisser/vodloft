@@ -83,8 +83,6 @@ export const SourceReadSchema = z.object({
     searchLabel: z.string().nullable().optional(),
     /** What the Source calls a kind of media in its own catalogue, such as Show for a Daily Wire collection. */
     kindNames: z.record(z.string(), z.string()).optional(),
-    /** What a cookies file does for the Source, when it says so itself. */
-    cookiesHelp: z.string().nullable().optional(),
     /** What a Local Media Profile can download for media of this Source: what any of its Sites offers. */
     downloadOptions: DownloadOptionsSchema,
 })
@@ -242,12 +240,29 @@ export const SourceProblemReadSchema = z.object({
 })
 export type SourceProblemRead = z.infer<typeof SourceProblemReadSchema>
 
-export const CookiesReadSchema = z.object({
+export const SiteAuthenticationReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+    domains: z.array(z.string()),
+    /** The Source made for the Site with a sign-in of its own, such as The Daily Wire's. */
+    signInSourceKey: z.string().nullable(),
+    /** The Sources that sign in on the Site with its cookies file. */
+    cookieSourceNames: z.array(z.string()),
+    /** How to export a cookies file for the Site, when it needs more than the usual. */
+    cookiesHelp: z.string().nullable(),
     hasCookies: z.boolean(),
-    /** What the cookies file signs in as, for a Source that can tell. */
-    status: z.object({label: z.string(), ok: z.boolean(), detail: z.string().nullable()}).nullable().optional(),
+    cookieCount: z.number(),
+    /** What the cookies file signs in as, for a Site whose Source can tell. */
+    cookiesStatus: z.object({label: z.string(), ok: z.boolean(), detail: z.string().nullable()}).nullable(),
+    /** The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key. */
+    apiKeySourceKey: z.string().nullable(),
 })
-export type CookiesRead = z.infer<typeof CookiesReadSchema>
+export type SiteAuthenticationRead = z.infer<typeof SiteAuthenticationReadSchema>
+
+/** A Site added by a link to it. */
+export const SiteAddedReadSchema = z.object({key: z.string(), name: z.string()})
+export type SiteAddedRead = z.infer<typeof SiteAddedReadSchema>
+
 
 /** A collection at a Source with listed episodes, shaped like the fields of a new collection. */
 export const CollectionDetailsReadSchema = z.object({

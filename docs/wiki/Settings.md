@@ -253,13 +253,37 @@ These are safeguards for unusual Daily Wire publication states. Most users shoul
 
 ## Sources
 
-The Sources tab lists every Source VODLoft can add media from, with what it supports. See [[Sources]] for what each one does. The Daily Wire's card contains its sign-in plus advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
+The Sources tab lists every Source VODLoft can add media from, with what it supports. See [[Sources]] for what each one does. Signing in and API keys are set up per site, under **Authentication** at the top. The Daily Wire's card contains advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
+
+### Authentication
+
+Signing in is optional, and only needed for content that requires an account, such as members-only or age-restricted
+videos. It is set up per site, so YouTube, Twitch and NPO Start each have their own. **Authentication** lists every site
+VODLoft knows: the sites a Source is made for, and every site you added something from. Each site shows whether it is
+signed in and whether it has an API key; open it to change that.
+
+- **The Daily Wire** has a sign-in of its own: follow the steps shown and authorize VODLoft on The Daily Wire's site.
+  It takes no cookies file. See [[Daily-Wire-Integration]].
+- **Every other site** signs in with a **cookies file**: a `cookies.txt` file (Netscape format) exported from a browser
+  where you are signed in on that site, with a browser extension made for that. Every Source that fetches the site uses
+  the site's own file, for every lookup and download there: yt-dlp on YouTube, and both NPO Start and yt-dlp on npo.nl.
+  A site keeps only its own cookies from the file you choose, so a file with cookies of other sites is fine.
+- **NPO Start** checks its cookies file with npo.nl, and shows whether it signs in with NPO Plus.
+- **YouTube** also takes an optional YouTube Data API key, which makes VODLoft much faster there. See
+  [[Settings#youtube-data-api-key]].
+
+A site shows up once you add something from it. To set up a site first, such as Twitch before adding a members-only
+channel, paste a link to a channel or video on that site in the box below the list and choose **Add site**. A link to
+the site's home page is often not enough for VODLoft to tell which site it is. The same box is below the site lists of
+the Automation and Downloads tabs.
+
+Treat a cookies file like a password: it signs VODLoft in as you.
 
 ### yt-dlp
 
 The yt-dlp card shows the installed yt-dlp version and when it was last updated. Sites change often, so VODLoft fetches the latest yt-dlp release once a week; **Update now** does it straight away, which is the first thing to try when a site stops working. The update is stored in the config directory and survives container upgrades.
 
-**Cookies file** is optional. Some videos only play for a signed-in viewer, such as age-restricted or members-only videos. Export a `cookies.txt` file (Netscape format) from a browser where you are signed in, with a browser extension made for that, and choose it here. yt-dlp then uses it for every lookup and download. Treat the file like a password: it signs VODLoft in as you.
+For videos that need a signed-in viewer, give the site a cookies file under [[Settings#authentication]].
 
 #### Your own yt-dlp options
 
@@ -287,7 +311,7 @@ To get a key, which takes about three minutes:
 1. [Create a Google Cloud project](https://console.cloud.google.com/projectcreate). Any name works.
 2. [Enable the YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com) in that project.
 3. Under [Credentials](https://console.cloud.google.com/apis/credentials), choose **Create credentials → API key**. Edit the key and, under **API restrictions**, restrict it to the YouTube Data API v3. Leave the website, IP address and app restrictions off.
-4. Paste the key into the YouTube Data API panel on the yt-dlp card and choose **Save and test**.
+4. Paste the key into the YouTube Data API panel on YouTube's row under **Authentication**, and choose **Save and test**.
 
 **Test key** checks a saved key again, and explains what to fix in Google Cloud when Google refuses it. A key that stops working, or a quota that runs out, also shows under **Needs attention** on Home. The key is stored next to the cookies file and is never shown again or written to the log.
 
@@ -300,7 +324,7 @@ Google gives each project 10,000 units a day, reset at midnight Pacific time. Mo
 | `youtubeApi.searchQuota` | `VL_YOUTUBE_API__SEARCH_QUOTA` | `2000` | YouTube searches on the Add media page, about 19 a day. When it is used up, or set to `0`, searches use yt-dlp. |
 | `youtubeApi.minCheckIntervalMinutes` | `VL_YOUTUBE_API__MIN_CHECK_INTERVAL_MINUTES` | `10` | The shortest time between two checks of the same collection. |
 
-What the checks and search shares leave of the daily total is kept free for adding collections, testing the key and manual refreshes. Adding a collection uses the units kept free first and then the checks share; listing a channel costs about 2 units per 50 videos. The panel shows what each share means in practice, such as how often each collection gets checked.
+What the checks and search shares leave of the daily total is kept free for adding collections, testing the key and manual refreshes. Adding a collection uses the units kept free first and then the checks share; listing a channel costs about 2 units per 50 videos. The split is under **How to spend the YouTube API quota** on the yt-dlp card, and shows what each share means in practice, such as how often each collection gets checked.
 
 ### Sites more than one Source handles
 

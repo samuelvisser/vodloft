@@ -26,7 +26,7 @@ def lookups(monkeypatch):
     answers: dict[tuple[str, ...], dict] = {}
     calls: list[tuple[str, ...]] = []
 
-    def run_json(*args):
+    def run_json(*args, **_kwargs):
         calls.append(args)
         if args not in answers:
             raise runner.YtDlpError("Video unavailable")

@@ -127,15 +127,14 @@ class NpoSource(Source):
     id = "npo"
     name = "NPO Start"
     domains = ("npo.nl",)
-    sites = (Site("npo", "NPO Start", domains, accesses=(NPO_PLUS,)),)
+    sites = (Site(account.SITE_KEY, "NPO Start", domains, accesses=(NPO_PLUS,), cookies_help=(
+        "Sign in with your NPO account to download programmes that need NPO Plus. Sign in on npo.nl in a "
+        "private browser window, export a cookies.txt file for npo.nl, choose it here, and then close that "
+        "window without signing out. VODLoft keeps the sign-in fresh by itself and never sees your password. "
+        "Programmes protected by DRM still can't be downloaded."
+    )),)
     features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Series"})
-    cookies_help = (
-        "Optional. Sign in with your NPO account to download programmes that need NPO Plus. Sign in on "
-        "npo.nl in a private browser window, export a cookies.txt file for npo.nl, choose it here, and then "
-        "close that window without signing out. VODLoft keeps the sign-in fresh by itself and never sees your "
-        "password. Programmes protected by DRM still can't be downloaded."
-    )
 
     def collection_ref(self, url: str) -> str | None:
         parsed = parse_link(url)
@@ -343,7 +342,8 @@ class NpoSource(Source):
             raise NpoError("NPO Start has no stream for this programme right now")
         if stream_protected(stream_link):
             return Playback(url=stream_url, drm_protected=True)
-        # The stream keeps its audio in a rendition of its own, which yt-dlp joins to the video.
+        # The stream keeps its audio in a rendition of its own, which yt-dlp joins to the video. The
+        # stream's link is signed already, so yt-dlp needs no cookies for it.
         return Playback(url=stream_url, kind=PlaybackKind.YTDLP, command=runner.command())
 
     @property
@@ -367,7 +367,7 @@ class NpoSource(Source):
             return [SourceProblem(
                 "NPO sign-in expired",
                 "The NPO cookies file no longer signs in, so programmes that need NPO Plus wait. Sign in on npo.nl "
-                "and choose a new cookies file under Settings › Sources › NPO Start. Free programmes keep downloading.",
+                "and choose a new cookies file under Settings › Sources › Authentication. Free programmes keep downloading.",
                 fix_url=f"{ORIGIN}/start",
             )]
         if not status.subscription:
@@ -381,16 +381,13 @@ class NpoSource(Source):
             return [SourceProblem(
                 "NPO sign-in expires soon",
                 f"The NPO cookies file stops working on {status.expires_at:%d %B}. Sign in on npo.nl and choose a "
-                "new cookies file under Settings › Sources › NPO Start.",
+                "new cookies file under Settings › Sources › Authentication.",
                 fix_url=f"{ORIGIN}/start",
             )]
         return []
 
-    def has_cookies(self) -> bool:
-        return account.has_cookies()
-
-    def cookies_status(self) -> CookiesStatus | None:
-        status = account.status(self._client)
+    def cookies_status(self, site_key: str) -> CookiesStatus | None:
+        status = account.status(self._client) if site_key == account.SITE_KEY else None
         if status is None:
             return None
         if not status.verified:
@@ -402,8 +399,6 @@ class NpoSource(Source):
             return CookiesStatus("No NPO Plus", ok=False, detail=f"Signed in, but this NPO account has no NPO Plus.{until}")
         return CookiesStatus("NPO Plus", ok=True, detail=f"Signed in with NPO Plus.{until}")
 
-    def save_cookies(self, content: bytes) -> None:
-        account.save_cookies(content)
-
-    def remove_cookies(self) -> None:
-        account.remove_cookies()
+    def cookies_changed(self, site_key: str) -> None:
+        if site_key == account.SITE_KEY:
+            account.forget_status()

@@ -39,7 +39,7 @@ def lookups(monkeypatch):
     answers: dict[str, dict] = {}
     calls: list[tuple[str, ...]] = []
 
-    def run_json(*args):
+    def run_json(*args, **_kwargs):
         calls.append(args)
         url = args[-1]
         if url not in answers:
@@ -95,22 +95,23 @@ def test_playlists_resolve_to_collections_but_are_not_videos(lookups):
         source.video_details("https://www.youtube.com/playlist?list=PL1")
 
 
-def test_playback_hands_the_page_to_ytdlp_with_the_cookies_file(ytdlp_dir):
+def test_playback_hands_the_page_to_ytdlp_with_its_sites_cookies_file(ytdlp_dir):
+    from sources import cookies
+
     source = YtDlpSource()
     playback = source.video_playback(slug="x", url="https://www.youtube.com/watch?v=x")
     assert playback.kind is PlaybackKind.YTDLP
     assert playback.url == "https://www.youtube.com/watch?v=x"
     assert "--cookies" not in playback.command
 
-    source.save_cookies(b"# Netscape HTTP Cookie File\n#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tabc\n")
-    assert source.has_cookies()
-    command = source.video_playback(slug="x", url="https://x").command
-    assert command[command.index("--cookies") + 1] == str(ytdlp_dir / "cookies.txt")
-
-    source.remove_cookies()
-    assert not source.has_cookies()
-    with pytest.raises(ValueError, match="Netscape"):
-        source.save_cookies(b"not cookies")
+    cookies.store_site_cookies("youtube", ["#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tabc"])
+    command = source.video_playback(slug="x", url="https://www.youtube.com/watch?v=x").command
+    assert command[command.index("--cookies") + 1] == str(cookies.site_cookies_path("youtube"))
+    # Another Site signs in with its own cookies file, or none.
+    assert "--cookies" not in source.video_playback(slug="x", url="https://www.twitch.tv/videos/1").command
+    assert "--cookies" not in source.video_playback(
+        slug="x", url="https://www.youtube.com/watch?v=x", use_cookies=False,
+    ).command
 
 
 class _Release:
@@ -333,10 +334,10 @@ class ToolSource(Source):
     id = "tool"
     name = "Tool"
     domains = ("tool.example",)
-    features = frozenset({Feature.PROGRAM_UPDATES, Feature.COOKIES})
+    features = frozenset({Feature.PROGRAM_UPDATES})
 
     def __init__(self, *, due=True, fails=False):
-        self.due, self.fails, self.updates, self.cookies = due, fails, 0, None
+        self.due, self.fails, self.updates = due, fails, 0
 
     def resolve(self, url):
         return None
@@ -358,17 +359,6 @@ class ToolSource(Source):
             raise RuntimeError("release server said no")
         self.updates += 1
         return self.program_status()
-
-    def has_cookies(self):
-        return self.cookies is not None
-
-    def save_cookies(self, content):
-        if b"\t" not in content:
-            raise ValueError("Not a cookies file")
-        self.cookies = content
-
-    def remove_cookies(self):
-        self.cookies = None
 
 
 @pytest.fixture
@@ -395,7 +385,7 @@ def client(tool_sources, monkeypatch):
         yield test_client
 
 
-def test_the_program_and_cookies_endpoints(client, tool_sources):
+def test_the_program_endpoints(client, tool_sources):
     tool, _ = tool_sources
     assert client.get("/api/sources/tool/program").json()["version"] == "v0"
     assert client.post("/api/sources/tool/program/update").json()["version"] == "v1"
@@ -404,14 +394,8 @@ def test_the_program_and_cookies_endpoints(client, tool_sources):
     assert failed.status_code == 502
     assert "release server said no" in failed.json()["detail"]
 
-    assert client.get("/api/sources/tool/cookies").json() == {"hasCookies": False, "status": None}
-    assert client.put("/api/sources/tool/cookies", json={"content": "a\tb"}).json() == {"hasCookies": True, "status": None}
-    assert client.put("/api/sources/tool/cookies", json={"content": "nope"}).status_code == 422
-    assert client.delete("/api/sources/tool/cookies").json() == {"hasCookies": False, "status": None}
-
     assert client.get("/api/sources/plain/program").status_code == 404
-    assert client.put("/api/sources/plain/cookies", json={"content": "a\tb"}).status_code == 404
-    assert client.get("/api/sources/nope/cookies").status_code == 404
+    assert client.get("/api/sources/nope/program").status_code == 404
 
 
 def test_the_weekly_update_only_updates_sources_that_are_due(tool_sources):

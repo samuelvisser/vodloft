@@ -4,7 +4,7 @@ On first launch, VODLoft shows the services it can add media from, helps you rev
 
 ## 1. Sources
 
-VODLoft calls the services it adds media from **Sources**: The Daily Wire, yt-dlp for YouTube and many other sites, and NPO Start. The first-run setup lists each Source, and offers its sign-in as an optional step. Only The Daily Wire has a sign-in today; yt-dlp and NPO Start work without one. See [[Sources]].
+VODLoft calls the services it adds media from **Sources**: The Daily Wire, yt-dlp for YouTube and many other sites, and NPO Start. The first-run setup lists each Source, and offers signing in per site as an optional step: The Daily Wire has a sign-in of its own, and other sites, such as YouTube or NPO Start, sign in with a cookies file. See [[Sources]] and [[Settings#authentication]].
 
 For The Daily Wire, VODLoft uses The Daily Wire's device authorization flow. Follow the instructions shown by VODLoft and authorize the connection on The Daily Wire's own site.
 
@@ -12,7 +12,7 @@ VODLoft does **not** ask for your The Daily Wire password.
 
 Signing in is only needed for member-exclusive content. You can continue without signing in and use what The Daily Wire makes publicly available.
 
-You can sign in, reconnect or change the session later from **Settings → Sources**.
+You can sign in, reconnect or change the session later from **Settings → Sources → Authentication**.
 
 ## 2. Decide how VODLoft should be protected
 
@@ -64,7 +64,7 @@ For most installations:
 
 1. Make sure `/config` and `/downloads` are persistent.
 2. Set `TZ` to your local timezone.
-3. Sign in to The Daily Wire under Settings → Sources if you use member content.
+3. Sign in to The Daily Wire under Settings → Sources → Authentication if you use member content.
 4. Protect the VODLoft UI if it is not confined to a trusted network.
 5. Add one collection with **Add media** in the Library.
 6. Create a Local Media Profile with the format and folder structure you want.
