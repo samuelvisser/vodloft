@@ -46,7 +46,7 @@ def account_level() -> DwMembershipLevel | None:
 def remember_level(level: DwMembershipLevel | str | None) -> None:
     """Keep the level The Daily Wire named for the signed-in account; None forgets it."""
     global _loaded, _level
-    known = level if isinstance(level, DwMembershipLevel) else None
+    known = _level_of(level)
     with _lock:
         _level, _loaded = known, True
         try:
@@ -96,6 +96,16 @@ def gives(level: DwMembershipLevel | None, needed: str) -> bool:
     return level in LEVEL_ORDER and wanted in LEVEL_ORDER and LEVEL_ORDER.index(level) >= LEVEL_ORDER.index(wanted)
 
 
+def _level_of(value: DwMembershipLevel | str | None) -> DwMembershipLevel | None:
+    """The level a value names: The Daily Wire's user info gives it as text, such as "ALL_ACCESS"."""
+    if value is None or isinstance(value, DwMembershipLevel):
+        return value
+    try:
+        return DwMembershipLevel(value)
+    except ValueError:
+        return None
+
+
 def _read() -> DwMembershipLevel | None:
     try:
         from .auth import TokenStore
@@ -104,7 +114,4 @@ def _read() -> DwMembershipLevel | None:
     except Exception as exc:  # noqa: BLE001
         logger.info("Could not read the Daily Wire membership level: %s", exc)
         return None
-    try:
-        return DwMembershipLevel(stored) if stored else None
-    except ValueError:
-        return None
+    return _level_of(stored or None)
