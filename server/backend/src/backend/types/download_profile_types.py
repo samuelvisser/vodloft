@@ -5,7 +5,7 @@ from pydantic import Field
 
 from config.settings.site_settings import (  # noqa: F401  (the Download Profile's options, defined with its defaults)
     DEFAULT_SPONSORBLOCK_SEGMENTS, DEFAULT_UPGRADE_IMPROVEMENTS, AutoSubtitles, SponsorBlockAction, SponsorBlockCategory,
-    UpgradeImprovement, UpgradeRepeat, check_sponsorblock_segments, sponsorblock_in_use,
+    UpgradeImprovement, UpgradeRepeat, check_sponsorblock_segments, sponsorblock_changes_anything,
 )
 
 

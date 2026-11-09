@@ -17,7 +17,7 @@ from backend.types.download_profile_types import (
     SponsorBlockAction,
     SponsorBlockCategory,
     check_sponsorblock_segments,
-    sponsorblock_in_use,
+    sponsorblock_changes_anything,
     UpgradeImprovement,
     UpgradeRepeat,
 )
@@ -119,12 +119,6 @@ class DownloadProfileAPIBaseIn(RequestBase):
         check_sponsorblock_segments(value)
         return value
 
-    @model_validator(mode="after")
-    def _sponsorblock_off_when_every_type_is_kept(self):
-        # Keeping every segment type does nothing, so the profile saves SponsorBlock as off.
-        self.sponsorblock_enabled = sponsorblock_in_use(self.sponsorblock_enabled, self.sponsorblock_segments)
-        return self
-
     @field_validator("upgrade_improvements")
     @classmethod
     def _unique_improvements(cls, value: list) -> list:
@@ -136,6 +130,13 @@ class DownloadProfileAPIBaseIn(RequestBase):
         # form opens with it collapsed.
         if not self.upgrade_improvements:
             self.upgrade_check = False
+        return self
+
+    @model_validator(mode="after")
+    def _sponsorblock_needs_a_segment_type(self):
+        # Keeping every segment type does nothing: SponsorBlock is saved off, so the form opens with it collapsed.
+        if not sponsorblock_changes_anything(self.sponsorblock_segments):
+            self.sponsorblock_enabled = False
         return self
 
     _one_line_per_date = field_validator("filters")(classmethod(lambda cls, value: _one_line_per_date(value)))

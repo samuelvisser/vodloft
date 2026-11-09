@@ -197,7 +197,7 @@ The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Previ
 - **Highlight**: the one moment viewers mark as where the video really gets going.
 - **Viewer chapters**: chapter titles viewers wrote, mostly for videos without chapters of their own. When other types are chapters too, they all share one list: a part that falls inside a viewer chapter splits it, and the overlap is named after both. On a video that has its own chapters, the two sets of titles mix, so this starts as Keep.
 
-A new YouTube Download Profile makes chapters of sponsors, intros, outros and the highlight, and keeps everything else. Profiles from before VODLoft 0.7.0 start with SponsorBlock off.
+A new YouTube Download Profile makes chapters of sponsors, intros, outros and the highlight, and keeps everything else. Saving a profile that keeps every type turns SponsorBlock off, and a new profile starts with it off when your defaults keep every type. Profiles from before VODLoft 0.7.0 start with SponsorBlock off.
 
 Most parts are submitted in the days after a video comes out, so a download made right after upload may find few of them. When a download found parts, the episode page shows them on a timeline: each part, whether it became a chapter or was cut out, and how much shorter the file is.
 

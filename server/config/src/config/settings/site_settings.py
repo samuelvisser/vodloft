@@ -104,9 +104,9 @@ DEFAULT_SPONSORBLOCK_SEGMENTS: dict[str, str] = {
 """Chapters of sponsors, intros, outros and the highlight, and everything else kept."""
 
 
-def sponsorblock_in_use(enabled: bool, segments: Mapping[str, str]) -> bool:
-    """Whether SponsorBlock does anything: on, and some segment type is not kept. Keeping every type is the same as off."""
-    return enabled and any(action != SponsorBlockAction.KEEP.value for action in segments.values())
+def sponsorblock_changes_anything(segments: Mapping[str, str]) -> bool:
+    """Whether the segment choices mark or cut out anything. Keeping every type does nothing, the same as off."""
+    return any(action != SponsorBlockAction.KEEP.value for action in segments.values())
 
 
 def check_sponsorblock_segments(value: Mapping[str, str]) -> None:
