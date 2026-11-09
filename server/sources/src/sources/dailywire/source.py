@@ -20,7 +20,7 @@ from .api.utils.validators.available_for_list import parse_tiers
 from .auth import DeviceAuthClient
 from .auth.storage import TokenStore
 from .links import _access_token, _first, parse_link, resolve_link
-from .membership import account_level, gives
+from .membership import account_level, check_after_refusal, gives, look_up_level
 from .playback import resolve_movie_playback
 
 _PLAYLIST_TIMEOUT_SECONDS = 15
@@ -188,6 +188,10 @@ class DailyWireSource(Source):
         # A lower level does not say False: VODLoft has always let a download find that out.
         return True if gives(account_level(), key) else None
 
+    def download_refused(self, key: str) -> None:
+        if any(access.key == key for access in MEMBERSHIP_ACCESSES):
+            check_after_refusal()
+
     def current_access(self, *, slug: str, url: str) -> str | None:
         payload = MiddlewareClient().get_episode_payload(slug)
         return episode_access(parse_tiers(payload.get("availableFor")))
@@ -219,6 +223,7 @@ class DailyWireSource(Source):
         store = TokenStore()
         for store_key, record in records.items():
             store.store_record(store_key, str(record))
+        look_up_level()
 
 
 def _playlist(url: str) -> tuple[str, str]:

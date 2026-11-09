@@ -8,7 +8,6 @@ import keyring
 from keyring.errors import PasswordDeleteError
 
 from sources.dailywire.auth.config import OAuthTokens
-from sources.dailywire.membership import forget_level
 
 
 class TokenStore:
@@ -38,16 +37,16 @@ class TokenStore:
             keyring.set_password(self.service_name, key, value)
         except Exception as e:
             raise RuntimeError("Failed to write to OS keyring.") from e
-        finally:
-            # The account signed in may be another one now.
-            forget_level()
 
     def store_record(self, key: str, record: str) -> None:
         """Store a record that is already in this store's JSON form, such as one another program kept."""
         self._set(key, record)
 
+    def load_record(self, key: str) -> Optional[str]:
+        """A record as it is stored, such as one that is not a sign-in."""
+        return self._get(key)
+
     def _delete(self, key: str) -> None:
-        forget_level()
         try:
             keyring.delete_password(self.service_name, key)
         except PasswordDeleteError:

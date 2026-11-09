@@ -49,14 +49,21 @@ class DeviceAuthClient:
         return None
 
     def revoke(self) -> None:
+        from ..membership import remember_level
+
         self.store.delete(self._store_key)
+        remember_level(None)
 
     def start_device_flow(self) -> Dict[str, Any]:
         return self._start_device_flow()
 
     def poll_until_authorized(self, device_code: str, interval: int, expires_in: int, stop_event: Optional[Any] = None) -> OAuthTokens:
+        from ..membership import look_up_level
+
         rec = self._poll_for_token(device_code, interval, expires_in, stop_event=stop_event)
         self.store.save(self._store_key, rec)
+        # Once per sign-in: the badges show an open lock on what the account's level gives.
+        look_up_level()
         return OAuthTokens(**rec.__dict__)
 
     def status(self) -> DeviceAuthStatus:
