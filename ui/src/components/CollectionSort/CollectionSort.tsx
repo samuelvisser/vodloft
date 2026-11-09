@@ -14,6 +14,7 @@ export const DEFAULT_COLLECTION_SORT: CollectionSortOrder = {by: 'often_used', r
 /** How each order reads, as it starts and turned around. */
 const DIRECTION_LABELS: Record<CollectionSortBy, [string, string]> = {
     often_used: ['Most opened first', 'Least opened first'],
+    recently_used: ['Last opened first', 'Opened longest ago first'],
     name: ['A to Z', 'Z to A'],
     release_date: ['Newest first', 'Oldest first'],
     added_at: ['Newest first', 'Oldest first'],
@@ -30,6 +31,8 @@ function sortKey(collection: CollectionReadView, by: CollectionSortBy): number |
     switch (by) {
         case 'often_used':
             return collection.openCount
+        case 'recently_used':
+            return collection.lastOpenedAt?.getTime() ?? null
         case 'release_date':
             return collection.firstPublishedDate?.getTime() ?? null
         case 'added_at':

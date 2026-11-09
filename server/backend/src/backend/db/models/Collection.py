@@ -77,6 +77,9 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     open_count: Mapped[int] = mapped_column(
         default=0, server_default="0", comment="How often the Collection's page was opened",
     )
+    last_opened_at: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(), comment="When the Collection's page was last opened",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()

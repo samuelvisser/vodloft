@@ -130,5 +130,7 @@ export const CollectionReadViewSchema = CollectionReadSchema.extend({
     firstPublishedDate: ApiDateTimeSchema.nullable().optional(),
     /** How often its page was opened, for the Library's Often used order. */
     openCount: z.int(),
+    /** When its page was last opened, for the Library's Recently used order; null when never. */
+    lastOpenedAt: ApiDateTimeSchema.nullable().optional(),
 });
 export type CollectionReadView = z.infer<typeof CollectionReadViewSchema>;

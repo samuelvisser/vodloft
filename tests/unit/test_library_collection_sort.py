@@ -67,6 +67,7 @@ def test_opening_a_collection_page_counts_without_changing_when_it_was_updated(s
     _collection(session, "never")
     updated_at = collection.updated_at
 
+    before = datetime.now(timezone.utc).replace(microsecond=0)
     collection_opened("often")
     collection_opened("often")
 
@@ -75,6 +76,8 @@ def test_opening_a_collection_page_counts_without_changing_when_it_was_updated(s
     assert views["often"].open_count == 2
     assert views["never"].open_count == 0
     assert views["often"].updated_at == updated_at
+    assert views["often"].last_opened_at >= before
+    assert views["never"].last_opened_at is None
     with pytest.raises(HTTPException) as refused:
         collection_opened("missing")
     assert refused.value.status_code == 404
@@ -103,10 +106,10 @@ def test_each_user_keeps_their_own_library_order(session):
         "collection_sort": "often_used", "collection_sort_reversed": False, "saved": True,
     }
     library_preferences_save(
-        LibraryPreferences.model_validate({"collectionSort": "release_date", "collectionSortReversed": True}), _user(1),
+        LibraryPreferences.model_validate({"collectionSort": "recently_used", "collectionSortReversed": True}), _user(1),
     )
 
-    assert library_preferences(_user(1)).model_dump()["collection_sort"] == "release_date"
+    assert library_preferences(_user(1)).model_dump()["collection_sort"] == "recently_used"
     assert library_preferences(_user(1)).collection_sort_reversed is True
     assert library_preferences(_user(2)).model_dump()["collection_sort"] == "often_used"
 

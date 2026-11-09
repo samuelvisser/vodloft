@@ -210,6 +210,8 @@ class CollectionAPIReadView(CollectionAPIRead):
     """When its oldest episode came out, for the Library's Release date order."""
     open_count: int
     """How often the Collection's page was opened, for the Library's Often used order."""
+    last_opened_at: Optional[datetime] = None
+    """When the Collection's page was last opened, for the Library's Recently used order."""
 
 
 class CollectionSyncLogEntryAPIRead(ResponseBase):

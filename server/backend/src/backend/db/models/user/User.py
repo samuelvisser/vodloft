@@ -61,7 +61,7 @@ class User(Base):
     )
     library_collection_sort: Mapped[str] = mapped_column(
         default="often_used", server_default="often_used",
-        comment="How the user lists the Library's Collections: often_used, name, release_date or added_at",
+        comment="How the user lists the Library's Collections: often_used, recently_used, name, release_date or added_at",
     )
     library_collection_sort_reversed: Mapped[bool] = mapped_column(
         default=False, server_default=false(), comment="Whether the user turned that order around",

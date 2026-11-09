@@ -141,7 +141,6 @@ function searchRank(item: {title: string}, words: string[]) {
     return 4
 }
 
-
 function NoMatches({search, what}: {search: boolean, what: string}) {
     return (
         <div className="catalog-empty">
