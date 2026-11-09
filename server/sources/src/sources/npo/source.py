@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 from ..contract import (
     MIN_NEWEST_EPISODES, Access, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Site, Source,
-    CookiesStatus, SourceProblem, VideoDetails,
+    CookiesStatus, SourceProblem, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails,
 )
 from .. import ytdlp_runner as runner
 from . import account
@@ -127,12 +127,17 @@ class NpoSource(Source):
     id = "npo"
     name = "NPO Start"
     domains = ("npo.nl",)
-    sites = (Site(account.SITE_KEY, "NPO Start", domains, accesses=(NPO_PLUS,), cookies_help=(
-        "Sign in with your NPO account to download programmes that need NPO Plus. Sign in on npo.nl in a "
-        "private browser window, export a cookies.txt file for npo.nl, choose it here, and then close that "
-        "window without signing out. VODLoft keeps the sign-in fresh by itself and never sees your password. "
-        "Programmes protected by DRM still can't be downloaded."
-    )),)
+    sites = (Site(
+        account.SITE_KEY, "NPO Start", domains, accesses=(NPO_PLUS,),
+        # Its programme pages only tell the length, which is all the upgrade check can compare.
+        upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,)),
+        cookies_help=(
+            "Sign in with your NPO account to download programmes that need NPO Plus. Sign in on npo.nl in a "
+            "private browser window, export a cookies.txt file for npo.nl, choose it here, and then close that "
+            "window without signing out. VODLoft keeps the sign-in fresh by itself and never sees your password. "
+            "Programmes protected by DRM still can't be downloaded."
+        ),
+    ),)
     features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Series"})
 
@@ -270,6 +275,13 @@ class NpoSource(Source):
             raise NpoError("This is not a link to a programme on NPO Start")
         program = self._client.program_detail(parsed[1])
         return self._video(program, drm_protected=bool(self._protected(program)))
+
+    def upgrade_offer(self, url: str, *, sponsorblock_categories: Sequence[str] = ()) -> UpgradeOffer:
+        parsed = parse_link(url)
+        if parsed is None or parsed[0] is not LinkKind.VIDEO:
+            raise NpoError("This is not a link to a programme on NPO Start")
+        duration = self._client.program_detail(parsed[1]).get("durationInSeconds")
+        return UpgradeOffer(duration=float(duration) if isinstance(duration, (int, float)) and duration > 0 else None)
 
     def _season_drm(self, programs: list[dict]) -> dict[str, bool]:
         """DRM per programme of a season, from as few stream lookups as it takes.

@@ -12,22 +12,28 @@ import DownloadProgressStatus from '../DownloadProgress/DownloadProgressStatus'
 import ProgressExplanation from '../common/ProgressExplanation'
 import DownloadLogDialog from './DownloadLogDialog'
 import {apiUrl} from '../../lib/api'
+import {startLabel, useDownloadStarts} from '../../lib/downloadStarts'
+import {refreshFrontendPuller} from '../../lib/puller'
 
 /**
  * Send a download action for one row, then refresh the row's downloads and the download lists.
- * A failed request is reported in a toast.
+ * A failed request is reported in a toast. A retry or re-download shows as started at once.
  */
 export function useDownloadRowRequest(downloadsQueryKey: QueryKey) {
     const qc = useQueryClient()
     const [busy, setBusy] = useState(false)
+    const starts = useDownloadStarts()
 
-    async function request(path: string, init: RequestInit, failure: string) {
+    /** Send the request; resolves to whether the server accepted it. */
+    async function request(path: string, init: RequestInit, failure: string): Promise<boolean> {
         setBusy(true)
+        let accepted = false
         try {
             const response = await fetch(
                 `${apiUrl()}${path}`,
                 {credentials: 'include', ...init},
             )
+            accepted = response.ok
             if (!response.ok) {
                 const {error} = await getErrorMessageFromResponse(response)
                 toast.error(error || failure)
@@ -36,21 +42,33 @@ export function useDownloadRowRequest(downloadsQueryKey: QueryKey) {
                 qc.invalidateQueries({queryKey: downloadsQueryKey}),
                 qc.invalidateQueries({queryKey: ['mediaDownloads']}),
                 qc.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+                refreshFrontendPuller(qc),
             ])
         } catch {
             toast.error(failure)
         } finally {
             setBusy(false)
         }
+        return accepted
     }
 
-    const cancel = (download: MediaDownloadViewRead) => request(
+    const sendCancel = (download: MediaDownloadViewRead) => request(
         `/media-downloads/${download.id}/cancel`,
         {method: 'POST'},
         'Could not cancel the download',
     )
 
-    return {busy, request, cancel}
+    const cancel = (download: MediaDownloadViewRead) => starts.cancel(download, () => sendCancel(download))
+
+    /** Retry or re-download an existing download, showing it as starting until its live progress arrives. */
+    const retry = (download: MediaDownloadViewRead, path: string, init: RequestInit, failure: string) => starts.start(
+        download,
+        startLabel(download),
+        () => request(path, init, failure),
+        () => sendCancel(download),
+    )
+
+    return {busy, request, cancel, retry, present: starts.present, isStarting: starts.isStarting}
 }
 
 /** Whether a row offers to download, because nothing is downloaded or running for its profile yet. */
@@ -67,6 +85,7 @@ export function DownloadRow({
     download,
     downloadStateKnown,
     busy,
+    starting = false,
     retry,
     onDownload,
     onCancel,
@@ -79,6 +98,8 @@ export function DownloadRow({
     download?: MediaDownloadViewRead
     downloadStateKnown: boolean
     busy: boolean
+    /** Whether the row's retry is still on its way to the server; it can be canceled meanwhile. */
+    starting?: boolean
     /** The retry button, when the row offers one. */
     retry: {title: string, label: string, onClick: () => void} | null
     onDownload: () => void
@@ -136,7 +157,7 @@ export function DownloadRow({
                             type="button"
                             className="icon-btn"
                             onClick={onCancel}
-                            disabled={busy}
+                            disabled={busy && !starting}
                             title="Cancel download"
                             aria-label={`Cancel download for ${profile.name}`}
                         >

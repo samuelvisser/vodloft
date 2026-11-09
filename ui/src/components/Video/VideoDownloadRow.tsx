@@ -14,7 +14,7 @@ export function VideoDownloadRow({
     downloadStateKnown?: boolean
     videoId: number
 }) {
-    const {busy, request, cancel} = useDownloadRowRequest(['videoDownloads', videoId])
+    const {busy, request, cancel, retry, present, isStarting} = useDownloadRowRequest(['videoDownloads', videoId])
 
     const startDownload = () => request(
         `/videos/${videoId}/downloads`,
@@ -25,20 +25,23 @@ export function VideoDownloadRow({
         },
         'Could not start the download',
     )
-    const retryDownload = (retried: MediaDownloadViewRead) => request(
+    const retryDownload = (retried: MediaDownloadViewRead) => retry(
+        retried,
         `/media-downloads/${retried.id}/retry`,
         {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'},
         'Could not retry the download',
     )
 
     const succeeded = download?.presentation.outcome === 'success'
+    const starting = isStarting(download)
     return (
         <DownloadRow
             profile={profile}
-            download={download}
+            download={download && present(download)}
             downloadStateKnown={downloadStateKnown}
             busy={busy}
-            retry={download && !download.presentation.active && download.presentation.canRetry
+            starting={starting}
+            retry={download && !starting && !download.presentation.active && download.presentation.canRetry
                 ? {
                     title: succeeded ? 'Re-download' : 'Retry download',
                     label: succeeded ? `Re-download ${profile.name}` : `Retry download for ${profile.name}`,

@@ -42,7 +42,8 @@ export function EpisodeDownloadRow({
     /** The Which episodes filter that keeps this episode from downloading automatically. */
     skippedBy?: EpisodeFilter
 }) {
-    const {busy, request, cancel} = useDownloadRowRequest(['episodeDownloads', episodeSlug])
+    const {busy, request, cancel, retry, present, isStarting} = useDownloadRowRequest(['episodeDownloads', episodeSlug])
+    const starting = isStarting(download)
     const [countdownConfirm, setCountdownConfirm] = useState(false)
     const [safeDelayDialog, setSafeDelayDialog] = useState<SafeDelayDialogState | null>(null)
     const [safeDelaySchedulePreferred, setSafeDelaySchedulePreferred] = useState<boolean | null>(null)
@@ -87,19 +88,21 @@ export function EpisodeDownloadRow({
     }: {
         redownloadDelayPassed?: boolean
         scheduleForDelay?: boolean
-    } = {}) =>
-        request(
-            `/media-downloads/${download!.id}/retry`,
-            {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    redownloadWhenDelayPassed: redownloadDelayPassed,
-                    scheduleForDelay,
-                }),
-            },
-            scheduleForDelay ? 'Could not schedule the re-download' : 'Could not retry the download',
-        )
+    } = {}) => {
+        const path = `/media-downloads/${download!.id}/retry`
+        const init = {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                redownloadWhenDelayPassed: redownloadDelayPassed,
+                scheduleForDelay,
+            }),
+        }
+        // A scheduled re-download only waits for the safety delay, so there is nothing to show as starting.
+        return scheduleForDelay
+            ? request(path, init, 'Could not schedule the re-download')
+            : retry(download!, path, init, 'Could not retry the download')
+    }
 
     const closeSafeDelayDialogs = () => {
         setSafeDelayDialog(null)
@@ -179,6 +182,7 @@ export function EpisodeDownloadRow({
 
     const showRetryButton = Boolean(
         download
+        && !starting
         && (
             (!download.presentation.active && download.presentation.canRetry)
             || publicationDelayWait
@@ -211,9 +215,10 @@ export function EpisodeDownloadRow({
     return (
         <DownloadRow
             profile={profile}
-            download={download}
+            download={download && present(download)}
             downloadStateKnown={downloadStateKnown}
             busy={busy}
+            starting={starting}
             retry={showRetryButton
                 ? {
                     title: publicationDelayWait ? 'Download now' : succeeded ? 'Re-download' : 'Retry download',

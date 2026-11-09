@@ -27,7 +27,7 @@ import type {EpisodeTagRead} from '../../types/schemas/source'
 import {useWhichEpisodes} from './useWhichEpisodes'
 import {useCollectionExamples} from '../../lib/collectionExamples'
 import {insertIndex, isDateLine, joinIgnoreCase, splitIgnoreCase} from './episodeFilters'
-import {filterComplete, filterSentence, plainText, type Part} from './whichEpisodesText'
+import {filterComplete, filterSentence, formatRunningTime, plainText, type Part} from './whichEpisodesText'
 import './WhichEpisodes.css'
 
 type Props = {
@@ -78,15 +78,18 @@ function toggleFromSentence(event: MouseEvent<HTMLDivElement>, toggle: () => voi
     toggle()
 }
 
-function CountBadge({count, waiting}: {count: number | undefined; waiting: boolean}) {
+function CountBadge({count, waiting, active, onShow}: {count: number | undefined; waiting: boolean; active: boolean; onShow: () => void}) {
     if (count === undefined) {
         // The counts load after the form; the line shows it is waiting for its number.
         return waiting ? <span className="which-episodes-count is-loading" aria-label="Counting">…</span> : null
     }
     return (
-        <span className={`which-episodes-count${count === 0 ? ' is-zero' : ''}`} title="Indexed episodes this filter leaves out">
+        <button
+            type="button" className={`which-episodes-count${count === 0 ? ' is-zero' : ''}`}
+            title="Show the episodes this filter leaves out" disabled={count === 0} onClick={onShow} aria-pressed={!!active}
+        >
             −{count}
-        </span>
+        </button>
     )
 }
 
@@ -115,6 +118,9 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
     const [openId, setOpenId] = useState<string | null>(null)
     const snapshot = useRef<{filter: EpisodeFilter; deleteOlder: boolean} | null>(null)
     const [showWhich, setShowWhich] = useState(false)
+    // Which episodes the list shows: all, the ones that download, the ones that can't be, or the ones one line leaves out.
+    const [shown, setShown] = useState<string>('all')
+    const shownRef = useRef<HTMLDivElement | null>(null)
     const dragFrom = useRef<number | null>(null)
     const [dragOver, setDragOver] = useState<number | null>(null)
 
@@ -127,8 +133,9 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
             downloadWithCountdown: !!values.downloadWithCountdown,
             filters: sentIndexes.map((index) => filters[index]),
             includeEpisodes: showWhich,
+            episodesShown: shown === 'all' ? undefined : shown,
         }
-    }, [collectionId, exampleCollection, values.downloadWithCountdown, filters, sentIndexes, showWhich])
+    }, [collectionId, exampleCollection, values.downloadWithCountdown, filters, sentIndexes, showWhich, shown])
     const {result, loading, episodes, hasMore, loadingMore, moreFailed, loadMore} = useWhichEpisodes(request)
     const counts = useMemo(() => {
         const byIndex = new Map<number, number>()
@@ -243,6 +250,33 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
         setDragOver(null)
         if (from !== null && from !== index) move(from, index)
     }
+
+    // A filter's count opens the list on the episodes that filter leaves out.
+    const showLeftOutBy = (index: number) => {
+        setShown(`filter:${sentIndexes.indexOf(index)}`)
+        setShowWhich(true)
+        window.setTimeout(() => shownRef.current?.scrollIntoView({behavior: 'smooth', block: 'nearest'}), 50)
+    }
+    const oneFilter = shown.startsWith('filter:')
+
+    const shownReg = useMemo(() => {
+        const spec: Record<string, {label: string}> = {
+            all: {label: `All episodes${result ? ` (${result.total})` : ''}`},
+            downloads: {label: `Episodes that download${result ? ` (${result.downloaded})` : ''}`},
+        }
+        sentIndexes.forEach((index, sent) => {
+            const filter = filters[index]
+            if (filter.action === 'keep') return
+            spec[`filter:${sent}`] = {label: `Left out by filter ${index + 1}: ${plainText(sentenceOf(filter))}${result ? ` (${result.filters[sent]})` : ''}`}
+        })
+        if (result && result.unavailable > 0) spec.unavailable = {label: `Can’t be downloaded (${result.unavailable})`}
+        return createSelectRegistry('ShownEpisodes', spec)
+    }, [sentIndexes, filters, result])
+
+    // A filter that was removed, became a Keep or is being rewritten no longer has episodes of its own to show.
+    useEffect(() => {
+        if (result && !shownReg.is(shown)) setShown('all')
+    }, [result, shownReg, shown])
 
     const leftOutLabel = (key: string | null) => {
         if (!key) return null
@@ -471,7 +505,11 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                                 ) : <span className="which-episodes-text"><Sentence parts={parts}/></span>}
                                 {filter.action === 'keep'
                                     ? <span className="which-episodes-count is-keep" title="Keep never stops a download; it protects matching downloads from deletion">keeps</span>
-                                    : <CountBadge count={counts.get(index)} waiting={request !== null && filterComplete(filter)}/>}
+                                    : <CountBadge
+                                        count={counts.get(index)} waiting={request !== null && filterComplete(filter)}
+                                        active={showWhich && shown === `filter:${sentIndexes.indexOf(index)}`}
+                                        onShow={() => showLeftOutBy(index)}
+                                    />}
                                 <button
                                     type="button" className={`which-episodes-icon${isOpen ? ' is-active' : ''}`}
                                     aria-label={`Edit: ${plainText(parts)}`} aria-expanded={isOpen}
@@ -518,53 +556,78 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                 {request !== null && (
                     // Shown before the count arrives, at the same height, so the form below does not move.
                     <li className="which-episodes-footer" aria-busy={!result && loading}>
-                        <span className="which-episodes-total">
-                            <span className="which-episodes-total__label">Total</span>
-                            {result ? (
-                                <span>
-                                    <b className="which-episodes-total__count">{result.downloaded} of {result.total}</b>
-                                    {exampleCollection ? ' newest episodes would be downloaded' : ' indexed episodes will be downloaded'}
-                                    {result.unavailable > 0 && <span className="which-episodes-muted"> ({result.unavailable} can’t be downloaded)</span>}
-                                </span>
-                            ) : loading ? (
-                                <span><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/> Counting episodes…</span>
-                            ) : (
-                                <span>Couldn’t count the episodes</span>
-                            )}
-                        </span>
-                        <button
-                            type="button" className="which-episodes-show" aria-expanded={showWhich} disabled={!result}
-                            onClick={() => setShowWhich((value) => !value)}
-                        >
-                            <FontAwesomeIcon icon={faIcon('fass', 'list')}/>
-                            {showWhich ? 'Hide the list' : 'Show which'}
-                            <FontAwesomeIcon icon={faIcon('fass', showWhich ? 'chevron-up' : 'chevron-down')}/>
-                        </button>
+                        <div className="which-episodes-footer-head">
+                            <span className="which-episodes-total">
+                                <span className="which-episodes-total__label">Total</span>
+                                {result ? (
+                                    <span>
+                                        <b className="which-episodes-total__count">{result.downloaded} of {result.total}</b>
+                                        {exampleCollection ? ' newest episodes would be downloaded' : ' indexed episodes will be downloaded'}
+                                        {result.unavailable > 0 && <span className="which-episodes-muted"> ({result.unavailable} can’t be downloaded)</span>}
+                                    </span>
+                                ) : loading ? (
+                                    <span><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/> Counting episodes…</span>
+                                ) : (
+                                    <span>Couldn’t count the episodes</span>
+                                )}
+                            </span>
+                            <button
+                                type="button" className="which-episodes-show" aria-expanded={showWhich} disabled={!result}
+                                onClick={() => {
+                                    setShowWhich((value) => !value)
+                                    setShown('all')
+                                }}
+                            >
+                                <FontAwesomeIcon icon={faIcon('fass', 'list')}/>
+                                {showWhich ? 'Hide the list' : 'Show which'}
+                                <FontAwesomeIcon icon={faIcon('fass', showWhich ? 'chevron-up' : 'chevron-down')}/>
+                            </button>
+                        </div>
+                        {showWhich && result && (
+                            <div className="which-episodes-shown" ref={shownRef}>
+                                <label htmlFor="which-episodes-shown">Show</label>
+                                <SimpleSelect
+                                    inputId="which-episodes-shown" registry={shownReg} value={shown} className="which-episodes-shown-select"
+                                    onChange={setShown} menuPlacement="auto"
+                                />
+                            </div>
+                        )}
+                        {showWhich && episodes && (
+                            <ul className="which-episodes-list" ref={listRef}>
+                                {episodes.map((episode) => (
+                                    <li key={episode.id} className={episode.leftOutBy ? 'is-left-out' : 'is-downloaded'}>
+                                        <FontAwesomeIcon icon={episode.leftOutBy ? faIcon('fass', 'minus') : faIcon('fass', 'check')}/>
+                                        <span className="which-episodes-list-main">
+                                            <span className="which-episodes-list-title">{episode.title}</span>
+                                            {/* Every episode in a one-filter list was left out by that filter, so it doesn't say so again. */}
+                                            {!oneFilter && (
+                                                <span className="which-episodes-muted which-episodes-list-reason">
+                                                    {leftOutLabel(episode.leftOutBy) ?? 'Downloads'}
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span className="which-episodes-list-meta">
+                                            {episode.episodeType && <span className="which-episodes-type">{typeLabel(episode.episodeType)}</span>}
+                                            {episode.duration ? <span>{formatRunningTime(episode.duration)}</span> : null}
+                                            {episode.publishedAt && (
+                                                <span>{new Date(episode.publishedAt).toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'})}</span>
+                                            )}
+                                        </span>
+                                    </li>
+                                ))}
+                                {hasMore && (
+                                    <li ref={endRef} className="which-episodes-list-end">
+                                        {moreFailed
+                                            ? <>Couldn’t load more episodes. <button type="button" className="btn btn-link" onClick={loadMore}>Try again</button></>
+                                            : <><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/> Loading more episodes…</>}
+                                    </li>
+                                )}
+                            </ul>
+                        )}
                     </li>
                 )}
             </ul>
             <ListError form={form}/>
-            {showWhich && episodes && (
-                <ul className="which-episodes-list" ref={listRef}>
-                    {episodes.map((episode) => (
-                        <li key={episode.id} className={episode.leftOutBy ? 'is-left-out' : 'is-downloaded'}>
-                            <FontAwesomeIcon icon={episode.leftOutBy ? faIcon('fass', 'minus') : faIcon('fass', 'check')}/>
-                            <span className="which-episodes-list-title">{episode.title}</span>
-                            <span className="which-episodes-muted">{leftOutLabel(episode.leftOutBy) ?? 'Downloads'}</span>
-                            <span className="which-episodes-muted">
-                                {episode.publishedAt ? new Date(episode.publishedAt).toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'}) : ''}
-                            </span>
-                        </li>
-                    ))}
-                    {hasMore && (
-                        <li ref={endRef} className="which-episodes-list-end">
-                            {moreFailed
-                                ? <>Couldn’t load more episodes. <button type="button" className="btn btn-link" onClick={loadMore}>Try again</button></>
-                                : <><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/> Loading more episodes…</>}
-                        </li>
-                    )}
-                </ul>
-            )}
             <div className="help">
                 <ReadMore summary={<span>Filters apply from top to bottom. Drag a filter to change the order. The numbers show how many {exampleCollection
                     ? 'of the newest episodes, looked up for this collection before it is saved,'

@@ -287,7 +287,7 @@ def test_the_settings_list_each_site_with_the_settings_it_shows_and_starts_with(
     assert shown["youtube"]["sponsorblock"] == {"key": "sponsorblock", "start": True, "preset": False}
     assert "sponsorblock" not in shown["generic:vimeo.com"]
     assert "autoSubtitles" in shown["generic:vimeo.com"] and "downloadWithCountdown" not in shown["youtube"]
-    assert youtube["upgradeImprovements"] == ["resolution", "sponsorblock", "subtitles", "codec"]
+    assert youtube["upgradeImprovements"] == ["resolution", "sponsorblock", "subtitles", "codec", "length"]
 
 
 # --- The Daily Wire's episodes ------------------------------------------------------------------

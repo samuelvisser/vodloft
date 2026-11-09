@@ -120,13 +120,16 @@ SponsorBlock segments come in over the days after it, and subtitles get added la
 episode after it is out, such as cutting a long live stream down to its highlights. The **Upgrade check** card, under
 Which episodes, downloads an episode again after a while, but only when something you care about changed.
 
-What the card shows depends on the Collection's site, and on the Source that downloads it. The Daily Wire has countdown
-downloads and checks for a different length; YouTube checks for a higher resolution, SponsorBlock segments, subtitles
-and the preferred codec; other sites yt-dlp downloads check for all of those except SponsorBlock. A Daily Wire show
-added through yt-dlp gets what yt-dlp offers any site. A site with nothing to check has no Upgrade check card at all.
+What the card shows depends on the Collection's site, and on the Source that downloads it. Every site can check for a
+different length. The Daily Wire also has countdown downloads; YouTube also checks for a higher resolution, SponsorBlock
+segments, subtitles and the preferred codec; other sites yt-dlp downloads check for all of those except SponsorBlock.
+NPO Start can only check for a different length. A Daily Wire show added through yt-dlp gets
+what yt-dlp offers any site.
 Subtitles only show when the Local Media Profile stores them.
 
-- **Download again when a better version is out** turns the check on. New profiles have it on.
+- **Download again when a better version is out** turns the check on. A new profile has it on when something counts
+  as better by default, and off when nothing does, such as on NPO Start. Saving a profile with nothing ticked under
+  **Better means** turns the check off.
 
 A new profile starts with its site's Download profile defaults (see [[Settings#download-profile-defaults]]), which you can
 change under **Settings → Downloads**. The defaults below are the ones VODLoft comes with.
@@ -135,17 +138,23 @@ change under **Settings → Downloads**. The defaults below are the ones VODLoft
   7 days checks on day 7, 14 and 21. Every choice stops early once an episode can't get any better.
 - **Better means**: a higher resolution (up to the Local Media Profile's quality), new SponsorBlock segments of the types
   you mark or cut out, new subtitles in a language the Local Media Profile asks for, or the preferred codec (the first
-  allowed codec in the Local Media Profile). A higher resolution is on by default, and on YouTube new SponsorBlock segments too.
-  For The Daily Wire it is **a different length**: longer or shorter by more than the minutes you set, 5 by default.
+  allowed codec in the Local Media Profile), or **a different length**: longer or shorter by more than the minutes you
+  set. A higher resolution is on by default, and on YouTube new SponsorBlock segments too. A different length is on by
+  default only for The Daily Wire, at 5 minutes; YouTube starts at 3 minutes once you turn it on, other sites at 5.
+  SponsorBlock segments a download cut out don't count as a different length.
 
 The check first asks the site what it has now, and only downloads when one of your improvements is there. The old
 file stays until the new one is complete. Kept downloads are checked too: Keep protects a download from being deleted,
 not from a better copy. Downloads made after the check is turned on are the ones that get checked.
+Files you imported or matched get the same check, timed from the day the episode came out instead of the day you
+imported them, so an imported backlog is not checked all at once. An episode whose check day has already passed is not
+checked.
 
 When a metadata refresh shows that one of your improvements changed, the check runs right away instead of waiting
 for its schedule. This includes a refresh you start yourself. Today a refresh can only tell a different length, such as
-The Daily Wire listing a new length for an episode; for anything else the check keeps its own schedule. Before downloading again, VODLoft measures the stream The Daily Wire actually
-serves, so a wrong length on the site does not cause a download. A countdown download waits for its final version
+a site listing a new length for an episode; for anything else the check keeps its own schedule. Before downloading
+again, VODLoft asks the site for the length again; for The Daily Wire it measures the stream it actually serves, so a
+wrong length on the site does not cause a download. A countdown download waits for its final version
 first. Each download remembers how long its file is; VODLoft reads this from the files you already had when you
 updated, and checks Daily Wire downloads of the last 30 days right away.
 
@@ -183,9 +192,14 @@ This setting only appears when the Local Media Profile stores subtitles.
 - **Chapter**: becomes a named chapter that your player can skip. Nothing is removed, so this is the safe choice.
 - **Cut out**: removed from the file. This is final; the cut part isn't kept anywhere.
 
-The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Preview and recap, Filler and Non-music section. SponsorBlock's Highlight is always a chapter. A new YouTube Download Profile makes chapters of sponsors, intros and outros, and keeps everything else. Profiles from before VODLoft 0.7.0 start with SponsorBlock off.
+The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Preview and recap, Hook and greetings, Filler and Non-music section. Two more can only be kept or made a chapter, because there is nothing to cut out:
 
-Most parts are submitted in the days after a video comes out, so a download made right after upload may find few of them. The episode page shows what a download found on a timeline: each part, whether it became a chapter or was cut out, and how much shorter the file is.
+- **Highlight**: the one moment viewers mark as where the video really gets going.
+- **Viewer chapters**: chapter titles viewers wrote, mostly for videos without chapters of their own. When other types are chapters too, they all share one list: a part that falls inside a viewer chapter splits it, and the overlap is named after both. On a video that has its own chapters, the two sets of titles mix, so this starts as Keep.
+
+A new YouTube Download Profile makes chapters of sponsors, intros, outros and the highlight, and keeps everything else. Saving a profile that keeps every type turns SponsorBlock off, and a new profile starts with it off when your defaults keep every type. Profiles from before VODLoft 0.7.0 start with SponsorBlock off.
+
+Most parts are submitted in the days after a video comes out, so a download made right after upload may find few of them. When a download found parts, the episode page shows them on a timeline: each part, whether it became a chapter or was cut out, and how much shorter the file is.
 
 An episode you download by hand follows the Collection's Download Profile for the same Local Media Profile.
 

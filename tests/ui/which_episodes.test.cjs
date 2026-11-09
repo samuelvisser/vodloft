@@ -92,3 +92,10 @@ test('the episode types a list downloads', () => {
         {action: 'skip', field: 'types', episodeTypes: ['aux']},
     ])], ['ep'])
 })
+
+test('an episode length reads short in the episode list', () => {
+    assert.equal(text.formatRunningTime(45), '45 sec')
+    assert.equal(text.formatRunningTime(59.6 * 60), '1 h')
+    assert.equal(text.formatRunningTime(42 * 60 + 10), '42 min')
+    assert.equal(text.formatRunningTime(3_600 + 4 * 60), '1 h 4 min')
+})

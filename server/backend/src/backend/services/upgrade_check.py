@@ -1,8 +1,7 @@
 """The upgrade check: an episode is downloaded again later, and only when something you care about improved.
 
 A YouTube video can get a higher resolution hours after upload, SponsorBlock segments come in over days, and
-subtitles get added later. The Daily Wire sometimes edits an episode after it is out, such as cutting a long live
-stream down. The check asks the Source what the video is offered as now, compares it with what the download kept,
+subtitles get added later. Any site can edit a video after it is out, such as cutting a long live stream down. The check asks the Source what the video is offered as now, compares it with what the download kept,
 and only then downloads it again through the usual redownload path, which keeps the old file until the new one is
 complete. What can count as better is the Site's: its contract lists the improvements it offers.
 """
@@ -42,8 +41,27 @@ def checks_profile(site: Site, profile: DownloadProfile) -> bool:
     return profile.upgrade_check and bool(checked_improvements(site, profile))
 
 
-def length_changed(kept: float | None, offered: float | None, profile: DownloadProfile) -> bool:
-    """Whether a length differs from the downloaded file's by more than the profile's minutes. An unknown length never does."""
+def kept_length(download: EpisodeMediaDownload) -> float | None:
+    """The length of the video the download was made from: the file's, with the SponsorBlock segments it cut out."""
+    if not download.duration:
+        return None
+    cut = sorted(
+        (float(segment["start"]), float(segment["end"])) for segment in download.sponsorblock_segments or ()
+        if isinstance(segment, dict) and segment.get("action") == "cut" and "start" in segment and "end" in segment
+    )
+    removed, reached = 0.0, 0.0
+    for start, end in cut:
+        # Segments can overlap; each second counts once.
+        start = max(start, reached)
+        if end > start:
+            removed += end - start
+            reached = end
+    return download.duration + removed
+
+
+def length_changed(download: EpisodeMediaDownload, offered: float | None, profile: DownloadProfile) -> bool:
+    """Whether a length differs from the download's by more than the profile's minutes. An unknown length never does."""
+    kept = kept_length(download)
     if not kept or not offered:
         return False
     return abs(offered - kept) > profile.upgrade_length_minutes * 60
@@ -61,6 +79,23 @@ def schedule_first_upgrade_check(download: EpisodeMediaDownload, site: Site, now
         download.upgrade_check_at = None
         return
     download.upgrade_check_at = now + timedelta(days=profile.upgrade_after_days)
+
+
+def schedule_imported_upgrade_check(
+    download: EpisodeMediaDownload, profile: DownloadProfile | None, published: datetime | None, site: Site, now: datetime,
+) -> None:
+    """Plan the check of a file VODLoft did not download itself, as if it had downloaded it when the episode came out.
+
+    An imported backlog would otherwise be checked all at once. An episode whose check day has already passed is
+    not checked, just as it would have been checked long ago.
+    """
+    if download.upgrade_checks or download.upgrade_check_at is not None or published is None:
+        return
+    if profile is None or not checks_profile(site, profile):
+        return
+    due = utc_datetime(published) + timedelta(days=profile.upgrade_after_days)
+    if due > now:
+        download.upgrade_check_at = due
 
 
 class RefreshedChange(StrEnum):
@@ -81,7 +116,7 @@ def refreshed_change(
     if improvement == UpgradeImprovement.LENGTH.value:
         if not download.duration or not episode.duration:
             return RefreshedChange.UNKNOWN
-        return RefreshedChange.YES if length_changed(download.duration, episode.duration, profile) else RefreshedChange.NO
+        return RefreshedChange.YES if length_changed(download, episode.duration, profile) else RefreshedChange.NO
     return RefreshedChange.UNKNOWN
 
 
@@ -196,7 +231,7 @@ def upgrade_findings(
     if UpgradeImprovement.LENGTH.value in wanted:
         # The site can edit an episode at any time. A countdown download is replaced by the final version anyway.
         could_improve = True
-        if not download.redownload_when_final and length_changed(download.duration, offer.duration, profile):
+        if not download.redownload_when_final and length_changed(download, offer.duration, profile):
             found.append(UpgradeImprovement.LENGTH)
 
     return UpgradeFindings(tuple(found), could_improve or bool(found), best_height)
