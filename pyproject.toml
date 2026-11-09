@@ -28,7 +28,7 @@ task-manager = { workspace = true }
 
 [dependency-groups]
 dev = [
-    "pytest>=8.4,<9",
+    "pytest>=9,<10",
     "pytest-socket>=0.7,<1",
     "httpx>=0.28,<1",
 ]
