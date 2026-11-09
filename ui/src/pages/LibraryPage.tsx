@@ -18,13 +18,33 @@ import {DrmBadge} from '../components/common/DrmProtected'
 import {AccessBadge} from '../components/common/AccessLocked'
 import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
 import DownloadStatusBadge from '../components/DownloadProgress/DownloadStatusBadge'
-import {useLibraryCounts, useLibraryDownloads, useMovies, useCollectionsView, useVideos} from '../lib/queries'
+import CollectionSort, {
+    type CollectionSortOrder,
+    compareCollections,
+    DEFAULT_COLLECTION_SORT,
+    isCollectionSortOrder,
+} from '../components/CollectionSort/CollectionSort'
+import {
+    useLibraryCounts, useLibraryDownloads, useLibraryPreferences, useMovies, useCollectionsView, useSaveLibraryPreferences, useVideos,
+} from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg, CollectionTypeValue} from '../types/collection'
 import DurationPill from '../components/common/DurationPill'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SOURCE_FILTER_STORAGE_KEY = 'librarySourceFilter'
+const LIBRARY_COLLECTION_SORT_STORAGE_KEY = 'libraryCollectionSort'
+
+/** The order this browser remembers, for installs without user accounts. */
+function loadBrowserCollectionSort(): CollectionSortOrder {
+    try {
+        const raw = localStorage.getItem(LIBRARY_COLLECTION_SORT_STORAGE_KEY)
+        const parsed: unknown = raw === null ? null : JSON.parse(raw)
+        return isCollectionSortOrder(parsed) ? parsed : DEFAULT_COLLECTION_SORT
+    } catch {
+        return DEFAULT_COLLECTION_SORT
+    }
+}
 
 /** The remembered Source filter; empty (every Source) when nothing usable is stored. */
 function loadLibrarySourceFilter(): Set<string> {
@@ -106,6 +126,22 @@ function matchesLibrarySearch(item: {title: string, authorName?: string | null},
     return words.every((word) => haystack.includes(word))
 }
 
+/**
+ * How well a Collection matches the search, best first: the whole title, the start of the title,
+ * the start of words in the title, anywhere in the title, and last the ones only its author matches.
+ */
+function searchRank(item: {title: string}, words: string[]) {
+    const title = foldForSearch(item.title).trim()
+    const query = words.join(' ')
+    if (title === query) return 0
+    if (title.startsWith(query)) return 1
+    const titleWords = title.split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+    if (words.every((word) => titleWords.some((titleWord) => titleWord.startsWith(word)))) return 2
+    if (words.every((word) => title.includes(word))) return 3
+    return 4
+}
+
+
 function NoMatches({search, what}: {search: boolean, what: string}) {
     return (
         <div className="catalog-empty">
@@ -131,6 +167,26 @@ export default function LibraryPage() {
     const {data: videos, isLoading: videosLoading, error: videosError} = useVideos()
     const {data: downloads} = useLibraryDownloads()
     const {data: libraryCounts, error: libraryCountsError} = useLibraryCounts()
+    const {data: libraryPreferences, error: libraryPreferencesError} = useLibraryPreferences()
+    const saveLibraryPreferences = useSaveLibraryPreferences()
+    const [browserCollectionSort, setBrowserCollectionSort] = useState(loadBrowserCollectionSort)
+    // With user accounts VODLoft remembers each user's order; without them, the browser does.
+    const collectionSort = useMemo<CollectionSortOrder>(() => (libraryPreferences?.saved
+        ? {by: libraryPreferences.collectionSort, reversed: libraryPreferences.collectionSortReversed}
+        : browserCollectionSort), [libraryPreferences, browserCollectionSort])
+    const collectionSortKnown = libraryPreferences !== undefined || !!libraryPreferencesError
+    const chooseCollectionSort = (order: CollectionSortOrder) => {
+        if (libraryPreferences?.saved) {
+            saveLibraryPreferences.mutate({collectionSort: order.by, collectionSortReversed: order.reversed})
+            return
+        }
+        setBrowserCollectionSort(order)
+        try {
+            localStorage.setItem(LIBRARY_COLLECTION_SORT_STORAGE_KEY, JSON.stringify(order))
+        } catch {
+            // Without storage the order is only kept while the page is open.
+        }
+    }
     const sourceKeys = useMemo(
         () => [...new Set([...(collections ?? []), ...(movies ?? []), ...(videos ?? [])].map((item) => item.sourceKey))].sort(),
         [collections, movies, videos],
@@ -143,13 +199,17 @@ export default function LibraryPage() {
         const kept = [...sourceFilter].filter((key) => sourceKeys.includes(key))
         return kept.length === sourceKeys.length ? new Set<string>() : new Set(kept)
     }, [sourceFilter, sourceKeys])
-    const filteredCollections = useMemo(
-        () => collections?.filter((collection) => (
+    const filteredCollections = useMemo(() => {
+        const shown = collections?.filter((collection) => (
             matchesCollectionTypeFilter(collection.type, collectionTypeFilter) && matchesSourceFilter(collection.sourceKey, activeSourceFilter)
             && matchesLibrarySearch(collection, searchWords)
-        )) ?? [],
-        [collections, collectionTypeFilter, activeSourceFilter, searchWords],
-    )
+        )) ?? []
+        // While searching, the best matches come first; the chosen order only settles equal matches.
+        const ranks = new Map(searchWords.length > 0 ? shown.map((collection) => [collection.slug, searchRank(collection, searchWords)]) : [])
+        return shown.sort((a, b) => (
+            (ranks.get(a.slug) ?? 0) - (ranks.get(b.slug) ?? 0) || compareCollections(a, b, collectionSort)
+        ))
+    }, [collections, collectionTypeFilter, activeSourceFilter, searchWords, collectionSort])
     const filteredMovies = useMemo(
         () => movies?.filter((movie) => (
             matchesSourceFilter(movie.sourceKey, activeSourceFilter) && matchesLibrarySearch(movie, searchWords)
@@ -259,6 +319,9 @@ export default function LibraryPage() {
                         />
                         {search && <ClearInputButton label="Clear the search" onClear={() => setSearch('')}/>}
                     </label>
+                    {activeType === 'collections' && hasCollections && (
+                        <CollectionSort order={collectionSort} onChange={chooseCollectionSort} searching={searchWords.length > 0}/>
+                    )}
                 </div>
             )}
 
@@ -290,7 +353,7 @@ export default function LibraryPage() {
                     <p>Paste a link to a collection, a movie or a video to add it.</p>
                     {can('add_media') && <Link className="btn btn-primary" to="/add">Add media</Link>}
                 </div>
-            ) : activeType === 'collections' && hasCollections && !collections ? (
+            ) : activeType === 'collections' && hasCollections && (!collections || !collectionSortKnown) ? (
                 <LibraryTypeLoading what="collections" error={collectionsError}/>
             ) : activeType === 'movies' && hasMovies && !movies ? (
                 <LibraryTypeLoading what="movies" error={moviesError}/>

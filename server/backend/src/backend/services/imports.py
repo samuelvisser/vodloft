@@ -1076,6 +1076,9 @@ def _upsert_collection(session: Session, plan: CollectionPlan, library, links, r
             library[_normalise_url(existing.sharing_url)] = existing
             report.add("created", plan.title, "Added to the Library", warnings=[_warning(warning) for warning in plan.warnings])
             report.counts["collections_created"] += 1
+    if plan.added_at is not None and (existing.created_at is None or plan.added_at < existing.created_at):
+        # The Collection has been in your library since the other program added it.
+        existing.created_at = plan.added_at
     options = plan.settings.get("ytdlp_options")
     if isinstance(options, str) and options and not existing.ytdlp_options:
         # Added once; after that, the Collection's yt-dlp options are yours to change.

@@ -24,6 +24,10 @@ Library contains the collections, movies and videos you have chosen to manage. E
 
 It has separate Collections, Movies and Videos views; a view appears once the Library holds that kind of media. Collection filters are remembered in that browser, so returning to the Library restores the last show-type selection you used.
 
+Collections are listed **Often used** first: VODLoft counts how often each collection's page is opened, and the ones you open most come first, with equal ones by name. The sort menu beside the search also lists them by **Name**, **Release date** (when the oldest episode came out) or **Added at** (when the collection was added to VODLoft), and the button next to it turns the order around. VODLoft remembers the order you pick for your user account; without user accounts, the browser remembers it. While you search, the best matches come first, whatever order you picked.
+
+A collection imported from Pinchflat counts as added on the day it was added to Pinchflat.
+
 ### Shows
 
 A collection page brings together its seasons and episodes, current publication state, local downloads, Download Profiles, RSS Stream Profiles, manual synchronization, and recent sync history.

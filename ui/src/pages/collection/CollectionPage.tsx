@@ -26,7 +26,7 @@ import ExistingFilesDialog from '../../components/ExistingFiles/ExistingFilesDia
 import ExistingFilesBanner from '../../components/ExistingFiles/ExistingFilesBanner'
 import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
-import {apiUrl} from '../../lib/api'
+import {apiFetch, apiUrl} from '../../lib/api'
 
 const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
 
@@ -84,6 +84,15 @@ export default function CollectionPage() {
   const PAGE_SIZE = 36
 
   const { data: collection, isLoading, error } = useCollection(id)
+  // Count each visit once, so the Library can list the most used Collections first.
+  const countedVisit = useRef<string | null>(null)
+  useEffect(() => {
+    if (!id || countedVisit.current === id) return
+    countedVisit.current = id
+    apiFetch(`/collections/${encodeURIComponent(id)}/opened`, {method: 'POST'}).catch(() => {
+      // Only the Library's order misses this visit.
+    })
+  }, [id])
   const sources = useSourceLookup()
   const isSeasonal = collection?.episodeIdentifier === 'seasonal'
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 from fastapi import HTTPException
@@ -16,6 +17,7 @@ class _CollectionViewSource:
     collection: Collection
     episode_count: int
     years: str
+    first_published_date: Optional[datetime]
 
 
 def _episode_stats():
@@ -59,6 +61,7 @@ def _to_view(
         collection=collection,
         episode_count=int(episode_count or 0),
         years=years,
+        first_published_date=min_published_date,
     ))
 
 

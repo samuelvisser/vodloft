@@ -425,6 +425,7 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
         },
         warnings=tuple(warnings),
         assets=assets,
+        added_at=source.added_at,
     )
 
 
