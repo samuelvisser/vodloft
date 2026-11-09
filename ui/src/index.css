@@ -980,6 +980,11 @@ input[type="time"] {
   white-space: normal;
 }
 
+/* Reserve two title lines when a meta line follows, so the meta lines of a grid row sit at the same height. */
+.episode-title:has(+ .episode-meta) {
+  min-height: calc(2 * 1.25em);
+}
+
 
 /* Professional table styles for profiles */
 .table-wrapper {
