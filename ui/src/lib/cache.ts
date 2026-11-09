@@ -140,6 +140,7 @@ function compactEpisodes(data: EpisodeReadView[]): EpisodeReadView[] {
     accessRefusedAt: episode.accessRefusedAt,
     accessCheckAt: episode.accessCheckAt,
     accessLocked: episode.accessLocked,
+    accessGranted: episode.accessGranted,
     accessLabel: episode.accessLabel,
     accessDescription: episode.accessDescription,
     removedFromSource: episode.removedFromSource,

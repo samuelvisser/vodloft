@@ -20,6 +20,7 @@ from .api.utils.validators.available_for_list import parse_tiers
 from .auth import DeviceAuthClient
 from .auth.storage import TokenStore
 from .links import _access_token, _first, parse_link, resolve_link
+from .membership import account_level, gives
 from .playback import resolve_movie_playback
 
 _PLAYLIST_TIMEOUT_SECONDS = 15
@@ -182,6 +183,10 @@ class DailyWireSource(Source):
         client = MiddlewareClient(request_priority="interactive") if interactive else MiddlewareClient()
         detail = client.get_episode_details(slug, require_member_exclusive=members_only)
         return EpisodeMedia(video_url=detail.video_url, audio_url=detail.audio_url)
+
+    def has_access(self, key: str) -> bool | None:
+        # A lower level does not say False: VODLoft has always let a download find that out.
+        return True if gives(account_level(), key) else None
 
     def current_access(self, *, slug: str, url: str) -> str | None:
         payload = MiddlewareClient().get_episode_payload(slug)

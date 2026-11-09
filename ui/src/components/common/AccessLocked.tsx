@@ -7,6 +7,7 @@ type Lockable = {
     accessLabel?: string | null
     accessDescription?: string | null
     accessLocked?: boolean
+    accessGranted?: boolean
     accessCheckAt?: Date | string | null
 }
 
@@ -14,12 +15,16 @@ function checkDate(value: Date | string): string {
     return new Date(value).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})
 }
 
-/** Marks an episode or video the Source only gives with an access, such as a channel membership or NPO Plus. */
-export function AccessBadge({label, description, onCover = false}: {label?: string | null, description?: string | null, onCover?: boolean}) {
+/** Marks an episode or video the Source only gives with an access, such as a channel membership or NPO Plus.
+ * The lock is open when VODLoft has that access, such as through the account it signs in with. */
+export function AccessBadge({label, description, granted = false, onCover = false}: {label?: string | null, description?: string | null, granted?: boolean, onCover?: boolean}) {
     const name = label ?? 'Locked'
+    const title = granted
+        ? `${name}: your account has this, so VODLoft can download it`
+        : description ?? `${name}: VODLoft cannot download this without it`
     return (
-        <span className={`drm-badge access-badge${onCover ? ' drm-badge-cover' : ''}`} title={description ?? `${name}: VODLoft cannot download this without it`}>
-            <FontAwesomeIcon icon={faIcon('fass', 'lock')} aria-hidden="true"/>
+        <span className={`drm-badge access-badge${onCover ? ' drm-badge-cover' : ''}`} title={title}>
+            <FontAwesomeIcon icon={faIcon('fass', granted ? 'lock-open' : 'lock')} aria-hidden="true"/>
             {name}
         </span>
     )
@@ -27,7 +32,7 @@ export function AccessBadge({label, description, onCover = false}: {label?: stri
 
 /** The badge, only for media that needs an access. */
 export function ItemAccessBadge({item, onCover = false}: {item: Lockable, onCover?: boolean}) {
-    return item.access ? <AccessBadge label={item.accessLabel} description={item.accessDescription} onCover={onCover}/> : null
+    return item.access ? <AccessBadge label={item.accessLabel} description={item.accessDescription} granted={item.accessGranted} onCover={onCover}/> : null
 }
 
 /** Takes the place of the download controls for locked media. */

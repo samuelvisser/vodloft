@@ -85,6 +85,14 @@ def access_locked(source_key: str, access: str | None, refused_at: datetime | No
     return refused_at is not None or AccessLocks().has_access(source_key, access) is False
 
 
+def access_granted(source_key: str, access: str | None, refused_at: datetime | None) -> bool:
+    """The media needs an access, and the Source says VODLoft has it, such as the membership level
+    of the account VODLoft signs in with."""
+    if access is None or refused_at is not None:
+        return False
+    return AccessLocks().has_access(source_key, access) is True
+
+
 def media_locked(media: MediaItemBase) -> bool:
     return AccessLocks().locked(media)
 

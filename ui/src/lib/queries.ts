@@ -1099,6 +1099,7 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         accessRefusedAt: null,
         accessCheckAt: null,
         accessLocked: false,
+        accessGranted: false,
         accessLabel: null,
         accessDescription: null,
         type: contextString(operation, 'media_type') || 'episode',
