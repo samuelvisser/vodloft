@@ -138,7 +138,7 @@ export default function CollectionPage() {
 
   const episodeSeasonId = isSeasonal ? selectedSeasonId : undefined
 
-  const {data: episodeTags} = useEpisodeTagsInCollection(id)
+  const {data: episodeTags, isError: episodeTagsFailed, refetch: refetchEpisodeTags} = useEpisodeTagsInCollection(id)
   const {data: lockedCount, refetch: refetchLocked} = useCollectionLocked(id, can('managed_downloads', 'manage'))
   const [lockedCheckBusy, setLockedCheckBusy] = useState(false)
   // Hidden on purpose: most users never gain the access, so only the Actions menu offers this.
@@ -177,9 +177,14 @@ export default function CollectionPage() {
   const {
     data: episodePagesData,
     isLoading: episodesLoading,
+    isFetching: episodesFetching,
+    isPlaceholderData: episodesPlaceholder,
+    isError: episodesError,
+    isFetchNextPageError,
     isFetchingNextPage,
     fetchNextPage,
     hasNextPage,
+    refetch: refetchEpisodes,
   } = useEpisodePages(id, {
     pageSize: PAGE_SIZE,
     seasonId: episodeSeasonId,
@@ -299,10 +304,14 @@ export default function CollectionPage() {
     )
   )
 
+  // Until the first page arrives, the grid shows the episodes this browser remembered.
+  const episodesFromCache = episodePagesData === undefined || episodesPlaceholder
+  const episodesFailed = episodesError && !episodesFetching
+  const sentinelShown = Boolean(hasNextPage) && !seasonViewLoading && !episodesInitialLoading && !episodesFailed
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     const node = sentinelRef.current
-    if (!node || !hasNextPage || isFetchingNextPage) return
+    if (!node || !sentinelShown || isFetchingNextPage) return
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -314,7 +323,11 @@ export default function CollectionPage() {
     )
     observer.observe(node)
     return () => observer.disconnect()
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage])
+  }, [fetchNextPage, sentinelShown, isFetchingNextPage])
+  const retryEpisodes = () => {
+    if (episodeTagsFailed) void refetchEpisodeTags()
+    void (isFetchNextPageError ? fetchNextPage() : refetchEpisodes())
+  }
 
   if (!id) {
     return (
@@ -344,7 +357,6 @@ export default function CollectionPage() {
   }
 
   const visibleItems = displayedEpisodes
-  const hasMore = Boolean(hasNextPage)
   const episodesViewLoading = episodesInitialLoading || seasonViewLoading
 
   const metadataRefreshDisabledReason = metadataRefreshOperation
@@ -713,9 +725,26 @@ export default function CollectionPage() {
           </div>
         )}
 
-        {hasMore && !episodesViewLoading && (
-          <div ref={sentinelRef} className="episodes-load-more" aria-hidden>Loading more episodes…</div>
-        )}
+        {!episodesViewLoading && (episodesFailed ? (
+          <div className="episodes-load-more episodes-load-failed" role="alert">
+            <span>
+              {isFetchNextPageError || visibleItems.length > 0
+                ? `Could not load the rest of the episodes, ${visibleItems.length} of ${total} are shown.`
+                : 'Could not load the episodes.'}
+            </span>
+            <button type="button" className="btn" onClick={retryEpisodes}>
+              <FontAwesomeIcon icon={faIcon('fass', 'rotate-right')} aria-hidden="true"/> Try again
+            </button>
+          </div>
+        ) : episodesFromCache && visibleItems.length > 0 ? (
+          <div className="episodes-load-more" role="status">
+            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Loading episodes…
+          </div>
+        ) : sentinelShown ? (
+          <div ref={sentinelRef} className="episodes-load-more" role="status">
+            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Loading more episodes…
+          </div>
+        ) : null)}
       </article>
 
       <CollectionSyncLogModal

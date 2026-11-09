@@ -6,6 +6,9 @@ import {
     useQueryClient,
 } from '@tanstack/react-query'
 
+// With React Query's backoff of 1, 2, 4 and 8 seconds, a list rides out a backend that restarts.
+const LAZY_COLLECTION_RETRIES = 4
+
 export type LazyCollectionPage<T> = {
     items: T[]
     limit: number
@@ -313,7 +316,11 @@ export function useLazyCollection<
             previousLazyCollectionPageRequest(firstPage, batchSize)
         ),
         refetchOnMount: 'always',
-        refetchOnWindowFocus: false,
+        // A list that failed to load would otherwise keep showing whatever was cached, with no
+        // sign that it is incomplete. Try a few more times, and again when the page comes back.
+        retry: LAZY_COLLECTION_RETRIES,
+        refetchOnWindowFocus: (currentQuery) => currentQuery.state.status === 'error',
+        refetchOnReconnect: (currentQuery) => currentQuery.state.status === 'error',
         refetchIntervalInBackground: false,
         refetchInterval: pollIntervalMs === undefined
             ? false
