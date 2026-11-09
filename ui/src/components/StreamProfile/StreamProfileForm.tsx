@@ -255,10 +255,11 @@ export default function StreamProfileForm({
                 shouldDirty: true,
                 shouldValidate: true,
             })}
-            onDisableDwStream={() => setValue('useSourceStream', false, {
-                shouldDirty: true,
-                shouldValidate: true,
-            })}
+            onDisableDwStream={() => {
+                // Without the Site's stream the feed can only serve downloads, so turn those on with it.
+                setValue('useSourceStream', false, {shouldDirty: true, shouldValidate: true})
+                setValue('useDownloads', true, {shouldDirty: true, shouldValidate: true})
+            }}
         />
     ) : null
 
