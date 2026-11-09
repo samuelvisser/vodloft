@@ -121,6 +121,14 @@ class DownloadProfileAPIBaseIn(RequestBase):
     def _unique_improvements(cls, value: list) -> list:
         return list(dict.fromkeys(value))
 
+    @model_validator(mode="after")
+    def _upgrade_check_needs_an_improvement(self):
+        # With nothing that counts as better, the check could never find anything: it is saved off, so the
+        # form opens with it collapsed.
+        if not self.upgrade_improvements:
+            self.upgrade_check = False
+        return self
+
     _one_line_per_date = field_validator("filters")(classmethod(lambda cls, value: _one_line_per_date(value)))
 
 
