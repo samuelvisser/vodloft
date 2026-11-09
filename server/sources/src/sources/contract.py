@@ -906,6 +906,9 @@ class Source(ABC):
         when only a download can tell, such as for a channel membership a cookies file may have."""
         return None
 
+    def learn_access(self) -> None:
+        """Ask the service what its sign-in gives, such as a membership level, for a Source that keeps it."""
+
     def download_refused(self, key: str) -> None:
         """A download was refused for lack of this access, so what VODLoft has may have changed,
         such as the membership level of the account it signs in with."""

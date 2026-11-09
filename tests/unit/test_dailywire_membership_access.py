@@ -119,3 +119,25 @@ def test_granted_media_shows_an_open_lock_but_refused_media_stays_locked(keyring
     assert access_locked("dailywire", "INSIDER", None) is False
     assert access_granted("dailywire", "INSIDER", datetime.now(timezone.utc)) is False
     assert access_granted("dailywire", None, None) is False
+
+
+def test_the_background_migration_learns_the_level_of_an_existing_sign_in(keyring_store, lookups):
+    import asyncio
+    import importlib
+
+    calls, _ = lookups
+    migration = importlib.import_module(
+        "backend.db.background_migrations.versions.c85008e6cb25_learn_signed_in_access",
+    )
+
+    class Context:
+        def update_progress(self, *args):
+            pass
+
+        def raise_if_canceled(self):
+            pass
+
+    asyncio.run(migration.migrate(Context()))
+
+    assert calls == [DwMembershipLevel.INSIDER]
+    assert get_source("dailywire").has_access("INSIDER") is True
