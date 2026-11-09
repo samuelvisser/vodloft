@@ -83,7 +83,7 @@ export default function CollectionSort({order, onChange, searching}: CollectionS
                 formatOptionLabel={(option, {context}) => context === 'value'
                     ? (
                         <span className="collection-sort-value">
-                            <FontAwesomeIcon icon={faIcon('fass', 'arrow-down-wide-short')} aria-hidden="true"/>
+                            <FontAwesomeIcon icon={order.reversed ? faIcon('fass', 'arrow-up-short-wide') : faIcon('fass', 'arrow-down-wide-short')} aria-hidden="true"/>
                             <span className="collection-sort-label">Sort:</span> {option.label}
                         </span>
                     )
