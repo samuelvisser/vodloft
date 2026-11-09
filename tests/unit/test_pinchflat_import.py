@@ -59,7 +59,7 @@ def _pinchflat_db(path: Path, *, version: int = NEWEST_KNOWN_VERSION, items=None
             download_cutoff_date TEXT, retention_period_days INTEGER, output_path_template_override TEXT,
             title_filter_regex TEXT, min_duration_seconds INTEGER, max_duration_seconds INTEGER, cookie_behaviour TEXT,
             series_directory TEXT, nfo_filepath TEXT, poster_filepath TEXT, fanart_filepath TEXT,
-            banner_filepath TEXT, marked_for_deletion_at TEXT);
+            banner_filepath TEXT, marked_for_deletion_at TEXT, inserted_at TEXT);
         CREATE TABLE media_items (
             id INTEGER PRIMARY KEY, media_id TEXT, title TEXT, media_filepath TEXT, source_id INTEGER,
             uploaded_at TEXT, playlist_index INTEGER, upload_date_index INTEGER, prevent_download INTEGER,
@@ -76,10 +76,11 @@ def _pinchflat_db(path: Path, *, version: int = NEWEST_KNOWN_VERSION, items=None
         (2, "Lists", PLAYLIST_TEMPLATE, "1440p", 0, 0, "include", "include"),
     ])
     connection.executemany("INSERT INTO sources (id, collection_name, collection_type, original_url, media_profile_id, "
-                           "custom_name, enabled, download_media, retention_period_days, download_cutoff_date) "
-                           "VALUES (?,?,?,?,?,?,?,?,?,?)", [
-        (1, "Veritasium", "channel", "https://www.youtube.com/@veritasium", 1, None, 1, 1, None, "2020-01-01"),
-        (2, "Lofi beats", "playlist", "https://www.youtube.com/playlist?list=PL1", 2, "Lofi", 0, 1, 30, None),
+                           "custom_name, enabled, download_media, retention_period_days, download_cutoff_date, inserted_at) "
+                           "VALUES (?,?,?,?,?,?,?,?,?,?,?)", [
+        (1, "Veritasium", "channel", "https://www.youtube.com/@veritasium", 1, None, 1, 1, None, "2020-01-01",
+         "2021-02-03T04:05:06Z"),
+        (2, "Lofi beats", "playlist", "https://www.youtube.com/playlist?list=PL1", 2, "Lofi", 0, 1, 30, None, None),
     ])
     connection.executemany(
         "INSERT INTO media_items (id, media_id, title, media_filepath, source_id, uploaded_at, playlist_index, "
@@ -922,6 +923,19 @@ def test_a_step_that_fails_shows_as_failed_and_the_import_finishes(installation)
     assert [step["status"] for step in view["steps"]] == ["failed"] * len(steps)
     assert view["steps"][0]["problems"] == [{"path": None, "error": "database is locked"}]
     assert view["status"] == "finished"
+
+
+def test_an_imported_collection_was_added_when_pinchflat_added_its_source(installation):
+    from backend.db.models import Collection
+    from backend.services import imports
+
+    session, _applied = installation
+    before = datetime.now(timezone.utc).replace(microsecond=0)
+    _run(session, imports.ImportOptions())
+    added = {collection.title: collection.created_at for collection in session.scalars(select(Collection))}
+    assert added["Veritasium"] == datetime(2021, 2, 3, 4, 5, 6, tzinfo=timezone.utc)
+    # Pinchflat didn't say when it added Lofi, so it was added to VODLoft by the import.
+    assert added["Lofi"] >= before
 
 
 def test_a_finished_import_turns_on_the_download_profiles_that_were_on_in_pinchflat(installation):

@@ -11,6 +11,7 @@ import json
 import shutil
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -82,6 +83,8 @@ class PinchflatSource:
     fanart_filepath: str | None = None
     banner_filepath: str | None = None
     marked_for_deletion: bool = False
+    added_at: datetime | None = None
+    """When the source was added to Pinchflat."""
 
     @property
     def name(self) -> str:
@@ -195,6 +198,17 @@ def _bool(value: object) -> bool:
     return bool(value) and value not in ("0", "false")
 
 
+def _timestamp(value: object) -> datetime | None:
+    """One of Pinchflat's timestamps, which it writes in UTC, such as ``2025-03-03T11:05:53Z``."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment.replace(tzinfo=timezone.utc) if moment.tzinfo is None else moment.astimezone(timezone.utc)
+
+
 def _int(value: object) -> int | None:
     try:
         return None if value is None else int(value)
@@ -265,6 +279,7 @@ def _source(row: dict[str, Any]) -> PinchflatSource:
         poster_filepath=row.get("poster_filepath"), fanart_filepath=row.get("fanart_filepath"),
         banner_filepath=row.get("banner_filepath"),
         marked_for_deletion=row.get("marked_for_deletion_at") is not None,
+        added_at=_timestamp(row.get("inserted_at")),
     )
 
 

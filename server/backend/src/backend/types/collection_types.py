@@ -11,6 +11,16 @@ class EpisodeIdentifier(Enum):
     SEASONAL = "seasonal"
 
 
+class LibraryCollectionSort(StrEnum):
+    """How the Library lists its Collections."""
+
+    RECENTLY_USED = "recently_used"
+    OFTEN_USED = "often_used"
+    NAME = "name"
+    RELEASE_DATE = "release_date"
+    ADDED_AT = "added_at"
+
+
 class EpisodeOrder(StrEnum):
     """Which way a Collection lists its episodes; a seasonal Collection orders each season."""
 

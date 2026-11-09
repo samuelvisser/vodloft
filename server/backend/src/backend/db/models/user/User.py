@@ -59,6 +59,13 @@ class User(Base):
     quick_download_preferences: Mapped[Optional[dict]] = mapped_column(
         JSON, comment="The user's own Quick download defaults; null: the install's defaults",
     )
+    library_collection_sort: Mapped[str] = mapped_column(
+        default="recently_used", server_default="recently_used",
+        comment="How the user lists the Library's Collections: recently_used, often_used, name, release_date or added_at",
+    )
+    library_collection_sort_reversed: Mapped[bool] = mapped_column(
+        default=False, server_default=false(), comment="Whether the user turned that order around",
+    )
     created_by_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
     )

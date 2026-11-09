@@ -32,6 +32,7 @@ def test_collection_view_maps_nested_orm_source_through_aliases():
         thumbnail_square_path=None,
         created_at=NOW,
         updated_at=NOW,
+        open_count=3,
         meta_items=[],
     )
     source = SimpleNamespace(
@@ -46,6 +47,7 @@ def test_collection_view_maps_nested_orm_source_through_aliases():
     assert view.title == "Collection"
     assert view.episode_count == 12
     assert view.years == "2025-2026"
+    assert view.open_count == 3
 
 
 def test_download_profile_view_uses_relationship_aliases():

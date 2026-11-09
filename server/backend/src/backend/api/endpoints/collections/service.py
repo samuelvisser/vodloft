@@ -4,7 +4,7 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import exists, func, or_, select, update
 
 from sqlalchemy.orm import Session
 
@@ -190,6 +190,22 @@ def _collection_id(s: Session, collection_slug: str) -> int:
     if collection_id is None:
         raise HTTPException(status_code=404, detail="Collection not found")
     return collection_id
+
+
+def record_collection_opened(s: Session, collection_slug: str) -> None:
+    """Count one more opening of the Collection's page, for the Library's Often used and Recently used orders."""
+    opened = s.execute(
+        update(Collection)
+        .where(Collection.slug == collection_slug)
+        # Opening the page does not change the Collection, so it keeps its last update time.
+        .values(
+            open_count=Collection.open_count + 1,
+            last_opened_at=datetime.now(timezone.utc),
+            updated_at=Collection.updated_at,
+        )
+    )
+    if opened.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Collection not found")
 
 
 def count_collection_locked(s: Session, collection_slug: str) -> CollectionLockedAPIRead:

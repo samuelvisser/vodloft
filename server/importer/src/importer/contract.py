@@ -8,6 +8,7 @@ download, and refuses what it can't apply.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
@@ -98,6 +99,8 @@ class CollectionPlan:
     warnings: tuple[ImportWarning, ...] = ()
     assets: tuple[tuple[str, str], ...] = ()
     """Collection artwork and NFO files as (kind, path), such as ("poster", "/downloads/…/poster.jpg")."""
+    added_at: datetime | None = None
+    """When the other program added the collection, in UTC; None when it doesn't say."""
 
 
 FileKind = Literal["file", "suppressed", "missing"]

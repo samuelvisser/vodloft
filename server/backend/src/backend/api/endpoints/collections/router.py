@@ -20,6 +20,7 @@ from .service import (
     collection_check_suggestion,
     count_collection_locked,
     check_collection_locked,
+    record_collection_opened,
 )
 from ...models.operations import (
     CollectionDeleteDownloadsOperationAccepted,
@@ -206,6 +207,16 @@ def collection_locked(collection_slug: str):
 def collection_locked_check(collection_slug: str):
     """Check the locked episodes again now, as after gaining access, and download those the Source gives."""
     return run_write_transaction(lambda s: check_collection_locked(s, collection_slug))
+
+
+@router.post(
+    "/{collection_slug}/opened",
+    dependencies=[requires(Area.LIBRARY, Level.VIEW)],
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def collection_opened(collection_slug: str) -> None:
+    """Count that someone opened the Collection's page, so the Library can list the most used Collections first."""
+    run_write_transaction(lambda s: record_collection_opened(s, collection_slug), concurrent=True)
 
 
 @router.get("/{collection_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=CollectionAPIRead)

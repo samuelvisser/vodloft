@@ -1,0 +1,51 @@
+/* The Library's Collection order beside the search: one pill, the order on the left and its direction on the right */
+.collection-sort {
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+    min-height: 44px;
+    border: 1px solid rgba(100,116,139,.4);
+    border-radius: 10px;
+    background: rgba(148,163,184,.07);
+}
+.collection-sort:focus-within { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.25); }
+.collection-sort-select { min-width: 190px; }
+/* Part of the pill: no border of its own (the global react-select rules use !important). */
+.collection-sort .collection-sort-select div.select__control,
+.collection-sort .collection-sort-select div.select__control:hover {
+    height: 100%;
+    min-height: 42px;
+    border: 0 !important;
+    border-radius: 10px 0 0 10px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    cursor: pointer;
+}
+.collection-sort.is-searching .collection-sort-select div.select__control { border-radius: 10px !important; }
+.collection-sort-select .select__indicator-separator { display: none; }
+.collection-sort-select .select__single-value,
+.collection-sort-select .select__placeholder { color: var(--text); font-weight: 600; }
+.collection-sort.is-searching .select__placeholder { color: var(--muted); }
+.collection-sort-value { display: inline-flex; align-items: center; gap: 8px; }
+.collection-sort-value svg { color: var(--muted); }
+.collection-sort-label { color: var(--muted); font-weight: 500; }
+.collection-sort-direction {
+    appearance: none;
+    display: grid;
+    place-items: center;
+    width: 46px;
+    padding: 0;
+    border: 0;
+    border-left: 1px solid rgba(100,116,139,.4);
+    border-radius: 0 10px 10px 0;
+    background: rgba(59,130,246,.14);
+    color: var(--text);
+    font-size: 15px;
+    cursor: pointer;
+}
+.collection-sort-direction:hover { background: rgba(59,130,246,.24); }
+.collection-sort-direction:focus-visible { outline: 2px solid #3b82f6; outline-offset: -2px; }
+
+@media (max-width: 700px) {
+    .collection-sort { align-self: flex-start; }
+}

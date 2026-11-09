@@ -5,6 +5,7 @@ import {
     keepPreviousData,
     QueryClient,
     useInfiniteQuery,
+    useMutation,
     useQueries,
     useQuery,
     useQueryClient,
@@ -77,10 +78,10 @@ import {
     DailywireMovieRead,
     DailywireMovieReadSchema,
 } from "../types/schemas/dailywire_catalog";
-import {apiUrl, responseError} from './api'
+import {apiJson, apiUrl, responseError} from './api'
 import {z} from 'zod'
 import {profilePageSchema} from '../types/schemas/profile_page'
-import {LibraryCountsSchema} from '../types/schemas/library'
+import {LibraryCountsSchema, LibraryPreferencesSchema, type LibraryPreferences} from '../types/schemas/library'
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
     const r = await fetch(url, {signal, credentials: 'include'})
@@ -1576,6 +1577,46 @@ export function applyMediaDownloadQueuePositions(
     )
 }
 
+function libraryPreferencesQueryOptions() {
+    return {
+        queryKey: ['libraryPreferences'] as const,
+        queryFn: ({signal}: {signal: AbortSignal}) => fetchParsed(
+            `${apiUrl()}/library/preferences`,
+            LibraryPreferencesSchema,
+            signal,
+        ),
+        staleTime: Infinity,
+    }
+}
+
+/** How the signed-in user lists the Library. */
+export function useLibraryPreferences() {
+    return useQuery({
+        ...libraryPreferencesQueryOptions(),
+        enabled: can('library'),
+    })
+}
+
+/** Remember how the signed-in user lists the Library; the page shows the new order right away. */
+export function useSaveLibraryPreferences() {
+    const qc = useQueryClient()
+    const {queryKey} = libraryPreferencesQueryOptions()
+    return useMutation({
+        mutationFn: (preferences: Omit<LibraryPreferences, 'saved'>) => apiJson(
+            '/library/preferences', LibraryPreferencesSchema.parse, {method: 'PUT', json: preferences},
+        ),
+        onMutate: (preferences) => {
+            const previous = qc.getQueryData<LibraryPreferences>(queryKey)
+            if (previous) qc.setQueryData<LibraryPreferences>(queryKey, {...previous, ...preferences})
+            return {previous}
+        },
+        onError: (_error, _preferences, context) => {
+            if (context?.previous) qc.setQueryData(queryKey, context.previous)
+        },
+        onSuccess: (saved) => qc.setQueryData(queryKey, saved),
+    })
+}
+
 // Prefetch core data to warm the cache on app start
 /** Warm the lists the pages share, only the ones the signed-in person may read. */
 export function prefetchCoreData(qc: QueryClient) {
@@ -1587,6 +1628,7 @@ export function prefetchCoreData(qc: QueryClient) {
             if (collections) saveCollectionsToStorage(collections)
         })
     if (library) void qc.prefetchQuery(libraryCountsQueryOptions())
+    if (library) void qc.prefetchQuery(libraryPreferencesQueryOptions())
     if (library) void qc.prefetchQuery({
         queryKey: ['movies'],
         queryFn: ({signal}) => fetchParsed(
