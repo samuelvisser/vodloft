@@ -341,3 +341,25 @@ def test_a_downloads_length_is_read_from_its_file(tmp_path):
     )
     assert media_duration(str(path)) == pytest.approx(3.5, abs=0.1)
     assert media_duration(str(tmp_path / "missing.mp4")) is None
+
+
+def test_an_imported_file_is_checked_from_its_publish_date(db_session):
+    from backend.services.upgrade_check import schedule_imported_upgrade_check
+
+    download = _download(db_session, profile_values={"upgrade_after_days": 7}, download_values={"sponsorblock_segments": None})
+    profile = download.download_profile
+    schedule_imported_upgrade_check(download, profile, NOW - timedelta(days=2), YOUTUBE, NOW)
+    assert download.upgrade_check_at == NOW + timedelta(days=5)
+
+    # A check it already has stays as it is.
+    schedule_imported_upgrade_check(download, profile, NOW - timedelta(days=1), YOUTUBE, NOW)
+    assert download.upgrade_check_at == NOW + timedelta(days=5)
+
+    download.upgrade_check_at = None
+    schedule_imported_upgrade_check(download, profile, NOW - timedelta(days=8), YOUTUBE, NOW)
+    assert download.upgrade_check_at is None
+    schedule_imported_upgrade_check(download, profile, None, YOUTUBE, NOW)
+    assert download.upgrade_check_at is None
+    profile.upgrade_check = False
+    schedule_imported_upgrade_check(download, profile, NOW - timedelta(days=2), YOUTUBE, NOW)
+    assert download.upgrade_check_at is None

@@ -34,6 +34,8 @@ from backend.db.models import (
 )
 from backend.db.models.media_download.MediaDownloadAsset import MediaDownloadAsset
 from backend.services.media_download_history import record_media_download_history
+from backend.services.sites import collection_site
+from backend.services.upgrade_check import schedule_imported_upgrade_check
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.media_types import MediaType
@@ -216,6 +218,10 @@ def adopt(
                 DownloadProfile.collection_id == media.collection_id,
                 DownloadProfile.local_media_profile_id == local_media_profile.id,
             ))
+        profile = session.get(DownloadProfile, download.download_profile_id) if download.download_profile_id else None
+        schedule_imported_upgrade_check(
+            download, profile, media.published_date, collection_site(media.collection), datetime.now(timezone.utc),
+        )
     download.assets.clear()
     session.flush()
     for asset in found.assets:
