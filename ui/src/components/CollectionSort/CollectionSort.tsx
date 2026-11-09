@@ -9,7 +9,7 @@ import './CollectionSort.css'
 /** How the Library lists its Collections: by what, and whether that order is turned around. */
 export type CollectionSortOrder = {by: CollectionSortBy, reversed: boolean}
 
-export const DEFAULT_COLLECTION_SORT: CollectionSortOrder = {by: 'often_used', reversed: false}
+export const DEFAULT_COLLECTION_SORT: CollectionSortOrder = {by: 'recently_used', reversed: false}
 
 /** How each order reads, as it starts and turned around. */
 const DIRECTION_LABELS: Record<CollectionSortBy, [string, string]> = {
@@ -26,13 +26,16 @@ export function compareCollectionNames(a: CollectionReadView, b: CollectionReadV
     return nameCollator.compare(a.title, b.title)
 }
 
-/** The value an order compares first, largest first; null sorts last whichever way the order goes. */
+/**
+ * The value an order compares first, largest first; null sorts last whichever way the order goes.
+ * A Collection never opened counts as opened longest ago, so it comes first when Recently used is turned around.
+ */
 function sortKey(collection: CollectionReadView, by: CollectionSortBy): number | null {
     switch (by) {
         case 'often_used':
             return collection.openCount
         case 'recently_used':
-            return collection.lastOpenedAt?.getTime() ?? null
+            return collection.lastOpenedAt?.getTime() ?? Number.NEGATIVE_INFINITY
         case 'release_date':
             return collection.firstPublishedDate?.getTime() ?? null
         case 'added_at':

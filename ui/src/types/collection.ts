@@ -27,8 +27,8 @@ export type EpisodeOrderValue = (typeof EpisodeOrderReg)["values"][number];
 
 /** How the Library lists its Collections. */
 export const LibraryCollectionSortReg = createSelectRegistry("LibraryCollectionSort", {
-    often_used: {label: "Often used"},
     recently_used: {label: "Recently used"},
+    often_used: {label: "Often used"},
     name: {label: "Name"},
     release_date: {label: "Release date"},
     added_at: {label: "Added at"},

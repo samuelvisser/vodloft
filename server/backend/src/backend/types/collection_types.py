@@ -14,8 +14,8 @@ class EpisodeIdentifier(Enum):
 class LibraryCollectionSort(StrEnum):
     """How the Library lists its Collections."""
 
-    OFTEN_USED = "often_used"
     RECENTLY_USED = "recently_used"
+    OFTEN_USED = "often_used"
     NAME = "name"
     RELEASE_DATE = "release_date"
     ADDED_AT = "added_at"

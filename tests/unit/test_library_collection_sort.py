@@ -103,7 +103,7 @@ def test_each_user_keeps_their_own_library_order(session):
     session.commit()
 
     assert library_preferences(_user(1)).model_dump() == {
-        "collection_sort": "often_used", "collection_sort_reversed": False, "saved": True,
+        "collection_sort": "recently_used", "collection_sort_reversed": False, "saved": True,
     }
     library_preferences_save(
         LibraryPreferences.model_validate({"collectionSort": "recently_used", "collectionSortReversed": True}), _user(1),
@@ -111,7 +111,7 @@ def test_each_user_keeps_their_own_library_order(session):
 
     assert library_preferences(_user(1)).model_dump()["collection_sort"] == "recently_used"
     assert library_preferences(_user(1)).collection_sort_reversed is True
-    assert library_preferences(_user(2)).model_dump()["collection_sort"] == "often_used"
+    assert library_preferences(_user(2)).model_dump()["collection_sort"] == "recently_used"
 
 
 def test_without_user_accounts_the_browser_keeps_the_library_order(session):
