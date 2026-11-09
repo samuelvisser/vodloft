@@ -20,6 +20,8 @@ import {useFilterChipPress} from '../lib/useFilterChipPress'
 import {workingPresentation} from '../lib/progressPresentation'
 import {presentOperationProgress} from '../lib/operationProgress'
 import {faIcon} from '../icons/faIcon'
+import {startLabel, useDownloadStarts} from '../lib/downloadStarts'
+import {refreshFrontendPuller} from '../lib/puller'
 import {
     DEFAULT_DOWNLOAD_STATUS_FILTER,
     DOWNLOAD_STATUS_FILTER_OPTIONS,
@@ -133,6 +135,7 @@ export default function DownloadsPage() {
         batchSize: DOWNLOAD_PAGE_SIZE,
         enabled: statusFilter.size > 0,
     })
+    const downloadStarts = useDownloadStarts()
     const downloads = downloadsQuery.data
     const error = downloadsQuery.error
     const loadingDownloads = downloads.length === 0 && downloadsQuery.isPending
@@ -251,9 +254,20 @@ export default function DownloadsPage() {
         }
     }
 
-    const retry = async (row: MediaDownloadViewRead) => {
-        const message = await retryRequest(row)
-        if (message) toast.error(message)
+    const retry = (row: MediaDownloadViewRead) => downloadStarts.start(
+        row,
+        startLabel(row),
+        async () => {
+            const message = await retryRequest(row)
+            if (message) toast.error(message)
+            await refreshDownloadQueries(row)
+            return message === null
+        },
+        () => sendCancel(row),
+    )
+
+    const refreshDownloadQueries = async (row: MediaDownloadViewRead) => {
+        void refreshFrontendPuller(qc)
         await qc.invalidateQueries({queryKey: ['mediaDownloads']})
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
@@ -262,7 +276,9 @@ export default function DownloadsPage() {
         if (row.collectionSlug) await qc.invalidateQueries({queryKey: ['collectionDownloads', row.collectionSlug]})
     }
 
-    const cancel = async (row: MediaDownloadViewRead) => {
+    const cancel = (row: MediaDownloadViewRead) => downloadStarts.cancel(row, () => sendCancel(row))
+
+    const sendCancel = async (row: MediaDownloadViewRead) => {
         try {
             const base = apiUrl()
             const r = await fetch(`${base}/media-downloads/${row.id}/cancel`, {method: 'POST', credentials: 'include'})
@@ -273,12 +289,7 @@ export default function DownloadsPage() {
         } catch {
             toast.error('Could not cancel the download')
         }
-        await qc.invalidateQueries({queryKey: ['mediaDownloads']})
-        await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
-        if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
-        if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
-        if (row.type === 'video') await qc.invalidateQueries({queryKey: ['videoDownloads', row.mediaItemId]})
-        if (row.collectionSlug) await qc.invalidateQueries({queryKey: ['collectionDownloads', row.collectionSlug]})
+        await refreshDownloadQueries(row)
     }
 
     const deleteUnavailable = async () => {
@@ -561,7 +572,7 @@ export default function DownloadsPage() {
                 <DataTable<MediaDownloadViewRead>
                     ariaLabel="Media downloads"
                     columns={columns}
-                    data={downloads}
+                    data={downloads.map(downloadStarts.present)}
                     className="table downloads-table"
                     wrapperClassName="table-wrapper downloads-table-wrapper"
                     loading={loadingDownloads}
