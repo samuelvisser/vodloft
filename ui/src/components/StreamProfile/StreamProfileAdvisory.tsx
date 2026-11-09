@@ -409,7 +409,7 @@ export default function StreamProfileAdvisory({
                             MP4 clients expect one complete seekable file. VODLoft cannot return the beginning of that MP4 while it is still building the rest of the file from {sourceName}&apos;s HLS stream.
                         </p>
                         <p>
-                            Keep matching video episodes downloaded and use those local files for immediate MP4 playback. After disabling {streaming}, VODLoft will show whether matching Download Profile coverage is missing.
+                            Keep matching video episodes downloaded and use those local files for immediate MP4 playback. Disabling {streaming} here also turns on <strong>Use Downloads</strong>, and VODLoft will then show whether matching Download Profile coverage is missing.
                         </p>
                     </>
                 )}
