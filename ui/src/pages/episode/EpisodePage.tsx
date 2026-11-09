@@ -363,7 +363,7 @@ export default function EpisodePage() {
                             </div>
                         )}
                         {(downloads ?? [])
-                            .filter((download) => download.artifactStatus === 'available' && download.sponsorblockSegments)
+                            .filter((download) => download.artifactStatus === 'available' && download.sponsorblockSegments?.length)
                             .map((download, _index, shown) => (
                                 <SponsorBlockTimeline
                                     key={download.id}

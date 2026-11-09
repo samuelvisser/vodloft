@@ -31,7 +31,7 @@ NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
 PROFILE_LOOKUP_INDEXES_REVISION = "5b8e1f3c2a90"
 IMPORTED_DOWNLOAD_PROFILES_REVISION = "a0eceaa70db5"
-HEAD_REVISION = "7d3e9b2c41fa"
+HEAD_REVISION = "4f7c2e9a1b38"
 
 
 @pytest.fixture
@@ -1031,3 +1031,37 @@ def test_media_that_needed_a_subscription_says_which_access_it_needs(migration_d
     assert [media_id for media_id, row in media.items() if row.access_refused_at is not None] == [2, 3]
     assert [media_id for media_id, row in media.items() if row.access_check_at is not None] == [2, 3]
     assert suppressed == {1: 0, 2: 0, 3: 0, 4: 1}
+
+
+def test_every_download_profile_chooses_the_new_sponsorblock_types(migration_database):
+    _database_path, engine = migration_database
+    import json
+
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_6_0_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        for profile_id in (1, 2):
+            connection.execute(text(
+                "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
+                "download_with_countdown, redownload_final, download_days_in_past, download_episode_count, "
+                "delete_older_episodes, include_upcoming_seasons) "
+                "VALUES (:id, 1, :local, 1, '[]', 0, 0, 0, 0, 0, 1)"
+            ), {"id": profile_id, "local": 4 + profile_id})
+    command.upgrade(config, "7d3e9b2c41fa")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "UPDATE download_profiles SET sponsorblock_segments = :segments WHERE id = 2"
+        ), {"segments": json.dumps({"sponsor": "cut", "poi_highlight": "keep"})})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        segments = {
+            profile_id: json.loads(value)
+            for profile_id, value in connection.execute(text("SELECT id, sponsorblock_segments FROM download_profiles"))
+        }
+    assert (segments[1]["poi_highlight"], segments[1]["hook"], segments[1]["chapter"]) == ("chapter", "keep", "keep")
+    assert segments[2] == {"sponsor": "cut", "poi_highlight": "keep", "hook": "keep", "chapter": "keep"}

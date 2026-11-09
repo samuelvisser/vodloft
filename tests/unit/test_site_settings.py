@@ -94,6 +94,12 @@ def test_a_new_download_profile_starts_with_its_sites_settings(site_settings):
     assert vimeo["upgrade_improvements"] == ["resolution", "codec"]
     assert vimeo["auto_subtitles"] == "never"
 
+    # SponsorBlock that keeps every segment type does nothing, so a new profile starts with it off.
+    site_settings(youtube={"sponsorblock": True, "sponsorblock_segments": {"sponsor": "keep", "intro": "keep", "outro": "keep", "poi_highlight": "keep"}})
+    youtube = download_profile_defaults(site_of("youtube"))
+    assert set(youtube["sponsorblock_segments"].values()) == {"keep"}
+    assert youtube["sponsorblock_enabled"] is False
+
 
 def test_a_new_download_profile_starts_with_the_check_off_when_nothing_counts_as_better(site_settings):
     from dataclasses import replace

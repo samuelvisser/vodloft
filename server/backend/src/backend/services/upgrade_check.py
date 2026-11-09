@@ -81,6 +81,23 @@ def schedule_first_upgrade_check(download: EpisodeMediaDownload, site: Site, now
     download.upgrade_check_at = now + timedelta(days=profile.upgrade_after_days)
 
 
+def schedule_imported_upgrade_check(
+    download: EpisodeMediaDownload, profile: DownloadProfile | None, published: datetime | None, site: Site, now: datetime,
+) -> None:
+    """Plan the check of a file VODLoft did not download itself, as if it had downloaded it when the episode came out.
+
+    An imported backlog would otherwise be checked all at once. An episode whose check day has already passed is
+    not checked, just as it would have been checked long ago.
+    """
+    if download.upgrade_checks or download.upgrade_check_at is not None or published is None:
+        return
+    if profile is None or not checks_profile(site, profile):
+        return
+    due = utc_datetime(published) + timedelta(days=profile.upgrade_after_days)
+    if due > now:
+        download.upgrade_check_at = due
+
+
 class RefreshedChange(StrEnum):
     """What a metadata refresh can tell about one improvement: it changed, it did not, or the refresh cannot tell."""
 

@@ -1,7 +1,7 @@
 """Matching files already on disk to episodes, and adopting them."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -429,3 +429,25 @@ def test_an_adopted_file_belongs_to_the_download_profile_and_its_retention(libra
 
     assert cleanup_older_episodes(session, download_profile) == 1
     assert session.scalars(select(EpisodeMediaDownload)).all() == []
+
+
+def test_an_adopted_file_gets_the_upgrade_check_its_episode_would_have_had(library):
+    """An imported file is checked as if VODLoft had downloaded it when the episode came out, never all at once."""
+    from backend.services.adoption import adopt, find_file
+
+    session, _collection, profile, download_profile, episodes, root = library
+    download_profile.upgrade_check, download_profile.upgrade_after_days = True, 7
+    download_profile.upgrade_improvements = ["sponsorblock"]
+    folder = root / "YouTube" / "Veritasium"
+    recent = datetime.now(timezone.utc) - timedelta(days=2)
+    episodes[0].published_date = recent
+    session.flush()
+
+    new = adopt(session, media=episodes[0], local_media_profile=profile,
+                found=find_file(folder / "2024-03-02 The Surprising Genius of Sewing Machines [RDOMKIw1aF4].mp4"))
+    old = adopt(session, media=episodes[1], local_media_profile=profile,
+                found=find_file(folder / "2019-11-08 Why Machines That Bend Are Better.mkv"))
+
+    assert new.download.upgrade_check_at == recent + timedelta(days=7)
+    # Its check day passed years ago.
+    assert old.download.upgrade_check_at is None

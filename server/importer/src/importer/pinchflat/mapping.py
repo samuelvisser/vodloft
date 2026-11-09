@@ -290,7 +290,7 @@ def _episode_types(profile: PinchflatProfile) -> list[str]:
 
 
 SPONSORBLOCK_CATEGORIES = (
-    "sponsor", "selfpromo", "interaction", "intro", "outro", "preview", "filler", "music_offtopic",
+    "sponsor", "selfpromo", "interaction", "intro", "outro", "preview", "filler", "hook", "music_offtopic",
 )
 
 
@@ -302,7 +302,10 @@ def _sponsorblock(profile: PinchflatProfile) -> dict[str, object]:
     return {
         "sponsorblock_enabled": on,
         "sponsorblock_segments": {
-            category: action if on and category in chosen else "keep" for category in SPONSORBLOCK_CATEGORIES
+            **{category: action if on and category in chosen else "keep" for category in SPONSORBLOCK_CATEGORIES},
+            # Pinchflat has no choice for these. VODLoft always marked the highlight; viewer chapters stay out.
+            "poi_highlight": "chapter" if on else "keep",
+            "chapter": "keep",
         },
     }
 

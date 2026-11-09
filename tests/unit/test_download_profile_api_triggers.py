@@ -355,3 +355,15 @@ def test_a_saved_profile_with_nothing_that_counts_as_better_has_the_check_off():
     kept = DownloadProfileAPIUpdate.model_validate({**body, "upgrade_check": True, "upgrade_improvements": ["length"]})
     assert kept.upgrade_check is True
 
+
+
+def test_a_saved_profile_that_keeps_every_sponsorblock_type_has_sponsorblock_off():
+    from backend.api.models.download_profile import DownloadProfileAPIUpdate
+
+    body = {**PROFILE_CHOICES, "enable_profile": True, "download_with_countdown": False, "redownload_final": False,
+            "delete_older_episodes": False, "local_media_profile_id": 1, "sponsorblock_enabled": True}
+    kept = {category: "keep" for category in DEFAULT_SPONSORBLOCK_SEGMENTS}
+    assert DownloadProfileAPIUpdate.model_validate({**body, "sponsorblock_segments": kept}).sponsorblock_enabled is False
+    assert DownloadProfileAPIUpdate.model_validate(body).sponsorblock_enabled is True
+    with pytest.raises(ValueError):
+        DownloadProfileAPIUpdate.model_validate({**body, "sponsorblock_segments": {**kept, "chapter": "cut"}})

@@ -146,6 +146,9 @@ change under **Settings → Downloads**. The defaults below are the ones VODLoft
 The check first asks the site what it has now, and only downloads when one of your improvements is there. The old
 file stays until the new one is complete. Kept downloads are checked too: Keep protects a download from being deleted,
 not from a better copy. Downloads made after the check is turned on are the ones that get checked.
+Files you imported or matched get the same check, timed from the day the episode came out instead of the day you
+imported them, so an imported backlog is not checked all at once. An episode whose check day has already passed is not
+checked.
 
 When a metadata refresh shows that one of your improvements changed, the check runs right away instead of waiting
 for its schedule. This includes a refresh you start yourself. Today a refresh can only tell a different length, such as
@@ -189,9 +192,14 @@ This setting only appears when the Local Media Profile stores subtitles.
 - **Chapter**: becomes a named chapter that your player can skip. Nothing is removed, so this is the safe choice.
 - **Cut out**: removed from the file. This is final; the cut part isn't kept anywhere.
 
-The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Preview and recap, Filler and Non-music section. SponsorBlock's Highlight is always a chapter. A new YouTube Download Profile makes chapters of sponsors, intros and outros, and keeps everything else. Profiles from before VODLoft 0.7.0 start with SponsorBlock off.
+The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Preview and recap, Hook and greetings, Filler and Non-music section. Two more can only be kept or made a chapter, because there is nothing to cut out:
 
-Most parts are submitted in the days after a video comes out, so a download made right after upload may find few of them. The episode page shows what a download found on a timeline: each part, whether it became a chapter or was cut out, and how much shorter the file is.
+- **Highlight**: the one moment viewers mark as where the video really gets going.
+- **Viewer chapters**: chapter titles viewers wrote, mostly for videos without chapters of their own. When other types are chapters too, they all share one list: a part that falls inside a viewer chapter splits it, and the overlap is named after both. On a video that has its own chapters, the two sets of titles mix, so this starts as Keep.
+
+A new YouTube Download Profile makes chapters of sponsors, intros, outros and the highlight, and keeps everything else. Saving a profile that keeps every type turns SponsorBlock off, and a new profile starts with it off when your defaults keep every type. Profiles from before VODLoft 0.7.0 start with SponsorBlock off.
+
+Most parts are submitted in the days after a video comes out, so a download made right after upload may find few of them. When a download found parts, the episode page shows them on a timeline: each part, whether it became a chapter or was cut out, and how much shorter the file is.
 
 An episode you download by hand follows the Collection's Download Profile for the same Local Media Profile.
 

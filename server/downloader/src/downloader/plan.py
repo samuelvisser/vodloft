@@ -33,7 +33,8 @@ class YtdlpSubtitles:
 
 
 SPONSORBLOCK_CATEGORIES = (
-    "sponsor", "selfpromo", "interaction", "intro", "outro", "preview", "filler", "music_offtopic",
+    "sponsor", "selfpromo", "interaction", "intro", "outro", "preview", "filler", "hook", "music_offtopic", "poi_highlight",
+    "chapter",
 )
 """SponsorBlock's segment types that can be kept, marked as a chapter or cut out."""
 
@@ -50,6 +51,8 @@ class YtdlpSponsorBlock:
             raise DownloadError(f"Unknown SponsorBlock segment types {sorted(unknown - set(SPONSORBLOCK_CATEGORIES))!r}")
         if set(self.chapter) & set(self.cut):
             raise DownloadError("A SponsorBlock segment type is either a chapter or cut out")
+        if {"poi_highlight", "chapter"} & set(self.cut):
+            raise DownloadError("SponsorBlock's highlight and viewer chapters can't be cut out")
 
     @property
     def enabled(self) -> bool:

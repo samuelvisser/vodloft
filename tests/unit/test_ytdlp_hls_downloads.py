@@ -107,4 +107,4 @@ def test_an_hls_bundle_only_marks_sponsorblock_segments():
         sponsorblock=YtdlpSponsorBlock(chapter=("intro",), cut=("sponsor",)),
     )
     assert "--sponsorblock-remove" not in source.ytdlp_command
-    assert source.ytdlp_command[source.ytdlp_command.index("--sponsorblock-mark") + 1] == "intro,sponsor,poi_highlight"
+    assert source.ytdlp_command[source.ytdlp_command.index("--sponsorblock-mark") + 1] == "intro,sponsor"

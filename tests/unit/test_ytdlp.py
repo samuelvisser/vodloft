@@ -510,10 +510,23 @@ def test_sponsorblock_choices_map_to_yt_dlp_options():
 
     assert ytdlp_sponsorblock_options(YtdlpSponsorBlock()) == ()
     assert ytdlp_sponsorblock_options(YtdlpSponsorBlock(chapter=("intro",), cut=("sponsor", "selfpromo"))) == (
-        "--sponsorblock-mark", "intro,poi_highlight", "--sponsorblock-remove", "sponsor,selfpromo",
+        "--sponsorblock-mark", "intro", "--sponsorblock-remove", "sponsor,selfpromo",
     )
     # Only chapters: nothing is cut.
-    assert ytdlp_sponsorblock_options(YtdlpSponsorBlock(chapter=("outro",))) == ("--sponsorblock-mark", "outro,poi_highlight")
+    assert ytdlp_sponsorblock_options(YtdlpSponsorBlock(chapter=("outro", "poi_highlight"))) == (
+        "--sponsorblock-mark", "outro,poi_highlight",
+    )
+    # Only cuts: nothing is marked.
+    assert ytdlp_sponsorblock_options(YtdlpSponsorBlock(cut=("sponsor",))) == ("--sponsorblock-remove", "sponsor")
+
+
+def test_the_highlight_and_viewer_chapters_cannot_be_cut_out():
+    from downloader.plan import YtdlpSponsorBlock
+
+    for category in ("poi_highlight", "chapter"):
+        with pytest.raises(DownloadError):
+            YtdlpSponsorBlock(cut=(category,))
+    assert YtdlpSponsorBlock(chapter=("poi_highlight", "chapter"), cut=("hook",)).enabled
 
 
 def test_your_own_options_come_before_vodlofts_own():
@@ -527,7 +540,7 @@ def test_your_own_options_come_before_vodlofts_own():
     command = source.ytdlp_command
     assert command[:3] == ("yt-dlp", "--concurrent-fragments", "4")
     assert command.index("-f") > command.index("--concurrent-fragments")
-    assert command[-4:] == ("--sponsorblock-mark", "poi_highlight", "--sponsorblock-remove", "sponsor")
+    assert command[-2:] == ("--sponsorblock-remove", "sponsor")
     assert source.ytdlp_sponsorblock == YtdlpSponsorBlock(cut=("sponsor",))
 
 
