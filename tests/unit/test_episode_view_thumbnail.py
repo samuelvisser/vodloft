@@ -74,5 +74,6 @@ def test_episode_grid_view_uses_landscape_thumbnail():
 
         assert episode.thumbnail_landscape_path == "landscape.jpg"
         assert episode.thumbnail_portrait_path == "portrait.jpg"
+        assert episode.duration == 60
 
     engine.dispose()

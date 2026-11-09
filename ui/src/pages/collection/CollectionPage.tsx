@@ -3,7 +3,7 @@ import {addedByLabel, can} from '../../lib/access'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { useCollectionDownloadProfilesView, useCollectionStreamProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionEpisodeDownloads, useCollectionDownloadedLocalMediaProfiles, useCollectionSeasons, useEpisodeTagsInCollection, useSkippedByFilter, useSourceLookup, useCollectionLocked } from '../../lib/queries'
+import { useCollectionDownloadProfilesView, useCollectionStreamProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionEpisodeDownloads, useCollectionDownloadedLocalMediaProfiles, useCollectionSeasons, useEpisodeTagsInCollection, useSourceLookup, useCollectionLocked } from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
@@ -84,11 +84,6 @@ export default function CollectionPage() {
   const PAGE_SIZE = 36
 
   const { data: collection, isLoading, error } = useCollection(id)
-  const { data: skipped } = useSkippedByFilter(collection?.id)
-  const skippedByEpisode = useMemo(
-    () => new Map((skipped ?? []).map((item) => [item.episodeId, item.filter])),
-    [skipped],
-  )
   const sources = useSourceLookup()
   const isSeasonal = collection?.episodeIdentifier === 'seasonal'
 
@@ -713,7 +708,6 @@ export default function CollectionPage() {
             {visibleItems.map((ep: any) => (
               <EpisodeCard
                 key={ep.id} ep={ep} collectionSlug={id} downloads={downloadsBySlug.get(ep.slug)}
-                skippedBy={skippedByEpisode.get(ep.id)}
               />
             ))}
           </div>

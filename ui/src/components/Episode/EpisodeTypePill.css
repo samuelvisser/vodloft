@@ -1,0 +1,12 @@
+/* The type badge outside a thumbnail, inline with text such as an episode's status. */
+.badge.episode-type-pill {
+    position: static;
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    font-size: 0.85em;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    box-shadow: none;
+}

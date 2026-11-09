@@ -59,3 +59,12 @@ export function formatDurationMinutes(minutes: number) {
     }
     return parts.join(' ')
 }
+/** A media length as a clock, such as "4:05" or "1:02:09", the way video sites print it on a thumbnail. */
+export function formatClockDuration(seconds: number | null | undefined): string | null {
+    if (!seconds || seconds <= 0) return null
+    const total = Math.round(seconds)
+    const hours = Math.floor(total / 3600)
+    const minutes = Math.floor((total % 3600) / 60)
+    const rest = String(total % 60).padStart(2, '0')
+    return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`
+}

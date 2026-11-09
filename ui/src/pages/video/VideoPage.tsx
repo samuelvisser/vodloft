@@ -21,13 +21,7 @@ import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
 import {isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
-
-function formatDuration(seconds: number) {
-    if (!seconds) return null
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.round((seconds % 3600) / 60)
-    return hours ? `${hours}h ${minutes}m` : `${Math.max(minutes, 1)}m`
-}
+import DurationPill from '../../components/common/DurationPill'
 
 /** The site a video is on, since one Source can serve many sites. */
 export default function VideoPage() {
@@ -69,7 +63,6 @@ export default function VideoPage() {
     const downloadStateError = (profiles === undefined ? profilesError : null)
         ?? (!hasDownloadState ? downloadsError : null)
     const cover = toImageUrl(video.thumbnailLandscapePath || video.backgroundImagePath)
-    const duration = formatDuration(video.duration)
 
     const refresh = async () => {
         if (refreshing) return
@@ -134,6 +127,9 @@ export default function VideoPage() {
                     {cover
                         ? <img src={cover} alt="Video thumbnail"/>
                         : <div className="video-cover-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'film')}/></div>}
+                    {video.duration > 0 && (
+                        <span className="thumb-corner thumb-corner-large"><DurationPill seconds={video.duration} large/></span>
+                    )}
                 </div>
 
                 <header className="episode-header">
@@ -179,15 +175,6 @@ export default function VideoPage() {
                                 <span className="episode-summary-item">
                                     <FontAwesomeIcon icon={faIcon('fass', 'calendar')} aria-hidden="true"/>
                                     <span>Uploaded {video.publishedAt.toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'})}</span>
-                                </span>
-                            </>
-                        )}
-                        {duration && (
-                            <>
-                                <span className="episode-summary-separator" aria-hidden="true"/>
-                                <span className="episode-summary-item">
-                                    <FontAwesomeIcon icon={faIcon('fass', 'clock')} aria-hidden="true"/>
-                                    <span>{duration}</span>
                                 </span>
                             </>
                         )}

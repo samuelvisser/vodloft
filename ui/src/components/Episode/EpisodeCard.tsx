@@ -7,11 +7,9 @@ import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {DrmBadge} from '../common/DrmProtected'
 import {AccessBadge} from '../common/AccessLocked'
 import {RemovedBadge} from '../common/RemovedFromSource'
-import {useEpisodeTags} from '../../lib/queries'
-import {episodeTagLabel} from '../../types/schemas/source'
-import type {EpisodeFilter} from '../../types/schemas/download_profile'
-import {filterSentence, plainText} from '../DownloadProfile/whichEpisodesText'
 import {apiUrl} from '../../lib/api'
+import DurationPill from '../common/DurationPill'
+import EpisodeTypePill from './EpisodeTypePill'
 
 // Beyond this many downloads for one episode, collapse the rest into a "+N" pill
 // instead of letting icons overflow the thumbnail.
@@ -43,16 +41,6 @@ const LIVE_BADGE_DOT_STYLE: React.CSSProperties = {
     flex: '0 0 auto',
     borderRadius: '50%',
     background: 'currentColor',
-}
-
-/** What the upgrade check did or will do for an episode's downloads, such as "Better version on Nov 10". */
-export function upgradeText(downloads: readonly MediaDownloadViewRead[]): string | null {
-    const next = downloads.map((download) => download.upgradeCheckAt).filter((at): at is Date => !!at)
-        .sort((a, b) => a.getTime() - b.getTime())[0]
-    if (downloads.some((download) => download.upgradeResult === 'upgraded')) return 'Upgraded to a better version'
-    if (next) return `Checked for a better version on ${next.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}`
-    if (downloads.some((download) => download.upgradeResult === 'checked')) return 'Checked: no better version'
-    return null
 }
 
 export function toImageUrl(path?: string | null): string | undefined {
@@ -114,13 +102,10 @@ type Props = {
     ep: EpisodeReadView
     collectionSlug: string
     downloads?: MediaDownloadViewRead[]
-    /** The Which episodes filter that keeps this episode from downloading automatically. */
-    skippedBy?: EpisodeFilter
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: Props) {
-    const upgrade = upgradeText(downloads ?? [])
+export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -134,15 +119,16 @@ export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: 
     const style = imageUrl ? {backgroundImage: `url(${imageUrl})`} : undefined
     const isLive = String(ep.publishStatus).toLowerCase() === 'live'
 
-    const type = ep.episodeType
-    const {data: tags} = useEpisodeTags(ep.sourceKey)
     // Identifier semantics are parsed once by the backend. The card only decides
-    // how those semantics should be presented.
-    const showNumberBadge = (type === 'ep' || type === 'ep-extra') && !!ep.episodeLabel
-    // Every tag other than the main one is badged with its Source's label, such as Short or Livestream.
-    const mainTag = tags?.find((tag) => tag.main)?.key ?? 'ep'
-    const typeBadgeLabel = type && type !== mainTag && type !== 'ep-extra' ? episodeTagLabel(tags, type) : undefined
-    const cornerBadgeText = showNumberBadge ? episodeBadgeText(ep.episodeLabel) : typeBadgeLabel
+    // how those semantics should be presented: the number of a numbered episode,
+    // then its release date, unless the number already is that date.
+    const numberText = ep.episodeType === 'ep' && ep.episodeLabel ? episodeBadgeText(ep.episodeLabel) : undefined
+    // An episode extra is labelled by its own number, such as #2542.10, in the extras' colour.
+    const extraNumber = ep.episodeType === 'ep-extra' && ep.episodeLabel ? episodeBadgeText(ep.episodeLabel) : undefined
+    const dateText = ep.publishedDate && !DATE_LABEL.test(ep.episodeLabel)
+        ? ep.publishedDate.toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'})
+        : undefined
+    const metaText = [numberText, dateText].filter(Boolean).join(' · ')
 
     const navigate = useNavigate()
     const episodeHref = `/collection/${collectionSlug}/episode/${ep.slug}`
@@ -172,15 +158,15 @@ export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: 
             {initials}
           </span>
                 )}
-                {cornerBadgeText && (
-                    <span className={`badge badge-${type}`}>{cornerBadgeText}</span>
-                )}
+                {ep.duration > 0 && <span className="thumb-corner"><DurationPill seconds={ep.duration}/></span>}
             </div>
             <div className="episode-title" title={ep.title}>{ep.title}</div>
-            {upgrade && <div className="episode-upgrade">{upgrade}</div>}
-            {skippedBy && !(downloads ?? []).some((download) => download.presentation.status !== 'not_downloaded') && (
-                <div className="episode-skipped" title="Open the episode to download it anyway">
-                    Skipped by filter: {plainText(filterSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}
+            {(metaText || ep.episodeType) && (
+                <div className="episode-meta">
+                    {extraNumber
+                        ? <span className="badge badge-ep-extra episode-type-pill">{extraNumber}</span>
+                        : <EpisodeTypePill sourceKey={ep.sourceKey} type={ep.episodeType}/>}
+                    {metaText && <span>{metaText}</span>}
                 </div>
             )}
         </div>

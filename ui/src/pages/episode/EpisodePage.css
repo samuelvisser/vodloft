@@ -164,7 +164,9 @@
 }
 
 .episode-view .download-row {
-    display: flex;
+    /* A fixed first column keeps each row's download status in line with the others. */
+    display: grid;
+    grid-template-columns: minmax(0, 16rem) minmax(0, 1fr) auto;
     align-items: center;
     gap: 16px;
     padding: 10px 0;
@@ -172,7 +174,7 @@
 }
 
 .episode-view .download-row-info {
-    min-width: 200px;
+    min-width: 0;
 }
 
 .episode-view .download-row-name {

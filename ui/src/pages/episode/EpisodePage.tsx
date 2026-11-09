@@ -23,6 +23,8 @@ import {RemovedBadge} from '../../components/common/RemovedFromSource'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
 import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
 import {apiUrl} from '../../lib/api'
+import DurationPill from '../../components/common/DurationPill'
+import EpisodeTypePill from '../../components/Episode/EpisodeTypePill'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -238,6 +240,9 @@ export default function EpisodePage() {
 
                 <div className="episode-cover">
                     <img src={coverUrl} alt="Episode cover"/>
+                    {episode.duration > 0 && (
+                        <span className="thumb-corner thumb-corner-large"><DurationPill seconds={episode.duration} large/></span>
+                    )}
                     {isLive && (
                         <span className="episode-live-badge" aria-label="Episode is live">Live</span>
                     )}
@@ -274,6 +279,7 @@ export default function EpisodePage() {
                         />
                     </div>
                     <div className="episode-summary" aria-label="Episode metadata">
+                        <EpisodeTypePill sourceKey={episode.sourceKey} type={episode.episodeType}/>
                         <span className={`episode-status${isLive ? ' is-live' : ''}`} title={sourceStatus?.help}>
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
                             {statusLabel}
