@@ -211,8 +211,13 @@ export const WhichEpisodesSchema = z.object({
         slug: z.string(),
         title: z.string(),
         publishedAt: z.string().nullable(),
+        episodeType: z.string().nullable(),
+        /** In seconds; null while it is not known. */
+        duration: z.number().nullable(),
         leftOutBy: z.string().nullable(),
     })).nullable().optional(),
+    /** How many episodes the list holds, after episodesShown. */
+    episodesTotal: z.int().nullable().optional(),
 })
 export type WhichEpisodes = z.infer<typeof WhichEpisodesSchema>
 
