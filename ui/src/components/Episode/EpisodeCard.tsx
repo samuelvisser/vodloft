@@ -7,8 +7,6 @@ import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {DrmBadge} from '../common/DrmProtected'
 import {AccessBadge} from '../common/AccessLocked'
 import {RemovedBadge} from '../common/RemovedFromSource'
-import type {EpisodeFilter} from '../../types/schemas/download_profile'
-import {filterSentence, plainText} from '../DownloadProfile/whichEpisodesText'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../common/DurationPill'
 import EpisodeTypePill from './EpisodeTypePill'
@@ -114,12 +112,10 @@ type Props = {
     ep: EpisodeReadView
     collectionSlug: string
     downloads?: MediaDownloadViewRead[]
-    /** The Which episodes filter that keeps this episode from downloading automatically. */
-    skippedBy?: EpisodeFilter
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: Props) {
+export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
     const upgrade = upgradeText(downloads ?? [])
     const initials = ep.title
         .split(' ')
@@ -137,9 +133,9 @@ export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: 
     // Identifier semantics are parsed once by the backend. The card only decides
     // how those semantics should be presented: the number of a numbered episode,
     // then its release date, unless the number already is that date.
-    const numberText = (ep.episodeType === 'ep' || ep.episodeType === 'ep-extra') && ep.episodeLabel
-        ? episodeBadgeText(ep.episodeLabel)
-        : undefined
+    const numberText = ep.episodeType === 'ep' && ep.episodeLabel ? episodeBadgeText(ep.episodeLabel) : undefined
+    // An episode extra is labelled by its own number, such as #2542.10, in the extras' colour.
+    const extraNumber = ep.episodeType === 'ep-extra' && ep.episodeLabel ? episodeBadgeText(ep.episodeLabel) : undefined
     const dateText = ep.publishedDate && !DATE_LABEL.test(ep.episodeLabel)
         ? ep.publishedDate.toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'})
         : undefined
@@ -178,16 +174,13 @@ export default function EpisodeCard({ep, collectionSlug, downloads, skippedBy}: 
             <div className="episode-title" title={ep.title}>{ep.title}</div>
             {(metaText || ep.episodeType) && (
                 <div className="episode-meta">
-                    <EpisodeTypePill sourceKey={ep.sourceKey} type={ep.episodeType}/>
+                    {extraNumber
+                        ? <span className="badge badge-ep-extra episode-type-pill">{extraNumber}</span>
+                        : <EpisodeTypePill sourceKey={ep.sourceKey} type={ep.episodeType}/>}
                     {metaText && <span>{metaText}</span>}
                 </div>
             )}
             {upgrade && <div className="episode-upgrade">{upgrade}</div>}
-            {skippedBy && !(downloads ?? []).some((download) => download.presentation.status !== 'not_downloaded') && (
-                <div className="episode-skipped" title="Open the episode to download it anyway">
-                    Skipped by filter: {plainText(filterSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}
-                </div>
-            )}
         </div>
     )
 }
