@@ -70,28 +70,35 @@ type CollectionSortProps = {
 export default function CollectionSort({order, onChange, searching}: CollectionSortProps) {
     const direction = DIRECTION_LABELS[order.by][order.reversed ? 1 : 0]
     return (
-        <div className="collection-sort" role="group" aria-label="Sort collections">
+        <div className={`collection-sort${searching ? ' is-searching' : ''}`} role="group" aria-label="Sort collections">
             <SimpleSelect
                 inputId="library-collection-sort"
                 aria-label="Sort collections by"
                 className="collection-sort-select"
                 registry={LibraryCollectionSortReg}
                 value={searching ? null : order.by}
-                placeholder="Best match"
+                placeholder={<span className="collection-sort-value"><span className="collection-sort-label">Sort:</span> Best match</span>}
                 isDisabled={searching}
                 onChange={(by) => onChange({by: by as CollectionSortBy, reversed: false})}
+                formatOptionLabel={(option, {context}) => context === 'value'
+                    ? (
+                        <span className="collection-sort-value">
+                            <FontAwesomeIcon icon={faIcon('fass', 'arrow-down-wide-short')} aria-hidden="true"/>
+                            <span className="collection-sort-label">Sort:</span> {option.label}
+                        </span>
+                    )
+                    : option.label}
             />
             {!searching && (
-            <button
-                type="button"
-                className="btn collection-sort-direction"
-                onClick={() => onChange({...order, reversed: !order.reversed})}
-                aria-label={`${direction}, turn around`}
-                title="Turn the order around"
-            >
-                <FontAwesomeIcon icon={order.reversed ? faIcon('fass', 'arrow-up-short-wide') : faIcon('fass', 'arrow-down-wide-short')} aria-hidden="true"/>
-                <span>{direction}</span>
-            </button>
+                <button
+                    type="button"
+                    className="collection-sort-direction"
+                    onClick={() => onChange({...order, reversed: !order.reversed})}
+                    aria-label={`${direction}, turn the order around`}
+                    title={`${direction}, click to turn around`}
+                >
+                    <FontAwesomeIcon icon={order.reversed ? faIcon('fass', 'arrow-up') : faIcon('fass', 'arrow-down')} aria-hidden="true"/>
+                </button>
             )}
         </div>
     )
