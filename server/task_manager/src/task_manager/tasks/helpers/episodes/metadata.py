@@ -5,8 +5,10 @@ from datetime import datetime
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode
 from backend.types.episode_types import EpisodePublishStatus
+from backend.services.media_access import apply_source_access
 from backend.services.metadata_refresh import refresh_watch_expired, site_refresh_offsets
 from sources.dailywire.api.records import DwEpisodeDetailRecord
+from sources.dailywire.source import episode_access
 
 
 
@@ -63,3 +65,7 @@ def update_episode_from_dailywire(
         if field in model_fields and field not in protected_fields:
             setattr(episode, field, value)
     episode.dw_episode_number = dw_episode.episode_number or None
+    # The membership levels it is for may have changed, or VODLoft added it before it kept them.
+    # A record without them says nothing about them.
+    if dw_episode.available_for:
+        apply_source_access(episode, episode_access(dw_episode.available_for))
