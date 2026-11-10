@@ -11,7 +11,7 @@ export const RssVideoOutputModeReg = createSelectRegistry("RssVideoOutputMode", 
     help: "Stream video directly using a stream- friendly protocol serving multiple quality levels depending on the connection speed. Provides an audio fallback for compatibility.",
   },
   'audio_mp4': {
-    label: "Serve as mp4 with audio fallback (full compatibility)",
+    label: "Serve as mp4 with audio fallback",
     help: "Stream as mp4 downloaded by VODLoft. Requires the mp4 to be downloaded by VODLoft before it can start streaming. Provides an audio fallback for compatibility.",
   },
   'mp4': {

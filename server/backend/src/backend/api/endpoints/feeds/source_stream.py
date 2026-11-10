@@ -24,7 +24,8 @@ from config import get_settings
 from sources import MediaStream, Source
 
 from .upstream import (
-    NO_CACHE_HEADERS, READ_BYTES, LinkCache, look_up_at_site, ranged_get, seconds_until_expiry, total_size,
+    NO_CACHE_HEADERS, READ_BYTES, LinkCache, ask_again, first_range, look_up_at_site, ranged_get, seconds_until_expiry,
+    total_size,
 )
 
 
@@ -42,6 +43,20 @@ def estimated_audio_size(duration: float | None) -> int | None:
     if not duration or duration <= 0:
         return None
     return int(duration * AAC_BITRATE / 8)
+
+
+# What a feed's MP4 video takes per second with its sound, by resolution: an estimate for a file that is
+# not there yet, as an app may pass over a video that says it is empty.
+_VIDEO_BITRATES = ((360, 500_000), (480, 1_000_000), (720, 2_000_000), (1080, 3_000_000))
+_HIGHER_VIDEO_BITRATE = 8_000_000
+
+
+def estimated_video_size(duration: float | None, height: int | None) -> int | None:
+    """Roughly the size of an episode's MP4 video at this resolution; 1080p when the resolution is not known."""
+    if not duration or duration <= 0:
+        return None
+    bitrate = next((rate for most, rate in _VIDEO_BITRATES if (height or 1080) <= most), _HIGHER_VIDEO_BITRATE)
+    return int(duration * bitrate / 8)
 
 
 def _kept_for(stream: MediaStream | None) -> float:
@@ -126,14 +141,13 @@ def proxy_response(
             content_range=f"bytes {start}-{last}/{size}" if wanted else None,
         ))
 
-    first = ranged_get(stream, start, end)
-    if first.status_code == 403:
-        # The URL expired early or no longer plays to this address: look it up once more.
-        first.close()
-        stream = episode_stream(source, episode, audio=audio, fresh=True)
-        if stream is None:
+    def look_up_again() -> MediaStream:
+        fresh = episode_stream(source, episode, audio=audio, fresh=True)
+        if fresh is None:
             raise HTTPException(status_code=404, detail=f"No {source.name} stream for this episode")
-        first = ranged_get(stream, start, end)
+        return fresh
+
+    stream, first = first_range(stream, start, end, look_up_again)
     if first.status_code == 416:
         first.close()
         raise HTTPException(status_code=416, detail="Range not satisfiable")
@@ -171,7 +185,7 @@ def proxy_response(
                     return  # The site sent the whole stream at once.
                 if (last is not None and position > last) or (size is not None and position >= size):
                     return
-                response = ranged_get(stream, position, last)
+                response = ask_again(stream, position, last, ranged_get(stream, position, last))
                 if response.status_code not in (200, 206):
                     logger.warning("%s stopped a stream of %s with %s", source.name, page_url, response.status_code)
                     return

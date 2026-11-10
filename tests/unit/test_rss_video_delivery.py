@@ -73,8 +73,8 @@ def test_rss_video_output_modes_use_stable_vodloft_urls(
     assert enclosure is not None
     assert enclosure.attrib["type"] == primary_type
     assert enclosure.attrib["url"].endswith(primary_suffix)
-    # Audio gives its size at 128 kbit/s; the episode is half an hour long.
-    assert enclosure.attrib["length"] == ("28800000" if primary_suffix.endswith(".m4a") else "0")
+    # Audio gives its size at 128 kbit/s and 1080p MP4 video at 3 Mbit/s; the episode is half an hour long.
+    assert enclosure.attrib["length"] == ("28800000" if primary_suffix.endswith(".m4a") else "675000000")
 
     alternates = _children(item, "podcast:alternateEnclosure")
     if alternate_type is None:
@@ -82,10 +82,30 @@ def test_rss_video_output_modes_use_stable_vodloft_urls(
     else:
         assert len(alternates) == 1
         assert alternates[0].attrib["type"] == alternate_type
+        # An app may pass over an MP4 video that says it is empty; an HLS stream has no size.
+        assert alternates[0].attrib["length"] == ("675000000" if alternate_type == "video/mp4" else "0")
         source = _children(alternates[0], "podcast:source")[0]
         assert source.attrib["uri"].endswith(alternate_suffix)
 
     assert item.find("guid").text == "episode-uuid"
+
+
+def test_mp4_video_in_the_rss_cache_gives_its_own_size(monkeypatch):
+    from backend.api.endpoints.feeds import service
+
+    monkeypatch.setattr(service, "get_cached_mp4_size", lambda key: {"episode-uuid-1080p": 123_456}.get(key))
+    channel = Element("channel")
+    service._append_item(
+        channel,
+        media_base_url="https://vodloft.example/feeds/rss/token",
+        episode=_episode(),
+        profile=_profile("audio_mp4"),
+        joined_height=1080,
+        video_height=1080,
+    )
+
+    alternate = _children(channel.find("item"), "podcast:alternateEnclosure")[0]
+    assert alternate.attrib["length"] == "123456"
 
 
 def test_audio_only_uses_stable_m4a_without_video_alternate():
@@ -167,6 +187,40 @@ def test_rss_cache_cleanup_uses_configured_sliding_retention(monkeypatch, tmp_pa
     assert cached_video.cleanup_expired_rss_cache() == 1
     assert current.exists()
     assert not expired.exists()
+
+
+def test_using_a_cached_mp4_keeps_it_without_changing_what_apps_see(monkeypatch, tmp_path):
+    import backend.services.video_cache as cached_video
+    from backend.api.endpoints.feeds.source_tracks import joined_mp4_response
+
+    video_root = tmp_path / "video"
+    video_root.mkdir()
+    joined = video_root / "joined.mp4"
+    joined.write_bytes(b"joined-video")
+    os.utime(joined, (900, 900))
+    settings = SimpleNamespace(
+        download_settings=SimpleNamespace(rss_cache_root=tmp_path, rss_cache_retention_seconds=60),
+    )
+    monkeypatch.setattr(cached_video, "get_settings", lambda: settings)
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    app.get("/video.mp4")(lambda: joined_mp4_response(joined, filename="e.mp4"))
+    client = TestClient(app)
+    first = client.get("/video.mp4", headers={"Range": "bytes=0-1"})
+    # An app asks for later ranges with If-Range, which only gets the range while the file keeps its ETag.
+    second = client.get("/video.mp4", headers={"Range": "bytes=2-5", "If-Range": first.headers["etag"]})
+    assert second.status_code == 206
+    assert second.content == b"ined"
+    assert first.headers["last-modified"] == second.headers["last-modified"]
+    assert joined.stat().st_mtime == 900
+    # Playing it keeps it in the cache for another retention period.
+    monkeypatch.setattr(cached_video.time, "time", lambda: 1000)
+    os.utime(joined, (990, 900))
+    assert cached_video._is_current(joined)
+    assert cached_video.cleanup_expired_rss_cache() == 0
 
 
 def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):

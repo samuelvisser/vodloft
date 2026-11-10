@@ -538,6 +538,7 @@ export default function StreamProfileForm({
                     liveEpisodes={canStreamLiveEpisodes}
                     hlsVideo={!site || canStreamHls || site.downloads.hlsBundle}
                     proxyChoice={canStreamFromSource && !!site?.streamProxyChoice}
+                    videoOutputHelp={site?.videoOutputHelp}
                     siteName={streamSourceName}
                 />
             ) : undefined}

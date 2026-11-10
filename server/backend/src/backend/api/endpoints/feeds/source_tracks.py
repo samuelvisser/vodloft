@@ -38,8 +38,8 @@ from fastapi.responses import FileResponse, RedirectResponse, Response, Streamin
 from config import get_settings
 from sources import MediaStream, MediaTracks, Site, Source
 
-from backend.services.video_cache import get_cached_mp4_path, mp4_cache_path
-from .upstream import NO_CACHE_HEADERS, LinkCache, look_up_at_site, ranged_get, seconds_until_expiry, stream_bytes
+from backend.services.video_cache import get_cached_mp4_path, mark_used, mp4_cache_path
+from .upstream import NO_CACHE_HEADERS, LinkCache, first_range, look_up_at_site, seconds_until_expiry, stream_bytes
 
 
 logger = logging.getLogger(__name__)
@@ -154,18 +154,14 @@ def track_part_response(
     if end is None and track.size_bytes:
         end = track.size_bytes - 1
     # One byte first, for the size and to tell whether the link still works.
-    probe = ranged_get(track, start, start)
-    if probe.status_code == 403:
-        # The link expired early: look the tracks up once more.
-        probe.close()
-        track = pick(episode_tracks(source, episode, fresh=True))
-        probe = ranged_get(track, start, start)
+    track, probe = first_range(track, start, start, lambda: pick(episode_tracks(source, episode, fresh=True)))
     status = probe.status_code
     total = probe.headers.get("Content-Range", "").rpartition("/")[2]
     probe.close()
     if status == 416:
         raise HTTPException(status_code=416, detail="Range not satisfiable")
     if status not in (200, 206):
+        logger.warning("%s answered %s for the %s track of %s", source.name, status, name, episode.url)
         raise HTTPException(status_code=502, detail=f"{source.name} stream is currently unavailable")
     size = int(total) if total.isdigit() else track.size_bytes
     if size is not None:
@@ -424,10 +420,7 @@ def join_in_background(source: Source, episode: EpisodeRef, height: int) -> None
 
 
 def joined_mp4_response(path: Path, *, filename: str) -> FileResponse:
-    try:
-        path.touch()
-    except OSError:
-        pass
+    mark_used(path)
     return FileResponse(
         path, filename=filename, content_disposition_type="inline", media_type="video/mp4", headers=NO_CACHE_HEADERS,
     )

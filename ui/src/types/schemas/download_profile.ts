@@ -274,6 +274,8 @@ export const SiteOptionsSchema = z.object({
     streamVideoHeights: z.array(z.number().int()),
     /** Whether a feed can send podcast apps straight to the site's video instead of passing it through VODLoft. */
     streamProxyChoice: z.boolean().default(false),
+    /** What a feed's video output does on the site, by output value, where it differs from the usual explanation. */
+    videoOutputHelp: z.record(z.string(), z.string()).default({}),
     /** What the collection's site can download. */
     downloads: DownloadOptionsSchema,
 })

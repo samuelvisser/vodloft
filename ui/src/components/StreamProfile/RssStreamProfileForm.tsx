@@ -23,6 +23,8 @@ type Props = {
     hlsVideo?: boolean
     /** Whether a feed can send podcast apps straight to the Site's video, or pass it through VODLoft. */
     proxyChoice?: boolean
+    /** What each video output does on the Site, where it differs from the usual explanation. */
+    videoOutputHelp?: Record<string, string>
     siteName?: string
 }
 
@@ -38,6 +40,7 @@ export default function RssStreamProfileForm({
     liveEpisodes = true,
     hlsVideo = true,
     proxyChoice = false,
+    videoOutputHelp = {},
     siteName = 'its site',
 }: Props) {
     const {control, formState: {errors}, register, setValue, watch} = form
@@ -153,18 +156,13 @@ export default function RssStreamProfileForm({
                     )}
                     <div className="help" id="rss-video-output-mode-help">
                         <ReadMore summary={<span>Choose how to serve video in your RSS feed depending on what your podcast player supports.</span>}>
-                            <p>
-                                <strong>{RssVideoOutputModeReg.getLabel('audio_hls')}</strong> {RssVideoOutputModeReg.getHelp('audio_hls')}
-                            </p>
-                            <p>
-                                <strong>{RssVideoOutputModeReg.getLabel('audio_mp4')}</strong> {RssVideoOutputModeReg.getHelp('audio_mp4')}
-                            </p>
-                            <p>
-                                <strong>{RssVideoOutputModeReg.getLabel('mp4')}</strong> {RssVideoOutputModeReg.getHelp('mp4')}
-                            </p>
-                            <p>
-                                <strong>{RssVideoOutputModeReg.getLabel('mp4_hls')}</strong> {RssVideoOutputModeReg.getHelp('mp4_hls')}
-                            </p>
+                            {RssVideoOutputModeReg.options
+                                .filter((option) => hlsVideo || !RssHlsOutputModes.has(option.value))
+                                .map((option) => (
+                                    <p key={option.value}>
+                                        <strong>{option.label}</strong> {videoOutputHelp[option.value] ?? RssVideoOutputModeReg.getHelp(option.value)}
+                                    </p>
+                                ))}
                             <p>
                                 The episode URLs in the RSS never change when a local download appears. The same VODLoft URL resolves to local media when available, and streams from the collection's site only when the profile permits that fallback.
                             </p>
