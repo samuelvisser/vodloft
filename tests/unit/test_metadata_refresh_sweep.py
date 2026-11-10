@@ -128,6 +128,30 @@ def test_an_upload_is_looked_up_on_each_interval_until_its_metadata_is_final(swe
     assert episode.episode_identifier == "ep.1"
 
 
+def test_a_sweep_that_starts_while_another_runs_skips(swept, session, site_settings, monkeypatch):
+    """The startup sweep can still run when the first scheduled one starts; that one must not look everything up again."""
+    from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
+
+    collection = _site_collection(session, site_settings)
+    now = datetime.now(timezone.utc)
+    _add(session, collection, "new", now - timedelta(minutes=30))
+    swept.titles["new"] = "A better title"
+    overlapping = []
+    looked_up = swept.refresh_metadata
+
+    def look_up_while_another_sweep_starts(items):
+        overlapping.append(run_metadata_refresh(session, now=now))
+        return looked_up(items)
+
+    monkeypatch.setattr(swept, "refresh_metadata", look_up_while_another_sweep_starts)
+    run_metadata_refresh(session, now=now)
+
+    assert swept.calls == [["new"]]
+    assert [result.summary() for result in overlapping] == ["Skipped: another metadata refresh was still running"]
+    # Once it finished, the next sweep runs as usual.
+    assert run_metadata_refresh(session, now=now + timedelta(minutes=10)).summary() == "No metadata refresh is due"
+
+
 def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, session, site_settings):
     from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
 

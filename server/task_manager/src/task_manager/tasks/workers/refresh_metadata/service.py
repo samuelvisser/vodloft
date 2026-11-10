@@ -23,6 +23,7 @@ way right away.
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -53,6 +54,9 @@ logger = logging.getLogger(__name__)
 
 _ATTEMPTS = 3
 _last_sweep: Optional[datetime] = None
+# The startup sweep can still run when the first scheduled one starts. Both would
+# look every unfinished item up after a restart, so the later one skips instead.
+_sweeping = threading.Lock()
 
 
 @dataclass
@@ -68,7 +72,11 @@ class SiteCounts:
 class SweepResult:
     sites: dict[str, SiteCounts] = field(default_factory=dict)
 
+    skipped: bool = False
+
     def summary(self) -> str:
+        if self.skipped:
+            return "Skipped: another metadata refresh was still running"
         checked = {name: counts for name, counts in self.sites.items() if counts.checked}
         if not checked:
             return "No metadata refresh is due"
@@ -242,6 +250,15 @@ def _store(w: Session, item: _Watched, answer: _Answers | None, now: datetime) -
 
 
 def run_metadata_refresh(s: Session, *, now: Optional[datetime] = None) -> SweepResult:
+    if not _sweeping.acquire(blocking=False):
+        return SweepResult(skipped=True)
+    try:
+        return _sweep(s, now)
+    finally:
+        _sweeping.release()
+
+
+def _sweep(s: Session, now: Optional[datetime]) -> SweepResult:
     global _last_sweep
     now = utc_datetime(now or datetime.now(timezone.utc))
     since = _last_sweep
