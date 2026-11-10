@@ -1,0 +1,69 @@
+/* Local Media Profiles in the format a Stream Profile asked for */
+.requested-format-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.requested-format-option__badge {
+    flex: none;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(14, 165, 233, 0.16);
+    color: #0369a1;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+div.select__option--requested-format {
+    box-shadow: inset 3px 0 0 #0ea5e9;
+    color: #0369a1 !important;
+    font-weight: 500;
+}
+
+div.select__option--requested-format[aria-selected="true"] {
+    color: #ffffff !important;
+}
+
+div.select__option--requested-format[aria-selected="true"] .requested-format-option__badge {
+    background: rgba(255, 255, 255, 0.24);
+    color: #ffffff;
+}
+
+div.select__single-value--requested-format {
+    color: #0369a1 !important;
+}
+
+.requested-format-note {
+    padding: 6px 10px;
+    border: 1px solid rgba(217, 119, 6, 0.28);
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.08);
+    color: #92400e;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+@media (prefers-color-scheme: dark) {
+    .requested-format-option__badge {
+        background: rgba(56, 189, 248, 0.18);
+        color: #7dd3fc;
+    }
+
+    div.select__option--requested-format {
+        box-shadow: inset 3px 0 0 #38bdf8;
+        color: #7dd3fc !important;
+    }
+
+    div.select__single-value--requested-format {
+        color: #7dd3fc !important;
+    }
+
+    .requested-format-note {
+        border-color: rgba(251, 191, 36, 0.3);
+        background: rgba(245, 158, 11, 0.1);
+        color: #fbbf24;
+    }
+}
