@@ -27,6 +27,7 @@ up, so after a restart every one of them is looked up once.
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -70,6 +71,9 @@ _WHILE_LIVE = {
     EpisodePublishStatus.PUBLISHED_PRELIMINARY.value,
 }
 _last_checked: dict[int, datetime] = {}
+# The startup check can still run when the first scheduled one starts. Both would
+# look every pending episode up after a restart, so the later one skips instead.
+_checking = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -124,8 +128,11 @@ class PendingCheckResult:
     recovered: int = 0
     deleted: int = 0
     failed: int = 0
+    skipped: bool = False
 
     def summary(self) -> str:
+        if self.skipped:
+            return "Skipped: another check of upcoming and live episodes was still running"
         if not self.checked:
             return "No upcoming or live episode is due for a check"
         text = f"Checked {self.checked} upcoming or live episodes: {self.changed} changed status, {self.published} published"
@@ -259,6 +266,15 @@ def _monitor(s: Session, item: _Pending, result: PendingCheckResult) -> None:
 
 
 def run_pending_checks(s: Session, *, now: Optional[datetime] = None) -> PendingCheckResult:
+    if not _checking.acquire(blocking=False):
+        return PendingCheckResult(skipped=True)
+    try:
+        return _run_checks(s, now)
+    finally:
+        _checking.release()
+
+
+def _run_checks(s: Session, now: Optional[datetime]) -> PendingCheckResult:
     now = utc_datetime(now or datetime.now(timezone.utc))
     due = _due(s, now)
     # No transaction stays open while the Sources look episodes up.

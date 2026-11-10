@@ -60,7 +60,10 @@ function formatDuration(milliseconds: number | null | undefined): string {
 
 function resourceLabel(row: TaskLedgerEntryRead): string {
     const label = row.resourceType.replace(/_/g, ' ').replace(/^./, (character) => character.toUpperCase())
-    return row.resourceId == null ? label : `${label} #${row.resourceId}`
+    if (row.resourceType === 'system') return label
+    // Scheduled sweeps over every resource of a type run with no id, or id 0.
+    if (!row.resourceId) return `All ${label.toLowerCase()}s`
+    return `${label} #${row.resourceId}`
 }
 
 function statusIcon(status: string): IconProp {
