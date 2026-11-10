@@ -2,7 +2,7 @@ import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
-import {type LocalMediaProfileTableFilters, type LocalMediaProfileTableRow, useLocalMediaProfilesTable} from '../lib/queries'
+import {type LocalMediaProfileTableFilters, type LocalMediaProfileTableRow, useLocalMediaProfileSites, useLocalMediaProfilesTable} from '../lib/queries'
 import ProfileTableFilters, {FORMAT_OPTIONS} from '../components/common/ProfileTableFilters'
 import {ChipFilter} from '../components/common/FilterBar'
 import LoadMore from '../components/common/LoadMore'
@@ -142,7 +142,9 @@ export default function LocalMediaProfilesPage() {
 
     const [filters, setFilters] = useState<LocalMediaProfileTableFilters>({})
     const table = useLocalMediaProfilesTable(filters)
-    const activeCount = [filters.usedFor, filters.format, filters.storage].filter((value) => value?.length).length
+    const {data: sites} = useLocalMediaProfileSites()
+    const siteOptions = (sites?.sites ?? []).map((site) => ({value: site.key, label: site.name}))
+    const activeCount = [filters.site, filters.usedFor, filters.format, filters.storage].filter((value) => value?.length).length
     const onSearch = useCallback((search: string) => setFilters((current) => ({...current, search})), [])
 
     const canManage = can('local_media_profiles', 'manage')
@@ -176,6 +178,7 @@ export default function LocalMediaProfilesPage() {
                 onReset={() => setFilters({})}
                 leading={<SelectAll selection={selection} filtered={activeCount > 0 || !!filters.search}/>}
             >
+                <ChipFilter label="Site" options={siteOptions} selected={filters.site ?? []} onChange={(site) => setFilters((current) => ({...current, site}))}/>
                 <ChipFilter label="Used for" options={USED_FOR_OPTIONS} selected={filters.usedFor ?? []} onChange={(usedFor) => setFilters((current) => ({...current, usedFor}))}/>
                 <ChipFilter label="Format" options={FORMAT_OPTIONS} selected={filters.format ?? []} onChange={(format) => setFilters((current) => ({...current, format}))}/>
                 <ChipFilter label="Storage" options={STORAGE_OPTIONS} selected={filters.storage ?? []} onChange={(storage) => setFilters((current) => ({...current, storage}))}/>

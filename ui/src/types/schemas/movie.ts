@@ -1,7 +1,7 @@
 import {z} from "zod";
 import {MovieExtraTypeSchema} from './dailywire_catalog'
 import {ApiDateTimeSchema} from './datetime'
-import {SourcedFields} from './source'
+import {SiteReadSchema, SourcedFields} from './source'
 
 
 export const MovieExtraCreateSchema = z.object({
@@ -103,6 +103,8 @@ export const MovieReadSchema = z.looseObject({
     thumbnailPortraitPath: z.string().nullable(),
     thumbnailSquarePath: z.string().nullable(),
     sharingUrl: z.string().nullable(),
+    /** The website it is on, told from its link. */
+    site: SiteReadSchema.nullable().optional(),
     authorName: z.string().nullable(),
     authorSlug: z.string().nullable(),
     logoImagePath: z.string().nullable(),

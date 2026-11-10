@@ -31,7 +31,7 @@ def _collection(index: int, *, youtube: bool):
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
 
     return Collection(
-        source_key="ytdlp" if youtube else "dailywire", uuid=f"collection-{index}", slug=f"show-{index}",
+        source_key="ytdlp" if youtube else "dailywire", site_key="youtube" if youtube else "dailywire", uuid=f"collection-{index}", slug=f"show-{index}",
         title=f"Show {index:02d}", description=None, membership_level="FREE",
         sharing_url=f"https://www.youtube.com/@show{index}" if youtube else f"https://www.dailywire.com/show/{index}",
         type=CollectionType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
@@ -79,7 +79,7 @@ def test_select_all_takes_every_download_profile_the_filters_match(session) -> N
     assert get_download_profile_ids(session, DownloadProfileListQuery()).ids == [item.id for item in profiles]
     enabled = get_download_profile_ids(session, DownloadProfileListQuery(status=["enabled"])).ids
     assert enabled == [item.id for item in profiles if item.enable_profile]
-    assert get_download_profile_ids(session, DownloadProfileListQuery(source=["ytdlp"], status=["disabled"])).ids == [
+    assert get_download_profile_ids(session, DownloadProfileListQuery(site=["youtube"], status=["disabled"])).ids == [
         profiles[3].id,
     ]
 

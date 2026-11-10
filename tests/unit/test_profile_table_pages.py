@@ -32,7 +32,7 @@ def _collection(index: int, *, source_key: str = "dailywire", title: str | None 
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
 
     return Collection(
-        source_key=source_key, uuid=f"collection-{index}", slug=f"show-{index}", title=title or f"Show {index:03d}",
+        source_key=source_key, site_key=source_key, uuid=f"collection-{index}", slug=f"show-{index}", title=title or f"Show {index:03d}",
         description=None, sharing_url=f"https://example.test/{index}", membership_level="FREE",
         type=CollectionType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host", author_slug="host",
@@ -41,7 +41,7 @@ def _collection(index: int, *, source_key: str = "dailywire", title: str | None 
 
 def _library(s: Session, count: int):
     """``count`` collections, each with an audio and a video Download Profile and a stream profile."""
-    from backend.db.models import DownloadProfile, LocalMediaProfile, RssStreamProfile
+    from backend.db.models import DownloadProfile, LocalMediaProfile, RssStreamProfile, Site
 
     audio = LocalMediaProfile(slug="audio", name="Audio", preferred_format="format_audio_only",
                               output_template="/downloads/audio/{{ episode }}.ext")
@@ -50,6 +50,7 @@ def _library(s: Session, count: int):
     collections = [
         _collection(index, source_key="youtube" if index % 3 == 0 else "dailywire") for index in range(count)
     ]
+    s.add_all([Site(key="dailywire", name="The Daily Wire", domains=[]), Site(key="youtube", name="YouTube", domains=[])])
     s.add_all([audio, video, *collections])
     s.flush()
     for index, collection in enumerate(collections):
@@ -108,14 +109,14 @@ def test_download_profile_filters_narrow_the_page_and_its_total(session) -> None
     assert total(format=["audio"]) == 60
     assert total(format=["audio", "video"]) == 120
     assert total(status=["disabled"]) == 60
-    assert total(source=["youtube"]) == 40
+    assert total(site=["youtube"]) == 40
     assert total(local_media_profile_id=audio.id) == 60
     assert total(search="show 045") == 2
     assert total(search="VIDEO 005") == 1
     # Search words are matched as text, not as LIKE patterns.
     assert total(search="%") == 0
     page = get_download_profile_views_page(
-        session, DownloadProfileListQuery(source=["youtube"], status=["enabled"], cursor=None, limit=50))
+        session, DownloadProfileListQuery(site=["youtube"], status=["enabled"], cursor=None, limit=50))
     assert page.total == 20
     assert all(item.collection_source_key == "youtube" and item.enable_profile for item in page.items)
 
@@ -155,7 +156,20 @@ def test_stream_profiles_page_with_filters_and_owner_scope(session) -> None:
     assert total_of(streams_from=["downloads"]) == 35
     assert total_of(streams_from=["downloads", "source"]) == 70
     assert total_of(format=["video"]) == 0
-    assert total_of(source=["youtube"]) == 24
+    assert total_of(site=["youtube"]) == 24
+
+
+def test_profile_tables_offer_the_sites_their_collections_are_on(session) -> None:
+    from backend.api.endpoints.download_profiles.as_view.service import get_download_profile_sites
+    from backend.api.endpoints.stream_profiles.as_view.service import get_stream_profile_sites
+    from backend.db.models import Site
+    from backend.security.access import Access
+
+    _library(session, 6)
+    session.add(Site(key="vimeo", name="Vimeo", domains=[]))
+    session.commit()
+    assert [site.name for site in get_download_profile_sites(session)] == ["The Daily Wire", "YouTube"]
+    assert [site.key for site in get_stream_profile_sites(session, Access.full())] == ["dailywire", "youtube"]
 
 
 def test_local_media_profiles_page_in_name_order_with_filters(session) -> None:
@@ -167,11 +181,11 @@ def test_local_media_profiles_page_in_name_order_with_filters(session) -> None:
     profiles = [
         LocalMediaProfile(slug=f"profile-{index}", name=f"{'Zeta' if index % 2 else 'alpha'} {index:02d}",
                           preferred_format="format_1080p", output_template=f"/downloads/{index}/{{{{ episode }}}}.ext",
-                          collection_scope="podcast")
+                          collection_scope="podcast", site_keys=["youtube"] if index % 5 == 0 else ["dailywire"])
         for index in range(55)
     ]
     movie = MovieLocalMediaProfile(slug="movies", name="Movies", preferred_format="format_audio_only",
-                                   output_template="/downloads/movies/{{ title }}.ext")
+                                   output_template="/downloads/movies/{{ title }}.ext", site_keys=["dailywire", "youtube"])
     collection = _collection(1)
     session.add_all([*profiles, movie, collection])
     session.flush()
@@ -208,6 +222,10 @@ def test_local_media_profiles_page_in_name_order_with_filters(session) -> None:
     assert page(storage=["empty"]).total == 55
     assert page(search="zeta 0").total == 5
     assert page(search="downloads/movies").total == 1
+    assert page(site=["youtube"]).total == 12
+    assert page(site=["dailywire"]).total == 45
+    assert page(site=["dailywire", "youtube"]).total == 56
+    assert page(site=["vimeo"]).total == 0
 
 
 def test_profile_table_endpoints_read_filters_from_the_query_string(session) -> None:
@@ -231,7 +249,11 @@ def test_profile_table_endpoints_read_filters_from_the_query_string(session) -> 
     }
     assert api_client.get("/stream-profiles/as-view", params={"streams_from": "source"}).status_code == 200
     assert api_client.get("/local-media-profiles/as-view", params={"used_for": ["movie", "video"]}).status_code == 200
+    assert api_client.get("/local-media-profiles/as-view", params={"site": ["youtube"]}).status_code == 200
     assert api_client.get("/download-profiles/as-view", params={"status": "maybe"}).status_code == 422
+    assert api_client.get("/download-profiles/as-view", params={"site": ["youtube"]}).status_code == 200
+    assert api_client.get("/download-profiles/as-view/sites").json() == []
+    assert api_client.get("/stream-profiles/as-view/sites").json() == []
 
 
 def test_library_counts_say_which_tabs_the_library_has(session):
