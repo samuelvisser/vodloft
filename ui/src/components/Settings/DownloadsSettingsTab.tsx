@@ -546,7 +546,7 @@ export default function DownloadsSettingsTab({
                     })}
                 />
                 <SiteSettingsCard
-                    group="downloadProfile" draft={draft} updateDraft={updateDraft} errorFor={errorFor}
+                    groups={['downloadProfile', 'localMediaProfile']} draft={draft} updateDraft={updateDraft} errorFor={errorFor}
                     help="Default follows the system defaults above. A Site with a preset starts with its own value, which you can change or set back to Default. Settings without a Default, such as SponsorBlock, only exist on the Sites that show them."
                 />
             </SettingsSection>

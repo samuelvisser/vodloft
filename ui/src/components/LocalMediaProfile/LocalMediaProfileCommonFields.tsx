@@ -4,6 +4,7 @@ import {type LocalMediaProfileType} from '../../types/local_media_profile'
 import CollectionLocalMediaProfileScopeField from './CollectionLocalMediaProfileScopeField'
 import LocalMediaProfileSitesField from './LocalMediaProfileSitesField'
 import SubtitleFields from './SubtitleFields'
+import SiteSettingsSections from './SiteSettingsSections'
 import {useSubtitleModeDefaults} from './useSubtitleModeDefaults'
 
 import {useLibraryDefaults} from '../../lib/settings'
@@ -222,6 +223,8 @@ export default function LocalMediaProfileCommonFields({
             <hr className="form-section-divider" aria-hidden="true"/>
 
             <SubtitleFields form={form} onSubtitleModeChange={onSubtitleModeChange}/>
+
+            <SiteSettingsSections form={form} mode={mode}/>
         </>
     )
 }

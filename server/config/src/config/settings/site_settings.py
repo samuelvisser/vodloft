@@ -127,9 +127,10 @@ SITE_SETTING_DEFAULT = "default"
 
 
 class SiteSettingGroup(StrEnum):
-    """Where in Settings a setting shows: Automations, or Downloads."""
+    """Where a setting is used: in Automations, on Download Profiles, or on Local Media Profiles."""
     SCHEDULING = "scheduling"
     DOWNLOAD_PROFILE = "downloadProfile"
+    LOCAL_MEDIA_PROFILE = "localMediaProfile"
 
 
 class SiteSetting(StrEnum):
@@ -281,10 +282,10 @@ SITE_SETTINGS: Mapping[SiteSetting, SiteSettingSpec] = {spec.key: spec for spec 
     SiteSettingSpec(
         SiteSetting.UPGRADE_LENGTH_MINUTES, SiteSettingGroup.DOWNLOAD_PROFILE, _profile_default("upgrade_length_minutes"),
     ),
-    SiteSettingSpec(SiteSetting.AUTO_SUBTITLES, SiteSettingGroup.DOWNLOAD_PROFILE, _profile_default("auto_subtitles")),
-    SiteSettingSpec(SiteSetting.SPONSORBLOCK, SiteSettingGroup.DOWNLOAD_PROFILE, builtin=True),
+    SiteSettingSpec(SiteSetting.AUTO_SUBTITLES, SiteSettingGroup.LOCAL_MEDIA_PROFILE, _profile_default("auto_subtitles")),
+    SiteSettingSpec(SiteSetting.SPONSORBLOCK, SiteSettingGroup.LOCAL_MEDIA_PROFILE, builtin=True),
     SiteSettingSpec(
-        SiteSetting.SPONSORBLOCK_SEGMENTS, SiteSettingGroup.DOWNLOAD_PROFILE, builtin=DEFAULT_SPONSORBLOCK_SEGMENTS,
+        SiteSetting.SPONSORBLOCK_SEGMENTS, SiteSettingGroup.LOCAL_MEDIA_PROFILE, builtin=DEFAULT_SPONSORBLOCK_SEGMENTS,
     ),
 )}
 

@@ -120,7 +120,7 @@ never changes a Download Profile you already have.
 | `downloadProfileDefaults.upgradeRepeat` | `VL_DOWNLOAD_PROFILE_DEFAULTS__UPGRADE_REPEAT` | `once` | How often it checks: `once`, `twice` or `every`. |
 | `downloadProfileDefaults.upgradeImprovements` | `VL_DOWNLOAD_PROFILE_DEFAULTS__UPGRADE_IMPROVEMENTS` | `[resolution]` | What counts as a better version. A Site only checks for what it can find. |
 | `downloadProfileDefaults.upgradeLengthMinutes` | `VL_DOWNLOAD_PROFILE_DEFAULTS__UPGRADE_LENGTH_MINUTES` | `5` | How many minutes longer or shorter counts as a different length. |
-| `downloadProfileDefaults.autoSubtitles` | `VL_DOWNLOAD_PROFILE_DEFAULTS__AUTO_SUBTITLES` | `fallback` | Auto-generated subtitles: `never`, `fallback` (only when there are no real ones) or `always`. |
+| `downloadProfileDefaults.autoSubtitles` | `VL_DOWNLOAD_PROFILE_DEFAULTS__AUTO_SUBTITLES` | `fallback` | Auto-generated subtitles: `never`, `fallback` (only when there are no real ones) or `always`. A Local Media Profile follows it for each site you didn't change (see [[Local-Media-Profiles#youtube-and-other-sites]]). |
 
 Below the system defaults, each Site has a row of its own, the same way as [Per-Site scheduling](#per-site-scheduling):
 **Default** follows the system default, and a Site with a preset starts on its own value. The Daily Wire checks after

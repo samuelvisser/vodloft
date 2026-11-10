@@ -38,7 +38,7 @@ import {
     LocalMediaProfileViewReadSchema,
 } from "../types/schemas/local_media_profile";
 import {LocalMediaProfileSitesReadSchema, type LocalMediaProfileSitesRead} from "../types/schemas/local_media_profile_base";
-import {AutoSubtitlesUseSchema, DownloadProfileRead, DownloadProfileReadSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
+import {DownloadProfileRead, DownloadProfileReadSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {ProfileIdsSchema} from '../types/schemas/profile_bulk'
 
@@ -970,18 +970,6 @@ export function useWaitingForCountdown(collectionId?: number, enabled = true) {
         queryFn: ({signal}) => fetchParsed(
             `${apiUrl()}/download-profiles/waiting-for-countdown/${collectionId}`,
             WaitingForCountdownSchema.array(),
-            signal,
-        ),
-    })
-}
-
-export function useAutoSubtitleUses(localMediaProfileId?: number) {
-    return useQuery({
-        queryKey: ['autoSubtitleUses', localMediaProfileId] as const,
-        enabled: localMediaProfileId !== undefined,
-        queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/download-profiles/auto-subtitles/${localMediaProfileId}`,
-            AutoSubtitlesUseSchema.array(),
             signal,
         ),
     })

@@ -1,16 +1,13 @@
-import {Fragment, useState} from 'react'
+import {useState} from 'react'
 import {useWatch, type UseFormReturn} from 'react-hook-form'
-import {Link} from 'react-router-dom'
 import Select from 'react-select'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import {faIcon} from '../../icons/faIcon'
-import {useAutoSubtitleUses} from '../../lib/queries'
-import {AutoSubtitlesReg, LANGUAGES, SubtitleLanguageModeReg, languageName} from '../../types/quality'
+import {LANGUAGES, SubtitleLanguageModeReg, languageName} from '../../types/quality'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import ReadMore from '../../utils/ReadMore'
 import SimpleSelect from '../common/SimpleSelect'
-import type {Part} from '../DownloadProfile/whichEpisodesText'
 import './SubtitleFields.css'
 
 const WhereReg = createSelectRegistry('SubtitleWhere', {
@@ -21,17 +18,6 @@ const WhereReg = createSelectRegistry('SubtitleWhere', {
 })
 
 const OPTIONS = {shouldDirty: true, shouldValidate: true} as const
-
-function Sentence({parts}: {parts: Part[]}) {
-    return <>{parts.map((part, index) => part.strong ? <b key={index}>{part.text}</b> : <Fragment key={index}>{part.text}</Fragment>)}</>
-}
-
-function strongList(items: string[], joiner = 'and'): Part[] {
-    return items.flatMap((item, index) => [
-        ...(index === 0 ? [] : [{text: index === items.length - 1 ? ` ${joiner} ` : ', '}]),
-        {text: item, strong: true},
-    ])
-}
 
 function joinAnd(items: string[], joiner = 'and'): string {
     return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} ${joiner} ${items[items.length - 1]}`
@@ -57,17 +43,15 @@ type Props = {
 /** Subtitles: where they are stored, which languages in which order, and what to do with several. */
 export default function SubtitleFields({form, onSubtitleModeChange}: Props) {
     const {control, setValue, formState: {errors}} = form
-    const [subtitleMode, languages, languageMode, profileId] = useWatch({
-        control, name: ['subtitleMode', 'subtitleLanguages', 'subtitleLanguageMode', 'id'],
-    }) as [string, string[] | undefined, string, number | undefined]
+    const [subtitleMode, languages, languageMode] = useWatch({
+        control, name: ['subtitleMode', 'subtitleLanguages', 'subtitleLanguageMode'],
+    }) as [string, string[] | undefined, string]
     const list = languages ?? []
-    const [usesOpen, setUsesOpen] = useState(false)
     const [dragging, setDragging] = useState<number | null>(null)
     const stores = subtitleMode && subtitleMode !== 'no_subtitles'
     const everyLanguage = languageMode === 'site'
     const help = modeHelp(languageMode, list, subtitleMode === 'sidecar' || subtitleMode === 'embed_and_sidecar')
     const whereHelp = WhereReg.values.includes(subtitleMode as any) ? WhereReg.getHelp(subtitleMode as any) : undefined
-    const {data: uses} = useAutoSubtitleUses(stores ? profileId : undefined)
 
     const setLanguages = (next: string[]) => setValue('subtitleLanguages', next, OPTIONS)
     const move = (from: number, to: number) => {
@@ -78,22 +62,6 @@ export default function SubtitleFields({form, onSubtitleModeChange}: Props) {
         setLanguages(next)
     }
     const addable = Object.entries(LANGUAGES).filter(([code]) => !list.includes(code)).map(([value, label]) => ({value, label}))
-
-    // The auto-generated pointer, grouped by choice: "for Kurzgesagt, for Veritasium only when there are no real ones, and not for MKBHD".
-    const useName = (use: {collectionTitle: string}) => use.collectionTitle
-    const groupNames = (choice: string) => {
-        const all = (uses ?? []).filter((use) => use.autoSubtitles === choice).map(useName)
-        return all.length > 4 ? [...all.slice(0, 3), `${all.length - 3} more`] : all
-    }
-    const autoParts: Part[] = [{text: 'Auto-generated subtitles', strong: true}, {text: ' are downloaded'}]
-    const groups: Part[][] = [
-        groupNames('always').length ? [{text: 'for '}, ...strongList(groupNames('always'))] : [],
-        groupNames('fallback').length ? [{text: 'for '}, ...strongList(groupNames('fallback')), {text: ' only when there are no real ones'}] : [],
-        groupNames('never').length ? [{text: 'not for '}, ...strongList(groupNames('never'), 'or')] : [],
-    ].filter((group) => group.length)
-    groups.forEach((group, index) => {
-        autoParts.push({text: index === 0 ? ' ' : index === groups.length - 1 ? ', and ' : ', '}, ...group)
-    })
 
     return (
         <div className="subtitle-fields" id="subtitle-fields">
@@ -193,39 +161,10 @@ export default function SubtitleFields({form, onSubtitleModeChange}: Props) {
                 </div>
             )}
 
-            {stores && uses && uses.length > 0 && (
-                <div className="subtitle-auto">
-                    <button
-                        type="button" className="subtitle-auto__toggle" aria-expanded={usesOpen}
-                        onClick={() => setUsesOpen((value) => !value)}
-                    >
-                        <FontAwesomeIcon className="subtitle-auto__fold" icon={faIcon('fass', usesOpen ? 'chevron-down' : 'chevron-right')}/>
-                        <span><Sentence parts={autoParts}/></span>
-                    </button>
-                    {usesOpen && (
-                        <div className="subtitle-uses-wrap">
-                            <div className="subtitle-uses">
-                                {uses.map((use) => (
-                                    <div key={use.downloadProfileId} className="subtitle-use">
-                                        <strong>{use.collectionTitle}</strong>
-                                        <span className="subtitle-use__muted">YouTube</span>
-                                        <span className={`subtitle-use__choice is-${use.autoSubtitles}`}>{AutoSubtitlesReg.getLabelLoose(use.autoSubtitles)}</span>
-                                        <Link to={`/edit-download-profile/${use.downloadProfileId}#youtube-subtitles`}>
-                                            Edit <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')}/>
-                                        </Link>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="help">Set on each YouTube Download Profile that uses this Local Media Profile. Opening one scrolls to its YouTube section.</div>
-                        </div>
-                    )}
-                </div>
-            )}
-
             <div className="help">
                 <ReadMore summary="Applies to every Source. Subtitles saved beside the media are always SRT.">
                     <p>Subtitles come from The Daily Wire and from every site yt-dlp downloads from, such as YouTube. NPO Start has no subtitles yet.</p>
-                    <p>Auto-generated subtitles only exist on YouTube, so that choice is on each Download Profile of a YouTube Collection.</p>
+                    <p>Whether to use the subtitles a site generates itself, such as YouTube's, is set per Site further down.</p>
                     <p>Embedding needs an MP4 or MKV video, not an HLS bundle or audio.</p>
                 </ReadMore>
             </div>

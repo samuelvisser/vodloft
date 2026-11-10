@@ -17,6 +17,7 @@ from backend.db.models import DownloadProfile, Episode
 from backend.db.models.local_media_profile import LocalMediaProfileBase
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.download_quality import ytdlp_quality, ytdlp_subtitles
+from backend.services.site_settings import local_media_profile_site_settings
 from backend.types.download_profile_types import (
     AutoSubtitles, MediaDownloadArtifactStatus, SponsorBlockAction, UpgradeImprovement, UpgradeRepeat,
 )
@@ -156,12 +157,16 @@ def next_upgrade_check_at(profile: DownloadProfile, checks_done: int, now: datet
     return now + timedelta(days=SECOND_CHECK_DAYS if repeat == UpgradeRepeat.TWICE else profile.upgrade_after_days)
 
 
-def sponsorblock_categories(profile: DownloadProfile) -> tuple[str, ...]:
-    """The SponsorBlock segment types the profile marks or cuts, which new segments of improve a download."""
-    if not profile.sponsorblock_enabled or UpgradeImprovement.SPONSORBLOCK.value not in profile.upgrade_improvements:
+def sponsorblock_categories(download: EpisodeMediaDownload, site: Site) -> tuple[str, ...]:
+    """The SponsorBlock segment types the download's Local Media Profile marks or cuts on the Site, which new
+    segments of improve the download, when its Download Profile counts them as better."""
+    if UpgradeImprovement.SPONSORBLOCK.value not in download.download_profile.upgrade_improvements:
+        return ()
+    choices = local_media_profile_site_settings(download.local_media_profile, site)
+    if not choices["sponsorblock_enabled"]:
         return ()
     return tuple(sorted(
-        category for category, action in profile.sponsorblock_segments.items() if action != SponsorBlockAction.KEEP.value
+        category for category, action in choices["sponsorblock_segments"].items() if action != SponsorBlockAction.KEEP.value
     ))
 
 

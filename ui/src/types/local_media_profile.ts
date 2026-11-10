@@ -1,7 +1,7 @@
 import {createSelectRegistry, SelectRegistry} from "../utils/selectRegistry";
 import {useMemo} from "react";
 import type {LocalMediaProfileRead} from "./schemas/local_media_profile";
-import type {LocalMediaProfileSiteRead, LocalMediaProfileSitesRead, LocalMediaProfileSubtitleMode} from "./schemas/local_media_profile_base";
+import type {LocalMediaProfileSiteRead, LocalMediaProfileSitesRead, LocalMediaProfileSubtitleMode, SiteDownloadChoices} from "./schemas/local_media_profile_base";
 import type {DownloadOptions} from "./schemas/source";
 
 
@@ -81,6 +81,15 @@ export function sitesForLocalMediaProfileType(
     type: LocalMediaProfileType,
 ): LocalMediaProfileSiteRead[] {
     return (sites?.sites ?? []).filter((site) => site.profileTypes.includes(type))
+}
+
+/** What a profile does on a Site with the settings only some Sites show: its own, or else the Site's. */
+export function siteDownloadChoices(
+    profile: Pick<LocalMediaProfileRead, 'siteSettings'>,
+    sites: LocalMediaProfileSitesRead | undefined,
+    siteKey: string,
+): SiteDownloadChoices | undefined {
+    return profile.siteSettings[siteKey] ?? sites?.sites.find((site) => site.key === siteKey)?.defaults
 }
 
 /** Whether a profile of this type can get media from Sites VODLoft has not seen yet. */

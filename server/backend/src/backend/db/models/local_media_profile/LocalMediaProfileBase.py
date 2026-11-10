@@ -118,6 +118,11 @@ class LocalMediaProfileBase(Base):
         default=True, server_default=true(), nullable=False,
         comment="Sites VODLoft sees for the first time join the profile's Sites",
     )
+    site_settings: Mapped[dict[str, dict]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}",
+        comment="Settings only some Sites show, such as YouTube's SponsorBlock, by Site key",
+    )
+    """A Site without settings here follows the Site's own from Settings."""
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
@@ -143,7 +148,10 @@ class LocalMediaProfileBase(Base):
 
 
 @event.listens_for(LocalMediaProfileBase, "before_insert", propagate=True)
-def _offer_every_known_site(_mapper, connection, target: LocalMediaProfileBase) -> None:
+def _start_new_profile(_mapper, connection, target: LocalMediaProfileBase) -> None:
+    """A new profile without Sites starts with every Site VODLoft knows, and without settings of its own for them."""
+    if target.site_settings is None:
+        target.site_settings = {}
     if target.site_keys is None:
         from backend.services.local_media_profile_sites import every_known_site
 

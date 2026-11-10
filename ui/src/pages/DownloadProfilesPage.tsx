@@ -69,7 +69,6 @@ export default function DownloadProfilesPage() {
             {key: 'downloadWithCountdown', label: 'Download with countdown', kind: 'switch', defaultValue: true},
             {key: 'upgradeCheck', label: 'Check for better versions', kind: 'switch', defaultValue: true},
             {key: 'upgradeRepeat', label: 'How often to check', kind: 'select', defaultValue: 'once', registry: UpgradeRepeatReg},
-            {key: 'sponsorblockEnabled', label: 'SponsorBlock', kind: 'switch', defaultValue: true},
         ]
     }, [MediaProfileReg])
 

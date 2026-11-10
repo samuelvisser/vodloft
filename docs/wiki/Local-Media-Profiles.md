@@ -62,11 +62,49 @@ Below it, **Subtitle languages** is a list in order of preference. Drag a langua
 
 With **Every language the site offers**, the list is called **Default track language**: only its first language counts, and it becomes the default track when an episode has it. The other languages are grayed out but stay on the list for when you choose something else again. Leave the list empty to mark no default track.
 
-**Auto-generated subtitles** only exist on YouTube, so that choice is on each Download Profile of a YouTube Collection (see [Download Profiles](Download-Profiles#youtube)). When a Local Media Profile is used for YouTube Collections, a folded line below says per Collection whether auto-generated subtitles are downloaded, with a link to each Download Profile.
+**Auto-generated subtitles** only exist on some sites, such as YouTube, so that choice is per site (see [YouTube and other sites](#youtube-and-other-sites)).
 
 **Movies**, **Series** and Collection profiles available for **Podcasts and Series** start with subtitles beside the media. **Podcast-only** profiles and **Video** profiles start without subtitles.
 
 Forced subtitles use names such as `Movie Name.en.forced.srt`, and auto-generated ones `Episode.nl.auto.srt`. The default track beside the media is named like `Episode.en.default.srt`: Jellyfin and Emby pick it by default, while Plex and Kodi go by the subtitle language set in the player. Plex and similar media servers find these files automatically. NPO Start has no subtitles yet. A video without subtitles downloads as before, and a subtitle that fails never stops the download. Audio-only downloads never embed subtitles, and an HLS bundle can only have them beside it.
+
+## YouTube and other sites
+
+Some sites have settings of their own. Each site in the profile's [Sites](#sites) that has them gets a section under
+the subtitle settings, with the site's name: YouTube has auto-generated subtitles and SponsorBlock, and other sites
+yt-dlp downloads have auto-generated subtitles only. The Daily Wire makes no subtitles, so it has no such section. A
+site you removed from the profile's sites doesn't show its section. These settings apply to every download with the
+profile, from a Collection's Download Profile and by hand alike. A site you haven't changed anything for follows the
+defaults under **Settings → Downloads**.
+
+These settings used to be on each Download Profile. When you upgrade, each profile takes, for each site,
+what most of its Download Profiles there had.
+
+### Auto-generated subtitles
+
+This setting only appears when the profile stores subtitles.
+
+**Use auto-generated subtitles** never, only when there are no real ones (the default), or always. YouTube makes subtitles automatically for most videos; they follow the subtitle languages above.
+
+- **Only when there are no real ones** uses an auto-generated subtitle for a language that has no subtitle a person made.
+- **Always** also adds it next to a real one, as its own track marked auto-generated (`Episode.nl.auto.srt` beside the media).
+
+### SponsorBlock
+
+[SponsorBlock](https://sponsor.ajay.app) is a community database of parts of YouTube videos: sponsor reads, "like and subscribe" reminders, intros and so on. Switch it on, then choose for each type of part:
+
+- **Keep**: left as it is.
+- **Chapter**: becomes a named chapter that your player can skip. Nothing is removed, so this is the safe choice.
+- **Cut out**: removed from the file. This is final; the cut part isn't kept anywhere.
+
+The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Preview and recap, Hook and greetings, Filler and Non-music section. Two more can only be kept or made a chapter, because there is nothing to cut out:
+
+- **Highlight**: the one moment viewers mark as where the video really gets going.
+- **Viewer chapters**: chapter titles viewers wrote, mostly for videos without chapters of their own. When other types are chapters too, they all share one list: a part that falls inside a viewer chapter splits it, and the overlap is named after both. On a video that has its own chapters, the two sets of titles mix, so this starts as Keep.
+
+A new profile makes chapters of sponsors, intros, outros and the highlight on YouTube, and keeps everything else. Saving a profile that keeps every type turns SponsorBlock off, and a new profile starts with it off when your defaults for YouTube keep every type.
+
+Most parts are submitted in the days after a video comes out, so a download made right after upload may find few of them. When a download found parts, the episode page shows them on a timeline: each part, whether it became a chapter or was cut out, and how much shorter the file is.
 
 ## Quality
 

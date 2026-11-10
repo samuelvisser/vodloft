@@ -1,4 +1,3 @@
-import {useWatch, type UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 
 import {
@@ -6,23 +5,27 @@ import {
 } from '../../types/sponsorblock'
 import ReadMore from '../../utils/ReadMore'
 
-/** SponsorBlock on a YouTube Download Profile: a switch, and Keep, Chapter or Cut out per segment type. */
-export default function SponsorBlockFields({form}: {form: UseFormReturn<any>}) {
-    const {control, setValue} = form
-    const [enabled, segments] = useWatch({control, name: ['sponsorblockEnabled', 'sponsorblockSegments']}) as [boolean, Record<string, string>]
+type Props = {
+    /** Keeps the ids of each Site's fields apart. */
+    idPrefix: string
+    enabled: boolean
+    segments: Record<string, string>
+    onChange: (enabled: boolean, segments: Record<string, string>) => void
+}
 
-    const choose = (category: string, action: string) =>
-        setValue('sponsorblockSegments', {...segments, [category]: action}, {shouldDirty: true})
+/** SponsorBlock on a Site of a Local Media Profile: a switch, and Keep, Chapter or Cut out per segment type. */
+export default function SponsorBlockFields({idPrefix, enabled, segments, onChange}: Props) {
+    const choose = (category: string, action: string) => onChange(enabled, {...segments, [category]: action})
 
     return (
         <div className="form-row">
-            <label htmlFor="sponsorblock-enabled">Use SponsorBlock</label>
+            <label htmlFor={`${idPrefix}-sponsorblock-enabled`}>Use SponsorBlock</label>
             <Switch
-                id="sponsorblock-enabled"
+                id={`${idPrefix}-sponsorblock-enabled`}
                 checked={enabled}
-                onChange={(value) => setValue('sponsorblockEnabled', value, {shouldDirty: true})}
+                onChange={(value) => onChange(value, segments)}
                 onColor="#0ea5e9" offColor="#d1d5db" uncheckedIcon={false} checkedIcon={false}
-                aria-describedby="sponsorblock-help"
+                aria-describedby={`${idPrefix}-sponsorblock-help`}
             />
             {enabled && (
                 <div className="sponsorblock-groups">
@@ -34,22 +37,22 @@ export default function SponsorBlockFields({form}: {form: UseFormReturn<any>}) {
                                 const help = SponsorBlockCategoryReg.getHelp(category)
                                 return (
                                     <div key={category} className="sponsorblock-row">
-                                        <span className="sponsorblock-row__name" id={`sponsorblock-${category}-label`} title={help}>
+                                        <span className="sponsorblock-row__name" id={`${idPrefix}-sponsorblock-${category}-label`} title={help}>
                                             <span className="sponsorblock-swatch" style={{background: SPONSORBLOCK_COLORS[category]}} aria-hidden="true"/>
                                             {label}
                                         </span>
-                                        <span className="sr-only" id={`sponsorblock-${category}-help`}>{help}</span>
+                                        <span className="sr-only" id={`${idPrefix}-sponsorblock-${category}-help`}>{help}</span>
                                         <span
                                             className="sponsorblock-choice"
                                             role="radiogroup"
-                                            aria-labelledby={`sponsorblock-${category}-label`}
-                                            aria-describedby={`sponsorblock-${category}-help`}
+                                            aria-labelledby={`${idPrefix}-sponsorblock-${category}-label`}
+                                            aria-describedby={`${idPrefix}-sponsorblock-${category}-help`}
                                         >
                                             {sponsorBlockActionReg(category).values.map((action) => (
                                                 <label key={action} title={SponsorBlockActionReg.getHelp(action)}>
                                                     <input
                                                         type="radio"
-                                                        name={`sponsorblock-${category}`}
+                                                        name={`${idPrefix}-sponsorblock-${category}`}
                                                         value={action}
                                                         aria-label={`${label}: ${SponsorBlockActionReg.getLabel(action)}`}
                                                         checked={segments[category] === action}
@@ -66,7 +69,7 @@ export default function SponsorBlockFields({form}: {form: UseFormReturn<any>}) {
                     ))}
                 </div>
             )}
-            <div className="help" id="sponsorblock-help">
+            <div className="help" id={`${idPrefix}-sponsorblock-help`}>
                 <ReadMore summary="Mark or cut out sponsor reads and other parts of a video.">
                     <p>SponsorBlock is a community database of parts of YouTube videos, such as sponsor reads and “like and subscribe” reminders.
                         A part becomes a chapter your player can skip, or is cut out of the file. Most parts are submitted in the days after a video comes out,

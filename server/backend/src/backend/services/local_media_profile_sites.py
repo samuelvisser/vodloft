@@ -7,12 +7,14 @@ it out again later. A new profile starts with every Site VODLoft knows.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Any
 
 from sqlalchemy import Connection, select
 from sqlalchemy.orm import Session
 
-from sources import ANY_DOMAIN, DownloadOptions, Feature, Site, Source, all_sources, named_sites, site_of
+from config.settings.site_settings import SiteSettingGroup
+from sources import ANY_DOMAIN, DownloadOptions, Feature, Site, SiteSetting, Source, all_sources, named_sites, site_of
 
 from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, LocalMediaProfileType, PreferredFormat
 
@@ -109,6 +111,10 @@ class ProfileSite:
     name: str
     profile_types: list[LocalMediaProfileType]
     download_options: DownloadOptions
+    settings: list[SiteSetting]
+    """The settings only some Sites show that a profile has for this Site."""
+    defaults: dict[str, Any]
+    """What a profile does on the Site until it has settings of its own for it."""
 
 
 @dataclass(frozen=True)
@@ -121,12 +127,19 @@ class ProfileSites:
 
 def profile_sites(s: Session) -> ProfileSites:
     """Every Site a Local Media Profile can be offered for."""
+    from backend.services.site_settings import local_media_profile_site_defaults, offered_settings
+
     types = list(_PROFILE_TYPE_FEATURES)
-    sites = [
-        ProfileSite(site.key, site.name, offered, site_of(site.key).downloads)
-        for site in known_sites(s)
-        if (offered := [profile_type for profile_type in types if site_offered_for_type(profile_type, site.key)])
-    ]
+    sites = []
+    for known in known_sites(s):
+        offered = [profile_type for profile_type in types if site_offered_for_type(profile_type, known.key)]
+        if not offered:
+            continue
+        site = replace(site_of(known.key), key=known.key, name=known.name)
+        sites.append(ProfileSite(
+            site.key, site.name, offered, site.downloads,
+            offered_settings(site, SiteSettingGroup.LOCAL_MEDIA_PROFILE), local_media_profile_site_defaults(site),
+        ))
     upcoming = [profile_type for profile_type in types if takes_upcoming_sites(profile_type)]
     return ProfileSites(sites, upcoming, DownloadOptions())
 

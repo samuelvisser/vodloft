@@ -22,9 +22,9 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
 /** Quality and subtitle language choices an existing profile keeps when this step picks it. */
-const QUALITY_FIELDS = [
+const PROFILE_CHOICE_FIELDS = [
     'subtitleLanguages', 'subtitleLanguageMode', 'qualityGoal', 'videoCodecs', 'codecFallback',
-    'container', 'audioCodec', 'audioFormat', 'audioLanguage',
+    'container', 'audioCodec', 'audioFormat', 'audioLanguage', 'siteKeys', 'includeUpcomingSites', 'siteSettings',
 ] as const
 
 
@@ -95,7 +95,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                 outputTemplate: watch('outputTemplate'),
                 preferredFormat: watch('preferredFormat'),
                 indexingValues: watch('indexingValues'),
-                ...Object.fromEntries(QUALITY_FIELDS.map((name) => [name, watch(name)])),
+                ...Object.fromEntries(PROFILE_CHOICE_FIELDS.map((name) => [name, watch(name)])),
             }
         }
 
@@ -109,7 +109,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
             outputTemplate: profile.outputTemplate,
             preferredFormat: profile.preferredFormat,
             indexingValues: profile.indexingValues,
-            ...Object.fromEntries(QUALITY_FIELDS.map((name) => [name, profile[name]])),
+            ...Object.fromEntries(PROFILE_CHOICE_FIELDS.map((name) => [name, profile[name]])),
         } as LocalMediaProfileUpsertIn)
     }
 

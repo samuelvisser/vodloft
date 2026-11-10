@@ -26,7 +26,6 @@ _SITE_SETTINGS = {
     "download_with_countdown": SiteSetting.DOWNLOAD_WITH_COUNTDOWN,
     "upgrade_check": SiteSetting.UPGRADE_CHECK,
     "upgrade_repeat": SiteSetting.UPGRADE_CHECK,
-    "sponsorblock_enabled": SiteSetting.SPONSORBLOCK,
 }
 
 

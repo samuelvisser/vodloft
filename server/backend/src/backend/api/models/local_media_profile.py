@@ -10,6 +10,8 @@ from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.local_media_profile_inputs import IndexingValueDefinition, LocalMediaProfileInput, VideoCodecChoice
 from backend.api.models.pagination import CursorPageRead
 from backend.api.models.source import DownloadOptionsAPIRead
+from backend.types.download_profile_types import AutoSubtitles, SponsorBlockAction
+from sources import SiteSetting
 from backend.types.local_media_profile_types import (
     AudioCodec,
     AudioFormat,
@@ -40,6 +42,14 @@ class LocalMediaProfileAPIBaseIn(RequestBase, LocalMediaProfileInput):
     """Fields shared by all Local Media Profile request models."""
 
 
+class SiteDownloadChoicesAPIRead(ResponseBase):
+    """What a Local Media Profile does on one Site with the settings only some Sites show."""
+
+    auto_subtitles: AutoSubtitles
+    sponsorblock_enabled: bool
+    sponsorblock_segments: dict[str, SponsorBlockAction]
+
+
 class LocalMediaProfileAPIBaseOut(ResponseBase):
     """Fields shared by all Local Media Profile response models."""
 
@@ -64,6 +74,7 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     audio_language: str | None = None
     site_keys: list[str]
     include_upcoming_sites: bool
+    site_settings: dict[str, SiteDownloadChoicesAPIRead]
     created_at: datetime
     updated_at: datetime
 
@@ -75,6 +86,10 @@ class LocalMediaProfileSiteAPIRead(ResponseBase):
     name: str
     profile_types: list[LocalMediaProfileType]
     download_options: DownloadOptionsAPIRead
+    settings: list[SiteSetting]
+    """The settings only some Sites show that a profile has for this Site, such as YouTube's SponsorBlock."""
+    defaults: SiteDownloadChoicesAPIRead
+    """What a profile does on the Site until it has settings of its own for it."""
 
 
 class LocalMediaProfileSitesAPIRead(ResponseBase):
