@@ -38,6 +38,8 @@ type LocalMediaProfileTemplateSourceOptions = {
     enabled?: boolean
     pageSize?: number
     anchorSourceId?: string
+    /** Only media on these Sites, as the profile's Sites filter offers it; undefined for every Site. */
+    siteKeys?: string[]
 }
 
 async function fetchTemplateJson<T>(
@@ -51,6 +53,11 @@ async function fetchTemplateJson<T>(
     )
     if (!response.ok) throw new Error(`Failed to load template data (${response.status})`)
     return response.json() as Promise<T>
+}
+
+/** The Sites a profile is for, as the server reads them: comma-separated, empty for none. */
+function sitesParam(siteKeys: string[] | undefined): string | undefined {
+    return siteKeys ? [...siteKeys].sort().join(',') : undefined
 }
 
 export function useLocalMediaProfileTemplateVariables(
@@ -76,8 +83,10 @@ export function useLocalMediaProfileTemplateSources(
         enabled = true,
         pageSize = 30,
         anchorSourceId,
+        siteKeys,
     }: LocalMediaProfileTemplateSourceOptions = {},
 ) {
+    const sites = sitesParam(siteKeys)
     const effectiveAnchorSourceId = mode === 'collection' && !search.trim()
         ? anchorSourceId
         : undefined
@@ -89,6 +98,7 @@ export function useLocalMediaProfileTemplateSources(
             collectionScope,
             search.trim(),
             effectiveAnchorSourceId ?? null,
+            sites ?? null,
         ] as const,
         initialCount: pageSize,
         batchSize: pageSize,
@@ -105,6 +115,7 @@ export function useLocalMediaProfileTemplateSources(
             }
             if (mode === 'collection') params.set('collection_scope', collectionScope)
             if (search.trim()) params.set('search', search.trim())
+            if (sites !== undefined) params.set('sites', sites)
             return fetchTemplateJson<LocalMediaProfileTemplateSourcePage>(
                 `sources?${params.toString()}`,
                 signal,
@@ -120,16 +131,19 @@ export function useRandomCollectionTemplateSource(
     enabled = true,
     /** A saved profile starts on an episode of a collection that downloads to it. */
     localMediaProfileId: number | null = null,
+    siteKeys?: string[],
 ) {
+    const sites = sitesParam(siteKeys)
     // A per-mount key makes reopening the form request a fresh example instead
     // of reusing React Query's cache from the previous page visit.
     const [requestKey] = useState(() => Math.random())
     return useQuery<LocalMediaProfileTemplateSource | null>({
-        queryKey: ['randomCollectionTemplateSource', collectionScope, localMediaProfileId, requestKey],
+        queryKey: ['randomCollectionTemplateSource', collectionScope, localMediaProfileId, sites ?? null, requestKey],
         enabled,
         queryFn: ({signal}) => fetchTemplateJson(
             `sources/random-collection-episode?collection_scope=${encodeURIComponent(collectionScope)}`
-            + (localMediaProfileId !== null ? `&local_media_profile_id=${localMediaProfileId}` : ''),
+            + (localMediaProfileId !== null ? `&local_media_profile_id=${localMediaProfileId}` : '')
+            + (sites !== undefined ? `&sites=${encodeURIComponent(sites)}` : ''),
             signal,
             'no-store',
         ),

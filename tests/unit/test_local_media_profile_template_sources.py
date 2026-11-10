@@ -555,3 +555,43 @@ def test_collection_source_cursor_survives_changes_before_boundary(db_session):
         limit=2,
     )
     assert [source.values["episode_number"] for source in previous.items] == ["0", "2"]
+
+
+def test_collection_examples_follow_the_profiles_sites(db_session):
+    from backend.api.endpoints.local_media_profiles.output_template import (
+        get_output_template_source_page,
+        get_random_collection_template_source,
+    )
+    from backend.types.local_media_profile_types import LocalMediaProfileType, CollectionLocalMediaProfileScope
+    from backend.types.collection_types import CollectionType
+
+    on_youtube = _make_collection(db_session, slug="alpha-youtube", collection_type=CollectionType.SERIES.value)
+    on_dailywire = _make_collection(db_session, slug="beta-dailywire", collection_type=CollectionType.SERIES.value)
+    on_youtube.site_key = "youtube"
+    on_dailywire.site_key = "dailywire"
+    for collection in (on_youtube, on_dailywire):
+        for index in range(1, 4):
+            _add_episode(db_session, collection, index=index)
+
+    def titles(site_keys):
+        page = get_output_template_source_page(
+            db_session, LocalMediaProfileType.COLLECTION, CollectionLocalMediaProfileScope.BOTH,
+            limit=2, site_keys=site_keys,
+        )
+        labels = [source.label for source in page.items]
+        while page.next_cursor:
+            page = get_output_template_source_page(
+                db_session, LocalMediaProfileType.COLLECTION, CollectionLocalMediaProfileScope.BOTH,
+                cursor=page.next_cursor, limit=2, site_keys=site_keys,
+            )
+            labels += [source.label for source in page.items]
+        return labels
+
+    assert len(titles(None)) == 6
+    assert titles(["youtube"]) == [f"Alpha Youtube — Episode {index}" for index in range(1, 4)]
+    # A profile only for Sites VODLoft does not know yet has no media to show, so it shows the made-up example.
+    assert [source.fallback for source in get_output_template_source_page(
+        db_session, LocalMediaProfileType.COLLECTION, site_keys=[],
+    ).items] == [True]
+    for _ in range(5):
+        assert get_random_collection_template_source(db_session, site_keys=["dailywire"]).label.startswith("Beta Dailywire")
