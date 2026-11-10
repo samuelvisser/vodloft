@@ -134,6 +134,13 @@ def local_media_profile_template_variables(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+_SITES_HELP = "Comma-separated keys of the Sites the profile is for; left out, every Site"
+
+
+def _site_keys(sites: str | None) -> list[str] | None:
+    return None if sites is None else [key for key in sites.split(",") if key]
+
+
 @router.get("/template/sources", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileTemplateSourcePage)
 def local_media_profile_template_sources(
     type: LocalMediaProfileType = Query(...),
@@ -142,6 +149,7 @@ def local_media_profile_template_sources(
     cursor: str | None = Query(None, max_length=4096),
     limit: int = Query(30, ge=1, le=100),
     anchor_source_id: str | None = Query(None, max_length=100),
+    sites: str | None = Query(None, max_length=4096, description=_SITES_HELP),
 ):
     """Search applicable media items for testing an output path template."""
     with db_session() as s:
@@ -154,6 +162,7 @@ def local_media_profile_template_sources(
                 cursor=cursor,
                 limit=limit,
                 anchor_source_id=anchor_source_id,
+                site_keys=_site_keys(sites),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -167,10 +176,13 @@ def local_media_profile_template_sources(
 def local_media_profile_random_collection_template_source(
     collection_scope: CollectionLocalMediaProfileScope = Query(CollectionLocalMediaProfileScope.BOTH),
     local_media_profile_id: int | None = Query(None, description="Prefer a Collection that uses this profile"),
+    sites: str | None = Query(None, max_length=4096, description=_SITES_HELP),
 ):
     """Choose a fresh initial episode without weighting Collections by episode count."""
     with db_session() as s:
-        return get_random_collection_template_source(s, collection_scope, local_media_profile_id=local_media_profile_id)
+        return get_random_collection_template_source(
+            s, collection_scope, local_media_profile_id=local_media_profile_id, site_keys=_site_keys(sites),
+        )
 
 
 @router.post(

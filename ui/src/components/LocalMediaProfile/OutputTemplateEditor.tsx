@@ -535,6 +535,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'both'
     const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
+    // Movies are only on The Daily Wire, so a movie profile has no Sites filter.
+    const watchedSiteKeys = useWatch({control, name: 'siteKeys'}) as string[] | null | undefined
+    const siteKeys = mode !== 'movie' && Array.isArray(watchedSiteKeys) ? watchedSiteKeys : undefined
+    const siteKeysKey = siteKeys ? [...siteKeys].sort().join(',') : null
     const rawLocalMediaProfileId = useWatch({control, name: 'id'})
     const localMediaProfileId = typeof rawLocalMediaProfileId === 'number'
         ? rawLocalMediaProfileId
@@ -572,9 +576,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         collectionScope,
         search: sourceSearch,
         anchorSourceId: isExampleSource(selectedSource) ? undefined : selectedSource?.id,
+        siteKeys,
     })
     const randomCollectionSourceQuery = useRandomCollectionTemplateSource(
-        collectionScope, mode === 'collection', localMediaProfileId,
+        collectionScope, mode === 'collection', localMediaProfileId, siteKeys,
     )
     const variableQuery = useLocalMediaProfileTemplateVariables(mode)
     const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
@@ -779,7 +784,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         setSelectedSource(null)
         setTestValues({})
         setSourceSearch('')
-    }, [mode, collectionScope])
+    }, [mode, collectionScope, siteKeysKey])
 
     useEffect(() => {
         if (selectedSource) return
@@ -976,7 +981,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                                 <p>Try different values here. Your profile is not changed.</p>
                             </div>
                             <label className="template-source-label" htmlFor="template-example-source">
-                                <span>Example source</span>
+                                <span>Example episode</span>
                                 <TemplateSourceSelect
                                     mode={mode}
                                     sources={sources}
