@@ -232,6 +232,10 @@ export function useDownloadProfileSites() {
     return useProfileTableSites('downloadProfilesView', 'download-profiles/as-view', profileListsReadable('download_profiles'))
 }
 
+export function useLocalMediaProfileTableSites() {
+    return useProfileTableSites('localMediaProfilesView', 'local-media-profiles/as-view', profileListsReadable('local_media_profiles'))
+}
+
 export function useStreamProfileSites() {
     return useProfileTableSites('streamProfilesView', 'stream-profiles/as-view', can('stream_profiles') || can('library', 'manage'))
 }

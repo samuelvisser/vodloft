@@ -172,6 +172,16 @@ def test_profile_tables_offer_the_sites_their_collections_are_on(session) -> Non
     assert [site.key for site in get_stream_profile_sites(session, Access.full())] == ["dailywire", "youtube"]
 
 
+def test_the_local_media_profile_table_offers_only_sites_vodloft_has_media_from(session) -> None:
+    from backend.api.endpoints.local_media_profiles.service import get_local_media_profile_table_sites
+    from backend.db.models import Site
+
+    assert get_local_media_profile_table_sites(session) == []
+    session.add(Site(key="youtube", name="YouTube", domains=[]))
+    session.commit()
+    assert [site.name for site in get_local_media_profile_table_sites(session)] == ["YouTube"]
+
+
 def test_local_media_profiles_page_in_name_order_with_filters(session) -> None:
     from backend.api.endpoints.local_media_profiles.service import get_local_media_profile_views_page
     from backend.api.models.profile_list import LocalMediaProfileListQuery
@@ -254,6 +264,7 @@ def test_profile_table_endpoints_read_filters_from_the_query_string(session) -> 
     assert api_client.get("/download-profiles/as-view", params={"site": ["youtube"]}).status_code == 200
     assert api_client.get("/download-profiles/as-view/sites").json() == []
     assert api_client.get("/stream-profiles/as-view/sites").json() == []
+    assert api_client.get("/local-media-profiles/as-view/sites").json() == []
 
 
 def test_library_counts_say_which_tabs_the_library_has(session):

@@ -16,6 +16,7 @@ from backend.api.models.local_media_profile_view import (
     LocalMediaProfileViewPageRead,
 )
 from backend.api.models.profile_list import LocalMediaProfileListQuery
+from backend.api.models.source import SiteAPIRead
 from backend.api.models.local_media_profile_move import (
     LocalMediaProfileMoveAPIRequest,
     LocalMediaProfileMovePreviewAPIRead,
@@ -53,6 +54,7 @@ from backend.api.models.profile_bulk import (
 )
 from .service import (
     get_local_media_profile_ids,
+    get_local_media_profile_table_sites,
     get_local_media_profile,
     get_local_media_profile_view,
     get_local_media_profile_views_page,
@@ -101,6 +103,13 @@ def local_media_profiles_view_ids(
     """The ids of every Local Media Profile the filters match, in table order, for Select all."""
     with db_session() as s:
         return get_local_media_profile_ids(s, filters)
+
+
+@router.get("/as-view/sites", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[SiteAPIRead])
+def local_media_profiles_view_sites():
+    """The Sites VODLoft has media from, which the table can be filtered by."""
+    with db_session() as s:
+        return get_local_media_profile_table_sites(s)
 
 
 @router.post("/bulk/summary", dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.MANAGE)], response_model=BulkSummaryRead)

@@ -2,7 +2,7 @@ import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {Link} from 'react-router-dom'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
-import {type LocalMediaProfileTableFilters, type LocalMediaProfileTableRow, useLocalMediaProfileSites, useLocalMediaProfilesTable} from '../lib/queries'
+import {type LocalMediaProfileTableFilters, type LocalMediaProfileTableRow, useLocalMediaProfileTableSites, useLocalMediaProfilesTable} from '../lib/queries'
 import ProfileTableFilters, {FORMAT_OPTIONS} from '../components/common/ProfileTableFilters'
 import {ChipFilter} from '../components/common/FilterBar'
 import LoadMore from '../components/common/LoadMore'
@@ -142,8 +142,8 @@ export default function LocalMediaProfilesPage() {
 
     const [filters, setFilters] = useState<LocalMediaProfileTableFilters>({})
     const table = useLocalMediaProfilesTable(filters)
-    const {data: sites} = useLocalMediaProfileSites()
-    const siteOptions = (sites?.sites ?? []).map((site) => ({value: site.key, label: site.name}))
+    const {data: sites} = useLocalMediaProfileTableSites()
+    const siteOptions = (sites ?? []).map((site) => ({value: site.key, label: site.name}))
     const activeCount = [filters.site, filters.usedFor, filters.format, filters.storage].filter((value) => value?.length).length
     const onSearch = useCallback((search: string) => setFilters((current) => ({...current, search})), [])
 
