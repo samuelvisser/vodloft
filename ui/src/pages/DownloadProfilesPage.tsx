@@ -1,6 +1,5 @@
 import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
-import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import {type DownloadProfileTableFilters, useDownloadProfilesTable, useLocalMediaProfiles, useSources} from '../lib/queries'
@@ -22,7 +21,7 @@ import {formatBytes} from '../utils/formatting'
 import {apiUrl} from '../lib/api'
 import {UpgradeRepeatReg} from '../types/schemas/siteSettings'
 import {useBulkSelection} from '../components/ProfileBulkEdit/useBulkSelection'
-import {BulkEditButton, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
+import {ProfileTableActions, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
 import ProfileBulkEdit, {tableSelection} from '../components/ProfileBulkEdit/ProfileBulkEdit'
 import type {BulkFieldSpec} from '../components/ProfileBulkEdit/BulkChangeDialog'
 
@@ -137,7 +136,7 @@ export default function DownloadProfilesPage() {
 
     return (
         <section className="view" aria-labelledby="profiles-title">
-            <div className="view-header">
+            <div className="view-header profile-table-header">
                 <h1 id="profiles-title">Download Profiles</h1>
                 <PageSubtitle summary={<>Create rules for how each collection is downloaded.</>}>
                     <p>A Download Profile tells VODLoft what to download and how long to retain your downloads.
@@ -147,10 +146,7 @@ export default function DownloadProfilesPage() {
                         downloads will be stored and what their file name should be.</p>
                 </PageSubtitle>
                 {canManage && (
-                    <div className="view-header-actions">
-                        <BulkEditButton selection={selection}/>
-                        <Link className="btn btn-primary" to="/add-download-profile">Add download profile</Link>
-                    </div>
+                    <ProfileTableActions selection={selection} addTo="/add-download-profile" addLabel="Add download profile"/>
                 )}
             </div>
 

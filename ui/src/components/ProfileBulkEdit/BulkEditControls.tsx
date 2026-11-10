@@ -1,19 +1,48 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {Link} from 'react-router-dom'
 import {faIcon} from '../../icons/faIcon'
 import type {BulkResult} from '../../types/schemas/profile_bulk'
 import {countOf} from './bulkApi'
 import type {BulkSelection} from './useBulkSelection'
 import './ProfileBulkEdit.css'
 
+type ProfileTableActionsProps = {
+    selection: BulkSelection
+    /** Where Add goes, and what it says, such as "Add media profile". */
+    addTo: string
+    addLabel: string
+}
+
+/**
+ * Bulk edit and Add, side by side in a profile table's header. They never stack: when the header is too narrow for
+ * their words they become round icon buttons, and the words stay for screen readers and as a tooltip.
+ */
+export function ProfileTableActions({selection, addTo, addLabel}: ProfileTableActionsProps) {
+    return (
+        <div className="view-header-actions">
+            <BulkEditButton selection={selection}/>
+            <Link className="btn btn-primary view-header-action" to={addTo} title={addLabel}>
+                <FontAwesomeIcon icon={faIcon('fass', 'plus')} aria-hidden="true"/>
+                <span className="view-header-action-label">{addLabel}</span>
+            </Link>
+        </div>
+    )
+}
+
 /** Turns bulk edit on beside a table's Add button, and becomes Done while it is on. */
-export function BulkEditButton({selection}: {selection: BulkSelection}) {
+function BulkEditButton({selection}: {selection: BulkSelection}) {
     if (selection.active) {
-        return <button type="button" className="btn btn-primary bulk-edit-toggle" onClick={selection.stop}>Done</button>
+        return (
+            <button type="button" className="btn btn-primary view-header-action" onClick={selection.stop} title="Done">
+                <FontAwesomeIcon icon={faIcon('fass', 'check')} aria-hidden="true"/>
+                <span className="view-header-action-label">Done</span>
+            </button>
+        )
     }
     return (
-        <button type="button" className="btn btn-secondary bulk-edit-toggle" onClick={selection.start}>
+        <button type="button" className="btn btn-secondary view-header-action" onClick={selection.start} title="Bulk edit">
             <FontAwesomeIcon icon={faIcon('fass', 'list-check')} aria-hidden="true"/>
-            Bulk edit
+            <span className="view-header-action-label">Bulk edit</span>
         </button>
     )
 }

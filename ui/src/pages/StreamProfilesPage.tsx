@@ -1,6 +1,5 @@
 import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
-import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import {type StreamProfileTableFilters, useSources, useStreamProfilesTable} from '../lib/queries'
@@ -18,7 +17,7 @@ import {RssStreamProfileUpdateSchema} from '../types/schemas/rss_stream_profile'
 import {faIcon} from '../icons/faIcon'
 import {apiUrl} from '../lib/api'
 import {useBulkSelection} from '../components/ProfileBulkEdit/useBulkSelection'
-import {BulkEditButton, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
+import {ProfileTableActions, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
 import ProfileBulkEdit, {tableSelection} from '../components/ProfileBulkEdit/ProfileBulkEdit'
 import type {BulkFieldSpec} from '../components/ProfileBulkEdit/BulkChangeDialog'
 
@@ -122,7 +121,7 @@ export default function StreamProfilesPage() {
 
     return (
         <section className="view" aria-labelledby="stream-profiles-title">
-            <div className="view-header">
+            <div className="view-header profile-table-header">
                 <h1 id="stream-profiles-title">Stream Profiles</h1>
                 <PageSubtitle summary={<>Control how VODLoft streams each collection.</>}>
                     <p>Stream Profiles allow you to control how each collection is streamed. You can stream episodes straight from the files
@@ -132,10 +131,7 @@ export default function StreamProfilesPage() {
                         viewing needs.</p>
                 </PageSubtitle>
                 {canManage && (
-                    <div className="view-header-actions">
-                        <BulkEditButton selection={selection}/>
-                        <Link className="btn btn-primary" to="/add-stream-profile">Add stream profile</Link>
-                    </div>
+                    <ProfileTableActions selection={selection} addTo="/add-stream-profile" addLabel="Add stream profile"/>
                 )}
             </div>
 

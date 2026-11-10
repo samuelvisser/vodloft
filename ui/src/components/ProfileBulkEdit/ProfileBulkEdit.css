@@ -1,7 +1,39 @@
-/* Bulk edit on the profile tables */
-.bulk-edit-toggle { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
-.view-header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-left: auto; }
+/* Bulk edit and Add in a profile table's header. They stay on one row, and become round icon buttons, like the
+   Library's + button on phones, when the header has no room for their words. */
+.profile-table-header { container-type: inline-size; }
+.view-header > .view-header-actions { display: flex; flex: 0 0 auto; flex-wrap: nowrap; align-items: center; gap: 8px; margin-left: auto; }
 .view-header .view-header-actions .btn { margin-left: 0; white-space: nowrap; }
+.view-header-action { display: inline-flex; align-items: center; gap: 8px; }
+
+@container (max-width: 959px) {
+  .view-header .view-header-actions .view-header-action {
+    width: 40px;
+    height: 40px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 17px;
+  }
+  .view-header-action-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}
+
+/* The title keeps its line; the subtitle beside it wraps first. */
+@media (min-width: 901px) {
+  .profile-table-header h1 { flex-shrink: 0; }
+}
+/* Once the header wraps, the buttons sit beside the title, with the subtitle below them. */
+@media (max-width: 900px) {
+  .profile-table-header h1 { flex: 1 1 0; min-width: 0; }
+  .view-header.profile-table-header > .page-subtitle { flex: 1 1 100%; order: 1; }
+}
 
 .bulk-check { width: 18px; height: 18px; margin: 0; accent-color: #3b82f6; cursor: pointer; }
 .bulk-select-all {

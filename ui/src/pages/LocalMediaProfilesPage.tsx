@@ -1,6 +1,5 @@
 import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
-import {Link} from 'react-router-dom'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {type LocalMediaProfileTableFilters, type LocalMediaProfileTableRow, useLocalMediaProfilesTable} from '../lib/queries'
 import ProfileTableFilters, {FORMAT_OPTIONS} from '../components/common/ProfileTableFilters'
@@ -23,7 +22,7 @@ import './LocalMediaProfilesPage.css'
 import {apiUrl} from '../lib/api'
 import {createSelectRegistry} from '../utils/selectRegistry'
 import {useBulkSelection} from '../components/ProfileBulkEdit/useBulkSelection'
-import {BulkEditButton, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
+import {ProfileTableActions, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
 import ProfileBulkEdit, {tableSelection} from '../components/ProfileBulkEdit/ProfileBulkEdit'
 import type {BulkFieldSpec} from '../components/ProfileBulkEdit/BulkChangeDialog'
 
@@ -151,7 +150,7 @@ export default function LocalMediaProfilesPage() {
 
     return (
         <section className="view" aria-labelledby="profiles-title">
-            <div className="view-header">
+            <div className="view-header profile-table-header">
                 <h1 id="profiles-title">Local Media Profiles</h1>
                 <PageSubtitle summary={<>Define how downloaded files are stored and in what format.</>}>
                     <p>A Local Media Profile controls the output path and the preferred file format for your downloads
@@ -159,10 +158,7 @@ export default function LocalMediaProfilesPage() {
                         reuse them.</p>
                 </PageSubtitle>
                 {canManage && (
-                    <div className="view-header-actions">
-                        <BulkEditButton selection={selection}/>
-                        <Link className="btn btn-primary" to="/add-local-media-profile">Add media profile</Link>
-                    </div>
+                    <ProfileTableActions selection={selection} addTo="/add-local-media-profile" addLabel="Add media profile"/>
                 )}
             </div>
 
