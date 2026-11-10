@@ -277,7 +277,7 @@ export default function LibraryPage() {
 
     return (
         <section className="view library-view" aria-labelledby="library-title">
-            <div className={`library-header${showTabs ? ' has-tabs' : ''}`}>
+            <div className="library-header">
                 <div className="library-heading">
                     <h1 id="library-title">Library</h1>
                     <p className="view-description">Collections, movies and videos indexed by VODLoft.</p>
