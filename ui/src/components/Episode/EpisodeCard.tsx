@@ -118,6 +118,8 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
     const imageUrl = landscapePath ? toImageUrl(landscapePath) : `https://placehold.co/640x360/png?text=Episode+%23${ep.index}`
     const style = imageUrl ? {backgroundImage: `url(${imageUrl})`} : undefined
     const isLive = String(ep.publishStatus).toLowerCase() === 'live'
+    // An episode that has not started yet has no length, so its pill says it is upcoming instead.
+    const isUpcoming = ep.publishStatus === 'scheduled' || ep.publishStatus === 'delayed'
 
     // Identifier semantics are parsed once by the backend. The card only decides
     // how those semantics should be presented: the number of a numbered episode,
@@ -158,7 +160,9 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
             {initials}
           </span>
                 )}
-                {ep.duration > 0 && <span className="thumb-corner"><DurationPill seconds={ep.duration}/></span>}
+                {(ep.duration > 0 || isUpcoming) && (
+                    <span className="thumb-corner"><DurationPill seconds={ep.duration} upcoming={isUpcoming}/></span>
+                )}
             </div>
             <div className="episode-title" title={ep.title}>{ep.title}</div>
             {(metaText || ep.episodeType) && (

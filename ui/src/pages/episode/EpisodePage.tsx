@@ -149,8 +149,9 @@ export default function EpisodePage() {
     const sourceStatus = publishStatusLabels?.[publishStatus]
     const statusLabel = sourceStatus?.label ?? PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
     const isLive = publishStatus === 'live' || publishStatus === EpisodePublishStatus.live
+    const isUpcoming = publishStatus === 'scheduled' || publishStatus === 'delayed'
     // An upcoming episode shows when it is due to start instead of when it was released.
-    const startsAt = (publishStatus === 'scheduled' || publishStatus === 'delayed') ? episode.scheduledDate : null
+    const startsAt = isUpcoming ? episode.scheduledDate : null
     const earlyDeleteAvailable = episode.earlyDeleteAvailable
     const containsCountdown = (
         publishStatus === 'published_preliminary'
@@ -244,8 +245,10 @@ export default function EpisodePage() {
 
                 <div className="episode-cover">
                     <img src={coverUrl} alt="Episode cover"/>
-                    {episode.duration > 0 && (
-                        <span className="thumb-corner thumb-corner-large"><DurationPill seconds={episode.duration} large/></span>
+                    {(episode.duration > 0 || isUpcoming) && (
+                        <span className="thumb-corner thumb-corner-large">
+                            <DurationPill seconds={episode.duration} upcoming={isUpcoming} large/>
+                        </span>
                     )}
                     {isLive && (
                         <span className="episode-live-badge" aria-label="Episode is live">Live</span>
