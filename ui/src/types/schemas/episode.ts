@@ -96,6 +96,8 @@ export const EpisodeReadViewPageSchema = z.object({
     limit: z.int().positive(),
     total: z.int().nonnegative(),
     collectionTotal: z.int().nonnegative(),
+    /** The collection's episodes that need an access VODLoft does not have. */
+    lockedTotal: z.int().nonnegative().optional().default(0),
     nextCursor: z.string().nullable().optional(),
     previousCursor: z.string().nullable().optional(),
     hasMore: z.boolean(),

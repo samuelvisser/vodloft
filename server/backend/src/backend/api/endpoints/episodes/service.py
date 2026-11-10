@@ -19,6 +19,7 @@ from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.services.episode_download_delay import episode_download_delay_ready_at
+from backend.services.media_access import without_access_clause
 from backend.utils.episode_publication_timing import (
     record_publication_lifecycle_observation,
 )
@@ -93,6 +94,7 @@ def _episode_view_stmt(
         season_id: int | None = None,
         episode_types: Sequence[str] = (),
         order: EpisodeOrder = EpisodeOrder.NEWEST_FIRST,
+        hide_locked: bool = False,
 ):
     # The collection grid needs only a small subset of Episode. Selecting those columns directly avoids
     # constructing full ORM entities (and their select-in metadata relationship), then sending and
@@ -126,6 +128,8 @@ def _episode_view_stmt(
     )
     if episode_types:
         stmt = stmt.where(episode_identifier_type_predicate(Episode.episode_identifier, set(episode_types)))
+    if hide_locked:
+        stmt = stmt.where(~without_access_clause(Episode))
     newest_first = order == EpisodeOrder.NEWEST_FIRST
     if season_id is not None:
         stmt = stmt.where(Episode.season_id == season_id)
@@ -161,8 +165,10 @@ def get_episode_views_by_collection_page(
         limit: int,
         season_id: int | None = None,
         episode_types: Sequence[str] = (),
+        hide_locked: bool = False,
 ) -> EpisodeAPIReadViewPage:
-    """Return one stable cursor page of compact episodes for a collection, optionally of some episode types only."""
+    """Return one stable cursor page of compact episodes for a collection, optionally of some episode types only,
+    and without the episodes that need an access VODLoft does not have."""
     episode_types = sorted(set(episode_types))
     collection_count_stmt = (
         select(func.count(Episode.id))
@@ -170,6 +176,7 @@ def get_episode_views_by_collection_page(
         .where(Collection.slug == collection_slug)
     )
     collection_total = int(s.scalar(collection_count_stmt) or 0)
+    locked_total = int(s.scalar(collection_count_stmt.where(without_access_clause(Episode))) or 0)
     view_count_stmt = collection_count_stmt
     if season_id is not None:
         view_count_stmt = view_count_stmt.where(Episode.season_id == season_id)
@@ -177,6 +184,8 @@ def get_episode_views_by_collection_page(
         view_count_stmt = view_count_stmt.where(
             episode_identifier_type_predicate(Episode.episode_identifier, set(episode_types))
         )
+    if hide_locked:
+        view_count_stmt = view_count_stmt.where(~without_access_clause(Episode))
     total = (
         collection_total
         if view_count_stmt is collection_count_stmt
@@ -201,7 +210,7 @@ def get_episode_views_by_collection_page(
 
     order = _episode_view_order(s, collection_slug, season_id)
     newest_first = order == EpisodeOrder.NEWEST_FIRST
-    stmt = _episode_view_stmt(collection_slug, season_id, episode_types, order)
+    stmt = _episode_view_stmt(collection_slug, season_id, episode_types, order, hide_locked)
     if cursor:
         try:
             values = decode_cursor(cursor)
@@ -210,6 +219,7 @@ def get_episode_views_by_collection_page(
                 or values.get("collection_slug") != collection_slug
                 or values.get("season_id") != season_id
                 or values.get("episode_types", []) != episode_types
+                or values.get("hide_locked", False) != hide_locked
             ):
                 raise InvalidCursorError("Cursor does not match this episode collection")
             cursor_id = values.get("id")
@@ -274,6 +284,7 @@ def get_episode_views_by_collection_page(
             "collection_slug": collection_slug,
             "season_id": season_id,
             "episode_types": episode_types,
+            "hide_locked": hide_locked,
             "revision": revision,
             "order": order.value,
             "id": last["id"],
@@ -292,6 +303,7 @@ def get_episode_views_by_collection_page(
         limit=limit,
         total=total,
         collection_total=collection_total,
+        locked_total=locked_total,
         next_cursor=next_cursor,
         revision=revision,
     )

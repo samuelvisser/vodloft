@@ -143,6 +143,8 @@ class EpisodeAPIReadViewPage(CursorPageRead[EpisodeAPIReadView]):
 
     total: int
     collection_total: int
+    locked_total: int = 0
+    """The collection's episodes that need an access VODLoft does not have, which the list can leave out."""
     revision: str
 
 

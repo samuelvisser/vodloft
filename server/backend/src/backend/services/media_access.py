@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, false, or_
+from sqlalchemy import and_, false, not_, or_
 
 from backend.db.models import Episode, Video
 from backend.db.models.media_item import MediaItemBase
@@ -105,6 +105,22 @@ def locked_clause(item=MediaItemBase):
         if source.has_access(access.key) is False
     ]
     return and_(item.access.is_not(None), or_(item.access_refused_at.is_not(None), *lacking, false()))
+
+
+def granted_clause(item=MediaItemBase):
+    """SQL for ``access_granted``."""
+    having = [
+        and_(item.source_key == source.id, item.access == access.key)
+        for source in all_sources() for site in source.sites for access in site.accesses
+        if source.has_access(access.key) is True
+    ]
+    return and_(item.access.is_not(None), item.access_refused_at.is_(None), or_(*having, false()))
+
+
+def without_access_clause(item=MediaItemBase):
+    """SQL for media that needs an access VODLoft is not known to have: locked, or left for a download
+    to find out, such as a channel membership."""
+    return and_(item.access.is_not(None), not_(granted_clause(item)))
 
 
 def lock_refused(media: MediaItemBase, access: str, *, now: datetime | None = None) -> None:

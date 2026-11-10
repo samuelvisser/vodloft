@@ -800,15 +800,18 @@ export function useEpisodePages(
         seasonId?: number | null
         /** Only episodes with these tags; empty means every episode. */
         episodeTypes?: readonly string[]
+        /** Leave out the episodes that need an access VODLoft does not have. */
+        hideLocked?: boolean
         enabled?: boolean
     },
 ) {
     const pageSize = opts?.pageSize ?? 36
     const seasonId = opts?.seasonId
     const episodeTypes = useMemo(() => [...(opts?.episodeTypes ?? [])].sort(), [opts?.episodeTypes])
+    const hideLocked = opts?.hideLocked ?? false
     const result = useLazyCollection<EpisodeReadView, EpisodeReadViewPage>({
         collectionPrefix: episodeQueryKeys.forCollection(collectionSlug),
-        queryKey: ['pages', seasonId ?? null, episodeTypes] as const,
+        queryKey: ['pages', seasonId ?? null, episodeTypes, hideLocked] as const,
         initialCount: pageSize,
         batchSize: pageSize,
         enabled: !!collectionSlug && seasonId !== null && (opts?.enabled ?? true),
@@ -819,6 +822,7 @@ export function useEpisodePages(
                 limit,
                 seasonId: seasonId ?? undefined,
                 episodeTypes,
+                hideLocked,
             },
             signal,
         ),
@@ -826,7 +830,7 @@ export function useEpisodePages(
 
     const firstPage = result.data?.pages[0]
     // The browser preview is of the whole collection, so only an unfiltered first page may replace it.
-    const unfiltered = seasonId === undefined && episodeTypes.length === 0
+    const unfiltered = seasonId === undefined && episodeTypes.length === 0 && !hideLocked
     useEffect(() => {
         if (!collectionSlug || !unfiltered || firstPage === undefined) return
         saveEpisodePreviewToStorage(

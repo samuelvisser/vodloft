@@ -42,6 +42,8 @@ _STREAM_PROXY_CHOICE = {"youtube"}
 # The Sites whose separate H.264 video and M4A audio Local Media Profiles can keep as an HLS bundle.
 _HLS_DOWNLOADS = {"youtube"}
 _API_KEY_SITES = {"youtube"}
+# A channel's members-only videos sit among its open ones, so its collections start without them.
+_HIDES_LOCKED = {"youtube"}
 """The Sites yt-dlp's API key is for: the YouTube Data API key."""
 # yt-dlp tells a video's resolutions, codecs, subtitles and length on every site; SponsorBlock only has YouTube's videos.
 _UPGRADE_CHECKS = UpgradeChecks((
@@ -130,7 +132,7 @@ def site_of(key: str, host: str | None = None) -> Site:
         stream_proxy_choice=key in _STREAM_PROXY_CHOICE,
         downloads=_downloads(key), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
         settings=_SITE_SETTINGS.get(key, SiteSettings()), accesses=_accesses(key),
-        takes_api_key=key in _API_KEY_SITES,
+        takes_api_key=key in _API_KEY_SITES, shows_locked=key not in _HIDES_LOCKED,
     )
 
 

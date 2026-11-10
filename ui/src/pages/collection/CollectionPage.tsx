@@ -26,6 +26,7 @@ import ExistingFilesDialog from '../../components/ExistingFiles/ExistingFilesDia
 import ExistingFilesBanner from '../../components/ExistingFiles/ExistingFilesBanner'
 import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
+import LockedEpisodesFilter from '../../components/Episode/LockedEpisodesFilter'
 import {apiFetch, apiUrl} from '../../lib/api'
 
 const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
@@ -66,6 +67,39 @@ function useEpisodeTypeFilter(collectionSlug: string | undefined) {
   return [current.selected, update] as const
 }
 
+const SHOW_LOCKED_STORAGE_PREFIX = 'collectionShowLocked:'
+
+/** Whether a collection shows the episodes VODLoft has no access to, as the user last chose it there;
+ * null while they never did, so the collection's Site decides. */
+function loadShowLocked(collectionSlug: string | undefined): boolean | null {
+  if (!collectionSlug) return null
+  try {
+    const raw = localStorage.getItem(SHOW_LOCKED_STORAGE_PREFIX + collectionSlug)
+    return raw === 'true' ? true : raw === 'false' ? false : null
+  } catch {
+    return null
+  }
+}
+
+/** The locked episodes filter of a collection, remembered per collection across page loads. */
+function useShowLocked(collectionSlug: string | undefined) {
+  const [state, setState] = useState(() => ({slug: collectionSlug, shown: loadShowLocked(collectionSlug)}))
+  let current = state
+  if (state.slug !== collectionSlug) {
+    current = {slug: collectionSlug, shown: loadShowLocked(collectionSlug)}
+    setState(current)
+  }
+  const update = useCallback((shown: boolean) => {
+    setState({slug: collectionSlug, shown})
+    if (!collectionSlug) return
+    try {
+      localStorage.setItem(SHOW_LOCKED_STORAGE_PREFIX + collectionSlug, String(shown))
+    } catch {
+      // Without storage the filter still works, it just isn't remembered.
+    }
+  }, [collectionSlug])
+  return [current.shown, update] as const
+}
 
 function preferredFormatLabel(value?: string | null) {
   if (!value) return 'Unknown'
@@ -183,6 +217,10 @@ export default function CollectionPage() {
   // With one type selected, the count names it, such as "726 livestreams".
   const singleTypeTag = episodeTypes.length === 1 ? episodeTags?.find((tag) => tag.key === episodeTypes[0]) : undefined
   const countNouns = singleTypeTag ?? {singular: 'episode', plural: 'episodes'}
+  // Locked episodes start shown, unless the collection's Site mixes them among open ones, such as a
+  // YouTube channel's members-only videos. Episodes the account can watch are never hidden.
+  const [storedShowLocked, setShowLocked] = useShowLocked(id)
+  const showLocked = storedShowLocked ?? collection?.site?.showsLocked ?? true
   const {
     data: episodePagesData,
     isLoading: episodesLoading,
@@ -198,6 +236,7 @@ export default function CollectionPage() {
     pageSize: PAGE_SIZE,
     seasonId: episodeSeasonId,
     episodeTypes,
+    hideLocked: !showLocked,
     enabled: Boolean(collection) && (!isSeasonal || selectedSeasonId !== null),
   })
 
@@ -210,15 +249,16 @@ export default function CollectionPage() {
   const newestFirst = collection?.episodeOrder !== 'oldest_first'
   const cachedPreviewEpisodesForView = useMemo(() => {
     if (!cachedPreviewEpisodes) return []
-    const ofTypes = typeFiltered
-      ? cachedPreviewEpisodes.filter((episode) => episode.episodeType !== null && episodeTypeFilter.has(episode.episodeType))
-      : cachedPreviewEpisodes
+    const ofTypes = cachedPreviewEpisodes.filter((episode) => (
+      (!typeFiltered || (episode.episodeType !== null && episodeTypeFilter.has(episode.episodeType)))
+      && (showLocked || !episode.access || episode.accessGranted)
+    ))
     if (!isSeasonal) return ofTypes
     if (selectedSeasonId === null) return []
     return ofTypes
       .filter((episode) => episode.seasonId === selectedSeasonId)
       .sort((a, b) => newestFirst ? b.index - a.index : a.index - b.index)
-  }, [cachedPreviewEpisodes, isSeasonal, selectedSeasonId, typeFiltered, episodeTypeFilter, newestFirst])
+  }, [cachedPreviewEpisodes, isSeasonal, selectedSeasonId, typeFiltered, episodeTypeFilter, showLocked, newestFirst])
   const fetchedEpisodes = useMemo(
     () => episodePagesData?.pages.flatMap((page) => page.items) ?? [],
     [episodePagesData],
@@ -227,6 +267,8 @@ export default function CollectionPage() {
   const firstEpisodePage = episodePagesData?.pages[0]
   const total = firstEpisodePage?.collectionTotal ?? cachedCollectionTotal ?? episodes.length
   const displayedTotal = firstEpisodePage?.total
+  const lockedTotal = firstEpisodePage?.lockedTotal ?? 0
+  const lockedHidden = !showLocked && lockedTotal > 0
   const episodesInitialLoading = (
     episodePagesData === undefined
     && cachedPreviewEpisodesForView.length === 0
@@ -693,14 +735,17 @@ export default function CollectionPage() {
           </div>
         )}
 
-        {episodeTags && episodeTags.length > 1 && (
+        {((episodeTags && episodeTags.length > 1) || lockedTotal > 0) && (
           <div className="collection-type-filter">
-            <EpisodeTypeFilter
-              tags={episodeTags}
-              selected={episodeTypeFilter}
-              onChange={setEpisodeTypeFilter}
-            />
-            {typeFiltered && !isSeasonal && displayedTotal !== undefined && (
+            {episodeTags && (
+              <EpisodeTypeFilter
+                tags={episodeTags}
+                selected={episodeTypeFilter}
+                onChange={setEpisodeTypeFilter}
+              />
+            )}
+            <LockedEpisodesFilter lockedTotal={lockedTotal} shown={showLocked} onChange={setShowLocked}/>
+            {(typeFiltered || lockedHidden) && !isSeasonal && displayedTotal !== undefined && (
               <span className="collection-type-count">
                 {displayedTotal} {displayedTotal === 1 ? countNouns.singular : countNouns.plural}
               </span>
@@ -720,9 +765,11 @@ export default function CollectionPage() {
               </div>
             ))}
           </div>
-        ) : typeFiltered && visibleItems.length === 0 && episodePagesData !== undefined ? (
+        ) : (typeFiltered || lockedHidden) && visibleItems.length === 0 && episodePagesData !== undefined ? (
           <div className="collection-season-empty" role="status">
-            No episodes of the selected types{isSeasonal ? ' in this season' : ''}.
+            {typeFiltered
+              ? `No ${lockedHidden ? 'unlocked ' : ''}episodes of the selected types${isSeasonal ? ' in this season' : ''}.`
+              : `Every episode${isSeasonal ? ' in this season' : ''} is locked. Turn on Locked to show them.`}
           </div>
         ) : (
           <div className="episodes-grid" role="list" aria-label={`${collection.title} episodes`}>
