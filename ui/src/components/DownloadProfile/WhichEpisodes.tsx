@@ -8,6 +8,7 @@ import {faIcon} from '../../icons/faIcon'
 import ReadMore from '../../utils/ReadMore'
 import TimeInterval from '../../utils/TimeInterval'
 import SimpleSelect from '../common/SimpleSelect'
+import SelectAllLabel from '../common/SelectAllLabel'
 import NumberInput from '../common/NumberInput'
 import DateInput from '../common/DateInput'
 import RegexEditor from '../RegexEditor/RegexEditor'
@@ -314,7 +315,20 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
             const chosen = [...(filter.includeUpcoming ? [UPCOMING_SEASONS] : []), ...(filter.seasonSlugs ?? [])]
             return (
                 <div className="form-row">
-                    <label htmlFor={`${id}-seasons`}>Is any of</label>
+                    <SelectAllLabel
+                        htmlFor={`${id}-seasons`}
+                        allChosen={seasonOptions.every((option) => chosen.includes(option.value))}
+                        onSelectAll={() => {
+                            setValue(`${name}.includeUpcoming`, true, {shouldDirty: true})
+                            setValue(
+                                `${name}.seasonSlugs`,
+                                seasonOptions.map((option) => option.value).filter((value) => value !== UPCOMING_SEASONS),
+                                {shouldDirty: true},
+                            )
+                        }}
+                    >
+                        Is any of
+                    </SelectAllLabel>
                     <Select
                         inputId={`${id}-seasons`} isMulti closeMenuOnSelect={false}
                         classNamePrefix="select"
