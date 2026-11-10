@@ -169,6 +169,8 @@ export function pluralKindName(name: string): string {
 export const SiteReadSchema = z.object({
     key: z.string(),
     name: z.string(),
+    /** A collection on the Site shows what VODLoft has no access to until the user hides it. */
+    showsLocked: z.boolean().optional().default(true),
 })
 export type SiteRead = z.infer<typeof SiteReadSchema>
 

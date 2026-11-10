@@ -10,7 +10,7 @@ from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.media_access import access_granted, access_locked, site_access
 from backend.types.collection_types import CollectionType
 from config.settings.site_settings import AutoSubtitles, SponsorBlockAction, SponsorBlockCategory, UpgradeRepeat
-from sources import Feature, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source
+from sources import Feature, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
@@ -377,6 +377,12 @@ class SiteAPIRead(ResponseBase):
 
     key: str
     name: str
+
+    @computed_field
+    @property
+    def shows_locked(self) -> bool:
+        """A collection on the Site shows what VODLoft has no access to until the user hides it."""
+        return site_of(self.key).shows_locked
 
 
 class SourceSiteAPIRead(ResponseBase):

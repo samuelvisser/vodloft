@@ -79,10 +79,12 @@ def episode_views_by_collection_page(
         limit: int = Query(default=25, ge=1, le=100),
         season_id: int | None = Query(default=None, ge=1),
         episode_type: list[EpisodeTagKey] = Query(default_factory=list, max_length=20),
+        hide_locked: bool = Query(default=False),
 ):
     """Return one compact episode page for a collection grid or browser cache preview.
 
     Repeat ``episode_type`` to list only episodes with those tags, such as ``short``; without it, every episode.
+    ``hide_locked`` leaves out the episodes that need an access VODLoft does not have, such as a channel membership.
     """
     with db_session() as s:
         return get_episode_views_by_collection_page(
@@ -92,6 +94,7 @@ def episode_views_by_collection_page(
             limit=limit,
             season_id=season_id,
             episode_types=episode_type,
+            hide_locked=hide_locked,
         )
 
 

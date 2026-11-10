@@ -648,6 +648,11 @@ class Site:
     accesses: tuple[Access, ...] = ()
     """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
     by the keys its Sources tell."""
+    shows_locked: bool = True
+    """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
+    whose collections mix locked videos among open ones, such as a YouTube channel's members-only
+    videos, it starts hidden. Where a collection is locked as a whole, as on The Daily Wire, hiding it
+    would empty the collection."""
 
     def access(self, key: str | None) -> Access | None:
         """One of ``accesses`` by its key."""
