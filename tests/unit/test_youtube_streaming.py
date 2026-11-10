@@ -36,6 +36,17 @@ def test_youtube_and_the_daily_wire_stream_but_other_sites_do_not():
         assert not site.streams and not site.stream_methods
 
 
+def test_a_site_explains_the_video_outputs_that_work_differently_on_it():
+    from backend.types.stream_profile_types import RssVideoOutputMode
+
+    youtube = site_for("https://www.youtube.com/@channel", "ytdlp")
+    dailywire = site_for("https://www.dailywire.com/show/the-ben-shapiro-show", "dailywire")
+    # YouTube's MP4 needs no download first, so its HLS with MP4 fallback says nothing about waiting for one.
+    assert "pre- downloaded" not in youtube.video_output_help["mp4_hls"]
+    assert set(youtube.video_output_help) <= set(RssVideoOutputMode)
+    assert dailywire.video_output_help == {}
+
+
 def test_audio_is_youtubes_m4a_when_it_is_offered():
     stream = stream_of({"formats": [
         _format("251", acodec="opus", abr=160), _format("140", abr=129, size=1234),

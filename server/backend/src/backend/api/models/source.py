@@ -259,6 +259,8 @@ class SiteOptionsAPIRead(ResponseBase):
     stream_video_heights: list[int] = []
     stream_proxy_choice: bool = False
     """A feed can send podcast apps straight to the Site's video, or pass it through VODLoft."""
+    video_output_help: dict[str, str] = {}
+    """What a feed's video output does on the Site, by output, where it differs from the usual explanation."""
     downloads: DownloadOptionsAPIRead
 
     @field_validator("stream_methods", mode="before")

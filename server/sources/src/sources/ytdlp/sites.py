@@ -39,6 +39,13 @@ _STREAM_METHODS = {"youtube": frozenset({StreamMethod.FILE, StreamMethod.HLS, St
 _STREAM_VIDEO_HEIGHTS = {"youtube": (360, 720, 1080)}
 _STREAM_FILE_HEIGHTS = {"youtube": 360}
 _STREAM_PROXY_CHOICE = {"youtube"}
+# YouTube's MP4 plays at once, as its own 360p file or one VODLoft joins, so nothing waits for a download.
+_VIDEO_OUTPUT_HELP = {
+    "youtube": {
+        "mp4_hls": "Streams video using HLS, and provides mp4 as the fallback. This ensures the podcasting app will "
+                   "always play video if it supports video at all.",
+    },
+}
 # The Sites whose separate H.264 video and M4A audio Local Media Profiles can keep as an HLS bundle.
 _HLS_DOWNLOADS = {"youtube"}
 _API_KEY_SITES = {"youtube"}
@@ -129,7 +136,7 @@ def site_of(key: str, host: str | None = None) -> Site:
     return Site(
         key, _NAMES.get(key, host or key), (host,) if host else (), stream_methods=_STREAM_METHODS.get(key, frozenset()),
         stream_video_heights=_STREAM_VIDEO_HEIGHTS.get(key, ()), stream_file_height=_STREAM_FILE_HEIGHTS.get(key),
-        stream_proxy_choice=key in _STREAM_PROXY_CHOICE,
+        stream_proxy_choice=key in _STREAM_PROXY_CHOICE, video_output_help=_VIDEO_OUTPUT_HELP.get(key, {}),
         downloads=_downloads(key), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
         settings=_SITE_SETTINGS.get(key, SiteSettings()), accesses=_accesses(key),
         takes_api_key=key in _API_KEY_SITES, shows_locked=key not in _HIDES_LOCKED,

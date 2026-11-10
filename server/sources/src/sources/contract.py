@@ -633,6 +633,9 @@ class Site:
     stream_proxy_choice: bool = False
     """The Site's streams play for any address, so a feed can send podcast apps straight to them
     instead of passing them through VODLoft."""
+    video_output_help: Mapping[str, str] = field(default_factory=dict, hash=False)
+    """What a feed's video output does on this Site, where it differs from the usual explanation, by
+    the output's value (``audio_hls``, ``audio_mp4``, ``mp4`` or ``mp4_hls``)."""
     downloads: DownloadOptions = DownloadOptions()
     upgrade_checks: UpgradeChecks = UpgradeChecks()
     settings: SiteSettings = field(default_factory=SiteSettings, hash=False)

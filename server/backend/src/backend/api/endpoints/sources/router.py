@@ -126,6 +126,7 @@ def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)
         upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks), site_name=site.name,
         stream_methods=site.stream_methods,
         stream_video_heights=site.stream_video_heights, stream_proxy_choice=site.stream_proxy_choice,
+        video_output_help=site.video_output_help,
         downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
     )
 
