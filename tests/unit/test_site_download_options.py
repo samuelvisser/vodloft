@@ -23,11 +23,22 @@ def _collection_profile(preferred_format, site_keys=None, include_upcoming_sites
 def test_the_daily_wire_and_youtube_keep_an_hls_bundle():
     dailywire = get_source("dailywire").download_options
     assert dailywire == DownloadOptions(video_heights=(480, 720, 1080), hls_bundle=True, quality_choices=False)
-    # yt-dlp offers what any of its sites offers: the defaults, and YouTube's HLS bundle.
-    assert get_source("ytdlp").download_options == DownloadOptions(hls_bundle=True)
-    assert site_for("https://www.youtube.com/@channel", "ytdlp").downloads == DownloadOptions(hls_bundle=True)
-    assert site_for("https://vimeo.com/channel", "ytdlp").downloads == DownloadOptions()
+    # yt-dlp offers what any of its sites offers: the quality choices on every site, and YouTube's HLS bundle.
+    assert get_source("ytdlp").download_options == DownloadOptions(hls_bundle=True, quality_choices=True)
+    assert site_for("https://www.youtube.com/@channel", "ytdlp").downloads == DownloadOptions(hls_bundle=True, quality_choices=True)
+    assert site_for("https://vimeo.com/channel", "ytdlp").downloads == DownloadOptions(quality_choices=True)
+    # NPO Start downloads with yt-dlp too, so it has the quality choices.
+    assert get_source("npo").download_options == DownloadOptions(quality_choices=True)
+    # A Site has nothing to choose unless its contract says so.
     assert DownloadOptions().video_heights == VIDEO_HEIGHTS and not DownloadOptions().hls_bundle
+    assert not DownloadOptions().quality_choices
+
+
+def test_a_site_still_to_come_has_what_a_source_that_fetches_any_site_offers():
+    from backend.services.local_media_profile_sites import profile_download_options
+
+    assert profile_download_options("collection", ["dailywire"], False).quality_choices is False
+    assert profile_download_options("collection", ["dailywire"], True).quality_choices is True
 
 
 def test_a_profile_offers_what_any_of_its_sites_offers():

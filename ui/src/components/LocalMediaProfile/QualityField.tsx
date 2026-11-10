@@ -23,8 +23,16 @@ import {
 } from '../../types/quality'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {useLocalMediaProfileSites} from '../../lib/queries'
-import {FORMAT_HEIGHTS, nearestVideoFormat, offersFormat, profileDownloadOptions} from '../../types/local_media_profile'
+import {
+    FORMAT_HEIGHTS,
+    nearestVideoFormat,
+    offersFormat,
+    profileDownloadOptions,
+    sitesForLocalMediaProfileType,
+    takesUpcomingSites,
+} from '../../types/local_media_profile'
 import './QualityField.css'
+import './SiteSettingsSection.css'
 
 type Props = {
     form: UseFormReturn<any>
@@ -52,6 +60,17 @@ export default function QualityField({form, mode}: Props) {
         [sites, mode, siteKeys, includeUpcomingSites],
     )
     const qualityChoices = offered?.qualityChoices ?? true
+    // The Sites the format choices apply to: the profile's Sites whose versions VODLoft chooses among.
+    const choiceSites = useMemo(() => {
+        if (!sites) return ''
+        const names = sitesForLocalMediaProfileType(sites, mode)
+            .filter((site) => (siteKeys == null || siteKeys.includes(site.key)) && site.downloadOptions.qualityChoices)
+            .map((site) => site.name)
+        if ((siteKeys == null || includeUpcomingSites) && takesUpcomingSites(sites, mode) && sites.upcomingDownloadOptions.qualityChoices) {
+            names.push('upcoming sites')
+        }
+        return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] ?? '')
+    }, [sites, mode, siteKeys, includeUpcomingSites])
 
     // Choosing fewer Sources can take away the chosen download; move to the nearest one they offer.
     useEffect(() => {
@@ -136,156 +155,159 @@ export default function QualityField({form, mode}: Props) {
                 </div>
             </div>
 
-            {audioOnly && qualityChoices && (
-                <div className="form-row">
-                    <span className="quality-field__heading" id="quality-audio-format">Audio format</span>
-                    <div className="quality-cards" role="radiogroup" aria-labelledby="quality-audio-format">
-                        {AudioFormatReg.values.map((value) => (
-                            <button
-                                key={value} type="button" role="radio" aria-checked={audioFormat === value}
-                                className={`quality-card${audioFormat === value ? ' is-selected' : ''}`}
-                                onClick={() => setValue('audioFormat', value, OPTIONS)}
-                            >
-                                <strong>{AudioFormatReg.getLabel(value)}</strong>
-                                <span>{AudioFormatReg.getHelp(value)}</span>
-                            </button>
-                        ))}
-                    </div>
-                    <div className="help">Podcast RSS feeds use this format.</div>
-                </div>
-            )}
-
-            {!audioOnly && !hls && qualityChoices && (
-                <div className="form-row">
-                    <span className="quality-field__heading" id="quality-goal">Optimise for</span>
-                    <div className="quality-cards" role="radiogroup" aria-labelledby="quality-goal">
-                        {QualityGoalReg.values.map((value) => (
-                            <button
-                                key={value} type="button" role="radio" aria-checked={goal === value}
-                                className={`quality-card${goal === value ? ' is-selected' : ''}`}
-                                onClick={() => chooseGoal(value)}
-                            >
-                                <strong>{QualityGoalReg.getLabel(value)}</strong>
-                                <span>{value === 'custom' && goal === 'custom' ? codecSummary(codecs, container) : QualityGoalReg.getHelp(value)}</span>
-                            </button>
-                        ))}
-                    </div>
-
-                    {goal === 'custom' && (
-                        <div className="quality-own">
-                            <div>
-                                <span className="quality-field__label">Video codecs</span>
-                                <div className="help">Drag to set the order. Switched off means never.</div>
-                            </div>
-                            <ol className="quality-codecs">
-                                {codecs.map((choice, index) => (
-                                    <li
-                                        key={choice.codec}
-                                        className={`quality-codec${choice.allowed ? '' : ' is-off'}${dragging === index ? ' is-dragging' : ''}`}
-                                        draggable
-                                        onDragStart={(event) => {
-                                            setDragging(index)
-                                            event.dataTransfer.effectAllowed = 'move'
-                                        }}
-                                        onDragOver={(event) => {
-                                            event.preventDefault()
-                                            if (dragging !== null && dragging !== index) {
-                                                move(dragging, index)
-                                                setDragging(index)
-                                            }
-                                        }}
-                                        onDragEnd={() => setDragging(null)}
+            {qualityChoices && !hls && (
+                <section className="site-settings-section" aria-labelledby="quality-choices-heading">
+                    <hr className="form-section-divider" aria-hidden="true"/>
+                    <h3 className="site-settings-heading" id="quality-choices-heading">{choiceSites || 'Format'}</h3>
+                    {audioOnly && (
+                        <div className="form-row">
+                            <span className="quality-field__heading" id="quality-audio-format">Audio format</span>
+                            <div className="quality-cards" role="radiogroup" aria-labelledby="quality-audio-format">
+                                {AudioFormatReg.values.map((value) => (
+                                    <button
+                                        key={value} type="button" role="radio" aria-checked={audioFormat === value}
+                                        className={`quality-card${audioFormat === value ? ' is-selected' : ''}`}
+                                        onClick={() => setValue('audioFormat', value, OPTIONS)}
                                     >
-                                        <span className="quality-codec__grip" aria-hidden="true">
-                                            <FontAwesomeIcon icon={faIcon('fass', 'grip-vertical')}/>
-                                        </span>
-                                        <span className="quality-codec__text">
-                                            <strong>{VideoCodecReg.getLabel(choice.codec)}</strong>
-                                            {CODEC_TAGS[choice.codec] && <span className="quality-codec__tag">{CODEC_TAGS[choice.codec]}</span>}
-                                            <span className="quality-codec__help">{VideoCodecReg.getHelp(choice.codec)}</span>
-                                        </span>
-                                        <span className="quality-codec__move">
-                                            <button type="button" aria-label={`Move ${VideoCodecReg.getLabel(choice.codec)} up`} disabled={index === 0} onClick={() => move(index, index - 1)}>
-                                                <FontAwesomeIcon icon={faIcon('fass', 'chevron-up')}/>
-                                            </button>
-                                            <button type="button" aria-label={`Move ${VideoCodecReg.getLabel(choice.codec)} down`} disabled={index === codecs.length - 1} onClick={() => move(index, index + 1)}>
-                                                <FontAwesomeIcon icon={faIcon('fass', 'chevron-down')}/>
-                                            </button>
-                                        </span>
-                                        <Switch
-                                            checked={choice.allowed}
-                                            aria-label={`Allow ${VideoCodecReg.getLabel(choice.codec)}`}
-                                            onChange={(allowed) => setCodecs(codecs.map((item, i) => i === index ? {...item, allowed} : item))}
-                                            onColor="#0ea5e9" offColor="#94a3b8" uncheckedIcon={false} checkedIcon={false}
-                                            height={18} width={34} handleDiameter={14}
-                                        />
-                                    </li>
-                                ))}
-                            </ol>
-                            {errors.videoCodecs && <div className="error" role="alert">{String((errors.videoCodecs as any).message ?? (errors.videoCodecs as any).root?.message ?? 'Allow at least one video codec')}</div>}
-
-                            <span className="quality-field__label">When none of these is available</span>
-                            <div className="quality-radios" role="radiogroup">
-                                {CodecFallbackReg.values.map((value) => (
-                                    <label key={value} className="quality-radio">
-                                        <input
-                                            type="radio" name="codec-fallback" checked={codecFallback === value}
-                                            onChange={() => setValue('codecFallback', value, OPTIONS)}
-                                        />
-                                        <span>
-                                            <strong>{CodecFallbackReg.getLabel(value)}</strong>
-                                            {CodecFallbackReg.getHelp(value) && <small>{CodecFallbackReg.getHelp(value)}</small>}
-                                        </span>
-                                    </label>
+                                        <strong>{AudioFormatReg.getLabel(value)}</strong>
+                                        <span>{AudioFormatReg.getHelp(value)}</span>
+                                    </button>
                                 ))}
                             </div>
-
-                            <div className="quality-own__pair">
-                                <div>
-                                    <span className="quality-field__label">Container</span>
-                                    <SegmentedOptions
-                                        name="quality-container" value={container} ariaLabel="Container"
-                                        options={ContainerReg.options}
-                                        onChange={(value) => {
-                                            setValue('container', value, OPTIONS)
-                                            makeOwn()
-                                        }}
-                                    />
-                                    <div className="help">MKV holds every codec as is. MP4 plays more widely, but AV1 in MP4 needs a recent player.</div>
-                                </div>
-                                <div>
-                                    <span className="quality-field__label">Audio codec</span>
-                                    <SegmentedOptions
-                                        name="quality-audio-codec" value={audioCodec} ariaLabel="Audio codec"
-                                        options={AudioCodecReg.options}
-                                        onChange={(value) => {
-                                            setValue('audioCodec', value, OPTIONS)
-                                            makeOwn()
-                                        }}
-                                    />
-                                    <div className="help">Opus is smaller. AAC plays on older Apple devices.</div>
-                                </div>
-                            </div>
-                            <div className="help">Choosing Compatibility, Quality or Small files again replaces this order with that goal’s.</div>
+                            <div className="help">Podcast RSS feeds use this format.</div>
                         </div>
                     )}
-                </div>
-            )}
 
-            {!hls && qualityChoices && (
-                <div className="form-row">
-                    <label htmlFor="quality-audio-language">Audio language</label>
-                    <Select
-                        inputId="quality-audio-language"
-                        classNamePrefix="select"
-                        options={AudioLanguageReg.options}
-                        value={AudioLanguageReg.options.find((option) => option.value === (audioLanguage ?? 'original')) ?? null}
-                        onChange={(option) => setValue('audioLanguage', !option || option.value === 'original' ? null : option.value, OPTIONS)}
-                        isSearchable
-                    />
-                    <div className="help">For videos with dubbed audio tracks. Original keeps the language the video was made in.</div>
-                    <div className="help">Applies to sites downloaded with yt-dlp. The Daily Wire offers fixed formats.</div>
-                </div>
+                    {!audioOnly && (
+                        <div className="form-row">
+                            <span className="quality-field__heading" id="quality-goal">Optimise for</span>
+                            <div className="quality-cards" role="radiogroup" aria-labelledby="quality-goal">
+                                {QualityGoalReg.values.map((value) => (
+                                    <button
+                                        key={value} type="button" role="radio" aria-checked={goal === value}
+                                        className={`quality-card${goal === value ? ' is-selected' : ''}`}
+                                        onClick={() => chooseGoal(value)}
+                                    >
+                                        <strong>{QualityGoalReg.getLabel(value)}</strong>
+                                        <span>{value === 'custom' && goal === 'custom' ? codecSummary(codecs, container) : QualityGoalReg.getHelp(value)}</span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {goal === 'custom' && (
+                                <div className="quality-own">
+                                    <div>
+                                        <span className="quality-field__label">Video codecs</span>
+                                        <div className="help">Drag to set the order. Switched off means never.</div>
+                                    </div>
+                                    <ol className="quality-codecs">
+                                        {codecs.map((choice, index) => (
+                                            <li
+                                                key={choice.codec}
+                                                className={`quality-codec${choice.allowed ? '' : ' is-off'}${dragging === index ? ' is-dragging' : ''}`}
+                                                draggable
+                                                onDragStart={(event) => {
+                                                    setDragging(index)
+                                                    event.dataTransfer.effectAllowed = 'move'
+                                                }}
+                                                onDragOver={(event) => {
+                                                    event.preventDefault()
+                                                    if (dragging !== null && dragging !== index) {
+                                                        move(dragging, index)
+                                                        setDragging(index)
+                                                    }
+                                                }}
+                                                onDragEnd={() => setDragging(null)}
+                                            >
+                                                <span className="quality-codec__grip" aria-hidden="true">
+                                                    <FontAwesomeIcon icon={faIcon('fass', 'grip-vertical')}/>
+                                                </span>
+                                                <span className="quality-codec__text">
+                                                    <strong>{VideoCodecReg.getLabel(choice.codec)}</strong>
+                                                    {CODEC_TAGS[choice.codec] && <span className="quality-codec__tag">{CODEC_TAGS[choice.codec]}</span>}
+                                                    <span className="quality-codec__help">{VideoCodecReg.getHelp(choice.codec)}</span>
+                                                </span>
+                                                <span className="quality-codec__move">
+                                                    <button type="button" aria-label={`Move ${VideoCodecReg.getLabel(choice.codec)} up`} disabled={index === 0} onClick={() => move(index, index - 1)}>
+                                                        <FontAwesomeIcon icon={faIcon('fass', 'chevron-up')}/>
+                                                    </button>
+                                                    <button type="button" aria-label={`Move ${VideoCodecReg.getLabel(choice.codec)} down`} disabled={index === codecs.length - 1} onClick={() => move(index, index + 1)}>
+                                                        <FontAwesomeIcon icon={faIcon('fass', 'chevron-down')}/>
+                                                    </button>
+                                                </span>
+                                                <Switch
+                                                    checked={choice.allowed}
+                                                    aria-label={`Allow ${VideoCodecReg.getLabel(choice.codec)}`}
+                                                    onChange={(allowed) => setCodecs(codecs.map((item, i) => i === index ? {...item, allowed} : item))}
+                                                    onColor="#0ea5e9" offColor="#94a3b8" uncheckedIcon={false} checkedIcon={false}
+                                                    height={18} width={34} handleDiameter={14}
+                                                />
+                                            </li>
+                                        ))}
+                                    </ol>
+                                    {errors.videoCodecs && <div className="error" role="alert">{String((errors.videoCodecs as any).message ?? (errors.videoCodecs as any).root?.message ?? 'Allow at least one video codec')}</div>}
+
+                                    <span className="quality-field__label">When none of these is available</span>
+                                    <div className="quality-radios" role="radiogroup">
+                                        {CodecFallbackReg.values.map((value) => (
+                                            <label key={value} className="quality-radio">
+                                                <input
+                                                    type="radio" name="codec-fallback" checked={codecFallback === value}
+                                                    onChange={() => setValue('codecFallback', value, OPTIONS)}
+                                                />
+                                                <span>
+                                                    <strong>{CodecFallbackReg.getLabel(value)}</strong>
+                                                    {CodecFallbackReg.getHelp(value) && <small>{CodecFallbackReg.getHelp(value)}</small>}
+                                                </span>
+                                            </label>
+                                        ))}
+                                    </div>
+
+                                    <div className="quality-own__pair">
+                                        <div>
+                                            <span className="quality-field__label">Container</span>
+                                            <SegmentedOptions
+                                                name="quality-container" value={container} ariaLabel="Container"
+                                                options={ContainerReg.options}
+                                                onChange={(value) => {
+                                                    setValue('container', value, OPTIONS)
+                                                    makeOwn()
+                                                }}
+                                            />
+                                            <div className="help">MKV holds every codec as is. MP4 plays more widely, but AV1 in MP4 needs a recent player.</div>
+                                        </div>
+                                        <div>
+                                            <span className="quality-field__label">Audio codec</span>
+                                            <SegmentedOptions
+                                                name="quality-audio-codec" value={audioCodec} ariaLabel="Audio codec"
+                                                options={AudioCodecReg.options}
+                                                onChange={(value) => {
+                                                    setValue('audioCodec', value, OPTIONS)
+                                                    makeOwn()
+                                                }}
+                                            />
+                                            <div className="help">Opus is smaller. AAC plays on older Apple devices.</div>
+                                        </div>
+                                    </div>
+                                    <div className="help">Choosing Compatibility, Quality or Small files again replaces this order with that goal’s.</div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <div className="form-row">
+                        <label htmlFor="quality-audio-language">Audio language</label>
+                        <Select
+                            inputId="quality-audio-language"
+                            classNamePrefix="select"
+                            options={AudioLanguageReg.options}
+                            value={AudioLanguageReg.options.find((option) => option.value === (audioLanguage ?? 'original')) ?? null}
+                            onChange={(option) => setValue('audioLanguage', !option || option.value === 'original' ? null : option.value, OPTIONS)}
+                            isSearchable
+                        />
+                        <div className="help">For videos with dubbed audio tracks. Original keeps the language the video was made in.</div>
+                    </div>
+                </section>
             )}
         </div>
     )
