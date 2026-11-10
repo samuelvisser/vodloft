@@ -1108,7 +1108,7 @@ def test_local_media_profiles_move_from_sources_to_sites(migration_database):
         assert "source_keys" not in columns
 
 
-def test_auto_subtitles_and_sponsorblock_move_to_the_local_media_profile_per_site(migration_database):
+def test_auto_subtitles_and_sponsorblock_move_to_the_local_media_profile(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
@@ -1144,17 +1144,22 @@ def test_auto_subtitles_and_sponsorblock_move_to_the_local_media_profile_per_sit
     command.upgrade(config, HEAD_REVISION)
 
     with engine.connect() as connection:
-        settings = {
-            profile_id: json.loads(value)
-            for profile_id, value in connection.execute(text("SELECT id, site_settings FROM local_media_profiles"))
+        profiles = {
+            row.id: (row.auto_subtitles, bool(row.sponsorblock_enabled), json.loads(row.sponsorblock_segments))
+            for row in connection.execute(text(
+                "SELECT id, auto_subtitles, sponsorblock_enabled, sponsorblock_segments FROM local_media_profiles"
+            ))
         }
         columns = {column["name"] for column in inspect(connection).get_columns("download_profiles")}
-    assert settings == {
-        1: {
-            "youtube": {"auto_subtitles": "always", "sponsorblock_enabled": True, "sponsorblock_segments": cut},
-            "vimeo": {"auto_subtitles": "fallback", "sponsorblock_enabled": False, "sponsorblock_segments": {}},
-        },
-        # Without Download Profiles, a profile follows each Site's own settings.
-        2: {},
+    default_segments = {
+        "sponsor": "chapter", "selfpromo": "keep", "interaction": "keep", "intro": "chapter", "outro": "chapter",
+        "preview": "keep", "filler": "keep", "hook": "keep", "music_offtopic": "keep", "poi_highlight": "chapter",
+        "chapter": "keep",
+    }
+    assert profiles == {
+        # What most of its Download Profiles on Sites with the setting had: The Daily Wire has neither.
+        1: ("always", True, {**default_segments, **cut}),
+        # Without Download Profiles: auto-generated subtitles when there are no real ones, and SponsorBlock off.
+        2: ("fallback", False, default_segments),
     }
     assert not {"auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments"} & columns

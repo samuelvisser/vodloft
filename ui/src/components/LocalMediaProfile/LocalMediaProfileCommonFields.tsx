@@ -1,12 +1,14 @@
+import {useEffect} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 
 import {type LocalMediaProfileType} from '../../types/local_media_profile'
 import CollectionLocalMediaProfileScopeField from './CollectionLocalMediaProfileScopeField'
 import LocalMediaProfileSitesField from './LocalMediaProfileSitesField'
 import SubtitleFields from './SubtitleFields'
-import SiteSettingsSections from './SiteSettingsSections'
+import SponsorBlockSection from './SponsorBlockSection'
 import {useSubtitleModeDefaults} from './useSubtitleModeDefaults'
 
+import {useLocalMediaProfileSites} from '../../lib/queries'
 import {useLibraryDefaults} from '../../lib/settings'
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -33,7 +35,15 @@ export default function LocalMediaProfileCommonFields({
     mode: LocalMediaProfileType
     isCreating: boolean
 }) {
-    const {control, register, formState: {errors}} = form
+    const {control, register, getValues, setValue, formState: {errors}} = form
+    // A new profile starts the settings only some Sites show as Settings says.
+    const {data: sites} = useLocalMediaProfileSites()
+    useEffect(() => {
+        if (!sites) return
+        for (const [name, value] of Object.entries(sites.defaults)) {
+            if (getValues(name) === undefined) setValue(name, value, {shouldDirty: false})
+        }
+    }, [sites, getValues, setValue])
     const {onSubtitleModeChange, onScopeChange} = useSubtitleModeDefaults(form, mode, isCreating)
     const {data: defaults} = useLibraryDefaults()
     const systemDownloadModeLabel = !defaults
@@ -224,7 +234,7 @@ export default function LocalMediaProfileCommonFields({
 
             <SubtitleFields form={form} mode={mode} onSubtitleModeChange={onSubtitleModeChange}/>
 
-            <SiteSettingsSections form={form} mode={mode}/>
+            <SponsorBlockSection form={form} mode={mode}/>
         </>
     )
 }

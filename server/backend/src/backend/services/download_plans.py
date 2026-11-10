@@ -18,7 +18,7 @@ from backend.services.no_ascii_names import settle_no_ascii_name
 from backend.services.media_access import link_access
 from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Movie, MovieExtra, Video
-from backend.services.site_settings import local_media_profile_site_settings
+from backend.services.site_settings import local_media_profile_site_choices
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail
 from backend.services.download_options import effective_download_mode, effective_metadata_mode, effective_thumbnail_mode
@@ -86,7 +86,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     metadata_mode = effective_metadata_mode(profile)
     subtitle_mode = LocalMediaProfileSubtitleMode(profile.subtitle_mode)
     quality = ytdlp_quality(profile)
-    site_choices = local_media_profile_site_settings(profile, media_site) if media_site is not None else None
+    site_choices = local_media_profile_site_choices(profile, media_site) if media_site is not None else None
     auto_subtitles = AutoSubtitles(site_choices["auto_subtitles"]) if site_choices else AutoSubtitles.NEVER
     sponsorblock = ytdlp_sponsorblock(
         site_choices["sponsorblock_enabled"], dict(site_choices["sponsorblock_segments"]),

@@ -32,7 +32,6 @@ import {
     siteNames,
 } from '../../types/local_media_profile'
 import './QualityField.css'
-import './SiteSettingsSection.css'
 
 type Props = {
     form: UseFormReturn<any>
@@ -60,11 +59,13 @@ export default function QualityField({form, mode}: Props) {
         [sites, mode, siteKeys, includeUpcomingSites],
     )
     const qualityChoices = offered?.qualityChoices ?? true
-    // The Sites the format choices apply to: the profile's Sites whose versions VODLoft chooses among.
-    const choiceSites = useMemo(
-        () => siteNames(profileSitesOffering(sites, mode, siteKeys, includeUpcomingSites, (options) => options.qualityChoices)),
-        [sites, mode, siteKeys, includeUpcomingSites],
-    )
+    // Which of the profile's Sites the format choices apply to, and which have fixed versions.
+    const appliesTo = useMemo(() => {
+        const choosing = siteNames(profileSitesOffering(sites, mode, siteKeys, includeUpcomingSites, (options) => options.qualityChoices))
+        const fixed = profileSitesOffering(sites, mode, siteKeys, false, (options) => !options.qualityChoices).sites
+        if (!choosing) return ''
+        return `Applies to ${choosing}.${fixed.length ? ` ${siteNames({sites: fixed, upcoming: false})} ${fixed.length > 1 ? 'have' : 'has'} fixed versions.` : ''}`
+    }, [sites, mode, siteKeys, includeUpcomingSites])
     // What each of the profile's Sites keeps in an HLS bundle.
     const hlsHelp = useMemo(() => {
         const {sites: bundled, upcoming} = profileSitesOffering(sites, mode, siteKeys, includeUpcomingSites, (options) => options.hlsBundle)
@@ -159,9 +160,7 @@ export default function QualityField({form, mode}: Props) {
             </div>
 
             {qualityChoices && !hls && (
-                <section className="site-settings-section" aria-labelledby="quality-choices-heading">
-                    <hr className="form-section-divider" aria-hidden="true"/>
-                    <h3 className="site-settings-heading" id="quality-choices-heading">{choiceSites || 'Format'}</h3>
+                <>
                     {audioOnly && (
                         <div className="form-row">
                             <span className="quality-field__heading" id="quality-audio-format">Audio format</span>
@@ -177,7 +176,7 @@ export default function QualityField({form, mode}: Props) {
                                     </button>
                                 ))}
                             </div>
-                            <div className="help">Podcast RSS feeds use this format.</div>
+                            <div className="help">Podcast RSS feeds use this format. {appliesTo}</div>
                         </div>
                     )}
 
@@ -196,6 +195,7 @@ export default function QualityField({form, mode}: Props) {
                                     </button>
                                 ))}
                             </div>
+                            {appliesTo && <div className="help">{appliesTo}</div>}
 
                             {goal === 'custom' && (
                                 <div className="quality-own">
@@ -308,9 +308,9 @@ export default function QualityField({form, mode}: Props) {
                             onChange={(option) => setValue('audioLanguage', !option || option.value === 'original' ? null : option.value, OPTIONS)}
                             isSearchable
                         />
-                        <div className="help">For videos with dubbed audio tracks. Original keeps the language the video was made in.</div>
+                        <div className="help">For videos with dubbed audio tracks. Original keeps the language the video was made in. {appliesTo}</div>
                     </div>
-                </section>
+                </>
             )}
         </div>
     )

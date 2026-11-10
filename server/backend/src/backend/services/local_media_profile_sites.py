@@ -48,15 +48,20 @@ def takes_upcoming_sites(profile_type: LocalMediaProfileType | str) -> bool:
     return any(ANY_DOMAIN in source.domains and source.has(feature) for source in all_sources())
 
 
-def _upcoming_downloads(profile_type: LocalMediaProfileType | str | None = None) -> DownloadOptions:
-    """What a Site VODLoft has not seen yet can download: what a Source that fetches any site offers on a
-    Site it has no contract of its own for."""
+def _upcoming_sites(profile_type: LocalMediaProfileType | str | None = None) -> list[Site]:
+    """What a Site VODLoft has not seen yet is like: what each Source that fetches any site makes of a Site it
+    has no contract of its own for."""
     feature = _feature(profile_type) if profile_type is not None else None
-    return DownloadOptions.combined(
-        site.downloads for source in all_sources()
+    return [
+        site for source in all_sources()
         if ANY_DOMAIN in source.domains and (feature is None or source.has(feature))
         and (site := source.site_of(_UNSEEN_SITE)) is not None
-    )
+    ]
+
+
+def _upcoming_downloads(profile_type: LocalMediaProfileType | str | None = None) -> DownloadOptions:
+    """What a Site VODLoft has not seen yet can download."""
+    return DownloadOptions.combined(site.downloads for site in _upcoming_sites(profile_type))
 
 
 # A key no Site has, for what a Site that is still to come offers.
@@ -127,9 +132,7 @@ class ProfileSite:
     profile_types: list[LocalMediaProfileType]
     download_options: DownloadOptions
     settings: list[SiteSetting]
-    """The settings only some Sites show that a profile has for this Site."""
-    defaults: dict[str, Any]
-    """What a profile does on the Site until it has settings of its own for it."""
+    """The settings only some Sites show that apply to this Site, such as YouTube's SponsorBlock."""
 
 
 @dataclass(frozen=True)
@@ -138,11 +141,15 @@ class ProfileSites:
     upcoming_profile_types: list[LocalMediaProfileType]
     """The profile types Sites VODLoft has not seen yet can bring media for."""
     upcoming_download_options: DownloadOptions
+    upcoming_settings: list[SiteSetting]
+    """The settings only some Sites show that apply to a Site VODLoft has not seen yet."""
+    defaults: dict[str, Any]
+    """What a new profile starts with for the settings only some Sites show."""
 
 
 def profile_sites(s: Session) -> ProfileSites:
     """Every Site a Local Media Profile can be offered for."""
-    from backend.services.site_settings import local_media_profile_site_defaults, offered_settings
+    from backend.services.site_settings import local_media_profile_defaults, offered_settings
 
     types = list(_PROFILE_TYPE_FEATURES)
     sites = []
@@ -152,11 +159,16 @@ def profile_sites(s: Session) -> ProfileSites:
             continue
         site = replace(site_of(known.key), key=known.key, name=known.name)
         sites.append(ProfileSite(
-            site.key, site.name, offered, site.downloads,
-            offered_settings(site, SiteSettingGroup.LOCAL_MEDIA_PROFILE), local_media_profile_site_defaults(site),
+            site.key, site.name, offered, site.downloads, offered_settings(site, SiteSettingGroup.LOCAL_MEDIA_PROFILE),
         ))
     upcoming = [profile_type for profile_type in types if takes_upcoming_sites(profile_type)]
-    return ProfileSites(sites, upcoming, _upcoming_downloads())
+    upcoming_settings = {
+        key for site in _upcoming_sites() for key in offered_settings(site, SiteSettingGroup.LOCAL_MEDIA_PROFILE)
+    }
+    return ProfileSites(
+        sites, upcoming, _upcoming_downloads(),
+        [key for key in SiteSetting if key in upcoming_settings], local_media_profile_defaults(),
+    )
 
 
 def profile_download_options(

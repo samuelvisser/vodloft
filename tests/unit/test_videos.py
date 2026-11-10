@@ -347,8 +347,7 @@ def test_a_ytdlp_download_follows_the_profile_quality_and_subtitle_languages(vid
     )
     video, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/abc"))
     download = create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
-    from backend.services.sites import video_site_key
-    profile.site_settings = {video_site_key(video): {"auto_subtitles": "always"}}
+    profile.auto_subtitles = "always"
     session.commit()
 
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())

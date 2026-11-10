@@ -1,7 +1,7 @@
 import {createSelectRegistry, SelectRegistry} from "../utils/selectRegistry";
 import {useMemo} from "react";
 import type {LocalMediaProfileRead} from "./schemas/local_media_profile";
-import type {LocalMediaProfileSiteRead, LocalMediaProfileSitesRead, LocalMediaProfileSubtitleMode, SiteDownloadChoices} from "./schemas/local_media_profile_base";
+import type {LocalMediaProfileSiteRead, LocalMediaProfileSitesRead, LocalMediaProfileSubtitleMode} from "./schemas/local_media_profile_base";
 import type {DownloadOptions} from "./schemas/source";
 
 
@@ -83,15 +83,6 @@ export function sitesForLocalMediaProfileType(
     return (sites?.sites ?? []).filter((site) => site.profileTypes.includes(type))
 }
 
-/** What a profile does on a Site with the settings only some Sites show: its own, or else the Site's. */
-export function siteDownloadChoices(
-    profile: Pick<LocalMediaProfileRead, 'siteSettings'>,
-    sites: LocalMediaProfileSitesRead | undefined,
-    siteKey: string,
-): SiteDownloadChoices | undefined {
-    return profile.siteSettings[siteKey] ?? sites?.sites.find((site) => site.key === siteKey)?.defaults
-}
-
 /** The profile's Sites that offer something, and whether Sites still to come do too. */
 export function profileSitesOffering(
     sites: LocalMediaProfileSitesRead | undefined,
@@ -105,6 +96,23 @@ export function profileSitesOffering(
             .filter((site) => (siteKeys == null || siteKeys.includes(site.key)) && offers(site.downloadOptions)),
         upcoming: !!sites && (siteKeys == null || !!includeUpcomingSites) && takesUpcomingSites(sites, type)
             && offers(sites.upcomingDownloadOptions),
+    }
+}
+
+/** The profile's Sites that have a setting only some Sites show, such as sponsorblock, and whether Sites still to
+ * come have it. */
+export function profileSitesWithSetting(
+    sites: LocalMediaProfileSitesRead | undefined,
+    type: LocalMediaProfileType,
+    siteKeys: readonly string[] | null | undefined,
+    includeUpcomingSites: boolean | undefined,
+    setting: string,
+): {sites: LocalMediaProfileSiteRead[], upcoming: boolean} {
+    return {
+        sites: sitesForLocalMediaProfileType(sites, type)
+            .filter((site) => (siteKeys == null || siteKeys.includes(site.key)) && site.settings.includes(setting)),
+        upcoming: !!sites && (siteKeys == null || !!includeUpcomingSites) && takesUpcomingSites(sites, type)
+            && sites.upcomingSettings.includes(setting),
     }
 }
 

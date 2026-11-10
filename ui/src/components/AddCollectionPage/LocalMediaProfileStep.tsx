@@ -24,7 +24,8 @@ import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableF
 /** Quality and subtitle language choices an existing profile keeps when this step picks it. */
 const PROFILE_CHOICE_FIELDS = [
     'subtitleLanguages', 'subtitleLanguageMode', 'qualityGoal', 'videoCodecs', 'codecFallback',
-    'container', 'audioCodec', 'audioFormat', 'audioLanguage', 'siteKeys', 'includeUpcomingSites', 'siteSettings',
+    'container', 'audioCodec', 'audioFormat', 'audioLanguage', 'siteKeys', 'includeUpcomingSites',
+    'autoSubtitles', 'sponsorblockEnabled', 'sponsorblockSegments',
 ] as const
 
 

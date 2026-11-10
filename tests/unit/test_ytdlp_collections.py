@@ -506,11 +506,10 @@ def test_a_bundle_that_matches_existing_files_holds_its_download_profile(listed,
     assert (scan.status, scan.folder, scan.held_download_profile_ids) == ("waiting", "/downloads/YouTube", [profile.id])
 
 
-def test_a_local_media_profile_chooses_auto_generated_subtitles_per_site(listed, session, monkeypatch):
+def test_a_local_media_profiles_auto_generated_subtitles_apply_where_the_site_has_them(listed, session, monkeypatch):
     from backend.db.models import CollectionLocalMediaProfile
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.services import download_plans
-    from backend.services.sites import collection_site
     from downloader.lifecycle import DownloadTracker
     from task_manager.tasks.helpers.listed_collections import index_listed_collection
 
@@ -531,7 +530,7 @@ def test_a_local_media_profile_chooses_auto_generated_subtitles_per_site(listed,
     session.commit()
 
     def choose_always():
-        profile.site_settings = {collection_site(collection).key: {"auto_subtitles": "always"}}
+        profile.auto_subtitles = "always"
         session.commit()
 
     # A site whose contract hides auto-generated subtitles doesn't get them, whatever the profile says.
@@ -544,12 +543,6 @@ def test_a_local_media_profile_chooses_auto_generated_subtitles_per_site(listed,
 
     _site_of.cache_clear()
     monkeypatch.setattr(ListedSource, "sites", ())
-    # Until the profile has its own choice for the site, it follows the site's.
-    profile.site_settings = {}
-    session.commit()
-    from backend.services.site_settings import local_media_profile_site_defaults
-    site_default = local_media_profile_site_defaults(collection_site(collection))["auto_subtitles"]
-    assert download_plans.prepare_download_plan(session, download.id, DownloadTracker()).source.ytdlp_subtitles.auto_generated == site_default
     choose_always()
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
     assert (plan.source.ytdlp_subtitles.languages, plan.source.ytdlp_subtitles.auto_generated) == (("nl", "en"), "always")

@@ -30,7 +30,7 @@ from typing import Any, Literal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.services.site_settings import download_profile_defaults, local_media_profile_site_defaults
+from backend.services.site_settings import download_profile_defaults, local_media_profile_defaults
 from backend.services.sites import CollectionAlreadyAddedError, collection_site
 
 import importer.pinchflat  # noqa: F401  (registers the importer)
@@ -1115,7 +1115,7 @@ def _upsert_download_profile(
 ) -> DownloadProfile | None:
     if plan.download_profile is None:
         return None
-    _keep_site_choices(profile, collection, plan.download_profile)
+    _keep_site_choices(profile, plan.download_profile)
     external_id = f"{plan.external_id}:{plan.profile_external_id}"
     link = links.get(("download_profile", external_id))
     existing = session.get(DownloadProfile, link.entity_id) if link and link.entity_id else None
@@ -1150,16 +1150,17 @@ def _upsert_download_profile(
     return existing
 
 
-def _keep_site_choices(profile: CollectionLocalMediaProfile, collection: Collection, fields: dict) -> None:
-    """Keep what the other program had for auto-generated subtitles and SponsorBlock on the profile, for the
-    collection's Site, unless the profile already has settings of its own for that Site."""
-    site = collection_site(collection)
+def _keep_site_choices(profile: CollectionLocalMediaProfile, fields: dict) -> None:
+    """Keep what the other program had for auto-generated subtitles and SponsorBlock on the profile, unless the
+    profile already downloads a collection: the first collection it gets decides."""
     had = {name: fields[name] for name in _SITE_CHOICE_FIELDS if fields.get(name) is not None}
-    if not had or site.key in profile.site_settings:
+    if not had or profile.download_profiles:
         return
-    choices = {**local_media_profile_site_defaults(site), **had}
-    choices["sponsorblock_segments"] = {**local_media_profile_site_defaults(site)["sponsorblock_segments"], **dict(had.get("sponsorblock_segments", {}))}
-    profile.site_settings = {**profile.site_settings, site.key: choices}
+    for name, value in had.items():
+        setattr(profile, name, value)
+    if "sponsorblock_segments" in had:
+        segments = local_media_profile_defaults()["sponsorblock_segments"]
+        profile.sponsorblock_segments = {**segments, **dict(had["sponsorblock_segments"])}
 
 
 def _index_running(session: Session, collection_id: int) -> bool:

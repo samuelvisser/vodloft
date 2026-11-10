@@ -5,8 +5,8 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import {faIcon} from '../../icons/faIcon'
 import {useLocalMediaProfileSites} from '../../lib/queries'
-import {profileSitesOffering, siteNames, type LocalMediaProfileType} from '../../types/local_media_profile'
-import {LANGUAGES, SubtitleLanguageModeReg, languageName} from '../../types/quality'
+import {profileSitesOffering, profileSitesWithSetting, siteNames, type LocalMediaProfileType} from '../../types/local_media_profile'
+import {AutoSubtitlesReg, LANGUAGES, SubtitleLanguageModeReg, languageName} from '../../types/quality'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import ReadMore from '../../utils/ReadMore'
 import SimpleSelect from '../common/SimpleSelect'
@@ -46,11 +46,13 @@ type Props = {
 /** Subtitles: where they are stored, which languages in which order, and what to do with several. */
 export default function SubtitleFields({form, mode: profileType, onSubtitleModeChange}: Props) {
     const {control, setValue, formState: {errors}} = form
-    const [subtitleMode, languages, languageMode, siteKeys, includeUpcomingSites] = useWatch({
-        control, name: ['subtitleMode', 'subtitleLanguages', 'subtitleLanguageMode', 'siteKeys', 'includeUpcomingSites'],
-    }) as [string, string[] | undefined, string, string[] | null, boolean]
+    const [subtitleMode, languages, languageMode, siteKeys, includeUpcomingSites, autoSubtitles] = useWatch({
+        control, name: ['subtitleMode', 'subtitleLanguages', 'subtitleLanguageMode', 'siteKeys', 'includeUpcomingSites', 'autoSubtitles'],
+    }) as [string, string[] | undefined, string, string[] | null, boolean, string | undefined]
     const {data: sites} = useLocalMediaProfileSites()
     const subtitleSites = profileSitesOffering(sites, profileType, siteKeys, includeUpcomingSites, (options) => options.subtitles)
+    const autoSubtitleSites = profileSitesWithSetting(sites, profileType, siteKeys, includeUpcomingSites, 'autoSubtitles')
+    const offersAutoSubtitles = autoSubtitleSites.sites.length > 0 || autoSubtitleSites.upcoming
     const list = languages ?? []
     const [dragging, setDragging] = useState<number | null>(null)
     const stores = subtitleMode && subtitleMode !== 'no_subtitles'
@@ -170,10 +172,28 @@ export default function SubtitleFields({form, mode: profileType, onSubtitleModeC
 
             <div className="help">
                 <ReadMore summary={`Subtitles from ${siteNames(subtitleSites)}. Subtitles saved beside the media are always SRT.`}>
-                    <p>Whether to use the subtitles a site generates itself, such as YouTube's, is set per Site further down.</p>
                     <p>Embedding needs an MP4 or MKV video, not an HLS bundle or audio.</p>
                 </ReadMore>
             </div>
+
+            {stores && offersAutoSubtitles && (
+                <div className="form-row">
+                    <label htmlFor="subtitle-auto">Use auto-generated subtitles</label>
+                    <SimpleSelect
+                        inputId="subtitle-auto"
+                        registry={AutoSubtitlesReg}
+                        value={autoSubtitles ?? 'fallback'}
+                        onChange={(value) => setValue('autoSubtitles', value, OPTIONS)}
+                        aria-describedby="subtitle-auto-help"
+                    />
+                    <div className="help" id="subtitle-auto-help">
+                        <ReadMore summary={`Subtitles the site makes itself, in the languages above. Applies to ${siteNames(autoSubtitleSites)}.`}>
+                            <p><strong>Only when there are no real ones</strong> uses an auto-generated subtitle for a language that has no subtitle a person made.</p>
+                            <p><strong>Always</strong> also adds it next to a real one, as its own track marked auto-generated.</p>
+                        </ReadMore>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

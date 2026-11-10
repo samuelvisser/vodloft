@@ -99,7 +99,7 @@ def test_a_download_at_the_best_resolution_cannot_improve(db_session):
 
 
 def test_new_sponsorblock_segments_count_but_moved_edges_do_not(db_session):
-    download = _download(db_session, local_values={"site_settings": {"youtube": {"sponsorblock_enabled": True}}}, download_values={
+    download = _download(db_session, local_values={"sponsorblock_enabled": True}, download_values={
         "video_height": 1080,
         "sponsorblock_segments": [{"category": "sponsor", "start": 10.0, "end": 40.0, "action": "cut"}],
     })

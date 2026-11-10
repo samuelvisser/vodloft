@@ -11,10 +11,12 @@ type Props = {
     enabled: boolean
     segments: Record<string, string>
     onChange: (enabled: boolean, segments: Record<string, string>) => void
+    /** Which of the profile's Sites have SponsorBlock, as in "Applies to YouTube." */
+    appliesTo: string
 }
 
-/** SponsorBlock on a Site of a Local Media Profile: a switch, and Keep, Chapter or Cut out per segment type. */
-export default function SponsorBlockFields({idPrefix, enabled, segments, onChange}: Props) {
+/** SponsorBlock on a Local Media Profile: a switch, and Keep, Chapter or Cut out per segment type. */
+export default function SponsorBlockFields({idPrefix, enabled, segments, onChange, appliesTo}: Props) {
     const choose = (category: string, action: string) => onChange(enabled, {...segments, [category]: action})
 
     return (
@@ -70,7 +72,7 @@ export default function SponsorBlockFields({idPrefix, enabled, segments, onChang
                 </div>
             )}
             <div className="help" id={`${idPrefix}-sponsorblock-help`}>
-                <ReadMore summary="Mark or cut out sponsor reads and other parts of a video.">
+                <ReadMore summary={`Mark or cut out sponsor reads and other parts of a video. ${appliesTo}`}>
                     <p>SponsorBlock is a community database of parts of YouTube videos, such as sponsor reads and “like and subscribe” reminders.
                         A part becomes a chapter your player can skip, or is cut out of the file. Most parts are submitted in the days after a video comes out,
                         so a download right after upload may have few of them. The episode page shows what was found.</p>

@@ -4,8 +4,7 @@ import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
-import {useLocalMediaProfileSites, useLocalMediaProfiles, useSiteOptions} from '../../lib/queries'
-import {siteDownloadChoices} from '../../types/local_media_profile'
+import {useLocalMediaProfiles, useSiteOptions} from '../../lib/queries'
 import type {UpgradeImprovement} from '../../types/schemas/download_profile'
 import NumberInput from '../common/NumberInput'
 import './UpgradeCheckCard.css'
@@ -48,7 +47,6 @@ export default function UpgradeCheckCard({form, collectionId, sourceKey, collect
     const offersUpgrades = offered.length > 0
     const {data: mediaProfiles} = useLocalMediaProfiles()
     const mediaProfile = mediaProfiles?.find((profile) => String(profile.id) === String(localMediaProfileId))
-    const {data: profileSites} = useLocalMediaProfileSites()
 
     if (!offersCountdown && !offersUpgrades) return null
 
@@ -71,8 +69,8 @@ export default function UpgradeCheckCard({form, collectionId, sourceKey, collect
     // Only what the Site offers, and of that only what the profile can use.
     const usable: Record<UpgradeImprovement, boolean> = {
         resolution: !audioOnly,
-        // The Local Media Profile marks or cuts SponsorBlock segments on the Site.
-        sponsorblock: !mediaProfile || !!(site && siteDownloadChoices(mediaProfile, profileSites, site.siteKey)?.sponsorblockEnabled),
+        // The Local Media Profile marks or cuts SponsorBlock segments; the Site offers this only when it has them.
+        sponsorblock: !mediaProfile || mediaProfile.sponsorblockEnabled,
         subtitles: storesSubtitles,
         codec: !audioOnly,
         length: true,

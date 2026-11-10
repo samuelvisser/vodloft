@@ -44,8 +44,7 @@ _LOCAL_MEDIA_PROFILE_FIELDS = {
     SiteSetting.SPONSORBLOCK: "sponsorblock_enabled",
     SiteSetting.SPONSORBLOCK_SEGMENTS: "sponsorblock_segments",
 }
-"""The field of a Local Media Profile's settings for one Site that each local media profile setting gives its
-starting value."""
+"""The Local Media Profile field each local media profile setting gives its starting value."""
 
 
 def site_setting(site_key: Optional[str], key: SiteSetting) -> Any:
@@ -104,31 +103,32 @@ def download_profile_defaults(site: Site) -> dict[str, Any]:
     return values
 
 
-def local_media_profile_site_defaults(site: Site) -> dict[str, Any]:
-    """What a Local Media Profile does on the Site until it has settings of its own for it, by field. A setting
-    the Site does not show is off."""
-    values = {field: site_setting_of(site, key)[0] for key, field in _LOCAL_MEDIA_PROFILE_FIELDS.items()}
-    values["auto_subtitles"] = str(values["auto_subtitles"]) if offers(site, SiteSetting.AUTO_SUBTITLES) else "never"
+def local_media_profile_defaults() -> dict[str, Any]:
+    """What a new Local Media Profile starts with, by field: for each setting, what the first Site VODLoft knows
+    that shows it follows, such as YouTube for SponsorBlock, or else the system default."""
+    from backend.services.local_media_profile_sites import builtin_sites
+
+    def start(key: SiteSetting) -> Any:
+        return site_setting_of(next((site for site in builtin_sites() if offers(site, key)), None), key)[0]
+
+    values = {field: start(key) for key, field in _LOCAL_MEDIA_PROFILE_FIELDS.items()}
+    values["auto_subtitles"] = str(values["auto_subtitles"])
     values["sponsorblock_segments"] = {str(key): str(value) for key, value in dict(values["sponsorblock_segments"]).items()}
     # SponsorBlock starts off when every segment type is kept.
     values["sponsorblock_enabled"] = (
-        offers(site, SiteSetting.SPONSORBLOCK) and bool(values["sponsorblock_enabled"])
-        and sponsorblock_changes_anything(values["sponsorblock_segments"])
+        bool(values["sponsorblock_enabled"]) and sponsorblock_changes_anything(values["sponsorblock_segments"])
     )
     return values
 
 
-def local_media_profile_site_settings(profile, site: Site) -> dict[str, Any]:
-    """What a Local Media Profile does on the Site: its own settings for the Site, or else the Site's. A setting
-    the Site does not show stays off."""
-    values = local_media_profile_site_defaults(site)
-    own = (profile.site_settings or {}).get(site.key) or {}
-    if offers(site, SiteSetting.AUTO_SUBTITLES) and "auto_subtitles" in own:
-        values["auto_subtitles"] = own["auto_subtitles"]
-    if offers(site, SiteSetting.SPONSORBLOCK):
-        values["sponsorblock_enabled"] = bool(own.get("sponsorblock_enabled", values["sponsorblock_enabled"]))
-        values["sponsorblock_segments"] = {**values["sponsorblock_segments"], **own.get("sponsorblock_segments", {})}
-    return values
+def local_media_profile_site_choices(profile, site: Site) -> dict[str, Any]:
+    """What a Local Media Profile does on the Site with the settings only some Sites show: the profile's choice,
+    or off where the Site does not show the setting."""
+    return {
+        "auto_subtitles": profile.auto_subtitles if offers(site, SiteSetting.AUTO_SUBTITLES) else "never",
+        "sponsorblock_enabled": bool(profile.sponsorblock_enabled) and offers(site, SiteSetting.SPONSORBLOCK),
+        "sponsorblock_segments": dict(profile.sponsorblock_segments or {}),
+    }
 
 
 @dataclass(frozen=True)

@@ -17,7 +17,7 @@ from backend.db.models import DownloadProfile, Episode
 from backend.db.models.local_media_profile import LocalMediaProfileBase
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.download_quality import ytdlp_quality, ytdlp_subtitles
-from backend.services.site_settings import local_media_profile_site_settings
+from backend.services.site_settings import local_media_profile_site_choices
 from backend.types.download_profile_types import (
     AutoSubtitles, MediaDownloadArtifactStatus, SponsorBlockAction, UpgradeImprovement, UpgradeRepeat,
 )
@@ -162,7 +162,7 @@ def sponsorblock_categories(download: EpisodeMediaDownload, site: Site) -> tuple
     segments of improve the download, when its Download Profile counts them as better."""
     if UpgradeImprovement.SPONSORBLOCK.value not in download.download_profile.upgrade_improvements:
         return ()
-    choices = local_media_profile_site_settings(download.local_media_profile, site)
+    choices = local_media_profile_site_choices(download.local_media_profile, site)
     if not choices["sponsorblock_enabled"]:
         return ()
     return tuple(sorted(

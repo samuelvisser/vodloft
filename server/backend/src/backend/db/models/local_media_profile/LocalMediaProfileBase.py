@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Index, String, event, func, true
+from sqlalchemy import JSON, Index, String, event, false, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -118,11 +118,16 @@ class LocalMediaProfileBase(Base):
         default=True, server_default=true(), nullable=False,
         comment="Sites VODLoft sees for the first time join the profile's Sites",
     )
-    site_settings: Mapped[dict[str, dict]] = mapped_column(
-        JSON, nullable=False, default=dict, server_default="{}",
-        comment="Settings only some Sites show, such as YouTube's SponsorBlock, by Site key",
+    # Settings only some Sites show; a Site that does not show one does without it.
+    auto_subtitles: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="fallback",
+        comment="Auto-generated subtitles: never, fallback (when there is no real one) or always",
     )
-    """A Site without settings here follows the Site's own from Settings."""
+    sponsorblock_enabled: Mapped[bool] = mapped_column(nullable=False, server_default=false())
+    sponsorblock_segments: Mapped[dict[str, str]] = mapped_column(
+        JSON, nullable=False, server_default="{}",
+        comment="SponsorBlock segment type to keep, chapter or cut",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
@@ -149,9 +154,15 @@ class LocalMediaProfileBase(Base):
 
 @event.listens_for(LocalMediaProfileBase, "before_insert", propagate=True)
 def _start_new_profile(_mapper, connection, target: LocalMediaProfileBase) -> None:
-    """A new profile without Sites starts with every Site VODLoft knows, and without settings of its own for them."""
-    if target.site_settings is None:
-        target.site_settings = {}
+    """A new profile without Sites starts with every Site VODLoft knows, and a setting it was not given starts as
+    Settings says."""
+    from backend.services.site_settings import local_media_profile_defaults
+
+    defaults = None
+    for field in ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments"):
+        if getattr(target, field) is None:
+            defaults = defaults or local_media_profile_defaults()
+            setattr(target, field, defaults[field])
     if target.site_keys is None:
         from backend.services.local_media_profile_sites import every_known_site
 

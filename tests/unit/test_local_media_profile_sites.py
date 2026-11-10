@@ -151,14 +151,22 @@ def test_the_sites_listing_says_which_profile_types_each_site_takes() -> None:
 
 
 def test_keeping_every_sponsorblock_type_saves_sponsorblock_off():
-    from backend.services.local_media_profile_inputs import SiteDownloadChoices
+    from backend.services.local_media_profile_inputs import CollectionLocalMediaProfileInput
     from config.settings.site_settings import DEFAULT_SPONSORBLOCK_SEGMENTS
 
-    body = {"auto_subtitles": "fallback", "sponsorblock_enabled": True, "sponsorblock_segments": DEFAULT_SPONSORBLOCK_SEGMENTS}
+    body = {
+        "name": "P", "preferred_format": "format_1080p", "output_template": "/downloads/{{ collection }}/{{ episode }}.ext",
+        "sponsorblock_enabled": True, "sponsorblock_segments": DEFAULT_SPONSORBLOCK_SEGMENTS,
+    }
     kept = {category: "keep" for category in DEFAULT_SPONSORBLOCK_SEGMENTS}
-    assert SiteDownloadChoices.model_validate({**body, "sponsorblock_segments": kept}).sponsorblock_enabled is False
-    assert SiteDownloadChoices.model_validate(body).sponsorblock_enabled is True
+    assert CollectionLocalMediaProfileInput.model_validate({**body, "sponsorblock_segments": kept}).sponsorblock_enabled is False
+    assert CollectionLocalMediaProfileInput.model_validate(body).sponsorblock_enabled is True
     with pytest.raises(ValueError):
-        SiteDownloadChoices.model_validate({**body, "sponsorblock_segments": {**kept, "chapter": "cut"}})
+        CollectionLocalMediaProfileInput.model_validate({**body, "sponsorblock_segments": {**kept, "chapter": "cut"}})
     with pytest.raises(ValueError):
-        SiteDownloadChoices.model_validate({**body, "sponsorblock_segments": {"sponsor": "cut"}})
+        CollectionLocalMediaProfileInput.model_validate({**body, "sponsorblock_segments": {"sponsor": "cut"}})
+    # Left out, an update keeps the profile's own.
+    assert {"auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments"} <= (
+        CollectionLocalMediaProfileInput.model_validate({**body, "sponsorblock_enabled": None, "sponsorblock_segments": None})
+        .fields_kept_on_update()
+    )

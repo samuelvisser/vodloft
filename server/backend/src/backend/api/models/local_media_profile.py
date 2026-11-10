@@ -43,7 +43,7 @@ class LocalMediaProfileAPIBaseIn(RequestBase, LocalMediaProfileInput):
 
 
 class SiteDownloadChoicesAPIRead(ResponseBase):
-    """What a Local Media Profile does on one Site with the settings only some Sites show."""
+    """What a Local Media Profile does with the settings only some Sites show."""
 
     auto_subtitles: AutoSubtitles
     sponsorblock_enabled: bool
@@ -74,7 +74,9 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     audio_language: str | None = None
     site_keys: list[str]
     include_upcoming_sites: bool
-    site_settings: dict[str, SiteDownloadChoicesAPIRead]
+    auto_subtitles: AutoSubtitles
+    sponsorblock_enabled: bool
+    sponsorblock_segments: dict[str, SponsorBlockAction]
     created_at: datetime
     updated_at: datetime
 
@@ -87,9 +89,7 @@ class LocalMediaProfileSiteAPIRead(ResponseBase):
     profile_types: list[LocalMediaProfileType]
     download_options: DownloadOptionsAPIRead
     settings: list[SiteSetting]
-    """The settings only some Sites show that a profile has for this Site, such as YouTube's SponsorBlock."""
-    defaults: SiteDownloadChoicesAPIRead
-    """What a profile does on the Site until it has settings of its own for it."""
+    """The settings only some Sites show that apply to this Site, such as YouTube's SponsorBlock."""
 
 
 class LocalMediaProfileSitesAPIRead(ResponseBase):
@@ -99,6 +99,10 @@ class LocalMediaProfileSitesAPIRead(ResponseBase):
     upcoming_profile_types: list[LocalMediaProfileType]
     """The profile types that can include upcoming Sites."""
     upcoming_download_options: DownloadOptionsAPIRead
+    upcoming_settings: list[SiteSetting]
+    """The settings only some Sites show that apply to a Site VODLoft has not seen yet."""
+    defaults: SiteDownloadChoicesAPIRead
+    """What a new profile starts with for the settings only some Sites show."""
 
 
 class LocalMediaProfileTemplateVariable(ResponseBase):

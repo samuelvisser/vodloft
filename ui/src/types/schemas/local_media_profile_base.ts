@@ -49,13 +49,14 @@ const QualityAndLanguageFields = {
     audioLanguage: LanguageCodeSchema.nullable().default(null),
 }
 
-/** What a profile does on one Site with the settings only some Sites show, such as YouTube's SponsorBlock. */
+/** What a profile does with the settings only some Sites show, such as YouTube's SponsorBlock. */
 export const SiteDownloadChoicesSchema = z.object({
     autoSubtitles: z.enum(['never', 'fallback', 'always']),
     sponsorblockEnabled: z.boolean(),
     sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])),
 })
 export type SiteDownloadChoices = z.infer<typeof SiteDownloadChoicesSchema>
+export type SponsorBlockSegments = SiteDownloadChoices['sponsorblockSegments']
 
 // ---------- Strict request (create/update) ----------
 export const LocalMediaProfileSchemaRequest = z.object({
@@ -68,8 +69,10 @@ export const LocalMediaProfileSchemaRequest = z.object({
     siteKeys: z.array(z.string()).nullable().default(null),
     /** Sites VODLoft sees for the first time join the profile's Sites. */
     includeUpcomingSites: z.boolean().default(true),
-    /** Per Site key; a Site left out follows its own settings. */
-    siteSettings: z.record(z.string(), SiteDownloadChoicesSchema).default({}),
+    /** Settings only some Sites show; the form fills in a new profile's from Settings. */
+    autoSubtitles: SiteDownloadChoicesSchema.shape.autoSubtitles.optional(),
+    sponsorblockEnabled: z.boolean().optional(),
+    sponsorblockSegments: SiteDownloadChoicesSchema.shape.sponsorblockSegments.optional(),
     ...QualityAndLanguageFields,
 })
 
@@ -109,7 +112,7 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     ...QualityAndLanguageFields,
     siteKeys: z.array(z.string()).default([]),
     includeUpcomingSites: z.boolean().default(true),
-    siteSettings: z.record(z.string(), SiteDownloadChoicesSchema).default({}),
+    ...SiteDownloadChoicesSchema.shape,
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })
@@ -120,10 +123,8 @@ export const LocalMediaProfileSiteReadSchema = z.object({
     name: z.string(),
     profileTypes: z.array(z.string()),
     downloadOptions: DownloadOptionsSchema,
-    /** The settings only some Sites show that a profile has for this Site, such as autoSubtitles or sponsorblock. */
+    /** The settings only some Sites show that apply to this Site, such as autoSubtitles or sponsorblock. */
     settings: z.array(z.string()),
-    /** What a profile does on the Site until it has settings of its own for it. */
-    defaults: SiteDownloadChoicesSchema,
 })
 export type LocalMediaProfileSiteRead = z.infer<typeof LocalMediaProfileSiteReadSchema>
 
@@ -133,5 +134,9 @@ export const LocalMediaProfileSitesReadSchema = z.object({
     /** The profile types that can include upcoming Sites. */
     upcomingProfileTypes: z.array(z.string()),
     upcomingDownloadOptions: DownloadOptionsSchema,
+    /** The settings only some Sites show that apply to a Site VODLoft has not seen yet. */
+    upcomingSettings: z.array(z.string()),
+    /** What a new profile starts with for the settings only some Sites show. */
+    defaults: SiteDownloadChoicesSchema,
 })
 export type LocalMediaProfileSitesRead = z.infer<typeof LocalMediaProfileSitesReadSchema>

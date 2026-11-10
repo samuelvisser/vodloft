@@ -62,36 +62,29 @@ Below it, **Subtitle languages** is a list in order of preference. Drag a langua
 
 With **Every language the site offers**, the list is called **Default track language**: only its first language counts, and it becomes the default track when an episode has it. The other languages are grayed out but stay on the list for when you choose something else again. Leave the list empty to mark no default track.
 
-**Auto-generated subtitles** only exist on some sites, such as YouTube, so that choice is per site (see [YouTube and other sites](#youtube-and-other-sites)).
+**Use auto-generated subtitles** never, only when there are no real ones (the default), or always. Only sites downloaded with yt-dlp, such as YouTube, make subtitles themselves, so this setting only shows when the profile stores subtitles and one of its sites has them; its help names those sites. They follow the subtitle languages above.
+
+- **Only when there are no real ones** uses an auto-generated subtitle for a language that has no subtitle a person made.
+- **Always** also adds it next to a real one, as its own track marked auto-generated (`Episode.nl.auto.srt` beside the media).
 
 **Movies**, **Series** and Collection profiles available for **Podcasts and Series** start with subtitles beside the media. **Podcast-only** profiles and **Video** profiles start without subtitles.
 
 Forced subtitles use names such as `Movie Name.en.forced.srt`, and auto-generated ones `Episode.nl.auto.srt`. The default track beside the media is named like `Episode.en.default.srt`: Jellyfin and Emby pick it by default, while Plex and Kodi go by the subtitle language set in the player. Plex and similar media servers find these files automatically. NPO Start has no subtitles yet, so a profile only for NPO Start has no subtitle settings. A video without subtitles downloads as before, and a subtitle that fails never stops the download. Audio-only downloads never embed subtitles, and an HLS bundle can only have them beside it.
 
-## YouTube and other sites
+## Settings only some sites have
 
-Some sites have settings of their own. Each site in the profile's [Sites](#sites) that has them gets a section under
-the subtitle settings, with the site's name: YouTube has auto-generated subtitles and SponsorBlock, and other sites
-yt-dlp downloads have auto-generated subtitles only. The Daily Wire makes no subtitles, so it has no such section. A
-site you removed from the profile's sites doesn't show its section. These settings apply to every download with the
-profile, from a Collection's Download Profile and by hand alike. A site you haven't changed anything for follows the
-defaults under **Settings → Downloads**.
+Some settings only do something on some sites, such as auto-generated subtitles and SponsorBlock. They only show when
+one of the profile's [Sites](#sites) has them, and their help says which sites they apply to. Each has one value for
+the whole profile: a site that doesn't have the setting simply does without it. These settings apply to every download
+with the profile, from a Collection's Download Profile and by hand alike. A new profile starts with the
+per-site defaults under **Settings → Downloads** (see [[Settings#per-site-defaults]]).
 
-These settings used to be on each Download Profile. When you upgrade, each profile takes, for each site,
-what most of its Download Profiles there had.
+Auto-generated subtitles and SponsorBlock used to be on each Download Profile. When you upgrade, each Local Media
+Profile takes what most of its Download Profiles had.
 
-### Auto-generated subtitles
+## SponsorBlock
 
-This setting only appears when the profile stores subtitles.
-
-**Use auto-generated subtitles** never, only when there are no real ones (the default), or always. YouTube makes subtitles automatically for most videos; they follow the subtitle languages above.
-
-- **Only when there are no real ones** uses an auto-generated subtitle for a language that has no subtitle a person made.
-- **Always** also adds it next to a real one, as its own track marked auto-generated (`Episode.nl.auto.srt` beside the media).
-
-### SponsorBlock
-
-[SponsorBlock](https://sponsor.ajay.app) is a community database of parts of YouTube videos: sponsor reads, "like and subscribe" reminders, intros and so on. Switch it on, then choose for each type of part:
+[SponsorBlock](https://sponsor.ajay.app) is a community database of parts of YouTube videos: sponsor reads, "like and subscribe" reminders, intros and so on. It only applies to YouTube, so it only shows when the profile is offered for YouTube. Switch it on, then choose for each type of part:
 
 - **Keep**: left as it is.
 - **Chapter**: becomes a named chapter that your player can skip. Nothing is removed, so this is the safe choice.
@@ -102,13 +95,13 @@ The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Previ
 - **Highlight**: the one moment viewers mark as where the video really gets going.
 - **Viewer chapters**: chapter titles viewers wrote, mostly for videos without chapters of their own. When other types are chapters too, they all share one list: a part that falls inside a viewer chapter splits it, and the overlap is named after both. On a video that has its own chapters, the two sets of titles mix, so this starts as Keep.
 
-A new profile makes chapters of sponsors, intros, outros and the highlight on YouTube, and keeps everything else. Saving a profile that keeps every type turns SponsorBlock off, and a new profile starts with it off when your defaults for YouTube keep every type.
+A new profile makes chapters of sponsors, intros, outros and the highlight, and keeps everything else. Saving a profile that keeps every type turns SponsorBlock off, and a new profile starts with it off when your defaults for YouTube keep every type.
 
 Most parts are submitted in the days after a video comes out, so a download made right after upload may find few of them. When a download found parts, the episode page shows them on a timeline: each part, whether it became a chapter or was cut out, and how much shorter the file is.
 
 ## Quality
 
-Each site offers its own choices, and a profile shows what its sites offer together. The Daily Wire has fixed versions: 480p, 720p and 1080p video, its HLS bundle and audio, with nothing else to choose. Sites downloaded with yt-dlp, such as YouTube, and NPO Start offer every resolution and every choice below. Of those, only YouTube also has an HLS bundle. The choices after **Download** sit under a heading that names the profile's sites they apply to, and don't show when none of its sites has them.
+Each site offers its own choices, and a profile shows what its sites offer together. The Daily Wire has fixed versions: 480p, 720p and 1080p video, its HLS bundle and audio, with nothing else to choose. Sites downloaded with yt-dlp, such as YouTube, and NPO Start offer every resolution and every choice below. Of those, only YouTube also has an HLS bundle. The choices after **Download** only show when one of the profile's sites has them, and their help names the sites they apply to.
 
 **Download** chooses video up to a ceiling: 360p, 480p, 720p, 1080p, 1440p, 4K or 8K. VODLoft downloads the highest resolution the site has up to that, and otherwise the lower ones. **Audio only** downloads no video. Collection profiles for The Daily Wire and YouTube also have **HLS bundle**: several resolutions kept together, so a podcast app can pick the one that suits its connection. The Daily Wire's bundle has 480p, 720p and 1080p, and YouTube's has 360p, 720p and 1080p in H.264 with its M4A audio, as far as the video has them. Codec and container choices don't apply to it, and SponsorBlock segments are only marked as chapters, never cut out. A profile for several sites can choose what only one of them has: the others then get the nearest they have, such as 1080p video for an HLS bundle.
 
