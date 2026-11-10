@@ -13,6 +13,7 @@ import {DownloadProfileReadView} from '../types/schemas/download_profile_view'
 import {PreferredFormatReg} from '../types/local_media_profile'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
+import PageHeader from '../components/common/PageHeader'
 import PageSubtitle from "../components/common/PageSubtitle";
 import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
 import {DownloadProfileUpdateSchema} from '../types/schemas/download_profile'
@@ -136,19 +137,20 @@ export default function DownloadProfilesPage() {
 
     return (
         <section className="view" aria-labelledby="profiles-title">
-            <div className="view-header profile-table-header">
-                <h1 id="profiles-title">Download Profiles</h1>
-                <PageSubtitle summary={<>Create rules for how each collection is downloaded.</>}>
-                    <p>A Download Profile tells VODLoft what to download and how long to retain your downloads.
-                        Each collection can contain multiple download profiles, allowing you to
-                        download both audio and video versions of episodes for example.</p>
-                    <p>Download Profiles are always connected to a Local Media Profile, which defines where your
-                        downloads will be stored and what their file name should be.</p>
-                </PageSubtitle>
-                {canManage && (
-                    <ProfileTableActions selection={selection} addTo="/add-download-profile" addLabel="Add download profile"/>
+            <PageHeader
+                title="Download Profiles"
+                titleId="profiles-title"
+                subtitle={(
+                    <PageSubtitle summary={<>Create rules for how each collection is downloaded.</>}>
+                        <p>A Download Profile tells VODLoft what to download and how long to retain your downloads.
+                            Each collection can contain multiple download profiles, allowing you to
+                            download both audio and video versions of episodes for example.</p>
+                        <p>Download Profiles are always connected to a Local Media Profile, which defines where your
+                            downloads will be stored and what their file name should be.</p>
+                    </PageSubtitle>
                 )}
-            </div>
+                actions={canManage && <ProfileTableActions selection={selection} addTo="/add-download-profile" addLabel="Add download profile"/>}
+            />
 
             <ProfileTableFilters
                 search={filters.search ?? ''}

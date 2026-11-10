@@ -11,6 +11,7 @@ import {StreamProfileReadView} from '../types/schemas/stream_profile_base'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import {PreferredFormatReg} from "../types/local_media_profile";
+import PageHeader from '../components/common/PageHeader'
 import PageSubtitle from "../components/common/PageSubtitle";
 import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
 import {RssStreamProfileUpdateSchema} from '../types/schemas/rss_stream_profile'
@@ -121,19 +122,20 @@ export default function StreamProfilesPage() {
 
     return (
         <section className="view" aria-labelledby="stream-profiles-title">
-            <div className="view-header profile-table-header">
-                <h1 id="stream-profiles-title">Stream Profiles</h1>
-                <PageSubtitle summary={<>Control how VODLoft streams each collection.</>}>
-                    <p>Stream Profiles allow you to control how each collection is streamed. You can stream episodes straight from the files
-                        you downloaded, or directly from DW. </p>
-                    <p>For now, a stream within VODLoft just means opening an RSS feed for it. More streaming options might come later.</p>
-                    <p>Use multiple profiles per collection to fit different listening or
-                        viewing needs.</p>
-                </PageSubtitle>
-                {canManage && (
-                    <ProfileTableActions selection={selection} addTo="/add-stream-profile" addLabel="Add stream profile"/>
+            <PageHeader
+                title="Stream Profiles"
+                titleId="stream-profiles-title"
+                subtitle={(
+                    <PageSubtitle summary={<>Control how VODLoft streams each collection.</>}>
+                        <p>Stream Profiles allow you to control how each collection is streamed. You can stream episodes straight from the files
+                            you downloaded, or directly from DW. </p>
+                        <p>For now, a stream within VODLoft just means opening an RSS feed for it. More streaming options might come later.</p>
+                        <p>Use multiple profiles per collection to fit different listening or
+                            viewing needs.</p>
+                    </PageSubtitle>
                 )}
-            </div>
+                actions={canManage && <ProfileTableActions selection={selection} addTo="/add-stream-profile" addLabel="Add stream profile"/>}
+            />
 
             <ProfileTableFilters
                 search={filters.search ?? ''}

@@ -15,6 +15,7 @@ import {
 import {faIcon} from '../icons/faIcon'
 import DataTable, { Column } from '../components/DataTable/DataTable';
 import ConfirmDeleteDialog, { ConfirmDeleteDialogRef } from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
+import PageHeader from '../components/common/PageHeader'
 import PageSubtitle from "../components/common/PageSubtitle";
 import OpaqueOutputTemplateCode from '../components/LocalMediaProfile/OpaqueOutputTemplateCode'
 import {localMediaProfileEndpoint} from '../types/local_media_profile'
@@ -150,17 +151,18 @@ export default function LocalMediaProfilesPage() {
 
     return (
         <section className="view" aria-labelledby="profiles-title">
-            <div className="view-header profile-table-header">
-                <h1 id="profiles-title">Local Media Profiles</h1>
-                <PageSubtitle summary={<>Define how downloaded files are stored and in what format.</>}>
-                    <p>A Local Media Profile controls the output path and the preferred file format for your downloads
-                        across collections and movies. You can create multiple profiles (e.g., “Podcasts to ABS”, “Videos to NAS”) and
-                        reuse them.</p>
-                </PageSubtitle>
-                {canManage && (
-                    <ProfileTableActions selection={selection} addTo="/add-local-media-profile" addLabel="Add media profile"/>
+            <PageHeader
+                title="Local Media Profiles"
+                titleId="profiles-title"
+                subtitle={(
+                    <PageSubtitle summary={<>Define how downloaded files are stored and in what format.</>}>
+                        <p>A Local Media Profile controls the output path and the preferred file format for your downloads
+                            across collections and movies. You can create multiple profiles (e.g., “Podcasts to ABS”, “Videos to NAS”) and
+                            reuse them.</p>
+                    </PageSubtitle>
                 )}
-            </div>
+                actions={canManage && <ProfileTableActions selection={selection} addTo="/add-local-media-profile" addLabel="Add media profile"/>}
+            />
 
             <ProfileTableFilters
                 search={filters.search ?? ''}

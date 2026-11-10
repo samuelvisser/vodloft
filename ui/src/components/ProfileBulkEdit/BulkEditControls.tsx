@@ -1,5 +1,5 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {Link} from 'react-router-dom'
+import {PageHeaderAction} from '../common/PageHeader'
 import {faIcon} from '../../icons/faIcon'
 import type {BulkResult} from '../../types/schemas/profile_bulk'
 import {countOf} from './bulkApi'
@@ -13,37 +13,15 @@ type ProfileTableActionsProps = {
     addLabel: string
 }
 
-/**
- * Bulk edit and Add, side by side in a profile table's header. They never stack: when the header is too narrow for
- * their words they become round icon buttons, and the words stay for screen readers and as a tooltip.
- */
+/** Bulk edit, which becomes Done while it is on, and Add: the buttons in a profile table's PageHeader. */
 export function ProfileTableActions({selection, addTo, addLabel}: ProfileTableActionsProps) {
     return (
-        <div className="view-header-actions">
-            <BulkEditButton selection={selection}/>
-            <Link className="btn btn-primary view-header-action" to={addTo} title={addLabel}>
-                <FontAwesomeIcon icon={faIcon('fass', 'plus')} aria-hidden="true"/>
-                <span className="view-header-action-label">{addLabel}</span>
-            </Link>
-        </div>
-    )
-}
-
-/** Turns bulk edit on beside a table's Add button, and becomes Done while it is on. */
-function BulkEditButton({selection}: {selection: BulkSelection}) {
-    if (selection.active) {
-        return (
-            <button type="button" className="btn btn-primary view-header-action" onClick={selection.stop} title="Done">
-                <FontAwesomeIcon icon={faIcon('fass', 'check')} aria-hidden="true"/>
-                <span className="view-header-action-label">Done</span>
-            </button>
-        )
-    }
-    return (
-        <button type="button" className="btn btn-secondary view-header-action" onClick={selection.start} title="Bulk edit">
-            <FontAwesomeIcon icon={faIcon('fass', 'list-check')} aria-hidden="true"/>
-            <span className="view-header-action-label">Bulk edit</span>
-        </button>
+        <>
+            {selection.active
+                ? <PageHeaderAction icon={faIcon('fass', 'check')} label="Done" onClick={selection.stop}/>
+                : <PageHeaderAction icon={faIcon('fass', 'list-check')} label="Bulk edit" variant="secondary" onClick={selection.start}/>}
+            <PageHeaderAction icon={faIcon('fass', 'plus')} label={addLabel} to={addTo}/>
+        </>
     )
 }
 
