@@ -113,6 +113,49 @@
     text-decoration: underline;
 }
 
+.episode-view .episode-summary-label {
+    font-weight: 600;
+}
+
+/* Labels such as the episode type and the access read like the rest of the line, each split from what comes
+   before it by the same line as the separators between the dates. */
+.episode-view .episode-summary > * + .episode-summary-label::before,
+.episode-view .episode-summary-label + .episode-status::before {
+    content: '';
+    width: 1px;
+    height: 18px;
+    margin-right: 5px;
+    background: var(--border-color, #d9d9d9);
+}
+
+.episode-view .episode-type-label {
+    color: var(--text);
+}
+
+.episode-view .episode-type-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.episode-view .access-label {
+    color: #6d28d9;
+}
+
+.episode-view .drm-label {
+    color: #c2410c;
+}
+
+@media (prefers-color-scheme: dark) {
+    .episode-view .access-label {
+        color: #c4b5fd;
+    }
+
+    .episode-view .drm-label {
+        color: #fdba74;
+    }
+}
+
 .episode-view .episode-status.is-live {
     color: var(--error, #d64545);
     font-weight: 600;
@@ -416,6 +459,12 @@
 
     .episode-view .episode-summary-separator {
         height: 16px;
+    }
+
+    .episode-view .episode-summary > * + .episode-summary-label::before,
+    .episode-view .episode-summary-label + .episode-status::before {
+        height: 16px;
+        margin-right: 2px;
     }
 
     .episode-view .episode-description {

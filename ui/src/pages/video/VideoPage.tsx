@@ -156,8 +156,8 @@ export default function VideoPage() {
                     </div>
                     <div className="episode-summary" aria-label="Video metadata">
                         <SourceBadge sourceKey={video.sourceKey}/>
-                        {video.drmProtected && <DrmBadge/>}
-                        <ItemAccessBadge item={video}/>
+                        {video.drmProtected && <DrmBadge asText/>}
+                        <ItemAccessBadge item={video} asText/>
                         {video.authorName && (
                             <>
                                 <span className="episode-summary-separator" aria-hidden="true"/>

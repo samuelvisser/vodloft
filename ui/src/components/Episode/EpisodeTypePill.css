@@ -10,3 +10,8 @@
     white-space: nowrap;
     box-shadow: none;
 }
+
+/* A type without a colour of its own gets a plain dot; the badge-<type> colours win over this. */
+:where(.episode-type-dot) {
+    background: var(--muted);
+}
