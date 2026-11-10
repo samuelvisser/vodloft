@@ -30,7 +30,7 @@ from typing import Any, Literal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.services.site_settings import download_profile_defaults
+from backend.services.site_settings import download_profile_defaults, local_media_profile_site_defaults
 from backend.services.sites import CollectionAlreadyAddedError, collection_site
 
 import importer.pinchflat  # noqa: F401  (registers the importer)
@@ -83,7 +83,9 @@ _PROFILE_FIELDS = (
     "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs", "container", "audio_codec",
     "audio_language",
 )
-_DOWNLOAD_PROFILE_FIELDS = ("delete_older_episodes", "auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments")
+_DOWNLOAD_PROFILE_FIELDS = ("delete_older_episodes",)
+_SITE_CHOICE_FIELDS = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments")
+"""What the other program had per Download Profile, which VODLoft keeps on the Local Media Profile per Site."""
 _OPTIONAL_DOWNLOAD_PROFILE_FIELDS = ("upgrade_check", "upgrade_after_days", "upgrade_repeat")
 """Download Profile fields an importer only sends when the other program had the setting."""
 _COLLECTION_FIELDS = ("cookies_mode", "check_frequency", "check_cron")
@@ -385,9 +387,7 @@ def _profile_wanted(plan: ProfilePlan) -> dict[str, object]:
 
 
 def _download_profile_values(profile: DownloadProfile) -> dict[str, object]:
-    values = {name: getattr(profile, name) for name in (*_DOWNLOAD_PROFILE_FIELDS, *_OPTIONAL_DOWNLOAD_PROFILE_FIELDS)}
-    values["sponsorblock_segments"] = dict(values["sponsorblock_segments"])
-    return values
+    return {name: getattr(profile, name) for name in (*_DOWNLOAD_PROFILE_FIELDS, *_OPTIONAL_DOWNLOAD_PROFILE_FIELDS)}
 
 
 def _download_profile_wanted(plan: CollectionPlan) -> dict[str, object]:
@@ -1115,6 +1115,7 @@ def _upsert_download_profile(
 ) -> DownloadProfile | None:
     if plan.download_profile is None:
         return None
+    _keep_site_choices(profile, collection, plan.download_profile)
     external_id = f"{plan.external_id}:{plan.profile_external_id}"
     link = links.get(("download_profile", external_id))
     existing = session.get(DownloadProfile, link.entity_id) if link and link.entity_id else None
@@ -1147,6 +1148,18 @@ def _upsert_download_profile(
         _report_changes(report, f"{collection.title} Download Profile", changes)
     _remember(session, links, run.importer, "download_profile", external_id, existing.id, hashes, unsupported, run.id)
     return existing
+
+
+def _keep_site_choices(profile: CollectionLocalMediaProfile, collection: Collection, fields: dict) -> None:
+    """Keep what the other program had for auto-generated subtitles and SponsorBlock on the profile, for the
+    collection's Site, unless the profile already has settings of its own for that Site."""
+    site = collection_site(collection)
+    had = {name: fields[name] for name in _SITE_CHOICE_FIELDS if fields.get(name) is not None}
+    if not had or site.key in profile.site_settings:
+        return
+    choices = {**local_media_profile_site_defaults(site), **had}
+    choices["sponsorblock_segments"] = {**local_media_profile_site_defaults(site)["sponsorblock_segments"], **dict(had.get("sponsorblock_segments", {}))}
+    profile.site_settings = {**profile.site_settings, site.key: choices}
 
 
 def _index_running(session: Session, collection_id: int) -> bool:

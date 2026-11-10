@@ -36,11 +36,16 @@ _PROFILE_FIELDS = {
     SiteSetting.UPGRADE_REPEAT: "upgrade_repeat",
     SiteSetting.UPGRADE_IMPROVEMENTS: "upgrade_improvements",
     SiteSetting.UPGRADE_LENGTH_MINUTES: "upgrade_length_minutes",
+}
+"""The Download Profile field each download profile setting gives its starting value."""
+
+_LOCAL_MEDIA_PROFILE_FIELDS = {
     SiteSetting.AUTO_SUBTITLES: "auto_subtitles",
     SiteSetting.SPONSORBLOCK: "sponsorblock_enabled",
     SiteSetting.SPONSORBLOCK_SEGMENTS: "sponsorblock_segments",
 }
-"""The Download Profile field each download profile setting gives its starting value."""
+"""The field of a Local Media Profile's settings for one Site that each local media profile setting gives its
+starting value."""
 
 
 def site_setting(site_key: Optional[str], key: SiteSetting) -> Any:
@@ -94,12 +99,35 @@ def download_profile_defaults(site: Site) -> dict[str, Any]:
     ]
     # With nothing that counts as better by default, the check starts off.
     values["upgrade_check"] = bool(values["upgrade_check"]) and bool(values["upgrade_improvements"])
-    # The same for SponsorBlock when every segment type is kept by default.
-    values["sponsorblock_enabled"] = (
-        bool(values["sponsorblock_enabled"]) and sponsorblock_changes_anything(values["sponsorblock_segments"])
-    )
     if not site.settings.offers(SiteSetting.DOWNLOAD_WITH_COUNTDOWN):
         values["download_with_countdown"] = False
+    return values
+
+
+def local_media_profile_site_defaults(site: Site) -> dict[str, Any]:
+    """What a Local Media Profile does on the Site until it has settings of its own for it, by field. A setting
+    the Site does not show is off."""
+    values = {field: site_setting_of(site, key)[0] for key, field in _LOCAL_MEDIA_PROFILE_FIELDS.items()}
+    values["auto_subtitles"] = str(values["auto_subtitles"]) if offers(site, SiteSetting.AUTO_SUBTITLES) else "never"
+    values["sponsorblock_segments"] = {str(key): str(value) for key, value in dict(values["sponsorblock_segments"]).items()}
+    # SponsorBlock starts off when every segment type is kept.
+    values["sponsorblock_enabled"] = (
+        offers(site, SiteSetting.SPONSORBLOCK) and bool(values["sponsorblock_enabled"])
+        and sponsorblock_changes_anything(values["sponsorblock_segments"])
+    )
+    return values
+
+
+def local_media_profile_site_settings(profile, site: Site) -> dict[str, Any]:
+    """What a Local Media Profile does on the Site: its own settings for the Site, or else the Site's. A setting
+    the Site does not show stays off."""
+    values = local_media_profile_site_defaults(site)
+    own = (profile.site_settings or {}).get(site.key) or {}
+    if offers(site, SiteSetting.AUTO_SUBTITLES) and "auto_subtitles" in own:
+        values["auto_subtitles"] = own["auto_subtitles"]
+    if offers(site, SiteSetting.SPONSORBLOCK):
+        values["sponsorblock_enabled"] = bool(own.get("sponsorblock_enabled", values["sponsorblock_enabled"]))
+        values["sponsorblock_segments"] = {**values["sponsorblock_segments"], **own.get("sponsorblock_segments", {})}
     return values
 
 

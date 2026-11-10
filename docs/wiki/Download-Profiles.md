@@ -173,35 +173,8 @@ If you only want the finished episode, leave countdown downloading disabled.
 
 ## YouTube and other sites
 
-Download Profiles of YouTube Collections have a YouTube section under Which episodes, with auto-generated subtitles and SponsorBlock. Collections on other sites yt-dlp downloads have the same section with auto-generated subtitles only, under the site's name. The Daily Wire makes no subtitles, so it has no such section.
-
-### Auto-generated subtitles
-
-This setting only appears when the Local Media Profile stores subtitles.
-
-**Use auto-generated subtitles** never, only when there are no real ones (the default), or always. YouTube makes subtitles automatically for most videos; they follow the subtitle languages of the Local Media Profile. When the Local Media Profile saves no subtitles, the choice isn't available and the form links to that profile instead.
-
-- **Only when there are no real ones** uses an auto-generated subtitle for a language that has no subtitle a person made.
-- **Always** also adds it next to a real one, as its own track marked auto-generated (`Episode.nl.auto.srt` beside the media).
-
-### SponsorBlock
-
-[SponsorBlock](https://sponsor.ajay.app) is a community database of parts of YouTube videos: sponsor reads, "like and subscribe" reminders, intros and so on. Switch it on, then choose for each type of part:
-
-- **Keep**: left as it is.
-- **Chapter**: becomes a named chapter that your player can skip. Nothing is removed, so this is the safe choice.
-- **Cut out**: removed from the file. This is final; the cut part isn't kept anywhere.
-
-The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Preview and recap, Hook and greetings, Filler and Non-music section. Two more can only be kept or made a chapter, because there is nothing to cut out:
-
-- **Highlight**: the one moment viewers mark as where the video really gets going.
-- **Viewer chapters**: chapter titles viewers wrote, mostly for videos without chapters of their own. When other types are chapters too, they all share one list: a part that falls inside a viewer chapter splits it, and the overlap is named after both. On a video that has its own chapters, the two sets of titles mix, so this starts as Keep.
-
-A new YouTube Download Profile makes chapters of sponsors, intros, outros and the highlight, and keeps everything else. Saving a profile that keeps every type turns SponsorBlock off, and a new profile starts with it off when your defaults keep every type. Profiles from before VODLoft 0.7.0 start with SponsorBlock off.
-
-Most parts are submitted in the days after a video comes out, so a download made right after upload may find few of them. When a download found parts, the episode page shows them on a timeline: each part, whether it became a chapter or was cut out, and how much shorter the file is.
-
-An episode you download by hand follows the Collection's Download Profile for the same Local Media Profile.
+Auto-generated subtitles and SponsorBlock are set on the Local Media Profile, for each site, so manual downloads use
+them too (see [[Local-Media-Profiles#youtube-and-other-sites]]).
 
 ## Using multiple profiles
 

@@ -13,11 +13,6 @@ from backend.types.download_profile_types import (
     EpisodeFilterAction,
     EpisodeFilterField,
     EpisodeTagKey,
-    AutoSubtitles,
-    SponsorBlockAction,
-    SponsorBlockCategory,
-    check_sponsorblock_segments,
-    sponsorblock_changes_anything,
     UpgradeImprovement,
     UpgradeRepeat,
 )
@@ -100,9 +95,6 @@ class DownloadProfileAPIBaseIn(RequestBase):
     download_with_countdown: bool
     redownload_final: bool
     delete_older_episodes: bool
-    auto_subtitles: AutoSubtitles
-    sponsorblock_enabled: bool
-    sponsorblock_segments: dict[SponsorBlockCategory, SponsorBlockAction]
     upgrade_check: bool
     upgrade_after_days: int = Field(ge=1, le=365)
     upgrade_repeat: UpgradeRepeat
@@ -110,14 +102,6 @@ class DownloadProfileAPIBaseIn(RequestBase):
     upgrade_length_minutes: int = Field(ge=1, le=600)
 
     filters: list[DownloadProfileFilterAPIIn] = Field(default_factory=list, max_length=50)
-
-    @field_validator("sponsorblock_segments")
-    @classmethod
-    def _validate_sponsorblock_segments(cls, value: dict) -> dict:
-        if set(value) != {category.value for category in SponsorBlockCategory}:
-            raise ValueError("Choose Keep, Chapter or Cut out for every SponsorBlock segment type")
-        check_sponsorblock_segments(value)
-        return value
 
     @field_validator("upgrade_improvements")
     @classmethod
@@ -130,13 +114,6 @@ class DownloadProfileAPIBaseIn(RequestBase):
         # form opens with it collapsed.
         if not self.upgrade_improvements:
             self.upgrade_check = False
-        return self
-
-    @model_validator(mode="after")
-    def _sponsorblock_needs_a_segment_type(self):
-        # Keeping every segment type does nothing: SponsorBlock is saved off, so the form opens with it collapsed.
-        if not sponsorblock_changes_anything(self.sponsorblock_segments):
-            self.sponsorblock_enabled = False
         return self
 
     _one_line_per_date = field_validator("filters")(classmethod(lambda cls, value: _one_line_per_date(value)))
@@ -172,9 +149,6 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     download_with_countdown: bool
     redownload_final: bool
     delete_older_episodes: bool
-    auto_subtitles: AutoSubtitles
-    sponsorblock_enabled: bool
-    sponsorblock_segments: dict[str, SponsorBlockAction]
     upgrade_check: bool
     upgrade_after_days: int
     upgrade_repeat: UpgradeRepeat
@@ -257,10 +231,3 @@ class WaitingForCountdownAPIRead(ResponseBase):
     local_media_profile_id: int
 
 
-class AutoSubtitlesUseAPIRead(ResponseBase):
-    """A YouTube Download Profile that uses a Local Media Profile, and its auto-generated subtitle choice."""
-
-    download_profile_id: int
-    collection_id: int
-    collection_title: str
-    auto_subtitles: AutoSubtitles

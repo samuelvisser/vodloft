@@ -13,6 +13,9 @@ from pydantic import Field, computed_field, field_validator, model_validator
 from backend.services.local_media_profile_sites import (
     offers_format, profile_download_options, site_offered_for_type, takes_upcoming_sites,
 )
+from backend.types.download_profile_types import (
+    AutoSubtitles, SponsorBlockAction, SponsorBlockCategory, check_sponsorblock_segments, sponsorblock_changes_anything,
+)
 from backend.types.input_model import InputModel
 from backend.types.local_media_profile_types import (
     GOAL_PRESETS,
@@ -87,6 +90,29 @@ class IndexingValueDefinition(InputModel):
             )
         return value
 
+class SiteDownloadChoices(InputModel):
+    """What a Local Media Profile does on one Site with the settings only some Sites show."""
+
+    auto_subtitles: AutoSubtitles
+    sponsorblock_enabled: bool
+    sponsorblock_segments: dict[SponsorBlockCategory, SponsorBlockAction]
+
+    @field_validator("sponsorblock_segments")
+    @classmethod
+    def _every_segment_type(cls, value: dict) -> dict:
+        if set(value) != {category.value for category in SponsorBlockCategory}:
+            raise ValueError("Choose Keep, Chapter or Cut out for every SponsorBlock segment type")
+        check_sponsorblock_segments(value)
+        return value
+
+    @model_validator(mode="after")
+    def _sponsorblock_needs_a_segment_type(self):
+        # Keeping every segment type does nothing: SponsorBlock is saved off, so the form opens with it collapsed.
+        if not sponsorblock_changes_anything(self.sponsorblock_segments):
+            self.sponsorblock_enabled = False
+        return self
+
+
 class LocalMediaProfileInput(InputModel):
     """What every kind of Local Media Profile is made of, validated."""
 
@@ -112,6 +138,8 @@ class LocalMediaProfileInput(InputModel):
     """The Sites the profile is offered for; a new profile without them starts with every Site VODLoft knows."""
     include_upcoming_sites: bool = True
     """Sites VODLoft sees for the first time join the profile's Sites."""
+    site_settings: dict[str, SiteDownloadChoices] | None = Field(default=None, max_length=500)
+    """Settings only some Sites show, by Site key; a Site left out follows its own from Settings."""
 
     @field_validator("subtitle_languages")
     @classmethod
@@ -182,12 +210,12 @@ class LocalMediaProfileInput(InputModel):
     def fields_kept_on_update(self) -> set[str]:
         """Choices an update leaves as they are when it does not send them, rather than resetting them to defaults."""
         kept = _KEPT_WHEN_UNSET - self.model_fields_set
-        # Without a list of Sites, an update keeps the profile's own.
-        return kept | {"site_keys"} if self.site_keys is None else kept
+        # Without Sites or their settings, an update keeps the profile's own.
+        return kept | {name for name in ("site_keys", "site_settings") if getattr(self, name) is None}
 
 
 _KEPT_WHEN_UNSET = {
-    "site_keys", "include_upcoming_sites", "subtitle_mode", "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs",
+    "site_keys", "include_upcoming_sites", "site_settings", "subtitle_mode", "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs",
     "codec_fallback", "container", "audio_codec", "audio_format", "audio_language",
 }
 

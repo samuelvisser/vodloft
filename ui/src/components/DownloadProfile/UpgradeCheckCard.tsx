@@ -4,7 +4,8 @@ import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
-import {useLocalMediaProfiles, useSiteOptions} from '../../lib/queries'
+import {useLocalMediaProfileSites, useLocalMediaProfiles, useSiteOptions} from '../../lib/queries'
+import {siteDownloadChoices} from '../../types/local_media_profile'
 import type {UpgradeImprovement} from '../../types/schemas/download_profile'
 import NumberInput from '../common/NumberInput'
 import './UpgradeCheckCard.css'
@@ -35,10 +36,10 @@ const CHOICES: Record<Exclude<UpgradeImprovement, 'length'>, {label: string, hel
  */
 export default function UpgradeCheckCard({form, collectionId, sourceKey, collectionUrl}: Props) {
     const {control, register, setValue, formState: {errors}} = form
-    const [withCountdown, upgradeCheck, afterDays, improvements, sponsorblockEnabled, localMediaProfileId] = useWatch({
+    const [withCountdown, upgradeCheck, afterDays, improvements, localMediaProfileId] = useWatch({
         control,
-        name: ['downloadWithCountdown', 'upgradeCheck', 'upgradeAfterDays', 'upgradeImprovements', 'sponsorblockEnabled', 'localMediaProfileId'],
-    }) as [boolean, boolean, number, UpgradeImprovement[] | undefined, boolean, number | string | undefined]
+        name: ['downloadWithCountdown', 'upgradeCheck', 'upgradeAfterDays', 'upgradeImprovements', 'localMediaProfileId'],
+    }) as [boolean, boolean, number, UpgradeImprovement[] | undefined, number | string | undefined]
 
     const {data: site} = useSiteOptions({collectionId, sourceKey, url: collectionUrl})
     // A profile that already downloads with the countdown keeps the switches, so it can turn them off.
@@ -47,6 +48,7 @@ export default function UpgradeCheckCard({form, collectionId, sourceKey, collect
     const offersUpgrades = offered.length > 0
     const {data: mediaProfiles} = useLocalMediaProfiles()
     const mediaProfile = mediaProfiles?.find((profile) => String(profile.id) === String(localMediaProfileId))
+    const {data: profileSites} = useLocalMediaProfileSites()
 
     if (!offersCountdown && !offersUpgrades) return null
 
@@ -69,7 +71,8 @@ export default function UpgradeCheckCard({form, collectionId, sourceKey, collect
     // Only what the Site offers, and of that only what the profile can use.
     const usable: Record<UpgradeImprovement, boolean> = {
         resolution: !audioOnly,
-        sponsorblock: sponsorblockEnabled,
+        // The Local Media Profile marks or cuts SponsorBlock segments on the Site.
+        sponsorblock: !mediaProfile || !!(site && siteDownloadChoices(mediaProfile, profileSites, site.siteKey)?.sponsorblockEnabled),
         subtitles: storesSubtitles,
         codec: !audioOnly,
         length: true,

@@ -1,39 +1,28 @@
-.youtube-section {
+.site-settings-section {
     display: grid;
     gap: 16px;
-    --yt-border: rgba(100, 116, 139, 0.24);
-    --yt-highlight: rgba(14, 165, 233, 0.12);
-    --yt-card-bg: rgba(148, 163, 184, 0.06);
-    --yt-control-border: rgba(100, 116, 139, 0.35);
-    --yt-choice-on: #2563eb;
-    --yt-choice-on-text: #fff;
-    --yt-choice-cut: #dc2626;
+    --site-border: rgba(100, 116, 139, 0.24);
+    --site-card-bg: rgba(148, 163, 184, 0.06);
+    --site-control-border: rgba(100, 116, 139, 0.35);
+    --site-choice-on: #2563eb;
+    --site-choice-on-text: #fff;
+    --site-choice-cut: #dc2626;
 }
 
 @media (prefers-color-scheme: dark) {
-    .youtube-section {
-        --yt-border: rgba(148, 163, 184, 0.22);
-        --yt-highlight: rgba(56, 189, 248, 0.16);
-        --yt-card-bg: rgba(255, 255, 255, 0.035);
-        --yt-control-border: rgba(148, 163, 184, 0.28);
-        --yt-choice-on: rgba(59, 130, 246, 0.28);
-        --yt-choice-cut: rgba(239, 68, 68, 0.28);
+    .site-settings-section {
+        --site-border: rgba(148, 163, 184, 0.22);
+        --site-card-bg: rgba(255, 255, 255, 0.035);
+        --site-control-border: rgba(148, 163, 184, 0.28);
+        --site-choice-on: rgba(59, 130, 246, 0.28);
+        --site-choice-cut: rgba(239, 68, 68, 0.28);
     }
 }
 
-.youtube-section-heading {
+.site-settings-heading {
     margin: 0 0 -8px;
     font-size: 1rem;
     font-weight: 600;
-}
-
-/* The Local Media Profile links to the auto-generated subtitles row; it lights up briefly. */
-.youtube-section .form-row.is-highlighted {
-    margin: -8px;
-    padding: 8px;
-    border-radius: 8px;
-    background: var(--yt-highlight);
-    transition: background 0.6s ease;
 }
 
 /* SponsorBlock: a card per group, three across on wide screens, with Keep | Chapter | Cut out per type. */
@@ -48,9 +37,9 @@
     margin: 0;
     padding: 4px 12px 6px;
     min-width: 0;
-    border: 1px solid var(--yt-border);
+    border: 1px solid var(--site-border);
     border-radius: 10px;
-    background: var(--yt-card-bg);
+    background: var(--site-card-bg);
 }
 
 .sponsorblock-group legend {
@@ -71,7 +60,7 @@
     align-items: center;
     gap: 8px;
     padding: 5px 0;
-    border-bottom: 1px solid var(--yt-border);
+    border-bottom: 1px solid var(--site-border);
 }
 
 .sponsorblock-row:last-child {
@@ -101,7 +90,7 @@
     display: inline-flex;
     flex: none;
     overflow: hidden;
-    border: 1px solid var(--yt-control-border);
+    border: 1px solid var(--site-control-border);
     border-radius: 8px;
 }
 
@@ -111,7 +100,7 @@
 }
 
 .sponsorblock-choice label + label {
-    border-left: 1px solid var(--yt-control-border);
+    border-left: 1px solid var(--site-control-border);
 }
 
 .sponsorblock-choice input {
@@ -136,13 +125,13 @@
 }
 
 .sponsorblock-choice input:checked + span {
-    background: var(--yt-choice-on);
-    color: var(--yt-choice-on-text);
+    background: var(--site-choice-on);
+    color: var(--site-choice-on-text);
 }
 
 /* Cut out is final, so it stands out in red. */
 .sponsorblock-choice input[value="cut"]:checked + span {
-    background: var(--yt-choice-cut);
+    background: var(--site-choice-cut);
 }
 
 .sponsorblock-choice input:focus-visible + span {
@@ -150,6 +139,6 @@
     outline-offset: -2px;
 }
 
-.youtube-section .help a {
+.site-settings-section .help a {
     color: inherit;
 }
