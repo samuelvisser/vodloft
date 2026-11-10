@@ -143,3 +143,8 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* Links and buttons share one row: give them one font size (browsers size buttons and links differently)
+   and drop the Actions menu's taller minimum so every button in the row is the same height. */
+.local-media-profile-page-actions .btn { font-size: 0.8333rem; }
+.local-media-profile-page-actions .action-menu-trigger { min-height: 0; }

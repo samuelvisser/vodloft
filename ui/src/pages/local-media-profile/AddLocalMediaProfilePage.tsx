@@ -2,10 +2,11 @@ import {useCallback, useEffect, useMemo, useState} from 'react'
 import LocalMediaProfileForm, {LocalMediaProfileMode} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import IndexingValuesEditorButton from '../../components/LocalMediaProfile/IndexingValuesEditorButton'
 import {useNavigate, useSearchParams} from 'react-router-dom'
-import {useQueryClient} from '@tanstack/react-query'
+import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {
     LocalMediaProfileCreateIn,
     LocalMediaProfileCreateOut,
+    LocalMediaProfileRead,
 } from '../../types/schemas/local_media_profile'
 import {
     MovieLocalMediaProfileCreateIn,
@@ -31,24 +32,66 @@ import {
     saveLocalMediaProfileDraft,
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
 import {getZodDefaults} from '../../utils/defaultZod'
-import {localMediaProfileEndpoint} from '../../types/local_media_profile'
+import {LocalMediaProfileTypeReg, localMediaProfileEndpoint} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
 
 
+/** The settings of an existing profile as a new profile, under a name the user still has to accept. */
+function duplicateValues(profile: LocalMediaProfileRead): LocalMediaProfileCreateIn {
+    const values = {...profile, name: `${profile.name} (copy)`}
+    if (profile.type === 'movie') return MovieLocalMediaProfileCreateSchema.parse(values)
+    if (profile.type === 'video') return VideoLocalMediaProfileCreateSchema.parse(values)
+    return CollectionLocalMediaProfileCreateSchema.parse(values)
+}
+
 export default function AddLocalMediaProfilePage() {
+    const [searchParams] = useSearchParams()
+    const duplicateSlug = searchParams.get('duplicate')
+
+    const {data: source, isLoading, error} = useQuery<LocalMediaProfileRead>({
+        queryKey: ['localMediaProfile', duplicateSlug],
+        enabled: !!duplicateSlug,
+        refetchOnMount: 'always',
+        queryFn: async ({signal}) => {
+            const res = await fetch(`${apiUrl()}/local-media-profiles/${encodeURIComponent(duplicateSlug!)}`, {signal, credentials: 'include'})
+            if (!res.ok) throw new Error(`Failed to load profile (${res.status})`)
+            return await res.json() as LocalMediaProfileRead
+        },
+    })
+
+    if (!duplicateSlug) return <AddLocalMediaProfileForm/>
+
+    if (isLoading || !source || error) {
+        return (
+            <section className="view" aria-labelledby="add-media-profile-title">
+                <div className="view-header">
+                    <h1 id="add-media-profile-title">Duplicate local media profile</h1>
+                </div>
+                <p>{isLoading ? 'Loading…' : 'Profile not found.'}</p>
+            </section>
+        )
+    }
+
+    return <AddLocalMediaProfileForm key={source.slug} source={source}/>
+}
+
+function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const qc = useQueryClient()
-    const draftKey = addLocalMediaProfileDraftKey()
+    // A duplicate starts from its source profile and leaves the draft of a new profile alone.
+    const draftKey = source ? null : addLocalMediaProfileDraftKey()
     const restoredDraft = useMemo(
-        () => loadLocalMediaProfileDraft<LocalMediaProfileCreateIn>(draftKey),
-        [draftKey],
+        () => source
+            ? {mode: source.type, values: duplicateValues(source)}
+            : loadLocalMediaProfileDraft<LocalMediaProfileCreateIn>(addLocalMediaProfileDraftKey()),
+        [source],
     )
     const requestedMode = searchParams.get('type')
-    const explicitMode = requestedMode === 'movie' || requestedMode === 'collection' || requestedMode === 'video'
+    const explicitMode = !source && (requestedMode === 'movie' || requestedMode === 'collection' || requestedMode === 'video')
         ? requestedMode
         : undefined
-    const initialMode: LocalMediaProfileMode = explicitMode ?? restoredDraft?.mode ?? 'collection'
+    const initialMode: LocalMediaProfileMode = explicitMode || (restoredDraft?.mode ?? 'collection')
     const [mode, setMode] = useState<LocalMediaProfileMode>(initialMode)
 
     const formCollection = useForm<WithRoot<CollectionLocalMediaProfileCreateIn>>({
@@ -90,6 +133,7 @@ export default function AddLocalMediaProfilePage() {
     const form = ({collection: formCollection, movie: formMovie, video: formVideo}[mode]) as UseFormReturn<any>
 
     useEffect(() => {
+        if (!draftKey) return
         const saveDraft = (values: Partial<LocalMediaProfileCreateIn>) => {
             saveLocalMediaProfileDraft<LocalMediaProfileCreateIn>(draftKey, {
                 mode,
@@ -116,12 +160,12 @@ export default function AddLocalMediaProfilePage() {
 
     const onSuccess = async () => {
         await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
-        clearLocalMediaProfileDraft(draftKey)
+        if (draftKey) clearLocalMediaProfileDraft(draftKey)
         navigate('/local-media-profiles')
     }
 
     const onCancel = useCallback(() => {
-        clearLocalMediaProfileDraft(draftKey)
+        if (draftKey) clearLocalMediaProfileDraft(draftKey)
         navigate('/local-media-profiles')
     }, [draftKey, navigate])
 
@@ -135,14 +179,16 @@ export default function AddLocalMediaProfilePage() {
     return (
         <section className="view" aria-labelledby="add-media-profile-title">
             <div className="view-header">
-                <h1 id="add-media-profile-title">Add local media profile</h1>
+                <h1 id="add-media-profile-title">{source ? 'Duplicate local media profile' : 'Add local media profile'}</h1>
                 {mode === 'collection' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
             <form className="form" onSubmit={onCreate} noValidate>
                 <div className="form-row">
                     <label>Profile type</label>
-                    <SegmentedOptions
+                    {source ? (
+                        <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(source.type)}</div>
+                    ) : <SegmentedOptions
                         name="local-media-profile-mode"
                         value={mode}
                         onChange={(value) => setMode(value as LocalMediaProfileMode)}
@@ -163,7 +209,7 @@ export default function AddLocalMediaProfilePage() {
                                 description: 'Store single videos added on their own',
                             },
                         ]}
-                    />
+                    />}
                 </div>
 
                 <LocalMediaProfileForm form={form} mode={mode} isCreating/>
