@@ -31,7 +31,7 @@ NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
 PROFILE_LOOKUP_INDEXES_REVISION = "5b8e1f3c2a90"
 IMPORTED_DOWNLOAD_PROFILES_REVISION = "a0eceaa70db5"
-HEAD_REVISION = "e8b2c4f6a1d3"
+HEAD_REVISION = "d7e173de7e72"
 
 
 @pytest.fixture
@@ -1106,6 +1106,60 @@ def test_local_media_profiles_move_from_sources_to_sites(migration_database):
         }
         columns = {column["name"] for column in inspect(connection).get_columns("local_media_profiles")}
         assert "source_keys" not in columns
+
+
+def test_per_site_settings_of_an_earlier_migration_become_one_value_per_profile(migration_database):
+    """A database that ran the earlier version of e8b2c4f6a1d3 kept these settings per Site in site_settings."""
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "d3a7f1c9e2b5")
+    cut = {"sponsor": "cut"}
+    site_settings = {
+        1: {
+            "vimeo": {"auto_subtitles": "never", "sponsorblock_enabled": False, "sponsorblock_segments": {}},
+            "youtube": {"auto_subtitles": "always", "sponsorblock_enabled": True, "sponsorblock_segments": cut},
+        },
+        2: {"vimeo": {"auto_subtitles": "never", "sponsorblock_enabled": False, "sponsorblock_segments": {}}},
+        3: {},
+    }
+    with engine.begin() as connection:
+        # What the earlier e8b2c4f6a1d3 left behind.
+        connection.execute(text("ALTER TABLE local_media_profiles ADD COLUMN site_settings JSON NOT NULL DEFAULT '{}'"))
+        for column in ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments"):
+            connection.execute(text(f"ALTER TABLE download_profiles DROP COLUMN {column}"))
+        for profile_id, settings in site_settings.items():
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs, "
+                "site_keys, site_settings) VALUES (:id, :slug, :slug, 'collection', '/x/' || :slug || '/{{ title }}.ext', "
+                "'format_1080p', '[]', '[]', :settings)"
+            ), {"id": profile_id, "slug": f"p{profile_id}", "settings": json.dumps(settings)})
+    command.stamp(config, "e8b2c4f6a1d3")
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        profiles = {
+            row.id: (row.auto_subtitles, bool(row.sponsorblock_enabled), json.loads(row.sponsorblock_segments))
+            for row in connection.execute(text(
+                "SELECT id, auto_subtitles, sponsorblock_enabled, sponsorblock_segments FROM local_media_profiles"
+            ))
+        }
+        columns = {column["name"] for column in inspect(connection).get_columns("local_media_profiles")}
+    default_segments = {
+        "sponsor": "chapter", "selfpromo": "keep", "interaction": "keep", "intro": "chapter", "outro": "chapter",
+        "preview": "keep", "filler": "keep", "hook": "keep", "music_offtopic": "keep", "poi_highlight": "chapter",
+        "chapter": "keep",
+    }
+    assert profiles == {
+        # YouTube's settings win.
+        1: ("always", True, {**default_segments, **cut}),
+        # Without YouTube: the other Sites' auto-generated subtitles, and SponsorBlock off.
+        2: ("never", False, default_segments),
+        3: ("fallback", False, default_segments),
+    }
+    assert "site_settings" not in columns
 
 
 def test_auto_subtitles_and_sponsorblock_move_to_the_local_media_profile(migration_database):
