@@ -30,6 +30,9 @@ NO_CACHE_HEADERS = {
 UPSTREAM_CHUNK_BYTES = 10 * 1024 * 1024
 READ_BYTES = 64 * 1024
 UPSTREAM_TIMEOUT_SECONDS = 30
+# The Site now and then refuses a link it has just handed out, and accepts it moments later.
+_REFUSED_STATUSES = frozenset({403, 429, 500, 502, 503})
+_ASK_AGAIN_AFTER_SECONDS = (1.0, 2.0)
 # Look a link up again this long before it expires, so a long episode keeps playing.
 _EXPIRY_MARGIN_SECONDS = 30 * 60
 # How long a link is kept when its Source does not say when it expires.
@@ -101,6 +104,34 @@ def ranged_get(stream: MediaStream, start: int, end: int | None) -> requests.Res
     )
 
 
+def ask_again(stream: MediaStream, start: int, end: int | None, refused: requests.Response) -> requests.Response:
+    """The answer to the same request, asked again a few times while the Site refuses a link that is not old."""
+    response = refused
+    for wait in _ASK_AGAIN_AFTER_SECONDS:
+        if response.status_code not in _REFUSED_STATUSES:
+            break
+        response.close()
+        time.sleep(wait)
+        response = ranged_get(stream, start, end)
+    return response
+
+
+def first_range(
+        stream: MediaStream, start: int, end: int | None, look_up_again: Callable[[], MediaStream],
+) -> tuple[MediaStream, requests.Response]:
+    """The answer to the first request of a response, and the stream that gave it.
+
+    A link the Site refuses with 403 expired early or no longer plays to this address, so it is looked
+    up once more. A new link the Site still refuses is asked for again, as it tends to work moments later.
+    """
+    response = ranged_get(stream, start, end)
+    if response.status_code == 403:
+        response.close()
+        stream = look_up_again()
+        response = ranged_get(stream, start, end)
+    return stream, ask_again(stream, start, end, response)
+
+
 def total_size(response: requests.Response) -> int | None:
     total = response.headers.get("Content-Range", "").rpartition("/")[2]
     return int(total) if total.isdigit() else None
@@ -111,7 +142,7 @@ def stream_bytes(stream: MediaStream, start: int, end: int | None) -> Iterator[b
     position = start
     while end is None or position <= end:
         asked = _chunk_end(position, end) - position + 1
-        response = ranged_get(stream, position, end)
+        response = ask_again(stream, position, end, ranged_get(stream, position, end))
         try:
             if response.status_code not in (200, 206):
                 if response.status_code != 416:

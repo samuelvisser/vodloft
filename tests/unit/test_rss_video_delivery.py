@@ -73,8 +73,8 @@ def test_rss_video_output_modes_use_stable_vodloft_urls(
     assert enclosure is not None
     assert enclosure.attrib["type"] == primary_type
     assert enclosure.attrib["url"].endswith(primary_suffix)
-    # Audio gives its size at 128 kbit/s; the episode is half an hour long.
-    assert enclosure.attrib["length"] == ("28800000" if primary_suffix.endswith(".m4a") else "0")
+    # Audio gives its size at 128 kbit/s and 1080p MP4 video at 3 Mbit/s; the episode is half an hour long.
+    assert enclosure.attrib["length"] == ("28800000" if primary_suffix.endswith(".m4a") else "675000000")
 
     alternates = _children(item, "podcast:alternateEnclosure")
     if alternate_type is None:
@@ -82,10 +82,30 @@ def test_rss_video_output_modes_use_stable_vodloft_urls(
     else:
         assert len(alternates) == 1
         assert alternates[0].attrib["type"] == alternate_type
+        # An app may pass over an MP4 video that says it is empty; an HLS stream has no size.
+        assert alternates[0].attrib["length"] == ("675000000" if alternate_type == "video/mp4" else "0")
         source = _children(alternates[0], "podcast:source")[0]
         assert source.attrib["uri"].endswith(alternate_suffix)
 
     assert item.find("guid").text == "episode-uuid"
+
+
+def test_mp4_video_in_the_rss_cache_gives_its_own_size(monkeypatch):
+    from backend.api.endpoints.feeds import service
+
+    monkeypatch.setattr(service, "get_cached_mp4_size", lambda key: {"episode-uuid-1080p": 123_456}.get(key))
+    channel = Element("channel")
+    service._append_item(
+        channel,
+        media_base_url="https://vodloft.example/feeds/rss/token",
+        episode=_episode(),
+        profile=_profile("audio_mp4"),
+        joined_height=1080,
+        video_height=1080,
+    )
+
+    alternate = _children(channel.find("item"), "podcast:alternateEnclosure")[0]
+    assert alternate.attrib["length"] == "123456"
 
 
 def test_audio_only_uses_stable_m4a_without_video_alternate():

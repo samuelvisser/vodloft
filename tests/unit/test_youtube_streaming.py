@@ -217,6 +217,38 @@ def test_a_refused_url_is_looked_up_again(proxied, monkeypatch):
     assert source.lookups == 2
 
 
+def test_a_new_link_youtube_still_refuses_is_asked_for_again(proxied, monkeypatch):
+    # YouTube now and then refuses a link it has just handed out, and accepts it moments later.
+    upstream = _Upstream(b"abcd", refuse=3)
+    monkeypatch.setattr(requests, "get", upstream.get)
+    from backend.api.endpoints.feeds import upstream as upstream_module
+
+    waits: list[float] = []
+    monkeypatch.setattr(upstream_module.time, "sleep", waits.append)
+    source = _Source(MediaStream(url="https://old"), MediaStream(url="https://new"))
+    response = _client(lambda range_header, head_only: proxied.proxy_response(
+        source, _episode(), audio=False, media_type="video/mp4", filename="e.mp4", range_header=range_header, head_only=head_only,
+    )).get("/media")
+    assert response.status_code == 200
+    assert response.content == b"abcd"
+    # One more lookup, and then the same link again after a short wait each time.
+    assert source.lookups == 2
+    assert waits == [1.0, 2.0]
+
+
+def test_a_link_youtube_keeps_refusing_is_given_up(proxied, monkeypatch):
+    monkeypatch.setattr(requests, "get", _Upstream(b"abcd", refuse=10).get)
+    from backend.api.endpoints.feeds import upstream as upstream_module
+
+    monkeypatch.setattr(upstream_module.time, "sleep", lambda seconds: None)
+    with pytest.raises(HTTPException) as refused:
+        proxied.proxy_response(
+            _Source(MediaStream(url="https://old")), _episode(), audio=False, media_type="video/mp4", filename="e.mp4",
+            range_header=None, head_only=False,
+        )
+    assert refused.value.status_code == 502
+
+
 def test_an_episode_without_a_stream_is_not_found(proxied):
     with pytest.raises(HTTPException) as missing:
         proxied.proxy_response(
@@ -273,3 +305,14 @@ def test_audio_enclosures_give_their_estimated_size():
     assert estimated_audio_size(3600) == 57_600_000
     assert estimated_audio_size(None) is None
     assert estimated_audio_size(0) is None
+
+
+def test_video_gives_an_estimated_size_by_resolution():
+    from backend.api.endpoints.feeds.source_stream import estimated_video_size
+
+    assert estimated_video_size(3600, 360) == 225_000_000
+    assert estimated_video_size(3600, 720) == 900_000_000
+    assert estimated_video_size(3600, 1080) == 1_350_000_000
+    assert estimated_video_size(3600, None) == 1_350_000_000
+    assert estimated_video_size(3600, 2160) == 3_600_000_000
+    assert estimated_video_size(None, 1080) is None
