@@ -63,7 +63,7 @@ export default function LocalMediaProfileSitesField({form, mode}: {
                 inputId="mp-sites"
                 isMulti
                 isSearchable={siteReg.values.length > 8}
-                isClearable={false}
+                isClearable
                 closeMenuOnSelect={false}
                 classNamePrefix="select"
                 placeholder="Choose at least one Site"

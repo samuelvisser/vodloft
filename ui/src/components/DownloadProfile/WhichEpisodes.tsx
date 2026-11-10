@@ -330,7 +330,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                         Is any of
                     </SelectAllLabel>
                     <Select
-                        inputId={`${id}-seasons`} isMulti closeMenuOnSelect={false}
+                        inputId={`${id}-seasons`} isMulti closeMenuOnSelect={false} isClearable
                         classNamePrefix="select"
                         options={seasonOptions}
                         value={seasonOptions.filter((option) => chosen.includes(option.value))}
