@@ -236,11 +236,17 @@ def _filtered(s: Session, filters: LocalMediaProfileListQuery):
         .exists()
     )
     storage = {StorageUse.FILES: has_files, StorageUse.EMPTY: ~has_files}
+    # There are only a handful of profiles, and their Sites are a JSON list: pick them here.
+    offered_for_site = profile.id.in_([
+        profile_id for profile_id, site_keys in s.execute(select(LocalMediaProfileBase.id, LocalMediaProfileBase.site_keys))
+        if set(site_keys or ()) & set(filters.site)
+    ]) if filters.site else None
     query = s.query(profile).filter(
         matches_words(search_words(filters.search), profile.name, profile.output_template),
         matches_any([used_for[value] for value in set(filters.used_for)]),
         matches_format(profile.preferred_format, filters.format),
         matches_any([storage[value] for value in set(filters.storage)] if set(filters.storage) != set(StorageUse) else []),
+        matches_any([offered_for_site] if offered_for_site is not None else []),
     )
     return query, profile
 

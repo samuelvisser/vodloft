@@ -45,17 +45,18 @@ class _ProfileListQuery(BaseModel):
 
 
 class DownloadProfileListQuery(_ProfileListQuery):
-    source: list[str] = Field(default_factory=list, max_length=20)
+    site: list[str] = Field(default_factory=list, max_length=50, description="Keys of the Sites the collection is on")
     status: list[ProfileStatus] = Field(default_factory=list)
     local_media_profile_id: int | None = Field(default=None, ge=1)
 
 
 class StreamProfileListQuery(_ProfileListQuery):
-    source: list[str] = Field(default_factory=list, max_length=20)
+    site: list[str] = Field(default_factory=list, max_length=50, description="Keys of the Sites the collection is on")
     status: list[ProfileStatus] = Field(default_factory=list)
     streams_from: list[StreamsFrom] = Field(default_factory=list)
 
 
 class LocalMediaProfileListQuery(_ProfileListQuery):
+    site: list[str] = Field(default_factory=list, max_length=50, description="Keys of the Sites the profile is offered for")
     used_for: list[UsedFor] = Field(default_factory=list)
     storage: list[StorageUse] = Field(default_factory=list)

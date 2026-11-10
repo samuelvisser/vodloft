@@ -20,7 +20,7 @@ import CollectionSort, {
     isCollectionSortOrder,
 } from '../components/CollectionSort/CollectionSort'
 import {
-    useLibraryCounts, useLibraryDownloads, useLibraryPreferences, useMovies, useCollectionsView, useSaveLibraryPreferences, useSourceLookup, useVideos,
+    useLibraryCounts, useLibraryDownloads, useLibraryPreferences, useMovies, useCollectionsView, useSaveLibraryPreferences, useVideos,
 } from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg} from '../types/collection'
@@ -29,7 +29,7 @@ import './LibraryPage.css'
 import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
-const LIBRARY_SOURCE_FILTER_STORAGE_KEY = 'librarySourceFilter'
+const LIBRARY_SITE_FILTER_STORAGE_KEY = 'librarySiteFilter'
 const LIBRARY_COLLECTION_SORT_STORAGE_KEY = 'libraryCollectionSort'
 
 /** The order this browser remembers, for installs without user accounts. */
@@ -65,6 +65,11 @@ function applicableChipFilter(selected: readonly string[], values: readonly stri
 
 function matchesChipFilter(value: string, selected: readonly string[]) {
     return selected.length === 0 || selected.includes(value)
+}
+
+/** Media whose Site VODLoft has not found yet only shows while every Site does. */
+function matchesSiteFilter(item: {site?: {key: string} | null}, selected: readonly string[]) {
+    return selected.length === 0 || (!!item.site && selected.includes(item.site.key))
 }
 
 function latestMovieDownload(downloads: MediaDownloadViewRead[] | undefined, slug: string) {
@@ -138,8 +143,7 @@ function LibraryTypeLoading({what, error}: {what: string, error: Error | null}) 
 export default function LibraryPage() {
     const [params, setParams] = useSearchParams()
     const [collectionTypeFilter, setCollectionTypeFilter] = useState(() => loadLibraryChipFilter(LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY))
-    const [sourceFilter, setSourceFilter] = useState(() => loadLibraryChipFilter(LIBRARY_SOURCE_FILTER_STORAGE_KEY))
-    const sources = useSourceLookup()
+    const [siteFilter, setSiteFilter] = useState(() => loadLibraryChipFilter(LIBRARY_SITE_FILTER_STORAGE_KEY))
     const [search, setSearch] = useState('')
     const searchWords = useMemo(() => foldForSearch(search).split(/\s+/).filter(Boolean), [search])
     const {data: collections, isLoading: collectionsLoading, error: collectionsError} = useCollectionsView()
@@ -167,14 +171,19 @@ export default function LibraryPage() {
             // Without storage the order is only kept while the page is open.
         }
     }
-    const sourceKeys = useMemo(
-        () => [...new Set([...(collections ?? []), ...(movies ?? []), ...(videos ?? [])].map((item) => item.sourceKey))].sort(),
-        [collections, movies, videos],
-    )
-    // A remembered Source can disappear from the library: only apply the Sources still present.
-    const activeSourceFilter = useMemo(
-        () => sourceKeys.length < 2 ? [] : applicableChipFilter(sourceFilter, sourceKeys),
-        [sourceFilter, sourceKeys],
+    // Every Site the library has media from, by name.
+    const siteOptions = useMemo(() => {
+        const names = new Map<string, string>()
+        for (const item of [...(collections ?? []), ...(movies ?? []), ...(videos ?? [])]) {
+            if (item.site) names.set(item.site.key, item.site.name)
+        }
+        return [...names].map(([value, label]) => ({value, label}))
+            .sort((a, b) => a.label.localeCompare(b.label, undefined, {sensitivity: 'base'}))
+    }, [collections, movies, videos])
+    // A remembered Site can disappear from the library: only apply the Sites still present.
+    const activeSiteFilter = useMemo(
+        () => siteOptions.length < 2 ? [] : applicableChipFilter(siteFilter, siteOptions.map((option) => option.value)),
+        [siteFilter, siteOptions],
     )
     const activeCollectionTypeFilter = useMemo(
         () => applicableChipFilter(collectionTypeFilter, CollectionTypeReg.values),
@@ -182,7 +191,7 @@ export default function LibraryPage() {
     )
     const filteredCollections = useMemo(() => {
         const shown = collections?.filter((collection) => (
-            matchesChipFilter(collection.type, activeCollectionTypeFilter) && matchesChipFilter(collection.sourceKey, activeSourceFilter)
+            matchesChipFilter(collection.type, activeCollectionTypeFilter) && matchesSiteFilter(collection, activeSiteFilter)
             && matchesLibrarySearch(collection, searchWords)
         )) ?? []
         // While searching, the best matches come first; the chosen order only settles equal matches.
@@ -190,18 +199,18 @@ export default function LibraryPage() {
         return shown.sort((a, b) => (
             (ranks.get(a.slug) ?? 0) - (ranks.get(b.slug) ?? 0) || compareCollections(a, b, collectionSort)
         ))
-    }, [collections, activeCollectionTypeFilter, activeSourceFilter, searchWords, collectionSort])
+    }, [collections, activeCollectionTypeFilter, activeSiteFilter, searchWords, collectionSort])
     const filteredMovies = useMemo(
         () => movies?.filter((movie) => (
-            matchesChipFilter(movie.sourceKey, activeSourceFilter) && matchesLibrarySearch(movie, searchWords)
+            matchesSiteFilter(movie, activeSiteFilter) && matchesLibrarySearch(movie, searchWords)
         )) ?? [],
-        [movies, activeSourceFilter, searchWords],
+        [movies, activeSiteFilter, searchWords],
     )
     const filteredVideos = useMemo(
         () => videos?.filter((video) => (
-            matchesChipFilter(video.sourceKey, activeSourceFilter) && matchesLibrarySearch(video, searchWords)
+            matchesSiteFilter(video, activeSiteFilter) && matchesLibrarySearch(video, searchWords)
         )) ?? [],
-        [videos, activeSourceFilter, searchWords],
+        [videos, activeSiteFilter, searchWords],
     )
     // A loaded list is the truth; until then the counts say which tabs the library will have,
     // so the tabs are there from the start instead of appearing as each list arrives.
@@ -239,11 +248,11 @@ export default function LibraryPage() {
 
     useEffect(() => {
         try {
-            localStorage.setItem(LIBRARY_SOURCE_FILTER_STORAGE_KEY, JSON.stringify(sourceFilter))
+            localStorage.setItem(LIBRARY_SITE_FILTER_STORAGE_KEY, JSON.stringify(siteFilter))
         } catch {
             // As above: without storage the filter just isn't remembered.
         }
-    }, [sourceFilter])
+    }, [siteFilter])
 
     // The URL is the single source of truth for the selected library type, just
     // like on the Browse page. Never switch away from an explicitly requested
@@ -263,15 +272,14 @@ export default function LibraryPage() {
     const showTabs = presentTypes.length > 1
     const showSort = activeType === 'collections' && hasCollections
     const showTypeFilter = activeType === 'collections' && hasCollections
-    const sourceOptions = sourceKeys.map((key) => ({value: key, label: sources.name(key)}))
-    const showChips = sourceOptions.length > 1 || showTypeFilter
-    const activeFilterCount = (activeSourceFilter.length > 0 ? 1 : 0) + (showTypeFilter && activeCollectionTypeFilter.length > 0 ? 1 : 0)
+    const showChips = siteOptions.length > 1 || showTypeFilter
+    const activeFilterCount = (activeSiteFilter.length > 0 ? 1 : 0) + (showTypeFilter && activeCollectionTypeFilter.length > 0 ? 1 : 0)
     const filtered = activeFilterCount > 0 || searchWords.length > 0
     const matchingCount = activeType === 'collections' ? filteredCollections.length
         : activeType === 'movies' ? filteredMovies.length
             : filteredVideos.length
     const resetFilters = () => {
-        setSourceFilter([])
+        setSiteFilter([])
         setCollectionTypeFilter([])
         setSearch('')
     }
@@ -315,7 +323,7 @@ export default function LibraryPage() {
                 >
                     {showChips && (
                         <>
-                            <ChipFilter label="Source" options={sourceOptions} selected={activeSourceFilter} onChange={setSourceFilter}/>
+                            <ChipFilter label="Site" options={siteOptions} selected={activeSiteFilter} onChange={setSiteFilter}/>
                             {showTypeFilter && (
                                 <ChipFilter label="Type" options={CollectionTypeReg.options} selected={activeCollectionTypeFilter} onChange={setCollectionTypeFilter}/>
                             )}

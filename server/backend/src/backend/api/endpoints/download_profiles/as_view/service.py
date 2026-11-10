@@ -10,12 +10,14 @@ from backend.api.list_filters import matches_any, matches_format, matches_status
 from backend.api.models.download_profile_view import DownloadProfileAPIReadView, DownloadProfileViewPageRead
 from backend.api.models.profile_bulk import ProfileIdsRead
 from backend.api.models.profile_list import DownloadProfileListQuery
+from backend.api.models.source import SiteAPIRead
 from backend.api.pagination import InvalidCursorError, SortKey, keyset_page
 from backend.db.models import (
     DownloadProfile,
     EpisodeMediaDownload,
     LocalMediaProfileBase,
     Collection,
+    Site,
 )
 from backend.services.storage_used import storage_size_bytes_sum
 
@@ -57,7 +59,7 @@ def _filtered(s: Session, filters: DownloadProfileListQuery):
         .join(LocalMediaProfileBase, LocalMediaProfileBase.id == DownloadProfile.local_media_profile_id)
         .filter(
             matches_words(words, Collection.title, LocalMediaProfileBase.name),
-            matches_any([Collection.source_key.in_(filters.source)] if filters.source else []),
+            matches_any([Collection.site_key.in_(filters.site)] if filters.site else []),
             matches_status(DownloadProfile.enable_profile, filters.status),
             matches_format(LocalMediaProfileBase.preferred_format, filters.format),
             matches_any(
@@ -96,6 +98,16 @@ def get_download_profile_ids(s: Session, filters: DownloadProfileListQuery) -> P
     """Every Download Profile the filters match, for Select all in bulk edit."""
     rows = _filtered(s, filters).with_entities(DownloadProfile.id).order_by(func.lower(Collection.title), DownloadProfile.id)
     return ProfileIdsRead(ids=[row.id for row in rows])
+
+
+def get_download_profile_sites(s: Session) -> list[SiteAPIRead]:
+    """The Sites of the collections that have a Download Profile, for the table's Site filter."""
+    sites = s.scalars(
+        select(Site)
+        .where(Site.key.in_(select(Collection.site_key).join(DownloadProfile, DownloadProfile.collection_id == Collection.id)))
+        .order_by(func.lower(Site.name))
+    )
+    return [SiteAPIRead.model_validate(site) for site in sites]
 
 
 def get_download_profile_views_by_collection(s: Session, collection_slug: str) -> list[DownloadProfileAPIReadView]:

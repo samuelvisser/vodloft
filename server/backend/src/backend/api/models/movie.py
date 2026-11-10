@@ -7,9 +7,10 @@ from pydantic import AwareDatetime, Field, computed_field
 
 from backend.api.models.base import RequestBase
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
-from backend.api.models.source import SourcedResponse
+from backend.api.models.source import SiteAPIRead, SourcedResponse
 from backend.api.models.movie_extra import MovieExtraAPICreate, MovieExtraAPIRead
 from backend.utils.helpers import generate_uuid
+from sources import site_for
 
 
 # ---------- Strict input (create/update) ----------
@@ -128,3 +129,12 @@ class MovieAPIRead(_MovieAPIBaseOut):
     updated_at: datetime
     added_by: Optional[str] = None
     """Who added it, with user accounts on."""
+
+    @computed_field
+    @property
+    def site(self) -> Optional[SiteAPIRead]:
+        """The website the movie is on, told from its link."""
+        if not self.sharing_url:
+            return None
+        site = site_for(self.sharing_url, self.source_key)
+        return SiteAPIRead(key=site.key, name=site.name)

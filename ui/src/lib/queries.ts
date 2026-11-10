@@ -67,7 +67,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
+    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -143,18 +143,19 @@ export type ProfileTableFilters = {
 }
 
 export type DownloadProfileTableFilters = ProfileTableFilters & {
-    source?: readonly string[]
+    site?: readonly string[]
     status?: readonly string[]
     localMediaProfileId?: number | null
 }
 
 export type StreamProfileTableFilters = ProfileTableFilters & {
-    source?: readonly string[]
+    site?: readonly string[]
     status?: readonly string[]
     streamsFrom?: readonly string[]
 }
 
 export type LocalMediaProfileTableFilters = ProfileTableFilters & {
+    site?: readonly string[]
     usedFor?: readonly string[]
     storage?: readonly string[]
 }
@@ -216,6 +217,23 @@ export function useProfileTableIds(
         enabled,
         queryFn: ({signal}) => fetchParsed(`${apiUrl()}/${path}/ids?${new URLSearchParams(params)}`, ProfileIdsSchema, signal),
     })
+}
+
+/** The Sites of the collections a profile table has profiles for, which it can be filtered by. Reloads with the table. */
+function useProfileTableSites(prefix: string, path: string, enabled: boolean) {
+    return useQuery({
+        queryKey: [prefix, 'sites'] as const,
+        enabled,
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/${path}/sites`, SiteReadSchema.array(), signal),
+    })
+}
+
+export function useDownloadProfileSites() {
+    return useProfileTableSites('downloadProfilesView', 'download-profiles/as-view', profileListsReadable('download_profiles'))
+}
+
+export function useStreamProfileSites() {
+    return useProfileTableSites('streamProfilesView', 'stream-profiles/as-view', can('stream_profiles') || can('library', 'manage'))
 }
 
 const LocalMediaProfileViewPageSchema = profilePageSchema(LocalMediaProfileViewReadSchema)
