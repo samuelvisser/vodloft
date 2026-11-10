@@ -132,9 +132,10 @@ class DownloadOptions:
     audio_only: bool = True
     hls_bundle: bool = False
     """The Site's HLS stream, kept with every resolution in it."""
-    quality_choices: bool = True
+    quality_choices: bool = False
     """Codecs, container, quality goal, audio format and audio language pick the version that is
-    downloaded. A Site with fixed versions, such as The Daily Wire, has nothing to choose."""
+    downloaded. Only a Site downloaded with a program that chooses among versions, such as yt-dlp, turns it
+    on; a Site with fixed versions, such as The Daily Wire, has nothing to choose."""
 
     @classmethod
     def combined(cls, options: Iterable[DownloadOptions]) -> DownloadOptions:

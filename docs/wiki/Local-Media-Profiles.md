@@ -108,7 +108,7 @@ Most parts are submitted in the days after a video comes out, so a download made
 
 ## Quality
 
-Each site offers its own choices, and a profile shows what its sites offer together. The Daily Wire has fixed versions: 480p, 720p and 1080p video, its HLS bundle and audio, with nothing else to choose. Sites downloaded with yt-dlp, such as YouTube, offer every resolution and every choice below. Of those, only YouTube also has an HLS bundle.
+Each site offers its own choices, and a profile shows what its sites offer together. The Daily Wire has fixed versions: 480p, 720p and 1080p video, its HLS bundle and audio, with nothing else to choose. Sites downloaded with yt-dlp, such as YouTube, and NPO Start offer every resolution and every choice below. Of those, only YouTube also has an HLS bundle. The choices after **Download** sit under a heading that names the profile's sites they apply to, and don't show when none of its sites has them.
 
 **Download** chooses video up to a ceiling: 360p, 480p, 720p, 1080p, 1440p, 4K or 8K. VODLoft downloads the highest resolution the site has up to that, and otherwise the lower ones. **Audio only** downloads no video. Collection profiles for The Daily Wire and YouTube also have **HLS bundle**: several resolutions kept together, so a podcast app can pick the one that suits its connection. The Daily Wire's bundle has 480p, 720p and 1080p, and YouTube's has 360p, 720p and 1080p in H.264 with its M4A audio, as far as the video has them. Codec and container choices don't apply to it, and SponsorBlock segments are only marked as chapters, never cut out. A profile for several sites can choose what only one of them has: the others then get the nearest they have, such as 1080p video for an HLS bundle.
 

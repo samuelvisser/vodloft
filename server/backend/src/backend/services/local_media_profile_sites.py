@@ -48,6 +48,21 @@ def takes_upcoming_sites(profile_type: LocalMediaProfileType | str) -> bool:
     return any(ANY_DOMAIN in source.domains and source.has(feature) for source in all_sources())
 
 
+def _upcoming_downloads(profile_type: LocalMediaProfileType | str | None = None) -> DownloadOptions:
+    """What a Site VODLoft has not seen yet can download: what a Source that fetches any site offers on a
+    Site it has no contract of its own for."""
+    feature = _feature(profile_type) if profile_type is not None else None
+    return DownloadOptions.combined(
+        site.downloads for source in all_sources()
+        if ANY_DOMAIN in source.domains and (feature is None or source.has(feature))
+        and (site := source.site_of(_UNSEEN_SITE)) is not None
+    )
+
+
+# A key no Site has, for what a Site that is still to come offers.
+_UNSEEN_SITE = "generic:upcoming.invalid"
+
+
 def builtin_sites() -> list[Site]:
     """The Sites VODLoft knows before it has anything from them: the ones a Source is made for, and the ones a
     Source takes an API key for, such as YouTube."""
@@ -141,7 +156,7 @@ def profile_sites(s: Session) -> ProfileSites:
             offered_settings(site, SiteSettingGroup.LOCAL_MEDIA_PROFILE), local_media_profile_site_defaults(site),
         ))
     upcoming = [profile_type for profile_type in types if takes_upcoming_sites(profile_type)]
-    return ProfileSites(sites, upcoming, DownloadOptions())
+    return ProfileSites(sites, upcoming, _upcoming_downloads())
 
 
 def profile_download_options(
@@ -154,8 +169,7 @@ def profile_download_options(
         return DownloadOptions.combined(source.download_options for source in all_sources() if source.has(feature))
     options = [site_of(key).downloads for key in site_keys if site_offered_for_type(profile_type, key)]
     if include_upcoming_sites and takes_upcoming_sites(profile_type):
-        # A Site VODLoft has not seen yet offers the defaults.
-        options.append(DownloadOptions())
+        options.append(_upcoming_downloads(profile_type))
     return DownloadOptions.combined(options)
 
 

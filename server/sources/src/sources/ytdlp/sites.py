@@ -155,9 +155,10 @@ def _accesses(key: str) -> tuple[Access, ...]:
 
 
 def _downloads(key: str) -> DownloadOptions:
-    return DownloadOptions(hls_bundle=True) if key in _HLS_DOWNLOADS else DownloadOptions()
+    # yt-dlp chooses among every version a site has, so each one has the quality choices.
+    return DownloadOptions(hls_bundle=key in _HLS_DOWNLOADS, quality_choices=True)
 
 
 def download_options() -> DownloadOptions:
-    """What any Site yt-dlp downloads from offers: the defaults, and an HLS bundle from some."""
-    return DownloadOptions.combined((DownloadOptions(), *(_downloads(key) for key in _HLS_DOWNLOADS)))
+    """What any Site yt-dlp downloads from offers: the quality choices, and an HLS bundle from some."""
+    return DownloadOptions.combined((_downloads(""), *(_downloads(key) for key in _HLS_DOWNLOADS)))

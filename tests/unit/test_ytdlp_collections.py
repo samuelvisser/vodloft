@@ -547,7 +547,9 @@ def test_a_local_media_profile_chooses_auto_generated_subtitles_per_site(listed,
     # Until the profile has its own choice for the site, it follows the site's.
     profile.site_settings = {}
     session.commit()
-    assert download_plans.prepare_download_plan(session, download.id, DownloadTracker()).source.ytdlp_subtitles.auto_generated == "fallback"
+    from backend.services.site_settings import local_media_profile_site_defaults
+    site_default = local_media_profile_site_defaults(collection_site(collection))["auto_subtitles"]
+    assert download_plans.prepare_download_plan(session, download.id, DownloadTracker()).source.ytdlp_subtitles.auto_generated == site_default
     choose_always()
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
     assert (plan.source.ytdlp_subtitles.languages, plan.source.ytdlp_subtitles.auto_generated) == (("nl", "en"), "always")
