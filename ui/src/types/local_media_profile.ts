@@ -92,6 +92,28 @@ export function siteDownloadChoices(
     return profile.siteSettings[siteKey] ?? sites?.sites.find((site) => site.key === siteKey)?.defaults
 }
 
+/** The profile's Sites that offer something, and whether Sites still to come do too. */
+export function profileSitesOffering(
+    sites: LocalMediaProfileSitesRead | undefined,
+    type: LocalMediaProfileType,
+    siteKeys: readonly string[] | null | undefined,
+    includeUpcomingSites: boolean | undefined,
+    offers: (options: DownloadOptions) => boolean,
+): {sites: LocalMediaProfileSiteRead[], upcoming: boolean} {
+    return {
+        sites: sitesForLocalMediaProfileType(sites, type)
+            .filter((site) => (siteKeys == null || siteKeys.includes(site.key)) && offers(site.downloadOptions)),
+        upcoming: !!sites && (siteKeys == null || !!includeUpcomingSites) && takesUpcomingSites(sites, type)
+            && offers(sites.upcomingDownloadOptions),
+    }
+}
+
+/** Names the Sites, as in "NPO Start, YouTube and upcoming sites". */
+export function siteNames({sites, upcoming}: {sites: readonly {name: string}[], upcoming: boolean}): string {
+    const names = [...sites.map((site) => site.name), ...(upcoming ? ['upcoming sites'] : [])]
+    return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] ?? '')
+}
+
 /** Whether a profile of this type can get media from Sites VODLoft has not seen yet. */
 export function takesUpcomingSites(sites: LocalMediaProfileSitesRead | undefined, type: LocalMediaProfileType): boolean {
     return !!sites?.upcomingProfileTypes.includes(type)
@@ -109,6 +131,8 @@ export function combinedDownloadOptions(options: readonly DownloadOptions[]): Do
         videoHeights: [...new Set(options.flatMap((option) => option.videoHeights))].sort((a, b) => a - b),
         audioOnly: options.some((option) => option.audioOnly),
         hlsBundle: options.some((option) => option.hlsBundle),
+        hlsHeights: [...new Set(options.flatMap((option) => option.hlsHeights))].sort((a, b) => a - b),
+        subtitles: options.some((option) => option.subtitles),
         qualityChoices: options.some((option) => option.qualityChoices),
     }
 }

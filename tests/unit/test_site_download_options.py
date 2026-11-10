@@ -22,16 +22,19 @@ def _collection_profile(preferred_format, site_keys=None, include_upcoming_sites
 
 def test_the_daily_wire_and_youtube_keep_an_hls_bundle():
     dailywire = get_source("dailywire").download_options
-    assert dailywire == DownloadOptions(video_heights=(480, 720, 1080), hls_bundle=True, quality_choices=False)
-    # yt-dlp offers what any of its sites offers: the quality choices on every site, and YouTube's HLS bundle.
-    assert get_source("ytdlp").download_options == DownloadOptions(hls_bundle=True, quality_choices=True)
-    assert site_for("https://www.youtube.com/@channel", "ytdlp").downloads == DownloadOptions(hls_bundle=True, quality_choices=True)
-    assert site_for("https://vimeo.com/channel", "ytdlp").downloads == DownloadOptions(quality_choices=True)
-    # NPO Start downloads with yt-dlp too, so it has the quality choices.
+    assert dailywire == DownloadOptions(video_heights=(480, 720, 1080), hls_heights=(480, 720, 1080), subtitles=True)
+    assert dailywire.hls_bundle and not dailywire.quality_choices
+    # yt-dlp offers what any of its sites offers: the quality choices and subtitles on every site, and
+    # YouTube's HLS bundle.
+    youtube = DownloadOptions(hls_heights=(360, 720, 1080), subtitles=True, quality_choices=True)
+    assert get_source("ytdlp").download_options == youtube
+    assert site_for("https://www.youtube.com/@channel", "ytdlp").downloads == youtube
+    assert site_for("https://vimeo.com/channel", "ytdlp").downloads == DownloadOptions(subtitles=True, quality_choices=True)
+    # NPO Start downloads with yt-dlp too, so it has the quality choices, but it has no subtitles.
     assert get_source("npo").download_options == DownloadOptions(quality_choices=True)
     # A Site has nothing to choose unless its contract says so.
     assert DownloadOptions().video_heights == VIDEO_HEIGHTS and not DownloadOptions().hls_bundle
-    assert not DownloadOptions().quality_choices
+    assert not DownloadOptions().quality_choices and not DownloadOptions().subtitles
 
 
 def test_a_site_still_to_come_has_what_a_source_that_fetches_any_site_offers():
@@ -39,6 +42,8 @@ def test_a_site_still_to_come_has_what_a_source_that_fetches_any_site_offers():
 
     assert profile_download_options("collection", ["dailywire"], False).quality_choices is False
     assert profile_download_options("collection", ["dailywire"], True).quality_choices is True
+    assert profile_download_options("collection", ["npo"], False).subtitles is False
+    assert profile_download_options("collection", ["npo"], True).subtitles is True
 
 
 def test_a_profile_offers_what_any_of_its_sites_offers():
@@ -87,4 +92,7 @@ def test_sources_say_what_they_can_download():
     from backend.api.models.source import SourceAPIRead
 
     read = SourceAPIRead.model_validate(get_source("dailywire")).model_dump(by_alias=True)
-    assert read["downloadOptions"] == {"videoHeights": [480, 720, 1080], "audioOnly": True, "hlsBundle": True, "qualityChoices": False}
+    assert read["downloadOptions"] == {
+        "videoHeights": [480, 720, 1080], "audioOnly": True, "hlsBundle": True, "hlsHeights": [480, 720, 1080],
+        "subtitles": True, "qualityChoices": False,
+    }

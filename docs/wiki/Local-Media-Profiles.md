@@ -66,7 +66,7 @@ With **Every language the site offers**, the list is called **Default track lang
 
 **Movies**, **Series** and Collection profiles available for **Podcasts and Series** start with subtitles beside the media. **Podcast-only** profiles and **Video** profiles start without subtitles.
 
-Forced subtitles use names such as `Movie Name.en.forced.srt`, and auto-generated ones `Episode.nl.auto.srt`. The default track beside the media is named like `Episode.en.default.srt`: Jellyfin and Emby pick it by default, while Plex and Kodi go by the subtitle language set in the player. Plex and similar media servers find these files automatically. NPO Start has no subtitles yet. A video without subtitles downloads as before, and a subtitle that fails never stops the download. Audio-only downloads never embed subtitles, and an HLS bundle can only have them beside it.
+Forced subtitles use names such as `Movie Name.en.forced.srt`, and auto-generated ones `Episode.nl.auto.srt`. The default track beside the media is named like `Episode.en.default.srt`: Jellyfin and Emby pick it by default, while Plex and Kodi go by the subtitle language set in the player. Plex and similar media servers find these files automatically. NPO Start has no subtitles yet, so a profile only for NPO Start has no subtitle settings. A video without subtitles downloads as before, and a subtitle that fails never stops the download. Audio-only downloads never embed subtitles, and an HLS bundle can only have them beside it.
 
 ## YouTube and other sites
 

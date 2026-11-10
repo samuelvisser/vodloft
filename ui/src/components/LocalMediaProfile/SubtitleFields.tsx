@@ -4,6 +4,8 @@ import Select from 'react-select'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import {faIcon} from '../../icons/faIcon'
+import {useLocalMediaProfileSites} from '../../lib/queries'
+import {profileSitesOffering, siteNames, type LocalMediaProfileType} from '../../types/local_media_profile'
 import {LANGUAGES, SubtitleLanguageModeReg, languageName} from '../../types/quality'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import ReadMore from '../../utils/ReadMore'
@@ -37,15 +39,18 @@ function modeHelp(mode: string, codes: string[], sidecars: boolean): string | un
 
 type Props = {
     form: UseFormReturn<any>
+    mode: LocalMediaProfileType
     onSubtitleModeChange?: (value: any) => void
 }
 
 /** Subtitles: where they are stored, which languages in which order, and what to do with several. */
-export default function SubtitleFields({form, onSubtitleModeChange}: Props) {
+export default function SubtitleFields({form, mode: profileType, onSubtitleModeChange}: Props) {
     const {control, setValue, formState: {errors}} = form
-    const [subtitleMode, languages, languageMode] = useWatch({
-        control, name: ['subtitleMode', 'subtitleLanguages', 'subtitleLanguageMode'],
-    }) as [string, string[] | undefined, string]
+    const [subtitleMode, languages, languageMode, siteKeys, includeUpcomingSites] = useWatch({
+        control, name: ['subtitleMode', 'subtitleLanguages', 'subtitleLanguageMode', 'siteKeys', 'includeUpcomingSites'],
+    }) as [string, string[] | undefined, string, string[] | null, boolean]
+    const {data: sites} = useLocalMediaProfileSites()
+    const subtitleSites = profileSitesOffering(sites, profileType, siteKeys, includeUpcomingSites, (options) => options.subtitles)
     const list = languages ?? []
     const [dragging, setDragging] = useState<number | null>(null)
     const stores = subtitleMode && subtitleMode !== 'no_subtitles'
@@ -62,6 +67,8 @@ export default function SubtitleFields({form, onSubtitleModeChange}: Props) {
         setLanguages(next)
     }
     const addable = Object.entries(LANGUAGES).filter(([code]) => !list.includes(code)).map(([value, label]) => ({value, label}))
+    // None of the profile's Sites has subtitles, so there is nothing to choose.
+    if (sites && !subtitleSites.sites.length && !subtitleSites.upcoming) return null
 
     return (
         <div className="subtitle-fields" id="subtitle-fields">
@@ -162,8 +169,7 @@ export default function SubtitleFields({form, onSubtitleModeChange}: Props) {
             )}
 
             <div className="help">
-                <ReadMore summary="Applies to every Source. Subtitles saved beside the media are always SRT.">
-                    <p>Subtitles come from The Daily Wire and from every site yt-dlp downloads from, such as YouTube. NPO Start has no subtitles yet.</p>
+                <ReadMore summary={`Subtitles from ${siteNames(subtitleSites)}. Subtitles saved beside the media are always SRT.`}>
                     <p>Whether to use the subtitles a site generates itself, such as YouTube's, is set per Site further down.</p>
                     <p>Embedding needs an MP4 or MKV video, not an HLS bundle or audio.</p>
                 </ReadMore>
