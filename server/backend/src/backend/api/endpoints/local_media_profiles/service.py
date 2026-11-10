@@ -16,11 +16,13 @@ from backend.api.models.local_media_profile_view import (
 )
 from backend.api.models.profile_bulk import ProfileIdsRead
 from backend.api.models.profile_list import LocalMediaProfileListQuery, StorageUse, UsedFor
+from backend.api.models.source import SiteAPIRead
 from backend.api.pagination import InvalidCursorError, SortKey, keyset_page
 from backend.db.models import (
     DownloadProfile,
     LocalMediaProfileBase,
     MediaDownloadBase,
+    Site,
 )
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope, LocalMediaProfileType
 from backend.services.storage_used import is_physical_download, storage_size_bytes_sum
@@ -304,6 +306,12 @@ def delete_local_media_profile_record(
     s.flush()
     s.delete(local_media_profile)
     s.flush()
+
+
+def get_local_media_profile_table_sites(s: Session) -> list[SiteAPIRead]:
+    """The Sites VODLoft has collections or videos from, for the table's Site filter. Sites it only knows
+    of are left out, so the filter shows once there is media from more than one Site."""
+    return [SiteAPIRead.model_validate(site) for site in s.scalars(select(Site).order_by(func.lower(Site.name)))]
 
 
 def get_local_media_profile_ids(s: Session, filters: LocalMediaProfileListQuery) -> ProfileIdsRead:
