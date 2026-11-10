@@ -144,7 +144,8 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
             <div className="cover" style={style} {...linkAreaHandlers(episodeHref, navigate)}>
                 <DownloadStatusIcons downloads={downloads ?? []}/>
                 {ep.drmProtected ? <DrmBadge onCover/>
-                    : ep.access ? <AccessBadge label={ep.accessLabel} description={ep.accessDescription} granted={ep.accessGranted} onCover/>
+                    // Media the account may watch only shows its open lock on its own page.
+                    : ep.access && !ep.accessGranted ? <AccessBadge label={ep.accessLabel} description={ep.accessDescription} onCover/>
                     : ep.removedFromSource && <RemovedBadge onCover/>}
                 {isLive && (
                     <span style={LIVE_BADGE_STYLE} aria-label="Episode is live">
