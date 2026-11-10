@@ -48,4 +48,6 @@
 
 @media (max-width: 700px) {
     .collection-sort { align-self: flex-start; }
+    /* Folded under the search with the filters, it takes the full width like the other selects there. */
+    .filter-bar-beside .collection-sort-select { flex: 1; }
 }
