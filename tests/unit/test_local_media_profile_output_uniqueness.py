@@ -173,3 +173,8 @@ def test_mutually_exclusive_layouts_are_not_rejected_by_the_api():
                     output_template='/downloads/{% if episode_type '+condition+' "aux" %}Shared/{% else %}'+name+'/{% endif %}{{ title }}.ext'))
     finally:
         engine.dispose()
+
+
+def test_video_profiles_are_compared():
+    assert _compare('/downloads/{{ title }}.ext', '/downloads/{{title}}.ext', kind='video') == OutputOverlap.OVERLAP
+    assert _compare('/downloads/{{ title }}.ext', '/downloads/{{ slug }}.ext', kind='video') != OutputOverlap.OVERLAP

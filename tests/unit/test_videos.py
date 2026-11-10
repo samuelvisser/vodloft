@@ -204,6 +204,32 @@ def test_video_profiles_take_audio_but_not_hls_or_collection_variables():
         )
 
 
+def test_video_profiles_can_be_created_and_changed(session):
+    from backend.api.endpoints.video_local_media_profiles.service import (
+        create_video_local_media_profile, update_video_local_media_profile,
+    )
+    from backend.api.models.video_local_media_profile import (
+        VideoLocalMediaProfileAPICreate, VideoLocalMediaProfileAPIUpdate,
+    )
+    from backend.services.errors import ServiceError
+
+    first = create_video_local_media_profile(session, VideoLocalMediaProfileAPICreate(
+        name="Videos", preferred_format="format_1080p", output_template=VIDEO_TEMPLATE,
+    ))
+    other = create_video_local_media_profile(session, VideoLocalMediaProfileAPICreate(
+        name="Other", preferred_format="format_1080p", output_template="/downloads/other/{{ title }}.ext",
+    ))
+    changed = update_video_local_media_profile(session, first.slug, VideoLocalMediaProfileAPIUpdate(
+        name="Renamed", preferred_format="format_720p", output_template=VIDEO_TEMPLATE,
+    ))
+    assert changed.name == "Renamed"
+    with pytest.raises(ServiceError, match="same file"):
+        update_video_local_media_profile(session, other.slug, VideoLocalMediaProfileAPIUpdate(
+            name="Other", preferred_format="format_720p",
+            output_template="{% set video_title = title %}" + VIDEO_TEMPLATE.replace("{{ title }}", "{{ video_title }}"),
+        ))
+
+
 def test_a_video_download_needs_a_video_profile(video_sources, session):
     from fastapi import HTTPException
 
