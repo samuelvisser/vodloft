@@ -131,7 +131,7 @@ Subtitles only show when the Local Media Profile stores them.
   as better by default, and off when nothing does, such as on NPO Start. Saving a profile with nothing ticked under
   **Better means** turns the check off.
 
-A new profile starts with its site's Download profile defaults (see [[Settings#download-profile-defaults]]), which you can
+A new profile starts with its site's defaults (see [[Settings#per-site-defaults]]), which you can
 change under **Settings → Downloads**. The defaults below are the ones VODLoft comes with.
 - **Check after … days**: how long after downloading the first check happens. 7 days by default, 3 for The Daily Wire.
 - **How often**: **Once, then stop**; **Twice, again after 30 days**; or **Every … days, up to 3 times**, which with
@@ -173,8 +173,8 @@ If you only want the finished episode, leave countdown downloading disabled.
 
 ## YouTube and other sites
 
-Auto-generated subtitles and SponsorBlock are set on the Local Media Profile, for each site, so manual downloads use
-them too (see [[Local-Media-Profiles#youtube-and-other-sites]]).
+Auto-generated subtitles and SponsorBlock are set on the Local Media Profile, so manual downloads use
+them too (see [[Local-Media-Profiles#settings-only-some-sites-have]]).
 
 ## Using multiple profiles
 

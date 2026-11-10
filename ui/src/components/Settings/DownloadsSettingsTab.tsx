@@ -470,8 +470,8 @@ export default function DownloadsSettingsTab({
             </SettingsSection>
 
             <SettingsSection
-                title="Download profile defaults"
-                description="What a new Download Profile starts with. Changing these leaves existing Download Profiles as they are."
+                title="Per-site defaults"
+                description="What a new Download Profile or Local Media Profile starts with. Changing these leaves existing profiles as they are."
             >
                 <div className="settings-field settings-field--wide site-settings-system">
                     <label>System defaults</label>

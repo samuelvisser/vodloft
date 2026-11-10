@@ -108,10 +108,10 @@ These settings are available under **Settings → Downloads**.
 
 When you move the temporary, RSS cache, quick download, thumbnail or lock folder, VODLoft removes the old folder the next time it starts, but only if VODLoft alone uses it: a hidden `.vodloft-…` folder or the setting's default folder. Quick downloads and thumbnails move to the new folder first. A folder of your own, and the download root itself, are never removed.
 
-### Download profile defaults
+### Per-site defaults
 
-What a new Download Profile starts with, under **Settings → Downloads → Download profile defaults**. Changing these
-never changes a Download Profile you already have.
+What a new Download Profile or Local Media Profile starts with, under **Settings → Downloads → Per-site defaults**. Changing these
+never changes a profile you already have.
 
 | Setting | Environment variable | Default | What it does |
 | --- | --- | --- | --- |
@@ -120,7 +120,7 @@ never changes a Download Profile you already have.
 | `downloadProfileDefaults.upgradeRepeat` | `VL_DOWNLOAD_PROFILE_DEFAULTS__UPGRADE_REPEAT` | `once` | How often it checks: `once`, `twice` or `every`. |
 | `downloadProfileDefaults.upgradeImprovements` | `VL_DOWNLOAD_PROFILE_DEFAULTS__UPGRADE_IMPROVEMENTS` | `[resolution]` | What counts as a better version. A Site only checks for what it can find. |
 | `downloadProfileDefaults.upgradeLengthMinutes` | `VL_DOWNLOAD_PROFILE_DEFAULTS__UPGRADE_LENGTH_MINUTES` | `5` | How many minutes longer or shorter counts as a different length. |
-| `downloadProfileDefaults.autoSubtitles` | `VL_DOWNLOAD_PROFILE_DEFAULTS__AUTO_SUBTITLES` | `fallback` | Auto-generated subtitles: `never`, `fallback` (only when there are no real ones) or `always`. A Local Media Profile follows it for each site you didn't change (see [[Local-Media-Profiles#youtube-and-other-sites]]). |
+| `downloadProfileDefaults.autoSubtitles` | `VL_DOWNLOAD_PROFILE_DEFAULTS__AUTO_SUBTITLES` | `fallback` | Auto-generated subtitles: `never`, `fallback` (only when there are no real ones) or `always`. A new Local Media Profile starts with it (see [[Local-Media-Profiles#settings-only-some-sites-have]]). |
 
 Below the system defaults, each Site has a row of its own, the same way as [Per-Site scheduling](#per-site-scheduling):
 **Default** follows the system default, and a Site with a preset starts on its own value. The Daily Wire checks after
@@ -224,7 +224,7 @@ you can change it or set the Site back to **Default**. The Daily Wire's refresh 
 YouTube's is `30m,2h,6h,24h,3d,7d,14d`, because creators keep testing titles and thumbnails there for up to two weeks.
 
 VODLoft keeps each Site's settings under `siteSettings` in `config.yml`, by the Site's key, together with its
-[Download Profile defaults](#download-profile-defaults). A setting that is left out uses the Site's preset, or the system
+[Per-site defaults](#per-site-defaults). A setting that is left out uses the Site's preset, or the system
 setting when it has none. `default` always means the system setting, even on a Site with a preset:
 
 ```yaml
