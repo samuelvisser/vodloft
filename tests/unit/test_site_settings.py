@@ -63,6 +63,9 @@ def test_every_site_contract_only_presets_what_it_shows_with_valid_values():
             # A Site shows only settings without a system default, and hides only ones with one.
             assert not any(SITE_SETTINGS[key].has_system_default for key in site.settings.shows)
             assert all(SITE_SETTINGS[key].has_system_default for key in site.settings.hides)
+            # Only a Site with subtitles has auto-generated ones.
+            if site.settings.offers(SiteSetting.AUTO_SUBTITLES):
+                assert site.downloads.subtitles, f"{site.key} offers auto-generated subtitles without subtitles"
 
 
 def test_which_sites_show_which_settings():
@@ -70,7 +73,10 @@ def test_which_sites_show_which_settings():
     assert not site_of("dailywire").settings.offers(SiteSetting.AUTO_SUBTITLES)
     assert site_of("youtube").settings.offers(SiteSetting.SPONSORBLOCK)
     assert site_of("youtube").settings.offers(SiteSetting.AUTO_SUBTITLES)
-    for key in ("generic:vimeo.com", "rumble", "npo"):
+    # NPO Start has no subtitles, so no auto-generated ones either.
+    npo = site_of("npo").settings
+    assert not any(npo.offers(key) for key in (SiteSetting.AUTO_SUBTITLES, SiteSetting.SPONSORBLOCK, SiteSetting.DOWNLOAD_WITH_COUNTDOWN))
+    for key in ("generic:vimeo.com", "rumble"):
         assert site_of(key).settings.offers(SiteSetting.AUTO_SUBTITLES)
         assert not site_of(key).settings.offers(SiteSetting.SPONSORBLOCK)
         assert not site_of(key).settings.offers(SiteSetting.DOWNLOAD_WITH_COUNTDOWN)

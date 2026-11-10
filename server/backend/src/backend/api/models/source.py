@@ -85,6 +85,8 @@ class DownloadOptionsAPIRead(ResponseBase):
     video_heights: list[int]
     audio_only: bool
     hls_bundle: bool
+    hls_heights: list[int]
+    subtitles: bool
     quality_choices: bool
 
 

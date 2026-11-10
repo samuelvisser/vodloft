@@ -222,7 +222,7 @@ export default function LocalMediaProfileCommonFields({
 
             <hr className="form-section-divider" aria-hidden="true"/>
 
-            <SubtitleFields form={form} onSubtitleModeChange={onSubtitleModeChange}/>
+            <SubtitleFields form={form} mode={mode} onSubtitleModeChange={onSubtitleModeChange}/>
 
             <SiteSettingsSections form={form} mode={mode}/>
         </>

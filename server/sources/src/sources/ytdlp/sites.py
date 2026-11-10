@@ -46,8 +46,9 @@ _VIDEO_OUTPUT_HELP = {
                    "always play video if it supports video at all.",
     },
 }
-# The Sites whose separate H.264 video and M4A audio Local Media Profiles can keep as an HLS bundle.
-_HLS_DOWNLOADS = {"youtube"}
+# The Sites whose separate H.264 video and M4A audio Local Media Profiles can keep as an HLS bundle, at these
+# resolutions.
+_HLS_DOWNLOADS = {"youtube": (360, 720, 1080)}
 _API_KEY_SITES = {"youtube"}
 # A channel's members-only videos sit among its open ones, so its collections start without them.
 _HIDES_LOCKED = {"youtube"}
@@ -155,10 +156,11 @@ def _accesses(key: str) -> tuple[Access, ...]:
 
 
 def _downloads(key: str) -> DownloadOptions:
-    # yt-dlp chooses among every version a site has, so each one has the quality choices.
-    return DownloadOptions(hls_bundle=key in _HLS_DOWNLOADS, quality_choices=True)
+    # yt-dlp chooses among every version a site has, so each one has the quality choices, and it gets the
+    # subtitles of any site.
+    return DownloadOptions(hls_heights=_HLS_DOWNLOADS.get(key, ()), subtitles=True, quality_choices=True)
 
 
 def download_options() -> DownloadOptions:
-    """What any Site yt-dlp downloads from offers: the quality choices, and an HLS bundle from some."""
+    """What any Site yt-dlp downloads from offers: the quality choices and subtitles, and an HLS bundle from some."""
     return DownloadOptions.combined((_downloads(""), *(_downloads(key) for key in _HLS_DOWNLOADS)))

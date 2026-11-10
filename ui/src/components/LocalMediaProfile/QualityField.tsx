@@ -28,8 +28,8 @@ import {
     nearestVideoFormat,
     offersFormat,
     profileDownloadOptions,
-    sitesForLocalMediaProfileType,
-    takesUpcomingSites,
+    profileSitesOffering,
+    siteNames,
 } from '../../types/local_media_profile'
 import './QualityField.css'
 import './SiteSettingsSection.css'
@@ -61,15 +61,18 @@ export default function QualityField({form, mode}: Props) {
     )
     const qualityChoices = offered?.qualityChoices ?? true
     // The Sites the format choices apply to: the profile's Sites whose versions VODLoft chooses among.
-    const choiceSites = useMemo(() => {
-        if (!sites) return ''
-        const names = sitesForLocalMediaProfileType(sites, mode)
-            .filter((site) => (siteKeys == null || siteKeys.includes(site.key)) && site.downloadOptions.qualityChoices)
-            .map((site) => site.name)
-        if ((siteKeys == null || includeUpcomingSites) && takesUpcomingSites(sites, mode) && sites.upcomingDownloadOptions.qualityChoices) {
-            names.push('upcoming sites')
-        }
-        return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] ?? '')
+    const choiceSites = useMemo(
+        () => siteNames(profileSitesOffering(sites, mode, siteKeys, includeUpcomingSites, (options) => options.qualityChoices)),
+        [sites, mode, siteKeys, includeUpcomingSites],
+    )
+    // What each of the profile's Sites keeps in an HLS bundle.
+    const hlsHelp = useMemo(() => {
+        const {sites: bundled, upcoming} = profileSitesOffering(sites, mode, siteKeys, includeUpcomingSites, (options) => options.hlsBundle)
+        const heights = (list: readonly number[]) => siteNames({sites: list.map((height) => ({name: `${height}p`})), upcoming: false})
+        return [
+            ...bundled.map((site) => `${heights(site.downloadOptions.hlsHeights)} from ${site.name}`),
+            ...(upcoming && sites ? [`${heights(sites.upcomingDownloadOptions.hlsHeights)} from upcoming sites that have one`] : []),
+        ].join(', ')
     }, [sites, mode, siteKeys, includeUpcomingSites])
 
     // Choosing fewer Sources can take away the chosen download; move to the nearest one they offer.
@@ -150,7 +153,7 @@ export default function QualityField({form, mode}: Props) {
                     {audioOnly
                         ? 'Audio only: no video is downloaded.'
                         : hls
-                            ? 'An HLS bundle keeps several resolutions together, so podcast apps can pick one: 480p, 720p and 1080p from The Daily Wire, 360p, 720p and 1080p from YouTube.'
+                            ? `An HLS bundle keeps several resolutions together, so podcast apps can pick one${hlsHelp ? `: ${hlsHelp}` : ''}.`
                             : 'VODLoft downloads the highest resolution the site has up to this, and falls back to lower ones.'}
                 </div>
             </div>

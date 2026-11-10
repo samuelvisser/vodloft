@@ -130,12 +130,19 @@ class DownloadOptions:
     """The resolutions worth downloading up to: the Site has nothing higher than the highest one,
     and asking for less than the lowest one still gets the lowest."""
     audio_only: bool = True
-    hls_bundle: bool = False
-    """The Site's HLS stream, kept with every resolution in it."""
+    hls_heights: tuple[int, ...] = ()
+    """The resolutions of the Site's HLS bundle, which keeps several together; none when it has no bundle."""
+    subtitles: bool = False
+    """The Site's media has subtitles a profile can save."""
     quality_choices: bool = False
     """Codecs, container, quality goal, audio format and audio language pick the version that is
     downloaded. Only a Site downloaded with a program that chooses among versions, such as yt-dlp, turns it
     on; a Site with fixed versions, such as The Daily Wire, has nothing to choose."""
+
+    @property
+    def hls_bundle(self) -> bool:
+        """Whether a profile can keep the Site's media as an HLS bundle."""
+        return bool(self.hls_heights)
 
     @classmethod
     def combined(cls, options: Iterable[DownloadOptions]) -> DownloadOptions:
@@ -146,7 +153,8 @@ class DownloadOptions:
         return cls(
             video_heights=tuple(sorted({height for option in options for height in option.video_heights})),
             audio_only=any(option.audio_only for option in options),
-            hls_bundle=any(option.hls_bundle for option in options),
+            hls_heights=tuple(sorted({height for option in options for height in option.hls_heights})),
+            subtitles=any(option.subtitles for option in options),
             quality_choices=any(option.quality_choices for option in options),
         )
 
