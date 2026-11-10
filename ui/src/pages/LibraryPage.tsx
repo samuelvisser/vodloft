@@ -3,20 +3,15 @@ import {can} from '../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
-import {ClearInputButton} from '../components/common/ClearInputButton'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import CollectionIndexingProgress from '../components/CollectionIndexingProgress/CollectionIndexingProgress'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
-import CollectionTypeFilter, {
-    createDefaultCollectionTypeFilter,
-    matchesCollectionTypeFilter,
-} from '../components/common/CollectionTypeFilter'
 import SourceBadge from '../components/Source/SourceBadge'
 import CollectionTileArt from '../components/CollectionTileArt/CollectionTileArt'
 import {DrmBadge} from '../components/common/DrmProtected'
 import {AccessBadge} from '../components/common/AccessLocked'
-import SourceFilter, {matchesSourceFilter} from '../components/Source/SourceFilter'
+import FilterBar, {ChipFilter} from '../components/common/FilterBar'
 import DownloadStatusBadge from '../components/DownloadProgress/DownloadStatusBadge'
 import CollectionSort, {
     type CollectionSortOrder,
@@ -25,11 +20,12 @@ import CollectionSort, {
     isCollectionSortOrder,
 } from '../components/CollectionSort/CollectionSort'
 import {
-    useLibraryCounts, useLibraryDownloads, useLibraryPreferences, useMovies, useCollectionsView, useSaveLibraryPreferences, useVideos,
+    useLibraryCounts, useLibraryDownloads, useLibraryPreferences, useMovies, useCollectionsView, useSaveLibraryPreferences, useSourceLookup, useVideos,
 } from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
-import {CollectionTypeReg, CollectionTypeValue} from '../types/collection'
+import {CollectionTypeReg} from '../types/collection'
 import DurationPill from '../components/common/DurationPill'
+import './LibraryPage.css'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SOURCE_FILTER_STORAGE_KEY = 'librarySourceFilter'
@@ -46,45 +42,28 @@ function loadBrowserCollectionSort(): CollectionSortOrder {
     }
 }
 
-/** The remembered Source filter; empty (every Source) when nothing usable is stored. */
-function loadLibrarySourceFilter(): Set<string> {
+/** A remembered chip filter: the chosen values, or empty for all of them when nothing usable is stored. */
+function loadLibraryChipFilter(storageKey: string): string[] {
     try {
-        const raw = localStorage.getItem(LIBRARY_SOURCE_FILTER_STORAGE_KEY)
-        if (raw === null) return new Set()
-
-        const parsed: unknown = JSON.parse(raw)
-        if (!Array.isArray(parsed)) return new Set()
-        return new Set(parsed.filter((value): value is string => typeof value === 'string'))
+        const raw = localStorage.getItem(storageKey)
+        const parsed: unknown = raw === null ? null : JSON.parse(raw)
+        return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
     } catch {
-        return new Set()
+        return []
     }
 }
 
-function loadLibraryCollectionTypeFilter(): Set<CollectionTypeValue> {
-    try {
-        const raw = localStorage.getItem(LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY)
-        if (raw === null) return createDefaultCollectionTypeFilter()
+/**
+ * The part of a remembered chip filter that still applies: only the values on offer, and all of them
+ * (empty) when it would keep every value or none, so nothing stays filtered out without a visible way to clear it.
+ */
+function applicableChipFilter(selected: readonly string[], values: readonly string[]): string[] {
+    const kept = values.filter((value) => selected.includes(value))
+    return kept.length === values.length ? [] : kept
+}
 
-        const parsed: unknown = JSON.parse(raw)
-        if (!Array.isArray(parsed)) return createDefaultCollectionTypeFilter()
-
-        const selectedTypes = parsed.filter(
-            (value): value is CollectionTypeValue => (
-                typeof value === 'string'
-                && CollectionTypeReg.values.includes(value as CollectionTypeValue)
-            ),
-        )
-
-        // Preserve an intentionally empty filter, while rejecting stored data that
-        // only contains stale or otherwise invalid values.
-        if (parsed.length > 0 && selectedTypes.length === 0) {
-            return createDefaultCollectionTypeFilter()
-        }
-
-        return new Set(selectedTypes)
-    } catch {
-        return createDefaultCollectionTypeFilter()
-    }
+function matchesChipFilter(value: string, selected: readonly string[]) {
+    return selected.length === 0 || selected.includes(value)
 }
 
 function latestMovieDownload(downloads: MediaDownloadViewRead[] | undefined, slug: string) {
@@ -157,8 +136,9 @@ function LibraryTypeLoading({what, error}: {what: string, error: Error | null}) 
 
 export default function LibraryPage() {
     const [params, setParams] = useSearchParams()
-    const [collectionTypeFilter, setCollectionTypeFilter] = useState(loadLibraryCollectionTypeFilter)
-    const [sourceFilter, setSourceFilter] = useState(loadLibrarySourceFilter)
+    const [collectionTypeFilter, setCollectionTypeFilter] = useState(() => loadLibraryChipFilter(LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY))
+    const [sourceFilter, setSourceFilter] = useState(() => loadLibraryChipFilter(LIBRARY_SOURCE_FILTER_STORAGE_KEY))
+    const sources = useSourceLookup()
     const [search, setSearch] = useState('')
     const searchWords = useMemo(() => foldForSearch(search).split(/\s+/).filter(Boolean), [search])
     const {data: collections, isLoading: collectionsLoading, error: collectionsError} = useCollectionsView()
@@ -190,17 +170,18 @@ export default function LibraryPage() {
         () => [...new Set([...(collections ?? []), ...(movies ?? []), ...(videos ?? [])].map((item) => item.sourceKey))].sort(),
         [collections, movies, videos],
     )
-    // A remembered Source can disappear from the library. Only apply the Sources still
-    // present, and every Source while the chips are hidden, so nothing stays filtered
-    // out without a visible way to clear it.
-    const activeSourceFilter = useMemo(() => {
-        if (sourceKeys.length < 2) return new Set<string>()
-        const kept = [...sourceFilter].filter((key) => sourceKeys.includes(key))
-        return kept.length === sourceKeys.length ? new Set<string>() : new Set(kept)
-    }, [sourceFilter, sourceKeys])
+    // A remembered Source can disappear from the library: only apply the Sources still present.
+    const activeSourceFilter = useMemo(
+        () => sourceKeys.length < 2 ? [] : applicableChipFilter(sourceFilter, sourceKeys),
+        [sourceFilter, sourceKeys],
+    )
+    const activeCollectionTypeFilter = useMemo(
+        () => applicableChipFilter(collectionTypeFilter, CollectionTypeReg.values),
+        [collectionTypeFilter],
+    )
     const filteredCollections = useMemo(() => {
         const shown = collections?.filter((collection) => (
-            matchesCollectionTypeFilter(collection.type, collectionTypeFilter) && matchesSourceFilter(collection.sourceKey, activeSourceFilter)
+            matchesChipFilter(collection.type, activeCollectionTypeFilter) && matchesChipFilter(collection.sourceKey, activeSourceFilter)
             && matchesLibrarySearch(collection, searchWords)
         )) ?? []
         // While searching, the best matches come first; the chosen order only settles equal matches.
@@ -208,16 +189,16 @@ export default function LibraryPage() {
         return shown.sort((a, b) => (
             (ranks.get(a.slug) ?? 0) - (ranks.get(b.slug) ?? 0) || compareCollections(a, b, collectionSort)
         ))
-    }, [collections, collectionTypeFilter, activeSourceFilter, searchWords, collectionSort])
+    }, [collections, activeCollectionTypeFilter, activeSourceFilter, searchWords, collectionSort])
     const filteredMovies = useMemo(
         () => movies?.filter((movie) => (
-            matchesSourceFilter(movie.sourceKey, activeSourceFilter) && matchesLibrarySearch(movie, searchWords)
+            matchesChipFilter(movie.sourceKey, activeSourceFilter) && matchesLibrarySearch(movie, searchWords)
         )) ?? [],
         [movies, activeSourceFilter, searchWords],
     )
     const filteredVideos = useMemo(
         () => videos?.filter((video) => (
-            matchesSourceFilter(video.sourceKey, activeSourceFilter) && matchesLibrarySearch(video, searchWords)
+            matchesChipFilter(video.sourceKey, activeSourceFilter) && matchesLibrarySearch(video, searchWords)
         )) ?? [],
         [videos, activeSourceFilter, searchWords],
     )
@@ -247,7 +228,7 @@ export default function LibraryPage() {
         try {
             localStorage.setItem(
                 LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY,
-                JSON.stringify(Array.from(collectionTypeFilter)),
+                JSON.stringify(collectionTypeFilter),
             )
         } catch {
             // Storage can be unavailable in restricted browser contexts. The filter
@@ -257,7 +238,7 @@ export default function LibraryPage() {
 
     useEffect(() => {
         try {
-            localStorage.setItem(LIBRARY_SOURCE_FILTER_STORAGE_KEY, JSON.stringify(Array.from(sourceFilter)))
+            localStorage.setItem(LIBRARY_SOURCE_FILTER_STORAGE_KEY, JSON.stringify(sourceFilter))
         } catch {
             // As above: without storage the filter just isn't remembered.
         }
@@ -279,66 +260,71 @@ export default function LibraryPage() {
     const loading = collectionsLoading || moviesLoading || videosLoading
     const error = collectionsError || moviesError || videosError
     const showTabs = presentTypes.length > 1
+    const showSort = activeType === 'collections' && hasCollections
+    const showTypeFilter = activeType === 'collections' && hasCollections
+    const sourceOptions = sourceKeys.map((key) => ({value: key, label: sources.name(key)}))
+    const showChips = sourceOptions.length > 1 || showTypeFilter
+    const activeFilterCount = (activeSourceFilter.length > 0 ? 1 : 0) + (showTypeFilter && activeCollectionTypeFilter.length > 0 ? 1 : 0)
+    const filtered = activeFilterCount > 0 || searchWords.length > 0
+    const matchingCount = activeType === 'collections' ? filteredCollections.length
+        : activeType === 'movies' ? filteredMovies.length
+            : filteredVideos.length
+    const resetFilters = () => {
+        setSourceFilter([])
+        setCollectionTypeFilter([])
+        setSearch('')
+    }
 
     return (
         <section className="view library-view" aria-labelledby="library-title">
-            <div className="view-header">
-                <div>
+            <div className={`library-header${showTabs ? ' has-tabs' : ''}`}>
+                <div className="library-heading">
                     <h1 id="library-title">Library</h1>
                     <p className="view-description">Collections, movies and videos indexed by VODLoft.</p>
                 </div>
+                {showTabs && (
+                    <MediaTypeTabs
+                        activeType={activeType}
+                        onChange={chooseType}
+                        ariaLabel="Library media type"
+                        types={presentTypes}
+                        counts={typeCounts}
+                    />
+                )}
                 {can('add_media') && (
-                    <Link className="btn btn-primary" to="/add">
+                    <Link className="btn btn-primary library-add" to="/add">
                         <FontAwesomeIcon icon={faIcon('fass', 'plus')}/>
-                        Add media
+                        <span className="library-add-label">Add media</span>
                     </Link>
                 )}
             </div>
 
-            {showTabs && (
-                <MediaTypeTabs
-                    activeType={activeType}
-                    onChange={chooseType}
-                    ariaLabel="Library media type"
-                    types={presentTypes}
-                    counts={typeCounts}
-                />
-            )}
-
             {hasAny && (
-                <div className="browse-toolbar library-toolbar">
-                    <label className="browse-search">
-                        <span className="sr-only">Search {activeType}</span>
-                        <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
-                        <input
-                            enterKeyHint="search"
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder={`Search ${activeType}`}
-                        />
-                        {search && <ClearInputButton label="Clear the search" onClear={() => setSearch('')}/>}
-                    </label>
-                    {activeType === 'collections' && hasCollections && (
+                <FilterBar
+                    search={search}
+                    onSearchChange={setSearch}
+                    searchPlaceholder={`Search ${activeType}`}
+                    beside={showSort && (
                         <CollectionSort order={collectionSort} onChange={chooseCollectionSort} searching={searchWords.length > 0}/>
                     )}
-                </div>
-            )}
-
-            {hasAny && (
-                <SourceFilter
-                    sourceKeys={sourceKeys}
-                    selected={activeSourceFilter}
-                    onChange={setSourceFilter}
-                    ariaLabel="Filter library by source"
-                />
-            )}
-
-            {activeType === 'collections' && hasCollections && (
-                <CollectionTypeFilter
-                    selectedTypes={collectionTypeFilter}
-                    onChange={setCollectionTypeFilter}
-                    ariaLabel="Filter library collections by type"
-                />
+                    hasFilters={showSort || showChips}
+                    activeCount={activeFilterCount}
+                    footer={filtered && (
+                        <div className="filter-bar-count" aria-live="polite">
+                            <strong>{matchingCount.toLocaleString()} matching {activeType}</strong>
+                            <button type="button" className="filter-chip-reset" onClick={resetFilters}>Reset filters</button>
+                        </div>
+                    )}
+                >
+                    {showChips && (
+                        <>
+                            <ChipFilter label="Source" options={sourceOptions} selected={activeSourceFilter} onChange={setSourceFilter}/>
+                            {showTypeFilter && (
+                                <ChipFilter label="Type" options={CollectionTypeReg.options} selected={activeCollectionTypeFilter} onChange={setCollectionTypeFilter}/>
+                            )}
+                        </>
+                    )}
+                </FilterBar>
             )}
 
             {(!typesKnown || loading) && !hasAny ? (

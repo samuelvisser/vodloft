@@ -1,0 +1,74 @@
+/* The Library's title, its media type tabs and Add media. On phones the tabs become the title. */
+.library-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "heading add" "tabs tabs";
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+.library-heading { grid-area: heading; min-width: 0; }
+.library-header .media-type-tabs { grid-area: tabs; justify-self: start; margin: 0; }
+.library-add { grid-area: add; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+@media (max-width: 720px) {
+    .library-header { grid-template-areas: "heading add"; gap: 10px; margin-bottom: 12px; }
+    .library-header h1 { margin: 0; font-size: 22px; }
+    .library-header .view-description { display: none; }
+
+    /* With more than one type, the tabs take the title's place; the title stays for screen readers. */
+    .library-header.has-tabs { grid-template-areas: "tabs add"; }
+    .library-header.has-tabs .library-heading {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+    }
+    .library-header .media-type-tabs {
+        display: flex;
+        width: auto;
+        min-width: 0;
+        gap: 18px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: none;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .library-header .media-type-tabs button {
+        flex: 0 0 auto;
+        min-height: 40px;
+        padding: 0 0 2px;
+        border-bottom: 3px solid transparent;
+        border-radius: 0;
+        background: none;
+        font-size: 20px;
+        font-weight: 750;
+    }
+    .library-header .media-type-tabs button svg { display: none; }
+    .library-header .media-type-tabs button[aria-selected="true"] { background: none; border-bottom-color: #3b82f6; }
+    .library-header .media-type-tabs button span { font-size: 13px; font-weight: 600; }
+
+    /* Add media becomes a round + button; its words stay for screen readers. */
+    .library-add {
+        width: 40px;
+        height: 40px;
+        justify-content: center;
+        padding: 0;
+        border-radius: 50%;
+        font-size: 17px;
+    }
+    .library-add-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+    }
+}

@@ -4,7 +4,8 @@ import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import {type DownloadProfileTableFilters, useDownloadProfilesTable, useLocalMediaProfiles, useSources} from '../lib/queries'
-import ProfileTableFilters, {ChipFilter, FORMAT_OPTIONS, STATUS_OPTIONS} from '../components/common/ProfileTableFilters'
+import ProfileTableFilters, {FORMAT_OPTIONS, STATUS_OPTIONS} from '../components/common/ProfileTableFilters'
+import {ChipFilter} from '../components/common/FilterBar'
 import SimpleSelect from '../components/common/SimpleSelect'
 import {createSelectRegistry} from '../utils/selectRegistry'
 import {updateLazyCollectionEntities} from '../lib/lazyCollection'
@@ -159,7 +160,7 @@ export default function DownloadProfilesPage() {
                 searchPlaceholder="Search collections or media profiles"
                 beside={(
                     <SimpleSelect
-                        className="profile-filters-select"
+                        className="filter-bar-select"
                         aria-label="Filter by local media profile"
                         registry={MediaProfileReg}
                         value={filters.localMediaProfileId ? String(filters.localMediaProfileId) : ''}

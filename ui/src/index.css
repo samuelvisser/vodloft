@@ -2445,27 +2445,28 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 }
 .toast-close:hover, .toast-close:focus-visible { opacity: 1; }
 
-/* The search, filter chips and count above the profile tables */
-.profile-filters { display: grid; gap: 10px; margin-bottom: 14px; }
-.profile-filters-top { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; }
-.profile-filters-top .browse-search { min-width: 220px; }
-.profile-filters-select { width: 240px; }
-.profile-filters-select .select__control { min-height: 44px; border-radius: 10px; }
-.profile-filters-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; }
-.profile-filter-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.profile-filter-label { margin-right: 2px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.profile-filters-count { display: flex; align-items: center; gap: 10px; min-height: 22px; color: var(--muted); font-size: 13px; }
-.profile-filters-count strong { color: var(--text); font-weight: 600; }
-.profile-filters-toggle { display: none; }
-.profile-filters-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #0d6efd; color: #fff; font-size: 11px; font-weight: 700; }
+/* A search with filter chips under it, such as above the profile tables and in the Library */
+.filter-bar { display: grid; gap: 10px; margin-bottom: 14px; }
+.filter-bar-top { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; }
+.filter-bar-top .browse-search { min-width: 220px; }
+.filter-bar-select { width: 240px; }
+.filter-bar-select .select__control { min-height: 44px; border-radius: 10px; }
+.filter-bar-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; }
+.filter-bar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.filter-bar-label { margin-right: 2px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.filter-bar-count { display: flex; align-items: center; gap: 10px; min-height: 22px; color: var(--muted); font-size: 13px; }
+.filter-bar-count strong { color: var(--text); font-weight: 600; }
+.filter-bar-toggle { display: none; }
+.filter-bar-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #0d6efd; color: #fff; font-size: 11px; font-weight: 700; }
 @media (max-width: 720px) {
-  .profile-filters-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-  .profile-filters-top .browse-search { min-width: 0; max-width: none; }
-  .profile-filters-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 12px; border-radius: 10px; }
-  .profile-filters-beside { display: none; grid-column: 1 / -1; }
-  .profile-filters-beside.is-open { display: block; }
-  .profile-filters-select { width: 100%; }
-  .profile-filters-chips { display: none; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; border: 1px solid rgba(100, 116, 139, .3); border-radius: 10px; }
-  .profile-filters-chips.is-open { display: flex; }
-  .profile-filter-label { flex-basis: 100%; }
+  .filter-bar-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .filter-bar-top.no-filters { grid-template-columns: minmax(0, 1fr); }
+  .filter-bar-top .browse-search { min-width: 0; max-width: none; }
+  .filter-bar-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 12px; border-radius: 10px; }
+  .filter-bar-beside { display: none; grid-column: 1 / -1; }
+  .filter-bar-beside.is-open { display: block; }
+  .filter-bar-select { width: 100%; }
+  .filter-bar-chips { display: none; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; border: 1px solid rgba(100, 116, 139, .3); border-radius: 10px; }
+  .filter-bar-chips.is-open { display: flex; }
+  .filter-bar-label { flex-basis: 100%; }
 }
