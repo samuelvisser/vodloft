@@ -12,8 +12,9 @@
 .library-add { grid-area: add; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 
 @media (max-width: 720px) {
-    .library-header { gap: 4px 10px; margin-bottom: 12px; }
-    .library-header h1 { margin: 0; font-size: 22px; }
+    /* The title keeps the size and place it has on every other page; the + button sits beside it. */
+    .library-header { align-items: start; gap: 4px 10px; margin-bottom: 12px; }
+    .library-header h1 { margin: 0; }
     .library-header .view-description { display: none; }
 
     .library-header .media-type-tabs {
