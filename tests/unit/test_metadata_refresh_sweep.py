@@ -152,6 +152,38 @@ def test_a_sweep_that_starts_while_another_runs_skips(swept, session, site_setti
     assert run_metadata_refresh(session, now=now + timedelta(minutes=10)).summary() == "No metadata refresh is due"
 
 
+def test_after_a_restart_only_what_came_due_since_the_last_sweep_is_looked_up(swept, session, site_settings):
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+    from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
+
+    collection = _site_collection(session, site_settings)
+    now = datetime.now(timezone.utc)
+    _add(session, collection, "settled", now - timedelta(minutes=30))
+    _add(session, collection, "came-due", now - timedelta(minutes=65))
+    swept.titles.update({"settled": "settled", "came-due": "came-due"})
+    definition = TaskDefinition(key="refresh_metadata", title="Refresh metadata", description=None,
+                                allowed_resource_types=["system"], default_max_retries=0)
+    session.add(definition)
+    session.flush()
+
+    def sweep_run(started_minutes_ago: int, data: dict):
+        session.add(TaskRun(
+            definition_id=definition.id, resource_type=ResourceType.SYSTEM, resource_id=0,
+            status=TaskStatus.SUCCEEDED, started_at=now - timedelta(minutes=started_minutes_ago),
+            result={"summary": "", "data": data},
+        ))
+
+    # The last sweep before the restart ran 10 minutes ago; one after it skipped because it overlapped.
+    sweep_run(10, {})
+    sweep_run(3, {"skipped": True})
+    session.commit()
+
+    # "came-due" passed its 1h interval since that sweep; "settled" has nothing new due.
+    run_metadata_refresh(session, now=now)
+    assert swept.calls == [["came-due"]]
+
+
 def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, session, site_settings):
     from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
 

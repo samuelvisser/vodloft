@@ -6,8 +6,10 @@ up again each time one of its Site's intervals passes, counted from publication.
 After the last interval it is final.
 
 The sweep keeps no schedule per item. It remembers when it last ran, and an item
-is due when one of its intervals passed since then. After a restart nothing is
-remembered, so the first sweep looks every unfinished item up once. A lookup
+is due when one of its intervals passed since then. After a restart it counts
+from the start of the last sweep in the task ledger, so only the items whose
+interval passed while VODLoft was down are looked up, not every unfinished item.
+Without such a sweep, the first one looks every unfinished item up once. A lookup
 that fails is tried again a couple of times within the sweep, and otherwise waits
 for the item's next interval.
 
@@ -45,6 +47,8 @@ from backend.services.metadata_refresh import (
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
 from sources import ItemRef, VideoDetails, all_sources, get_source
+from task_manager.scheduler.db import TaskDefinition, TaskRun
+from task_manager.scheduler.types import TaskStatus
 from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
 from ...helpers.locked_media import open_up
 from ...helpers.refreshed_metadata import apply_refreshed_details, check_upgrades_after_refresh
@@ -53,6 +57,7 @@ from ..refresh_episode_metadata.service import refresh_dailywire_episode
 logger = logging.getLogger(__name__)
 
 _ATTEMPTS = 3
+_TASK_KEY = "refresh_metadata"
 _last_sweep: Optional[datetime] = None
 # The startup sweep can still run when the first scheduled one starts. Both would
 # look every unfinished item up after a restart, so the later one skips instead.
@@ -91,6 +96,8 @@ class SweepResult:
         return "; ".join(parts)
 
     def as_data(self) -> dict:
+        if self.skipped:
+            return {"skipped": True}
         return {name: vars(counts) for name, counts in self.sites.items()}
 
 
@@ -258,10 +265,26 @@ def run_metadata_refresh(s: Session, *, now: Optional[datetime] = None) -> Sweep
         _sweeping.release()
 
 
+def _previous_sweep(s: Session) -> Optional[datetime]:
+    """When the last sweep in the task ledger started, so a restart does not look every unfinished item up again."""
+    runs = s.execute(
+        select(TaskRun.started_at, TaskRun.result)
+        .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
+        .where(TaskDefinition.key == _TASK_KEY, TaskRun.status == TaskStatus.SUCCEEDED, TaskRun.started_at.is_not(None))
+        .order_by(TaskRun.id.desc())
+        .limit(10)
+    )
+    for started_at, result in runs:
+        # A sweep that skipped because another one ran looked nothing up.
+        if not ((result or {}).get("data") or {}).get("skipped"):
+            return utc_datetime(started_at)
+    return None
+
+
 def _sweep(s: Session, now: Optional[datetime]) -> SweepResult:
     global _last_sweep
     now = utc_datetime(now or datetime.now(timezone.utc))
-    since = _last_sweep
+    since = _last_sweep or _previous_sweep(s)
     source_keys = [source.id for source in all_sources() if sweeps_metadata(source.id) or refreshes_one_by_one(source.id)]
     due: list[_Watched] = []
     finished: list[_Watched] = []
