@@ -10,13 +10,13 @@ import {
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
 import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
-import {PreferredFormatReg} from "../../types/local_media_profile";
 import {SelectRegistry} from "../../utils/selectRegistry";
 import {buildCollectionSelectRegistry, EpisodeIdentifierReg} from "../../types/collection";
 import {useQueryClient} from "@tanstack/react-query";
 import {getZodDefaults} from "../../utils/defaultZod";
 import ReadMore from "../../utils/ReadMore";
 import {apiUrl} from '../../lib/api'
+import {PreferredFormatReg} from '../../types/local_media_profile'
 import './AddDownloadProfilePage.css'
 
 export default function AddDownloadProfilePage() {
