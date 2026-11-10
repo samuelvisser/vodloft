@@ -80,6 +80,7 @@ function getAvailableForLabel(profile: LocalMediaProfileRead) {
 
 export default function LocalMediaProfilesPage() {
     const editIcon: IconProp = faIcon('fass', 'pen-to-square')
+    const duplicateIcon: IconProp = faIcon('fass', 'copy')
     const deleteIcon: IconProp = faIcon('fass', 'trash')
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
@@ -210,6 +211,12 @@ export default function LocalMediaProfilesPage() {
                             href: `/edit-local-media-profile/${p.slug}`,
                             icon: editIcon,
                             text: 'Edit',
+                            classes: 'btn',
+                        },
+                        {
+                            href: `/add-local-media-profile?duplicate=${encodeURIComponent(p.slug)}`,
+                            icon: duplicateIcon,
+                            text: 'Duplicate',
                             classes: 'btn',
                         },
                         {

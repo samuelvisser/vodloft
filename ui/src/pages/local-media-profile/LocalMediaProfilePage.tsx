@@ -256,6 +256,10 @@ export default function LocalMediaProfilePage() {
                             <FontAwesomeIcon icon={faIcon('fass', 'pen-to-square')} aria-hidden="true"/>
                             <span>Edit</span>
                         </Link>
+                        <Link className="btn" to={`/add-local-media-profile?duplicate=${encodeURIComponent(profile.slug)}`}>
+                            <FontAwesomeIcon icon={faIcon('fass', 'copy')} aria-hidden="true"/>
+                            <span>Duplicate</span>
+                        </Link>
                         <button
                             type="button"
                             className="btn btn-danger"
