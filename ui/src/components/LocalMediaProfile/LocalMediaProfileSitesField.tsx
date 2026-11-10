@@ -6,6 +6,7 @@ import {useLocalMediaProfileSites} from '../../lib/queries'
 import {sitesForLocalMediaProfileType, takesUpcomingSites, type LocalMediaProfileType} from '../../types/local_media_profile'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import ReadMore from '../../utils/ReadMore'
+import SelectAllLabel from '../common/SelectAllLabel'
 
 const UPCOMING_SITES = '__upcoming__'
 
@@ -48,7 +49,16 @@ export default function LocalMediaProfileSitesField({form, mode}: {
     const error = errors.siteKeys ?? errors.includeUpcomingSites
     return (
         <div className="form-row">
-            <label htmlFor="mp-sites">Sites</label>
+            <SelectAllLabel
+                htmlFor="mp-sites"
+                allChosen={siteReg.values.every((value) => chosen.includes(value))}
+                onSelectAll={() => {
+                    if (upcoming) setValue('includeUpcomingSites', true, {shouldDirty: true})
+                    setValue('siteKeys', available.map((site) => site.key), {shouldDirty: true, shouldValidate: true})
+                }}
+            >
+                Sites
+            </SelectAllLabel>
             <Select
                 inputId="mp-sites"
                 isMulti
