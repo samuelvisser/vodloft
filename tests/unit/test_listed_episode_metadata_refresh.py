@@ -93,7 +93,7 @@ def test_the_refresh_never_asks_the_daily_wire_about_a_listed_episode(listed, se
         raise AssertionError("The Daily Wire was asked about a listed episode")
 
     monkeypatch.setattr(service, "refresh_dailywire_episode", daily_wire)
-    monkeypatch.setattr(service, "_last_sweep", None)
+    monkeypatch.setattr(service, "_failed", {})
 
     service.run_metadata_refresh(session)
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode
@@ -49,8 +49,11 @@ def metadata_is_final_for_new_episode(
 def update_episode_from_dailywire(
         episode: Episode,
         dw_episode: DwEpisodeDetailRecord,
+        *,
+        now: datetime | None = None,
 ) -> None:
     """Refresh Daily Wire metadata without changing VODLoft-owned lifecycle state."""
+    episode.metadata_refreshed_at = now or datetime.now(timezone.utc)
     protected_fields = {
         "id",
         "collection_id",
@@ -59,6 +62,7 @@ def update_episode_from_dailywire(
         "episode_identifier",
         "publish_status",
         "metadata_is_final",
+        "metadata_refreshed_at",
     }
     model_fields = set(Episode.__mapper__.attrs.keys())
     for field, value in dw_episode.model_dump(mode="python", by_alias=False).items():

@@ -89,6 +89,9 @@ class Episode(
         default=True,
         server_default="1",
     )
+    metadata_refreshed_at: Mapped[Optional[datetime]] = mapped_column(
+        comment="When VODLoft last looked the episode up at its Source, by a refresh or a manual Refresh now",
+    )
     video_url: Mapped[Optional[str]]
     audio_url: Mapped[Optional[str]]
     sharing_url: Mapped[str]

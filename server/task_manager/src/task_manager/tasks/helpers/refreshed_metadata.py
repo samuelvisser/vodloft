@@ -20,12 +20,14 @@ from task_manager.scheduler.transactional import queue_task_after_commit
 _UPGRADE_CHECK_TASK_KEY = "upgrade_check"
 
 
-def apply_refreshed_details(item: Episode | Video, details: VideoDetails) -> bool:
+def apply_refreshed_details(item: Episode | Video, details: VideoDetails, *, now: datetime | None = None) -> bool:
     """Take the title, description, uploader, length and picture the Source has now. Returns whether any changed.
 
     A field the Source left out is kept. So is a lock: a refresh that says nothing about access does not prove
-    anyone may download the item, so it only stores the access the Source says the item needs now.
+    anyone may download the item, so it only stores the access the Source says the item needs now. The item
+    remembers when it was looked up, also when nothing changed.
     """
+    item.metadata_refreshed_at = now or datetime.now(timezone.utc)
     changes = {
         "title": details.title, "description": details.description, "author_name": details.author_name,
         # A length of zero means the Source did not say.

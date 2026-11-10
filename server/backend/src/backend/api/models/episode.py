@@ -94,6 +94,7 @@ class _EpisodeAPIBaseOut(SourcedResponse, LockableResponse, _EpisodeIdentifierAP
     went_live_date: Optional[datetime] = None
     published_date: Optional[datetime]
     scheduled_date: Optional[datetime]
+    metadata_refreshed_at: Optional[datetime] = None
     sharing_url: str
     early_delete_available: bool = False
     download_delay_passed: bool

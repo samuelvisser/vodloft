@@ -61,7 +61,7 @@ def swept(monkeypatch):
     from task_manager.tasks.workers.refresh_metadata import service
 
     monkeypatch.setattr(registry, "_sources", dict(registry._sources))
-    monkeypatch.setattr(service, "_last_sweep", None)
+    monkeypatch.setattr(service, "_failed", {})
     return registry.register(SweptSource())
 
 
@@ -104,25 +104,27 @@ def test_an_upload_is_looked_up_on_each_interval_until_its_metadata_is_final(swe
     assert _episode(session, "old").metadata_is_final
     swept.titles["new"] = "A better title"
 
-    # After a restart, every unfinished upload is looked up once.
-    first = run_metadata_refresh(session, now=now)
+    # Its first interval has not passed yet.
+    assert run_metadata_refresh(session, now=now).summary() == "No metadata refresh is due"
+    assert swept.calls == []
+
+    # The 1h interval passes, and the upload remembers when it was looked up.
+    first = run_metadata_refresh(session, now=now + timedelta(minutes=40))
     assert swept.calls == [["new"]]
-    assert _episode(session, "new").title == "A better title"
+    episode = _episode(session, "new")
+    assert episode.title == "A better title" and not episode.metadata_is_final
+    assert episode.metadata_refreshed_at == now + timedelta(minutes=40)
     assert "Tube: looked up 1, 1 changed" in first.summary()
 
     # No interval passed since then.
-    assert run_metadata_refresh(session, now=now + timedelta(minutes=10)).summary() == "No metadata refresh is due"
+    assert run_metadata_refresh(session, now=now + timedelta(minutes=50)).summary() == "No metadata refresh is due"
     assert len(swept.calls) == 1
 
-    # The 1h interval passes.
-    swept.titles["new"] = "The final title"
-    run_metadata_refresh(session, now=now + timedelta(minutes=40))
-    assert len(swept.calls) == 2 and not _episode(session, "new").metadata_is_final
-
     # The last interval passes: one more look, then the metadata is final.
+    swept.titles["new"] = "The final title"
     run_metadata_refresh(session, now=now + timedelta(days=1))
     episode = _episode(session, "new")
-    assert len(swept.calls) == 3
+    assert len(swept.calls) == 2
     assert episode.metadata_is_final and episode.title == "The final title"
     # The identifier, which file names follow, never changes.
     assert episode.episode_identifier == "ep.1"
@@ -134,7 +136,7 @@ def test_a_sweep_that_starts_while_another_runs_skips(swept, session, site_setti
 
     collection = _site_collection(session, site_settings)
     now = datetime.now(timezone.utc)
-    _add(session, collection, "new", now - timedelta(minutes=30))
+    _add(session, collection, "new", now - timedelta(minutes=65))
     swept.titles["new"] = "A better title"
     overlapping = []
     looked_up = swept.refresh_metadata
@@ -152,13 +154,48 @@ def test_a_sweep_that_starts_while_another_runs_skips(swept, session, site_setti
     assert run_metadata_refresh(session, now=now + timedelta(minutes=10)).summary() == "No metadata refresh is due"
 
 
+def test_after_a_restart_only_what_came_due_since_its_last_lookup_is_looked_up(swept, session, site_settings, monkeypatch):
+    from task_manager.tasks.workers.refresh_metadata import service
+
+    collection = _site_collection(session, site_settings)
+    now = datetime.now(timezone.utc)
+    _add(session, collection, "looked-up", now - timedelta(minutes=65))
+    _add(session, collection, "came-due", now - timedelta(minutes=65))
+    _add(session, collection, "not-yet", now - timedelta(minutes=30))
+    swept.titles.update({"looked-up": "looked-up", "came-due": "came-due", "not-yet": "not-yet"})
+    # Refresh now, or a sweep before the restart, looked one up after its 1h interval.
+    _episode(session, "looked-up").metadata_refreshed_at = now - timedelta(minutes=2)
+    session.commit()
+    # A restart forgets everything the sweep kept in memory.
+    monkeypatch.setattr(service, "_failed", {})
+
+    service.run_metadata_refresh(session, now=now)
+    assert swept.calls == [["came-due"]]
+
+
+def test_a_lookup_that_keeps_failing_waits_for_the_next_interval(swept, session, site_settings):
+    from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
+
+    collection = _site_collection(session, site_settings)
+    now = datetime.now(timezone.utc)
+    _add(session, collection, "flaky", now - timedelta(minutes=65))
+
+    assert run_metadata_refresh(session, now=now).sites["Tube"].failed == 1
+    assert len(swept.calls) == 3 and _episode(session, "flaky").metadata_refreshed_at is None
+    # The next sweeps leave it alone until its next interval passes.
+    assert run_metadata_refresh(session, now=now + timedelta(minutes=2)).summary() == "No metadata refresh is due"
+    swept.titles["flaky"] = "Back"
+    run_metadata_refresh(session, now=now + timedelta(days=1))
+    assert len(swept.calls) == 4 and _episode(session, "flaky").title == "Back"
+
+
 def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, session, site_settings):
     from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
 
     collection = _site_collection(session, site_settings)
     now = datetime.now(timezone.utc)
-    _add(session, collection, "gone", now - timedelta(minutes=5))
-    _add(session, collection, "flaky", now - timedelta(minutes=5))
+    _add(session, collection, "gone", now - timedelta(minutes=65))
+    _add(session, collection, "flaky", now - timedelta(minutes=65))
     swept.removed.add("gone")
 
     result = run_metadata_refresh(session, now=now)
@@ -174,7 +211,7 @@ def test_an_upload_only_members_may_see_is_locked_and_checked_again_later(swept,
 
     collection = _site_collection(session, site_settings)
     now = datetime.now(timezone.utc)
-    _add(session, collection, "members", now - timedelta(minutes=5))
+    _add(session, collection, "members", now - timedelta(minutes=65))
     swept.refused.add("members")
 
     result = run_metadata_refresh(session, now=now)
@@ -191,7 +228,7 @@ def test_an_upload_that_opened_up_loses_its_badge(swept, session, site_settings)
 
     collection = _site_collection(session, site_settings)
     now = datetime.now(timezone.utc)
-    _add(session, collection, "members", now - timedelta(minutes=5))
+    _add(session, collection, "members", now - timedelta(minutes=65))
     _episode(session, "members").access = "members"
     session.commit()
     swept.titles["members"] = "Now for everyone"
@@ -341,15 +378,20 @@ def daily_wire(monkeypatch, site_settings):
 
     site_settings(dailywire={"metadata_refresh": "1h,1d"})
 
-    monkeypatch.setattr(service, "_last_sweep", None)
+    monkeypatch.setattr(service, "_failed", {})
     answers: list[bool | None | Exception] = []
     asked: list[int] = []
 
-    def refresh(_session, episode_id):
+    def refresh(session, episode_id, *, now):
+        from backend.db.models import Episode
+
         asked.append(episode_id)
         answer = answers.pop(0) if answers else True
         if isinstance(answer, Exception):
             raise answer
+        if answer:
+            session.get(Episode, episode_id).metadata_refreshed_at = now
+            session.commit()
         return answer
 
     monkeypatch.setattr(service, "refresh_dailywire_episode", refresh)
@@ -363,21 +405,21 @@ def test_a_daily_wire_episode_is_refreshed_one_by_one_on_its_sites_schedule(dail
     now = datetime.now(timezone.utc)
     episode_id = _dailywire_episode(session, "show", now - timedelta(minutes=30))
 
-    assert "The Daily Wire: looked up 1, 1 changed" in run_metadata_refresh(session, now=now).summary()
-    assert run_metadata_refresh(session, now=now + timedelta(minutes=10)).summary() == "No metadata refresh is due"
+    assert run_metadata_refresh(session, now=now).summary() == "No metadata refresh is due"
     # A lookup that fails is tried again within the sweep.
     answers.extend([RuntimeError("HTTP error 503"), True])
-    run_metadata_refresh(session, now=now + timedelta(minutes=40))
-    assert asked == [episode_id] * 3
+    summary = run_metadata_refresh(session, now=now + timedelta(minutes=40)).summary()
+    assert "The Daily Wire: looked up 1, 1 changed" in summary and asked == [episode_id] * 2
+    assert run_metadata_refresh(session, now=now + timedelta(minutes=50)).summary() == "No metadata refresh is due"
 
     run_metadata_refresh(session, now=now + timedelta(days=1))
     session.expire_all()
-    assert _episode(session, "show").metadata_is_final
+    assert len(asked) == 3 and _episode(session, "show").metadata_is_final
 
     # Refresh now looks it up again, and the sweep follows it as long as its schedule says.
     refresh_episode_now(session, episode_id, now=now + timedelta(days=2))
     session.expire_all()
-    assert len(asked) == 5 and _episode(session, "show").metadata_is_final
+    assert len(asked) == 4 and _episode(session, "show").metadata_is_final
 
 
 def test_a_daily_wire_episode_that_changed_hands_is_not_made_final(daily_wire, session):

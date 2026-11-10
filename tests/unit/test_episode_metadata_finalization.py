@@ -79,7 +79,7 @@ def test_the_refresh_schedule_counts_from_the_safe_final_publication(has_safe_fi
         id=42, source_key="dailywire", source_slug="episode", sharing_url="https://example.test/episode",
         metadata_is_final=False, publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         safe_published_final=safe_final if has_safe_final else None, last_known_pending=None,
-        published_date=dailywire_published, collection=SimpleNamespace(site=None, site_key=None),
+        published_date=dailywire_published, metadata_refreshed_at=None, collection=SimpleNamespace(site=None, site_key=None),
     )
 
     item = _watched_episode(episode)
@@ -100,7 +100,8 @@ def test_the_refresh_schedule_ignores_the_ensure_safe_delay_setting(monkeypatch)
         id=42, source_key="dailywire", source_slug="episode", sharing_url="https://example.test/episode",
         metadata_is_final=False, publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         safe_published_final=None, last_known_pending=last_known_pending,
-        published_date=datetime(2026, 10, 2, 8, tzinfo=timezone.utc), collection=SimpleNamespace(site=None, site_key=None),
+        published_date=datetime(2026, 10, 2, 8, tzinfo=timezone.utc), metadata_refreshed_at=None,
+        collection=SimpleNamespace(site=None, site_key=None),
     )
 
     assert _watched_episode(episode).published == last_known_pending
@@ -268,6 +269,6 @@ def test_refresh_now_leaves_an_episode_that_is_not_published_alone(monkeypatch):
         def rollback(self):
             pass
 
-    monkeypatch.setattr(service, "refresh_dailywire_episode", lambda *_args: pytest.fail("looked up"))
+    monkeypatch.setattr(service, "refresh_dailywire_episode", lambda *_args, **_kwargs: pytest.fail("looked up"))
 
     assert service.refresh_episode_now(FakeSession(), episode.id).summary() == "No metadata refresh is due"

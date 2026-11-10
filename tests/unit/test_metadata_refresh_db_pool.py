@@ -69,7 +69,7 @@ def test_metadata_refresh_releases_read_transaction_before_dailywire_request(mon
     monkeypatch.setattr(
         service,
         "_refresh_episode_from_dailywire",
-        lambda _session, refreshed_episode, fetched_detail: (
+        lambda _session, refreshed_episode, fetched_detail, **_kwargs: (
             applied.append((refreshed_episode, fetched_detail)) or True
         ),
     )
@@ -116,7 +116,7 @@ def test_metadata_refresh_revalidates_episode_after_dailywire_request(monkeypatc
     monkeypatch.setattr(
         service,
         "_refresh_episode_from_dailywire",
-        lambda *_args: applied.append(True) or True,
+        lambda *_args, **_kwargs: applied.append(True) or True,
     )
     monkeypatch.setattr(service, "run_write_transaction", lambda work, **_kwargs: work(session))
 

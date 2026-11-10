@@ -200,7 +200,7 @@ def _move_to_published_date(s: Session, episode: Episode, details: VideoDetails)
 def _apply(s: Session, episode: Episode, details: VideoDetails, result: PendingCheckResult, now: datetime) -> None:
     old_status = episode.publish_status
     new_status = details.publish_status
-    apply_refreshed_details(episode, details)
+    apply_refreshed_details(episode, details, now=now)
     episode.removed_from_source = False
     if old_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
         clear_episode_no_usable_media_tracking(episode)

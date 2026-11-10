@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -28,7 +29,7 @@ from ...helpers.episodes.unusable_media import NoUsableMediaReason, mark_episode
 logger = logging.getLogger(__name__)
 
 
-def refresh_dailywire_episode(s: Session, episode_id: int) -> Optional[bool]:
+def refresh_dailywire_episode(s: Session, episode_id: int, *, now: Optional[datetime] = None) -> Optional[bool]:
     """Look one published Daily Wire episode up again, as the metadata refresh sweep asks.
 
     True when it was updated as usual, False when it changed hands because it is
@@ -56,7 +57,7 @@ def refresh_dailywire_episode(s: Session, episode_id: int) -> Optional[bool]:
         episode = w.get(Episode, episode_id)
         if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
             return None
-        refreshed_normally = _refresh_episode_from_dailywire(w, episode, detail)
+        refreshed_normally = _refresh_episode_from_dailywire(w, episode, detail, now=now)
         request_collection_custom_index_reconciliation(w, episode.collection_id)
         if not refreshed_normally:
             episode.metadata_is_final = False
@@ -95,6 +96,8 @@ def _refresh_episode_from_dailywire(
     s: Session,
     episode: Episode,
     detail: DwEpisodeDetailRecord | None,
+    *,
+    now: Optional[datetime] = None,
 ) -> bool:
     """Apply one fetched snapshot; return False when lifecycle ownership transfers."""
     collection = episode.collection
@@ -131,7 +134,7 @@ def _refresh_episode_from_dailywire(
     )
     new_status = resolved.status
 
-    update_episode_from_dailywire(episode, detail)
+    update_episode_from_dailywire(episode, detail, now=now)
 
     if new_status is EpisodePublishStatus.NO_USABLE_MEDIA:
         mark_episode_no_usable_media(

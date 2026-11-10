@@ -38,6 +38,9 @@ class Video(MediaItemBase, MediaContentMetadataMixin, CreatedByMixin):
         Boolean, nullable=False, default=True, server_default="1",
         comment="False while VODLoft still looks the video up again after publication",
     )
+    metadata_refreshed_at: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(), comment="When VODLoft last looked the video up at its Source, by a refresh or a manual Refresh now",
+    )
 
     site: Mapped[Optional["Site"]] = relationship(lazy="joined")
 

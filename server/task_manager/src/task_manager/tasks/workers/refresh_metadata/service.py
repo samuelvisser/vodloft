@@ -5,11 +5,11 @@ it. While an episode or single video's metadata is not final, the sweep looks it
 up again each time one of its Site's intervals passes, counted from publication.
 After the last interval it is final.
 
-The sweep keeps no schedule per item. It remembers when it last ran, and an item
-is due when one of its intervals passed since then. After a restart nothing is
-remembered, so the first sweep looks every unfinished item up once. A lookup
-that fails is tried again a couple of times within the sweep, and otherwise waits
-for the item's next interval.
+Every item remembers when it was last looked up (``metadata_refreshed_at``), by
+the sweep, Refresh now or any other check, and it is due when one of its intervals
+passed since then. A restart therefore changes nothing. A lookup that fails is
+tried again a couple of times within the sweep, and otherwise waits for the item's
+next interval; after a restart it is tried once more.
 
 Items of a Source with ``Feature.METADATA_REFRESH`` are looked up per Source in
 one go, so the yt-dlp Source can ask the YouTube API for 50 videos at a time. The
@@ -53,7 +53,8 @@ from ..refresh_episode_metadata.service import refresh_dailywire_episode
 logger = logging.getLogger(__name__)
 
 _ATTEMPTS = 3
-_last_sweep: Optional[datetime] = None
+# When each item's lookup last failed, so it waits for its next interval instead of being tried every sweep.
+_failed: dict[tuple[type, int], datetime] = {}
 # The startup sweep can still run when the first scheduled one starts. Both would
 # look every unfinished item up after a restart, so the later one skips instead.
 _sweeping = threading.Lock()
@@ -104,13 +105,21 @@ class _Watched:
     published: Optional[datetime]
     offsets: tuple[int, ...]
     one_by_one: bool
+    looked_up: Optional[datetime]
 
-    def due(self, since: Optional[datetime], now: datetime) -> bool:
-        """Whether one of the item's intervals passed since the last sweep; all are due after a restart."""
-        if since is None:
-            return True
+    @property
+    def key(self) -> tuple[type, int]:
+        return self.model, self.id
+
+    def due(self, now: datetime) -> bool:
+        """Whether one of the item's intervals passed since it was last looked up, or its lookup last failed."""
         published = utc_datetime(self.published)
-        return any(since < published + timedelta(seconds=offset) <= now for offset in self.offsets)
+        passed = [published + timedelta(seconds=offset) for offset in self.offsets]
+        passed = [point for point in passed if point <= now]
+        if not passed:
+            return False
+        tried = [utc_datetime(at) for at in (self.looked_up, _failed.get(self.key)) if at is not None]
+        return not tried or max(tried) < max(passed)
 
 
 def _site_name(site: Optional[Site]) -> str:
@@ -122,6 +131,7 @@ def _watched_episode(episode: Episode) -> _Watched:
     return _Watched(
         Episode, episode.id, episode.source_key, _site_name(site), ItemRef(episode.source_slug, episode.sharing_url),
         best_effort_published_date(episode), site_refresh_offsets(episode.collection.site_key), refreshes_one_by_one(episode.source_key),
+        episode.metadata_refreshed_at,
     )
 
 
@@ -141,7 +151,7 @@ def _watched(s: Session, source_keys: list[str]) -> Iterator[_Watched]:
     for video in videos:
         yield _Watched(
             Video, video.id, video.source_key, _site_name(video.site), ItemRef(video.slug, video.sharing_url),
-            video.published_at, site_refresh_offsets(video.site_key), False,
+            video.published_at, site_refresh_offsets(video.site_key), False, video.metadata_refreshed_at,
         )
 
 
@@ -177,11 +187,11 @@ def _look_up(source_key: str, refs: list[ItemRef]) -> _Answers:
     return answers
 
 
-def _refresh_one_by_one(s: Session, item: _Watched, counts: SiteCounts) -> bool:
+def _refresh_one_by_one(s: Session, item: _Watched, counts: SiteCounts, now: datetime) -> bool:
     """Whether the episode is still published, after its Source's own refresh looked it up."""
     for attempt in range(_ATTEMPTS):
         try:
-            refreshed = refresh_dailywire_episode(s, item.id)
+            refreshed = refresh_dailywire_episode(s, item.id, now=now)
         except Exception:
             s.rollback()
             logger.warning("Could not refresh episode %s (attempt %d)", item.id, attempt + 1, exc_info=True)
@@ -212,11 +222,16 @@ def _refresh(s: Session, due: list[_Watched], now: datetime) -> dict[str, SiteCo
     for item in due:
         counts = sites.setdefault(item.site_name, SiteCounts())
         counts.checked += 1
-        if item.one_by_one and not _refresh_one_by_one(s, item, counts):
+        failed = counts.failed
+        if item.one_by_one and not _refresh_one_by_one(s, item, counts, now):
             continue
         stored = run_write_transaction(lambda w, item=item: _store(w, item, answers.get(item.source_key), now))
         for name in ("updated", "removed", "failed", "finished"):
             setattr(counts, name, getattr(counts, name) + getattr(stored, name))
+        if counts.failed > failed:
+            _failed[item.key] = now
+        else:
+            _failed.pop(item.key, None)
     return sites
 
 
@@ -228,13 +243,15 @@ def _store(w: Session, item: _Watched, answer: _Answers | None, now: datetime) -
         return counts
     if not item.one_by_one:
         if item.ref.slug in answer.removed:
+            row.metadata_refreshed_at = now
             if not row.removed_from_source:
                 row.removed_from_source = True
                 counts.removed += 1
         elif (details := answer.details.get(item.ref.slug)) is not None or item.ref.slug in answer.refused:
             row.removed_from_source = False
+            row.metadata_refreshed_at = now
             if details is not None:
-                counts.updated += apply_refreshed_details(row, details)
+                counts.updated += apply_refreshed_details(row, details, now=now)
                 if isinstance(row, Episode):
                     check_upgrades_after_refresh(w, row)
             if (access := answer.refused.get(item.ref.slug)) is not None and row.access_refused_at is None:
@@ -259,9 +276,7 @@ def run_metadata_refresh(s: Session, *, now: Optional[datetime] = None) -> Sweep
 
 
 def _sweep(s: Session, now: Optional[datetime]) -> SweepResult:
-    global _last_sweep
     now = utc_datetime(now or datetime.now(timezone.utc))
-    since = _last_sweep
     source_keys = [source.id for source in all_sources() if sweeps_metadata(source.id) or refreshes_one_by_one(source.id)]
     due: list[_Watched] = []
     finished: list[_Watched] = []
@@ -269,7 +284,7 @@ def _sweep(s: Session, now: Optional[datetime]) -> SweepResult:
         if not item.offsets or item.published is None:
             # The Site's refresh is off, or there is no publication to count from.
             finished.append(item)
-        elif item.due(since, now):
+        elif item.due(now):
             due.append(item)
         elif refresh_watch_expired(item.published, item.offsets, now=now):
             finished.append(item)
@@ -289,7 +304,6 @@ def _sweep(s: Session, now: Optional[datetime]) -> SweepResult:
     if finished:
         for name in run_write_transaction(finish):
             sites.setdefault(name, SiteCounts()).finished += 1
-    _last_sweep = now
     return SweepResult(sites)
 
 
