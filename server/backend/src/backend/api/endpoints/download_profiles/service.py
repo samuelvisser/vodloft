@@ -26,7 +26,7 @@ from backend.services.episode_filters import (
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.utils.local_media_profiles import require_local_media_profile_type
-from backend.services.sites import collection_site
+from backend.services.sites import collection_site, collection_site_key
 from sources import SiteSetting
 from task_manager.events.transactional import queue_event
 
@@ -76,7 +76,7 @@ def create_download_profile(s: Session, body: DownloadProfileAPICreate) -> Downl
     collection = s.get(Collection, body.collection_id)
     require_local_media_profile_type(
         s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION,
-        collection.source_key if collection is not None else None,
+        collection_site_key(collection) if collection is not None else None,
     )
     require_one_profile_per_local_media_profile(
         s, collection_id=body.collection_id, local_media_profile_id=body.local_media_profile_id,
@@ -96,10 +96,10 @@ def update_download_profile(s: Session, download_profile_id: int, body: Download
     if item is None:
         raise HTTPException(status_code=404, detail="Download profile not found")
 
-    # A profile limited to other Sources after it was chosen stays usable where it already is.
+    # A profile limited to other Sites after it was chosen stays usable where it already is.
     require_local_media_profile_type(
         s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION,
-        item.collection.source_key if body.local_media_profile_id != item.local_media_profile_id else None,
+        collection_site_key(item.collection) if body.local_media_profile_id != item.local_media_profile_id else None,
     )
     require_one_profile_per_local_media_profile(
         s, collection_id=item.collection_id, local_media_profile_id=body.local_media_profile_id,

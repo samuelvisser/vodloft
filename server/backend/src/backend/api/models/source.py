@@ -248,6 +248,7 @@ class YtdlpOptionLineAPIRead(ResponseBase):
 class SiteOptionsAPIRead(ResponseBase):
     """What the site of one collection offers beyond its Source's usual choices."""
 
+    site_key: str
     site_name: str
     settings: list[SiteSetting]
     """The download profile settings the site shows, such as auto-generated subtitles or downloading with the countdown."""

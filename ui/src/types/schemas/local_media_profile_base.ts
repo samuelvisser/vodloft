@@ -1,5 +1,6 @@
 import {z} from 'zod'
 import {ApiDateTimeSchema} from "./datetime";
+import {DownloadOptionsSchema} from "./source";
 
 
 export const LocalMediaProfileStorageModeSchema = z.enum(['system', 'direct', 'temporary'])
@@ -55,8 +56,10 @@ export const LocalMediaProfileSchemaRequest = z.object({
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
-    /** The Sources the profile is offered for; null offers it for every Source, including ones added later. */
-    sourceKeys: z.array(z.string()).min(1, 'Choose at least one Source').nullable().default(null),
+    /** The Sites the profile is offered for; null until the form fills in every Site VODLoft knows. */
+    siteKeys: z.array(z.string()).nullable().default(null),
+    /** Sites VODLoft sees for the first time join the profile's Sites. */
+    includeUpcomingSites: z.boolean().default(true),
     ...QualityAndLanguageFields,
 })
 
@@ -94,7 +97,26 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     ...QualityAndLanguageFields,
-    sourceKeys: z.array(z.string()).nullable().optional().transform((value) => value ?? null),
+    siteKeys: z.array(z.string()).default([]),
+    includeUpcomingSites: z.boolean().default(true),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })
+
+/** A Site VODLoft knows, with the profile types that can store media from it. */
+export const LocalMediaProfileSiteReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+    profileTypes: z.array(z.string()),
+    downloadOptions: DownloadOptionsSchema,
+})
+export type LocalMediaProfileSiteRead = z.infer<typeof LocalMediaProfileSiteReadSchema>
+
+/** Every Site a Local Media Profile can be offered for, and what Sites VODLoft has not seen yet bring. */
+export const LocalMediaProfileSitesReadSchema = z.object({
+    sites: z.array(LocalMediaProfileSiteReadSchema),
+    /** The profile types that can include upcoming Sites. */
+    upcomingProfileTypes: z.array(z.string()),
+    upcomingDownloadOptions: DownloadOptionsSchema,
+})
+export type LocalMediaProfileSitesRead = z.infer<typeof LocalMediaProfileSitesReadSchema>

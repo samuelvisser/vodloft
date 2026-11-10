@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from pydantic import AliasPath, Field
 
 from backend.api.models.download_profile import DownloadProfileAPIRead
@@ -13,6 +15,7 @@ class DownloadProfileAPIReadView(DownloadProfileAPIRead):
     collection_slug: str = Field(validation_alias=AliasPath("profile", "collection", "slug"))
     collection_type: str = Field(validation_alias=AliasPath("profile", "collection", "type"))
     collection_source_key: str = Field(validation_alias=AliasPath("profile", "collection", "source_key"))
+    collection_site_key: Optional[str] = Field(validation_alias=AliasPath("profile", "collection", "site_key"))
     collection_episode_identifier: str = Field(
         validation_alias=AliasPath("profile", "collection", "episode_identifier")
     )

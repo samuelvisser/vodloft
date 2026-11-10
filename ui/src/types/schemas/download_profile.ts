@@ -246,6 +246,7 @@ export const AutoSubtitlesUseSchema = z.object({
 export type AutoSubtitlesUse = z.infer<typeof AutoSubtitlesUseSchema>
 
 export const SiteOptionsSchema = z.object({
+    siteKey: z.string(),
     siteName: z.string(),
     /** The download profile settings the site shows, such as autoSubtitles, sponsorblock or downloadWithCountdown. */
     settings: z.array(z.string()),

@@ -10,7 +10,9 @@ from typing import Literal
 
 from pydantic import Field, computed_field, field_validator, model_validator
 
-from backend.services.local_media_profile_sources import offers_format, profile_download_options, sources_for_profile_type
+from backend.services.local_media_profile_sites import (
+    offers_format, profile_download_options, site_offered_for_type, takes_upcoming_sites,
+)
 from backend.types.input_model import InputModel
 from backend.types.local_media_profile_types import (
     GOAL_PRESETS,
@@ -106,8 +108,10 @@ class LocalMediaProfileInput(InputModel):
     audio_format: AudioFormat = AudioFormat.M4A
     audio_language: str | None = Field(default=None, max_length=16)
     output_template: str = Field(min_length=16, max_length=4096)
-    source_keys: list[str] | None = Field(default=None, max_length=50)
-    """The Sources the profile is offered for; None offers it for every Source."""
+    site_keys: list[str] | None = Field(default=None, max_length=500)
+    """The Sites the profile is offered for; a new profile without them starts with every Site VODLoft knows."""
+    include_upcoming_sites: bool = True
+    """Sites VODLoft sees for the first time join the profile's Sites."""
 
     @field_validator("subtitle_languages")
     @classmethod
@@ -132,27 +136,23 @@ class LocalMediaProfileInput(InputModel):
         return value
 
     @model_validator(mode="after")
-    def _known_sources(self):
-        if self.source_keys is None:
+    def _offered_sites(self):
+        if self.site_keys is None:
             return self
-        available = [source.id for source in sources_for_profile_type(self.type)]
-        if not self.source_keys:
-            raise ValueError("Choose at least one Source")
-        unknown = [key for key in self.source_keys if key not in available]
-        if unknown:
-            raise ValueError(f"This profile cannot be offered for {', '.join(unknown)}")
-        # Every Source chosen means every Source, so Sources added later are offered the profile too.
-        if set(self.source_keys) >= set(available):
-            self.source_keys = None
-        else:
-            self.source_keys = [key for key in available if key in self.source_keys]
+        self.site_keys = list(dict.fromkeys(self.site_keys))
+        refused = [key for key in self.site_keys if not site_offered_for_type(self.type, key)]
+        if refused:
+            raise ValueError(f"This profile cannot be offered for {', '.join(refused)}")
+        if not self.site_keys and not (self.include_upcoming_sites and takes_upcoming_sites(self.type)):
+            raise ValueError("Choose at least one Site")
         return self
 
     @model_validator(mode="after")
     def _offered_format(self):
-        # A profile can download what any of its Sources' Sites offers; each Site gets the nearest it has.
-        if not offers_format(profile_download_options(self.type, self.source_keys), self.preferred_format):
-            raise ValueError(f"None of this profile's Sources can download {_FORMAT_NAMES.get(self.preferred_format, self.preferred_format.removeprefix("format_"))}")
+        # A profile can download what any of its Sites offers; each Site gets the nearest it has.
+        options = profile_download_options(self.type, self.site_keys, self.include_upcoming_sites)
+        if not offers_format(options, self.preferred_format):
+            raise ValueError(f"None of this profile's Sites can download {_FORMAT_NAMES.get(self.preferred_format, self.preferred_format.removeprefix("format_"))}")
         return self
 
     @model_validator(mode="after")
@@ -181,11 +181,13 @@ class LocalMediaProfileInput(InputModel):
 
     def fields_kept_on_update(self) -> set[str]:
         """Choices an update leaves as they are when it does not send them, rather than resetting them to defaults."""
-        return _KEPT_WHEN_UNSET - self.model_fields_set
+        kept = _KEPT_WHEN_UNSET - self.model_fields_set
+        # Without a list of Sites, an update keeps the profile's own.
+        return kept | {"site_keys"} if self.site_keys is None else kept
 
 
 _KEPT_WHEN_UNSET = {
-    "source_keys", "subtitle_mode", "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs",
+    "site_keys", "include_upcoming_sites", "subtitle_mode", "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs",
     "codec_fallback", "container", "audio_codec", "audio_format", "audio_language",
 }
 

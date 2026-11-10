@@ -220,7 +220,7 @@ def add_cookies_file(content: bytes) -> SortedCookies:
     with _reading() as s:
         new = sites_for_cookies(s, content)
     if new:
-        run_write_transaction(lambda s: add_sites(s, new), concurrent=True)
+        run_write_transaction(lambda s: add_sites(s, new))
     with _reading() as s:
         return sort_cookies(s, content)
 

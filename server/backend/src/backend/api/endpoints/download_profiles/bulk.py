@@ -13,7 +13,7 @@ from backend.api.models.profile_bulk import (
 )
 from backend.api.profile_bulk import in_order, offered_changes, reason_of, skipped, summarize
 from backend.db.models.download_profile import DownloadProfile
-from backend.services.sites import collection_site
+from backend.services.sites import collection_site, collection_site_key
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.utils.local_media_profiles import require_local_media_profile_type
 from sources import SiteSetting
@@ -69,7 +69,7 @@ def change_download_profiles(s: Session, body: BulkChangeIn[DownloadProfileBulkC
         if media_profile_id is not None and media_profile_id != profile.local_media_profile_id:
             try:
                 require_local_media_profile_type(
-                    s, media_profile_id, LocalMediaProfileType.COLLECTION, profile.collection.source_key,
+                    s, media_profile_id, LocalMediaProfileType.COLLECTION, collection_site_key(profile.collection),
                 )
                 require_one_profile_per_local_media_profile(
                     s, collection_id=profile.collection_id, local_media_profile_id=media_profile_id,

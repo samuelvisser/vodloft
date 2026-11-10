@@ -66,7 +66,7 @@ def add_site_by_link(body: SiteAddAPIRequest):
             site = site_of_link(s, body.url.strip())
         except SiteLinkError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return run_write_transaction(lambda s: SiteAddedAPIRead.model_validate(add_site(s, site)), concurrent=True)
+    return run_write_transaction(lambda s: SiteAddedAPIRead.model_validate(add_site(s, site)))
 
 
 @router.put("/sources/sites/{key}", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SourceSiteAPIRead)
@@ -123,7 +123,7 @@ def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)
     return SiteOptionsAPIRead(
         settings=offered_settings(site, SiteSettingGroup.DOWNLOAD_PROFILE),
         profile_defaults=DownloadProfileDefaultsAPIRead.model_validate(download_profile_defaults(site)),
-        upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks), site_name=site.name,
+        upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks), site_key=site.key, site_name=site.name,
         stream_methods=site.stream_methods,
         stream_video_heights=site.stream_video_heights, stream_proxy_choice=site.stream_proxy_choice,
         video_output_help=site.video_output_help,

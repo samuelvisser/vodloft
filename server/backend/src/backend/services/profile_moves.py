@@ -139,7 +139,7 @@ def plan_profile_move(
         collection = collection_downloads[0].media.collection
         plan = CollectionMove(
             collection=collection,
-            in_scope=profile_applies_to_collection(target, collection),
+            in_scope=profile_applies_to_collection(session, target, collection),
             source_download_profiles=[dp for dp in collection.download_profiles if dp.local_media_profile_id == source.id],
             target_download_profiles=[dp for dp in collection.download_profiles if dp.local_media_profile_id == target.id],
         )

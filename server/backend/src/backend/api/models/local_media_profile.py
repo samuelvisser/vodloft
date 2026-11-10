@@ -9,6 +9,7 @@ from pydantic import Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.local_media_profile_inputs import IndexingValueDefinition, LocalMediaProfileInput, VideoCodecChoice
 from backend.api.models.pagination import CursorPageRead
+from backend.api.models.source import DownloadOptionsAPIRead
 from backend.types.local_media_profile_types import (
     AudioCodec,
     AudioFormat,
@@ -61,9 +62,28 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     audio_codec: Union[AudioCodec, str]
     audio_format: Union[AudioFormat, str]
     audio_language: str | None = None
-    source_keys: list[str] | None = None
+    site_keys: list[str]
+    include_upcoming_sites: bool
     created_at: datetime
     updated_at: datetime
+
+
+class LocalMediaProfileSiteAPIRead(ResponseBase):
+    """A Site VODLoft knows, with the profile types that can store media from it."""
+
+    key: str
+    name: str
+    profile_types: list[LocalMediaProfileType]
+    download_options: DownloadOptionsAPIRead
+
+
+class LocalMediaProfileSitesAPIRead(ResponseBase):
+    """Every Site a Local Media Profile can be offered for, and what Sites VODLoft has not seen yet bring."""
+
+    sites: list[LocalMediaProfileSiteAPIRead]
+    upcoming_profile_types: list[LocalMediaProfileType]
+    """The profile types that can include upcoming Sites."""
+    upcoming_download_options: DownloadOptionsAPIRead
 
 
 class LocalMediaProfileTemplateVariable(ResponseBase):
