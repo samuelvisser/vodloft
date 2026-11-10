@@ -38,7 +38,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response, Streamin
 from config import get_settings
 from sources import MediaStream, MediaTracks, Site, Source
 
-from backend.services.video_cache import get_cached_mp4_path, mp4_cache_path
+from backend.services.video_cache import get_cached_mp4_path, mark_used, mp4_cache_path
 from .upstream import NO_CACHE_HEADERS, LinkCache, first_range, look_up_at_site, seconds_until_expiry, stream_bytes
 
 
@@ -420,10 +420,7 @@ def join_in_background(source: Source, episode: EpisodeRef, height: int) -> None
 
 
 def joined_mp4_response(path: Path, *, filename: str) -> FileResponse:
-    try:
-        path.touch()
-    except OSError:
-        pass
+    mark_used(path)
     return FileResponse(
         path, filename=filename, content_disposition_type="inline", media_type="video/mp4", headers=NO_CACHE_HEADERS,
     )

@@ -46,12 +46,29 @@ def mp4_cache_path(key: str) -> Path:
     return _cache_path(key)
 
 
+def _last_used(stat: os.stat_result) -> float:
+    return max(stat.st_atime, stat.st_mtime)
+
+
+def mark_used(path: Path) -> None:
+    """Keep a cached file for another retention period from now.
+
+    Only its access time moves: its modification time stays the same, so the Last-Modified and ETag
+    a podcast app gets for it do too. An app that asks for a range with If-Range would otherwise get
+    the whole file from the start, as it seems to have changed since its last request.
+    """
+    try:
+        os.utime(path, (time.time(), path.stat().st_mtime))
+    except OSError:
+        pass
+
+
 def _is_current(path: Path) -> bool:
     try:
         stat = path.stat()
     except OSError:
         return False
-    return stat.st_size > 0 and time.time() - stat.st_mtime < _cache_retention_seconds()
+    return stat.st_size > 0 and time.time() - _last_used(stat) < _cache_retention_seconds()
 
 
 def get_cached_mp4_path(episode_uuid: str) -> Path | None:
@@ -79,7 +96,7 @@ def _cleanup_expired_files(root: Path, *, retention_seconds: int) -> int:
     removed = 0
     for path in paths:
         try:
-            if path.is_file() and path.stat().st_mtime <= cutoff:
+            if path.is_file() and _last_used(path.stat()) <= cutoff:
                 path.unlink()
                 removed += 1
         except OSError:
@@ -123,10 +140,7 @@ def prepare_cached_mp4(source_url: str, *, episode_uuid: str) -> Path:
 
     with _CACHE_LOCKS.hold(target):
         if _is_current(target):
-            try:
-                target.touch()
-            except OSError:
-                pass
+            mark_used(target)
             return target
 
         _cleanup_expired_files(

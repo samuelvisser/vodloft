@@ -189,6 +189,40 @@ def test_rss_cache_cleanup_uses_configured_sliding_retention(monkeypatch, tmp_pa
     assert not expired.exists()
 
 
+def test_using_a_cached_mp4_keeps_it_without_changing_what_apps_see(monkeypatch, tmp_path):
+    import backend.services.video_cache as cached_video
+    from backend.api.endpoints.feeds.source_tracks import joined_mp4_response
+
+    video_root = tmp_path / "video"
+    video_root.mkdir()
+    joined = video_root / "joined.mp4"
+    joined.write_bytes(b"joined-video")
+    os.utime(joined, (900, 900))
+    settings = SimpleNamespace(
+        download_settings=SimpleNamespace(rss_cache_root=tmp_path, rss_cache_retention_seconds=60),
+    )
+    monkeypatch.setattr(cached_video, "get_settings", lambda: settings)
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    app.get("/video.mp4")(lambda: joined_mp4_response(joined, filename="e.mp4"))
+    client = TestClient(app)
+    first = client.get("/video.mp4", headers={"Range": "bytes=0-1"})
+    # An app asks for later ranges with If-Range, which only gets the range while the file keeps its ETag.
+    second = client.get("/video.mp4", headers={"Range": "bytes=2-5", "If-Range": first.headers["etag"]})
+    assert second.status_code == 206
+    assert second.content == b"ined"
+    assert first.headers["last-modified"] == second.headers["last-modified"]
+    assert joined.stat().st_mtime == 900
+    # Playing it keeps it in the cache for another retention period.
+    monkeypatch.setattr(cached_video.time, "time", lambda: 1000)
+    os.utime(joined, (990, 900))
+    assert cached_video._is_current(joined)
+    assert cached_video.cleanup_expired_rss_cache() == 0
+
+
 def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):
     import backend.services.video_cache as cached_video
 
