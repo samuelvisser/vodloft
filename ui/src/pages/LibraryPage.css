@@ -1,21 +1,12 @@
-/* The Library's title, its media type tabs and Add media. On phones the tabs become a row of underlined titles. */
-.library-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: "heading add" "tabs tabs";
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 18px;
-}
-.library-heading { grid-area: heading; min-width: 0; }
-.library-header .media-type-tabs { grid-area: tabs; justify-self: start; margin: 0; }
-.library-add { grid-area: add; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+/* The Library's PageHeader holds its media type tabs. On phones the tabs become a row of underlined titles. */
+.page-header.library-header { margin-bottom: 18px; }
+.library-header .media-type-tabs { margin: 0; }
 
 @media (max-width: 720px) {
-    /* The title keeps the size and place it has on every other page; the + button sits beside it. */
-    .library-header { align-items: start; gap: 4px 10px; margin-bottom: 12px; }
+    .page-header.library-header { margin-bottom: 12px; }
     .library-header h1 { margin: 0; }
-    .library-header .view-description { display: none; }
+    .library-header .page-header-subtitle { display: none; }
+    .library-header .page-header-below { margin-top: 4px; }
 
     .library-header .media-type-tabs {
         display: flex;
@@ -42,23 +33,4 @@
     .library-header .media-type-tabs button svg { display: none; }
     .library-header .media-type-tabs button[aria-selected="true"] { background: none; border-bottom-color: #3b82f6; }
     .library-header .media-type-tabs button span { font-size: 13px; font-weight: 600; }
-
-    /* Add media becomes a round + button; its words stay for screen readers. */
-    .library-add {
-        width: 40px;
-        height: 40px;
-        justify-content: center;
-        padding: 0;
-        border-radius: 50%;
-        font-size: 17px;
-    }
-    .library-add-label {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-    }
 }

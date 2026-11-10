@@ -1,20 +1,27 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {PageHeaderAction} from '../common/PageHeader'
 import {faIcon} from '../../icons/faIcon'
 import type {BulkResult} from '../../types/schemas/profile_bulk'
 import {countOf} from './bulkApi'
 import type {BulkSelection} from './useBulkSelection'
 import './ProfileBulkEdit.css'
 
-/** Turns bulk edit on beside a table's Add button, and becomes Done while it is on. */
-export function BulkEditButton({selection}: {selection: BulkSelection}) {
-    if (selection.active) {
-        return <button type="button" className="btn btn-primary bulk-edit-toggle" onClick={selection.stop}>Done</button>
-    }
+type ProfileTableActionsProps = {
+    selection: BulkSelection
+    /** Where Add goes, and what it says, such as "Add media profile". */
+    addTo: string
+    addLabel: string
+}
+
+/** Bulk edit, which becomes Done while it is on, and Add: the buttons in a profile table's PageHeader. */
+export function ProfileTableActions({selection, addTo, addLabel}: ProfileTableActionsProps) {
     return (
-        <button type="button" className="btn btn-secondary bulk-edit-toggle" onClick={selection.start}>
-            <FontAwesomeIcon icon={faIcon('fass', 'list-check')} aria-hidden="true"/>
-            Bulk edit
-        </button>
+        <>
+            {selection.active
+                ? <PageHeaderAction icon={faIcon('fass', 'check')} label="Done" onClick={selection.stop}/>
+                : <PageHeaderAction icon={faIcon('fass', 'list-check')} label="Bulk edit" variant="secondary" onClick={selection.start}/>}
+            <PageHeaderAction icon={faIcon('fass', 'plus')} label={addLabel} to={addTo}/>
+        </>
     )
 }
 

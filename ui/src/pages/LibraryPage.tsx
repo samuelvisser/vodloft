@@ -26,6 +26,7 @@ import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg} from '../types/collection'
 import DurationPill from '../components/common/DurationPill'
 import './LibraryPage.css'
+import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SOURCE_FILTER_STORAGE_KEY = 'librarySourceFilter'
@@ -277,11 +278,13 @@ export default function LibraryPage() {
 
     return (
         <section className="view library-view" aria-labelledby="library-title">
-            <div className="library-header">
-                <div className="library-heading">
-                    <h1 id="library-title">Library</h1>
-                    <p className="view-description">Collections, movies and videos indexed by VODLoft.</p>
-                </div>
+            <PageHeader
+                className="library-header"
+                title="Library"
+                titleId="library-title"
+                subtitle={<p className="view-description">Collections, movies and videos indexed by VODLoft.</p>}
+                actions={can('add_media') && <PageHeaderAction icon={faIcon('fass', 'plus')} label="Add media" to="/add"/>}
+            >
                 {showTabs && (
                     <MediaTypeTabs
                         activeType={activeType}
@@ -291,13 +294,7 @@ export default function LibraryPage() {
                         counts={typeCounts}
                     />
                 )}
-                {can('add_media') && (
-                    <Link className="btn btn-primary library-add" to="/add">
-                        <FontAwesomeIcon icon={faIcon('fass', 'plus')}/>
-                        <span className="library-add-label">Add media</span>
-                    </Link>
-                )}
-            </div>
+            </PageHeader>
 
             {hasAny && (
                 <FilterBar
