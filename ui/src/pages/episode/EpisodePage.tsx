@@ -286,14 +286,14 @@ export default function EpisodePage() {
                         />
                     </div>
                     <div className="episode-summary" aria-label="Episode metadata">
-                        <EpisodeTypePill sourceKey={episode.sourceKey} type={episode.episodeType}/>
+                        <EpisodeTypePill sourceKey={episode.sourceKey} type={episode.episodeType} asText/>
+                        {episode.drmProtected && <DrmBadge asText/>}
+                        <ItemAccessBadge item={episode} asText/>
+                        {episode.removedFromSource && <RemovedBadge asText/>}
                         <span className={`episode-status${isLive ? ' is-live' : ''}`} title={sourceStatus?.help}>
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
                             {statusLabel}
                         </span>
-                        {episode.drmProtected && <DrmBadge/>}
-                        <ItemAccessBadge item={episode}/>
-                        {episode.removedFromSource && <RemovedBadge/>}
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <span className="episode-summary-item">
                             <FontAwesomeIcon icon={faIcon('fass', 'calendar')} aria-hidden="true"/>
