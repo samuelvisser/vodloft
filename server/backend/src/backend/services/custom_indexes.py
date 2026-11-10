@@ -55,9 +55,13 @@ class CustomIndexReconciliationResult:
     synced_source_paths: tuple[tuple[int, str], ...] = ()
 
 
+def profile_offered_for_collection_type(profile: CollectionLocalMediaProfile, collection: Collection) -> bool:
+    return profile.collection_scope in (CollectionLocalMediaProfileScope.BOTH, collection.type)
+
+
 def profile_applies_to_collection(s: Session, profile: CollectionLocalMediaProfile, collection: Collection) -> bool:
     return (
-        profile.collection_scope in (CollectionLocalMediaProfileScope.BOTH, collection.type)
+        profile_offered_for_collection_type(profile, collection)
         and profile_offered_for_site(s, profile, collection_site_key(collection))
     )
 

@@ -79,28 +79,6 @@
     cursor: pointer;
 }
 
-.move-episodes-episodes {
-    display: grid;
-    gap: 8px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.move-episodes-episode {
-    display: grid;
-    gap: 2px;
-    padding: 6px 0;
-    border-top: 1px solid var(--select-menu-border);
-}
-
-.move-episodes-episode-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 10px;
-}
-
 .move-episodes-episode-title {
     font-weight: 500;
 }
@@ -110,25 +88,15 @@
     font-size: 14px;
 }
 
-.move-episodes-episode-stays .move-episodes-episode-outcome {
+.move-episodes-episode-outcome.is-stays {
     color: var(--warning, #b45309);
 }
 
 .move-episodes-history {
-    width: 30px;
-    height: 30px;
+    width: 26px;
+    height: 26px;
     padding: 0;
     justify-content: center;
-}
-
-.move-episodes-paths {
-    font-size: 13px;
-    color: var(--muted);
-    overflow-wrap: anywhere;
-}
-
-.move-episodes-paths code {
-    font-family: var(--font-mono, monospace);
 }
 
 .move-episodes-empty {

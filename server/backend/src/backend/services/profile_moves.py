@@ -22,9 +22,11 @@ from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadProfile, Episode
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadAsset
 from backend.services.adoption import download_root, sidecar_assets
-from backend.services.custom_indexes import profile_applies_to_collection
+from backend.services.custom_indexes import profile_offered_for_collection_type
 from backend.services.download_metadata import build_episode_metadata, select_thumbnail
 from backend.services.download_options import effective_metadata_mode, effective_thumbnail_mode
+from backend.services.local_media_profile_sites import profile_offered_for_site
+from backend.services.sites import collection_site_key
 from backend.services.download_relocation import (
     DownloadRelocation, filter_relocation_conflicts, plan_download_relocation, relocate_downloads,
 )
@@ -74,12 +76,19 @@ class EpisodeMove:
 @dataclass
 class CollectionMove:
     collection: Collection
-    in_scope: bool
+    type_offered: bool
+    """Whether the target is for this type of Collection, such as Podcasts."""
+    site_offered: bool
+    """Whether the target is offered for the Collection's Site."""
     episodes: list[EpisodeMove] = field(default_factory=list)
     source_download_profiles: list[DownloadProfile] = field(default_factory=list)
     target_download_profiles: list[DownloadProfile] = field(default_factory=list)
     retention_at_risk: int = 0
     """Moved episodes the target's Download Profile would delete as older episodes."""
+
+    @property
+    def in_scope(self) -> bool:
+        return self.type_offered and self.site_offered
 
     @property
     def blocked(self) -> bool:
@@ -139,7 +148,8 @@ def plan_profile_move(
         collection = collection_downloads[0].media.collection
         plan = CollectionMove(
             collection=collection,
-            in_scope=profile_applies_to_collection(session, target, collection),
+            type_offered=profile_offered_for_collection_type(target, collection),
+            site_offered=profile_offered_for_site(session, target, collection_site_key(collection)),
             source_download_profiles=[dp for dp in collection.download_profiles if dp.local_media_profile_id == source.id],
             target_download_profiles=[dp for dp in collection.download_profiles if dp.local_media_profile_id == target.id],
         )

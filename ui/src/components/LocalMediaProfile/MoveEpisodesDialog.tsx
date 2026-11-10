@@ -4,6 +4,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import toast from 'react-hot-toast'
 
 import {faIcon} from '../../icons/faIcon'
+import PathChangeList, {type PathChange} from '../common/PathChangeList'
 import SimpleSelect from '../common/SimpleSelect'
 import DownloadLogDialog from '../MediaDownload/DownloadLogDialog'
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
@@ -90,28 +91,22 @@ function EpisodeDownloadLog({episode, onClose}: {episode: LocalMediaProfileMoveE
     return <DownloadLogDialog row={row} onClose={onClose}/>
 }
 
-function EpisodeRow({episode, target}: {episode: LocalMediaProfileMoveEpisode, target: string}) {
+function episodeChange(episode: LocalMediaProfileMoveEpisode, target: string): PathChange {
     const moves = MOVES.includes(episode.outcome)
-    return (
-        <li className={`move-episodes-episode${moves ? '' : ' move-episodes-episode-stays'}`}>
-            <div className="move-episodes-episode-header">
+    return {
+        key: episode.mediaDownloadId,
+        from: episode.sourcePath,
+        to: moves ? episode.destinationPath ?? null : null,
+        toNote: moves ? 'Worked out when the move runs' : undefined,
+        muted: !moves,
+        header: (
+            <>
                 <span className="move-episodes-episode-title">{episode.episodeTitle}</span>
-                <span className="move-episodes-episode-outcome">{outcomeLabel(episode.outcome, target)}</span>
+                <span className={`move-episodes-episode-outcome${moves ? '' : ' is-stays'}`}>{outcomeLabel(episode.outcome, target)}</span>
                 {!moves && <HistoryButton episode={episode}/>}
-            </div>
-            <div className="move-episodes-paths">
-                <code>{episode.sourcePath}</code>
-                {moves && (
-                    <>
-                        <span aria-hidden="true"> → </span>
-                        {episode.destinationPath
-                            ? <code>{episode.destinationPath}</code>
-                            : <span className="move-episodes-muted">the new path is worked out when the move runs</span>}
-                    </>
-                )}
-            </div>
-        </li>
-    )
+            </>
+        ),
+    }
 }
 
 function CollectionCard({collection, choice, setChoice, source, target, disabled}: {
@@ -146,7 +141,12 @@ function CollectionCard({collection, choice, setChoice, source, target, disabled
             </label>
 
             {!collection.inScope && (
-                <p className="move-episodes-note">{target} is not offered for this Collection: its type or Source is not one the profile is for.</p>
+                <p className="move-episodes-note">
+                    {target} is not offered for this Collection: its {
+                        !collection.typeOffered && !collection.siteOffered ? 'type and Site are'
+                            : !collection.typeOffered ? 'type is' : 'Site is'
+                    } not one the profile is for.
+                </p>
             )}
             {collection.blocked && (
                 <p className="move-episodes-note move-episodes-warning">
@@ -201,11 +201,12 @@ function CollectionCard({collection, choice, setChoice, source, target, disabled
                 {expanded ? 'Hide episodes' : 'Show episodes'}
             </button>
             {expanded && (
-                <ul className="move-episodes-episodes">
-                    {collection.episodes.map((episode) => (
-                        <EpisodeRow key={episode.mediaDownloadId} episode={episode} target={target}/>
-                    ))}
-                </ul>
+                <PathChangeList
+                    changes={collection.episodes.map((episode) => episodeChange(episode, target))}
+                    fromLabel="Now"
+                    toLabel="After"
+                    endless
+                />
             )}
         </section>
     )

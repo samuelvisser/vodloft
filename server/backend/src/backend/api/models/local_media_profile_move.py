@@ -47,6 +47,10 @@ class LocalMediaProfileMoveCollectionAPIRead(ResponseBase):
     collection_slug: str = Field(validation_alias=AliasPath("collection", "slug"))
     collection_title: str = Field(validation_alias=AliasPath("collection", "title"))
     in_scope: bool
+    type_offered: bool
+    """Whether the target is for this type of Collection."""
+    site_offered: bool
+    """Whether the target is offered for the Collection's Site."""
     blocked: bool
     can_move_download_profile: bool
     retention_at_risk: int
