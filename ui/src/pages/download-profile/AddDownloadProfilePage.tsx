@@ -46,7 +46,7 @@ export default function AddDownloadProfilePage() {
         mediaProfiles,
         'collection',
         selectedCollection?.type === 'podcast' || selectedCollection?.type === 'series' ? selectedCollection.type : undefined,
-        selectedCollection?.sourceKey,
+        selectedCollection?.site?.key,
     )
 
     const selectCollection = useCallback((id: number) => {
