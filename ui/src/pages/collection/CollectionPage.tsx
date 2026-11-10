@@ -835,7 +835,7 @@ export default function CollectionPage() {
           collectionSlug={id}
           collectionTitle={collection.title}
           collectionType={collection.type === 'series' ? 'series' : 'podcast'}
-          sourceKey={collection.sourceKey}
+          siteKey={collection.site?.key}
           seasons={seasons}
           localMediaProfiles={localMediaProfiles ?? []}
           onDismiss={() => setDownloadAllConfirm(false)}

@@ -37,6 +37,7 @@ import {
     LocalMediaProfileViewRead,
     LocalMediaProfileViewReadSchema,
 } from "../types/schemas/local_media_profile";
+import {LocalMediaProfileSitesReadSchema, type LocalMediaProfileSitesRead} from "../types/schemas/local_media_profile_base";
 import {AutoSubtitlesUseSchema, DownloadProfileRead, DownloadProfileReadSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {ProfileIdsSchema} from '../types/schemas/profile_bulk'
@@ -100,6 +101,19 @@ async function fetchParsed<T>(
 /** Profile lists are also read by the Add pages and by library managers picking a profile. */
 function profileListsReadable(area: Area): boolean {
     return can(area) || can('add_media') || can('library', 'manage')
+}
+
+/** Every Site VODLoft knows that a Local Media Profile can be offered for. */
+export function useLocalMediaProfileSites() {
+    return useQuery<LocalMediaProfileSitesRead, Error, LocalMediaProfileSitesRead, readonly ['localMediaProfileSites']>({
+        queryKey: ['localMediaProfileSites'] as const,
+        enabled: profileListsReadable('local_media_profiles'),
+        queryFn: ({signal}) => fetchParsed(
+            `${apiUrl()}/local-media-profiles/sites`,
+            LocalMediaProfileSitesReadSchema,
+            signal,
+        ),
+    })
 }
 
 export function useLocalMediaProfiles() {

@@ -10,11 +10,12 @@ from pydantic import ValidationError
 from sources import DownloadOptions, VIDEO_HEIGHTS, get_source, site_for
 
 
-def _collection_profile(preferred_format, source_keys=None):
+def _collection_profile(preferred_format, site_keys=None, include_upcoming_sites=True):
     from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
     return CollectionLocalMediaProfileAPICreate(
-        name="Profile", type="collection", preferred_format=preferred_format, source_keys=source_keys,
+        name="Profile", type="collection", preferred_format=preferred_format, site_keys=site_keys,
+        include_upcoming_sites=include_upcoming_sites,
         output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
     )
 
@@ -29,19 +30,21 @@ def test_the_daily_wire_and_youtube_keep_an_hls_bundle():
     assert DownloadOptions().video_heights == VIDEO_HEIGHTS and not DownloadOptions().hls_bundle
 
 
-def test_a_profile_offers_what_any_of_its_sources_offers():
+def test_a_profile_offers_what_any_of_its_sites_offers():
     assert _collection_profile("format_hls").preferred_format == "format_hls"
-    assert _collection_profile("format_hls", ["ytdlp"]).preferred_format == "format_hls"
-    with pytest.raises(ValidationError, match="None of this profile's Sources can download an HLS bundle"):
-        _collection_profile("format_hls", ["npo"])
+    assert _collection_profile("format_hls", ["youtube"], False).preferred_format == "format_hls"
+    with pytest.raises(ValidationError, match="None of this profile's Sites can download an HLS bundle"):
+        _collection_profile("format_hls", ["npo"], False)
     with pytest.raises(ValidationError, match="can download 4K"):
-        _collection_profile("format_4k", ["dailywire"])
-    assert _collection_profile("format_720p", ["dailywire"]).preferred_format == "format_720p"
-    assert _collection_profile("format_4k", ["ytdlp"]).preferred_format == "format_4k"
+        _collection_profile("format_4k", ["dailywire"], False)
+    assert _collection_profile("format_720p", ["dailywire"], False).preferred_format == "format_720p"
+    # Upcoming Sites offer the defaults, 4K included.
+    assert _collection_profile("format_4k", ["dailywire"]).preferred_format == "format_4k"
+    assert _collection_profile("format_4k", ["youtube"], False).preferred_format == "format_4k"
 
 
 def test_each_site_downloads_the_nearest_it_has():
-    from backend.services.local_media_profile_sources import format_for_site
+    from backend.services.local_media_profile_sites import format_for_site
 
     youtube = site_for("https://www.youtube.com/@channel", "ytdlp")
     dailywire = site_for("https://www.dailywire.com/show/a", "dailywire")

@@ -8,6 +8,7 @@ export const DownloadProfileReadViewSchema = DownloadProfileReadSchema.extend({
     collectionSlug: z.string(),
     collectionType: z.string(),
     collectionSourceKey: z.string(),
+    collectionSiteKey: z.string().nullable().optional().default(null),
     collectionEpisodeIdentifier: z.string(),
     localMediaProfileName: z.string(),
     localMediaProfilePreferredFormat: z.string(),

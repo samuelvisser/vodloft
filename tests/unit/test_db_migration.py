@@ -31,7 +31,7 @@ NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
 PROFILE_LOOKUP_INDEXES_REVISION = "5b8e1f3c2a90"
 IMPORTED_DOWNLOAD_PROFILES_REVISION = "a0eceaa70db5"
-HEAD_REVISION = "80a8b55fb9d6"
+HEAD_REVISION = "d3a7f1c9e2b5"
 
 
 @pytest.fixture
@@ -1065,3 +1065,43 @@ def test_every_download_profile_chooses_the_new_sponsorblock_types(migration_dat
         }
     assert (segments[1]["poi_highlight"], segments[1]["hook"], segments[1]["chapter"]) == ("chapter", "keep", "keep")
     assert segments[2] == {"sponsor": "cut", "poi_highlight": "keep", "hook": "keep", "chapter": "keep"}
+
+
+def test_local_media_profiles_move_from_sources_to_sites(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "80a8b55fb9d6")
+    with engine.begin() as connection:
+        for key in ("vimeo", "dailywire"):
+            connection.execute(text("INSERT INTO sites (key, name, domains) VALUES (:key, :key, '[]')"), {"key": key})
+        profiles = (
+            # id, type, source_keys
+            (1, "collection", None),
+            (2, "collection", '["dailywire"]'),
+            (3, "video", '["ytdlp"]'),
+            (4, "collection", '["npo", "ytdlp"]'),
+            (5, "movie", None),
+        )
+        for profile_id, profile_type, source_keys in profiles:
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs, source_keys) "
+                "VALUES (:id, :slug, :slug, :type, '/x/' || :slug || '/{{ title }}.ext', 'format_1080p', '[]', :keys)"
+            ), {"id": profile_id, "slug": f"p{profile_id}", "type": profile_type, "keys": source_keys})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        rows = connection.execute(text("SELECT id, site_keys, include_upcoming_sites FROM local_media_profiles ORDER BY id")).all()
+        sites = {profile_id: (json.loads(keys), bool(upcoming)) for profile_id, keys, upcoming in rows}
+        assert sites == {
+            1: (["dailywire", "npo", "vimeo", "youtube"], True),
+            2: (["dailywire"], False),
+            # yt-dlp stands for every Site that is not The Daily Wire or NPO Start, and for Sites to come.
+            3: (["vimeo", "youtube"], True),
+            4: (["npo", "vimeo", "youtube"], True),
+            5: (["dailywire"], True),
+        }
+        columns = {column["name"] for column in inspect(connection).get_columns("local_media_profiles")}
+        assert "source_keys" not in columns

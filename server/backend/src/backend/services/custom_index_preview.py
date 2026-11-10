@@ -82,7 +82,7 @@ def plan_custom_index_preview(
         )
 
     profile = session.get(CollectionLocalMediaProfile, local_media_profile_id)
-    if profile is None or not profile_applies_to_collection(profile, episode.collection):
+    if profile is None or not profile_applies_to_collection(session, profile, episode.collection):
         return CustomIndexPreviewPlan(
             CustomIndexPreviewMode.SIMULATE, referenced, active, missing, {},
             "The selected collection has no reusable saved assignments for this profile",

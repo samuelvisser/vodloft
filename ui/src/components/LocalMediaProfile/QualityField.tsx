@@ -22,7 +22,7 @@ import {
     type QualityGoal,
 } from '../../types/quality'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
-import {useSources} from '../../lib/queries'
+import {useLocalMediaProfileSites} from '../../lib/queries'
 import {FORMAT_HEIGHTS, nearestVideoFormat, offersFormat, profileDownloadOptions} from '../../types/local_media_profile'
 import './QualityField.css'
 
@@ -37,17 +37,20 @@ type DownloadOption = {value: string; label: string}
 
 /**
  * Quality: what to download (video up to a resolution, audio only or HLS), a goal, and your own codec order.
- * Only what the Sites of the profile's Sources offer is shown; each Site gets the nearest it has.
+ * Only what the profile's Sites offer is shown; each Site gets the nearest it has.
  */
 export default function QualityField({form, mode}: Props) {
     const {control, setValue, formState: {errors}} = form
-    const [preferredFormat, goal, videoCodecs, codecFallback, container, audioCodec, audioFormat, audioLanguage, sourceKeys] = useWatch({
+    const [preferredFormat, goal, videoCodecs, codecFallback, container, audioCodec, audioFormat, audioLanguage, siteKeys, includeUpcomingSites] = useWatch({
         control,
-        name: ['preferredFormat', 'qualityGoal', 'videoCodecs', 'codecFallback', 'container', 'audioCodec', 'audioFormat', 'audioLanguage', 'sourceKeys'],
-    }) as [string, QualityGoal, CodecChoice[], string, string, string, string, string | null, string[] | null]
+        name: ['preferredFormat', 'qualityGoal', 'videoCodecs', 'codecFallback', 'container', 'audioCodec', 'audioFormat', 'audioLanguage', 'siteKeys', 'includeUpcomingSites'],
+    }) as [string, QualityGoal, CodecChoice[], string, string, string, string, string | null, string[] | null, boolean]
     const [dragging, setDragging] = useState<number | null>(null)
-    const {data: sources} = useSources()
-    const offered = useMemo(() => profileDownloadOptions(sources, mode, sourceKeys), [sources, mode, sourceKeys])
+    const {data: sites} = useLocalMediaProfileSites()
+    const offered = useMemo(
+        () => profileDownloadOptions(sites, mode, siteKeys, includeUpcomingSites),
+        [sites, mode, siteKeys, includeUpcomingSites],
+    )
     const qualityChoices = offered?.qualityChoices ?? true
 
     // Choosing fewer Sources can take away the chosen download; move to the nearest one they offer.

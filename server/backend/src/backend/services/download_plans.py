@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from backend.services.collection_cookies import uses_cookies
 from backend.services.playback import resolve_playback
-from backend.services.local_media_profile_sources import format_for_site
+from backend.services.local_media_profile_sites import format_for_site
 from backend.services.sites import collection_site, video_site
 from backend.services.no_ascii_names import settle_no_ascii_name
 from backend.services.media_access import link_access

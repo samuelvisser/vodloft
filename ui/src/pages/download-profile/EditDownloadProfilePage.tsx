@@ -9,7 +9,7 @@ import {
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
-import {isLocalMediaProfileAvailableForSource, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {isLocalMediaProfileAvailableForSite, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_view";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import ReadMore from "../../utils/ReadMore";
@@ -56,13 +56,13 @@ export default function EditDownloadProfilePage() {
     }, [downloadProfile, form])
 
     const collectionType = downloadProfile?.collectionType
-    // The profile already in use stays offered after it was limited to other Sources.
+    // The profile already in use stays offered after it was limited to other Sites.
     const offeredProfiles = useMemo(
         () => mediaProfiles?.filter((profile) => (
             profile.id === downloadProfile?.localMediaProfileId
-            || isLocalMediaProfileAvailableForSource(profile, downloadProfile?.collectionSourceKey)
+            || isLocalMediaProfileAvailableForSite(profile, downloadProfile?.collectionSiteKey)
         )),
-        [mediaProfiles, downloadProfile?.localMediaProfileId, downloadProfile?.collectionSourceKey],
+        [mediaProfiles, downloadProfile?.localMediaProfileId, downloadProfile?.collectionSiteKey],
     )
     const mediaProfileReg = useLocalMediaProfileSelectRegistry(
         offeredProfiles,

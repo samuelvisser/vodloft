@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from backend.db.models import CustomIndexState, Episode, Metadata, Collection, CollectionLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from backend.services.local_media_profile_sources import profile_offered_for_source
+from backend.services.local_media_profile_sites import profile_offered_for_site
+from backend.services.sites import collection_site_key
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.utils.custom_index import (
     CustomIndexNotReadyError,
@@ -54,10 +55,10 @@ class CustomIndexReconciliationResult:
     synced_source_paths: tuple[tuple[int, str], ...] = ()
 
 
-def profile_applies_to_collection(profile: CollectionLocalMediaProfile, collection: Collection) -> bool:
+def profile_applies_to_collection(s: Session, profile: CollectionLocalMediaProfile, collection: Collection) -> bool:
     return (
         profile.collection_scope in (CollectionLocalMediaProfileScope.BOTH, collection.type)
-        and profile_offered_for_source(profile.source_keys, collection.source_key)
+        and profile_offered_for_site(s, profile, collection_site_key(collection))
     )
 
 
@@ -72,9 +73,8 @@ def profile_collection_scope_filter_for_collection_type(collection_type: str):
 def profile_collection_scope_filter(profile: CollectionLocalMediaProfile):
     """SQL predicate for Collections that are in one Local Media Profile's scope."""
     scope = true() if profile.collection_scope == CollectionLocalMediaProfileScope.BOTH else Collection.type == profile.collection_scope
-    if profile.source_keys is None:
-        return scope
-    return and_(scope, Collection.source_key.in_(profile.source_keys))
+    # A collection whose Site VODLoft has not stored yet is in every profile's scope.
+    return and_(scope, or_(Collection.site_key.in_(profile.site_keys), Collection.site_key.is_(None)))
 
 
 def profile_uses_custom_indexes(profile: CollectionLocalMediaProfile) -> bool:
@@ -354,7 +354,7 @@ def reconcile_collection_profile_custom_indexes(
     generation = state.requested_generation
     episodes = list(session.scalars(select(Episode).where(Episode.collection_id == collection_id)
         .order_by(Episode.index.asc(), Episode.id.asc())))
-    applicable = profile_applies_to_collection(profile, collection)
+    applicable = profile_applies_to_collection(session, profile, collection)
     old = {ep.id: get_episode_index_assignments(ep, profile.id) for ep in episodes}
     desired = simulate_episode_indexes(
         episodes, template=profile.output_template,

@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from backend.api.models.collection_example import ExampleCollectionAPIIn
 
 from backend.api.models.local_media_profile import (
+    LocalMediaProfileSitesAPIRead,
     LocalMediaProfileTemplateSource,
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
@@ -26,6 +27,7 @@ from backend.api.models.operations import (
     LocalMediaProfileRedownloadOperationAccepted,
 )
 from backend.app import db_session
+from backend.services.local_media_profile_sites import profile_sites
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
     CollectionLocalMediaProfileScope,
@@ -71,6 +73,13 @@ def local_media_profiles_list():
     """List Local Media Profiles of every type."""
     with db_session() as s:
         return get_local_media_profiles_list(s)
+
+
+@router.get("/sites", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileSitesAPIRead)
+def local_media_profile_sites():
+    """Every Site VODLoft knows that a Local Media Profile can be offered for."""
+    with db_session() as s:
+        return LocalMediaProfileSitesAPIRead.model_validate(profile_sites(s))
 
 
 @router.get("/as-view", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileViewPageRead)
