@@ -58,6 +58,7 @@ export const EpisodeReadSchema = z.looseObject({
     wentLiveDate: ApiDateTimeSchema.nullable(),
     publishedDate: ApiDateTimeSchema.nullable().optional(),
     scheduledDate: ApiDateTimeSchema.nullable().optional(),
+    metadataRefreshedAt: ApiDateTimeSchema.nullable().optional(),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })

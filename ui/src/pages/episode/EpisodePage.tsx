@@ -312,6 +312,15 @@ export default function EpisodePage() {
                                 </span>
                             </>
                         )}
+                        {episode.metadataRefreshedAt && (
+                            <>
+                                <span className="episode-summary-separator" aria-hidden="true"/>
+                                <span className="episode-summary-item" title="When VODLoft last looked this episode up for changed details">
+                                    <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} aria-hidden="true"/>
+                                    <span>Details checked {formatDate(episode.metadataRefreshedAt)}</span>
+                                </span>
+                            </>
+                        )}
                         {episode.sharingUrl && (
                             <>
                                 <span className="episode-summary-separator" aria-hidden="true"/>
