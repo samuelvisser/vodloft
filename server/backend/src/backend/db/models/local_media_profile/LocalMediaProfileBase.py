@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Index, String, func
+from sqlalchemy import JSON, Index, String, event, false, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -109,10 +109,24 @@ class LocalMediaProfileBase(Base):
     )
     # A dubbed audio track's language code; None keeps the original language.
     audio_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    # None offers the profile for every Source, including ones added later.
-    source_keys: Mapped[list[str] | None] = mapped_column(
-        JSON, nullable=True, default=None,
-        comment="The Sources this profile is offered for; NULL offers it for every Source",
+    site_keys: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, server_default="[]",
+        comment="The Sites this profile is offered for",
+    )
+    """A new profile without a list starts with every Site VODLoft knows that can use its type."""
+    include_upcoming_sites: Mapped[bool] = mapped_column(
+        default=True, server_default=true(), nullable=False,
+        comment="Sites VODLoft sees for the first time join the profile's Sites",
+    )
+    # Settings only some Sites show; a Site that does not show one does without it.
+    auto_subtitles: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="fallback",
+        comment="Auto-generated subtitles: never, fallback (when there is no real one) or always",
+    )
+    sponsorblock_enabled: Mapped[bool] = mapped_column(nullable=False, server_default=false())
+    sponsorblock_segments: Mapped[dict[str, str]] = mapped_column(
+        JSON, nullable=False, server_default="{}",
+        comment="SponsorBlock segment type to keep, chapter or cut",
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -136,3 +150,20 @@ class LocalMediaProfileBase(Base):
             f"<LocalMediaProfileBase(id={self.id}, type={self.type}, slug={self.slug}, "
             f"name={self.name}, created_at={self.created_at}, updated_at={self.updated_at})>"
         )
+
+
+@event.listens_for(LocalMediaProfileBase, "before_insert", propagate=True)
+def _start_new_profile(_mapper, connection, target: LocalMediaProfileBase) -> None:
+    """A new profile without Sites starts with every Site VODLoft knows, and a setting it was not given starts as
+    Settings says."""
+    from backend.services.site_settings import local_media_profile_defaults
+
+    defaults = None
+    for field in ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments"):
+        if getattr(target, field) is None:
+            defaults = defaults or local_media_profile_defaults()
+            setattr(target, field, defaults[field])
+    if target.site_keys is None:
+        from backend.services.local_media_profile_sites import every_known_site
+
+        target.site_keys = every_known_site(connection, target.type)

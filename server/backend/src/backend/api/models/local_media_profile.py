@@ -9,6 +9,9 @@ from pydantic import Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.local_media_profile_inputs import IndexingValueDefinition, LocalMediaProfileInput, VideoCodecChoice
 from backend.api.models.pagination import CursorPageRead
+from backend.api.models.source import DownloadOptionsAPIRead
+from backend.types.download_profile_types import AutoSubtitles, SponsorBlockAction
+from sources import SiteSetting
 from backend.types.local_media_profile_types import (
     AudioCodec,
     AudioFormat,
@@ -39,6 +42,14 @@ class LocalMediaProfileAPIBaseIn(RequestBase, LocalMediaProfileInput):
     """Fields shared by all Local Media Profile request models."""
 
 
+class SiteDownloadChoicesAPIRead(ResponseBase):
+    """What a Local Media Profile does with the settings only some Sites show."""
+
+    auto_subtitles: AutoSubtitles
+    sponsorblock_enabled: bool
+    sponsorblock_segments: dict[str, SponsorBlockAction]
+
+
 class LocalMediaProfileAPIBaseOut(ResponseBase):
     """Fields shared by all Local Media Profile response models."""
 
@@ -61,9 +72,37 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     audio_codec: Union[AudioCodec, str]
     audio_format: Union[AudioFormat, str]
     audio_language: str | None = None
-    source_keys: list[str] | None = None
+    site_keys: list[str]
+    include_upcoming_sites: bool
+    auto_subtitles: AutoSubtitles
+    sponsorblock_enabled: bool
+    sponsorblock_segments: dict[str, SponsorBlockAction]
     created_at: datetime
     updated_at: datetime
+
+
+class LocalMediaProfileSiteAPIRead(ResponseBase):
+    """A Site VODLoft knows, with the profile types that can store media from it."""
+
+    key: str
+    name: str
+    profile_types: list[LocalMediaProfileType]
+    download_options: DownloadOptionsAPIRead
+    settings: list[SiteSetting]
+    """The settings only some Sites show that apply to this Site, such as YouTube's SponsorBlock."""
+
+
+class LocalMediaProfileSitesAPIRead(ResponseBase):
+    """Every Site a Local Media Profile can be offered for, and what Sites VODLoft has not seen yet bring."""
+
+    sites: list[LocalMediaProfileSiteAPIRead]
+    upcoming_profile_types: list[LocalMediaProfileType]
+    """The profile types that can include upcoming Sites."""
+    upcoming_download_options: DownloadOptionsAPIRead
+    upcoming_settings: list[SiteSetting]
+    """The settings only some Sites show that apply to a Site VODLoft has not seen yet."""
+    defaults: SiteDownloadChoicesAPIRead
+    """What a new profile starts with for the settings only some Sites show."""
 
 
 class LocalMediaProfileTemplateVariable(ResponseBase):

@@ -119,6 +119,29 @@ def test_the_preview_says_what_happens_to_each_episode(library):
     assert plan.in_scope and not plan.blocked and not plan.can_move_download_profile
 
 
+@pytest.mark.parametrize(("scope", "site_keys", "type_offered", "site_offered"), [
+    ("series", ["youtube"], True, True),
+    ("podcast", ["youtube"], False, True),
+    ("series", ["dailywire"], True, False),
+    ("podcast", ["dailywire"], False, False),
+])
+def test_the_preview_says_whether_the_collections_type_and_site_are_ones_the_target_is_for(
+        library, scope, site_keys, type_offered, site_offered,
+):
+    from backend.services.profile_moves import plan_profile_move
+
+    session, collection, source, target, *_ = library
+    collection.site_key = "youtube"
+    target.collection_scope = scope
+    target.include_upcoming_sites = False
+    target.site_keys = site_keys
+    session.commit()
+
+    (plan,) = plan_profile_move(session, source, target)
+
+    assert (plan.type_offered, plan.site_offered, plan.in_scope) == (type_offered, site_offered, type_offered and site_offered)
+
+
 def test_a_file_vodloft_does_not_manage_keeps_its_path(library):
     from backend.services.profile_moves import plan_profile_move
 

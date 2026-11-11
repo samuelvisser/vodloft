@@ -73,7 +73,7 @@ export default function CollectionAssetsField({form, preview}: {
                     <p>
                         VODLoft dynamically tries to resolve the root folder for your collection. This resolver is very powerful
                         and takes into account even conditional Jinja paths. To make sure VODLoft actually finds your collection
-                        root folder correctly, select any episode in the 'example source' below, and the path above will automatically
+                        root folder correctly, select any episode in the 'Example episode' picker below, and the path above will automatically
                         show you what VODLoft resolved as your collection root, without changing any files or saving anything yet.
                     </p>
                     <p>

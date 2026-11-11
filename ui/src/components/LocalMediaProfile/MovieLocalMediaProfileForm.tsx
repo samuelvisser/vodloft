@@ -1,19 +1,19 @@
 import {useMemo} from 'react'
 import {UseFormReturn, useWatch} from 'react-hook-form'
 
-import {useSources} from '../../lib/queries'
+import {useLocalMediaProfileSites} from '../../lib/queries'
 import {MoviePreferredFormatReg, offersFormat, profileDownloadOptions} from '../../types/local_media_profile'
 import LocalMediaProfilePreferredFormatField from './LocalMediaProfilePreferredFormatField'
 import OutputTemplateEditor from './OutputTemplateEditor'
 
 export default function MovieLocalMediaProfileForm({form}: { form: UseFormReturn<any> }) {
-    const {data: sources} = useSources()
-    const sourceKeys = useWatch({control: form.control, name: 'sourceKeys'}) as string[] | null
-    // Only the resolutions the Sites of the profile's Sources have.
+    const {data: sites} = useLocalMediaProfileSites()
+    const [siteKeys, includeUpcomingSites] = useWatch({control: form.control, name: ['siteKeys', 'includeUpcomingSites']}) as [string[] | null, boolean]
+    // Only the resolutions the profile's Sites have.
     const formats = useMemo(() => {
-        const offered = profileDownloadOptions(sources, 'movie', sourceKeys)
+        const offered = profileDownloadOptions(sites, 'movie', siteKeys, includeUpcomingSites)
         return {options: MoviePreferredFormatReg.options.filter((option) => !offered || offersFormat(offered, option.value))}
-    }, [sources, sourceKeys])
+    }, [sites, siteKeys, includeUpcomingSites])
     return (
         <>
             <hr className="form-section-divider" aria-hidden="true"/>

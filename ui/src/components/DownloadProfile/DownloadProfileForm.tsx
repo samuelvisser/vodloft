@@ -5,7 +5,6 @@ import ReadMore from '../../utils/ReadMore'
 import {useCollectionEpisodeTags, useSiteOptions} from "../../lib/queries";
 import type {SeasonDetachedOut} from "../../types/schemas/season";
 import WhichEpisodes from "./WhichEpisodes";
-import YouTubeSection from "./YouTubeSection";
 import UpgradeCheckCard from "./UpgradeCheckCard";
 
 type Props = {
@@ -91,7 +90,6 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                 collectionId={collectionId}
             />
             <UpgradeCheckCard form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
-            <YouTubeSection form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
         </>
     )
 }

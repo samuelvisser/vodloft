@@ -443,6 +443,7 @@ export default function AddCollectionPage({onCancel, onCreated, initialUrl}: Pro
                     onCancel={handleCancel}
                     collectionSlug={collectionSubmit.slug}
                     collection={collectionSubmit}
+                    siteKey={collectionSite?.siteKey}
                     collectionType={collectionSubmit.type}
                 />
             )}

@@ -12,12 +12,13 @@ from sqlalchemy.orm import Session
 
 from backend.services.collection_cookies import uses_cookies
 from backend.services.playback import resolve_playback
-from backend.services.local_media_profile_sources import format_for_site
+from backend.services.local_media_profile_sites import format_for_site
 from backend.services.sites import collection_site, video_site
 from backend.services.no_ascii_names import settle_no_ascii_name
 from backend.services.media_access import link_access
 from backend.db.core import run_write_transaction
-from backend.db.models import DownloadProfile, Episode, Movie, MovieExtra, Video
+from backend.db.models import Episode, Movie, MovieExtra, Video
+from backend.services.site_settings import local_media_profile_site_choices
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail
 from backend.services.download_options import effective_download_mode, effective_metadata_mode, effective_thumbnail_mode
@@ -41,7 +42,7 @@ from downloader.metadata import render_nfo
 from downloader.plan import DownloadPlan, SidecarSpec, YtdlpSponsorBlock, build_download_plan
 from downloader.source import resolve_download_source
 from downloader.ytdlp import resolve_ytdlp_source
-from sources import Feature, PlaybackKind, SiteSetting, Source, get_source
+from sources import Feature, PlaybackKind, Source, get_source
 
 logger = logging.getLogger(__name__)
 
@@ -85,13 +86,11 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     metadata_mode = effective_metadata_mode(profile)
     subtitle_mode = LocalMediaProfileSubtitleMode(profile.subtitle_mode)
     quality = ytdlp_quality(profile)
-    download_profile = _download_profile(download, episode)
-    auto_subtitles = AutoSubtitles(download_profile.auto_subtitles) if download_profile is not None else (
-        AutoSubtitles.FALLBACK if episode is not None else AutoSubtitles.NEVER
-    )
+    site_choices = local_media_profile_site_choices(profile, media_site) if media_site is not None else None
+    auto_subtitles = AutoSubtitles(site_choices["auto_subtitles"]) if site_choices else AutoSubtitles.NEVER
     sponsorblock = ytdlp_sponsorblock(
-        download_profile.sponsorblock_enabled, dict(download_profile.sponsorblock_segments),
-    ) if download_profile is not None else YtdlpSponsorBlock()
+        site_choices["sponsorblock_enabled"], dict(site_choices["sponsorblock_segments"]),
+    ) if site_choices else YtdlpSponsorBlock()
     option_texts = [("the yt-dlp Source", ytdlp_source_options(session))]
     if episode is not None:
         option_texts.append((f"the Collection '{episode.collection.title}'", episode.collection.ytdlp_options))
@@ -113,12 +112,12 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
             media_source, slug=slug, url=page_url, title=title, tracker=tracker, use_cookies=use_cookies,
         )
         if playback.kind is PlaybackKind.YTDLP:
-            if media_site.settings.offers(SiteSetting.AUTO_SUBTITLES):
-                subtitle_request = ytdlp_subtitles(profile, auto_subtitles)
+            # The profile's choices for the Site; a setting the Site does not show is off.
+            subtitle_request = ytdlp_subtitles(profile, auto_subtitles)
             source = resolve_ytdlp_source(
                 playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only,
                 quality=quality, subtitles=subtitle_request,
-                sponsorblock=sponsorblock if media_site.settings.offers(SiteSetting.SPONSORBLOCK) else YtdlpSponsorBlock(),
+                sponsorblock=sponsorblock,
                 custom_options=custom_ytdlp_options(*option_texts) if media_source.has(Feature.YTDLP_OPTIONS) else (),
                 ffmpeg_path=ffmpeg_path,
             )
@@ -293,21 +292,6 @@ def _raise_if_access_required(source: Source, *, slug: str, url: str, title: str
         found = link_access(source.id, url, access)
         label = found.label if found else "an access VODLoft does not have"
         raise AccessRequiredError(f"{source.name} only gives '{title}' with {label}", access)
-
-
-def _download_profile(download: MediaDownloadBase, episode: Episode | None) -> DownloadProfile | None:
-    """The Download Profile behind an episode download, for its YouTube choices.
-
-    An episode downloaded by hand follows the Collection's Download Profile
-    that uses the same Local Media Profile; a single video has none.
-    """
-    if episode is None:
-        return None
-    return getattr(download, "download_profile", None) or next(
-        (candidate for candidate in episode.collection.download_profiles
-         if candidate.local_media_profile_id == download.local_media_profile_id),
-        None,
-    )
 
 
 def _store_episode_media(session: Session, media_id: int, detail) -> None:

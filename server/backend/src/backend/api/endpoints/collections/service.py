@@ -19,7 +19,8 @@ from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
 from backend.services.access_checks import ask_for_check, refused_media
 from backend.services.media_access import locked_clause
-from backend.services.local_media_profile_sources import profile_offered_for_source
+from backend.services.local_media_profile_sites import profile_offered_for_site
+from backend.services.sites import collection_site_key
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.types.collection_types import CollectionType
 from backend.api.endpoints.media_downloads.service import create_new_episode_download
@@ -392,8 +393,8 @@ def request_collection_download_all(
         raise HTTPException(status_code=422, detail="Select a Collection Local Media Profile")
     if profile.collection_scope not in (CollectionLocalMediaProfileScope.BOTH, collection.type):
         raise HTTPException(status_code=422, detail="Local Media Profile is not available for this collection type")
-    if not profile_offered_for_source(profile.source_keys, collection.source_key):
-        raise HTTPException(status_code=422, detail="Local Media Profile is not available for this Source")
+    if not profile_offered_for_site(s, profile, collection_site_key(collection)):
+        raise HTTPException(status_code=422, detail="Local Media Profile is not available for this Site")
 
     if not body.episode_types:
         raise HTTPException(status_code=422, detail="Select at least one episode type")

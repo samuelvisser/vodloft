@@ -6,6 +6,7 @@ from .service import *
 from ....models.profile_bulk import ProfileIdsRead
 from ....models.download_profile_view import DownloadProfileAPIReadView, DownloadProfileViewPageRead
 from ....models.profile_list import DownloadProfileListQuery
+from ....models.source import SiteAPIRead
 from backend.app import db_session
 from backend.security.access import Area, Level
 from backend.security.deps import requires_any
@@ -36,6 +37,13 @@ def download_profile_view_ids(
     """The ids of every download profile the filters match, in table order, for Select all."""
     with db_session() as s:
         return get_download_profile_ids(s, filters)
+
+
+@router.get("/sites", dependencies=_VIEWERS, response_model=list[SiteAPIRead])
+def download_profile_view_sites():
+    """The Sites of the collections that have a download profile, which the table can be filtered by."""
+    with db_session() as s:
+        return get_download_profile_sites(s)
 
 
 @router.get("/by-collection-slug/{collection_slug}", dependencies=_VIEWERS, response_model=list[DownloadProfileAPIReadView])

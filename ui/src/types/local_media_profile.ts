@@ -1,8 +1,8 @@
 import {createSelectRegistry, SelectRegistry} from "../utils/selectRegistry";
 import {useMemo} from "react";
 import type {LocalMediaProfileRead} from "./schemas/local_media_profile";
-import type {LocalMediaProfileSubtitleMode} from "./schemas/local_media_profile_base";
-import {type DownloadOptions, SourceFeature, type SourceFeatureValue, type SourceRead, sourceHas} from "./schemas/source";
+import type {LocalMediaProfileSiteRead, LocalMediaProfileSitesRead, LocalMediaProfileSubtitleMode} from "./schemas/local_media_profile_base";
+import type {DownloadOptions} from "./schemas/source";
 
 
 export const PreferredFormatReg = createSelectRegistry("PreferredFormat", {
@@ -75,19 +75,56 @@ export function isCollectionLocalMediaProfileAvailableFor(
     return scope === 'both' || scope === collectionType
 }
 
-/** The Feature a Source needs before a profile of this type can store its media. */
-const PROFILE_TYPE_SOURCE_FEATURES: Record<LocalMediaProfileType, SourceFeatureValue> = {
-    collection: SourceFeature.COLLECTIONS,
-    movie: SourceFeature.MOVIES,
-    video: SourceFeature.VIDEOS,
+/** Every Site whose media a Local Media Profile of this type can store. */
+export function sitesForLocalMediaProfileType(
+    sites: LocalMediaProfileSitesRead | undefined,
+    type: LocalMediaProfileType,
+): LocalMediaProfileSiteRead[] {
+    return (sites?.sites ?? []).filter((site) => site.profileTypes.includes(type))
 }
 
-/** Every Source whose media a Local Media Profile of this type can store. */
-export function sourcesForLocalMediaProfileType(
-    sources: readonly SourceRead[] | undefined,
+/** The profile's Sites that offer something, and whether Sites still to come do too. */
+export function profileSitesOffering(
+    sites: LocalMediaProfileSitesRead | undefined,
     type: LocalMediaProfileType,
-): SourceRead[] {
-    return (sources ?? []).filter((source) => sourceHas(source, PROFILE_TYPE_SOURCE_FEATURES[type]))
+    siteKeys: readonly string[] | null | undefined,
+    includeUpcomingSites: boolean | undefined,
+    offers: (options: DownloadOptions) => boolean,
+): {sites: LocalMediaProfileSiteRead[], upcoming: boolean} {
+    return {
+        sites: sitesForLocalMediaProfileType(sites, type)
+            .filter((site) => (siteKeys == null || siteKeys.includes(site.key)) && offers(site.downloadOptions)),
+        upcoming: !!sites && (siteKeys == null || !!includeUpcomingSites) && takesUpcomingSites(sites, type)
+            && offers(sites.upcomingDownloadOptions),
+    }
+}
+
+/** The profile's Sites that have a setting only some Sites show, such as sponsorblock, and whether Sites still to
+ * come have it. */
+export function profileSitesWithSetting(
+    sites: LocalMediaProfileSitesRead | undefined,
+    type: LocalMediaProfileType,
+    siteKeys: readonly string[] | null | undefined,
+    includeUpcomingSites: boolean | undefined,
+    setting: string,
+): {sites: LocalMediaProfileSiteRead[], upcoming: boolean} {
+    return {
+        sites: sitesForLocalMediaProfileType(sites, type)
+            .filter((site) => (siteKeys == null || siteKeys.includes(site.key)) && site.settings.includes(setting)),
+        upcoming: !!sites && (siteKeys == null || !!includeUpcomingSites) && takesUpcomingSites(sites, type)
+            && sites.upcomingSettings.includes(setting),
+    }
+}
+
+/** Names the Sites, as in "NPO Start, YouTube and upcoming sites". */
+export function siteNames({sites, upcoming}: {sites: readonly {name: string}[], upcoming: boolean}): string {
+    const names = [...sites.map((site) => site.name), ...(upcoming ? ['upcoming sites'] : [])]
+    return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] ?? '')
+}
+
+/** Whether a profile of this type can get media from Sites VODLoft has not seen yet. */
+export function takesUpcomingSites(sites: LocalMediaProfileSitesRead | undefined, type: LocalMediaProfileType): boolean {
+    return !!sites?.upcomingProfileTypes.includes(type)
 }
 
 /** The resolution each video format downloads up to. */
@@ -102,20 +139,25 @@ export function combinedDownloadOptions(options: readonly DownloadOptions[]): Do
         videoHeights: [...new Set(options.flatMap((option) => option.videoHeights))].sort((a, b) => a - b),
         audioOnly: options.some((option) => option.audioOnly),
         hlsBundle: options.some((option) => option.hlsBundle),
+        hlsHeights: [...new Set(options.flatMap((option) => option.hlsHeights))].sort((a, b) => a - b),
+        subtitles: options.some((option) => option.subtitles),
         qualityChoices: options.some((option) => option.qualityChoices),
     }
 }
 
-/** What a profile can download: everything one of the Sources it is offered for can. */
+/** What a profile can download: everything one of the Sites it is offered for can. */
 export function profileDownloadOptions(
-    sources: readonly SourceRead[] | undefined,
+    sites: LocalMediaProfileSitesRead | undefined,
     type: LocalMediaProfileType,
-    sourceKeys: readonly string[] | null | undefined,
+    siteKeys: readonly string[] | null | undefined,
+    includeUpcomingSites: boolean | undefined,
 ): DownloadOptions | undefined {
-    if (!sources) return undefined
-    const offered = sourcesForLocalMediaProfileType(sources, type)
-        .filter((source) => sourceKeys == null || sourceKeys.includes(source.id))
-    return combinedDownloadOptions(offered.map((source) => source.downloadOptions))
+    if (!sites) return undefined
+    const offered = sitesForLocalMediaProfileType(sites, type)
+        .filter((site) => siteKeys == null || siteKeys.includes(site.key))
+        .map((site) => site.downloadOptions)
+    if ((siteKeys == null || includeUpcomingSites) && takesUpcomingSites(sites, type)) offered.push(sites.upcomingDownloadOptions)
+    return combinedDownloadOptions(offered)
 }
 
 export function offersFormat(options: DownloadOptions, format: string): boolean {
@@ -132,12 +174,17 @@ export function nearestVideoFormat(options: DownloadOptions, format: string): st
     return Object.keys(FORMAT_HEIGHTS).find((key) => FORMAT_HEIGHTS[key] === height)
 }
 
-/** A profile without a list of Sources is offered for every Source. */
-export function isLocalMediaProfileAvailableForSource(
-    profile: Pick<LocalMediaProfileRead, 'sourceKeys'>,
-    sourceKey: string | null | undefined,
+/**
+ * Whether a profile is offered for media from a Site. A Site VODLoft has not seen yet is offered every profile
+ * that includes upcoming Sites; media whose Site is not known yet is offered every profile.
+ */
+export function isLocalMediaProfileAvailableForSite(
+    profile: Pick<LocalMediaProfileRead, 'siteKeys' | 'includeUpcomingSites'>,
+    siteKey: string | null | undefined,
+    knownSiteKeys?: readonly string[],
 ): boolean {
-    return !sourceKey || profile.sourceKeys == null || profile.sourceKeys.includes(sourceKey)
+    if (!siteKey || profile.siteKeys.includes(siteKey)) return true
+    return profile.includeUpcomingSites && !!knownSiteKeys && !knownSiteKeys.includes(siteKey)
 }
 
 /** Build a select registry for Local Media Profiles from an array (no memoization). */
@@ -145,7 +192,7 @@ export function buildLocalMediaProfileSelectRegistry(
     mediaProfiles: readonly LocalMediaProfileRead[] | undefined | null,
     type?: LocalMediaProfileType,
     collectionType?: CollectionLocalMediaProfileContext,
-    sourceKey?: string | null,
+    siteKey?: string | null,
 ): SelectRegistry{
     const spec: Record<string, { label: string }> = {}
     const values: string[] = []
@@ -153,7 +200,7 @@ export function buildLocalMediaProfileSelectRegistry(
         for (const p of mediaProfiles) {
             if (type && p.type !== type) continue
             if (type === 'collection' && collectionType && !isCollectionLocalMediaProfileAvailableFor(p, collectionType)) continue
-            if (!isLocalMediaProfileAvailableForSource(p, sourceKey)) continue
+            if (!isLocalMediaProfileAvailableForSite(p, siteKey)) continue
             const id = (p as any).id
             const name = (p as any).name ?? String(id)
             if (typeof id === 'number') {
@@ -171,10 +218,10 @@ export function useLocalMediaProfileSelectRegistry(
     mediaProfiles: readonly LocalMediaProfileRead[] | undefined | null,
     type?: LocalMediaProfileType,
     collectionType?: CollectionLocalMediaProfileContext,
-    sourceKey?: string | null,
+    siteKey?: string | null,
 ): SelectRegistry{
     return useMemo(
-        (): SelectRegistry => buildLocalMediaProfileSelectRegistry(mediaProfiles, type, collectionType, sourceKey),
-        [mediaProfiles, type, collectionType, sourceKey],
+        (): SelectRegistry => buildLocalMediaProfileSelectRegistry(mediaProfiles, type, collectionType, siteKey),
+        [mediaProfiles, type, collectionType, siteKey],
     )
 }

@@ -35,10 +35,10 @@ const CHOICES: Record<Exclude<UpgradeImprovement, 'length'>, {label: string, hel
  */
 export default function UpgradeCheckCard({form, collectionId, sourceKey, collectionUrl}: Props) {
     const {control, register, setValue, formState: {errors}} = form
-    const [withCountdown, upgradeCheck, afterDays, improvements, sponsorblockEnabled, localMediaProfileId] = useWatch({
+    const [withCountdown, upgradeCheck, afterDays, improvements, localMediaProfileId] = useWatch({
         control,
-        name: ['downloadWithCountdown', 'upgradeCheck', 'upgradeAfterDays', 'upgradeImprovements', 'sponsorblockEnabled', 'localMediaProfileId'],
-    }) as [boolean, boolean, number, UpgradeImprovement[] | undefined, boolean, number | string | undefined]
+        name: ['downloadWithCountdown', 'upgradeCheck', 'upgradeAfterDays', 'upgradeImprovements', 'localMediaProfileId'],
+    }) as [boolean, boolean, number, UpgradeImprovement[] | undefined, number | string | undefined]
 
     const {data: site} = useSiteOptions({collectionId, sourceKey, url: collectionUrl})
     // A profile that already downloads with the countdown keeps the switches, so it can turn them off.
@@ -69,7 +69,8 @@ export default function UpgradeCheckCard({form, collectionId, sourceKey, collect
     // Only what the Site offers, and of that only what the profile can use.
     const usable: Record<UpgradeImprovement, boolean> = {
         resolution: !audioOnly,
-        sponsorblock: sponsorblockEnabled,
+        // The Local Media Profile marks or cuts SponsorBlock segments; the Site offers this only when it has them.
+        sponsorblock: !mediaProfile || mediaProfile.sponsorblockEnabled,
         subtitles: storesSubtitles,
         codec: !audioOnly,
         length: true,

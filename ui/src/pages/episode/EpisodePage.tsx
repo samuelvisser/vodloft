@@ -7,7 +7,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, usePublishStatusLabels, useSkippedByFilter, useSourceLookup, useWaitingForCountdown} from '../../lib/queries'
 import {useLibraryDefaults} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
-import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
+import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
@@ -88,8 +88,8 @@ export default function EpisodePage() {
     const settingsQuery = useLibraryDefaults()
     const collectionProfiles = profiles?.filter((profile) => (
         isCollectionLocalMediaProfileAvailableFor(profile, collection?.type)
-        // A profile limited to other Sources still shows the download it already made.
-        && (isLocalMediaProfileAvailableForSource(profile, episode?.sourceKey)
+        // A profile limited to other Sites still shows the download it already made.
+        && (isLocalMediaProfileAvailableForSite(profile, collection?.site?.key)
             || !!downloads?.some((download) => download.localMediaProfileId === profile.id))
     ))
     const metadataRefreshOperation = useActiveOperation(

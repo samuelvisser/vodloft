@@ -27,6 +27,10 @@ export const LocalMediaProfileMoveCollectionSchema = z.looseObject({
     collectionSlug: z.string(),
     collectionTitle: z.string(),
     inScope: z.boolean(),
+    /** Whether the target is for this type of Collection. */
+    typeOffered: z.boolean(),
+    /** Whether the target is offered for the Collection's Site. */
+    siteOffered: z.boolean(),
     blocked: z.boolean(),
     canMoveDownloadProfile: z.boolean(),
     retentionAtRisk: z.int(),

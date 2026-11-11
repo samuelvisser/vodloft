@@ -3,11 +3,10 @@ from __future__ import annotations
 from typing import Optional
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from backend.api.models.download_profile import (
-    AutoSubtitlesUseAPIRead,
     DownloadProfileAPICreate,
     DownloadProfileAPIRead,
     DownloadProfileAPIUpdate,
@@ -26,8 +25,7 @@ from backend.services.episode_filters import (
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.utils.local_media_profiles import require_local_media_profile_type
-from backend.services.sites import collection_site
-from sources import SiteSetting
+from backend.services.sites import collection_site_key
 from task_manager.events.transactional import queue_event
 
 
@@ -76,7 +74,7 @@ def create_download_profile(s: Session, body: DownloadProfileAPICreate) -> Downl
     collection = s.get(Collection, body.collection_id)
     require_local_media_profile_type(
         s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION,
-        collection.source_key if collection is not None else None,
+        collection_site_key(collection) if collection is not None else None,
     )
     require_one_profile_per_local_media_profile(
         s, collection_id=body.collection_id, local_media_profile_id=body.local_media_profile_id,
@@ -96,10 +94,10 @@ def update_download_profile(s: Session, download_profile_id: int, body: Download
     if item is None:
         raise HTTPException(status_code=404, detail="Download profile not found")
 
-    # A profile limited to other Sources after it was chosen stays usable where it already is.
+    # A profile limited to other Sites after it was chosen stays usable where it already is.
     require_local_media_profile_type(
         s, body.local_media_profile_id, LocalMediaProfileType.COLLECTION,
-        item.collection.source_key if body.local_media_profile_id != item.local_media_profile_id else None,
+        collection_site_key(item.collection) if body.local_media_profile_id != item.local_media_profile_id else None,
     )
     require_one_profile_per_local_media_profile(
         s, collection_id=item.collection_id, local_media_profile_id=body.local_media_profile_id,
@@ -226,25 +224,3 @@ def waiting_for_countdown(s: Session, collection_id: int) -> list[WaitingForCoun
                 "local_media_profile_id": profile.local_media_profile_id,
             }))
     return waiting
-
-
-def auto_subtitles_uses(s: Session, local_media_profile_id: int, access) -> list[AutoSubtitlesUseAPIRead]:
-    """The Download Profiles of YouTube Collections that use this Local Media Profile."""
-    profiles = list(s.scalars(
-        select(DownloadProfile).where(DownloadProfile.local_media_profile_id == local_media_profile_id)
-        .options(selectinload(DownloadProfile.collection))
-    ))
-    uses: list[AutoSubtitlesUseAPIRead] = []
-    for profile in profiles:
-        collection = profile.collection
-        if not access.allows_source(collection.source_key):
-            continue
-        if not collection_site(collection).settings.offers(SiteSetting.AUTO_SUBTITLES):
-            continue
-        uses.append(AutoSubtitlesUseAPIRead.model_validate({
-            "download_profile_id": profile.id,
-            "collection_id": collection.id,
-            "collection_title": collection.title,
-            "auto_subtitles": profile.auto_subtitles,
-        }))
-    return sorted(uses, key=lambda use: (use.collection_title.lower(), use.download_profile_id))

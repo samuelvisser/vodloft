@@ -116,18 +116,11 @@ def download_profiles_site_options(collection_id: int, request: Request):
             settings=offered_settings(site, SiteSettingGroup.DOWNLOAD_PROFILE),
             profile_defaults=DownloadProfileDefaultsAPIRead.model_validate(download_profile_defaults(site)),
             upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks),
-            site_name=site.name, stream_methods=site.stream_methods,
+            site_key=site.key, site_name=site.name, stream_methods=site.stream_methods,
             stream_video_heights=site.stream_video_heights, stream_proxy_choice=site.stream_proxy_choice,
             video_output_help=site.video_output_help,
             downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
         )
-
-
-@router.get("/auto-subtitles/{local_media_profile_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.LOCAL_MEDIA_PROFILES, Level.VIEW))], response_model=list[AutoSubtitlesUseAPIRead])
-def download_profiles_auto_subtitles(local_media_profile_id: int, request: Request):
-    """The YouTube Download Profiles that use a Local Media Profile, with their auto-generated subtitle choice."""
-    with db_session() as s:
-        return auto_subtitles_uses(s, local_media_profile_id, deps.request_access(request))
 
 
 @router.get("/{download_profile_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=DownloadProfileAPIRead)

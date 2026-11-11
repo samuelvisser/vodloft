@@ -31,7 +31,7 @@ def _collection(index: int, *, youtube: bool):
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
 
     return Collection(
-        source_key="ytdlp" if youtube else "dailywire", uuid=f"collection-{index}", slug=f"show-{index}",
+        source_key="ytdlp" if youtube else "dailywire", site_key="youtube" if youtube else "dailywire", uuid=f"collection-{index}", slug=f"show-{index}",
         title=f"Show {index:02d}", description=None, membership_level="FREE",
         sharing_url=f"https://www.youtube.com/@show{index}" if youtube else f"https://www.dailywire.com/show/{index}",
         type=CollectionType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
@@ -54,7 +54,6 @@ def _library(s: Session):
         s.add(DownloadProfile(
             collection_id=collection.id, local_media_profile_id=audio.id, enable_profile=index % 2 == 0,
             download_with_countdown=False, redownload_final=False, delete_older_episodes=False,
-            sponsorblock_enabled=False,
         ))
         s.add(RssStreamProfile(
             collection_id=collection.id, enable_profile=True, use_downloads=True, use_source_stream=False,
@@ -80,7 +79,7 @@ def test_select_all_takes_every_download_profile_the_filters_match(session) -> N
     assert get_download_profile_ids(session, DownloadProfileListQuery()).ids == [item.id for item in profiles]
     enabled = get_download_profile_ids(session, DownloadProfileListQuery(status=["enabled"])).ids
     assert enabled == [item.id for item in profiles if item.enable_profile]
-    assert get_download_profile_ids(session, DownloadProfileListQuery(source=["ytdlp"], status=["disabled"])).ids == [
+    assert get_download_profile_ids(session, DownloadProfileListQuery(site=["youtube"], status=["disabled"])).ids == [
         profiles[3].id,
     ]
 
@@ -96,23 +95,23 @@ def test_download_profile_changes_skip_settings_a_site_does_not_have(session) ->
     summary = summarize_download_profiles(session, BulkSelectionIn(ids=ids))
     assert summary.count == 4
     assert {item.value: item.count for item in summary.fields["enableProfile"].values} == {True: 2, False: 2}
-    assert summary.fields["sponsorblockEnabled"].offered == 2  # only the YouTube ones
-    assert summary.fields["sponsorblockEnabled"].sites_without == ["The Daily Wire"]
+    assert summary.fields["downloadWithCountdown"].offered == 2  # only the Daily Wire ones
+    assert summary.fields["downloadWithCountdown"].sites_without == ["YouTube"]
     assert summary.fields["enableProfile"].sites_without == []
 
     body = BulkChangeIn[DownloadProfileBulkChangesIn].model_validate(
-        {"ids": ids, "changes": {"enableProfile": True, "sponsorblockEnabled": True}})
+        {"ids": ids, "changes": {"enableProfile": True, "downloadWithCountdown": True}})
     result = change_download_profiles(session, body)
     session.commit()
     assert (result.done, result.skipped) == (4, [])
     assert all(item.enable_profile for item in profiles)
-    assert [item.sponsorblock_enabled for item in profiles] == [False, False, True, True]
+    assert [item.download_with_countdown for item in profiles] == [True, True, False, False]
 
-    only_sponsorblock = BulkChangeIn[DownloadProfileBulkChangesIn].model_validate(
-        {"ids": ids[:1], "changes": {"sponsorblockEnabled": False}})
-    result = change_download_profiles(session, only_sponsorblock)
+    only_countdown = BulkChangeIn[DownloadProfileBulkChangesIn].model_validate(
+        {"ids": ids[2:3], "changes": {"downloadWithCountdown": False}})
+    result = change_download_profiles(session, only_countdown)
     assert result.done == 0
-    assert [item.name for item in result.skipped] == ["Show 00 (Audio)"]
+    assert [item.name for item in result.skipped] == ["Show 02 (Audio)"]
 
 
 def test_moving_download_profiles_to_another_media_profile_skips_a_collection_that_has_one(session) -> None:

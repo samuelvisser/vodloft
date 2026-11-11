@@ -19,7 +19,7 @@ import '../episode/EpisodePage.css'
 import {siteName} from '../../lib/siteName'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
-import {isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
+import {isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../../components/common/DurationPill'
 
@@ -50,9 +50,9 @@ export default function VideoPage() {
     }
     if (!video) return <section className="view episode-view" aria-busy="true"><p>Loading video…</p></section>
 
-    // A profile limited to other Sources still shows the download it already made.
+    // A profile limited to other Sites still shows the download it already made.
     const videoProfiles = profiles?.filter((profile) => profile.type === 'video' && (
-        isLocalMediaProfileAvailableForSource(profile, video.sourceKey)
+        isLocalMediaProfileAvailableForSite(profile, video.site?.key)
         || !!downloads?.some((download) => download.localMediaProfileId === profile.id)
     ))
     const downloadByProfileId = new Map<number, MediaDownloadViewRead>(

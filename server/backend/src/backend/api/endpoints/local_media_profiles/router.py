@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from backend.api.models.collection_example import ExampleCollectionAPIIn
 
 from backend.api.models.local_media_profile import (
+    LocalMediaProfileSitesAPIRead,
     LocalMediaProfileTemplateSource,
     LocalMediaProfileTemplateSourcePage,
     LocalMediaProfileTemplateVariable,
@@ -15,6 +16,7 @@ from backend.api.models.local_media_profile_view import (
     LocalMediaProfileViewPageRead,
 )
 from backend.api.models.profile_list import LocalMediaProfileListQuery
+from backend.api.models.source import SiteAPIRead
 from backend.api.models.local_media_profile_move import (
     LocalMediaProfileMoveAPIRequest,
     LocalMediaProfileMovePreviewAPIRead,
@@ -26,6 +28,7 @@ from backend.api.models.operations import (
     LocalMediaProfileRedownloadOperationAccepted,
 )
 from backend.app import db_session
+from backend.services.local_media_profile_sites import profile_sites
 from backend.types.local_media_profile_types import (
     LocalMediaProfileType,
     CollectionLocalMediaProfileScope,
@@ -51,6 +54,7 @@ from backend.api.models.profile_bulk import (
 )
 from .service import (
     get_local_media_profile_ids,
+    get_local_media_profile_table_sites,
     get_local_media_profile,
     get_local_media_profile_view,
     get_local_media_profile_views_page,
@@ -73,6 +77,13 @@ def local_media_profiles_list():
         return get_local_media_profiles_list(s)
 
 
+@router.get("/sites", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileSitesAPIRead)
+def local_media_profile_sites():
+    """Every Site VODLoft knows that a Local Media Profile can be offered for."""
+    with db_session() as s:
+        return LocalMediaProfileSitesAPIRead.model_validate(profile_sites(s))
+
+
 @router.get("/as-view", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileViewPageRead)
 def local_media_profiles_view_list(
         filters: Annotated[LocalMediaProfileListQuery, Query()],
@@ -92,6 +103,13 @@ def local_media_profiles_view_ids(
     """The ids of every Local Media Profile the filters match, in table order, for Select all."""
     with db_session() as s:
         return get_local_media_profile_ids(s, filters)
+
+
+@router.get("/as-view/sites", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=list[SiteAPIRead])
+def local_media_profiles_view_sites():
+    """The Sites VODLoft has media from, which the table can be filtered by."""
+    with db_session() as s:
+        return get_local_media_profile_table_sites(s)
 
 
 @router.post("/bulk/summary", dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.MANAGE)], response_model=BulkSummaryRead)
@@ -125,6 +143,13 @@ def local_media_profile_template_variables(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+_SITES_HELP = "Comma-separated keys of the Sites the profile is for; left out, every Site"
+
+
+def _site_keys(sites: str | None) -> list[str] | None:
+    return None if sites is None else [key for key in sites.split(",") if key]
+
+
 @router.get("/template/sources", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileTemplateSourcePage)
 def local_media_profile_template_sources(
     type: LocalMediaProfileType = Query(...),
@@ -133,6 +158,7 @@ def local_media_profile_template_sources(
     cursor: str | None = Query(None, max_length=4096),
     limit: int = Query(30, ge=1, le=100),
     anchor_source_id: str | None = Query(None, max_length=100),
+    sites: str | None = Query(None, max_length=4096, description=_SITES_HELP),
 ):
     """Search applicable media items for testing an output path template."""
     with db_session() as s:
@@ -145,6 +171,7 @@ def local_media_profile_template_sources(
                 cursor=cursor,
                 limit=limit,
                 anchor_source_id=anchor_source_id,
+                site_keys=_site_keys(sites),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -158,10 +185,13 @@ def local_media_profile_template_sources(
 def local_media_profile_random_collection_template_source(
     collection_scope: CollectionLocalMediaProfileScope = Query(CollectionLocalMediaProfileScope.BOTH),
     local_media_profile_id: int | None = Query(None, description="Prefer a Collection that uses this profile"),
+    sites: str | None = Query(None, max_length=4096, description=_SITES_HELP),
 ):
     """Choose a fresh initial episode without weighting Collections by episode count."""
     with db_session() as s:
-        return get_random_collection_template_source(s, collection_scope, local_media_profile_id=local_media_profile_id)
+        return get_random_collection_template_source(
+            s, collection_scope, local_media_profile_id=local_media_profile_id, site_keys=_site_keys(sites),
+        )
 
 
 @router.post(

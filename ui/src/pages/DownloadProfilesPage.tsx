@@ -2,7 +2,7 @@ import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
-import {type DownloadProfileTableFilters, useDownloadProfilesTable, useLocalMediaProfiles, useSources} from '../lib/queries'
+import {type DownloadProfileTableFilters, useDownloadProfilesTable, useLocalMediaProfiles, useDownloadProfileSites} from '../lib/queries'
 import ProfileTableFilters, {FORMAT_OPTIONS, STATUS_OPTIONS} from '../components/common/ProfileTableFilters'
 import {ChipFilter} from '../components/common/FilterBar'
 import SimpleSelect from '../components/common/SimpleSelect'
@@ -31,10 +31,8 @@ export default function DownloadProfilesPage() {
 
     const [filters, setFilters] = useState<DownloadProfileTableFilters>({})
     const table = useDownloadProfilesTable(filters)
-    const {data: sources} = useSources()
-    const sourceOptions = (sources ?? [])
-        .filter((source) => source.features.includes('collections'))
-        .map((source) => ({value: source.id, label: source.name}))
+    const {data: sites} = useDownloadProfileSites()
+    const siteOptions = (sites ?? []).map((site) => ({value: site.key, label: site.name}))
     const {data: mediaProfiles} = useLocalMediaProfiles()
     const MediaProfileReg = useMemo(() => {
         const collectionProfiles = (mediaProfiles ?? [])
@@ -44,7 +42,7 @@ export default function DownloadProfilesPage() {
         for (const profile of collectionProfiles) spec[String(profile.id)] = {label: profile.name}
         return createSelectRegistry('DownloadProfileMediaProfileFilter', spec, ['', ...collectionProfiles.map((profile) => String(profile.id))])
     }, [mediaProfiles])
-    const activeCount = [filters.source, filters.status, filters.format].filter((value) => value?.length).length
+    const activeCount = [filters.site, filters.status, filters.format].filter((value) => value?.length).length
         + (filters.localMediaProfileId ? 1 : 0)
     const onSearch = useCallback((search: string) => setFilters((current) => ({...current, search})), [])
 
@@ -69,7 +67,6 @@ export default function DownloadProfilesPage() {
             {key: 'downloadWithCountdown', label: 'Download with countdown', kind: 'switch', defaultValue: true},
             {key: 'upgradeCheck', label: 'Check for better versions', kind: 'switch', defaultValue: true},
             {key: 'upgradeRepeat', label: 'How often to check', kind: 'select', defaultValue: 'once', registry: UpgradeRepeatReg},
-            {key: 'sponsorblockEnabled', label: 'SponsorBlock', kind: 'switch', defaultValue: true},
         ]
     }, [MediaProfileReg])
 
@@ -171,7 +168,7 @@ export default function DownloadProfilesPage() {
                 onReset={() => setFilters({})}
                 leading={<SelectAll selection={selection} filtered={activeCount > 0 || !!filters.search}/>}
             >
-                <ChipFilter label="Source" options={sourceOptions} selected={filters.source ?? []} onChange={(source) => setFilters((current) => ({...current, source}))}/>
+                <ChipFilter label="Site" options={siteOptions} selected={filters.site ?? []} onChange={(site) => setFilters((current) => ({...current, site}))}/>
                 <ChipFilter label="Status" options={STATUS_OPTIONS} selected={filters.status ?? []} onChange={(status) => setFilters((current) => ({...current, status}))}/>
                 <ChipFilter label="Format" options={FORMAT_OPTIONS} selected={filters.format ?? []} onChange={(format) => setFilters((current) => ({...current, format}))}/>
             </ProfileTableFilters>

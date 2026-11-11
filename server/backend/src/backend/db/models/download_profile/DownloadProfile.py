@@ -3,13 +3,12 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, JSON, String, UniqueConstraint, func
-from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
-from backend.types.download_profile_types import DEFAULT_SPONSORBLOCK_SEGMENTS, DEFAULT_UPGRADE_IMPROVEMENTS
+from backend.types.download_profile_types import DEFAULT_UPGRADE_IMPROVEMENTS
 
 if TYPE_CHECKING:
     from backend.db.models import EpisodeMediaDownload, LocalMediaProfileBase, Collection
@@ -39,15 +38,6 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
     redownload_final: Mapped[bool] = mapped_column(default=False)
     # Whether a download its date lines leave out is deleted.
     delete_older_episodes: Mapped[bool] = mapped_column(default=True)
-    auto_subtitles: Mapped[str] = mapped_column(
-        String(16), default="fallback", server_default="fallback",
-        comment="YouTube's auto-generated subtitles: never, fallback (when there is no real one) or always",
-    )
-    sponsorblock_enabled: Mapped[bool] = mapped_column(default=True, server_default="0")
-    sponsorblock_segments: Mapped[dict[str, str]] = mapped_column(
-        MutableDict.as_mutable(JSON), default=lambda: dict(DEFAULT_SPONSORBLOCK_SEGMENTS), nullable=False,
-        comment="SponsorBlock segment type to keep, chapter or cut, for YouTube Collections",
-    )
 
     # The upgrade check: downloading again later, and keeping the new file only when it is better
     upgrade_check: Mapped[bool] = mapped_column(default=True, server_default="0")

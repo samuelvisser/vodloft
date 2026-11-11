@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 
 import FolderField from '../ExistingFiles/FolderField'
 import {watchImportMatches} from '../ExistingFiles/ImportMatchesWatcher'
+import PathChangeList from '../common/PathChangeList'
 import ProgressBar from '../common/ProgressBar'
 import {useOperations} from '../OperationNotifier/OperationNotifier'
 import OpaqueOutputTemplateCode from '../LocalMediaProfile/OpaqueOutputTemplateCode'
@@ -914,52 +915,7 @@ function ReportLine({line}: {line: string}) {
     return <>{parts}</>
 }
 
-/** Where two paths first differ, so the rest of each can stand out. */
-function splitAtDifference(left: string, right: string): number {
-    let index = 0
-    while (index < left.length && index < right.length && left[index] === right[index]) index += 1
-    // Start at the folder or word the difference is in, so the highlight reads as whole names.
-    const boundary = Math.max(left.lastIndexOf('/', index - 1), left.lastIndexOf(' ', index - 1))
-    return boundary >= 0 ? boundary + 1 : 0
-}
-
-function PathPair({path, rendered}: {path: string, rendered: string}) {
-    const at = splitAtDifference(path, rendered)
-    return (
-        <li className="import-path-pair">
-            <span className="import-path-pair__label">Pinchflat</span>
-            <code><span className="is-same">{path.slice(0, at)}</span>{path.slice(at)}</code>
-            <span className="import-path-pair__label">VODLoft</span>
-            <code><span className="is-same">{rendered.slice(0, at)}</span><mark>{rendered.slice(at)}</mark></code>
-        </li>
-    )
-}
-
 const FEW_DIFFERENCES = 3
-const DIFFERENCES_PAGE = 50
-
-/** Every differing path in a scrolling list that renders more as its end comes into view. */
-function EndlessDifferences({differences}: {differences: ImportProfile['pathProof']['differences']}) {
-    const [shown, setShown] = useState(DIFFERENCES_PAGE)
-    const end = useRef<HTMLLIElement | null>(null)
-    useEffect(() => {
-        const sentinel = end.current
-        if (!sentinel || shown >= differences.length) return
-        const observer = new IntersectionObserver((entries) => {
-            if (entries.some((entry) => entry.isIntersecting)) {
-                setShown((current) => Math.min(differences.length, current + DIFFERENCES_PAGE))
-            }
-        }, {root: sentinel.closest('.import-differences'), rootMargin: '200px'})
-        observer.observe(sentinel)
-        return () => observer.disconnect()
-    }, [shown, differences.length])
-    return (
-        <ul className="import-differences is-endless">
-            {differences.slice(0, shown).map((item) => <PathPair key={item.path} path={item.path} rendered={item.rendered}/>)}
-            {shown < differences.length && <li ref={end} className="import-differences__end" aria-hidden="true"/>}
-        </ul>
-    )
-}
 
 function PathProof({proof}: {proof: ImportProfile['pathProof']}) {
     const [expanded, setExpanded] = useState(false)
@@ -987,14 +943,13 @@ function PathProof({proof}: {proof: ImportProfile['pathProof']}) {
                         each file if it downloaded it for the first time, so it is a check of how accurate the conversion
                         is.
                     </p>
-                    {expanded ? (
-                        <EndlessDifferences differences={proof.differences}/>
-                    ) : (
-                        <ul className="import-differences">
-                            {proof.differences.slice(0, FEW_DIFFERENCES)
-                                .map((item) => <PathPair key={item.path} path={item.path} rendered={item.rendered}/>)}
-                        </ul>
-                    )}
+                    <PathChangeList
+                        changes={(expanded ? proof.differences : proof.differences.slice(0, FEW_DIFFERENCES))
+                            .map((item) => ({key: item.path, from: item.path, to: item.rendered}))}
+                        fromLabel="Pinchflat"
+                        toLabel="VODLoft"
+                        endless={expanded}
+                    />
                     {!expanded && proof.differences.length > FEW_DIFFERENCES && (
                         <button type="button" className="btn import-differences__more" aria-expanded={false}
                                 onClick={() => setExpanded(true)}>

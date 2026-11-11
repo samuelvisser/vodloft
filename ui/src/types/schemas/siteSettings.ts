@@ -23,7 +23,7 @@ export const SiteRefreshModeReg = createSelectRegistry('SiteRefreshMode', {
     off: {label: 'Off'},
 }, ['default', 'own', 'off'])
 
-export const SiteSettingGroupSchema = z.enum(['scheduling', 'downloadProfile'])
+export const SiteSettingGroupSchema = z.enum(['scheduling', 'downloadProfile', 'localMediaProfile'])
 export type SiteSettingGroup = z.infer<typeof SiteSettingGroupSchema>
 
 /** A setting a Site shows, and what it starts with when the Site has no value of its own. */

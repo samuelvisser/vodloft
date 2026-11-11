@@ -31,7 +31,7 @@ NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
 PROFILE_LOOKUP_INDEXES_REVISION = "5b8e1f3c2a90"
 IMPORTED_DOWNLOAD_PROFILES_REVISION = "a0eceaa70db5"
-HEAD_REVISION = "80a8b55fb9d6"
+HEAD_REVISION = "d7e173de7e72"
 
 
 @pytest.fixture
@@ -1056,7 +1056,8 @@ def test_every_download_profile_chooses_the_new_sponsorblock_types(migration_dat
             "UPDATE download_profiles SET sponsorblock_segments = :segments WHERE id = 2"
         ), {"segments": json.dumps({"sponsor": "cut", "poi_highlight": "keep"})})
 
-    command.upgrade(config, HEAD_REVISION)
+    # The last revision before SponsorBlock moved to the Local Media Profiles.
+    command.upgrade(config, "d3a7f1c9e2b5")
 
     with engine.connect() as connection:
         segments = {
@@ -1065,3 +1066,154 @@ def test_every_download_profile_chooses_the_new_sponsorblock_types(migration_dat
         }
     assert (segments[1]["poi_highlight"], segments[1]["hook"], segments[1]["chapter"]) == ("chapter", "keep", "keep")
     assert segments[2] == {"sponsor": "cut", "poi_highlight": "keep", "hook": "keep", "chapter": "keep"}
+
+
+def test_local_media_profiles_move_from_sources_to_sites(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "80a8b55fb9d6")
+    with engine.begin() as connection:
+        for key in ("vimeo", "dailywire"):
+            connection.execute(text("INSERT INTO sites (key, name, domains) VALUES (:key, :key, '[]')"), {"key": key})
+        profiles = (
+            # id, type, source_keys
+            (1, "collection", None),
+            (2, "collection", '["dailywire"]'),
+            (3, "video", '["ytdlp"]'),
+            (4, "collection", '["npo", "ytdlp"]'),
+            (5, "movie", None),
+        )
+        for profile_id, profile_type, source_keys in profiles:
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs, source_keys) "
+                "VALUES (:id, :slug, :slug, :type, '/x/' || :slug || '/{{ title }}.ext', 'format_1080p', '[]', :keys)"
+            ), {"id": profile_id, "slug": f"p{profile_id}", "type": profile_type, "keys": source_keys})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        rows = connection.execute(text("SELECT id, site_keys, include_upcoming_sites FROM local_media_profiles ORDER BY id")).all()
+        sites = {profile_id: (json.loads(keys), bool(upcoming)) for profile_id, keys, upcoming in rows}
+        assert sites == {
+            1: (["dailywire", "npo", "vimeo", "youtube"], True),
+            2: (["dailywire"], False),
+            # yt-dlp stands for every Site that is not The Daily Wire or NPO Start, and for Sites to come.
+            3: (["vimeo", "youtube"], True),
+            4: (["npo", "vimeo", "youtube"], True),
+            5: (["dailywire"], True),
+        }
+        columns = {column["name"] for column in inspect(connection).get_columns("local_media_profiles")}
+        assert "source_keys" not in columns
+
+
+def test_per_site_settings_of_an_earlier_migration_become_one_value_per_profile(migration_database):
+    """A database that ran the earlier version of e8b2c4f6a1d3 kept these settings per Site in site_settings."""
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "d3a7f1c9e2b5")
+    cut = {"sponsor": "cut"}
+    site_settings = {
+        1: {
+            "vimeo": {"auto_subtitles": "never", "sponsorblock_enabled": False, "sponsorblock_segments": {}},
+            "youtube": {"auto_subtitles": "always", "sponsorblock_enabled": True, "sponsorblock_segments": cut},
+        },
+        2: {"vimeo": {"auto_subtitles": "never", "sponsorblock_enabled": False, "sponsorblock_segments": {}}},
+        3: {},
+    }
+    with engine.begin() as connection:
+        # What the earlier e8b2c4f6a1d3 left behind.
+        connection.execute(text("ALTER TABLE local_media_profiles ADD COLUMN site_settings JSON NOT NULL DEFAULT '{}'"))
+        for column in ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments"):
+            connection.execute(text(f"ALTER TABLE download_profiles DROP COLUMN {column}"))
+        for profile_id, settings in site_settings.items():
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs, "
+                "site_keys, site_settings) VALUES (:id, :slug, :slug, 'collection', '/x/' || :slug || '/{{ title }}.ext', "
+                "'format_1080p', '[]', '[]', :settings)"
+            ), {"id": profile_id, "slug": f"p{profile_id}", "settings": json.dumps(settings)})
+    command.stamp(config, "e8b2c4f6a1d3")
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        profiles = {
+            row.id: (row.auto_subtitles, bool(row.sponsorblock_enabled), json.loads(row.sponsorblock_segments))
+            for row in connection.execute(text(
+                "SELECT id, auto_subtitles, sponsorblock_enabled, sponsorblock_segments FROM local_media_profiles"
+            ))
+        }
+        columns = {column["name"] for column in inspect(connection).get_columns("local_media_profiles")}
+    default_segments = {
+        "sponsor": "chapter", "selfpromo": "keep", "interaction": "keep", "intro": "chapter", "outro": "chapter",
+        "preview": "keep", "filler": "keep", "hook": "keep", "music_offtopic": "keep", "poi_highlight": "chapter",
+        "chapter": "keep",
+    }
+    assert profiles == {
+        # YouTube's settings win.
+        1: ("always", True, {**default_segments, **cut}),
+        # Without YouTube: the other Sites' auto-generated subtitles, and SponsorBlock off.
+        2: ("never", False, default_segments),
+        3: ("fallback", False, default_segments),
+    }
+    assert "site_settings" not in columns
+
+
+def test_auto_subtitles_and_sponsorblock_move_to_the_local_media_profile(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "d3a7f1c9e2b5")
+    cut = {"sponsor": "cut"}
+    with engine.begin() as connection:
+        for key in ("youtube", "vimeo", "dailywire"):
+            connection.execute(text("INSERT INTO sites (key, name, domains) VALUES (:key, :key, '[]')"), {"key": key})
+        for collection_id, site_key in ((1, "youtube"), (2, "youtube"), (3, "youtube"), (4, "vimeo"), (5, "dailywire")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, site_key, episode_order) VALUES (:id, :uuid, :uuid, 'C', "
+                "'https://example.test/' || :uuid, 'free', 'series', 'numbered', 'Host', 'host', 'ytdlp', :site, 'newest_first')"
+            ), {"id": collection_id, "uuid": f"c{collection_id}", "site": site_key})
+        for profile_id in (1, 2):
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs, "
+                "site_keys) VALUES (:id, :slug, :slug, 'collection', '/x/' || :slug || '/{{ title }}.ext', 'format_1080p', '[]', '[]')"
+            ), {"id": profile_id, "slug": f"p{profile_id}"})
+        # Two of the three YouTube Download Profiles of profile 1 use auto-generated subtitles always and cut sponsors.
+        rows = (
+            (1, 1, 1, "always", 1, cut), (2, 2, 1, "always", 1, cut), (3, 3, 1, "never", 0, {}),
+            (4, 4, 1, "fallback", 0, {}), (5, 5, 1, "never", 0, {}),
+        )
+        for download_profile_id, collection_id, profile_id, auto, sponsorblock, segments in rows:
+            connection.execute(text(
+                "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, auto_subtitles, "
+                "sponsorblock_enabled, sponsorblock_segments) VALUES (:id, :collection, :profile, 1, :auto, :sb, :segments)"
+            ), {"id": download_profile_id, "collection": collection_id, "profile": profile_id, "auto": auto,
+                "sb": sponsorblock, "segments": json.dumps(segments)})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        profiles = {
+            row.id: (row.auto_subtitles, bool(row.sponsorblock_enabled), json.loads(row.sponsorblock_segments))
+            for row in connection.execute(text(
+                "SELECT id, auto_subtitles, sponsorblock_enabled, sponsorblock_segments FROM local_media_profiles"
+            ))
+        }
+        columns = {column["name"] for column in inspect(connection).get_columns("download_profiles")}
+    default_segments = {
+        "sponsor": "chapter", "selfpromo": "keep", "interaction": "keep", "intro": "chapter", "outro": "chapter",
+        "preview": "keep", "filler": "keep", "hook": "keep", "music_offtopic": "keep", "poi_highlight": "chapter",
+        "chapter": "keep",
+    }
+    assert profiles == {
+        # What most of its Download Profiles on Sites with the setting had: The Daily Wire has neither.
+        1: ("always", True, {**default_segments, **cut}),
+        # Without Download Profiles: auto-generated subtitles when there are no real ones, and SponsorBlock off.
+        2: ("fallback", False, default_segments),
+    }
+    assert not {"auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments"} & columns
