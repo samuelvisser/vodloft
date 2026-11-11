@@ -174,9 +174,11 @@ export default function EditLocalMediaProfilePage() {
     const onSuccess = async () => {
         renameDecisionRef.current = null
         setRestoredDraft(false)
-        await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
-        await qc.invalidateQueries({queryKey: ['localMediaProfile', slug]})
         clearLocalMediaProfileDraft(editLocalMediaProfileDraftKey(slug))
+        // A new name gives the profile a new slug, so loading the page's own profile again would find nothing at
+        // the old one and wait for a retry. The page closes anyway: only mark it stale.
+        void qc.invalidateQueries({queryKey: ['localMediaProfile', slug], refetchType: 'none'})
+        void qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         navigate('/local-media-profiles')
     }
 
