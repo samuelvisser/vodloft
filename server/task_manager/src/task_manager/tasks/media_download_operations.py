@@ -9,7 +9,7 @@ from typing import Optional
 from sqlalchemy import case, event, exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from backend.db.core import get_session, run_write_transaction
+from backend.db.core import get_session, run_write_transaction, take_write_turn
 from backend.db.core import write_when_changed
 from backend.db.models import Episode, Movie, MovieExtra
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
@@ -118,6 +118,9 @@ def _hold_download_dispatch_lock_until_transaction_end(session: Session) -> None
         current_transaction = session.get_transaction()
     assert current_transaction is not None
 
+    # This lock is held until the transaction ends, so take the turn to write first, as every other
+    # transaction holding it did.
+    take_write_turn(session)
     _DOWNLOAD_DISPATCH_LOCK.acquire()
     session.info[_DOWNLOAD_DISPATCH_TRANSACTION_KEY] = current_transaction
 

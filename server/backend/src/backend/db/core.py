@@ -351,6 +351,18 @@ def _take_turn_before_the_first_write(connection, _cursor, statement, _parameter
         turn.take(statement)
 
 
+def take_write_turn(session: Session) -> None:
+    """Take this write transaction's turn to write now, before its first write.
+
+    Call it before taking any other lock that is held until the transaction ends.
+    A transaction that took such a lock while it still read, and then waited for
+    its turn, would wait for ever on one that has its turn and wants that lock.
+    """
+    turn = getattr(_writing, "turn", None)
+    if turn is not None and is_write_session(session) and turn.connection is session.connection():
+        turn.take()
+
+
 _wal_engines: weakref.WeakKeyDictionary[Engine, bool] = weakref.WeakKeyDictionary()
 
 

@@ -201,3 +201,27 @@ def test_a_transaction_that_only_reads_never_takes_a_turn(wal_database):
     finally:
         release.set()
         holder.join(5)
+
+
+def test_a_transaction_can_take_its_turn_before_its_first_write(wal_database):
+    from backend.db import core
+
+    wrote, release = threading.Event(), threading.Event()
+    holder = _hold_the_writer(core, wrote=wrote, release=release)
+    read, turned = threading.Event(), threading.Event()
+
+    def work(session):
+        session.execute(select(text("1"))).all()
+        read.set()
+        # Taken before a lock held until the transaction ends, so the lock is never held while waiting.
+        core.take_write_turn(session)
+        turned.set()
+
+    thread = threading.Thread(target=lambda: core.run_write_transaction(work))
+    thread.start()
+    assert read.wait(5)
+    assert not turned.wait(0.2)
+    release.set()
+    holder.join(5)
+    assert turned.wait(5)
+    thread.join(5)
