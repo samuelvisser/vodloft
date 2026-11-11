@@ -42,7 +42,7 @@ def analyze_profile_outputs(
     environment: Environment,
     namespace: str,
 ) -> ProfileOutputAnalysis:
-    """Analyze Collection profiles, or separately analyze movie features and extras.
+    """Analyze Collection and Video profiles, or separately analyze movie features and extras.
 
     Movie parent/item aliases coincide for the feature, but NOT for its extras.
     Local custom indexes remain profile-scoped symbols and are never evaluated.
@@ -60,8 +60,11 @@ def analyze_profile_outputs(
             namespace=namespace,
         )
         scenarios = (feature, extra)
+    elif profile_type == "video":
+        # video_output_template_values has no alias pairs: every name is its own value.
+        scenarios = (analyze_template(template, environment=environment, namespace=namespace),)
     else:
-        raise ValueError("Output analysis requires a Collection or Movie Local Media Profile")
+        raise ValueError("Output analysis requires a Collection, Movie or Video Local Media Profile")
     return ProfileOutputAnalysis(profile_type, extension, scenarios)
 
 
