@@ -7,6 +7,7 @@ import {faIcon} from '../../icons/faIcon'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import DisabledReason from '../../components/common/DisabledReason'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import OpaqueOutputTemplateCode from '../../components/LocalMediaProfile/OpaqueOutputTemplateCode'
 import ProfileExistingFilesDialog from '../../components/ExistingFiles/ProfileExistingFilesDialog'
@@ -105,6 +106,18 @@ export default function LocalMediaProfilePage() {
     }
 
     const actionBusy = Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation || moveOperation)
+    const runningActionReason = renameOperation
+        ? 'A file rename operation is running for this profile.'
+        : deleteDownloadsOperation
+            ? 'A delete downloads operation is running for this profile.'
+            : redownloadOperation
+                ? 'A re-download operation is running for this profile.'
+                : moveOperation
+                    ? 'Episodes are being moved to another profile.'
+                    : undefined
+    const deleteDisabledReason = runningActionReason
+        ? `${runningActionReason} Wait for it to finish before deleting the profile.`
+        : undefined
     const managedLabel = profile.type === 'collection' ? 'Managed episodes' : 'Managed items'
     const downloadedLabel = profile.type === 'collection' ? 'Downloaded episodes' : 'Downloaded items'
 
@@ -267,16 +280,20 @@ export default function LocalMediaProfilePage() {
                             <FontAwesomeIcon icon={faIcon('fass', 'copy')} aria-hidden="true"/>
                             <span>Duplicate</span>
                         </Link>
-                        <button
-                            type="button"
-                            className="btn btn-danger"
-                            disabled={actionBusy}
-                            title={actionBusy ? 'Wait for the active profile action to finish first' : undefined}
-                            onClick={() => setDeleteProfileConfirm(true)}
-                        >
-                            <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
-                            <span>Delete</span>
-                        </button>
+                        <DisabledReason reason={deleteDisabledReason} placement="below">
+                            {({describedBy, explain}) => (
+                                <button
+                                    type="button"
+                                    className={`btn btn-danger${deleteDisabledReason ? ' is-disabled' : ''}`}
+                                    aria-disabled={deleteDisabledReason ? true : undefined}
+                                    aria-describedby={describedBy}
+                                    onClick={() => deleteDisabledReason ? explain() : setDeleteProfileConfirm(true)}
+                                >
+                                    <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
+                                    <span>Delete</span>
+                                </button>
+                            )}
+                        </DisabledReason>
                         <ActionMenu
                             items={[
                                 {

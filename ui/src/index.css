@@ -452,7 +452,9 @@ a.btn,
 .btn:focus,
 .btn:active { text-decoration: none; }
 .btn:hover { filter: brightness(0.98); }
-.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn:disabled,
+.btn.is-disabled { opacity: 0.6; cursor: not-allowed; }
+.btn.is-disabled:hover { filter: none; }
 .btn-primary {
   background: #3b82f6;
   color: #fff;
@@ -1447,7 +1449,7 @@ a.icon-btn { display: inline-block; text-decoration: none; }
   color: white;
   border-color: #ef4444;
 }
-.btn-danger:hover {
+.btn-danger:hover:not(.is-disabled) {
   background: #dc2626;
   border-color: #dc2626;
 }

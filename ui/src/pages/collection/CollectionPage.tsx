@@ -567,6 +567,7 @@ export default function CollectionPage() {
                   label: `Check locked videos again (${lockedCount})`,
                   icon: faIcon('fass', 'unlock') as [string, string],
                   disabled: lockedCheckBusy,
+                  disabledReason: lockedCheckBusy ? 'The locked videos are being checked again.' : undefined,
                   onSelect: () => void checkLockedAgain(),
                 }] : []),
                 ...(sourceControls(collection).metadataRefresh ? [{

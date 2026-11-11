@@ -1,0 +1,87 @@
+.vl-disabled-reason {
+    position: relative;
+}
+
+span.vl-disabled-reason {
+    display: inline-flex;
+}
+
+.vl-disabled-reason-tooltip {
+    position: absolute;
+    width: max-content;
+    max-width: 260px;
+    padding: 7px 9px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    text-align: left;
+    white-space: normal;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+    z-index: 70;
+}
+
+.vl-disabled-reason.has-reason:hover > .vl-disabled-reason-tooltip,
+.vl-disabled-reason.has-reason:has(:focus-visible) > .vl-disabled-reason-tooltip,
+.vl-disabled-reason.is-shown > .vl-disabled-reason-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Beside the control, to its left: the items of a menu that opens on the right. */
+.vl-disabled-reason--side > .vl-disabled-reason-tooltip {
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%) translateX(4px);
+}
+
+.vl-disabled-reason--side.has-reason:hover > .vl-disabled-reason-tooltip,
+.vl-disabled-reason--side.has-reason:has(:focus-visible) > .vl-disabled-reason-tooltip,
+.vl-disabled-reason--side.is-shown > .vl-disabled-reason-tooltip {
+    transform: translateY(-50%) translateX(0);
+}
+
+/* Below the control, lined up with its right edge. */
+.vl-disabled-reason--below > .vl-disabled-reason-tooltip {
+    right: 0;
+    top: calc(100% + 6px);
+    max-width: min(280px, calc(100vw - 36px));
+    transform: translateY(-4px);
+}
+
+.vl-disabled-reason--below.has-reason:hover > .vl-disabled-reason-tooltip,
+.vl-disabled-reason--below.has-reason:has(:focus-visible) > .vl-disabled-reason-tooltip,
+.vl-disabled-reason--below.is-shown > .vl-disabled-reason-tooltip {
+    transform: translateY(0);
+}
+
+@media (prefers-color-scheme: dark) {
+    .vl-disabled-reason-tooltip {
+        border-color: rgba(148, 163, 184, 0.24);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+    }
+}
+
+@media (max-width: 560px) {
+    /* A phone has no room beside the control, so the explanation goes above it. */
+    .vl-disabled-reason--side > .vl-disabled-reason-tooltip {
+        right: 0;
+        top: auto;
+        bottom: calc(100% + 6px);
+        max-width: min(280px, calc(100vw - 36px));
+        transform: translateY(4px);
+    }
+
+    .vl-disabled-reason--side.has-reason:hover > .vl-disabled-reason-tooltip,
+    .vl-disabled-reason--side.has-reason:has(:focus-visible) > .vl-disabled-reason-tooltip,
+    .vl-disabled-reason--side.is-shown > .vl-disabled-reason-tooltip {
+        transform: translateY(0);
+    }
+}
