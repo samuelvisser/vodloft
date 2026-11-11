@@ -279,6 +279,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Outermost, so a slow request's time includes every middleware above.
+    from backend.slow_requests import SlowRequestMiddleware
+    app.add_middleware(SlowRequestMiddleware)
+
     # Import routers lazily to avoid circular imports during app module import
     from backend.api.endpoints import (
         dailywire_router,
