@@ -19,7 +19,7 @@ from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import URL, Engine, make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, QueuePool
 
 from config import get_settings
 
@@ -32,6 +32,8 @@ T = TypeVar("T")
 
 _SQLITE_BUSY_TIMEOUT_SECONDS = 30
 _SQLITE_BUSY_TIMEOUT_MS = _SQLITE_BUSY_TIMEOUT_SECONDS * 1_000
+# Idle SQLite connections kept open; more are opened whenever they are needed.
+_SQLITE_POOL_SIZE = 16
 # Idle connections kept open, and how many more may be opened under load.
 # PostgreSQL allows 100 connections by default, so 60 leaves room for other clients.
 _SERVER_POOL_SIZE = 10
@@ -114,20 +116,24 @@ def _sqlite_path(url: URL) -> Path | None:
 def _create_sqlite_engine(url: URL, path: Path | None) -> Engine:
     if path is not None:
         os.makedirs(path.parent, exist_ok=True)
-    # A bounded QueuePool is a poor fit for VODLoft's threaded SQLite workload.
-    # The scheduler may run as many workers as the old default pool could serve,
-    # leaving no connection headroom for API requests. SQLite connections are
-    # cheap, and the busy timeout/WAL settings below already govern the actual
-    # database contention, so open them on demand and close them with each Session.
+    # A new SQLite connection reads and parses the whole schema before its first
+    # statement, about 2 ms for VODLoft's, and starts with an empty page cache.
+    # Every Session would pay that, so keep connections open for the next one.
+    # The pool never makes a thread wait: the scheduler's workers and the API's
+    # requests may together want more than it keeps, and those extra connections
+    # are opened on demand and closed again when their Session ends.
+    pool = {"poolclass": NullPool} if path is None else {
+        "poolclass": QueuePool, "pool_size": _SQLITE_POOL_SIZE, "max_overflow": -1,
+    }
     engine = create_engine(
         url,
         connect_args={
             "check_same_thread": False,
-            # sqlite3 defaults to five seconds. Background workers and API writes
-            # legitimately overlap, so give short writer bursts time to serialize.
+            # sqlite3 defaults to five seconds. Other processes, such as a command
+            # line, can hold the writer, so give their short bursts time to finish.
             "timeout": _SQLITE_BUSY_TIMEOUT_SECONDS,
         },
-        poolclass=NullPool,
+        **pool,
     )
     event.listen(engine, "connect", _configure_sqlite_connection)
     _enable_sqlite_wal(engine)
@@ -314,27 +320,31 @@ class _WriteTurn:
 
     connection: object
     priority: WritePriority
+    # Whether it reads beside other writers and only takes its turn at its first write.
+    reads_first: bool = False
+    holding: bool = False
+    # For the slow write log: when it first asked for its turn, got it, and last gave it back.
     asked: float | None = None
     began: float | None = None
-
-    @property
-    def held(self) -> bool:
-        return self.began is not None
+    ended: float | None = None
 
     def take(self, statement: str = "BEGIN") -> None:
-        if self.held:
+        if self.holding:
             return
-        self.asked = time.monotonic()
+        asked = time.monotonic()
         if not _write_turns.take(self.priority, _SQLITE_BUSY_TIMEOUT_SECONDS):
             raise OperationalError(
                 statement, None,
                 TimeoutError(f"database is locked: no turn to write within {_SQLITE_BUSY_TIMEOUT_SECONDS}s"),
             )
-        self.began = time.monotonic()
+        self.holding = True
+        if self.began is None:
+            self.asked, self.began = asked, time.monotonic()
 
     def give_back(self) -> None:
-        if self.held:
-            self.began = None
+        if self.holding:
+            self.holding = False
+            self.ended = time.monotonic()
             _write_turns.give_back()
 
 
@@ -345,7 +355,7 @@ _NON_WRITING_STATEMENTS = ("SELECT", "PRAGMA", "EXPLAIN", "SAVEPOINT", "RELEASE"
 @event.listens_for(Engine, "before_cursor_execute")
 def _take_turn_before_the_first_write(connection, _cursor, statement, _parameters, _context, _executemany) -> None:
     turn = getattr(_writing, "turn", None)
-    if turn is None or turn.held or turn.connection is not connection:
+    if turn is None or turn.holding or turn.connection is not connection:
         return
     if not statement.lstrip().upper().startswith(_NON_WRITING_STATEMENTS):
         turn.take(statement)
@@ -361,6 +371,18 @@ def take_write_turn(session: Session) -> None:
     turn = getattr(_writing, "turn", None)
     if turn is not None and is_write_session(session) and turn.connection is session.connection():
         turn.take()
+
+
+@event.listens_for(Session, "after_commit", insert=True)
+def _give_the_turn_back_once_committed(session: Session) -> None:
+    """Let the next writer in as soon as the commit is on disk.
+
+    What a commit sets off, such as events and task dispatches, runs in the listeners
+    after this one. It no longer writes to this transaction, so nobody waits for it.
+    """
+    turn = getattr(_writing, "turn", None)
+    if turn is not None and is_write_session(session) and not session.in_nested_transaction():
+        turn.give_back()
 
 
 _wal_engines: weakref.WeakKeyDictionary[Engine, bool] = weakref.WeakKeyDictionary()
@@ -411,6 +433,7 @@ def _begin_write_transaction(session: Session, *, concurrent: bool, reserve: boo
         return None
     turn = _WriteTurn(session.connection(), _write_priority.get())
     if dialect == "sqlite" and not reserve and _reads_beside_the_writer(session):
+        turn.reads_first = True
         session.execute(text("BEGIN"))
         return turn
     turn.take()
@@ -446,10 +469,10 @@ def is_lock_conflict(error: BaseException) -> bool:
     return "database is locked" in message or "database is busy" in message
 
 
-def _log_slow_write(work: Callable, turn: _WriteTurn | None, *, ended: float) -> None:
-    if turn is None or turn.began is None or turn.asked is None:
+def _log_slow_write(work: Callable, turn: _WriteTurn | None) -> None:
+    if turn is None or turn.began is None or turn.asked is None or turn.ended is None:
         return
-    waited, held = turn.began - turn.asked, ended - turn.began
+    waited, held = turn.began - turn.asked, turn.ended - turn.began
     if waited < _SLOW_WRITE_SECONDS and held < _SLOW_WRITE_SECONDS:
         return
     code = getattr(work, "__code__", None)
@@ -461,22 +484,30 @@ def _log_slow_write(work: Callable, turn: _WriteTurn | None, *, ended: float) ->
 
 
 def run_write_transaction(
-    work: Callable[[Session], T], *, concurrent: bool = False, attempts: int = _WRITE_ATTEMPTS,
+    work: Callable[[Session], T], *, concurrent: bool = False, reserve: bool = False,
+    attempts: int = _WRITE_ATTEMPTS,
 ) -> T:
     """Run ``work`` in a write transaction of its own and commit it.
 
-    The transaction starts with ``begin_write_transaction``, so it reads what
-    the previous writer committed. When another transaction is in the way
-    (a locked SQLite database, a PostgreSQL deadlock), the whole of ``work``
-    runs again in a new transaction, a few times, before the error is raised.
-    ``work`` may end the transaction early with ``session.rollback()``; any
-    exception it raises rolls the transaction back and is raised as it is.
+    The transaction starts with ``_begin_write_transaction``, so it writes only
+    from what the previous writer committed. When another transaction was in
+    the way (one that committed while this one read on SQLite, a PostgreSQL
+    deadlock), the whole of ``work`` runs again in a new transaction, a few
+    times, before the error is raised. So ``work`` must be safe to run twice:
+    it changes nothing but the session, and returns what it found instead of
+    adding to a list or counter outside it. ``work`` may end the transaction
+    early with ``session.rollback()``; any exception it raises rolls the
+    transaction back and is raised as it is.
 
-    ``work`` must be short: SQLite has one writer at a time, so every other
-    write waits while it runs, and a retry runs it again. Look Sites up, read
-    files and do other slow work before, and side effects such as webhooks
-    after. ``concurrent`` lets the transaction run beside other writers where
-    the database allows it; see ``begin_write_transaction``.
+    ``work`` reads first and writes last where it can. From its first write
+    until the commit every other write waits, on SQLite and, unless they are
+    ``concurrent``, on PostgreSQL. Look Sites up, read files and do other slow
+    work before the transaction, and side effects such as webhooks after.
+
+    ``concurrent`` lets the transaction run beside other writers where the
+    database allows it. ``reserve`` takes the writer before the first read, for
+    the rare work that cannot run twice; every other write then waits for all
+    of it. See ``_begin_write_transaction``.
     """
     if getattr(_writing, "active", False):
         # A second write transaction on the same thread would wait for the first one forever.
@@ -488,11 +519,11 @@ def run_write_transaction(
         turn = None
         try:
             # The first attempt reads beside other writers; one that was passed reserves the writer up front.
-            turn = _begin_write_transaction(session, concurrent=concurrent, reserve=attempt > 0)
+            turn = _begin_write_transaction(session, concurrent=concurrent, reserve=reserve or attempt > 0)
             _writing.turn = turn
             result = work(session)
             session.commit()
-            _log_slow_write(work, turn, ended=time.monotonic())
+            _log_slow_write(work, turn)
             return result
         except OperationalError as error:
             session.rollback()
@@ -507,7 +538,9 @@ def run_write_transaction(
             session.close()
             if turn is not None:
                 turn.give_back()
-        time.sleep(_WRITE_RETRY_DELAY_SECONDS * (2 ** attempt))
+        if turn is None or not turn.reads_first:
+            # One that only read first was passed by a commit and takes its turn right away.
+            time.sleep(_WRITE_RETRY_DELAY_SECONDS * (2 ** attempt))
     raise AssertionError("unreachable")
 
 

@@ -194,7 +194,8 @@ def create_app() -> FastAPI:
                     local_media_profile_id=error.repair_profile_id,
                 )
 
-            run_write_transaction(work)
+            # Off the event loop: the write may wait for its turn.
+            await run_in_threadpool(run_write_transaction, work)
         return JSONResponse({"detail": str(error)}, status_code=409)
 
     @app.exception_handler(LinkNotAllowed)

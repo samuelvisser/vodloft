@@ -225,3 +225,44 @@ def test_a_transaction_can_take_its_turn_before_its_first_write(wal_database):
     holder.join(5)
     assert turned.wait(5)
     thread.join(5)
+
+
+def test_what_a_commit_sets_off_runs_after_the_turn_is_given_back(wal_database):
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+
+    from backend.db import core
+
+    held = []
+
+    def after_commit(session):
+        if core.is_write_session(session):
+            held.append(core._write_turns.held)
+
+    event.listen(Session, "after_commit", after_commit)
+    try:
+        core.run_write_transaction(lambda session: session.execute(text("UPDATE settings SET ytdlp_options = 'x'")))
+    finally:
+        event.remove(Session, "after_commit", after_commit)
+    assert held == [False]
+
+
+def test_reserved_work_takes_its_turn_before_it_reads_and_runs_once(wal_database):
+    from backend.db import core
+
+    wrote, release = threading.Event(), threading.Event()
+    holder = _hold_the_writer(core, wrote=wrote, release=release)
+    runs = []
+
+    def work(session):
+        runs.append(session.execute(text("SELECT ytdlp_options FROM settings")).scalar())
+        session.execute(text("UPDATE settings SET ytdlp_options = 'reserved'"))
+
+    thread = threading.Thread(target=lambda: core.run_write_transaction(work, reserve=True))
+    thread.start()
+    time.sleep(0.2)
+    assert runs == []
+    release.set()
+    holder.join(5)
+    thread.join(5)
+    assert len(runs) == 1

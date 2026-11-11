@@ -1192,7 +1192,10 @@ def apply_run(run_id: int) -> dict[str, int]:
 
         run_write_transaction(fail)
         raise
-    counts, cookies_imported = run_write_transaction(lambda session: _apply_loaded_plan(session, run_id, options, loaded))
+    # Applying a setting writes the settings file, and a second run would report it as already there.
+    counts, cookies_imported = run_write_transaction(
+        lambda session: _apply_loaded_plan(session, run_id, options, loaded), reserve=True,
+    )
     if cookies_imported:
         remove_secrets(importer)
     return counts

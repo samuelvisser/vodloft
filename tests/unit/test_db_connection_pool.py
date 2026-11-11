@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy.pool import QueuePool
 
 
 def _configure(monkeypatch, url: str, database_path=None):
@@ -16,11 +16,20 @@ def _configure(monkeypatch, url: str, database_path=None):
     return core.get_engine()
 
 
-def test_configure_db_does_not_bound_sqlite_connections(tmp_path, monkeypatch):
+def test_sqlite_connections_are_kept_open_and_never_waited_for(tmp_path, monkeypatch):
     database_path = tmp_path / "vodloft.db"
     engine = _configure(monkeypatch, f"sqlite:///{database_path.as_posix()}", database_path)
     try:
-        assert isinstance(engine.pool, NullPool)
+        assert isinstance(engine.pool, QueuePool)
+        # More connections than the pool keeps are opened at once, not waited for.
+        connections = [engine.connect() for _ in range(engine.pool.size() + 5)]
+        for connection in connections:
+            connection.close()
+        # The next Session gets one that is already open, with its settings still applied.
+        assert engine.pool.checkedin() == engine.pool.size()
+        with engine.connect() as connection:
+            assert engine.pool.checkedin() == engine.pool.size() - 1
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
     finally:
         engine.dispose()
 

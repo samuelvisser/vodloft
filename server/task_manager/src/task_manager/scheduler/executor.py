@@ -318,13 +318,13 @@ def _prepare_execution(
     """Persist the RUNNING attempt in one write transaction, which ends before worker code runs."""
 
     def work(session) -> _PreparedExecution | None:
-        nonlocal operation_ids
+        owning_operation_ids = operation_ids
         if operation_ids and operation_ids_inherited:
             # Started by an operation's worker, not owned by the operation: it only
             # stops when that operation was canceled, and joins it while it is active.
             if operation_ids_canceled(session, operation_ids):
                 return None
-            operation_ids = active_operation_ids(session, operation_ids)
+            owning_operation_ids = active_operation_ids(session, operation_ids)
         elif operation_ids and not operation_ids_allow_execution(session, operation_ids):
             return None
 
@@ -375,7 +375,7 @@ def _prepare_execution(
             session,
             run=run,
             task_key=def_key,
-            operation_ids=operation_ids,
+            operation_ids=owning_operation_ids,
             operation_slot=operation_slot,
         )
 
@@ -421,7 +421,7 @@ def _finalize_execution(
     """Persist terminal/retry state in one short write transaction."""
 
     def work(session) -> tuple[datetime | None, Exception | None]:
-        nonlocal cancellation_reason
+        reason = cancellation_reason
         retry_at: datetime | None = None
         terminal_error: Exception | None = None
         run = session.get(TaskRun, prepared.run_id)
@@ -439,12 +439,12 @@ def _finalize_execution(
             return None, None
 
         if run_cancel_requested(run):
-            cancellation_reason = run_cancel_reason(run, cancellation_reason or "Canceled")
-        elif cancellation_reason is None and not _run_has_active_operation_owner(session, run.id):
-            cancellation_reason = "Owning operation was canceled"
+            reason = run_cancel_reason(run, reason or "Canceled")
+        elif reason is None and not _run_has_active_operation_owner(session, run.id):
+            reason = "Owning operation was canceled"
 
-        if cancellation_reason is not None:
-            _mark_run_canceled(run, cancellation_reason)
+        if reason is not None:
+            _mark_run_canceled(run, reason)
         elif worker_error is None:
             if isinstance(worker_result, TaskResult):
                 run.result = worker_result.as_dict()
