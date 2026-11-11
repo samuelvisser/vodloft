@@ -131,6 +131,14 @@ def resolve_media_download_file(
         return None
 
 
+def media_download_file_is_as_recorded(download: MediaDownloadBase) -> bool:
+    """Whether the file on disk is what the database says it is: there, healthy and unchanged.
+
+    This only looks. When it is not, ``resolve_media_download_file`` reconciles the download.
+    """
+    return not _reconcile(download, verify_file_size=get_settings().file_watcher.verify_file_size)
+
+
 def _release_clean_read_transaction(s: Session) -> bool:
     """End a caller's read transaction without expiring already-loaded objects."""
     if not s.in_transaction():

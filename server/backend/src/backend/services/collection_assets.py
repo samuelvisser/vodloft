@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from os.path import normcase
 from typing import TYPE_CHECKING
@@ -16,12 +17,13 @@ from backend.services.example_episodes import EXAMPLE_SOURCE_PREFIX
 from backend.utils.custom_metadata import custom_metadata_template_values, get_custom_metadata
 from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS, COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    _sanitize_emitted_output_value, output_template_fields, sanitize_path_component,
+    _sanitize_emitted_output_value, output_template_fields, rendering_with_filename_mode, sanitize_path_component,
     validate_output_template_path_requirements,
 )
 from backend.utils.output_template_jinja import create_output_template_environment
 from backend.utils.collection_media_directory import CollectionMediaDirectory, infer_collection_media_directory
 from config import get_settings
+from config.settings.submodels import FilenameRestrictionMode
 
 if TYPE_CHECKING:
     from sources.dailywire.api.records import DwShowRecord
@@ -103,6 +105,33 @@ def managed_collection_profile_pairs(session: Session) -> set[tuple[int, int]]:
     }
 
 
+@lru_cache(maxsize=1024)
+def _inferred_directory(
+    output_template: str, known_values: tuple[tuple[str, str], ...], season_names: tuple[str, ...],
+    mode: FilenameRestrictionMode,
+) -> CollectionMediaDirectory:
+    """The shared directory a template gives a collection, before it is placed in the download root.
+
+    Working this out analyses the whole template, and the artwork task asks it for every collection
+    each time it places one file. The answer only depends on what is passed in here.
+    """
+    validate_output_template_path_requirements(
+        output_template,
+        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
+    )
+    values = {field: "" for field in COLLECTION_OUTPUT_TEMPLATE_FIELDS | output_template_fields(output_template)}
+    values.update(known_values)
+    environment = create_output_template_environment(custom_index_resolver=lambda _key, _group: "")
+    environment.finalize = _sanitize_emitted_output_value
+    with rendering_with_filename_mode(mode):
+        return infer_collection_media_directory(
+            output_template, values, environment=environment,
+            sanitize_component=lambda part: sanitize_path_component(part, mode=mode),
+            season_names=season_names,
+        )
+
+
 def resolve_collection_media_directory(
     collection: Collection | None, output_template: str, *, values_overrides: Mapping[str, str] | None = None,
 ) -> CollectionMediaDirectory:
@@ -112,18 +141,11 @@ def resolve_collection_media_directory(
     semantic resolver still treats episode/season fields as variable, so editing
     a season cannot accidentally turn it into the shared collection directory.
     """
-    validate_output_template_path_requirements(
-        output_template,
-        allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
-        allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    )
-    values = {field: "" for field in COLLECTION_OUTPUT_TEMPLATE_FIELDS | output_template_fields(output_template)}
+    values = {}
     if collection is not None:
         values.update(collection=collection.slug, collection_title=collection.title)
         values.update(custom_metadata_template_values("collection", get_custom_metadata(collection)))
     values.update(values_overrides or {})
-    environment = create_output_template_environment(custom_index_resolver=lambda _key, _group: "")
-    environment.finalize = _sanitize_emitted_output_value
     settings = get_settings().download_settings
     names = tuple(
         str(value) for season in (collection.seasons if collection is not None else ())
@@ -131,10 +153,9 @@ def resolve_collection_media_directory(
         if value is not None
     )
     names += tuple(values[field] for field in ("season", "season_name", "season_index", "season_number") if values.get(field))
-    resolution = infer_collection_media_directory(
-        output_template, values, environment=environment,
-        sanitize_component=lambda part: sanitize_path_component(part, mode=settings.filename_restriction_mode),
-        season_names=names,
+    resolution = _inferred_directory(
+        output_template, tuple(sorted(values.items())), names,
+        FilenameRestrictionMode(settings.filename_restriction_mode),
     )
     if resolution.path is None:
         return resolution
