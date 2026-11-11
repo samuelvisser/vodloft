@@ -5,6 +5,7 @@ from backend.db.core import run_write_transaction, write_priority
 from backend.services.retired_folders import retire_changed_folders
 
 import logging
+import sys
 import threading
 from contextlib import asynccontextmanager, contextmanager
 
@@ -89,6 +90,15 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
         scheduled_work_pause.release()
 
 
+# API requests and task threads share Python's interpreter lock. A request gives it up
+# for every row it reads from SQLite, every file it reads and every answer it sends, and
+# beside a task thread that is computing it then waits a whole switch interval to get it
+# back. With Python's default of 5 ms a request reading 5,000 rows took half a minute
+# beside four busy task threads; at 0.5 ms it takes a few seconds, for about a tenth less
+# throughput on threads that only compute.
+_THREAD_SWITCH_INTERVAL_SECONDS = 0.0005
+
+
 @asynccontextmanager
 async def application_lifespan(app: FastAPI):
     """Own the background controller for exactly one ASGI app lifespan."""
@@ -99,6 +109,7 @@ async def application_lifespan(app: FastAPI):
     )
 
     settings = get_settings()
+    sys.setswitchinterval(_THREAD_SWITCH_INTERVAL_SECONDS)
 
     # Snapshot file/environment metadata and run settings diagnostics once at
     # startup. Settings GET requests then serve this in-memory state; config.yml
