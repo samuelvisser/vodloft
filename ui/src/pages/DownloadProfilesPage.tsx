@@ -1,5 +1,7 @@
 import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
+import {useSearchParams} from 'react-router-dom'
+import {LOCAL_MEDIA_PROFILE_QUERY_PARAM} from '../lib/downloadProfileFilters'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import {type DownloadProfileTableFilters, useDownloadProfilesTable, useLocalMediaProfiles, useDownloadProfileSites} from '../lib/queries'
@@ -29,7 +31,17 @@ import type {BulkFieldSpec} from '../components/ProfileBulkEdit/BulkChangeDialog
 export default function DownloadProfilesPage() {
     const queryClient = useQueryClient()
 
-    const [filters, setFilters] = useState<DownloadProfileTableFilters>({})
+    // The URL holds the Local Media Profile filter, so a link can open the table already filtered.
+    const [searchParams, setSearchParams] = useSearchParams()
+    const localMediaProfileId = Number(searchParams.get(LOCAL_MEDIA_PROFILE_QUERY_PARAM)) || null
+    const setLocalMediaProfileId = useCallback((id: number | null) => setSearchParams((current) => {
+        const next = new URLSearchParams(current)
+        if (id) next.set(LOCAL_MEDIA_PROFILE_QUERY_PARAM, String(id))
+        else next.delete(LOCAL_MEDIA_PROFILE_QUERY_PARAM)
+        return next
+    }, {replace: true}), [setSearchParams])
+    const [otherFilters, setFilters] = useState<Omit<DownloadProfileTableFilters, 'localMediaProfileId'>>({})
+    const filters = useMemo<DownloadProfileTableFilters>(() => ({...otherFilters, localMediaProfileId}), [otherFilters, localMediaProfileId])
     const table = useDownloadProfilesTable(filters)
     const {data: sites} = useDownloadProfileSites()
     const siteOptions = (sites ?? []).map((site) => ({value: site.key, label: site.name}))
@@ -159,13 +171,16 @@ export default function DownloadProfilesPage() {
                         aria-label="Filter by local media profile"
                         registry={MediaProfileReg}
                         value={filters.localMediaProfileId ? String(filters.localMediaProfileId) : ''}
-                        onChange={(value) => setFilters((current) => ({...current, localMediaProfileId: value ? Number(value) : null}))}
+                        onChange={(value) => setLocalMediaProfileId(value ? Number(value) : null)}
                     />
                 )}
                 total={table.total}
                 loading={table.isLoading}
                 activeCount={activeCount}
-                onReset={() => setFilters({})}
+                onReset={() => {
+                    setFilters({})
+                    setLocalMediaProfileId(null)
+                }}
                 leading={<SelectAll selection={selection} filtered={activeCount > 0 || !!filters.search}/>}
             >
                 <ChipFilter label="Site" options={siteOptions} selected={filters.site ?? []} onChange={(site) => setFilters((current) => ({...current, site}))}/>

@@ -27,6 +27,8 @@ import {
     CollectionLocalMediaProfileScopeReg,
 } from '../../types/local_media_profile'
 import {formatBytes} from '../../utils/formatting'
+import {can} from '../../lib/access'
+import {downloadProfilesUrlForLocalMediaProfile} from '../../lib/downloadProfileFilters'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {localMediaProfileEndpoint, sitesForLocalMediaProfileType, takesUpcomingSites} from '../../types/local_media_profile'
 import './LocalMediaProfilePage.css'
@@ -388,10 +390,17 @@ export default function LocalMediaProfilePage() {
                         </span>
                         <span className="local-media-profile-stat-label">Storage used</span>
                     </div>
-                    <div className="local-media-profile-stat">
-                        <span className="local-media-profile-stat-value">{statistics.downloadProfileCount}</span>
-                        <span className="local-media-profile-stat-label">Download Profiles</span>
-                    </div>
+                    {profile.type === 'collection' && can('download_profiles') ? (
+                        <Link className="local-media-profile-stat" to={downloadProfilesUrlForLocalMediaProfile(profile.id)}>
+                            <span className="local-media-profile-stat-value">{statistics.downloadProfileCount}</span>
+                            <span className="local-media-profile-stat-label">Download Profiles</span>
+                        </Link>
+                    ) : (
+                        <div className="local-media-profile-stat">
+                            <span className="local-media-profile-stat-value">{statistics.downloadProfileCount}</span>
+                            <span className="local-media-profile-stat-label">Download Profiles</span>
+                        </div>
+                    )}
                 </div>
 
                 <dl className="local-media-profile-properties">
