@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from backend.services.download_recovery import STARTUP_RECOVERY_PAUSE_OWNER, recover_download_filesystem
-from backend.db.core import run_write_transaction
+from backend.db.core import run_write_transaction, write_priority
 from backend.services.retired_folders import retire_changed_folders
 
 import logging
@@ -194,7 +194,8 @@ def create_app() -> FastAPI:
                     local_media_profile_id=error.repair_profile_id,
                 )
 
-            run_write_transaction(work)
+            # Off the event loop: the write may wait for its turn.
+            await run_in_threadpool(run_write_transaction, work)
         return JSONResponse({"detail": str(error)}, status_code=409)
 
     @app.exception_handler(LinkNotAllowed)
@@ -244,6 +245,13 @@ def create_app() -> FastAPI:
                 {"detail": NO_INTERNET_CONNECTION_MESSAGE},
                 status_code=503,
             )
+
+    # Someone waits for every request's answer, so its writes go before the scheduler's background
+    # writes. Added after the auth guard so it wraps it, and signing in counts as well.
+    @app.middleware("http")
+    async def _interactive_writes(request: Request, call_next):
+        with write_priority("interactive"):
+            return await call_next(request)
 
     # Added after the auth guard so it wraps it: its 401 and 403 answers get CORS headers too.
     import os

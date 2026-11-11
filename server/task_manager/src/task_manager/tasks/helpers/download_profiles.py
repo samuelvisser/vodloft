@@ -11,8 +11,8 @@ from task_manager.events.transactional import queue_event
 def _lock_download_profile(s: Session, profile_id: int) -> DownloadProfile | None:
     """Load one Download Profile while serializing changes to its enabled state.
 
-    Callers run inside ``run_write_transaction``. On SQLite its BEGIN IMMEDIATE already keeps every
-    other writer out; PostgreSQL locks the profile row, which also covers concurrent transactions.
+    Callers run inside ``run_write_transaction``. On SQLite it already writes only from a snapshot no
+    other writer changed; PostgreSQL locks the profile row, which also covers concurrent transactions.
     """
     statement = select(DownloadProfile).where(DownloadProfile.id == profile_id)
     if s.get_bind().dialect.name != "sqlite":

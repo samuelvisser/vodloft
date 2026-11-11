@@ -367,6 +367,14 @@ def reconcile_collection_profile_custom_indexes(
     ) if applicable and profile_uses_custom_indexes(profile) else {ep.id: {} for ep in episodes}
     synced = _synced_downloads_before_reindex(session, profile, episodes) if auto_rename and applicable else {}
 
+    prefix = f"{INDEX_ASSIGNMENT_PREFIX}{profile.id}."
+    # Found before the first write: every other write waits from there until the commit.
+    outdated = [
+        episode for episode in episodes
+        if old[episode.id] != desired[episode.id]
+        or sum(item.key.startswith(prefix) for item in episode.meta_items) != len(desired[episode.id])
+    ]
+
     # Compare-and-swap and metadata edits belong to the same transaction.
     updated = session.execute(update(CustomIndexState).where(
         CustomIndexState.id == state.id,
@@ -377,16 +385,9 @@ def reconcile_collection_profile_custom_indexes(
 
     changed = 0
     synced_episode_ids: list[int] = []
-    for episode in episodes:
+    for episode in outdated:
         before, after = old[episode.id], desired[episode.id]
-        raw_count = sum(
-            item.key.startswith(f"{INDEX_ASSIGNMENT_PREFIX}{profile.id}.")
-            for item in episode.meta_items
-        )
-        if before == after and raw_count == len(after):
-            continue
         changed += max(1, len(set(before.items()) ^ set(after.items())))
-        prefix = f"{INDEX_ASSIGNMENT_PREFIX}{profile.id}."
         seen: set[str] = set()
         for item in list(episode.meta_items):
             if not item.key.startswith(prefix):

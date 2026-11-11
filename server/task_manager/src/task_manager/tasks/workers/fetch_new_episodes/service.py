@@ -257,10 +257,12 @@ def finish_index(*, collection_id: int, found: int, newest: int, progress=None) 
 
     def work(s: Session) -> list[int]:
         collection = s.get(Collection, collection_id)
+        # Read before the first write: every other write waits from there until the commit.
+        added = _episodes_after(s, collection_id, newest) if found else []
         if collection is not None:
             request_collection_custom_index_reconciliation(s, collection_id)
             _queue_collection_indexed(s, collection=collection, indexed_count=found)
-        return _episodes_after(s, collection_id, newest) if found else []
+        return added
 
     added = run_write_transaction(work)
     if added:

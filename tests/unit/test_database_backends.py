@@ -72,6 +72,20 @@ def _seeded_sqlite_database(tmp_path, monkeypatch) -> Path:
     return path
 
 
+def _hold_a_write_transaction(run_write_transaction):
+    """A thread inside a write transaction until ``release`` is set."""
+    holding, release = threading.Event(), threading.Event()
+
+    def work(_session):
+        holding.set()
+        release.wait(10)
+
+    thread = threading.Thread(target=lambda: run_write_transaction(work))
+    thread.start()
+    assert holding.wait(10)
+    return thread, release
+
+
 def _row_counts(engine) -> dict[str, int]:
     from backend.db.core import Base, load_database_models
 
@@ -127,7 +141,7 @@ def test_the_case_insensitive_username_uses_each_databases_collation():
     from backend.db.models import User
 
     assert 'COLLATE "NOCASE"' in str(CreateTable(User.__table__).compile(dialect=sqlite.dialect()))
-    assert 'COLLATE "vodloft_case_insensitive"' in str(CreateTable(User.__table__).compile(dialect=postgresql.dialect()))
+    assert 'COLLATE vodloft_case_insensitive' in str(CreateTable(User.__table__).compile(dialect=postgresql.dialect())).replace('"', '')
 
 
 # Moving from SQLite ------------------------------------------------------------
@@ -172,22 +186,20 @@ def test_usernames_stay_unique_regardless_of_case_on_postgresql(postgresql_datab
     from sqlalchemy.exc import IntegrityError
 
     from backend.db import get_session
+    from backend.db.core import run_write_transaction
     from backend.db.migrations import upgrade_database
     from backend.db.models import User
 
     upgrade_database()
+    run_write_transaction(lambda session: session.add(User(username="Samuel", password_hash="x")))
     with get_session() as session:
-        session.add(User(username="Samuel", password_hash="x"))
-        session.commit()
         assert session.scalar(select(User.id).where(User.username == "SAMUEL")) is not None
-        session.add(User(username="samuel", password_hash="x"))
-        with pytest.raises(IntegrityError):
-            session.commit()
+    with pytest.raises(IntegrityError):
+        run_write_transaction(lambda session: session.add(User(username="samuel", password_hash="x")))
 
 
 @needs_postgresql
 def test_the_first_start_on_postgresql_copies_the_sqlite_database(tmp_path, monkeypatch, postgresql_database):
-    from backend.db import get_session
     from backend.db.migrations import check_database, upgrade_database
     from backend.db.models import Collection
     from backend.db.sqlite_copy import COPIED_SUFFIX
@@ -204,7 +216,7 @@ def test_the_first_start_on_postgresql_copies_the_sqlite_database(tmp_path, monk
     assert _row_counts(core.get_engine()) == expected
     assert not source.exists()
     assert source.with_name(source.name + COPIED_SUFFIX).is_file()
-    with get_session() as session:
+    def add(session):
         highest = session.scalar(select(func.max(Collection.id)))
         added = Collection(
             uuid="copied-sequence-check", source_key="ytdlp", slug="new", title="New", type="series", episode_identifier="numbered", membership_level="FREE",
@@ -212,8 +224,11 @@ def test_the_first_start_on_postgresql_copies_the_sqlite_database(tmp_path, monk
             sharing_url="https://example.test/new",
         )
         session.add(added)
-        session.commit()
-        assert added.id == highest + 1
+        session.flush()
+        return highest, added.id
+
+    highest, added_id = core.run_write_transaction(add)
+    assert added_id == highest + 1
 
 
 @needs_postgresql
@@ -235,44 +250,32 @@ def test_copying_refuses_values_postgresql_would_reject(tmp_path, monkeypatch, p
 
 @needs_postgresql
 def test_write_transactions_queue_behind_each_other_on_postgresql(postgresql_database):
-    from backend.db import get_session
-    from backend.db.core import begin_write_transaction
+    from backend.db.core import run_write_transaction
     from backend.db.migrations import upgrade_database
 
     upgrade_database()
-    first = get_session()
-    begin_write_transaction(first)
+    first, release = _hold_a_write_transaction(run_write_transaction)
     entered = threading.Event()
-
-    def second_writer():
-        with get_session() as second:
-            begin_write_transaction(second)
-            entered.set()
-            second.rollback()
-
-    thread = threading.Thread(target=second_writer)
-    thread.start()
+    second = threading.Thread(target=lambda: run_write_transaction(lambda _session: entered.set()))
+    second.start()
     time.sleep(0.5)
+    # It waits before it reads, so it reads what the first one wrote.
     assert not entered.is_set()
-    first.rollback()
-    first.close()
-    thread.join(timeout=10)
+    release.set()
+    first.join(timeout=10)
+    second.join(timeout=10)
     assert entered.is_set()
 
 
 @needs_postgresql
 def test_a_concurrent_write_transaction_does_not_wait_on_postgresql(postgresql_database):
-    from backend.db import get_session
-    from backend.db.core import begin_write_transaction
+    from backend.db.core import run_write_transaction
     from backend.db.migrations import upgrade_database
 
     upgrade_database()
-    first = get_session()
-    begin_write_transaction(first)
+    first, release = _hold_a_write_transaction(run_write_transaction)
     try:
-        with get_session() as second:
-            begin_write_transaction(second, concurrent=True)
-            second.rollback()
+        assert run_write_transaction(lambda _session: "ran", concurrent=True) == "ran"
     finally:
-        first.rollback()
-        first.close()
+        release.set()
+        first.join(timeout=10)
