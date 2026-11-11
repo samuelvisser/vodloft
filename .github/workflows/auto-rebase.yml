@@ -1,0 +1,39 @@
+name: Rebase open pull requests
+
+# Whenever main changes, every open pull request is rebased onto it, as long as that has no conflicts.
+# See .github/scripts/auto_rebase.py for the rules.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: auto-rebase
+  cancel-in-progress: false
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # A personal access token with the workflow scope can also push branches whose commits change files in
+          # .github/workflows, and its pushes start other workflows. Without it, the built-in token is used.
+          token: ${{ secrets.AUTO_REBASE_TOKEN || github.token }}
+
+      - name: Rebase open pull requests
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_REBASE_TOKEN || github.token }}
+          MAIN_BRANCH: main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python .github/scripts/auto_rebase.py
