@@ -45,7 +45,6 @@ class DownloadProfileBulkChangesIn(BulkChangesIn):
     download_with_countdown: bool | None = None
     upgrade_check: bool | None = None
     upgrade_repeat: UpgradeRepeat | None = None
-    sponsorblock_enabled: bool | None = None
 
 
 class StreamProfileBulkChangesIn(BulkChangesIn):

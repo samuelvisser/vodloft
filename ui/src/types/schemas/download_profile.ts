@@ -3,7 +3,6 @@ import {z} from 'zod'
 import {EpisodeIdentifierReg, EpisodeIdentifierValue} from "../collection";
 import {ApiDateTimeSchema} from "./datetime";
 import {createSelectRegistry} from "../../utils/selectRegistry";
-import {DEFAULT_SPONSORBLOCK_SEGMENTS} from '../sponsorblock'
 import {DATE_FIELDS, isDateLine, joinIgnoreCase, splitIgnoreCase} from '../../components/DownloadProfile/episodeFilters'
 
 
@@ -137,9 +136,6 @@ export const DownloadProfileSchemaRequest = z.object({
     redownloadFinal: z.boolean().default(true),
     /** Whether an Only date line deletes the downloads it leaves out. */
     deleteOlderEpisodes: z.boolean().default(true),
-    autoSubtitles: z.enum(['never', 'fallback', 'always']).default('fallback'),
-    sponsorblockEnabled: z.boolean().default(true),
-    sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])).default(() => ({...DEFAULT_SPONSORBLOCK_SEGMENTS})),
     upgradeCheck: z.boolean().default(true),
     upgradeAfterDays: z.int('Enter a number of days').min(1, 'Check after at least 1 day').max(365, 'Check within a year').default(7),
     upgradeRepeat: z.enum(['once', 'twice', 'every']).default('once'),
@@ -171,9 +167,6 @@ export const DownloadProfileReadSchema = z.looseObject({
     downloadWithCountdown: z.boolean(),
     redownloadFinal: z.boolean(),
     deleteOlderEpisodes: z.boolean(),
-    autoSubtitles: z.string().default('fallback'),
-    sponsorblockEnabled: z.boolean().default(false),
-    sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])).default(() => ({...DEFAULT_SPONSORBLOCK_SEGMENTS})),
     upgradeCheck: z.boolean(),
     upgradeAfterDays: z.int(),
     upgradeRepeat: z.enum(['once', 'twice', 'every']),
@@ -237,17 +230,10 @@ export const WaitingForCountdownSchema = z.object({
 })
 export type WaitingForCountdown = z.infer<typeof WaitingForCountdownSchema>
 
-export const AutoSubtitlesUseSchema = z.object({
-    downloadProfileId: z.number(),
-    collectionId: z.number(),
-    collectionTitle: z.string(),
-    autoSubtitles: z.string(),
-})
-export type AutoSubtitlesUse = z.infer<typeof AutoSubtitlesUseSchema>
-
 export const SiteOptionsSchema = z.object({
+    siteKey: z.string(),
     siteName: z.string(),
-    /** The download profile settings the site shows, such as autoSubtitles, sponsorblock or downloadWithCountdown. */
+    /** The download profile settings the site shows, such as downloadWithCountdown. */
     settings: z.array(z.string()),
     /** What a new Download Profile for the collection starts with. */
     profileDefaults: z.object({
@@ -257,9 +243,6 @@ export const SiteOptionsSchema = z.object({
         upgradeRepeat: z.enum(['once', 'twice', 'every']),
         upgradeImprovements: z.array(UpgradeImprovementSchema),
         upgradeLengthMinutes: z.int(),
-        autoSubtitles: z.enum(['never', 'fallback', 'always']),
-        sponsorblockEnabled: z.boolean(),
-        sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])),
     }),
     /** What the upgrade check can find on the site; no improvements means no upgrade check. */
     upgradeChecks: z.object({

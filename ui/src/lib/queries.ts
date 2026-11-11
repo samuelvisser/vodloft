@@ -37,7 +37,8 @@ import {
     LocalMediaProfileViewRead,
     LocalMediaProfileViewReadSchema,
 } from "../types/schemas/local_media_profile";
-import {AutoSubtitlesUseSchema, DownloadProfileRead, DownloadProfileReadSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
+import {LocalMediaProfileSitesReadSchema, type LocalMediaProfileSitesRead} from "../types/schemas/local_media_profile_base";
+import {DownloadProfileRead, DownloadProfileReadSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {ProfileIdsSchema} from '../types/schemas/profile_bulk'
 
@@ -66,7 +67,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
+    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -102,6 +103,19 @@ function profileListsReadable(area: Area): boolean {
     return can(area) || can('add_media') || can('library', 'manage')
 }
 
+/** Every Site VODLoft knows that a Local Media Profile can be offered for. */
+export function useLocalMediaProfileSites() {
+    return useQuery<LocalMediaProfileSitesRead, Error, LocalMediaProfileSitesRead, readonly ['localMediaProfileSites']>({
+        queryKey: ['localMediaProfileSites'] as const,
+        enabled: profileListsReadable('local_media_profiles'),
+        queryFn: ({signal}) => fetchParsed(
+            `${apiUrl()}/local-media-profiles/sites`,
+            LocalMediaProfileSitesReadSchema,
+            signal,
+        ),
+    })
+}
+
 export function useLocalMediaProfiles() {
     const result = useQuery<LocalMediaProfileRead[], Error, LocalMediaProfileRead[], readonly ['localMediaProfiles']>({
         queryKey: ['localMediaProfiles'] as const,
@@ -129,18 +143,19 @@ export type ProfileTableFilters = {
 }
 
 export type DownloadProfileTableFilters = ProfileTableFilters & {
-    source?: readonly string[]
+    site?: readonly string[]
     status?: readonly string[]
     localMediaProfileId?: number | null
 }
 
 export type StreamProfileTableFilters = ProfileTableFilters & {
-    source?: readonly string[]
+    site?: readonly string[]
     status?: readonly string[]
     streamsFrom?: readonly string[]
 }
 
 export type LocalMediaProfileTableFilters = ProfileTableFilters & {
+    site?: readonly string[]
     usedFor?: readonly string[]
     storage?: readonly string[]
 }
@@ -202,6 +217,27 @@ export function useProfileTableIds(
         enabled,
         queryFn: ({signal}) => fetchParsed(`${apiUrl()}/${path}/ids?${new URLSearchParams(params)}`, ProfileIdsSchema, signal),
     })
+}
+
+/** The Sites of the collections a profile table has profiles for, which it can be filtered by. Reloads with the table. */
+function useProfileTableSites(prefix: string, path: string, enabled: boolean) {
+    return useQuery({
+        queryKey: [prefix, 'sites'] as const,
+        enabled,
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/${path}/sites`, SiteReadSchema.array(), signal),
+    })
+}
+
+export function useDownloadProfileSites() {
+    return useProfileTableSites('downloadProfilesView', 'download-profiles/as-view', profileListsReadable('download_profiles'))
+}
+
+export function useLocalMediaProfileTableSites() {
+    return useProfileTableSites('localMediaProfilesView', 'local-media-profiles/as-view', profileListsReadable('local_media_profiles'))
+}
+
+export function useStreamProfileSites() {
+    return useProfileTableSites('streamProfilesView', 'stream-profiles/as-view', can('stream_profiles') || can('library', 'manage'))
 }
 
 const LocalMediaProfileViewPageSchema = profilePageSchema(LocalMediaProfileViewReadSchema)
@@ -956,18 +992,6 @@ export function useWaitingForCountdown(collectionId?: number, enabled = true) {
         queryFn: ({signal}) => fetchParsed(
             `${apiUrl()}/download-profiles/waiting-for-countdown/${collectionId}`,
             WaitingForCountdownSchema.array(),
-            signal,
-        ),
-    })
-}
-
-export function useAutoSubtitleUses(localMediaProfileId?: number) {
-    return useQuery({
-        queryKey: ['autoSubtitleUses', localMediaProfileId] as const,
-        enabled: localMediaProfileId !== undefined,
-        queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/download-profiles/auto-subtitles/${localMediaProfileId}`,
-            AutoSubtitlesUseSchema.array(),
             signal,
         ),
     })

@@ -9,7 +9,7 @@ from pydantic import AliasChoices, AliasPath, Field, computed_field, field_valid
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.media_access import access_granted, access_locked, site_access
 from backend.types.collection_types import CollectionType
-from config.settings.site_settings import AutoSubtitles, SponsorBlockAction, SponsorBlockCategory, UpgradeRepeat
+from config.settings.site_settings import UpgradeRepeat
 from sources import Feature, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
@@ -85,6 +85,8 @@ class DownloadOptionsAPIRead(ResponseBase):
     video_heights: list[int]
     audio_only: bool
     hls_bundle: bool
+    hls_heights: list[int]
+    subtitles: bool
     quality_choices: bool
 
 
@@ -103,9 +105,6 @@ class DownloadProfileDefaultsAPIRead(ResponseBase):
     upgrade_repeat: UpgradeRepeat
     upgrade_improvements: list[UpgradeImprovement]
     upgrade_length_minutes: int
-    auto_subtitles: AutoSubtitles
-    sponsorblock_enabled: bool
-    sponsorblock_segments: dict[SponsorBlockCategory, SponsorBlockAction]
 
 
 class SourceAPIRead(ResponseBase):
@@ -248,6 +247,7 @@ class YtdlpOptionLineAPIRead(ResponseBase):
 class SiteOptionsAPIRead(ResponseBase):
     """What the site of one collection offers beyond its Source's usual choices."""
 
+    site_key: str
     site_name: str
     settings: list[SiteSetting]
     """The download profile settings the site shows, such as auto-generated subtitles or downloading with the countdown."""

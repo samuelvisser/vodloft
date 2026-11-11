@@ -1005,6 +1005,36 @@ def test_profile_save_scope_change_still_queues_index_management(db_session):
     assert [operation.kind for operation in operations] == ["local_media_profile.manage_custom_indexes"]
 
 
+def test_profile_save_with_the_same_sites_in_another_order_does_not_queue_index_management(db_session):
+    from backend.api.endpoints.collection_local_media_profiles.service import update_collection_local_media_profile
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPIUpdate
+    from task_manager.scheduler.db import TaskOperation
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    _make_episode(db_session, collection, season, index=1, slug="first", identifier="ep.1")
+    template = "/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext"
+    profile = _make_profile(db_session, template=template)
+    _define(profile, ("extras", "Extras"))
+    profile.site_keys = ["dailywire", "youtube"]
+    db_session.flush()
+
+    body = CollectionLocalMediaProfileAPIUpdate(
+        name=profile.name,
+        preferred_format=profile.preferred_format,
+        output_template=template,
+        collection_scope=profile.collection_scope,
+        site_keys=["youtube", "dailywire"],
+        indexing_values=[{"key": "extras", "name": "Extras"}],
+    )
+    update_collection_local_media_profile(db_session, profile.slug, body)
+
+    assert not any(
+        operation.kind == "local_media_profile.manage_custom_indexes"
+        for operation in db_session.query(TaskOperation)
+    )
+
+
 def test_profile_save_unused_definition_change_does_not_queue_index_management(db_session):
     from backend.api.endpoints.collection_local_media_profiles.service import update_collection_local_media_profile
     from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPIUpdate

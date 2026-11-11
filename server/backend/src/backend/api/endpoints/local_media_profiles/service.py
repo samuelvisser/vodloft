@@ -16,11 +16,13 @@ from backend.api.models.local_media_profile_view import (
 )
 from backend.api.models.profile_bulk import ProfileIdsRead
 from backend.api.models.profile_list import LocalMediaProfileListQuery, StorageUse, UsedFor
+from backend.api.models.source import SiteAPIRead
 from backend.api.pagination import InvalidCursorError, SortKey, keyset_page
 from backend.db.models import (
     DownloadProfile,
     LocalMediaProfileBase,
     MediaDownloadBase,
+    Site,
 )
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope, LocalMediaProfileType
 from backend.services.storage_used import is_physical_download, storage_size_bytes_sum
@@ -236,11 +238,17 @@ def _filtered(s: Session, filters: LocalMediaProfileListQuery):
         .exists()
     )
     storage = {StorageUse.FILES: has_files, StorageUse.EMPTY: ~has_files}
+    # There are only a handful of profiles, and their Sites are a JSON list: pick them here.
+    offered_for_site = profile.id.in_([
+        profile_id for profile_id, site_keys in s.execute(select(LocalMediaProfileBase.id, LocalMediaProfileBase.site_keys))
+        if set(site_keys or ()) & set(filters.site)
+    ]) if filters.site else None
     query = s.query(profile).filter(
         matches_words(search_words(filters.search), profile.name, profile.output_template),
         matches_any([used_for[value] for value in set(filters.used_for)]),
         matches_format(profile.preferred_format, filters.format),
         matches_any([storage[value] for value in set(filters.storage)] if set(filters.storage) != set(StorageUse) else []),
+        matches_any([offered_for_site] if offered_for_site is not None else []),
     )
     return query, profile
 
@@ -298,6 +306,12 @@ def delete_local_media_profile_record(
     s.flush()
     s.delete(local_media_profile)
     s.flush()
+
+
+def get_local_media_profile_table_sites(s: Session) -> list[SiteAPIRead]:
+    """The Sites VODLoft has collections or videos from, for the table's Site filter. Sites it only knows
+    of are left out, so the filter shows once there is media from more than one Site."""
+    return [SiteAPIRead.model_validate(site) for site in s.scalars(select(Site).order_by(func.lower(Site.name)))]
 
 
 def get_local_media_profile_ids(s: Session, filters: LocalMediaProfileListQuery) -> ProfileIdsRead:

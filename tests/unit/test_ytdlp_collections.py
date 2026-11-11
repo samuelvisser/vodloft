@@ -506,12 +506,8 @@ def test_a_bundle_that_matches_existing_files_holds_its_download_profile(listed,
     assert (scan.status, scan.folder, scan.held_download_profile_ids) == ("waiting", "/downloads/YouTube", [profile.id])
 
 
-def test_a_youtube_download_profile_chooses_auto_generated_subtitles(listed, session, monkeypatch):
-    from types import SimpleNamespace
-
-    from backend.api.endpoints.download_profiles.service import auto_subtitles_uses
+def test_a_local_media_profiles_auto_generated_subtitles_apply_where_the_site_has_them(listed, session, monkeypatch):
     from backend.db.models import CollectionLocalMediaProfile
-    from backend.db.models.download_profile import DownloadProfile
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.services import download_plans
     from downloader.lifecycle import DownloadTracker
@@ -526,33 +522,30 @@ def test_a_youtube_download_profile_chooses_auto_generated_subtitles(listed, ses
     )
     session.add(profile)
     session.flush()
-    download_profile = DownloadProfile(
-        collection_id=collection.id, local_media_profile_id=profile.id, filters=filter_rows(only_types("ep")),
-        auto_subtitles="always",
-    )
-    session.add(download_profile)
+    # A manual download: the collection has no Download Profile.
     download = EpisodeMediaDownload(
         media=collection.episodes[0], local_media_profile=profile, type="episode", file_path="/downloads/x.ext",
     )
     session.add(download)
     session.commit()
-    everyone = SimpleNamespace(allows_source=lambda _key: True)
 
-    # A site whose contract hides auto-generated subtitles doesn't get them; any other site does, and the
-    # Local Media Profile lists it there.
+    def choose_always():
+        profile.auto_subtitles = "always"
+        session.commit()
+
+    # A site whose contract hides auto-generated subtitles doesn't get them, whatever the profile says.
     _site_of.cache_clear()
     monkeypatch.setattr(ListedSource, "sites", (Site(
         "youtube", "YouTube", ("youtube.com",), settings=SiteSettings(hides=frozenset({SiteSetting.AUTO_SUBTITLES})),
     ),))
-    assert auto_subtitles_uses(session, profile.id, everyone) == []
+    choose_always()
     assert download_plans.prepare_download_plan(session, download.id, DownloadTracker()).source.ytdlp_subtitles.auto_generated == "never"
 
     _site_of.cache_clear()
     monkeypatch.setattr(ListedSource, "sites", ())
+    choose_always()
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
     assert (plan.source.ytdlp_subtitles.languages, plan.source.ytdlp_subtitles.auto_generated) == (("nl", "en"), "always")
-    uses = auto_subtitles_uses(session, profile.id, everyone)
-    assert [(use.collection_title, use.auto_subtitles) for use in uses] == [("A playlist", "always")]
 
 
 def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(listed, session, monkeypatch):

@@ -284,7 +284,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     />
                 ))}
                 <SiteSettingsCard
-                    group="scheduling" draft={draft} updateDraft={updateDraft} errorFor={errorFor}
+                    groups={['scheduling']} draft={draft} updateDraft={updateDraft} errorFor={errorFor}
                     help="Default follows the system settings above. A Site with a preset starts with its own value, which you can change or set back to Default."
                 />
             </SettingsSection>

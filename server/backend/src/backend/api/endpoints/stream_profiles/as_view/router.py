@@ -5,6 +5,7 @@ from fastapi import APIRouter, Query
 from .service import *
 from ....models.profile_bulk import ProfileIdsRead
 from ....models.profile_list import StreamProfileListQuery
+from ....models.source import SiteAPIRead
 from ....models.stream_profile import StreamProfileAPIReadView, StreamProfileViewPageRead
 from backend.app import db_session
 from backend.security.access import Access, Area, Level
@@ -38,6 +39,13 @@ def stream_profile_view_ids(
     """The ids of every stream profile the filters match, in table order, for Select all."""
     with db_session() as s:
         return get_stream_profile_ids(s, access, filters)
+
+
+@router.get("/sites", dependencies=_VIEWERS, response_model=list[SiteAPIRead])
+def stream_profile_view_sites(access: Access = signed_in()):
+    """The Sites of the collections with a stream profile the user may see, which the table can be filtered by."""
+    with db_session() as s:
+        return get_stream_profile_sites(s, access)
 
 
 @router.get("/by-collection-slug/{collection_slug}", dependencies=_VIEWERS, response_model=list[StreamProfileAPIReadView])

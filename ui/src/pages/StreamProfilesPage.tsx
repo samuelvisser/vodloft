@@ -2,7 +2,7 @@ import {useCallback, useMemo, useRef, useState} from 'react'
 import {can} from '../lib/access'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
-import {type StreamProfileTableFilters, useSources, useStreamProfilesTable} from '../lib/queries'
+import {type StreamProfileTableFilters, useStreamProfileSites, useStreamProfilesTable} from '../lib/queries'
 import ProfileTableFilters, {FORMAT_OPTIONS, STATUS_OPTIONS} from '../components/common/ProfileTableFilters'
 import {ChipFilter} from '../components/common/FilterBar'
 import {updateLazyCollectionEntities} from '../lib/lazyCollection'
@@ -41,11 +41,9 @@ export default function StreamProfilesPage() {
 
     const [filters, setFilters] = useState<StreamProfileTableFilters>({})
     const table = useStreamProfilesTable(filters)
-    const {data: sources} = useSources()
-    const sourceOptions = (sources ?? [])
-        .filter((source) => source.features.includes('collections'))
-        .map((source) => ({value: source.id, label: source.name}))
-    const activeCount = [filters.source, filters.status, filters.streamsFrom, filters.format].filter((value) => value?.length).length
+    const {data: sites} = useStreamProfileSites()
+    const siteOptions = (sites ?? []).map((site) => ({value: site.key, label: site.name}))
+    const activeCount = [filters.site, filters.status, filters.streamsFrom, filters.format].filter((value) => value?.length).length
     const onSearch = useCallback((search: string) => setFilters((current) => ({...current, search})), [])
 
     const canManage = can('stream_profiles')
@@ -147,7 +145,7 @@ export default function StreamProfilesPage() {
                 onReset={() => setFilters({})}
                 leading={<SelectAll selection={selection} filtered={activeCount > 0 || !!filters.search}/>}
             >
-                <ChipFilter label="Source" options={sourceOptions} selected={filters.source ?? []} onChange={(source) => setFilters((current) => ({...current, source}))}/>
+                <ChipFilter label="Site" options={siteOptions} selected={filters.site ?? []} onChange={(site) => setFilters((current) => ({...current, site}))}/>
                 <ChipFilter label="Status" options={STATUS_OPTIONS} selected={filters.status ?? []} onChange={(status) => setFilters((current) => ({...current, status}))}/>
                 <ChipFilter label="Streams from" options={STREAMS_FROM_OPTIONS} selected={filters.streamsFrom ?? []} onChange={(streamsFrom) => setFilters((current) => ({...current, streamsFrom}))}/>
                 <ChipFilter label="Format" options={FORMAT_OPTIONS} selected={filters.format ?? []} onChange={(format) => setFilters((current) => ({...current, format}))}/>

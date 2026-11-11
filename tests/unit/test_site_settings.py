@@ -63,6 +63,9 @@ def test_every_site_contract_only_presets_what_it_shows_with_valid_values():
             # A Site shows only settings without a system default, and hides only ones with one.
             assert not any(SITE_SETTINGS[key].has_system_default for key in site.settings.shows)
             assert all(SITE_SETTINGS[key].has_system_default for key in site.settings.hides)
+            # Only a Site with subtitles has auto-generated ones.
+            if site.settings.offers(SiteSetting.AUTO_SUBTITLES):
+                assert site.downloads.subtitles, f"{site.key} offers auto-generated subtitles without subtitles"
 
 
 def test_which_sites_show_which_settings():
@@ -70,7 +73,10 @@ def test_which_sites_show_which_settings():
     assert not site_of("dailywire").settings.offers(SiteSetting.AUTO_SUBTITLES)
     assert site_of("youtube").settings.offers(SiteSetting.SPONSORBLOCK)
     assert site_of("youtube").settings.offers(SiteSetting.AUTO_SUBTITLES)
-    for key in ("generic:vimeo.com", "rumble", "npo"):
+    # NPO Start has no subtitles, so no auto-generated ones either.
+    npo = site_of("npo").settings
+    assert not any(npo.offers(key) for key in (SiteSetting.AUTO_SUBTITLES, SiteSetting.SPONSORBLOCK, SiteSetting.DOWNLOAD_WITH_COUNTDOWN))
+    for key in ("generic:vimeo.com", "rumble"):
         assert site_of(key).settings.offers(SiteSetting.AUTO_SUBTITLES)
         assert not site_of(key).settings.offers(SiteSetting.SPONSORBLOCK)
         assert not site_of(key).settings.offers(SiteSetting.DOWNLOAD_WITH_COUNTDOWN)
@@ -86,19 +92,36 @@ def test_a_new_download_profile_starts_with_its_sites_settings(site_settings):
     youtube = download_profile_defaults(site_of("youtube"))
     assert youtube["upgrade_after_days"] == get_settings().download_profile_defaults.upgrade_after_days
     assert youtube["upgrade_improvements"] == ["resolution", "sponsorblock"]
-    assert youtube["sponsorblock_enabled"] is True and youtube["download_with_countdown"] is False
+    assert youtube["download_with_countdown"] is False
 
     # A Site only checks for what it can find, whatever the system default lists.
-    site_settings(**{"generic:vimeo.com": {"upgrade_improvements": ["sponsorblock", "codec", "resolution"], "auto_subtitles": "never"}})
+    site_settings(**{"generic:vimeo.com": {"upgrade_improvements": ["sponsorblock", "codec", "resolution"]}})
     vimeo = download_profile_defaults(site_of("generic:vimeo.com"))
     assert vimeo["upgrade_improvements"] == ["resolution", "codec"]
-    assert vimeo["auto_subtitles"] == "never"
 
-    # SponsorBlock that keeps every segment type does nothing, so a new profile starts with it off.
+
+def test_a_local_media_profiles_choices_apply_where_a_site_has_the_setting(site_settings):
+    from types import SimpleNamespace
+
+    from backend.services.site_settings import local_media_profile_defaults, local_media_profile_site_choices
+
+    # A new profile starts with what YouTube, the Site that shows SponsorBlock, starts with.
+    defaults = local_media_profile_defaults()
+    assert defaults["sponsorblock_enabled"] is True and defaults["auto_subtitles"] == get_settings().download_profile_defaults.auto_subtitles
+    # SponsorBlock that keeps every segment type does nothing, so it starts off.
     site_settings(youtube={"sponsorblock": True, "sponsorblock_segments": {"sponsor": "keep", "intro": "keep", "outro": "keep", "poi_highlight": "keep"}})
-    youtube = download_profile_defaults(site_of("youtube"))
-    assert set(youtube["sponsorblock_segments"].values()) == {"keep"}
-    assert youtube["sponsorblock_enabled"] is False
+    defaults = local_media_profile_defaults()
+    assert set(defaults["sponsorblock_segments"].values()) == {"keep"} and defaults["sponsorblock_enabled"] is False
+
+    profile = SimpleNamespace(auto_subtitles="always", sponsorblock_enabled=True, sponsorblock_segments={"sponsor": "cut"})
+    youtube = local_media_profile_site_choices(profile, site_of("youtube"))
+    assert (youtube["auto_subtitles"], youtube["sponsorblock_enabled"], youtube["sponsorblock_segments"]) == ("always", True, {"sponsor": "cut"})
+    vimeo = local_media_profile_site_choices(profile, site_of("generic:vimeo.com"))
+    assert (vimeo["auto_subtitles"], vimeo["sponsorblock_enabled"]) == ("always", False)
+    # What a Site does not show stays off.
+    for key in ("dailywire", "npo"):
+        choices = local_media_profile_site_choices(profile, site_of(key))
+        assert (choices["auto_subtitles"], choices["sponsorblock_enabled"]) == ("never", False)
 
 
 def test_a_new_download_profile_starts_with_the_check_off_when_nothing_counts_as_better(site_settings):

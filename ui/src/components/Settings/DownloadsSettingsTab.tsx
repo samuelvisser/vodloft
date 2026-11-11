@@ -470,8 +470,8 @@ export default function DownloadsSettingsTab({
             </SettingsSection>
 
             <SettingsSection
-                title="Download profile defaults"
-                description="What a new Download Profile starts with. Changing these leaves existing Download Profiles as they are."
+                title="Per-site defaults"
+                description="What a new Download Profile or Local Media Profile starts with. Changing these leaves existing profiles as they are."
             >
                 <div className="settings-field settings-field--wide site-settings-system">
                     <label>System defaults</label>
@@ -546,7 +546,7 @@ export default function DownloadsSettingsTab({
                     })}
                 />
                 <SiteSettingsCard
-                    group="downloadProfile" draft={draft} updateDraft={updateDraft} errorFor={errorFor}
+                    groups={['downloadProfile', 'localMediaProfile']} draft={draft} updateDraft={updateDraft} errorFor={errorFor}
                     help="Default follows the system defaults above. A Site with a preset starts with its own value, which you can change or set back to Default. Settings without a Default, such as SponsorBlock, only exist on the Sites that show them."
                 />
             </SettingsSection>

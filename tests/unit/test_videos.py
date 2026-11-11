@@ -347,6 +347,7 @@ def test_a_ytdlp_download_follows_the_profile_quality_and_subtitle_languages(vid
     )
     video, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/abc"))
     download = create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
+    profile.auto_subtitles = "always"
     session.commit()
 
     plan = download_plans.prepare_download_plan(session, download.id, DownloadTracker())
@@ -354,8 +355,8 @@ def test_a_ytdlp_download_follows_the_profile_quality_and_subtitle_languages(vid
     assert "res:1440,vcodec:av01,acodec:opus" in command
     assert any("av0?1|avc|h264" in part and "language^=nl" in part for part in command)
     assert plan.source.extension == "mkv"
-    # A single video has no Download Profile, so no auto-generated subtitles.
-    assert (plan.source.ytdlp_subtitles.languages, plan.source.ytdlp_subtitles.auto_generated) == (("nl", "en"), "never")
+    # A single video has no Download Profile, and follows the profile's choice for its Site.
+    assert (plan.source.ytdlp_subtitles.languages, plan.source.ytdlp_subtitles.auto_generated) == (("nl", "en"), "always")
 
 
 @pytest.mark.parametrize(("container", "audio_only", "embeds"), [("mkv", False, True), ("mp4", False, True), ("opus", True, False)])

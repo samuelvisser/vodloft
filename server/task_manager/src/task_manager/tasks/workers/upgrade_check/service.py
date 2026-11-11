@@ -100,7 +100,7 @@ def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
 
     episode = download.media
     source = get_source(episode.source_key)
-    url, categories = episode.sharing_url, sponsorblock_categories(download.download_profile)
+    url, categories = episode.sharing_url, sponsorblock_categories(download, collection_site(episode.collection))
     s.rollback()
     try:
         offer = source.upgrade_offer(url, sponsorblock_categories=categories)

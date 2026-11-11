@@ -90,8 +90,8 @@ class DailyWireSource(Source):
         takes_cookies=False,
         stream_methods=frozenset({StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE}),
         stream_video_heights=_VIDEO_HEIGHTS,
-        # Fixed versions: an HLS stream of 480p, 720p and 1080p, and audio.
-        downloads=DownloadOptions(video_heights=_VIDEO_HEIGHTS, hls_bundle=True, quality_choices=False),
+        # Fixed versions: an HLS stream of 480p, 720p and 1080p, and audio, with its own subtitles.
+        downloads=DownloadOptions(video_heights=_VIDEO_HEIGHTS, hls_heights=_VIDEO_HEIGHTS, subtitles=True),
         # The Daily Wire sometimes edits an episode after it is out, such as cutting a long live stream down.
         upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,)),
         settings=SiteSettings(

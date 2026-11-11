@@ -169,7 +169,8 @@ def update_collection_local_media_profile(
     previous_index_keys = output_template_custom_index_keys(previous_template)
     previous_definition_keys = indexing_value_definition_keys(item)
     previous_kept_keys = kept_index_keys(item)
-    previous_scope = (item.collection_scope, item.source_keys)
+    # The order of the Sites does not change which Collections the profile is for.
+    previous_scope = (item.collection_scope, set(item.site_keys))
 
     ensure_unique_profile_settings(s, CollectionLocalMediaProfile, fields, exclude_id=item.id)
     # Missing values on updates are not creation defaults; retain the
@@ -183,7 +184,7 @@ def update_collection_local_media_profile(
     current_definition_keys = indexing_value_definition_keys(item)
     definition_keys_changed = previous_definition_keys != current_definition_keys
     template_changed = previous_template != item.output_template
-    scope_changed = previous_scope != (item.collection_scope, item.source_keys)
+    scope_changed = previous_scope != (item.collection_scope, set(item.site_keys))
 
     assignment_change = compare_custom_index_assignments(
         previous_template,

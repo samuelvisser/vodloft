@@ -70,6 +70,10 @@ export const DownloadOptionsSchema = z.object({
     audioOnly: z.boolean(),
     /** The Site's HLS stream with every resolution in it, as The Daily Wire offers. */
     hlsBundle: z.boolean(),
+    /** The resolutions of the Site's HLS bundle; none when it has no bundle. */
+    hlsHeights: z.array(z.number().int()),
+    /** The Site's media has subtitles a profile can save. */
+    subtitles: z.boolean(),
     /** Codecs, container, quality goal, audio format and audio language pick the version that is downloaded. */
     qualityChoices: z.boolean(),
 })

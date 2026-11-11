@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from sqlalchemy import and_, case, func, literal, or_, select, union_all
+from sqlalchemy import and_, case, func, literal, or_, select, true, union_all
 from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from backend.api.pagination import (
@@ -191,6 +191,14 @@ def _collection_type_values(collection_scope: CollectionLocalMediaProfileScope) 
     raise ValueError(f"Unsupported collection template source scope: {collection_scope}")
 
 
+def _on_sites(site_key_column, site_keys: list[str] | None):
+    """Media on the Sites a profile is for; every Site when the profile has no Site filter."""
+    if site_keys is None:
+        return true()
+    # A collection whose Site is not stored yet counts as on every Site, as it does for the profile itself.
+    return or_(site_key_column.in_(site_keys), site_key_column.is_(None))
+
+
 def _collection_template_source(episode: Episode) -> LocalMediaProfileTemplateSource:
     return LocalMediaProfileTemplateSource(
         id=f"episode:{episode.id}",
@@ -205,6 +213,7 @@ def _collection_source_anchor_offset(
     source_id: str,
     *,
     limit: int,
+    site_keys: list[str] | None,
 ) -> int | None:
     """Return a page offset that keeps one selected Episode near the middle of the page."""
     kind, separator, identifier = source_id.partition(":")
@@ -217,6 +226,8 @@ def _collection_source_anchor_offset(
         .where(Episode.id == int(identifier))
     )
     if episode is None or episode.collection.type not in _collection_type_values(collection_scope):
+        return None
+    if site_keys is not None and episode.collection.site_key not in (*site_keys, None):
         return None
 
     collection_title = episode.collection.title.lower()
@@ -241,6 +252,7 @@ def _collection_source_anchor_offset(
         .join(Episode.collection)
         .join(Episode.season)
         .where(Collection.type.in_(_collection_type_values(collection_scope)))
+        .where(_on_sites(Collection.site_key, site_keys))
         .where(before_anchor)
     ) or 0
     return max(0, position - limit // 2)
@@ -256,6 +268,7 @@ def _modified_timestamp(model):
 def _collection_source_revision(
     session: Session,
     collection_scope: CollectionLocalMediaProfileScope,
+    site_keys: list[str] | None,
 ) -> str:
     episode_changed, collection_changed, season_changed = session.execute(
         select(
@@ -267,6 +280,7 @@ def _collection_source_revision(
         .join(Episode.collection)
         .join(Episode.season)
         .where(Collection.type.in_(_collection_type_values(collection_scope)))
+        .where(_on_sites(Collection.site_key, site_keys))
     ).one()
     return "|".join(
         value.isoformat() if value is not None else ""
@@ -315,9 +329,11 @@ def _collection_source_page(
     cursor: str | None,
     limit: int,
     anchor_offset: int | None = None,
+    site_keys: list[str] | None = None,
 ) -> tuple[list[LocalMediaProfileTemplateSource], str | None, str | None, str]:
     search_text = (search or "").strip()
-    revision = _collection_source_revision(session, collection_scope)
+    sites = sorted(site_keys) if site_keys is not None else None
+    revision = _collection_source_revision(session, collection_scope, site_keys)
     relevance = search_relevance_score(
         search,
         Episode.title,
@@ -354,6 +370,7 @@ def _collection_source_page(
             if (
                 values.get("kind") != "template-collection"
                 or values.get("scope") != collection_scope.value
+                or values.get("sites") != sites
                 or values.get("search") != search_text
                 or values.get("direction") not in {"next", "previous"}
             ):
@@ -378,6 +395,7 @@ def _collection_source_page(
         .join(Episode.season)
         .options(contains_eager(Episode.collection), contains_eager(Episode.season))
         .where(Collection.type.in_(_collection_type_values(collection_scope)))
+        .where(_on_sites(Collection.site_key, site_keys))
         .where(*search_all_terms(
             search,
             Collection.title,
@@ -443,6 +461,7 @@ def _collection_source_page(
         previous_cursor = encode_cursor({
             "kind": "template-collection",
             "scope": collection_scope.value,
+            "sites": sites,
             "search": search_text,
             "direction": "previous",
             "revision": revision,
@@ -452,6 +471,7 @@ def _collection_source_page(
         next_cursor = encode_cursor({
             "kind": "template-collection",
             "scope": collection_scope.value,
+            "sites": sites,
             "search": search_text,
             "direction": "next",
             "revision": revision,
@@ -469,6 +489,7 @@ def get_random_collection_template_source(
     collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH,
     *,
     local_media_profile_id: int | None = None,
+    site_keys: list[str] | None = None,
 ) -> LocalMediaProfileTemplateSource | None:
     """Choose an example uniformly by Collection, then uniformly within that Collection.
 
@@ -479,6 +500,7 @@ def get_random_collection_template_source(
         .join(Episode.collection)
         .join(Episode.season)
         .where(Collection.type.in_(_collection_type_values(collection_scope)))
+        .where(_on_sites(Collection.site_key, site_keys))
         .group_by(Episode.collection_id)
         .order_by(func.random())
         .limit(1)
@@ -738,10 +760,14 @@ def _video_source_page(
     search: str | None,
     cursor: str | None,
     limit: int,
+    site_keys: list[str] | None = None,
 ) -> tuple[list[LocalMediaProfileTemplateSource], str | None, str | None, str]:
     search_text = (search or "").strip()
+    sites = sorted(site_keys) if site_keys is not None else None
     changed, count, newest = session.execute(
-        select(_modified_timestamp(Video), func.count(Video.id), func.max(Video.id)).select_from(Video)
+        select(_modified_timestamp(Video), func.count(Video.id), func.max(Video.id))
+        .select_from(Video)
+        .where(_on_sites(Video.site_key, site_keys))
     ).one()
     revision = f"{changed.isoformat() if changed is not None else ''}|{count}|{newest or 0}"
     relevance = search_relevance_score(search, Video.title, Video.slug, Video.author_name)
@@ -757,6 +783,7 @@ def _video_source_page(
             values = decode_cursor(cursor)
             if (
                 values.get("kind") != "template-video"
+                or values.get("sites") != sites
                 or values.get("search") != search_text
                 or values.get("direction") not in {"next", "previous"}
             ):
@@ -773,7 +800,8 @@ def _video_source_page(
         query_fields = [(expr, not descending) for expr, descending in natural_fields]
 
     stmt = select(Video, *(expr for expr, _ in natural_fields)).where(
-        *search_all_terms(search, Video.title, Video.slug, Video.author_name)
+        _on_sites(Video.site_key, site_keys),
+        *search_all_terms(search, Video.title, Video.slug, Video.author_name),
     )
     if cursor_values is not None:
         stmt = stmt.where(keyset_after([
@@ -793,6 +821,7 @@ def _video_source_page(
     def page_cursor(row, page_direction: str) -> str:
         return encode_cursor({
             "kind": "template-video",
+            "sites": sites,
             "search": search_text,
             "direction": page_direction,
             "revision": revision,
@@ -821,8 +850,12 @@ def get_output_template_source_page(
     cursor: str | None = None,
     limit: int = 30,
     anchor_source_id: str | None = None,
+    site_keys: list[str] | None = None,
 ) -> LocalMediaProfileTemplateSourcePage:
-    """Search locally stored media with stable bidirectional cursor pagination."""
+    """Search locally stored media with stable bidirectional cursor pagination.
+
+    With `site_keys`, only media on those Sites, as a profile's Sites filter offers it.
+    """
     if profile_type == LocalMediaProfileType.COLLECTION:
         anchor_offset = None
         if cursor is None and anchor_source_id and not (search or "").strip():
@@ -831,6 +864,7 @@ def get_output_template_source_page(
                 collection_scope,
                 anchor_source_id,
                 limit=limit,
+                site_keys=site_keys,
             )
         sources, next_cursor, previous_cursor, revision = _collection_source_page(
             session,
@@ -839,6 +873,7 @@ def get_output_template_source_page(
             cursor=cursor,
             limit=limit,
             anchor_offset=anchor_offset,
+            site_keys=site_keys,
         )
         fallback_values = _EXAMPLE_COLLECTION_VALUES
         fallback_label = "Example collection episode"
@@ -857,6 +892,7 @@ def get_output_template_source_page(
             search=search,
             cursor=cursor,
             limit=limit,
+            site_keys=site_keys,
         )
         fallback_values = _EXAMPLE_VIDEO_VALUES
         fallback_label = "Example video"

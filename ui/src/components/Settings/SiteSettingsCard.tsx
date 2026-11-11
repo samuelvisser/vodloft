@@ -383,13 +383,14 @@ function SettingRow({site, setting, error, onChange}: {
     )
 }
 
-/** Every Site VODLoft knows, with the settings of the group it shows, under siteSettings in config.yml. */
-export default function SiteSettingsCard({group, draft, updateDraft, errorFor, help}: Pick<SettingsTabProps, 'draft' | 'updateDraft' | 'errorFor'> & {
-    group: SiteSettingGroup
+/** Every Site VODLoft knows, with the settings of the groups it shows, under siteSettings in config.yml. */
+export default function SiteSettingsCard({groups, draft, updateDraft, errorFor, help}: Pick<SettingsTabProps, 'draft' | 'updateDraft' | 'errorFor'> & {
+    groups: readonly SiteSettingGroup[]
     help: ReactNode
 }) {
     const {data, error} = useSitesSettings()
-    const groupKeys = new Set(data?.specs.filter((spec) => spec.group === group).map((spec) => spec.key))
+    const group = groups[0]
+    const groupKeys = new Set(data?.specs.filter((spec) => groups.includes(spec.group)).map((spec) => spec.key))
     return (
         <div className="settings-field settings-field--wide site-settings">
             <label>Sites</label>

@@ -11,9 +11,10 @@ from sqlalchemy.orm.util import AliasedClass
 from backend.api.list_filters import matches_any, matches_format, matches_status, matches_words, scope_of, search_words
 from backend.api.models.profile_bulk import ProfileIdsRead
 from backend.api.models.profile_list import StreamProfileListQuery, StreamsFrom
+from backend.api.models.source import SiteAPIRead
 from backend.api.models.stream_profile import StreamProfileAPIReadView, StreamProfileViewPageRead
 from backend.api.pagination import InvalidCursorError, SortKey, keyset_page
-from backend.db.models import RssStreamProfile, Collection, StreamProfileBase
+from backend.db.models import RssStreamProfile, Collection, Site, StreamProfileBase
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,7 @@ def _filtered(s: Session, access: Access, filters: StreamProfileListQuery):
                 func.coalesce(profile.overwrite_collection_title, Collection.title),
                 Collection.title,
             ),
-            matches_any([Collection.source_key.in_(filters.source)] if filters.source else []),
+            matches_any([Collection.site_key.in_(filters.site)] if filters.site else []),
             matches_status(profile.enable_profile, filters.status),
             matches_any([streams_from[value] for value in set(filters.streams_from)]),
             matches_format(profile.preferred_format, filters.format),
@@ -114,3 +115,14 @@ def get_stream_profile_view(
         raise HTTPException(status_code=404, detail="Stream profile not found")
     check_owner(item, access)
     return _to_view(item)
+
+
+def get_stream_profile_sites(s: Session, access: Access) -> list[SiteAPIRead]:
+    """The Sites of the collections with a Stream Profile the user may see, for the table's Site filter."""
+    profiles = owned_by(select(StreamProfileBase.collection_id), StreamProfileBase.owner_user_id, access)
+    sites = s.scalars(
+        select(Site)
+        .where(Site.key.in_(select(Collection.site_key).where(Collection.id.in_(profiles))))
+        .order_by(func.lower(Site.name))
+    )
+    return [SiteAPIRead.model_validate(site) for site in sites]

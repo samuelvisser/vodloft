@@ -104,9 +104,10 @@ many days after downloading, as Pinchflat did, and videos you told Pinchflat nev
 
 A media profile's resolution becomes the Local Media Profile's **Up to** step, its subtitle languages its language
 list, its audio track its audio language, and MKV its container (see [[Local-Media-Profiles#quality]]). Downloading
-auto subtitles becomes **only when there are no real ones** on the Download Profile, which is what Pinchflat did.
-Its SponsorBlock setting becomes SponsorBlock on each Download Profile: the categories Pinchflat removed are cut out,
-the ones it marked become chapters (see [[Download-Profiles#sponsorblock]]).
+auto subtitles becomes **only when there are no real ones** on the Local Media Profile, which is what
+Pinchflat did. Its SponsorBlock setting becomes SponsorBlock on the Local Media Profile: the categories
+Pinchflat removed are cut out, the ones it marked become chapters (see [[Local-Media-Profiles#sponsorblock]]). A Local
+Media Profile that is already used by a Collection keeps its own settings for these.
 
 Options in Pinchflat's yt-dlp option files that VODLoft has no setting for become the Collection's own yt-dlp options,
 on its Edit page (see [[Settings#your-own-yt-dlp-options]]), with the file each came from as a note. Lines VODLoft

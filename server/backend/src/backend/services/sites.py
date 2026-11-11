@@ -13,7 +13,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Collection, Site, Video
+from backend.db.models import Collection, Movie, Site, Video
+from backend.services.local_media_profile_sites import add_upcoming_site
 from sources import Site as SourceSite, collection_on_site, site_for, source_site, sources_for
 
 
@@ -32,6 +33,7 @@ def site_record(s: Session, site: SourceSite) -> Site:
         record = Site(key=site.key, name=site.name, domains=list(site.domains))
         s.add(record)
         s.flush()
+        add_upcoming_site(s, site.key)
     elif any(domain not in record.domains for domain in site.domains):
         record.domains = [*record.domains, *(domain for domain in site.domains if domain not in record.domains)]
     return record
@@ -65,6 +67,20 @@ def collection_site(collection: Collection) -> SourceSite:
 
 def video_site(video: Video) -> SourceSite:
     return _site_of(video.sharing_url, video.source_key)
+
+
+def collection_site_key(collection: Collection) -> str:
+    """The key of the Site a collection is on, told from its link while VODLoft has not stored it yet."""
+    return collection.site_key or collection_site(collection).key
+
+
+def video_site_key(video: Video) -> str:
+    return video.site_key or video_site(video).key
+
+
+def movie_site_key(movie: Movie) -> Optional[str]:
+    """The key of the Site a movie is on; None for a movie without a link."""
+    return _site_of(movie.sharing_url, movie.source_key).key if movie.sharing_url else None
 
 
 @lru_cache(maxsize=1024)

@@ -13,7 +13,7 @@ import ProfileExistingFilesDialog from '../../components/ExistingFiles/ProfileEx
 import MoveEpisodesDialog from '../../components/LocalMediaProfile/MoveEpisodesDialog'
 import {scanProfile, useOpenExistingFilesScans} from '../../components/ExistingFiles/api'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
-import {useLocalMediaProfileView, useSourceLookup} from '../../lib/queries'
+import {useLocalMediaProfileSites, useLocalMediaProfileView} from '../../lib/queries'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {
     OperationControlError,
@@ -28,7 +28,7 @@ import {
 } from '../../types/local_media_profile'
 import {formatBytes} from '../../utils/formatting'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
-import {localMediaProfileEndpoint} from '../../types/local_media_profile'
+import {localMediaProfileEndpoint, sitesForLocalMediaProfileType, takesUpcomingSites} from '../../types/local_media_profile'
 import './LocalMediaProfilePage.css'
 import {apiUrl} from '../../lib/api'
 
@@ -38,7 +38,7 @@ export default function LocalMediaProfilePage() {
     const {slug} = useParams<{slug: string}>()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
-    const sourceLookup = useSourceLookup()
+    const {data: sites} = useLocalMediaProfileSites()
     const controlOperation = useControlOperation()
     const {isStarting, onStartingChange} = useStartingOperations()
     const {data, isLoading, error} = useLocalMediaProfileView(slug)
@@ -203,7 +203,12 @@ export default function LocalMediaProfilePage() {
     const availableFor = profile.type === 'collection'
         ? CollectionLocalMediaProfileScopeReg.getLabelLoose(profile.collectionScope)
         : 'Movies'
-    const onlySources = profile.sourceKeys ? `${profile.sourceKeys.map((key) => sourceLookup.name(key)).join(', ')} only` : null
+    const known = sitesForLocalMediaProfileType(sites, profile.type)
+    const everySite = known.every((site) => profile.siteKeys.includes(site.key))
+        && (profile.includeUpcomingSites || !takesUpcomingSites(sites, profile.type))
+    const siteNames = profile.siteKeys.map((key) => known.find((site) => site.key === key)?.name ?? key).join(', ')
+    const onlySites = !sites || everySite ? null
+        : profile.includeUpcomingSites ? [siteNames, 'upcoming sites'].filter(Boolean).join(' and ') : `${siteNames} only`
 
     return (
         <section className="view local-media-profile-view" aria-labelledby="local-media-profile-title">
@@ -247,7 +252,7 @@ export default function LocalMediaProfilePage() {
                             {LocalMediaProfileTypeReg.getLabelLoose(profile.type)} Local Media Profile
                         </div>
                         <div className="local-media-profile-meta">
-                            {PreferredFormatReg.getLabelLoose(profile.preferredFormat)} · {availableFor}{onlySources && ` · ${onlySources}`}
+                            {PreferredFormatReg.getLabelLoose(profile.preferredFormat)} · {availableFor}{onlySites && ` · ${onlySites}`}
                         </div>
                     </div>
 

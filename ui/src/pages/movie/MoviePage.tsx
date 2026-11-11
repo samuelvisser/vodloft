@@ -36,7 +36,6 @@ import {movieExtraTypeLabel} from '../../utils/movieExtras'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import './MoviePage.css'
-import {isLocalMediaProfileAvailableForSource} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
 import {type DownloadStarts, startLabel, useDownloadStarts} from '../../lib/downloadStarts'
 import {refreshFrontendPuller} from '../../lib/puller'
@@ -145,8 +144,9 @@ export default function MoviePage() {
         localMovie?.id ?? null,
     )
     const videoProfiles = useMemo(
-        () => profiles?.filter((profile) => profile.type === 'movie' && isLocalMediaProfileAvailableForSource(profile, sourceKey)) || [],
-        [profiles, sourceKey],
+        // Movies come from one Site, which every movie profile is offered for.
+        () => profiles?.filter((profile) => profile.type === 'movie') || [],
+        [profiles],
     )
     const videoProfileReg = useMemo(() => {
         const spec: Record<string, {label: string}> = {}

@@ -7,7 +7,7 @@ import LocalMediaProfileCommonFields from '../LocalMediaProfile/LocalMediaProfil
 import CollectionLocalMediaProfileFields from '../LocalMediaProfile/CollectionLocalMediaProfileFields'
 import IndexingValuesEditorButton from '../LocalMediaProfile/IndexingValuesEditorButton'
 import CollectionLocalMediaProfileOutputTemplate from '../LocalMediaProfile/CollectionLocalMediaProfileOutputTemplate'
-import {useLocalMediaProfiles} from '../../lib/queries'
+import {useLocalMediaProfileSites, useLocalMediaProfiles} from '../../lib/queries'
 import {CollectionLocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {
     LocalMediaProfileCreateUnionIn,
@@ -20,11 +20,12 @@ import {
 import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
-import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSource, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
+import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
 /** Quality and subtitle language choices an existing profile keeps when this step picks it. */
-const QUALITY_FIELDS = [
+const PROFILE_CHOICE_FIELDS = [
     'subtitleLanguages', 'subtitleLanguageMode', 'qualityGoal', 'videoCodecs', 'codecFallback',
-    'container', 'audioCodec', 'audioFormat', 'audioLanguage',
+    'container', 'audioCodec', 'audioFormat', 'audioLanguage', 'siteKeys', 'includeUpcomingSites',
+    'autoSubtitles', 'sponsorblockEnabled', 'sponsorblockSegments',
 ] as const
 
 
@@ -38,15 +39,19 @@ type Props = {
     collectionSlug?: string
     /** The collection chosen in the first step. */
     collection?: CollectionCreatePayloadOut
+    /** The Site the chosen collection is on. */
+    siteKey?: string | null
     collectionType: CollectionLocalMediaProfileContext
 }
 
-export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, collection, collectionType}: Props) {
+export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, collection, collectionType, siteKey}: Props) {
     const profilesQuery = useLocalMediaProfiles()
+    const {data: sites} = useLocalMediaProfileSites()
+    const knownSiteKeys = sites?.sites.map((site) => site.key)
     const profiles: CollectionLocalMediaProfileRead[] | undefined = profilesQuery.data?.filter(
         (profile): profile is CollectionLocalMediaProfileRead =>
             profile.type === 'collection' && isCollectionLocalMediaProfileAvailableFor(profile, collectionType)
-            && isLocalMediaProfileAvailableForSource(profile, collection?.sourceKey),
+            && isLocalMediaProfileAvailableForSite(profile, siteKey, knownSiteKeys),
     )
     const profilesError = profilesQuery.isError ? ((profilesQuery.error)?.message ?? 'Failed to load media profiles') : null
     const createDefaults = getZodDefaults(LocalMediaProfileCreateUnionSchema)
@@ -91,7 +96,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                 outputTemplate: watch('outputTemplate'),
                 preferredFormat: watch('preferredFormat'),
                 indexingValues: watch('indexingValues'),
-                ...Object.fromEntries(QUALITY_FIELDS.map((name) => [name, watch(name)])),
+                ...Object.fromEntries(PROFILE_CHOICE_FIELDS.map((name) => [name, watch(name)])),
             }
         }
 
@@ -105,7 +110,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
             outputTemplate: profile.outputTemplate,
             preferredFormat: profile.preferredFormat,
             indexingValues: profile.indexingValues,
-            ...Object.fromEntries(QUALITY_FIELDS.map((name) => [name, profile[name]])),
+            ...Object.fromEntries(PROFILE_CHOICE_FIELDS.map((name) => [name, profile[name]])),
         } as LocalMediaProfileUpsertIn)
     }
 
