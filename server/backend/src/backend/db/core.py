@@ -257,9 +257,6 @@ def begin_write_transaction(session: Session, *, concurrent: bool = False) -> No
 
 
 _WRITE_ATTEMPTS = 3
-# A write transaction that waits this long for its turn, or holds it this long, is logged, so a slow save names
-# what was in its way.
-_SLOW_WRITE_SECONDS = 1.0
 _WRITE_RETRY_DELAY_SECONDS = 0.1
 # PostgreSQL error codes that mean "try the transaction again": a deadlock, or a
 # transaction that could not be serialized against another one.
@@ -275,17 +272,6 @@ def is_lock_conflict(error: BaseException) -> bool:
         return True
     message = str(error.orig).lower()
     return "database is locked" in message or "database is busy" in message
-
-
-def _log_slow_write(work: Callable, *, waited: float, held: float) -> None:
-    if waited < _SLOW_WRITE_SECONDS and held < _SLOW_WRITE_SECONDS:
-        return
-    code = getattr(work, "__code__", None)
-    where = f"{code.co_filename.rsplit('/src/', 1)[-1]}:{code.co_firstlineno}" if code else repr(work)
-    logger.warning(
-        "Slow write transaction %s (%s): waited %.1fs for its turn, held it %.1fs",
-        getattr(work, "__qualname__", "?"), where, waited, held,
-    )
 
 
 def run_write_transaction(
@@ -314,12 +300,9 @@ def run_write_transaction(
         session.info[_WRITER] = True
         _writing.active = True
         try:
-            asked = time.monotonic()
             begin_write_transaction(session, concurrent=concurrent)
-            began = time.monotonic()
             result = work(session)
             session.commit()
-            _log_slow_write(work, waited=began - asked, held=time.monotonic() - began)
             return result
         except OperationalError as error:
             session.rollback()
