@@ -148,9 +148,19 @@ def _create_server_engine(url: URL) -> Engine:
     same time, and the worker counts can change while VODLoft runs. Keep a
     small pool of idle connections, but let it grow well past SQLAlchemy's
     default limit of fifteen instead of making workers wait for a connection.
+
+    PostgreSQL's JIT compiler is turned off. It starts on queries it estimates as
+    costly, such as the Downloads page reading the status of every download, and
+    compiling them took longer than running them: seconds for a page that runs in
+    a few hundred milliseconds.
     """
+    connect_args = {}
+    if url.get_backend_name() == "postgresql":
+        # Keep any options the database URL itself passes to the server.
+        connect_args["options"] = " ".join(filter(None, (url.query.get("options"), "-c jit=off")))
     return create_engine(
         url,
+        connect_args=connect_args,
         pool_size=_SERVER_POOL_SIZE,
         max_overflow=_SERVER_POOL_MAX_OVERFLOW,
         pool_pre_ping=True,

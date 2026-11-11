@@ -1258,6 +1258,7 @@ def test_workflow_orders_publication_waits_in_dispatch_queue_order():
         engine.dispose()
 
 
+@pytest.mark.sqlite_only
 def test_download_statuses_join_their_operations_through_an_index():
     """Without statistics SQLite guessed the queue was tiny and scanned all of it for every download,
     so a few thousand queued downloads made the Downloads page take minutes."""
@@ -1277,4 +1278,28 @@ def test_download_statuses_join_their_operations_through_an_index():
     joins = [step for step in plan if step.endswith("LEFT-JOIN")]
     assert joins
     assert not [step for step in joins if step.startswith("SCAN")], plan
+    engine.dispose()
+
+
+def test_download_statuses_are_worked_out_once_per_page():
+    """Every workflow sort key reads a download's status. Inlined, PostgreSQL copied the status
+    expression into each of them and parsed every task run's JSON again for each copy, so the
+    Downloads page took seconds."""
+    import backend.db.models  # noqa: F401
+    import task_manager.scheduler.db  # noqa: F401
+    from backend.db import Base
+    from backend.services.media_download_collection import MediaDownloadCollectionQuery
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    statement = MediaDownloadCollectionQuery.build().walk_statement(order="workflow")
+    sql = str(statement.compile(engine, compile_kwargs={"literal_binds": True}))
+
+    with engine.connect() as connection:
+        if engine.dialect.name == "sqlite":
+            plan = [row[3] for row in connection.exec_driver_sql(f"EXPLAIN QUERY PLAN {sql}")]
+            assert "MATERIALIZE download_status" in plan, plan
+        else:
+            plan = [row[0] for row in connection.exec_driver_sql(f"EXPLAIN {sql}")]
+            assert any("CTE Scan on download_status" in step for step in plan), plan
     engine.dispose()

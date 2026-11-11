@@ -15,7 +15,7 @@ from hashlib import blake2b
 
 from sqlalchemy import String, and_, case, exists, func, literal, or_, select, type_coerce
 from sqlalchemy.orm import Session, aliased
-from sqlalchemy.sql.selectable import Subquery
+from sqlalchemy.sql.selectable import CTE, Subquery
 
 from backend.db.json_sql import json_array_items
 from backend.db.models import MediaDownloadBase
@@ -340,8 +340,13 @@ def _awaiting_admission(active_operation):
     ), False).label("awaiting_admission")
 
 
-def _download_status_source() -> Subquery:
-    """One SQL relation containing the effective UI status for every download."""
+def _download_status_source() -> CTE:
+    """One SQL relation containing the effective UI status for every download.
+
+    Materialized, so the database works each status out once. Inlined, the status
+    expression was copied into every sort key that uses it, and PostgreSQL parsed
+    each download's task run JSON again for every copy: several seconds a page.
+    """
     latest_run_ids = _latest_download_run_ids()
     active_operation_ids = _latest_active_download_operation_ids()
     operation = aliased(TaskOperation, name="active_operation")
@@ -387,7 +392,8 @@ def _download_status_source() -> Subquery:
             sort_queue,
             sort_queue.c.media_download_id == MediaDownloadBase.id,
         )
-        .subquery()
+        .cte("download_status")
+        .prefix_with("MATERIALIZED")
     )
 
 
