@@ -16,6 +16,8 @@ import {useQueryClient} from "@tanstack/react-query";
 import {getZodDefaults} from "../../utils/defaultZod";
 import ReadMore from "../../utils/ReadMore";
 import {apiUrl} from '../../lib/api'
+import {PreferredFormatReg} from '../../types/local_media_profile'
+import './AddDownloadProfilePage.css'
 
 export default function AddDownloadProfilePage() {
     const navigate = useNavigate()
@@ -57,7 +59,7 @@ export default function AddDownloadProfilePage() {
     const prefillApplied = useRef(false)
     const mediaProfilePrefillApplied = useRef(false)
     const requestedCollectionSlug = searchParams.get('collection')
-    const requestedPreferredFormat = searchParams.get('preferredFormat')
+    const requestedPreferredFormat = PreferredFormatReg.normalize(searchParams.get('preferredFormat'))
     const requestedEpisodeTypes = useMemo(
         () => searchParams.getAll('episodeType').filter((value) => /^[a-z][a-z-]*$/.test(value)),
         [searchParams],
@@ -163,6 +165,17 @@ export default function AddDownloadProfilePage() {
         usedLocalMediaProfiles,
     ])
 
+    // A link from a Stream Profile asks for a format: the profiles that download it stand out, and another choice says so.
+    const requestedFormatProfiles = useMemo(() => new Set(
+        requestedPreferredFormat
+            ? (mediaProfiles ?? []).filter((profile) => profile.preferredFormat === requestedPreferredFormat).map((profile) => profile.id)
+            : [],
+    ), [mediaProfiles, requestedPreferredFormat])
+    const localMediaProfileId = watch('localMediaProfileId')
+    const selectedMediaProfile = mediaProfiles?.find((profile) => profile.id === localMediaProfileId)
+    const otherFormatSelected = !!requestedPreferredFormat && !!selectedMediaProfile
+        && !requestedFormatProfiles.has(selectedMediaProfile.id)
+
     return (
         <section className="view" aria-labelledby="add-download-profile-title">
             <div className="view-header">
@@ -223,6 +236,18 @@ export default function AddDownloadProfilePage() {
                                 value={mediaProfileReg.options.find(o => Number(o.value) === field.value) ?? null}
                                 onChange={(opt) => field.onChange(opt ? Number(opt.value) : null)}
                                 isOptionDisabled={(opt) => usedLocalMediaProfiles.has(Number(opt.value))}
+                                classNames={{
+                                    option: ({data}) => requestedFormatProfiles.has(Number(data.value)) ? 'select__option--requested-format' : '',
+                                    singleValue: ({data}) => requestedFormatProfiles.has(Number(data.value)) ? 'select__single-value--requested-format' : '',
+                                }}
+                                formatOptionLabel={(opt) => requestedPreferredFormat && requestedFormatProfiles.has(Number(opt.value))
+                                    ? (
+                                        <span className="requested-format-option">
+                                            {opt.label}
+                                            <span className="requested-format-option__badge">{PreferredFormatReg.getLabel(requestedPreferredFormat)}</span>
+                                        </span>
+                                    )
+                                    : opt.label}
                                 onBlur={field.onBlur}
                                 isDisabled={mediaProfileReg.options.length === 0}
                                 placeholder={!mediaProfiles ? 'Loading profiles...' : mediaProfileReg.options.length === 0 ? 'No profiles found' : undefined}
@@ -235,6 +260,11 @@ export default function AddDownloadProfilePage() {
                     {errors.localMediaProfileId && (
                         <div id="local-media-profile-errors" className="error" role="alert" aria-live="polite">
                             {errors.localMediaProfileId.message as string}
+                        </div>
+                    )}
+                    {otherFormatSelected && (
+                        <div className="requested-format-note" role="status">
+                            This Local Media Profile downloads {PreferredFormatReg.getLabelLoose(selectedMediaProfile.preferredFormat)}, not the requested {PreferredFormatReg.getLabel(requestedPreferredFormat)}.
                         </div>
                     )}
                     <div className="help" id="local-media-profile-help">
