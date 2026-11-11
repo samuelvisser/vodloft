@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, TypeVar
+from typing import Literal, Optional, TypeVar
 import importlib
 import logging
 import os
 import pkgutil
 import threading
 import time
+import weakref
 
 from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import URL, Engine, make_url
@@ -223,40 +227,196 @@ def _execute_writes_only_in_write_transactions(state) -> None:
         _refuse_unguarded(state.session)
 
 
-def begin_write_transaction(session: Session, *, concurrent: bool = False) -> None:
-    """Begin a write-intent transaction before any reads.
+WritePriority = Literal["interactive", "background"]
+_write_priority: ContextVar[WritePriority] = ContextVar("write_priority", default="background")
+# A background write that has waited this long goes before newer interactive ones, so a busy
+# afternoon of saves cannot hold a sync back for ever.
+_WRITE_TURN_AGING_SECONDS = 5.0
+
+
+@contextmanager
+def write_priority(priority: WritePriority) -> Iterator[None]:
+    """Write transactions started inside this block take their turn with ``priority``.
+
+    API requests run as ``interactive``: someone is waiting for the answer, so their writes
+    go before the scheduler's background writes. Everything else is ``background``.
+    """
+    token = _write_priority.set(priority)
+    try:
+        yield
+    finally:
+        _write_priority.reset(token)
+
+
+@dataclass
+class _Waiter:
+    id: int
+    priority: WritePriority
+    since: float
+
+
+class _WriteTurns:
+    """Hands this process's write transactions the database writer one at a time.
+
+    SQLite lets one transaction write at a time, and a transaction that finds it taken
+    polls for it with growing sleeps. A save from the UI could keep losing the writer to
+    background work that asks again the moment it commits. Here waiting transactions
+    queue: interactive ones go first, then the rest in the order they asked, and a
+    background one that waited ``_WRITE_TURN_AGING_SECONDS`` is not passed again.
+    Other processes, such as a command line, still meet SQLite's own busy timeout.
+    """
+
+    def __init__(self) -> None:
+        self.condition = threading.Condition()
+        self.held = False
+        self.waiters: dict[int, _Waiter] = {}
+        self.next_id = 0
+
+    def _first(self, now: float) -> int:
+        oldest = min(self.waiters.values(), key=lambda waiter: waiter.id)
+        if oldest.priority == "background" and now - oldest.since >= _WRITE_TURN_AGING_SECONDS:
+            return oldest.id
+        return min(
+            self.waiters.values(), key=lambda waiter: (waiter.priority != "interactive", waiter.id),
+        ).id
+
+    def take(self, priority: WritePriority, timeout: float) -> bool:
+        with self.condition:
+            waiter = _Waiter(self.next_id, priority, time.monotonic())
+            self.next_id += 1
+            self.waiters[waiter.id] = waiter
+            deadline = waiter.since + timeout
+            try:
+                while self.held or self._first(time.monotonic()) != waiter.id:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return False
+                    # Aging can change who is first without anyone letting go, so look again now and then.
+                    self.condition.wait(min(remaining, _WRITE_TURN_AGING_SECONDS))
+                self.held = True
+                return True
+            finally:
+                del self.waiters[waiter.id]
+                self.condition.notify_all()
+
+    def give_back(self) -> None:
+        with self.condition:
+            self.held = False
+            self.condition.notify_all()
+
+
+_write_turns = _WriteTurns()
+
+
+@dataclass
+class _WriteTurn:
+    """One write transaction's place in ``_write_turns``."""
+
+    connection: object
+    priority: WritePriority
+    asked: float | None = None
+    began: float | None = None
+
+    @property
+    def held(self) -> bool:
+        return self.began is not None
+
+    def take(self, statement: str = "BEGIN") -> None:
+        if self.held:
+            return
+        self.asked = time.monotonic()
+        if not _write_turns.take(self.priority, _SQLITE_BUSY_TIMEOUT_SECONDS):
+            raise OperationalError(
+                statement, None,
+                TimeoutError(f"database is locked: no turn to write within {_SQLITE_BUSY_TIMEOUT_SECONDS}s"),
+            )
+        self.began = time.monotonic()
+
+    def give_back(self) -> None:
+        if self.held:
+            self.began = None
+            _write_turns.give_back()
+
+
+# Statements that never write, so a write transaction may run them before its turn.
+_NON_WRITING_STATEMENTS = ("SELECT", "PRAGMA", "EXPLAIN", "SAVEPOINT", "RELEASE", "ROLLBACK")
+
+
+@event.listens_for(Engine, "before_cursor_execute")
+def _take_turn_before_the_first_write(connection, _cursor, statement, _parameters, _context, _executemany) -> None:
+    turn = getattr(_writing, "turn", None)
+    if turn is None or turn.held or turn.connection is not connection:
+        return
+    if not statement.lstrip().upper().startswith(_NON_WRITING_STATEMENTS):
+        turn.take(statement)
+
+
+_wal_engines: weakref.WeakKeyDictionary[Engine, bool] = weakref.WeakKeyDictionary()
+
+
+def _reads_beside_the_writer(session: Session) -> bool:
+    """Whether this SQLite database is in WAL mode, where a reader never holds a writer up.
+
+    In any other journal mode a transaction that read would keep the writer from
+    committing while it waits for its own turn, so there it reserves the writer up front.
+    """
+    engine = session.get_bind()
+    wal = _wal_engines.get(engine)
+    if wal is None:
+        wal = str(session.execute(text("PRAGMA journal_mode")).scalar()).lower() == "wal"
+        _wal_engines[engine] = wal
+    return wal
+
+
+def _begin_write_transaction(session: Session, *, concurrent: bool, reserve: bool) -> _WriteTurn | None:
+    """Begin a write transaction before any reads, and say how it takes its turn to write.
 
     These transactions read a row and then write it based on what they read,
     such as a task run's state. They must never run side by side, or one would
     overwrite the other's change.
 
-    SQLite WAL permits concurrent readers, but a deferred transaction that reads
-    before writing can fail with SQLITE_BUSY_SNAPSHOT when another writer commits
-    first. BEGIN IMMEDIATE reserves the writer slot up front, allowing SQLite's
-    busy timeout to queue these short write transactions instead of failing the
-    later read-to-write upgrade.
+    On SQLite in WAL mode the transaction reads one snapshot of the database, beside any
+    writer, and takes its turn in ``_write_turns`` only at its first write. When
+    another transaction committed after the snapshot was read, that write fails
+    with SQLITE_BUSY_SNAPSHOT, a lock conflict, and ``run_write_transaction``
+    runs the work again with ``reserve``: then it takes its turn first and
+    begins with BEGIN IMMEDIATE, so it reads and writes what is current and
+    cannot be passed a second time.
 
     PostgreSQL lets every other transaction write at the same time. These ones
-    queue on one transaction-level advisory lock instead, and as each statement
-    reads the rows committed before it (READ COMMITTED), every transaction sees
-    what the one before it wrote. A ``concurrent`` transaction only writes what
-    it was given, such as a new row or a value the user chose, so it may run
-    beside the others and takes no lock there. On SQLite it still reserves the
-    one writer slot, as every write does.
+    take their turn up front and queue on one transaction-level advisory lock, and
+    as each statement reads the rows committed before it (READ COMMITTED), every
+    transaction sees what the one before it wrote. A ``concurrent`` transaction
+    only writes what it was given, such as a new row or a value the user chose,
+    so it may run beside the others and takes no turn there.
     """
     if session.in_transaction():
         raise RuntimeError("Write transaction must begin before the session is used")
 
-    bind = session.get_bind()
-    if bind.dialect.name == "sqlite":
-        session.execute(text("BEGIN IMMEDIATE"))
-    elif bind.dialect.name == "postgresql" and not concurrent:
-        session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _POSTGRESQL_WRITE_LOCK_KEY})
-    else:
+    dialect = session.get_bind().dialect.name
+    if dialect == "postgresql" and concurrent:
         session.begin()
+        return None
+    turn = _WriteTurn(session.connection(), _write_priority.get())
+    if dialect == "sqlite" and not reserve and _reads_beside_the_writer(session):
+        session.execute(text("BEGIN"))
+        return turn
+    turn.take()
+    try:
+        if dialect == "sqlite":
+            session.execute(text("BEGIN IMMEDIATE"))
+        elif dialect == "postgresql":
+            session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _POSTGRESQL_WRITE_LOCK_KEY})
+    except BaseException:
+        turn.give_back()
+        raise
+    return turn
 
 
 _WRITE_ATTEMPTS = 3
+# A write transaction that waits this long for its turn, or holds it this long, is logged, so a slow save names
+# what was in its way.
+_SLOW_WRITE_SECONDS = 1.0
 _WRITE_RETRY_DELAY_SECONDS = 0.1
 # PostgreSQL error codes that mean "try the transaction again": a deadlock, or a
 # transaction that could not be serialized against another one.
@@ -272,6 +432,20 @@ def is_lock_conflict(error: BaseException) -> bool:
         return True
     message = str(error.orig).lower()
     return "database is locked" in message or "database is busy" in message
+
+
+def _log_slow_write(work: Callable, turn: _WriteTurn | None, *, ended: float) -> None:
+    if turn is None or turn.began is None or turn.asked is None:
+        return
+    waited, held = turn.began - turn.asked, ended - turn.began
+    if waited < _SLOW_WRITE_SECONDS and held < _SLOW_WRITE_SECONDS:
+        return
+    code = getattr(work, "__code__", None)
+    where = f"{code.co_filename.rsplit('/src/', 1)[-1]}:{code.co_firstlineno}" if code else repr(work)
+    logger.warning(
+        "Slow %s write transaction %s (%s): waited %.1fs for its turn, held it %.1fs",
+        turn.priority, getattr(work, "__qualname__", "?"), where, waited, held,
+    )
 
 
 def run_write_transaction(
@@ -299,10 +473,14 @@ def run_write_transaction(
         session = get_session()
         session.info[_WRITER] = True
         _writing.active = True
+        turn = None
         try:
-            begin_write_transaction(session, concurrent=concurrent)
+            # The first attempt reads beside other writers; one that was passed reserves the writer up front.
+            turn = _begin_write_transaction(session, concurrent=concurrent, reserve=attempt > 0)
+            _writing.turn = turn
             result = work(session)
             session.commit()
+            _log_slow_write(work, turn, ended=time.monotonic())
             return result
         except OperationalError as error:
             session.rollback()
@@ -313,7 +491,10 @@ def run_write_transaction(
             raise
         finally:
             _writing.active = False
+            _writing.turn = None
             session.close()
+            if turn is not None:
+                turn.give_back()
         time.sleep(_WRITE_RETRY_DELAY_SECONDS * (2 ** attempt))
     raise AssertionError("unreachable")
 
