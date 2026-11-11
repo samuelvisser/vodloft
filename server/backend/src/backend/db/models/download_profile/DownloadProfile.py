@@ -70,8 +70,9 @@ class DownloadProfile(Base, HasTaskResourcesMixin):
         cascade="all, delete-orphan",
         order_by="DownloadProfileFilter.position",
     )
+    # A deleted profile's downloads stay; the database clears their link to it in one go.
     episode_downloads: Mapped[list["EpisodeMediaDownload"]] = relationship(
-        back_populates="download_profile"
+        back_populates="download_profile", passive_deletes=True,
     )
 
 

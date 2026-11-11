@@ -324,9 +324,10 @@ class _WriteTurn:
     # Whether it reads beside other writers and only takes its turn at its first write.
     reads_first: bool = False
     holding: bool = False
-    # For the slow write log: when it first asked for its turn, got it, and last gave it back.
+    # For the slow write log: when it first asked for its turn, got it, began to commit and last gave it back.
     asked: float | None = None
     began: float | None = None
+    committing: float | None = None
     ended: float | None = None
 
     def take(self, statement: str = "BEGIN") -> None:
@@ -476,11 +477,13 @@ def _log_slow_write(work: Callable, turn: _WriteTurn | None) -> None:
     waited, held = turn.began - turn.asked, turn.ended - turn.began
     if waited < _SLOW_WRITE_SECONDS and held < _SLOW_WRITE_SECONDS:
         return
+    # The commit is where the database writes to disk; the rest of the hold is the work's own statements.
+    committed = turn.ended - max(turn.committing, turn.began) if turn.committing is not None else 0.0
     code = getattr(work, "__code__", None)
     where = f"{code.co_filename.rsplit('/src/', 1)[-1]}:{code.co_firstlineno}" if code else repr(work)
     logger.warning(
-        "Slow %s write transaction %s (%s): waited %.1fs for its turn, held it %.1fs",
-        turn.priority, getattr(work, "__qualname__", "?"), where, waited, held,
+        "Slow %s write transaction %s (%s): waited %.1fs for its turn, held it %.1fs, %.1fs of that to commit",
+        turn.priority, getattr(work, "__qualname__", "?"), where, waited, held, committed,
     )
 
 
@@ -523,6 +526,9 @@ def run_write_transaction(
             turn = _begin_write_transaction(session, concurrent=concurrent, reserve=reserve or attempt > 0)
             _writing.turn = turn
             result = work(session)
+            session.flush()
+            if turn is not None:
+                turn.committing = time.monotonic()
             session.commit()
             _log_slow_write(work, turn)
             return result
