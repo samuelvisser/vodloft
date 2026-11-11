@@ -111,15 +111,15 @@ body *::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-rad
   margin: -0.72em 0 0 -0.72em;
   overflow: visible;
   pointer-events: none;
-  animation: nav-activity-spin 3.2s linear infinite;
+  animation: nav-activity-spin 1.8s linear infinite;
 }
 .nav-activity-ring circle {
   fill: none;
-  stroke: #fff;
-  stroke-opacity: 0.28;
-  stroke-width: 0.9;
+  stroke: #60a5fa;
+  stroke-opacity: 0.9;
+  stroke-width: 1.6;
   stroke-linecap: round;
-  stroke-dasharray: 17.5 64.2;
+  stroke-dasharray: 26 55.7;
 }
 .nav-activity-dot {
   display: none;
