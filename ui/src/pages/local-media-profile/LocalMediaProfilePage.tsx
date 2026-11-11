@@ -7,7 +7,7 @@ import {faIcon} from '../../icons/faIcon'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
-import ExplainedButton from '../../components/common/ExplainedButton'
+import DisabledReason from '../../components/common/DisabledReason'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import OpaqueOutputTemplateCode from '../../components/LocalMediaProfile/OpaqueOutputTemplateCode'
 import ProfileExistingFilesDialog from '../../components/ExistingFiles/ProfileExistingFilesDialog'
@@ -280,15 +280,20 @@ export default function LocalMediaProfilePage() {
                             <FontAwesomeIcon icon={faIcon('fass', 'copy')} aria-hidden="true"/>
                             <span>Duplicate</span>
                         </Link>
-                        <ExplainedButton
-                            type="button"
-                            className="btn btn-danger"
-                            disabledReason={deleteDisabledReason}
-                            onClick={() => setDeleteProfileConfirm(true)}
-                        >
-                            <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
-                            <span>Delete</span>
-                        </ExplainedButton>
+                        <DisabledReason reason={deleteDisabledReason} placement="below">
+                            {({describedBy, explain}) => (
+                                <button
+                                    type="button"
+                                    className={`btn btn-danger${deleteDisabledReason ? ' is-disabled' : ''}`}
+                                    aria-disabled={deleteDisabledReason ? true : undefined}
+                                    aria-describedby={describedBy}
+                                    onClick={() => deleteDisabledReason ? explain() : setDeleteProfileConfirm(true)}
+                                >
+                                    <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
+                                    <span>Delete</span>
+                                </button>
+                            )}
+                        </DisabledReason>
                         <ActionMenu
                             items={[
                                 {

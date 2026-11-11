@@ -4,6 +4,7 @@ import type {ProgressPresentation} from '../../types/progress'
 import {presentOperationProgress} from '../../lib/operationProgress'
 import DownloadProgressActionItem from '../DownloadProgress/DownloadProgressActionItem'
 import ProgressFill from '../common/ProgressFill'
+import DisabledReason from '../common/DisabledReason'
 import {useEffect, useId, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link} from 'react-router-dom'
@@ -76,8 +77,11 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
         }
     }, [open])
 
-    const selectItem = (item: ActionMenuItem) => {
-        if (item.disabled || item.starting) return
+    const selectItem = (item: ActionMenuItem, explain?: () => void) => {
+        if (item.disabled || item.starting) {
+            explain?.()
+            return
+        }
         setOpen(false)
         item.onSelect?.()
     }
@@ -142,9 +146,6 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                         {items.map((item, index) => {
                             const progress = normalizedProgress(item.progress)
                             const presentation = item.presentation ?? presentOperationProgress(item.operation, item.starting)
-                            const tooltipId = item.disabled && item.disabledReason
-                                ? `${menuId}-disabled-reason-${index}`
-                                : undefined
                             const itemContent = (
                                 <>
                                     {item.icon && (
@@ -156,77 +157,79 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                             )
 
                             return (
-                                <div
+                                <DisabledReason
                                     key={`${item.label}-${index}`}
-                                    className={`action-menu-entry${tooltipId ? ' has-disabled-reason' : ''}`}
+                                    as="div"
+                                    placement="side"
+                                    className="action-menu-entry"
+                                    reason={item.disabled ? item.disabledReason : undefined}
                                 >
-                                    {item.separatorBefore && <div className="action-menu-separator" role="separator"/>}
-                                    <div className="action-menu-item-row">
-                                        {presentation ? (
-                                            <ProgressFill
-                                                presentation={presentation}
-                                                className="action-menu-item-progress"
-                                            />
-                                        ) : progress !== undefined && (
-                                            <span
-                                                className="action-menu-item-progress"
-                                                style={{width: `${progress}%`}}
-                                                aria-hidden="true"
-                                            />
-                                        )}
-                                        {item.href && !item.disabled ? (
-                                            <Link
-                                                to={item.href}
-                                                role="menuitem"
-                                                className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}`}
-                                                aria-label={presentation ? `${item.label}: ${presentation.detail}` : item.label}
-                                                onClick={() => setOpen(false)}
-                                            >
-                                                {itemContent}
-                                            </Link>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}${item.disabled ? ' is-disabled' : ''}`}
-                                                aria-disabled={item.disabled || undefined}
-                                                aria-describedby={tooltipId}
-                                                aria-label={presentation ? `${item.label}: ${presentation.detail}` : item.label}
-                                                onClick={() => selectItem(item)}
-                                            >
-                                                {itemContent}
-                                            </button>
-                                        )}
-                                        {presentation && (
-                                            <ProgressExplanation
-                                                detail={presentation.detail}
-                                                buttonClassName="action-menu-item-control"
-                                            />
-                                        )}
-                                        {!!item.controls?.length && (
-                                            <div className="action-menu-item-controls" aria-label={`${item.label} task controls`}>
-                                                {item.controls.map((control) => (
-                                                    <button
-                                                        key={control.label}
-                                                        type="button"
-                                                        className={`action-menu-item-control${control.tone === 'danger' ? ' is-danger' : ''}`}
-                                                        aria-label={control.label}
-                                                        title={control.label}
-                                                        disabled={control.disabled}
-                                                        onClick={() => selectControl(control)}
+                                    {({describedBy, explain}) => (
+                                        <>
+                                            {item.separatorBefore && <div className="action-menu-separator" role="separator"/>}
+                                            <div className="action-menu-item-row">
+                                                {presentation ? (
+                                                    <ProgressFill
+                                                        presentation={presentation}
+                                                        className="action-menu-item-progress"
+                                                    />
+                                                ) : progress !== undefined && (
+                                                    <span
+                                                        className="action-menu-item-progress"
+                                                        style={{width: `${progress}%`}}
+                                                        aria-hidden="true"
+                                                    />
+                                                )}
+                                                {item.href && !item.disabled ? (
+                                                    <Link
+                                                        to={item.href}
+                                                        role="menuitem"
+                                                        className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}`}
+                                                        aria-label={presentation ? `${item.label}: ${presentation.detail}` : item.label}
+                                                        onClick={() => setOpen(false)}
                                                     >
-                                                        <FontAwesomeIcon icon={control.icon} aria-hidden="true"/>
+                                                        {itemContent}
+                                                    </Link>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        role="menuitem"
+                                                        className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}${item.disabled ? ' is-disabled' : ''}`}
+                                                        aria-disabled={item.disabled || undefined}
+                                                        aria-describedby={describedBy}
+                                                        aria-label={presentation ? `${item.label}: ${presentation.detail}` : item.label}
+                                                        onClick={() => selectItem(item, explain)}
+                                                    >
+                                                        {itemContent}
                                                     </button>
-                                                ))}
+                                                )}
+                                                {presentation && (
+                                                    <ProgressExplanation
+                                                        detail={presentation.detail}
+                                                        buttonClassName="action-menu-item-control"
+                                                    />
+                                                )}
+                                                {!!item.controls?.length && (
+                                                    <div className="action-menu-item-controls" aria-label={`${item.label} task controls`}>
+                                                        {item.controls.map((control) => (
+                                                            <button
+                                                                key={control.label}
+                                                                type="button"
+                                                                className={`action-menu-item-control${control.tone === 'danger' ? ' is-danger' : ''}`}
+                                                                aria-label={control.label}
+                                                                title={control.label}
+                                                                disabled={control.disabled}
+                                                                onClick={() => selectControl(control)}
+                                                            >
+                                                                <FontAwesomeIcon icon={control.icon} aria-hidden="true"/>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                    </div>
-                                    {tooltipId && (
-                                        <span id={tooltipId} role="tooltip" className="action-menu-disabled-tooltip">
-                                            {item.disabledReason}
-                                        </span>
+                                        </>
                                     )}
-                                </div>
+                                </DisabledReason>
                             )
                         })}
                     </div>
