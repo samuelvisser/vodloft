@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from tests.unit.conftest import use_database
+from conftest import use_database
 
 YOUTUBE = "#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tyoutube"
 TWITCH = ".twitch.tv\tTRUE\t/\tTRUE\t0\tauth-token\ttwitch"

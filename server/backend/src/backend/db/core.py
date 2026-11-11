@@ -15,7 +15,7 @@ import threading
 import time
 import weakref
 
-from sqlalchemy import MetaData, create_engine, event, text
+from sqlalchemy import Float, MetaData, create_engine, event, text
 from sqlalchemy.engine import URL, Engine, make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -55,7 +55,8 @@ naming_convention = {
 
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=naming_convention)
-    type_annotation_map = {datetime: UTCDateTime()}
+    # SQLAlchemy 2.1 maps a bare ``float`` to Double; the migrations create FLOAT columns.
+    type_annotation_map = {datetime: UTCDateTime(), float: Float()}
 
 
 create_case_insensitive_collation(Base.metadata)

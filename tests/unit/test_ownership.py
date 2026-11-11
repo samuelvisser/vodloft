@@ -8,6 +8,9 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+
+from conftest import use_database
 
 from backend.security.access import TEMPLATES, Access, Area, Level
 
@@ -17,8 +20,10 @@ def session():
     import backend.db.models  # noqa: F401
     from backend.db import Base
 
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    # One shared connection, so the writes VODLoft makes in its own transactions see the same database.
+    engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool)
     Base.metadata.create_all(engine)
+    use_database(engine)
     with Session(engine) as s:
         yield s
     engine.dispose()
@@ -99,10 +104,11 @@ def test_history_is_kept_per_user(session):
             quick_download_id=quick_id, title=quick_id, source_key="ytdlp", source_name="yt-dlp", url="u",
             format="Video", choice={}, outcome="downloaded", owner=owner,
         ))
-    session.flush()
+    session.commit()
     assert [row.quick_download_id for row in history.list_history(session, owner="1", everyone=False)] == ["a"]
     assert len(history.list_history(session)) == 3
     assert history.clear_history(session, owner="1", everyone=False) == 1
+    session.commit()
     assert sorted(row.quick_download_id for row in history.list_history(session)) == ["b", "c"]
 
 

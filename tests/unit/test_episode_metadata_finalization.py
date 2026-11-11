@@ -269,6 +269,8 @@ def test_refresh_now_leaves_an_episode_that_is_not_published_alone(monkeypatch):
         def rollback(self):
             pass
 
+    session = FakeSession()
+    monkeypatch.setattr(service, "run_write_transaction", lambda work, **_kwargs: work(session))
     monkeypatch.setattr(service, "refresh_dailywire_episode", lambda *_args, **_kwargs: pytest.fail("looked up"))
 
-    assert service.refresh_episode_now(FakeSession(), episode.id).summary() == "No metadata refresh is due"
+    assert service.refresh_episode_now(session, episode.id).summary() == "No metadata refresh is due"
