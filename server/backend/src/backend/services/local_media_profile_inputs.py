@@ -10,6 +10,7 @@ from typing import Literal
 
 from pydantic import Field, computed_field, field_validator, model_validator
 
+from backend.services.errors import FieldValueError
 from backend.services.local_media_profile_sites import (
     offers_format, profile_download_options, site_offered_for_type, takes_upcoming_sites,
 )
@@ -166,9 +167,9 @@ class LocalMediaProfileInput(InputModel):
         self.site_keys = list(dict.fromkeys(self.site_keys))
         refused = [key for key in self.site_keys if not site_offered_for_type(self.type, key)]
         if refused:
-            raise ValueError(f"This profile cannot be offered for {', '.join(refused)}")
+            raise FieldValueError("site_keys", f"This profile cannot be offered for {', '.join(refused)}")
         if not self.site_keys and not (self.include_upcoming_sites and takes_upcoming_sites(self.type)):
-            raise ValueError("Choose at least one Site")
+            raise FieldValueError("site_keys", "Choose at least one Site")
         return self
 
     @model_validator(mode="after")
@@ -176,13 +177,13 @@ class LocalMediaProfileInput(InputModel):
         # A profile can download what any of its Sites offers; each Site gets the nearest it has.
         options = profile_download_options(self.type, self.site_keys, self.include_upcoming_sites)
         if not offers_format(options, self.preferred_format):
-            raise ValueError(f"None of this profile's Sites can download {_FORMAT_NAMES.get(self.preferred_format, self.preferred_format.removeprefix("format_"))}")
+            raise FieldValueError("preferred_format", f"None of this profile's Sites can download {_FORMAT_NAMES.get(self.preferred_format, self.preferred_format.removeprefix("format_"))}")
         return self
 
     @model_validator(mode="after")
     def _goal_sets_codecs(self):
         if self.subtitle_language_mode != SubtitleLanguageMode.SITE and not self.subtitle_languages:
-            raise ValueError("Add at least one subtitle language, or download every language the site offers")
+            raise FieldValueError("subtitle_languages", "Add at least one subtitle language, or download every language the site offers")
         # A goal stands for its codec order, container and audio codec.
         if "quality_goal" in self.model_fields_set and self.quality_goal != QualityGoal.CUSTOM:
             preset = GOAL_PRESETS[QualityGoal(self.quality_goal)]
@@ -228,7 +229,7 @@ class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
     def _unique_index_keys(self):
         keys = [item.key for item in self.indexing_values]
         if len(keys) != len(set(keys)):
-            raise ValueError("Indexing Value keys must be unique")
+            raise FieldValueError("indexing_values", "Indexing Value keys must be unique")
         return self
 
     @field_validator("output_template")

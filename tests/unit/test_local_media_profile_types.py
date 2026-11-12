@@ -181,7 +181,7 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
             ),
         )
     assert exact_error.value.status_code == 409
-    assert "output path template and preferred format" in str(exact_error.value)
+    assert "'Collection' already uses this output path template with the same download format" in str(exact_error.value)
 
     # A different Jinja string that renders to the same path is also a conflict.
     equivalent_template = (
