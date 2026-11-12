@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,7 +14,10 @@ from backend.db.core import run_write_transaction
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.media_download_history import record_media_download_history
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
+from config import get_settings
+from config.settings.base import get_config_path
 from downloader import hls_asset_marker, hls_asset_root
+from downloader.storage.empty_folders import remove_emptied_folders
 from downloader.storage.identity import inspect_artifact
 from downloader.storage.relocation import PathMove, RelocationTransaction
 
@@ -132,7 +135,38 @@ def relocate_downloads(
     except BaseException:
         transaction.rollback()
         raise
+    # Only once the files are at their new place and recorded there, and only where files left in this run.
+    remove_folders_left_empty(
+        (path.source.parent for path in transaction.moves),
+        keep=(path.destination for path in transaction.moves),
+    )
     return len(moves), len(skipped)
+
+
+# Folders VODLoft uses for itself. They stay, also when they are empty.
+_OWN_FOLDER_SETTINGS = (
+    "temporary_download_root", "rss_cache_root", "quick_download_root", "thumbnail_root", "lock_root",
+)
+
+
+def remove_folders_left_empty(folders: Iterable[Path], *, keep: Iterable[Path] = ()) -> list[Path]:
+    """Remove the folders that managed files just left, and their parents, where nothing at all is left in them.
+
+    Pass only folders that VODLoft moved or deleted its own files out of in this run. The download folder
+    itself, VODLoft's own folders and the ``keep`` paths always stay; see ``downloader.storage.empty_folders``
+    for what makes it impossible to remove a folder that still holds a file.
+    """
+    download_settings = get_settings().download_settings
+    own = [Path(getattr(download_settings, setting)) for setting in _OWN_FOLDER_SETTINGS]
+    try:
+        return remove_emptied_folders(
+            folders, root=Path(download_settings.download_root).resolve(),
+            keep=[*keep, *own, get_config_path()],
+        )
+    except Exception:
+        # The files are already where they belong; a folder that stays behind must never fail the work.
+        logger.exception("Could not remove the folders left empty")
+        return []
 
 
 def _record_relocations(session: Session, moves: list[DownloadRelocation], identities, reason: str) -> None:
