@@ -296,46 +296,50 @@ export default function LocalMediaProfilePage() {
                         </DisabledReason>
                         <ActionMenu
                             items={[
-                                {
-                                    label: 'Match existing files',
-                                    icon: faIcon('fass', 'file-import'),
-                                    disabled: profile.type !== 'collection' || statistics.downloadProfileCount === 0,
-                                    disabledReason: profile.type !== 'collection'
-                                        ? 'Only Collection Local Media Profiles can match existing files.'
-                                        : statistics.downloadProfileCount === 0
+                                ...(profile.type === 'collection' ? [
+                                    {
+                                        label: 'Match existing files',
+                                        icon: faIcon('fass', 'file-import'),
+                                        disabled: statistics.downloadProfileCount === 0,
+                                        disabledReason: statistics.downloadProfileCount === 0
                                             ? 'No collection downloads with this Local Media Profile yet.'
                                             : undefined,
-                                    onSelect: () => void matchExistingFiles(),
-                                },
-                                {
-                                    label: 'Move episodes to another profile',
-                                    icon: faIcon('fass', 'file-export'),
-                                    disabled: profile.type !== 'collection' || Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation),
-                                    disabledReason: profile.type !== 'collection'
-                                        ? 'Only Collection Local Media Profiles can move episodes.'
-                                        : renameOperation
+                                        onSelect: () => void matchExistingFiles(),
+                                    },
+                                    {
+                                        label: 'Move episodes to another profile',
+                                        icon: faIcon('fass', 'file-export'),
+                                        disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)
+                                            || statistics.managedMediaCount === 0,
+                                        disabledReason: renameOperation
                                             ? 'A file rename operation is running for this profile.'
                                             : deleteDownloadsOperation
                                                 ? 'A delete downloads operation is running for this profile.'
                                                 : redownloadOperation
                                                     ? 'A re-download operation is running for this profile.'
-                                                    : undefined,
-                                    operation: moveOperation,
-                                    controls: operationControls(moveOperation?.id, 'move', false),
-                                    onSelect: () => setMoveOpen(true),
-                                },
+                                                    : statistics.managedMediaCount === 0
+                                                        ? 'This Local Media Profile does not manage any episodes yet.'
+                                                        : undefined,
+                                        operation: moveOperation,
+                                        controls: operationControls(moveOperation?.id, 'move', false),
+                                        onSelect: () => setMoveOpen(true),
+                                    },
+                                ] : []),
                                 {
                                     label: 'Rename all managed files',
                                     separatorBefore: true,
                                     icon: faIcon('fass', 'file-pen'),
-                                    disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation),
+                                    disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)
+                                        || statistics.managedMediaCount === 0,
                                     disabledReason: renameOperation
                                         ? 'A file rename operation is running for this profile.'
                                         : deleteDownloadsOperation
                                             ? 'A delete downloads operation is running for this profile.'
                                             : redownloadOperation
                                                 ? 'A re-download operation is running for this profile.'
-                                                : undefined,
+                                                : statistics.managedMediaCount === 0
+                                                    ? 'This Local Media Profile does not manage any files yet.'
+                                                    : undefined,
                                     operation: renameOperation,
                                     starting: isStarting('local_media_profile.rename_files'),
                                     controls: operationControls(renameOperation?.id, 'file rename'),
@@ -392,7 +396,10 @@ export default function LocalMediaProfilePage() {
                     </div>
                 </header>
 
-                <div className="local-media-profile-statistics" aria-label="Profile statistics">
+                <div
+                    className={`local-media-profile-statistics${profile.type === 'collection' ? '' : ' has-three-stats'}`}
+                    aria-label="Profile statistics"
+                >
                     <div className="local-media-profile-stat">
                         <span className="local-media-profile-stat-value">{statistics.managedMediaCount}</span>
                         <span className="local-media-profile-stat-label">{managedLabel}</span>
@@ -407,7 +414,7 @@ export default function LocalMediaProfilePage() {
                         </span>
                         <span className="local-media-profile-stat-label">Storage used</span>
                     </div>
-                    {profile.type === 'collection' && can('download_profiles') ? (
+                    {profile.type === 'collection' && (can('download_profiles') ? (
                         <Link className="local-media-profile-stat" to={downloadProfilesUrlForLocalMediaProfile(profile.id)}>
                             <span className="local-media-profile-stat-value">{statistics.downloadProfileCount}</span>
                             <span className="local-media-profile-stat-label">Download Profiles</span>
@@ -417,7 +424,7 @@ export default function LocalMediaProfilePage() {
                             <span className="local-media-profile-stat-value">{statistics.downloadProfileCount}</span>
                             <span className="local-media-profile-stat-label">Download Profiles</span>
                         </div>
-                    )}
+                    ))}
                 </div>
 
                 <dl className="local-media-profile-properties">
