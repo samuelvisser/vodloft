@@ -587,6 +587,8 @@ def _missing_playlist_files(playlist: Path, *, root: Path) -> list[Path]:
     missing: list[Path] = []
     saw_segment = False
     resolved_root = root.resolve()
+    # A bundle's parts are byte ranges of one file, listed once for every part: look at each file once.
+    uris: dict[str, None] = {}
     for raw in text.splitlines():
         line = raw.strip()
         uri: str | None = None
@@ -595,9 +597,10 @@ def _missing_playlist_files(playlist: Path, *, root: Path) -> list[Path]:
         elif line and not line.startswith("#"):
             uri = line
             saw_segment = True
+        if uri:
+            uris[uri] = None
 
-        if not uri:
-            continue
+    for uri in uris:
         candidate = (playlist.parent / uri).resolve()
         if not candidate.is_relative_to(resolved_root) or not candidate.is_file():
             missing.append(candidate)
