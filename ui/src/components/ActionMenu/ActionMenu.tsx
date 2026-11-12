@@ -166,7 +166,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                 >
                                     {({describedBy, explain}) => (
                                         <>
-                                            {item.separatorBefore && <div className="action-menu-separator" role="separator"/>}
+                                            {item.separatorBefore && index > 0 && <div className="action-menu-separator" role="separator"/>}
                                             <div className="action-menu-item-row">
                                                 {presentation ? (
                                                     <ProgressFill

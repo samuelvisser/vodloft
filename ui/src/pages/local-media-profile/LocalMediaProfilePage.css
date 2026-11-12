@@ -38,6 +38,11 @@
     gap: 12px;
 }
 
+/* Only Collection profiles have Download Profiles, so other types show three statistics. */
+.local-media-profile-statistics.has-three-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .local-media-profile-stat {
     display: grid;
     gap: 5px;
@@ -127,7 +132,7 @@ a.local-media-profile-stat:hover {
 }
 
 @media (max-width: 800px) {
-    .local-media-profile-statistics {
+    .local-media-profile-statistics:not(.has-three-stats) {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -154,7 +159,8 @@ a.local-media-profile-stat:hover {
         flex-wrap: wrap;
     }
 
-    .local-media-profile-statistics {
+    .local-media-profile-statistics,
+    .local-media-profile-statistics.has-three-stats {
         grid-template-columns: 1fr;
     }
 }
