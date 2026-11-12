@@ -404,22 +404,136 @@ export function renderCompactOutputTemplate(ast: OutputTemplateAst): string {
 // Blocks that only define values or helpers, and print nothing where they stand.
 const DEFINITION_BLOCKS = new Set(['set', 'macro'])
 
-function renderPathNodes(nodes: OutputTemplateNode[]): string {
+type PathRenderOptions = {
+    // Print each expression as its first variable only: `{{ "%02d"|format(season|int) }}` reads `{{ season }}`.
+    simplifyExpressions?: boolean
+}
+
+type ExpressionToken = {kind: 'name' | 'string' | 'number' | 'symbol'; value: string}
+
+// Words in an expression that are operators or literals, never a variable.
+const EXPRESSION_KEYWORDS = new Set([
+    'if', 'else', 'and', 'or', 'not', 'in', 'is', 'true', 'false', 'none', 'True', 'False', 'None',
+])
+
+function tokenizeExpression(body: string): ExpressionToken[] {
+    const tokens: ExpressionToken[] = []
+    let index = 0
+    while (index < body.length) {
+        const character = body[index]
+        if (/\s/.test(character)) {
+            index += 1
+            continue
+        }
+        if (character === '"' || character === "'") {
+            let end = index + 1
+            while (end < body.length && body[end] !== character) end += body[end] === '\\' ? 2 : 1
+            tokens.push({kind: 'string', value: body.slice(index, end + 1)})
+            index = end + 1
+            continue
+        }
+        const name = /^[A-Za-z_][A-Za-z0-9_]*/.exec(body.slice(index))
+        if (name) {
+            tokens.push({kind: 'name', value: name[0]})
+            index += name[0].length
+            continue
+        }
+        const number = /^[0-9][0-9_.]*/.exec(body.slice(index))
+        if (number) {
+            tokens.push({kind: 'number', value: number[0]})
+            index += number[0].length
+            continue
+        }
+        tokens.push({kind: 'symbol', value: character})
+        index += 1
+    }
+    return tokens
+}
+
+// Splits the tokens at a keyword that is not inside brackets.
+function splitTopLevel(tokens: ExpressionToken[], keyword: string): ExpressionToken[][] {
+    const parts: ExpressionToken[][] = [[]]
+    let depth = 0
+    for (const token of tokens) {
+        if (token.kind === 'symbol' && '([{'.includes(token.value)) depth += 1
+        if (token.kind === 'symbol' && ')]}'.includes(token.value)) depth -= 1
+        if (depth === 0 && token.kind === 'name' && token.value === keyword) {
+            parts.push([])
+            continue
+        }
+        parts[parts.length - 1].push(token)
+    }
+    return parts
+}
+
+function firstVariableInTokens(tokens: ExpressionToken[]): string | null {
+    for (let index = 0; index < tokens.length; index += 1) {
+        const token = tokens[index]
+        if (token.kind !== 'name' || EXPRESSION_KEYWORDS.has(token.value)) continue
+        const previous = tokens[index - 1]
+        // Filter names (`|int`), attributes (`.name`) and tests (`is defined`) are not variables.
+        if (previous?.kind === 'symbol' && (previous.value === '|' || previous.value === '.')) continue
+        if (previous?.kind === 'name' && previous.value === 'is') continue
+        if (previous?.kind === 'name' && previous.value === 'not' && tokens[index - 2]?.value === 'is') continue
+        // A name that is called is a function, like `range(...)`.
+        if (tokens[index + 1]?.kind === 'symbol' && tokens[index + 1].value === '(') continue
+
+        let variable = token.value
+        while (tokens[index + 1]?.value === '.' && tokens[index + 2]?.kind === 'name') {
+            variable += `.${tokens[index + 2].value}`
+            index += 2
+        }
+        return variable
+    }
+    return null
+}
+
+// The first variable the expression would print: the value of an `x if c else y` before its fallback,
+// and the first operand of an `a or b` before the next one.
+function firstPrintedVariable(tokens: ExpressionToken[]): string | null {
+    const conditional = splitTopLevel(tokens, 'if')
+    if (conditional.length > 1) {
+        const [value, ...rest] = conditional
+        const [condition, ...fallback] = splitTopLevel(rest.flat(), 'else')
+        return firstPrintedVariable(value)
+            ?? firstPrintedVariable(fallback.flat())
+            ?? firstVariableInTokens(condition)
+    }
+
+    const operands = splitTopLevel(tokens, 'or')
+    if (operands.length > 1) {
+        for (const operand of operands) {
+            const variable = firstPrintedVariable(operand)
+            if (variable) return variable
+        }
+        return null
+    }
+
+    return firstVariableInTokens(tokens)
+}
+
+function simplifiedExpressionSource(node: JinjaExpressionNode): string {
+    if (!node.complete) return node.source
+    const variable = firstPrintedVariable(tokenizeExpression(node.source.slice(2, -2)))
+    return variable ? `{{ ${variable} }}` : node.source
+}
+
+function renderPathNodes(nodes: OutputTemplateNode[], options: PathRenderOptions): string {
     return nodes.map((node) => {
         if (node.type === 'text') return node.value
-        if (node.type === 'expression') return node.source
+        if (node.type === 'expression') return options.simplifyExpressions ? simplifiedExpressionSource(node) : node.source
         // Comments and standalone statements such as `{% set x = … %}` print nothing.
         if (node.type !== 'block') return ''
         if (DEFINITION_BLOCKS.has(node.keyword)) return ''
         // Logic tags are hidden. A block keeps its first part, so `if`/`else` reads as one path, not two joined.
-        return renderPathNodes(node.body)
+        return renderPathNodes(node.body, options)
     }).join('')
 }
 
 // The template as it reads as a path: only the text and printed variables, without set blocks,
 // logic tags or comments, so every dynamic part stays a variable instead of one episode's value.
-export function renderPathOutputTemplate(ast: OutputTemplateAst): string {
-    return renderPathNodes(ast.children).trim()
+export function renderPathOutputTemplate(ast: OutputTemplateAst, options: PathRenderOptions = {}): string {
+    return renderPathNodes(ast.children, options).trim()
 }
 
 function nodesHaveLeadingPathPartSpace(nodes: OutputTemplateNode[]): boolean {
