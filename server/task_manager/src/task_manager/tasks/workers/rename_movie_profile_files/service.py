@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 
 from backend.services.no_ascii_names import settle_no_ascii_name
 from sqlalchemy import select
@@ -12,7 +13,9 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_types import MediaType
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.utils.output_template import resolve_movie_output_path, resolve_video_output_path
-from backend.services.download_relocation import DownloadRelocation, plan_download_relocation, relocate_downloads
+from backend.services.download_relocation import (
+    DownloadRelocation, number_shared_destinations, plan_download_relocation, relocate_downloads,
+)
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
@@ -84,6 +87,7 @@ def _plan_renames(
             },
         )
 
+    planned: list[tuple[MediaDownloadBase, Path, Path]] = []
     moves: list[DownloadRelocation] = []
     unchanged = 0
     for download in downloads:
@@ -117,11 +121,13 @@ def _plan_renames(
             raise ValueError(
                 f"Media download {download.id} is not a movie, movie extra or video"
             )
-        destination = settle_no_ascii_name(download, destination, session=session)
+        planned.append((download, source, settle_no_ascii_name(download, destination, session=session)))
+
+    destinations = number_shared_destinations([(source, destination) for _download, source, destination in planned])
+    for (download, source, _wanted), destination in zip(planned, destinations):
         if source == destination:
             unchanged += 1
             continue
-
         moves.append(plan_download_relocation(download, source, destination))
 
     if not moves:
