@@ -13,7 +13,8 @@ import './OutputTemplateEditor.css'
 import './ReadOnlyOutputTemplateCode.css'
 
 // 'path' hides set blocks, logic tags and comments and shows only the path with its variables.
-export type OutputTemplateRenderMode = 'compact' | 'editor' | 'path'
+// 'simplified-path' also shows each expression as just its first variable, without filters or fallbacks.
+export type OutputTemplateRenderMode = 'compact' | 'editor' | 'path' | 'simplified-path'
 
 export type ReadOnlyOutputTemplateCodeProps = {
     source: string
@@ -42,18 +43,19 @@ export default function ReadOnlyOutputTemplateCode({
     className,
 }: ReadOnlyOutputTemplateCodeProps) {
     const ast = parseOutputTemplate(source, sourceMode)
+    const isPath = renderMode === 'path' || renderMode === 'simplified-path'
     const value = renderMode === 'compact'
         ? renderCompactOutputTemplate(ast)
-        : renderMode === 'path'
-            ? renderPathOutputTemplate(ast)
+        : isPath
+            ? renderPathOutputTemplate(ast, {simplifyExpressions: renderMode === 'simplified-path'})
             : renderEditorOutputTemplate(ast).value
 
     return (
         <CodeMirror
-            className={`output-template-code-editor read-only-output-template-code-editor${renderMode === 'path' ? ' is-path' : ''}${className ? ` ${className}` : ''}`}
+            className={`output-template-code-editor read-only-output-template-code-editor${isPath ? ' is-path' : ''}${className ? ` ${className}` : ''}`}
             value={value}
             editable={false}
-            extensions={renderMode === 'path' ? pathCodeExtensions : readOnlyCodeExtensions}
+            extensions={isPath ? pathCodeExtensions : readOnlyCodeExtensions}
             basicSetup={{
                 lineNumbers: false,
                 foldGutter: false,
