@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import re
 import shutil
@@ -21,6 +22,7 @@ _PROGRESS_INTERVAL_S = 1.0
 _CHUNK_SIZE = 256 * 1024
 _URI_ATTRIBUTE_RE = re.compile(r'URI="[^"]*"')
 _HLS_BUNDLE_MARKER = ".vodloft-hls-bundle"
+_SUBTITLE_GROUP = "subtitles"
 # A variant's subtitles, captions and other video renditions are not downloaded, so a bundle's master
 # must not name their groups: Apple's players refuse a playlist that names a group it does not define.
 _GROUPS_NOT_KEPT_RE = re.compile(r',(?:SUBTITLES|CLOSED-CAPTIONS|VIDEO)="[^"]*"')
@@ -287,6 +289,77 @@ def write_hls_bundle(
     except BaseException:
         _discard_staging(master_path)
         raise
+
+
+@dataclass(frozen=True)
+class BundleSubtitle:
+    """A WebVTT subtitle to keep in an HLS bundle."""
+
+    path: Path
+    language: str
+    name: str
+    """What players list it as; unique within the bundle."""
+    default: bool = False
+    forced: bool = False
+
+
+def add_hls_subtitles(master_path: str | Path, subtitles: list[BundleSubtitle]) -> None:
+    """Keep each subtitle in the bundle as one WebVTT file with a playlist of its own, and list them
+    in the master, so players offer them with the video.
+
+    The bundle then needs these files, just like its video: a bundle that misses one is incomplete.
+    """
+    if not subtitles:
+        return
+    master = Path(master_path)
+    root = hls_asset_root(master)
+    text = master.read_text(encoding="utf-8")
+    playlists = _listed_playlists(master, root)
+    duration = _playlist_duration(playlists[-1]) if playlists else 0.0
+    if duration <= 0:
+        raise DownloadError("The HLS bundle has no length to give its subtitles")
+
+    media_lines = []
+    for index, subtitle in enumerate(subtitles):
+        directory = root / f"subtitles-{index}"
+        shutil.rmtree(directory, ignore_errors=True)
+        directory.mkdir()
+        shutil.copyfile(subtitle.path, directory / "subtitles.vtt")
+        (directory / "playlist.m3u8").write_text(
+            "\n".join((
+                "#EXTM3U", "#EXT-X-VERSION:3", f"#EXT-X-TARGETDURATION:{math.ceil(duration)}",
+                "#EXT-X-MEDIA-SEQUENCE:0", "#EXT-X-PLAYLIST-TYPE:VOD",
+                f"#EXTINF:{duration:.3f},", "subtitles.vtt", "#EXT-X-ENDLIST",
+            )) + "\n",
+            encoding="utf-8",
+        )
+        name = subtitle.name.replace('"', "'")
+        media_lines.append(
+            f'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="{_SUBTITLE_GROUP}",NAME="{name}",LANGUAGE="{subtitle.language}",'
+            f'DEFAULT={"YES" if subtitle.default else "NO"},AUTOSELECT=YES,FORCED={"YES" if subtitle.forced else "NO"},'
+            f'URI="hls/subtitles-{index}/playlist.m3u8"'
+        )
+
+    lines = text.splitlines()
+    first_variant = next(index for index, line in enumerate(lines) if line.startswith("#EXT-X-STREAM-INF:"))
+    lines = [
+        *lines[:first_variant], *media_lines,
+        *(f'{line},SUBTITLES="{_SUBTITLE_GROUP}"' if line.startswith("#EXT-X-STREAM-INF:") else line for line in lines[first_variant:]),
+    ]
+    part_path = Path(f"{master}.part")
+    part_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.replace(part_path, master)
+
+
+def _playlist_duration(playlist: Path) -> float:
+    total = 0.0
+    for line in playlist.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#EXTINF:"):
+            try:
+                total += float(line.split(":", 1)[1].split(",", 1)[0])
+            except ValueError:
+                continue
+    return total
 
 
 def _select_required_renditions(

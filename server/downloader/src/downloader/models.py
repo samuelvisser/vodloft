@@ -90,6 +90,8 @@ class WrittenSubtitle(NamedTuple):
     language: str
     path: str
     auto_generated: bool = False
+    webvtt_path: str | None = None
+    """The same subtitle as WebVTT, written for an HLS bundle."""
 
 
 class VideoStream(NamedTuple):

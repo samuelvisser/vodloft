@@ -481,6 +481,8 @@ def rss_feed_episode_hls_asset(
         media_type = "application/x-mpegURL"
     elif candidate.suffix.lower() == ".ts":
         media_type = "video/mp2t"
+    elif candidate.suffix.lower() == ".vtt":
+        media_type = "text/vtt"
 
     return FileResponse(
         candidate,
