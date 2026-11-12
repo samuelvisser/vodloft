@@ -1,4 +1,5 @@
-import {useCallback, useEffect, useMemo, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {Link, useNavigate, useParams} from 'react-router-dom'
@@ -7,6 +8,7 @@ import {useCollectionDownloadProfilesView} from '../../lib/queries'
 import {StreamProfileReadView} from '../../types/schemas/stream_profile_base'
 import StreamProfileForm from '../../components/StreamProfile/StreamProfileForm'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
+import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import {RssStreamProfileUpdateIn, RssStreamProfileUpdateSchema} from '../../types/schemas/rss_stream_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {faIcon} from '../../icons/faIcon'
@@ -63,6 +65,7 @@ export default function EditStreamProfilePage() {
     }, [streamProfile, form])
 
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
+    const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
     const [regenerating, setRegenerating] = useState(false)
     const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false)
@@ -164,11 +167,30 @@ export default function EditStreamProfilePage() {
                     />
 
                     <div className="actions">
+                        <button
+                            type="button"
+                            className="btn btn-danger"
+                            style={{marginRight: 'auto'}}
+                            onClick={() => confirmRef.current?.open(streamProfile)}
+                        >
+                            <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
+                            <span>Delete profile</span>
+                        </button>
                         <button type="button" className="btn" onClick={onCancel}>Cancel</button>
                         <input type="submit" className="btn btn-primary" value="Save changes" disabled={isSubmitting} />
                     </div>
                 </form>
             )}
+
+            <ConfirmDeleteDialog
+                ref={confirmRef}
+                title="Delete stream profile"
+                subjectProp="collectionTitle"
+                deleteRequest={() => fetch(`${apiUrl()}/rss-stream-profiles/${profileId}`, {method: 'DELETE', credentials: 'include'})}
+                invalidateQueries={[['streamProfilesView']]}
+                inUseMessage="This stream profile is in use, it cannot be deleted"
+                onDeleted={onCancel}
+            />
 
             <ConfirmDialog
                 open={regenerateConfirmOpen}
