@@ -171,6 +171,8 @@ def _available(selection: EpisodeSelection, episode: Episode, locks: AccessLocks
 
 
 def _newest_first(episodes: Iterable[Episode]) -> list[Episode]:
+    # A query result can only be read once, and it is read twice below.
+    episodes = list(episodes)
     dated = [episode for episode in episodes if published_at(episode) is not None]
     undated = [episode for episode in episodes if published_at(episode) is None]
     dated.sort(key=lambda episode: (published_at(episode), episode.id), reverse=True)

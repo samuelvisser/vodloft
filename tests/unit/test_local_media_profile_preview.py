@@ -96,6 +96,31 @@ def test_edited_values_drive_both_paths_without_mutating_source(examples):
     assert actual.path == str(examples.root / "TV/Saved Show 1")
 
 
+def test_a_collection_directory_is_worked_out_once_until_what_decides_it_changes(examples, monkeypatch):
+    """The artwork task asks for every collection's directory each time it places a file."""
+    template = "/downloads/Asked Often/{{ collection_title }}/{{ title }}.ext"
+    analysed = []
+    real = collection_assets.infer_collection_media_directory
+
+    def counting(*args, **kwargs):
+        analysed.append(args[1]["collection_title"])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(collection_assets, "infer_collection_media_directory", counting)
+    collection = examples.collections[0]
+
+    for _ in range(3):
+        assert collection_assets.resolve_collection_media_directory(collection, template).path == str(
+            examples.root / "Asked Often/Saved Show 1"
+        )
+    collection.title = "Renamed Show"
+    assert collection_assets.resolve_collection_media_directory(collection, template).path == str(
+        examples.root / "Asked Often/Renamed Show"
+    )
+
+    assert analysed == ["Saved Show 1", "Renamed Show"]
+
+
 @pytest.mark.parametrize("folder,expected", [("New Folder", "New Folder"), ("", "Edited Show")])
 def test_custom_metadata_overrides_and_empty_fallbacks(examples, folder, expected):
     template = "/downloads/TV/{% if meta_collection_folder %}{{ meta_collection_folder }}{% else %}{{ collection_title }}{% endif %}/{{ title }}.ext"

@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import date, datetime, time
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
@@ -99,6 +100,9 @@ def _parse_output_template(output_template: str) -> nodes.Template:
         raise ValueError(f"Invalid Jinja template{location}: {exc.message}") from exc
 
 
+# Tasks ask the same few templates the same questions for every episode they pass, and parsing
+# a template costs far more than rendering it. A template's text decides each of these answers.
+@lru_cache(maxsize=256)
 def output_template_fields(output_template: str) -> frozenset[str]:
     """Return all context variables referenced by a Jinja path template."""
     parsed = _parse_output_template(output_template)
@@ -195,6 +199,7 @@ def typed_characters_the_mode_replaces(output_template: str, mode: FilenameRestr
     return replaced_typed_characters(typed, FilenameRestrictionMode(mode))
 
 
+@lru_cache(maxsize=256)
 def output_template_custom_index_keys(output_template: str) -> frozenset[str]:
     """Return literal custom-index keys referenced by one output template."""
     return frozenset(output_template_custom_index_calls(output_template))
@@ -537,6 +542,7 @@ class PreparedOutputTemplate:
         return rendered
 
 
+@lru_cache(maxsize=256)
 def prepare_output_template(
     output_template: str,
     *,

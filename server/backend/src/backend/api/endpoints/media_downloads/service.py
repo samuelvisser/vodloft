@@ -469,9 +469,8 @@ def get_media_downloads_page(
     except LookupError:
         raise HTTPException(status_code=422, detail="Invalid download cursor key")
 
-    has_more = len(window.rows) > limit
-    page_rows = window.rows[:limit]
-    selected_ids = [int(row.id) for row in page_rows]
+    has_more = len(window.ids) > limit
+    selected_ids = window.ids[:limit]
     revision = window.revision
 
     if selected_ids:
@@ -493,21 +492,13 @@ def get_media_downloads_page(
             for media_download_id in selected_ids
             if media_download_id in selected_downloads_by_id
         ]
-        latest_runs = latest_download_runs(s, selected_ids)
-        queue_positions = {
-            int(row.id): int(row.queue_position)
-            for row in page_rows
-            if row.queue_position is not None
-        }
     else:
         selected_downloads = []
-        latest_runs = {}
-        queue_positions = {}
 
     next_cursor = None
-    if has_more and page_rows:
+    if has_more:
         # The next page continues after this row while the order stays the same.
-        cursor_key = [int(page_rows[-1].id)]
+        cursor_key = [selected_ids[-1]]
         next_cursor = encode_cursor({
             "kind": "media-download",
             "order": order,
@@ -520,8 +511,6 @@ def get_media_downloads_page(
         items=_build_media_download_views(
             s,
             selected_downloads,
-            latest_runs=latest_runs,
-            queue_positions=queue_positions,
         ),
         total=window.total,
         limit=limit,

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from hashlib import blake2b
 from typing import Literal, Optional
 
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import String, and_, case, cast, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from backend.api.pagination import InvalidCursorError, KeysetField, decode_cursor, encode_cursor, keyset_after
@@ -172,23 +172,22 @@ def _task_ledger_collection_revision(
 
     Progress and other changes to a TaskRun do not invalidate a cursor unless
     they change its membership or its position in this particular collection.
-    The ordered ID stream also provides the exact total without a second count
-    query, and does not hydrate task objects into memory.
+
+    The database lists the ids as one text and counts them, so this reads one row.
+    Read a row per task, a page waited for the interpreter lock once per task
+    while task threads were busy: forty seconds with 57,000 tasks.
     """
-    statement = select(TaskRun.id).where(*filters)
+    statement = select(
+        func.aggregate_strings(cast(TaskRun.id, String), ",").aggregate_order_by(*ordering),
+        func.count(),
+    ).where(*filters)
     if definition_key is not None:
         statement = statement.join(
             TaskDefinition,
             TaskDefinition.id == TaskRun.definition_id,
         )
-    digest = blake2b(digest_size=16)
-    total = 0
-    for run_id in session.scalars(
-        statement.order_by(*ordering)
-    ).yield_per(512):
-        digest.update(f"{run_id},".encode("ascii"))
-        total += 1
-    return digest.hexdigest(), total
+    ordered_ids, total = session.execute(statement).one()
+    return blake2b((ordered_ids or "").encode("ascii"), digest_size=16).hexdigest(), total
 
 
 def _workflow_bucket():

@@ -718,6 +718,23 @@ def test_podcast_profile_respects_days_in_past_window(db_session):
     assert [episode.slug for episode in get_download_profile_episodes(db_session, profile)] == [recent.slug]
 
 
+def test_a_profile_downloads_episodes_without_a_publication_date(db_session):
+    """They come after the dated ones, newest first."""
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    lmp = _make_local_media_profile(db_session)
+    _make_episode(db_session, collection, season, slug="undated-1", ep_id="ep.1", status="published_final", published_at=None, index=1)
+    _make_episode(db_session, collection, season, slug="dated", ep_id="ep.2", status="published_final", published_at=_now(), index=2)
+    _make_episode(db_session, collection, season, slug="undated-2", ep_id="ep.3", status="published_final", published_at=None, index=3)
+    profile = _make_podcast_profile(db_session, collection, lmp)
+
+    assert [episode.slug for episode in get_download_profile_episodes(db_session, profile)] == [
+        "dated", "undated-2", "undated-1",
+    ]
+
+
 def test_series_profile_filters_by_seasons(db_session):
     from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
@@ -1108,6 +1125,87 @@ def test_a_large_show_is_reconciled_in_short_write_transactions(db_session, monk
     assert db_session.query(TaskOperation).count() == 120
     # Three batches of at most 50 episodes, the cleanup and the final dispatch.
     assert len(transactions) == 5
+
+
+def _downloaded_show(db_session, count):
+    from backend.db.models import Episode
+
+    profile = _large_show(db_session, count)
+    episodes = db_session.query(Episode).order_by(Episode.id).all()
+    downloads = [_completed_download(db_session, episode, profile.local_media_profile, profile) for episode in episodes]
+    return profile, episodes, downloads
+
+
+def _reconciled_episodes(db_session, monkeypatch):
+    """Run the worker; the episode ids it reconciled one by one."""
+    from task_manager.tasks.workers.download_profile_worker import service
+
+    monkeypatch.setattr(service, "dispatch_queued_media_download_operations", Mock(return_value=0))
+    real = service._reconcile_episodes
+    reconciled = []
+
+    def recording(s, profile_id, version, episode_ids):
+        reconciled.extend(episode_ids)
+        return real(s, profile_id, version, episode_ids)
+
+    monkeypatch.setattr(service, "_reconcile_episodes", recording)
+    asyncio.run(service.run_download_profile_worker(db_session))
+    return reconciled
+
+
+def test_a_pass_over_downloaded_episodes_reconciles_none_of_them(db_session, monkeypatch):
+    """Most passes find every file where it belongs, and then they must cost next to nothing."""
+    from task_manager.scheduler.db import TaskOperation
+
+    _downloaded_show(db_session, 60)
+
+    assert _reconciled_episodes(db_session, monkeypatch) == []
+    assert db_session.query(TaskOperation).count() == 0
+
+
+def test_a_pass_still_downloads_an_episode_whose_file_is_gone(db_session, monkeypatch):
+    from pathlib import Path
+    from task_manager.scheduler.db import TaskOperation
+
+    _profile, episodes, downloads = _downloaded_show(db_session, 3)
+    Path(downloads[1].file_path).unlink()
+
+    assert _reconciled_episodes(db_session, monkeypatch) == [episodes[1].id]
+    operation = db_session.query(TaskOperation).one()
+    assert operation.resource_id == downloads[1].id
+
+
+def test_an_episode_with_a_queued_download_is_not_passed_over(db_session):
+    from backend.db.core import run_write_transaction
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from task_manager.tasks.media_download_operations import create_media_download_operation
+    from task_manager.tasks.workers.download_profile_worker._helpers import episodes_with_nothing_to_do
+
+    profile, episodes, downloads = _downloaded_show(db_session, 3)
+    queued = downloads[0].id
+    run_write_transaction(
+        lambda w: create_media_download_operation(w, w.get(EpisodeMediaDownload, queued), source="USER", is_redownload=True)
+    )
+    db_session.rollback()
+
+    assert episodes_with_nothing_to_do(db_session, profile, episodes) == {episodes[1].id, episodes[2].id}
+
+
+def test_an_early_download_that_is_not_marked_for_its_final_version_is_not_passed_over(db_session):
+    from task_manager.tasks.workers.download_profile_worker._helpers import episodes_with_nothing_to_do
+
+    profile, episodes, downloads = _downloaded_show(db_session, 2)
+    profile.download_with_countdown = True
+    profile.redownload_final = True
+    episodes[0].publish_status = "published_preliminary"
+    db_session.commit()
+
+    assert episodes_with_nothing_to_do(db_session, profile, episodes) == {episodes[1].id}
+
+    downloads[0].redownload_when_final = True
+    db_session.commit()
+
+    assert episodes_with_nothing_to_do(db_session, profile, episodes) == {episodes[0].id, episodes[1].id}
 
 
 def test_a_profile_disabled_during_a_run_stops_at_the_next_batch(db_session, monkeypatch):
