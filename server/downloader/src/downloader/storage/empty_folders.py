@@ -6,6 +6,8 @@ every rule below holds on its own:
 - A folder is only ever removed with ``os.rmdir``, which the operating system refuses for a folder that
   holds anything at all: a hidden file, a symbolic link, another folder. Nothing here deletes a file or
   walks into a folder, and nothing may be added that does.
+- The one thing that may be cleared out of a folder first is the ``@eaDir`` index data a Synology NAS
+  left there, under the rules of ``synology_index_data``, which lives apart so those rules stay in one place.
 - Only the folders the caller names are tried, and from each one its parents in turn, stopping at the
   first folder that cannot be removed.
 - The root is never removed and nothing outside it is touched. A folder reached through a symbolic link
@@ -14,11 +16,14 @@ every rule below holds on its own:
 """
 from __future__ import annotations
 
+import errno
 import logging
 import os
 import stat
 from collections.abc import Iterable
 from pathlib import Path
+
+from .synology_index_data import remove_synology_index_data
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +50,15 @@ def remove_emptied_folders(folders: Iterable[Path], *, root: Path, keep: Iterabl
         while _may_try(folder, real_root, kept):
             try:
                 os.rmdir(folder)
-            except OSError:
-                # Not empty, in use, or not ours to remove: it stays, and so do its parents.
-                break
+            except OSError as error:
+                # Not empty, in use, or not ours to remove: it stays, and so do its parents. The one
+                # exception is a folder that holds nothing but the index data of a Synology NAS.
+                if error.errno not in (errno.ENOTEMPTY, errno.EEXIST) or not remove_synology_index_data(folder):
+                    break
+                try:
+                    os.rmdir(folder)
+                except OSError:
+                    break
             removed.append(folder)
             folder = folder.parent
     if removed:

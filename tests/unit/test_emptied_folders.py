@@ -137,6 +137,7 @@ def test_nothing_but_rmdir_can_remove_anything(root, monkeypatch):
     episode = _folder(root, "show", "episode")
     (episode / "keep.txt").write_text("keep")
     monkeypatch.setattr(empty_folders, "_may_try", lambda *_: True)
+    monkeypatch.setattr(empty_folders, "remove_synology_index_data", lambda _folder: False)
 
     def forbidden(*_args, **_kwargs):
         raise AssertionError("only os.rmdir may remove")
@@ -290,3 +291,109 @@ def test_a_redownload_keeps_the_old_folder_when_something_else_is_in_it(tmp_path
     download_adapter._retire_previous_after_commit(previous, execution)
 
     assert [path.name for path in old.parent.iterdir()] == ["my notes.txt"]
+
+
+def _index_data(folder: Path) -> Path:
+    """What DSM leaves beside two media files it indexed."""
+    index = folder / "@eaDir"
+    (index / "Episode.mp4").mkdir(parents=True)
+    (index / "Episode.mp4" / "SYNOVIDEO_VIDEO_SCREENSHOT.jpg").write_bytes(b"thumb")
+    (index / "Episode.mp4" / "SYNOINDEX_MEDIA_INFO").write_bytes(b"info")
+    (index / "Episode.nfo@SynoEAStream").write_bytes(b"attributes")
+    (index / "Episode.jpg@SynoResource").write_bytes(b"resource")
+    return index
+
+
+def test_a_folder_holding_only_synology_index_data_is_removed(root):
+    episode = _folder(root, "show-slug", "episode")
+    _index_data(episode)
+    _index_data(episode.parent)
+
+    removed = remove_emptied_folders([episode], root=root)
+
+    assert removed == [episode, episode.parent]
+    assert list(root.iterdir()) == []
+
+
+def test_index_data_beside_any_other_file_stays(root):
+    episode = _folder(root, "show-slug", "episode")
+    index = _index_data(episode)
+    (episode / "notes.txt").write_text("mine")
+
+    assert remove_emptied_folders([episode], root=root) == []
+    assert (index / "Episode.mp4" / "SYNOINDEX_MEDIA_INFO").read_bytes() == b"info"
+
+
+def _unexpected_file(index: Path) -> None:
+    (index / "holiday.mp4").write_bytes(b"mine")
+
+
+def _unexpected_file_in_a_media_folder(index: Path) -> None:
+    (index / "Episode.mp4" / "cover.jpg").write_bytes(b"mine")
+
+
+def _attribute_name_one_level_down(index: Path) -> None:
+    (index / "Episode.mp4" / "mine@SynoResource").write_bytes(b"mine")
+
+
+def _folder_one_level_too_deep(index: Path) -> None:
+    (index / "Episode.mp4" / "SYNO_deeper").mkdir()
+
+
+def _link_to_a_file(index: Path) -> None:
+    target = index.parent.parent / "target.mp4"
+    target.write_bytes(b"mine")
+    (index / "SYNO_link").symlink_to(target)
+
+
+def _link_to_a_folder(index: Path) -> None:
+    target = index.parent.parent / "target"
+    target.mkdir()
+    (target / "SYNO_keep").write_bytes(b"mine")
+    (index / "Linked.mp4").symlink_to(target, target_is_directory=True)
+
+
+def _named_pipe(index: Path) -> None:
+    os.mkfifo(index / "SYNO_pipe")
+
+
+@pytest.mark.parametrize("spoil", [
+    _unexpected_file, _unexpected_file_in_a_media_folder, _attribute_name_one_level_down,
+    _folder_one_level_too_deep, _link_to_a_file, _link_to_a_folder, _named_pipe,
+])
+def test_index_data_holding_anything_synology_does_not_write_is_left_whole(root, spoil):
+    episode = _folder(root, "show-slug", "episode")
+    index = _index_data(episode)
+    spoil(index)
+    before = sorted(path.relative_to(root) for path in root.rglob("*"))
+
+    assert remove_emptied_folders([episode], root=root) == []
+    assert sorted(path.relative_to(root) for path in root.rglob("*")) == before
+    assert (index / "Episode.mp4" / "SYNOVIDEO_VIDEO_SCREENSHOT.jpg").read_bytes() == b"thumb"
+
+
+def test_an_index_folder_that_is_a_link_is_not_followed(root):
+    episode = _folder(root, "show-slug", "episode")
+    elsewhere = _index_data(_folder(root, "elsewhere"))
+    (episode / "@eaDir").symlink_to(elsewhere, target_is_directory=True)
+
+    assert remove_emptied_folders([episode], root=root) == []
+    assert (elsewhere / "Episode.mp4" / "SYNOINDEX_MEDIA_INFO").read_bytes() == b"info"
+
+
+@pytest.mark.parametrize("name", ["@eadir", "eaDir", "@eaDir2", ".@eaDir"])
+def test_only_the_exact_index_folder_name_counts(root, name):
+    episode = _folder(root, "show-slug", "episode")
+    _index_data(episode).rename(episode / name)
+
+    assert remove_emptied_folders([episode], root=root) == []
+    assert (episode / name / "Episode.mp4" / "SYNOINDEX_MEDIA_INFO").exists()
+
+
+def test_index_data_is_only_removed_from_folders_the_cleanup_may_remove(root):
+    kept = _folder(root, "Video")
+    _index_data(kept)
+    _index_data(root)
+
+    assert remove_emptied_folders([kept, root], root=root, keep=[kept / "new" / "episode.mp4"]) == []
+    assert (kept / "@eaDir").is_dir() and (root / "@eaDir").is_dir()
