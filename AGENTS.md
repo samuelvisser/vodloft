@@ -126,6 +126,24 @@ default changes dynamically based on certain conditions.
 
 Make sure to use this structure for any form adjustments and especially any new forms.
 
+### Server errors on form fields
+Every backend refusal should land under the form field the user can change. Keep this chain working:
+- Each error item is `{"loc": ["body", <field>, ...], "msg", "type"}`, where `<field>` is the camelCase name the API
+  model takes and the form uses. Python field and column names are converted with `to_camel`.
+- Pydantic field errors carry that `loc` already. A `model_validator` refusal that one field can fix raises
+  `FieldValueError(<python field name>, message)` from `backend.services.errors`; the API's validation handler moves it
+  under that field. A plain `ValueError` in a model validator lands on the form's fallback field.
+- `ServiceError(..., field=..., other_fields={...})` puts a service refusal under one or more fields. When more than
+  one setting can fix a clash, name every one, and say in the message which existing record it clashes with.
+- Database constraint errors go through `integrity_error_handler` in `backend.api.errors`, which finds the columns of a
+  failed unique or NOT NULL constraint (by name in the models on PostgreSQL, from the message on SQLite) and reports
+  each one as its camelCase field.
+- In the UI, `buildServerAwareSubmit` / `applyFieldErrors` set each error on its field when the form knows that field,
+  and on `fallbackField` (or the root banner) otherwise. Use `fieldAlias` for hidden fields such as `slug`, and only
+  add a `mapMessage` override when the server's message is not good enough. A field that can receive a server error
+  must show `errors.<field>`, also when it is edited in a dialog.
+- `tests/unit/test_api_errors.py` covers the backend side; extend it when you change this chain.
+
 ### React Select
 Whenever you add a Select component anywhere, always use ReactSelect, or components using it like SimpleSelect. 
 Enable search only if there are a lot of items. Keep most select components simple (SimpleSelect). 

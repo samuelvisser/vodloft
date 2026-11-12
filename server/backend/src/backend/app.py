@@ -12,13 +12,16 @@ from contextlib import asynccontextmanager, contextmanager
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from sqlalchemy.exc import IntegrityError
 
-from backend.api.errors import collection_already_added_handler, integrity_error_handler, source_request_error_handler
+from backend.api.errors import (
+    collection_already_added_handler, integrity_error_handler, source_request_error_handler, validation_error_handler,
+)
 from backend.services.sites import CollectionAlreadyAddedError
 from backend.services.source_requests import SourceRequestError
 from backend.utils.custom_index import CustomIndexNotReadyError
@@ -191,6 +194,7 @@ def create_app() -> FastAPI:
 
     # Exception handlers
     app.add_exception_handler(IntegrityError, integrity_error_handler)
+    app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(SourceRequestError, source_request_error_handler)
     app.add_exception_handler(CollectionAlreadyAddedError, collection_already_added_handler)
     app.add_exception_handler(StarletteHTTPException, _network_aware_http_exception_handler)
@@ -218,7 +222,10 @@ def create_app() -> FastAPI:
         if error.field is None:
             return JSONResponse({"detail": str(error)}, status_code=error.status_code)
         return JSONResponse(
-            {"detail": [{"loc": ["body", error.field], "msg": str(error), "type": error.kind}]},
+            {"detail": [
+                {"loc": ["body", field], "msg": message, "type": error.kind}
+                for field, message in {error.field: str(error), **error.other_fields}.items()
+            ]},
             status_code=error.status_code,
         )
 
