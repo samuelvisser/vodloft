@@ -304,3 +304,32 @@ def test_feed_and_stable_media_routes_accept_head_requests():
     assert set(routes) == expected_paths
     for route in routes.values():
         assert {"GET", "HEAD"}.issubset(route.methods)
+
+
+def test_hls_parts_are_served_without_checking_the_whole_download_again(monkeypatch):
+    """A player asks for a part every few seconds; checking every part of the download each time made
+    the picture fall behind, so a part only needs the download VODLoft already knows."""
+    from backend.api.endpoints.feeds import service
+
+    def download(preferred_format, status, path, day):
+        return SimpleNamespace(
+            local_media_profile=SimpleNamespace(preferred_format=preferred_format), artifact_status=status,
+            file_path=path, downloaded_at=datetime(2026, 11, day, tzinfo=timezone.utc), updated_at=None,
+        )
+
+    downloads = [
+        download("format_audio_only", "available", "/a/episode.m4a", 12),
+        download("format_hls", "missing", "/b/newer.m3u8", 11),
+        download("format_hls", "available", "/c/episode.m3u8", 10),
+    ]
+    monkeypatch.setattr(service, "_episode_downloads", lambda s, profile, episode_id: downloads)
+
+    def reconcile(*args, **kwargs):
+        raise AssertionError("a part does not check the whole download")
+
+    monkeypatch.setattr(service, "resolve_media_download_file", reconcile)
+
+    episode = SimpleNamespace(id=1)
+    assert service.get_local_hls_master(None, _profile("audio_hls"), episode) == Path("/c/episode.m3u8")
+    downloads.pop()
+    assert service.get_local_hls_master(None, _profile("audio_hls"), episode) is None

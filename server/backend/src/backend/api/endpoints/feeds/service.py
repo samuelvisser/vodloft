@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from email.utils import format_datetime
+from pathlib import Path
 from typing import Literal, Optional
 from xml.etree.ElementTree import Element, SubElement, tostring
 
@@ -227,6 +228,29 @@ def get_local_download_for_episode(
         preferred_format=profile.preferred_format,
         prefer_exact_match=profile.prefer_exact_match,
     )
+
+
+def get_local_hls_master(
+        s: Session,
+        profile: RssStreamProfile,
+        episode: Episode,
+) -> Optional[Path]:
+    """The playlist of the episode's HLS download, for serving one of its parts.
+
+    A player asks for a part every few seconds, so this only trusts what VODLoft already knows of the
+    download. Checking every part of the bundle each time took seconds, longer than a part plays, and
+    the picture never kept up; the playlist itself is checked when the player first asks for it.
+    """
+    for download in _candidate_downloads(
+        _episode_downloads(s, profile, episode.id),
+        kind="hls",
+        preferred_format=profile.preferred_format,
+        prefer_exact_match=False,
+    ):
+        path = Path(download.file_path)
+        if download.artifact_status == _AVAILABLE_ARTIFACT_STATUS and path.suffix.lower() == ".m3u8":
+            return path
+    return None
 
 
 def _mode_downloads(
