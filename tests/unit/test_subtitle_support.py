@@ -107,7 +107,7 @@ World
     result = download_hls_webvtt(
         "https://cdn.example/subs.m3u8",
         maximum_bytes=100000, should_cancel=lambda: False,
-    ).decode()
+    ).srt.decode()
 
     assert "00:00:01,000 --> 00:00:02,000\nHello" in result
     assert "00:00:07,000 --> 00:00:08,000\nWorld" in result
@@ -131,7 +131,7 @@ def test_webvtt_without_maps_uses_global_or_segment_relative_timing(
     result = download_hls_webvtt(
         "https://cdn.example/subs.m3u8",
         maximum_bytes=100000, should_cancel=lambda: False,
-    ).decode()
+    ).srt.decode()
     assert f"{expected_time} --> 00:00:08,000\nSecond" in result
 
 
@@ -266,8 +266,11 @@ def test_subtitles_use_existing_publication_and_embedding_lifecycle(
     from downloader.lifecycle import DownloadTracker
     from downloader.models import DownloadProgress, DownloadResult
 
+    from downloader.subtitles import DownloadedSubtitle
+
     payload = b"1\n00:00:01,000 --> 00:00:02,000\nHello\n\n"
-    monkeypatch.setattr(sidecars, "download_hls_webvtt", lambda *_args, **_kwargs: payload)
+    webvtt = b"WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHello\n"
+    monkeypatch.setattr(sidecars, "download_hls_webvtt", lambda *_args, **_kwargs: DownloadedSubtitle(payload, webvtt))
     embedding_calls = []
     monkeypatch.setattr(
         coordinator, "embed_media",

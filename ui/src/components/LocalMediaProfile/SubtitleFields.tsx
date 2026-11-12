@@ -172,7 +172,7 @@ export default function SubtitleFields({form, mode: profileType, onSubtitleModeC
 
             <div className="help">
                 <ReadMore summary={`Subtitles from ${siteNames(subtitleSites)}. Subtitles saved beside the media are always SRT.`}>
-                    <p>Embedding needs an MP4 or MKV video, not an HLS bundle or audio.</p>
+                    <p>Embedding needs an MP4, MKV or HLS video, not audio. An HLS bundle keeps embedded subtitles inside it as WebVTT, so players that stream it can show them; subtitles beside it stay separate SRT files the bundle does not need.</p>
                 </ReadMore>
             </div>
 

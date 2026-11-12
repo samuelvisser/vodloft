@@ -257,8 +257,8 @@ def build_download_plan(
         raise ValueError("Asset IDs must be unique within an attempt")
     if artwork_asset_id is not None and not any(a.id == artwork_asset_id for a in assets):
         raise ValueError("Embedded artwork must reference a planned asset")
-    if source.hls_bundle and (metadata_tags or artwork_asset_id or subtitle_asset_ids):
-        raise DownloadError("HLS bundles support sidecars, not container embedding")
+    if source.hls_bundle and (metadata_tags or artwork_asset_id):
+        raise DownloadError("HLS bundles support sidecars, not embedded artwork or metadata")
     if source.ytdlp_command and (source.use_hls or source.remux_to_mp4 or source.convert_video_to_m4a):
         raise DownloadError("yt-dlp downloads produce their final format themselves")
     if any(asset.source_format == "ytdlp" for asset in assets) and not source.ytdlp_command:
@@ -268,8 +268,8 @@ def build_download_plan(
         for asset_id in subtitle_asset_ids
     ):
         raise ValueError("Embedded subtitles must reference distinct planned subtitle assets")
-    if subtitle_asset_ids and (source.audio_only or source.extension not in {"mp4", "m4v", "mkv"}):
-        raise DownloadError("Embedding subtitles requires an MP4 or MKV video output")
+    if subtitle_asset_ids and (source.audio_only or not (source.hls_bundle or source.extension in {"mp4", "m4v", "mkv"})):
+        raise DownloadError("Embedding subtitles requires an MP4, MKV or HLS video output")
     if source.remux_to_mp4 and source.convert_video_to_m4a:
         raise DownloadError("A source cannot be remuxed to MP4 and converted to M4A")
     if source.convert_video_to_m4a and (not source.audio_only or source.extension != "m4a"):

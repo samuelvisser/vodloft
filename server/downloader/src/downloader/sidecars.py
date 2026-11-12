@@ -25,6 +25,8 @@ class AcquiredSidecar:
     path: Path
     target_suffix: str
     size_bytes: int
+    webvtt: Path | None = None
+    """A subtitle as WebVTT too, for an HLS bundle."""
 
 
 def default_subtitle(subtitles: Sequence[AcquiredSidecar], languages: Sequence[str]) -> AcquiredSidecar | None:
@@ -71,17 +73,19 @@ def acquire_sidecar(spec: SidecarSpec, workspace: Path, tracker: DownloadTracker
                         return AcquiredSidecar(spec, path, spec.target_suffix or f".{spec.extension}", len(spec.content))
                     assert spec.url is not None
                     if spec.source_format == "hls_webvtt":
-                        content = download_hls_webvtt(
+                        subtitle = download_hls_webvtt(
                             spec.url, maximum_bytes=spec.maximum_bytes,
                             should_cancel=tracker.is_canceled,
                             progress=lambda value: tracker.progress(activity, value),
                         )
                         path = workspace / f"{spec.id}.srt"
-                        with path.open("xb") as out:
-                            out.write(content)
-                            out.flush()
-                            os.fsync(out.fileno())
-                        return AcquiredSidecar(spec, path, spec.target_suffix or ".srt", len(content))
+                        webvtt = workspace / f"{spec.id}.vtt"
+                        for target, content in ((path, subtitle.srt), (webvtt, subtitle.webvtt)):
+                            with target.open("xb") as out:
+                                out.write(content)
+                                out.flush()
+                                os.fsync(out.fileno())
+                        return AcquiredSidecar(spec, path, spec.target_suffix or ".srt", len(subtitle.srt), webvtt)
                     with http_get(spec.url, retries=0) as response:
                         extension = _extension_for_direct_file(spec.url, response.headers.get("Content-Type"))
                         if extension == "bin":
@@ -110,6 +114,7 @@ def acquire_sidecar(spec: SidecarSpec, workspace: Path, tracker: DownloadTracker
             except BaseException as exc:
                 if path is not None:
                     path.unlink(missing_ok=True)
+                    path.with_suffix(".vtt").unlink(missing_ok=True)
                 if isinstance(exc, (DownloadCanceled, InvalidSidecar, MediaUnavailableError)) or not isinstance(exc, Exception):
                     raise
                 if attempt + 1 == spec.attempts:
@@ -159,6 +164,7 @@ class SidecarDownloads:
                     target_suffix=suffix, title="Auto-generated" if subtitle.auto_generated else None,
                 ),
                 Path(subtitle.path), suffix, Path(subtitle.path).stat().st_size,
+                Path(subtitle.webvtt_path) if subtitle.webvtt_path else None,
             ))
         self._ytdlp[asset_id] = tuple(items)
 
