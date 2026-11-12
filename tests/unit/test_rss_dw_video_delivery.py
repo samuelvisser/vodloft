@@ -307,3 +307,33 @@ def test_compact_hls_bundle_validator_detects_missing_media_file(
     missing = hls_bundle.missing_hls_bundle_files(target)
 
     assert missing_media.resolve() in missing
+
+
+def test_hls_download_leaves_out_the_subtitle_group_it_does_not_download(tmp_path, monkeypatch):
+    """The Daily Wire's playlist names a subtitle group on each variant. The bundle does not keep the
+    subtitles, and Apple's players refuse a playlist that names a group it does not define."""
+    import downloader.hls_bundle as hls_bundle
+
+    master = """#EXTM3U
+#EXT-X-VERSION:5
+#EXT-X-INDEPENDENT-SEGMENTS
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub1",NAME="English",LANGUAGE="en",URI="subs.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=998800,CODECS="mp4a.40.2,avc1.64001f",RESOLUTION=854x480,CLOSED-CAPTIONS=NONE,SUBTITLES="sub1"
+480.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=2016300,CODECS="mp4a.40.2,avc1.640020",RESOLUTION=1280x720,CLOSED-CAPTIONS=NONE,SUBTITLES="sub1"
+720.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=3940200,CODECS="mp4a.40.2,avc1.64002a",RESOLUTION=1920x1080,CLOSED-CAPTIONS=NONE,SUBTITLES="sub1"
+1080.m3u8
+"""
+    playlists = {MASTER_URL: master, **{f"https://media.example/{height}.m3u8": _media(height) for height in (480, 720, 1080)}}
+    monkeypatch.setattr(hls_bundle, "http_get_text", lambda url: playlists[url])
+    monkeypatch.setattr(hls_bundle, "http_get", lambda url: _Response(f"bytes:{url}".encode()))
+
+    target = tmp_path / "episode.m3u8"
+    hls_bundle.download_hls_bundle(MASTER_URL, str(target))
+
+    variants = [line for line in target.read_text().splitlines() if line.startswith("#EXT-X-STREAM-INF:")]
+    assert variants[0] == (
+        '#EXT-X-STREAM-INF:BANDWIDTH=998800,CODECS="mp4a.40.2,avc1.64001f",RESOLUTION=854x480,CLOSED-CAPTIONS=NONE'
+    )
+    assert "sub1" not in target.read_text()

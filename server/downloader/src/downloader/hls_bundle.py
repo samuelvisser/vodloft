@@ -21,6 +21,9 @@ _PROGRESS_INTERVAL_S = 1.0
 _CHUNK_SIZE = 256 * 1024
 _URI_ATTRIBUTE_RE = re.compile(r'URI="[^"]*"')
 _HLS_BUNDLE_MARKER = ".vodloft-hls-bundle"
+# A variant's subtitles, captions and other video renditions are not downloaded, so a bundle's master
+# must not name their groups: Apple's players refuse a playlist that names a group it does not define.
+_GROUPS_NOT_KEPT_RE = re.compile(r',(?:SUBTITLES|CLOSED-CAPTIONS|VIDEO)="[^"]*"')
 
 
 @dataclass(frozen=True)
@@ -401,7 +404,7 @@ def _build_master_and_jobs(
         public_uri = f"hls/{height}p/playlist.m3u8"
         text = http_get_text(source_url)
         _validate_vod_media_playlist(text)
-        master_out.append(stream_line)
+        master_out.append(_GROUPS_NOT_KEPT_RE.sub("", stream_line))
         master_out.append(public_uri)
         jobs.append(_PlaylistJob(
             source_url=source_url,
@@ -587,6 +590,8 @@ def _missing_playlist_files(playlist: Path, *, root: Path) -> list[Path]:
     missing: list[Path] = []
     saw_segment = False
     resolved_root = root.resolve()
+    # A bundle's parts are byte ranges of one file, listed once for every part: look at each file once.
+    uris: dict[str, None] = {}
     for raw in text.splitlines():
         line = raw.strip()
         uri: str | None = None
@@ -595,9 +600,10 @@ def _missing_playlist_files(playlist: Path, *, root: Path) -> list[Path]:
         elif line and not line.startswith("#"):
             uri = line
             saw_segment = True
+        if uri:
+            uris[uri] = None
 
-        if not uri:
-            continue
+    for uri in uris:
         candidate = (playlist.parent / uri).resolve()
         if not candidate.is_relative_to(resolved_root) or not candidate.is_file():
             missing.append(candidate)
