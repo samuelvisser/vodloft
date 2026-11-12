@@ -31,7 +31,7 @@ NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
 UPCOMING_VIDEOS_REVISION = "158c03681e52"
 PROFILE_LOOKUP_INDEXES_REVISION = "5b8e1f3c2a90"
 IMPORTED_DOWNLOAD_PROFILES_REVISION = "a0eceaa70db5"
-HEAD_REVISION = "d7e173de7e72"
+HEAD_REVISION = "3f9c1e7a5b24"
 
 
 @pytest.fixture
@@ -1217,3 +1217,24 @@ def test_auto_subtitles_and_sponsorblock_move_to_the_local_media_profile(migrati
         2: ("fallback", False, default_segments),
     }
     assert not {"auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments"} & columns
+
+
+def test_the_database_unlinks_downloads_from_a_deleted_download_profile(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "d7e173de7e72")
+
+    def ondelete() -> str | None:
+        with engine.connect() as connection:
+            [foreign_key] = [
+                key for key in inspect(connection).get_foreign_keys("media_downloads_episode")
+                if key["constrained_columns"] == ["download_profile_id"]
+            ]
+        assert foreign_key["name"] == "fk_media_downloads_episode_download_profile_id_download_profiles"
+        return foreign_key["options"].get("ondelete")
+
+    assert ondelete() is None
+    command.upgrade(config, HEAD_REVISION)
+    assert ondelete() == "SET NULL"

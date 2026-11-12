@@ -23,10 +23,12 @@ type ConfirmDeleteDialogProps = {
     invalidateQueries?: QueryKey | QueryKey[]
     // Optional message to show when backend indicates the item is in use and cannot be deleted
     inUseMessage?: string
+    // What the toast says once the item is deleted; "Deleted <subject>" when left out
+    deletedMessage?: (item: any) => string
 }
 
 const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDialogProps>(function ConfirmDeleteDialog(props, ref) {
-    const {title, subjectProp, deleteRequest, invalidateQueries, inUseMessage} = props
+    const {title, subjectProp, deleteRequest, invalidateQueries, inUseMessage, deletedMessage} = props
     const qc = useQueryClient()
     const [item, setItem] = useState<any | null>(null)
 
@@ -36,6 +38,10 @@ const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDial
         open: (i) => setItem(i),
         close,
     }), [close])
+
+    const subjectOf = useCallback((i: any): string => typeof subjectProp === 'function'
+        ? subjectProp(i)
+        : String(i?.[subjectProp] ?? ''), [subjectProp])
 
     const onConfirmDelete = useCallback(async () => {
         if (!item) return
@@ -72,6 +78,7 @@ const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDial
                 const keys = isListOfKeys ? (keysInput as QueryKey[]) : [keysInput as QueryKey]
                 await Promise.all(keys.map((key) => qc.invalidateQueries({queryKey: key})))
             }
+            toast.success(deletedMessage ? deletedMessage(item) : `Deleted ${subjectOf(item)}`)
         } catch (e) {
             const friendly = 'Failed to delete item (network error)'
             console.error(e)
@@ -79,13 +86,11 @@ const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDial
         } finally {
             close()
         }
-    }, [item, qc, close, deleteRequest, invalidateQueries, inUseMessage])
+    }, [item, qc, close, deleteRequest, invalidateQueries, inUseMessage, deletedMessage, subjectOf])
 
     if (!item) return null
 
-    const subject = typeof subjectProp === 'function'
-        ? subjectProp(item as any)
-        : String((item as any)?.[subjectProp] ?? '')
+    const subject = subjectOf(item)
 
     return (
         <ConfirmDialog
