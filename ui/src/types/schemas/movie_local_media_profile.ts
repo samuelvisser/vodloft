@@ -1,6 +1,6 @@
 import {z} from 'zod'
 
-import {MoviePreferredFormatReg} from '../local_media_profile'
+import {VideoPreferredFormatReg} from '../local_media_profile'
 import {
     LocalMediaProfileCreateBaseSchema,
     LocalMediaProfileOutputTemplateSchema,
@@ -17,7 +17,8 @@ const MovieLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
     outputTemplate: LocalMediaProfileOutputTemplateSchema.default(
         "/downloads/movies/{{ movie_title }}/{{ title }}{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext",
     ),
-    preferredFormat: z.enum(MoviePreferredFormatReg.values).default('format_1080p'),
+    // A movie is always kept as a video.
+    preferredFormat: z.enum(VideoPreferredFormatReg.values).exclude(['format_audio_only']).default('format_1080p'),
 })
 
 export const MovieLocalMediaProfileCreateSchema = MovieLocalMediaProfileBaseSchema.extend({

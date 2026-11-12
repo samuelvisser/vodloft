@@ -68,6 +68,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
         title="Run Hide Fight",
         duration=109 * 60,
         sharing_url="https://www.dailywire.com/videos/run-hide-fight",
+        has_video=True,
         is_downloadable=True,
         movie_extras=[official_trailer],
         trailer=official_trailer,

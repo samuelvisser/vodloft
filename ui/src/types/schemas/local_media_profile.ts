@@ -25,10 +25,7 @@ export * from './video_local_media_profile'
 
 export const LocalMediaProfileServerErrors = createServerErrorMapper({
     name: {unique_violation: 'Name is already taken.'},
-    slug: {unique_violation: 'Slug is already taken.'},
-    outputTemplate: {
-        unique_violation: 'A profile with these output settings already exists.',
-    },
+    slug: {unique_violation: 'Name is already taken.'},
 })
 
 

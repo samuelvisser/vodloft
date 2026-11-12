@@ -4,7 +4,6 @@ import {zodResolver} from '@hookform/resolvers/zod'
 import {ChosenCollectionCard} from './CollectionPreviewCard'
 import type {CollectionCreatePayloadOut} from '../../types/schemas/collection'
 import LocalMediaProfileCommonFields from '../LocalMediaProfile/LocalMediaProfileCommonFields'
-import CollectionLocalMediaProfileFields from '../LocalMediaProfile/CollectionLocalMediaProfileFields'
 import IndexingValuesEditorButton from '../LocalMediaProfile/IndexingValuesEditorButton'
 import CollectionLocalMediaProfileOutputTemplate from '../LocalMediaProfile/CollectionLocalMediaProfileOutputTemplate'
 import {useLocalMediaProfileSites, useLocalMediaProfiles} from '../../lib/queries'
@@ -161,7 +160,6 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                         mode="collection"
                         isCreating={watchedOp !== 'update_by_slug'}
                     />
-                    <CollectionLocalMediaProfileFields form={form}/>
                     <div className="form-row">
                         <label>Indexing values</label>
                         <IndexingValuesEditorButton form={form}/>

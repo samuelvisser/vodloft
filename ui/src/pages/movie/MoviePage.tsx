@@ -129,7 +129,7 @@ export default function MoviePage() {
     const drmProtected = Boolean(localMovie?.drmProtected)
     const refreshAttemptedSlugs = useRef(new Set<string>())
     const shouldRefreshMovie = Boolean(
-        localMovie && (localMovie.status !== 'published' || !localMovie.isDownloadable),
+        localMovie && (localMovie.status !== 'published' || !localMovie.hasVideo),
     )
     const {data: profiles} = useLocalMediaProfiles()
     const {data: downloads} = useMovieDownloads(slug)
@@ -606,7 +606,7 @@ export default function MoviePage() {
                             />
                             {drmProtected ? (
                                 <DrmNotice/>
-                            ) : movie.isDownloadable ? (
+                            ) : movie.hasVideo && !isUpcoming ? (
                                 <MovieDownloadControl
                                     download={movieDownload}
                                     label="Download movie"
@@ -628,7 +628,7 @@ export default function MoviePage() {
                                         ? expectedReleaseDate
                                             ? `Full movie expected ${expectedReleaseDate}.`
                                             : 'Full movie has not been released yet.'
-                                        : `${sourceName} does not currently offer the full movie for download.`}
+                                        : `${sourceName} has no video for the full movie yet.`}
                                 </div>
                             )}
                             {featuredTrailer && (

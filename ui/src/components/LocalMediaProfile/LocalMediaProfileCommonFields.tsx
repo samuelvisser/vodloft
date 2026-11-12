@@ -4,6 +4,7 @@ import {Controller, UseFormReturn} from 'react-hook-form'
 import {type LocalMediaProfileType} from '../../types/local_media_profile'
 import CollectionLocalMediaProfileScopeField from './CollectionLocalMediaProfileScopeField'
 import LocalMediaProfileSitesField from './LocalMediaProfileSitesField'
+import QualityField from './QualityField'
 import SubtitleFields from './SubtitleFields'
 import SponsorBlockSection from './SponsorBlockSection'
 import {useSubtitleModeDefaults} from './useSubtitleModeDefaults'
@@ -118,6 +119,10 @@ export default function LocalMediaProfileCommonFields({
             )}
 
             <LocalMediaProfileSitesField form={form} mode={mode}/>
+
+            <hr className="form-section-divider" aria-hidden="true"/>
+
+            <QualityField form={form} mode={mode}/>
 
             <hr className="form-section-divider" aria-hidden="true"/>
 

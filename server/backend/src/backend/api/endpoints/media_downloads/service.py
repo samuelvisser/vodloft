@@ -653,9 +653,11 @@ def create_movie_download(
     """Persist a download target for an indexed movie."""
     _ensure_downloadable(movie)
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE, movie_site_key(movie))
-    if not movie.is_downloadable:
+    # The Daily Wire's isDownloadable only says whether its own apps offer offline downloads.
+    # VODLoft downloads the stream its web player uses, so a movie only needs a video.
+    if not movie.has_video:
         source_name = get_source(movie.source_key).name
-        raise HTTPException(status_code=422, detail=f"{source_name} marks this movie as unavailable for download")
+        raise HTTPException(status_code=422, detail=f"{source_name} has no video for this movie yet")
 
     existing: Optional[MovieMediaDownload] = (
         s.query(MovieMediaDownload)
