@@ -46,6 +46,9 @@ export default function IndexingValuesEditorButton({
         name: 'indexingValues',
     })
     const {errors} = useFormState({control: editorForm.control})
+    // An error the server puts on the whole list, such as two values sharing a key.
+    const {errors: profileErrors} = useFormState({control: form.control, name: 'indexingValues'})
+    const listError = (profileErrors.indexingValues as {message?: string} | undefined)?.message
 
     const openEditor = () => {
         editorForm.reset({
@@ -215,6 +218,7 @@ export default function IndexingValuesEditorButton({
             <button type="button" className={className} onClick={openEditor}>
                 Indexing values
             </button>
+            {listError && <div className="error" role="alert">{listError}</div>}
             {dialog ? createPortal(dialog, document.body) : null}
         </>
     )

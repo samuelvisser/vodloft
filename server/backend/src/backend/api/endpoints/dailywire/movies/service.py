@@ -157,7 +157,7 @@ def get_movie_for_action(movie_slug: str) -> DwMovieRecord:
     """Return authoritative metadata for indexing/downloading a movie.
 
     Scheduled or otherwise unavailable indexed movies are refreshed live so their
-    release transition is discovered. Released downloadable movies may use the
+    release transition is discovered. Released movies with a video may use the
     persisted canonical movie-page snapshot for low-latency actions.
     """
     indexed: DwMovieRecord | None = None
@@ -166,7 +166,7 @@ def get_movie_for_action(movie_slug: str) -> DwMovieRecord:
     except Exception:
         logger.exception("Failed to read indexed movie metadata for %s", movie_slug)
 
-    if indexed is not None and indexed.status == "published" and indexed.is_downloadable:
+    if indexed is not None and indexed.status == "published" and indexed.has_video:
         return indexed
 
     try:

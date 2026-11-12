@@ -144,6 +144,14 @@ def test_create_and_update_use_conditional_collision_analysis():
             assert conflict.value.field == 'outputTemplate'
             assert conflict.value.kind == 'output_path_collision'
             assert 'Original' in str(conflict.value)
+            with pytest.raises(ServiceError) as duplicate:
+                create_collection_local_media_profile(session, CollectionLocalMediaProfileAPICreate(
+                    name='Copy', preferred_format='format_1080p', output_template=original.output_template))
+            assert duplicate.value.kind == 'unique_violation'
+            assert duplicate.value.field == 'outputTemplate'
+            assert "'Original'" in str(duplicate.value)
+            assert set(duplicate.value.other_fields) == {'preferredFormat'}
+            assert "'Original'" in duplicate.value.other_fields['preferredFormat']
             separate = create_collection_local_media_profile(session, CollectionLocalMediaProfileAPICreate(
                 name='Separate', preferred_format='format_1080p', output_template='/downloads/Separate/{{ title }}.ext'))
             with pytest.raises(ServiceError):
