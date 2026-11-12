@@ -1,4 +1,5 @@
-import {useCallback, useEffect, useMemo} from 'react'
+import {useCallback, useEffect, useMemo, useRef} from 'react'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {Link, useNavigate, useParams} from 'react-router-dom'
@@ -14,6 +15,8 @@ import {DownloadProfileReadView} from "../../types/schemas/download_profile_view
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import ReadMore from "../../utils/ReadMore";
 import {apiUrl} from '../../lib/api'
+import {faIcon} from '../../icons/faIcon'
+import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 
 type RouteParams = { id?: string }
 
@@ -77,6 +80,7 @@ export default function EditDownloadProfilePage() {
     ), [collectionProfiles, profileId])
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
+    const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
     const submitFn = async (data: DownloadProfileUpdateOut) => {
         return fetch(`${apiUrl()}/download-profiles/${profileId}`, {
@@ -185,11 +189,31 @@ export default function EditDownloadProfilePage() {
                     />
 
                     <div className="actions">
+                        <button
+                            type="button"
+                            className="btn btn-danger"
+                            style={{marginRight: 'auto'}}
+                            onClick={() => confirmRef.current?.open(downloadProfile)}
+                        >
+                            <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
+                            <span>Delete profile</span>
+                        </button>
                         <button type="button" className="btn" onClick={onCancel}>Cancel</button>
                         <input type="submit" className="btn btn-primary" value="Save changes" disabled={isSubmitting}/>
                     </div>
                 </form>
             )}
+
+            <ConfirmDeleteDialog
+                ref={confirmRef}
+                title="Delete download profile"
+                subjectProp="collectionTitle"
+                deleteRequest={() => fetch(`${apiUrl()}/download-profiles/${profileId}`, {method: 'DELETE', credentials: 'include'})}
+                invalidateQueries={[['downloadProfilesView'], ['downloadProfilesByCollectionSlug']]}
+                inUseMessage="This download profile is in use, it cannot be deleted"
+                deletedMessage={(p) => `Deleted the Download Profile of ${p.collectionTitle}`}
+                onDeleted={onCancel}
+            />
         </section>
     )
 }
