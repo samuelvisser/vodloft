@@ -27,6 +27,10 @@ import {ProfileTableActions, SelectAll} from '../components/ProfileBulkEdit/Bulk
 import ProfileBulkEdit, {tableSelection} from '../components/ProfileBulkEdit/ProfileBulkEdit'
 import type {BulkFieldSpec} from '../components/ProfileBulkEdit/BulkChangeDialog'
 
+// Show each output path expression as just its first variable, without filters or if/else fallbacks.
+// Set to false to show the expressions as written again.
+const SIMPLIFY_OUTPUT_PATHS = true
+
 const USED_FOR_OPTIONS = [
     {value: 'podcast', label: 'Podcasts'},
     {value: 'series', label: 'Series'},
@@ -104,7 +108,7 @@ export default function LocalMediaProfilesPage() {
                 <OpaqueOutputTemplateCode
                     source={p.outputTemplate}
                     sourceMode="compact"
-                    renderMode="path"
+                    renderMode={SIMPLIFY_OUTPUT_PATHS ? 'simplified-path' : 'path'}
                     label={`Output path template for ${p.name}`}
                     className="local-media-profile-output-template"
                 />
