@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import logging
+import re
+from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -50,6 +53,48 @@ def plan_download_relocation(download: MediaDownloadBase, source: Path, destinat
     if source.suffix.lower() == '.m3u8' and hls_asset_marker(source).is_file():
         paths.append(PathMove(hls_asset_root(source), hls_asset_root(destination)))
     return DownloadRelocation(download.id, source, destination, tuple(paths), tuple(assets), recovered)
+
+
+def number_shared_destinations(planned: Sequence[tuple[Path, Path]]) -> list[Path]:
+    """The destination of each ``(source, destination)`` pair, numbered where several files share one.
+
+    The downloader stores a file whose name is taken as ``name-1.ext``, ``name-2.ext`` and so on, for
+    example two extras of one movie with the same type when the template tells them apart only by
+    ``media_type``. A rename numbers them the same way: a file that already has one of the shared
+    name's numbered forms keeps it, and the others take the lowest free number in the given order.
+    A number is free when no other planned file claims it and no file outside this rename is there.
+    """
+    counts = Counter(destination for _source, destination in planned)
+    sources = {source for source, _destination in planned}
+    result = [destination for _source, destination in planned]
+    taken = {destination for destination, count in counts.items() if count == 1}
+    for shared in (destination for destination, count in counts.items() if count > 1):
+        indexes = [index for index, (_source, destination) in enumerate(planned) if destination == shared]
+        pending = []
+        for index in indexes:
+            source = planned[index][0]
+            if _is_numbered_form(source, shared) and source not in taken:
+                taken.add(source)
+                result[index] = source
+            else:
+                pending.append(index)
+        number = 0
+        for index in pending:
+            while True:
+                candidate = shared if number == 0 else shared.with_name(f"{shared.stem}-{number}{shared.suffix}")
+                number += 1
+                if candidate not in taken and (candidate in sources or not candidate.exists()):
+                    break
+            taken.add(candidate)
+            result[index] = candidate
+    return result
+
+
+def _is_numbered_form(path: Path, destination: Path) -> bool:
+    return (
+        path.parent == destination.parent and path.suffix == destination.suffix
+        and re.fullmatch(re.escape(destination.stem) + r"(-[1-9][0-9]*)?", path.stem) is not None
+    )
 
 
 def filter_relocation_conflicts(moves: list[DownloadRelocation]) -> tuple[list[DownloadRelocation], list[DownloadRelocation]]:

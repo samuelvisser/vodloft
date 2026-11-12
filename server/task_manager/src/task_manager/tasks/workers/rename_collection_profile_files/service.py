@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from backend.services.no_ascii_names import settle_no_ascii_name
 from sqlalchemy import select
@@ -12,7 +13,9 @@ from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.custom_indexes import ensure_episode_custom_indexes_ready
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.output_template import resolve_episode_output_path
-from backend.services.download_relocation import DownloadRelocation, plan_download_relocation, relocate_downloads
+from backend.services.download_relocation import (
+    DownloadRelocation, number_shared_destinations, plan_download_relocation, relocate_downloads,
+)
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
@@ -99,6 +102,7 @@ def _plan_renames(
             data={"files_considered": 0, "files_renamed": 0, "files_unchanged": 0},
         )
 
+    planned: list[tuple[EpisodeMediaDownload, Path, Path]] = []
     moves: list[DownloadRelocation] = []
     unchanged = 0
     for download in downloads:
@@ -125,7 +129,10 @@ def _plan_renames(
             media_download=download,
             extension=extension,
         )
-        destination = settle_no_ascii_name(download, destination, session=session)
+        planned.append((download, source, settle_no_ascii_name(download, destination, session=session)))
+
+    destinations = number_shared_destinations([(source, destination) for _download, source, destination in planned])
+    for (download, source, _wanted), destination in zip(planned, destinations):
         if source == destination:
             unchanged += 1
             continue
