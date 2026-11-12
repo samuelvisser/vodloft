@@ -718,6 +718,23 @@ def test_podcast_profile_respects_days_in_past_window(db_session):
     assert [episode.slug for episode in get_download_profile_episodes(db_session, profile)] == [recent.slug]
 
 
+def test_a_profile_downloads_episodes_without_a_publication_date(db_session):
+    """They come after the dated ones, newest first."""
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    lmp = _make_local_media_profile(db_session)
+    _make_episode(db_session, collection, season, slug="undated-1", ep_id="ep.1", status="published_final", published_at=None, index=1)
+    _make_episode(db_session, collection, season, slug="dated", ep_id="ep.2", status="published_final", published_at=_now(), index=2)
+    _make_episode(db_session, collection, season, slug="undated-2", ep_id="ep.3", status="published_final", published_at=None, index=3)
+    profile = _make_podcast_profile(db_session, collection, lmp)
+
+    assert [episode.slug for episode in get_download_profile_episodes(db_session, profile)] == [
+        "dated", "undated-2", "undated-1",
+    ]
+
+
 def test_series_profile_filters_by_seasons(db_session):
     from backend.types.collection_types import EpisodeIdentifier
     from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
