@@ -163,7 +163,9 @@ def download_profile_out_of_scope_preview(
 def download_profile_delete_out_of_scope_downloads(download_profile_id: int, body: OutOfScopeDeleteAPIRequest):
     """Delete the picked downloads and their files in the background, if the profile still leaves them out."""
     with db_session() as s:
-        ids = picked_out_of_scope(s, download_profile_id, body.pick, body.include, body.exclude)
+        ids = picked_out_of_scope(
+            s, download_profile_id, not_kept=body.not_kept, kept=body.kept, include=body.include, exclude=body.exclude,
+        )
     return run_write_transaction(lambda s: request_out_of_scope_delete(s, download_profile_id, ids))
 
 

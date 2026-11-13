@@ -22,7 +22,7 @@ from backend.services.episode_filters import (
     EpisodeSelection, evaluate, filter_leaving_out, kept_by, published_at,
 )
 from backend.services.errors import NotFoundError, ServiceError
-from backend.types.download_profile_types import DownloadKeptBy, MediaDownloadArtifactStatus, OutOfScopePick
+from backend.types.download_profile_types import DownloadKeptBy, MediaDownloadArtifactStatus
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
 
@@ -186,26 +186,23 @@ def newly_out_of_scope(
     )
 
 
-def _starts_picked(pick: OutOfScopePick, item: OutOfScopeDownload) -> bool:
-    if pick == OutOfScopePick.ALL:
-        return True
-    return pick == OutOfScopePick.NOT_KEPT and item.kept_by is None
-
-
 def picked_out_of_scope(
-        s: Session, profile_id: int, pick: OutOfScopePick, include: Iterable[int] = (), exclude: Iterable[int] = (),
+        s: Session, profile_id: int, *, not_kept: bool, kept: bool,
+        include: Iterable[int] = (), exclude: Iterable[int] = (),
 ) -> list[int]:
     """The downloads picked to delete that the saved profile still leaves out.
 
-    ``pick`` says which ones start picked, then ``include`` and ``exclude`` add and take away
-    the ones picked by hand. Read before the delete starts, so a download the profile covers
-    again after a change in between is never deleted.
+    ``not_kept`` and ``kept`` pick every download that nothing keeps and every kept one,
+    then ``include`` and ``exclude`` add and take away the ones picked by hand. Read before
+    the delete starts, so a download the profile covers again after a change in between is
+    never deleted.
     """
     included, excluded = set(include), set(exclude)
     out = out_of_scope_downloads(s, get_profile(s, profile_id))
     return [
         item.download.id for item in out
-        if item.download.id not in excluded and (item.download.id in included or _starts_picked(pick, item))
+        if item.download.id not in excluded
+        and (item.download.id in included or (kept if item.kept_by is not None else not_kept))
     ]
 
 

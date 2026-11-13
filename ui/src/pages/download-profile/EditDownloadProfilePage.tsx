@@ -129,7 +129,7 @@ export default function EditDownloadProfilePage() {
         if (toDelete?.length) {
             // The delete runs in the background; the profile's page shows its progress.
             navigate(`/download-profile/${profileId}`)
-            await deleteOutOfScope({pick: 'none', include: toDelete})
+            await deleteOutOfScope({notKept: false, kept: false, include: toDelete})
             return
         }
         navigate('/download-profiles')
@@ -168,9 +168,8 @@ export default function EditDownloadProfilePage() {
     /** The downloads picked in the dialog, also the ones that did not load: the saved profile can no longer tell them apart. */
     const pickedIds = () => {
         if (!previewSummary) return []
-        const {pick, include = [], exclude = []} = picks.choice
-        const start = pick === 'all' ? [...previewSummary.notKeptIds, ...previewSummary.keptIds]
-            : pick === 'not_kept' ? previewSummary.notKeptIds : []
+        const {notKept, kept, include = [], exclude = []} = picks.choice
+        const start = [...(notKept ? previewSummary.notKeptIds : []), ...(kept ? previewSummary.keptIds : [])]
         const left = new Set(exclude)
         return [...start.filter((id) => !left.has(id)), ...include]
     }
@@ -316,7 +315,7 @@ export default function EditDownloadProfilePage() {
                 </p>
                 <p className="modal-text">
                     Episodes you downloaded by hand are never listed or deleted. Downloads marked to keep are listed,
-                    but only deleted when you pick them.
+                    but picking all leaves them out: they have a checkbox of their own.
                 </p>
                 <OutOfScopeChecklist
                     query={preview}

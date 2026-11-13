@@ -32,10 +32,11 @@ export function downloadsSummary(count: number, sizeBytes: number): string {
     return sizeBytes ? `${downloads} (${formatBytes(sizeBytes)})` : downloads
 }
 
-/** Which of the profile's out-of-scope downloads start picked, before the ones picked or unpicked by hand. */
-export type OutOfScopePick = 'none' | 'not_kept' | 'all'
-
-export type OutOfScopeChoice = {pick: OutOfScopePick, include?: number[], exclude?: number[]}
+/**
+ * Which out-of-scope downloads to delete: ``notKept`` picks every one that nothing keeps and
+ * ``kept`` every kept one, then ``include`` and ``exclude`` add and take away the ones picked by hand.
+ */
+export type OutOfScopeChoice = {notKept: boolean, kept: boolean, include?: number[], exclude?: number[]}
 
 /** Starts deleting these downloads of the profile in the background; the page shows the progress. */
 export function useDeleteOutOfScope(profileId: number, resourceLabel: string) {
@@ -67,62 +68,90 @@ export function leftOutByText(
     return `Left out by: ${sentence.replace(/^\w/, (c) => c.toLowerCase())}`
 }
 
-const startsPicked = (pick: OutOfScopePick, download: OutOfScopeDownload) =>
-    pick === 'all' || (pick === 'not_kept' && download.keptBy === null)
-
 /**
  * Which listed downloads are picked to delete.
  *
- * Kept downloads are listed but not picked to start with. What is picked is kept as where
- * it started (``pick``) and the rows picked or unpicked by hand, so the count, the size and
- * the delete cover rows that are not loaded yet. Picks start over whenever ``startKey`` changes.
+ * Downloads nothing keeps start picked; kept downloads are listed but have their own
+ * checkbox, so picking all never deletes one by accident. Each group is kept as whether
+ * all of it is picked plus the rows picked or unpicked by hand, so the counts, the size
+ * and the delete cover rows that are not loaded yet. Picks start over whenever ``startKey`` changes.
  */
 export function useOutOfScopePicks(summary: OutOfScopePage | undefined, startKey: unknown) {
-    const [pick, setPick] = useState<OutOfScopePick>('not_kept')
-    /** The rows picked or unpicked by hand, against where ``pick`` starts them. */
+    const [notKept, setNotKept] = useState(true)
+    const [kept, setKept] = useState(false)
+    /** The rows picked or unpicked by hand, against what their group starts with. */
     const [changed, setChanged] = useState<ReadonlyMap<number, OutOfScopeDownload>>(new Map())
 
     useEffect(() => {
-        setPick('not_kept')
+        setNotKept(true)
+        setKept(false)
         setChanged(new Map())
     }, [startKey])
 
-    const total = summary?.total ?? 0
-    let count = pick === 'all' ? total : pick === 'not_kept' ? total - (summary?.kept ?? 0) : 0
-    let sizeBytes = !summary ? 0 : pick === 'all' ? summary.sizeBytes : pick === 'not_kept' ? summary.sizeBytes - summary.keptSizeBytes : 0
+    const startsPicked = (download: OutOfScopeDownload) => download.keptBy === null ? notKept : kept
+    const keptTotal = summary?.kept ?? 0
+    const notKeptTotal = (summary?.total ?? 0) - keptTotal
+    let notKeptCount = notKept ? notKeptTotal : 0
+    let keptCount = kept ? keptTotal : 0
+    let sizeBytes = (notKept ? (summary?.sizeBytes ?? 0) - (summary?.keptSizeBytes ?? 0) : 0) + (kept ? summary?.keptSizeBytes ?? 0 : 0)
     for (const download of changed.values()) {
-        const sign = startsPicked(pick, download) ? -1 : 1
-        count += sign
+        const sign = startsPicked(download) ? -1 : 1
+        if (download.keptBy === null) notKeptCount += sign
+        else keptCount += sign
         sizeBytes += sign * (download.sizeBytes ?? 0)
     }
     const hand = [...changed.values()]
     const choice: OutOfScopeChoice = {
-        pick,
-        include: hand.filter((download) => !startsPicked(pick, download)).map((download) => download.id),
-        exclude: hand.filter((download) => startsPicked(pick, download)).map((download) => download.id),
+        notKept,
+        kept,
+        include: hand.filter((download) => !startsPicked(download)).map((download) => download.id),
+        exclude: hand.filter((download) => startsPicked(download)).map((download) => download.id),
+    }
+    /** Picks or unpicks a whole group, and forgets the hand picks in it. */
+    const pickGroup = (isKept: boolean, value: boolean) => {
+        if (isKept) setKept(value)
+        else setNotKept(value)
+        setChanged((current) => new Map([...current].filter(([, download]) => (download.keptBy !== null) !== isKept)))
     }
 
     return {
-        total,
-        count,
+        total: summary?.total ?? 0,
+        count: notKeptCount + keptCount,
         sizeBytes,
-        allPicked: total > 0 && count === total,
+        notKeptTotal,
+        notKeptCount,
+        keptTotal,
+        keptCount,
         choice,
-        isPicked: (download: OutOfScopeDownload) => startsPicked(pick, download) !== changed.has(download.id),
+        isPicked: (download: OutOfScopeDownload) => startsPicked(download) !== changed.has(download.id),
         toggle: (download: OutOfScopeDownload) => setChanged((current) => {
             const next = new Map(current)
             if (next.has(download.id)) next.delete(download.id)
             else next.set(download.id, download)
             return next
         }),
-        pickAll: (value: OutOfScopePick) => {
-            setPick(value)
-            setChanged(new Map())
-        },
+        pickNotKept: (value: boolean) => pickGroup(false, value),
+        pickKept: (value: boolean) => pickGroup(true, value),
     }
 }
 
 export type OutOfScopePicks = ReturnType<typeof useOutOfScopePicks>
+
+/** Picks or unpicks a whole group of downloads: "All 12 downloads picked", "3 of 12 downloads picked". */
+function GroupCheckbox({count, total, noun, onChange}: {
+    count: number, total: number, noun: (n: number) => string, onChange: (value: boolean) => void,
+}) {
+    const all = count === total
+    return (
+        <label className="out-of-scope-all">
+            <input
+                type="checkbox" checked={all} onChange={() => onChange(!all)}
+                ref={(input) => { if (input) input.indeterminate = count > 0 && !all }}
+            />
+            <span>{all ? 'All' : `${count.toLocaleString()} of`} {total.toLocaleString()} {noun(total)} picked</span>
+        </label>
+    )
+}
 
 /** What a paged list of out-of-scope downloads needs from its infinite query. */
 type PagedOutOfScope = {
@@ -185,10 +214,20 @@ export function OutOfScopeChecklist({query, picks, filterText, typeLabel, empty}
     return (
         <>
             {oneFilter && <p className="modal-text out-of-scope-filter">{oneFilter}</p>}
-            <label className="out-of-scope-all">
-                <input type="checkbox" checked={picks.allPicked} onChange={() => picks.pickAll(picks.allPicked ? 'none' : 'all')}/>
-                <span>{picks.allPicked ? 'All' : `${picks.count.toLocaleString()} of ${picks.total.toLocaleString()}`} picked</span>
-            </label>
+            <div className="out-of-scope-groups">
+                {picks.notKeptTotal > 0 && (
+                    <GroupCheckbox
+                        count={picks.notKeptCount} total={picks.notKeptTotal} onChange={picks.pickNotKept}
+                        noun={(n) => n === 1 ? 'download' : 'downloads'}
+                    />
+                )}
+                {picks.keptTotal > 0 && (
+                    <GroupCheckbox
+                        count={picks.keptCount} total={picks.keptTotal} onChange={picks.pickKept}
+                        noun={(n) => n === 1 ? 'download marked to keep' : 'downloads marked to keep'}
+                    />
+                )}
+            </div>
             <EpisodeList
                 className="out-of-scope-list"
                 typeLabel={typeLabel}
@@ -269,6 +308,7 @@ export default function OutOfScopeDownloadsDialog({
             <p className="modal-text">
                 These downloads were downloaded or adopted by this Download Profile, but its filters leave
                 them out now. Downloads you made by hand are not the profile's, so they are never listed or deleted.
+                Downloads marked to keep are listed, but picking all leaves them out: they have a checkbox of their own.
             </p>
             <OutOfScopeChecklist
                 query={query}

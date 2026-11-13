@@ -62,14 +62,6 @@ class EpisodeFilterField(StrEnum):
 DATE_FIELDS = (EpisodeFilterField.PUBLISHED, EpisodeFilterField.DOWNLOADED)
 
 
-class OutOfScopePick(StrEnum):
-    """Which of a profile's out-of-scope downloads a delete starts from, before the ones picked or unpicked by hand."""
-    NONE = "none"
-    NOT_KEPT = "not_kept"
-    """Every one that nothing keeps."""
-    ALL = "all"
-
-
 class DownloadKeptBy(StrEnum):
     """What keeps a download safe from deletion."""
     HAND = "hand"

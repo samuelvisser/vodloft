@@ -15,7 +15,6 @@ from backend.types.download_profile_types import (
     EpisodeFilterAction,
     EpisodeFilterField,
     EpisodeTagKey,
-    OutOfScopePick,
     UpgradeImprovement,
     UpgradeRepeat,
 )
@@ -280,9 +279,14 @@ class OutOfScopePreviewAPIRead(OutOfScopePageAPIRead):
 
 
 class OutOfScopeDeleteAPIRequest(RequestBase):
-    """Which out-of-scope downloads to delete: the ones ``pick`` starts with, plus ``include``, minus ``exclude``."""
+    """Which out-of-scope downloads to delete.
 
-    pick: OutOfScopePick = OutOfScopePick.NONE
+    ``not_kept`` picks every one that nothing keeps and ``kept`` every kept one; ``include`` and
+    ``exclude`` then add and take away the ones picked by hand.
+    """
+
+    not_kept: bool = False
+    kept: bool = False
     include: list[int] = Field(default_factory=list, max_length=100000)
     exclude: list[int] = Field(default_factory=list, max_length=100000)
 
