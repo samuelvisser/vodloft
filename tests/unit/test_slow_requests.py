@@ -38,6 +38,28 @@ def test_a_slow_request_logs_the_threads_that_were_working(monkeypatch, capsys):
     assert "/api/fast" not in logged
 
 
+def test_a_request_that_waits_long_is_still_sampled_after_the_first_seconds(monkeypatch, capsys):
+    """What holds a request up for a minute is often not what held it up in its first seconds."""
+    from backend import slow_requests
+
+    monkeypatch.setattr(slow_requests, "SLOW_REQUEST_SECONDS", 0.1)
+    monkeypatch.setattr(slow_requests, "_SAMPLE_EVERY_SECONDS", 0.1)
+
+    app = FastAPI()
+    app.add_middleware(slow_requests.SlowRequestMiddleware)
+
+    @app.get("/api/long")
+    def long():
+        time.sleep(0.9)
+        return {}
+
+    with TestClient(app) as client:
+        assert client.get("/api/long").status_code == 200
+
+    # A sample a second apart at first (here a tenth), then one after twice as long.
+    assert capsys.readouterr().err.count("Still waiting for GET /api/long") == 4
+
+
 def test_pool_workers_waiting_for_work_are_left_out_of_the_working_threads():
     from backend.slow_requests import working_threads
 

@@ -13,13 +13,13 @@ from datetime import datetime, timezone
 from typing import Iterable, Optional
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, lazyload
 
 from backend.db.models import DownloadProfile, Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.operations.download_profiles import DownloadProfileDeleteOutOfScopeOperation
 from backend.services.episode_filters import (
-    EpisodeSelection, evaluate, filter_leaving_out, kept_by, published_at,
+    EpisodeSelection, Evaluation, collection_episodes, evaluate, filter_leaving_out, kept_by, published_at,
 )
 from backend.services.errors import NotFoundError, ServiceError
 from backend.types.download_profile_types import DownloadKeptBy, MediaDownloadArtifactStatus, OutOfScopePick
@@ -71,29 +71,47 @@ def get_profile(s: Session, profile_id: int) -> DownloadProfile:
     return profile
 
 
-def _downloads(s: Session, profile: DownloadProfile) -> list[EpisodeMediaDownload]:
-    return list(s.scalars(
-        select(EpisodeMediaDownload)
-        .where(EpisodeMediaDownload.download_profile_id == profile.id)
-        .options(selectinload(EpisodeMediaDownload.media))
-    ))
+@dataclass(frozen=True)
+class _ProfileDownloads:
+    """The profile's downloads, and the Collection's episodes the filters walk over.
+
+    Read once for everything a request asks: a large Collection has thousands of both.
+    """
+    downloads: list[EpisodeMediaDownload]
+    episodes: list[Episode]
+
+    @classmethod
+    def read(cls, s: Session, profile: DownloadProfile) -> "_ProfileDownloads":
+        downloads = list(s.scalars(
+            select(EpisodeMediaDownload)
+            .where(EpisodeMediaDownload.download_profile_id == profile.id)
+            # Nothing here reads a download's sidecar files or metadata rows.
+            .options(lazyload(EpisodeMediaDownload.assets), lazyload(EpisodeMediaDownload.meta_items))
+        ))
+        return cls(downloads=downloads, episodes=collection_episodes(s, profile.collection_id))
+
+    def evaluate(self, s: Session, selection: EpisodeSelection) -> Evaluation:
+        return evaluate(s, selection, episodes=self.episodes)
+
+    def out_of_scope(self, evaluation: Evaluation) -> list[OutOfScopeDownload]:
+        episodes = {episode.id: episode for episode in self.episodes}
+        found = []
+        for download in self.downloads:
+            index = filter_leaving_out(evaluation, download)
+            if index is not None:
+                found.append(OutOfScopeDownload(
+                    download=download,
+                    # The Collection's episodes are loaded already; a download's own is only looked up
+                    # when it belongs to another Collection.
+                    episode=episodes.get(download.media_item_id) or download.media,
+                    filter_index=index, kept_by=kept_by(evaluation, download),
+                ))
+        return sorted(found, key=_newest_first, reverse=True)
 
 
 def _newest_first(item: OutOfScopeDownload):
     moment = item.published_at
     return moment is not None, moment or _EARLIEST, item.episode.id, item.download.id
-
-
-def _out_of_scope(evaluation, downloads: Iterable[EpisodeMediaDownload]) -> list[OutOfScopeDownload]:
-    found = []
-    for download in downloads:
-        index = filter_leaving_out(evaluation, download)
-        if index is not None:
-            found.append(OutOfScopeDownload(
-                download=download, episode=download.media, filter_index=index,
-                kept_by=kept_by(evaluation, download),
-            ))
-    return sorted(found, key=_newest_first, reverse=True)
 
 
 def out_of_scope_downloads(
@@ -103,18 +121,16 @@ def out_of_scope_downloads(
 
     With a selection, the filters of a form that is not saved yet decide instead.
     """
-    downloads = _downloads(s, profile)
-    if not downloads:
-        return []
-    return _out_of_scope(evaluate(s, selection or EpisodeSelection.of_profile(profile)), downloads)
+    read = _ProfileDownloads.read(s, profile)
+    return read.out_of_scope(read.evaluate(s, selection or EpisodeSelection.of_profile(profile)))
 
 
 def download_profile_statistics(s: Session, profile: DownloadProfile) -> DownloadProfileStatistics:
     """What the profile's page counts: its downloads, and which of them its filters leave out."""
-    downloads = _downloads(s, profile)
-    evaluation = evaluate(s, EpisodeSelection.of_profile(profile))
-    on_disk = [download for download in downloads if download.artifact_status in _ON_DISK]
-    out = _out_of_scope(evaluation, downloads)
+    read = _ProfileDownloads.read(s, profile)
+    evaluation = read.evaluate(s, EpisodeSelection.of_profile(profile))
+    on_disk = [download for download in read.downloads if download.artifact_status in _ON_DISK]
+    out = read.out_of_scope(evaluation)
     return DownloadProfileStatistics(
         downloaded=len(on_disk),
         storage_size_bytes=sum(download.artifact_size_bytes or 0 for download in on_disk),
@@ -169,8 +185,9 @@ class OutOfScopePreview:
 
 
 def newly_out_of_scope(s: Session, profile: DownloadProfile, selection: EpisodeSelection) -> OutOfScopePreview:
-    before = {item.download.id for item in out_of_scope_downloads(s, profile)}
-    new = [item for item in out_of_scope_downloads(s, profile, selection) if item.download.id not in before]
+    read = _ProfileDownloads.read(s, profile)
+    before = {item.download.id for item in read.out_of_scope(read.evaluate(s, EpisodeSelection.of_profile(profile)))}
+    new = [item for item in read.out_of_scope(read.evaluate(s, selection)) if item.download.id not in before]
     remove = [item for item in new if item.kept_by is None]
     kept = [item for item in new if item.kept_by is not None]
     return OutOfScopePreview(

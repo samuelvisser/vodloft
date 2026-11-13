@@ -30,7 +30,7 @@ from typing import Iterable, Optional, Protocol, Sequence
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, lazyload, selectinload
 
 from backend.db.models import Collection, DownloadProfile, DownloadProfileFilter, Episode
 from backend.services.media_access import AccessLocks
@@ -184,9 +184,14 @@ def _newest_first(episodes: Iterable[Episode]) -> list[Episode]:
 
 
 def collection_episodes(s: Session, collection_id: int) -> list[Episode]:
-    """Every indexed episode of the Collection, newest first."""
+    """Every indexed episode of the Collection, newest first.
+
+    Their metadata rows are left for whoever asks for one: the filters never read them, and in a
+    large Collection they outnumber the episodes many times over.
+    """
     return _newest_first(s.scalars(
-        select(Episode).where(Episode.collection_id == collection_id).options(selectinload(Episode.season))
+        select(Episode).where(Episode.collection_id == collection_id)
+        .options(selectinload(Episode.season), lazyload(Episode.meta_items))
     ))
 
 
