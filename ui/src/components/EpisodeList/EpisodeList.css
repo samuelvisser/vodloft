@@ -104,6 +104,12 @@
     font-size: 0.8rem;
 }
 
+/* Rows that are being asked for again stay readable, dimmed until the new ones come. */
+.episode-list.is-refreshing > li:not(.episode-list-end) {
+    opacity: 0.55;
+    transition: opacity 0.15s ease;
+}
+
 .episode-list > li.episode-list-end {
     display: flex;
     justify-content: center;

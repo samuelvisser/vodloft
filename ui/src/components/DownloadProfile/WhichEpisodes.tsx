@@ -594,7 +594,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                                 />
                             </div>
                         )}
-                        {showWhich && episodes && (
+                        {showWhich && (episodes || loading) && (
                             <EpisodeList
                                 className="which-episodes-list"
                                 typeLabel={typeLabel}
@@ -602,7 +602,8 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                                 loadingMore={loadingMore}
                                 moreFailed={moreFailed}
                                 loadMore={loadMore}
-                                rows={episodes.map((episode) => ({
+                                loading={loading}
+                                rows={(episodes ?? []).map((episode) => ({
                                     id: episode.id,
                                     title: episode.title,
                                     // Every episode in a one-filter list was left out by that filter, so it doesn't say so again.
