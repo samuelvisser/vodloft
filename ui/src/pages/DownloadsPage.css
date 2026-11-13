@@ -19,13 +19,13 @@
     white-space: nowrap;
 }
 
-.downloads-action-row .progress-button-root.downloads-action-danger:not(.is-progress) .progress-button {
+.downloads-action-row .progress-button-root.downloads-action-danger .progress-button:not(.is-progress-surface) {
     background: #ef4444;
     border-color: #ef4444;
     color: #fff;
 }
 
-.downloads-action-row .progress-button-root.downloads-action-danger:not(.is-progress) .progress-button:hover {
+.downloads-action-row .progress-button-root.downloads-action-danger .progress-button:not(.is-progress-surface):hover {
     background: #dc2626;
     border-color: #dc2626;
 }
