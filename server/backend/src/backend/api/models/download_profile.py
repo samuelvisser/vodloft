@@ -243,6 +243,8 @@ class OutOfScopeDownloadAPIRead(ResponseBase):
     episode_id: int = Field(validation_alias=AliasPath("episode", "id"))
     episode_slug: str = Field(validation_alias=AliasPath("episode", "slug"))
     episode_title: str = Field(validation_alias=AliasPath("episode", "title"))
+    episode_type: str | None = Field(validation_alias=AliasPath("episode", "episode_type"))
+    duration: float | None = Field(validation_alias=AliasPath("episode", "duration"))
     published_at: datetime | None
     downloaded_at: datetime | None = Field(validation_alias=AliasPath("download", "downloaded_at"))
     on_disk: bool
@@ -270,13 +272,11 @@ class OutOfScopePageAPIRead(OffsetPageRead[OutOfScopeDownloadAPIRead]):
     filter_indexes: list[int]
 
 
-class OutOfScopePreviewAPIRead(ResponseBase):
-    """What saving the edit form's filters would newly leave out."""
+class OutOfScopePreviewAPIRead(OutOfScopePageAPIRead):
+    """A page of what saving the edit form's filters would newly leave out, with the ids of all of them."""
 
-    media_download_ids: list[int]
-    size_bytes: int
-    kept: int
-    kept_size_bytes: int
+    not_kept_ids: list[int]
+    kept_ids: list[int]
 
 
 class OutOfScopeDeleteAPIRequest(RequestBase):

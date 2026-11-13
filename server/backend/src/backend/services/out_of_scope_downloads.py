@@ -144,12 +144,7 @@ class OutOfScopePage:
     """The filters that leave any of them out, so a page can tell when one filter leaves out all of them."""
 
 
-def out_of_scope_page(s: Session, profile: DownloadProfile, offset: int, limit: int) -> OutOfScopePage:
-    """One page of ``out_of_scope_downloads``.
-
-    Every page walks the filters again: the list it pages through is only known by walking them.
-    """
-    out = out_of_scope_downloads(s, profile)
+def _page(out: list[OutOfScopeDownload], offset: int, limit: int) -> OutOfScopePage:
     kept = [item for item in out if item.kept_by is not None]
     return OutOfScopePage(
         items=out[offset:offset + limit], offset=offset, limit=limit, has_more=offset + limit < len(out),
@@ -158,24 +153,36 @@ def out_of_scope_page(s: Session, profile: DownloadProfile, offset: int, limit: 
     )
 
 
+def out_of_scope_page(s: Session, profile: DownloadProfile, offset: int, limit: int) -> OutOfScopePage:
+    """One page of ``out_of_scope_downloads``.
+
+    Every page walks the filters again: the list it pages through is only known by walking them.
+    """
+    return _page(out_of_scope_downloads(s, profile), offset, limit)
+
+
 @dataclass(frozen=True)
-class OutOfScopePreview:
-    """What saving the edit form's filters would newly leave out, apart from what is out already."""
-    media_download_ids: list[int]
-    """The ones nothing keeps."""
-    size_bytes: int
-    kept: int
-    kept_size_bytes: int
+class OutOfScopePreviewPage(OutOfScopePage):
+    """A page of what saving the edit form's filters would newly leave out, apart from what is out already.
+
+    The profile is saved before the delete starts, and after that nothing tells the new ones from
+    the ones left out before. So the preview carries the ids of all of them, for the form to say
+    exactly which ones to delete.
+    """
+    not_kept_ids: list[int]
+    kept_ids: list[int]
 
 
-def newly_out_of_scope(s: Session, profile: DownloadProfile, selection: EpisodeSelection) -> OutOfScopePreview:
+def newly_out_of_scope(
+        s: Session, profile: DownloadProfile, selection: EpisodeSelection, offset: int, limit: int,
+) -> OutOfScopePreviewPage:
     before = {item.download.id for item in out_of_scope_downloads(s, profile)}
     new = [item for item in out_of_scope_downloads(s, profile, selection) if item.download.id not in before]
-    remove = [item for item in new if item.kept_by is None]
-    kept = [item for item in new if item.kept_by is not None]
-    return OutOfScopePreview(
-        media_download_ids=[item.download.id for item in remove], size_bytes=_size(remove),
-        kept=len(kept), kept_size_bytes=_size(kept),
+    page = _page(new, offset, limit)
+    return OutOfScopePreviewPage(
+        **{field: getattr(page, field) for field in OutOfScopePage.__dataclass_fields__},
+        not_kept_ids=[item.download.id for item in new if item.kept_by is None],
+        kept_ids=[item.download.id for item in new if item.kept_by is not None],
     )
 
 

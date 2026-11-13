@@ -227,8 +227,12 @@ def test_the_preview_only_counts_what_saving_newly_leaves_out(db_session):
         filters=[line("skip", "title", pattern="(?i)trailer"), line("skip", "title", pattern="Old")],
     )
 
-    preview = newly_out_of_scope(db_session, profile, narrower)
+    preview = newly_out_of_scope(db_session, profile, narrower, offset=0, limit=1)
 
-    assert preview.media_download_ids == [older.id]
-    assert newest.id not in preview.media_download_ids
-    assert (preview.size_bytes, preview.kept, preview.kept_size_bytes) == (20, 1, 40)
+    assert preview.not_kept_ids == [older.id]
+    assert newest.id not in preview.not_kept_ids
+    assert len(preview.kept_ids) == 1
+    assert [item.download.id for item in preview.items] == [older.id]
+    assert preview.has_more
+    assert (preview.total, preview.size_bytes, preview.kept, preview.kept_size_bytes) == (2, 60, 1, 40)
+    assert preview.filter_indexes == [1]

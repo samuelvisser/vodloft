@@ -28,7 +28,8 @@ import type {EpisodeTagRead} from '../../types/schemas/source'
 import {useWhichEpisodes} from './useWhichEpisodes'
 import {useCollectionExamples} from '../../lib/collectionExamples'
 import {insertIndex, isDateLine, joinIgnoreCase, splitIgnoreCase} from './episodeFilters'
-import {filterComplete, filterSentence, formatRunningTime, plainText, type Part} from './whichEpisodesText'
+import {filterComplete, filterSentence, plainText, type Part} from './whichEpisodesText'
+import EpisodeList from '../EpisodeList/EpisodeList'
 import './WhichEpisodes.css'
 
 type Props = {
@@ -147,19 +148,6 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
         return byIndex
     }, [sentIndexes, result])
 
-    // The list loads its next page when its end scrolls into view.
-    const listRef = useRef<HTMLUListElement | null>(null)
-    const endRef = useRef<HTMLLIElement | null>(null)
-    useEffect(() => {
-        const node = endRef.current
-        if (!node || !hasMore || loadingMore || moreFailed) return
-        const observer = new IntersectionObserver(
-            (entries) => { if (entries[0]?.isIntersecting) loadMore() },
-            {root: listRef.current, rootMargin: '200px'},
-        )
-        observer.observe(node)
-        return () => observer.disconnect()
-    }, [hasMore, loadingMore, moreFailed, loadMore])
 
     const typeLabel = (key: string) => tags?.find((tag) => tag.key === key)?.label ?? key
     const seasonLabel = (slug: string) => seasons.find((season) => season.slug === slug)?.name ?? slug
@@ -607,36 +595,27 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                             </div>
                         )}
                         {showWhich && episodes && (
-                            <ul className="which-episodes-list" ref={listRef}>
-                                {episodes.map((episode) => (
-                                    <li key={episode.id} className={episode.leftOutBy ? 'is-left-out' : 'is-downloaded'}>
-                                        <FontAwesomeIcon icon={episode.leftOutBy ? faIcon('fass', 'minus') : faIcon('fass', 'check')}/>
-                                        <span className="which-episodes-list-main">
-                                            <span className="which-episodes-list-title">{episode.title}</span>
-                                            {/* Every episode in a one-filter list was left out by that filter, so it doesn't say so again. */}
-                                            {!oneFilter && (
-                                                <span className="which-episodes-muted which-episodes-list-reason">
-                                                    {leftOutLabel(episode.leftOutBy) ?? 'Downloads'}
-                                                </span>
-                                            )}
-                                        </span>
-                                        <span className="which-episodes-list-meta">
-                                            {episode.episodeType && <span className="which-episodes-type">{typeLabel(episode.episodeType)}</span>}
-                                            {episode.duration ? <span>{formatRunningTime(episode.duration)}</span> : null}
-                                            {episode.publishedAt && (
-                                                <span>{new Date(episode.publishedAt).toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'})}</span>
-                                            )}
-                                        </span>
-                                    </li>
-                                ))}
-                                {hasMore && (
-                                    <li ref={endRef} className="which-episodes-list-end">
-                                        {moreFailed
-                                            ? <>Couldn’t load more episodes. <button type="button" className="btn btn-link" onClick={loadMore}>Try again</button></>
-                                            : <><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/> Loading more episodes…</>}
-                                    </li>
-                                )}
-                            </ul>
+                            <EpisodeList
+                                className="which-episodes-list"
+                                typeLabel={typeLabel}
+                                hasMore={hasMore}
+                                loadingMore={loadingMore}
+                                moreFailed={moreFailed}
+                                loadMore={loadMore}
+                                rows={episodes.map((episode) => ({
+                                    id: episode.id,
+                                    title: episode.title,
+                                    // Every episode in a one-filter list was left out by that filter, so it doesn't say so again.
+                                    note: oneFilter ? undefined : leftOutLabel(episode.leftOutBy) ?? 'Downloads',
+                                    episodeType: episode.episodeType,
+                                    duration: episode.duration,
+                                    publishedAt: episode.publishedAt,
+                                    muted: Boolean(episode.leftOutBy),
+                                    icon: episode.leftOutBy
+                                        ? <FontAwesomeIcon icon={faIcon('fass', 'minus')}/>
+                                        : <FontAwesomeIcon className="is-ok" icon={faIcon('fass', 'check')}/>,
+                                }))}
+                            />
                         )}
                     </li>
                 )}
