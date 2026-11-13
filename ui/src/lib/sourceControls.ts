@@ -12,8 +12,8 @@ export function sourceControls(item: SourcedItem) {
     return {
         membershipLevels: has(SourceFeature.MEMBERSHIP_LEVELS),
         movieExtras: has(SourceFeature.MOVIE_EXTRAS),
-        // Episodes a Source lists are refreshed in batches by the sweep and the daily refresh instead.
-        metadataRefresh: has(SourceFeature.EPISODE_LOOKUPS),
+        // Whether VODLoft looks the Source's items up again: in batches, or one by one as for The Daily Wire.
+        metadataRefresh: has(SourceFeature.METADATA_REFRESH) || has(SourceFeature.EPISODE_LOOKUPS),
     }
 }
 
