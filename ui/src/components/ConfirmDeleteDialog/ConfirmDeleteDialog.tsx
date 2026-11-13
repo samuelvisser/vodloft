@@ -25,10 +25,12 @@ type ConfirmDeleteDialogProps = {
     inUseMessage?: string
     // What the toast says once the item is deleted; "Deleted <subject>" when left out
     deletedMessage?: (item: any) => string
+    // Runs once the item is deleted, for example to leave the page that showed it
+    onDeleted?: (item: any) => void
 }
 
 const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDialogProps>(function ConfirmDeleteDialog(props, ref) {
-    const {title, subjectProp, deleteRequest, invalidateQueries, inUseMessage, deletedMessage} = props
+    const {title, subjectProp, deleteRequest, invalidateQueries, inUseMessage, deletedMessage, onDeleted} = props
     const qc = useQueryClient()
     const [item, setItem] = useState<any | null>(null)
 
@@ -79,6 +81,7 @@ const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDial
                 await Promise.all(keys.map((key) => qc.invalidateQueries({queryKey: key})))
             }
             toast.success(deletedMessage ? deletedMessage(item) : `Deleted ${subjectOf(item)}`)
+            onDeleted?.(item)
         } catch (e) {
             const friendly = 'Failed to delete item (network error)'
             console.error(e)
@@ -86,7 +89,7 @@ const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDial
         } finally {
             close()
         }
-    }, [item, qc, close, deleteRequest, invalidateQueries, inUseMessage, deletedMessage, subjectOf])
+    }, [item, qc, close, deleteRequest, invalidateQueries, inUseMessage, deletedMessage, onDeleted, subjectOf])
 
     if (!item) return null
 
