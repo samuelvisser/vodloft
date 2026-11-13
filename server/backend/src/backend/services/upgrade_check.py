@@ -4,6 +4,9 @@ A YouTube video can get a higher resolution hours after upload, SponsorBlock seg
 subtitles get added later. Any site can edit a video after it is out, such as cutting a long live stream down. The check asks the Source what the video is offered as now, compares it with what the download kept,
 and only then downloads it again through the usual redownload path, which keeps the old file until the new one is
 complete. What can count as better is the Site's: its contract lists the improvements it offers.
+
+A download kept by hand stays as it is: no check looks at it while it is kept. Its planned check stays on record
+and runs once it is no longer kept.
 """
 from __future__ import annotations
 
@@ -133,7 +136,7 @@ def check_refreshed_changes_now(episode: Episode, site: Site, now: datetime) -> 
             continue
         profile = download.download_profile
         if (
-            profile is None or not profile.enable_profile or not profile.upgrade_check
+            profile is None or not profile.enable_profile or not profile.upgrade_check or download.kept
             or download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value or download.redownload_when_final
         ):
             continue
