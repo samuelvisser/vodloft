@@ -62,6 +62,20 @@ span.vl-disabled-reason {
     transform: translateY(0);
 }
 
+/* Below the control, lined up with its left edge. */
+.vl-disabled-reason--below-start > .vl-disabled-reason-tooltip {
+    left: 0;
+    top: calc(100% + 6px);
+    max-width: min(280px, calc(100vw - 36px));
+    transform: translateY(-4px);
+}
+
+.vl-disabled-reason--below-start.has-reason:hover > .vl-disabled-reason-tooltip,
+.vl-disabled-reason--below-start.has-reason:has(:focus-visible) > .vl-disabled-reason-tooltip,
+.vl-disabled-reason--below-start.is-shown > .vl-disabled-reason-tooltip {
+    transform: translateY(0);
+}
+
 @media (prefers-color-scheme: dark) {
     .vl-disabled-reason-tooltip {
         border-color: rgba(148, 163, 184, 0.24);

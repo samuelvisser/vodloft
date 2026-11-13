@@ -72,8 +72,18 @@
     gap: 16px;
 }
 
-.episode-view .episode-title-row .action-menu {
+.episode-view .episode-title-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     flex: 0 0 auto;
+}
+
+.episode-view .episode-open-link {
+    min-height: 38px;
+    gap: 8px;
+    text-decoration: none;
+    white-space: nowrap;
 }
 
 .episode-view .episode-title-text {
@@ -111,6 +121,26 @@
 .episode-view a.episode-summary-item:focus-visible {
     color: var(--text);
     text-decoration: underline;
+}
+
+.episode-view .episode-summary-date .episode-summary-item {
+    cursor: default;
+    border-radius: 4px;
+}
+
+.episode-view .episode-summary-date .episode-summary-item:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+.episode-view .episode-summary-date.is-shown .episode-summary-item,
+.episode-view .episode-summary-date:hover .episode-summary-item {
+    color: var(--text);
+}
+
+/* Only a phone puts the dates on a line of their own. */
+.episode-view .episode-summary-break {
+    display: none;
 }
 
 .episode-view .episode-summary-label {
@@ -459,6 +489,30 @@
 
     .episode-view .episode-summary-separator {
         height: 16px;
+    }
+
+    .episode-view .episode-summary-break {
+        display: block;
+        flex-basis: 100%;
+        height: 0;
+        margin-top: -9px;
+    }
+
+    .episode-view .episode-summary-separator:has(+ .episode-summary-break) {
+        display: none;
+    }
+
+    .episode-view .episode-title-actions {
+        gap: 6px;
+    }
+
+    .episode-view .episode-open-link {
+        min-height: 40px;
+        padding-inline: 12px;
+    }
+
+    .episode-view .episode-open-link-text {
+        display: none;
     }
 
     .episode-view .episode-summary > * + .episode-summary-label::before,

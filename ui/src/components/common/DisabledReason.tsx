@@ -11,8 +11,9 @@ export type DisabledReasonControl = {
 type Props = {
     /** Why the control inside is not available right now. Without one, nothing is explained. */
     reason?: string
-    /** Where the explanation appears: beside the control (above it on phones), or below it. */
-    placement: 'side' | 'below'
+    /** Where the explanation appears: beside the control (above it on phones), or below it, lined up with its
+     *  right edge (``below``) or its left edge (``below-start``). */
+    placement: 'side' | 'below' | 'below-start'
     as?: 'div' | 'span'
     className?: string
     children: (control: DisabledReasonControl) => ReactNode
