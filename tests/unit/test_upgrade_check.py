@@ -201,6 +201,45 @@ def test_a_profile_with_the_check_off_stops_its_checks(db_session, monkeypatch):
     assert db_session.get(EpisodeMediaDownload, download_id).upgrade_check_at is None
 
 
+def test_a_kept_download_is_not_checked_until_it_is_no_longer_kept(db_session, monkeypatch):
+    from task_manager.tasks.workers.upgrade_check import service
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.services.upgrade_check import check_refreshed_changes_now
+
+    download = _download(db_session, profile_values={"upgrade_improvements": ["resolution", "length"]}, download_values={
+        "kept": True, "duration": 3600, "upgrade_check_at": NOW - timedelta(minutes=1),
+    })
+    download_id = download.id
+    db_session.commit()
+    source = SimpleNamespace(
+        has=lambda feature: True,
+        upgrade_offer=Mock(return_value=UpgradeOffer(videos=(VideoFormat(1080, "vp9"),))),
+    )
+    created = Mock()
+    monkeypatch.setattr(service, "get_source", lambda key: source)
+    monkeypatch.setattr(service, "create_media_download_operation", created)
+    monkeypatch.setattr(service, "get_active_media_download_operation", Mock(return_value=None))
+    monkeypatch.setattr(service, "dispatch_queued_media_download_operations", Mock(return_value=0))
+
+    assert service.run_upgrade_checks(db_session, now=NOW).data == {"checked": 0, "upgraded": 0}
+    source.upgrade_offer.assert_not_called()
+    created.assert_not_called()
+    kept = db_session.get(EpisodeMediaDownload, download_id)
+    # The planned check stays on record for when it is no longer kept.
+    assert kept.upgrade_check_at.replace(tzinfo=timezone.utc) == NOW - timedelta(minutes=1)
+    assert kept.upgrade_checks == 0
+
+    # A refresh that shows a different length does not start a check either.
+    kept.media.duration = 3 * 3600
+    assert not check_refreshed_changes_now(kept.media, DAILY_WIRE, NOW)
+    db_session.rollback()
+
+    kept = db_session.get(EpisodeMediaDownload, download_id)
+    kept.kept = False
+    db_session.commit()
+    assert service.run_upgrade_checks(db_session, now=NOW).data == {"checked": 1, "upgraded": 1}
+
+
 def test_a_different_length_counts_only_beyond_the_profiles_minutes(db_session):
     download = _download(db_session, profile_values={"upgrade_improvements": ["length"], "upgrade_length_minutes": 5}, download_values={
         "duration": 7 * 3600 + 12 * 60,

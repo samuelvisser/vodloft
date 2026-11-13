@@ -148,8 +148,8 @@ change under **Settings → Downloads**. The defaults below are the ones VODLoft
   SponsorBlock segments a download cut out don't count as a different length.
 
 The check first asks the site what it has now, and only downloads when one of your improvements is there. The old
-file stays until the new one is complete. Kept downloads are checked too: Keep protects a download from being deleted,
-not from a better copy. Downloads made after the check is turned on are the ones that get checked.
+file stays until the new one is complete. Kept downloads are not checked: a download you keep stays exactly as it
+is. Stop keeping it and its check picks up again. Downloads made after the check is turned on are the ones that get checked.
 Files you imported or matched get the same check, timed from the day the episode came out instead of the day you
 imported them, so an imported backlog is not checked all at once. An episode whose check day has already passed is not
 checked.
