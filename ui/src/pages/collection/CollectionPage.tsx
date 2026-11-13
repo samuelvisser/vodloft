@@ -664,7 +664,7 @@ export default function CollectionPage() {
                       <Link
                         key={profile.id}
                         className="collection-profile-chip"
-                        to={`/edit-download-profile/${profile.id}`}
+                        to={`/download-profile/${profile.id}`}
                         title={`Open ${preferredFormatLabel(profile.localMediaProfilePreferredFormat)} download profile`}
                       >
                         <span>{preferredFormatLabel(profile.localMediaProfilePreferredFormat)}</span>

@@ -23,6 +23,7 @@ import EpisodePage from './pages/episode/EpisodePage'
 import DownloadProfilesPage from './pages/DownloadProfilesPage'
 import AddDownloadProfilePage from './pages/download-profile/AddDownloadProfilePage'
 import EditDownloadProfilePage from './pages/download-profile/EditDownloadProfilePage'
+import DownloadProfilePage from './pages/download-profile/DownloadProfilePage'
 import StreamProfilesPage from './pages/StreamProfilesPage'
 import AddStreamProfilePage from './pages/stream-profile/AddStreamProfilePage'
 import EditStreamProfilePage from './pages/stream-profile/EditStreamProfilePage'
@@ -98,6 +99,7 @@ export const router = createBrowserRouter(
       <Route path="edit-local-media-profile/:slug" element={g('local_media_profiles', <EditLocalMediaProfilePage />, 'manage')} />
       <Route path="download-profiles" element={g('download_profiles', <DownloadProfilesPage />)} />
       <Route path="add-download-profile" element={g('download_profiles', <AddDownloadProfilePage />, 'manage')} />
+      <Route path="download-profile/:id" element={g('download_profiles', <DownloadProfilePage />)} />
       <Route path="edit-download-profile/:id" element={g('download_profiles', <EditDownloadProfilePage />, 'manage')} />
       <Route path="stream-profiles" element={g('stream_profiles', <StreamProfilesPage />)} />
       <Route path="add-stream-profile" element={g('stream_profiles', <AddStreamProfilePage />)} />

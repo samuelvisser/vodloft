@@ -1,9 +1,9 @@
-import {useCallback, useEffect, useMemo, useRef} from 'react'
+import {type FormEvent, useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {Link, useNavigate, useParams} from 'react-router-dom'
-import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionSeasons} from '../../lib/queries'
+import {useDownloadProfileOutOfScope, useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionSeasons} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
     DownloadProfileUpdateIn, DownloadProfileUpdateOut, DownloadProfileUpdateSchema,
@@ -17,6 +17,9 @@ import ReadMore from "../../utils/ReadMore";
 import {apiUrl} from '../../lib/api'
 import {faIcon} from '../../icons/faIcon'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
+import {downloadsSummary, mayDeleteOutOfScope, useDeleteOutOfScope} from '../../components/DownloadProfile/OutOfScopeDownloadsDialog'
+import {OutOfScopeDownloadsSchema, type OutOfScopeDownload} from '../../types/schemas/download_profile'
 
 type RouteParams = { id?: string }
 
@@ -82,6 +85,15 @@ export default function EditDownloadProfilePage() {
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
+    // Narrowing the filters never deletes by itself: saving asks whether to delete the downloads that fall out.
+    const mayDeleteFiles = mayDeleteOutOfScope()
+    const {data: outOfScopeBefore} = useDownloadProfileOutOfScope(profileId, mayDeleteFiles)
+    const [fallingOut, setFallingOut] = useState<{remove: OutOfScopeDownload[], kept: OutOfScopeDownload[]} | null>(null)
+    const deleteDecisionRef = useRef<OutOfScopeDownload[] | null>(null)
+    const deleteOutOfScope = useDeleteOutOfScope(
+        profileId ?? 0, `${collectionTitle ?? ''} (${downloadProfile?.localMediaProfileName ?? ''})`,
+    )
+
     const submitFn = async (data: DownloadProfileUpdateOut) => {
         return fetch(`${apiUrl()}/download-profiles/${profileId}`, {
             method: 'PATCH',
@@ -92,17 +104,64 @@ export default function EditDownloadProfilePage() {
     }
 
     const onSuccess = async () => {
+        const toDelete = deleteDecisionRef.current
+        deleteDecisionRef.current = null
         await qc.invalidateQueries({queryKey: ['downloadProfilesView']})
         await qc.invalidateQueries({queryKey: ['downloadProfilesByCollectionSlug']})
+        void qc.invalidateQueries({queryKey: ['downloadProfileView', profileId]})
+        void qc.invalidateQueries({queryKey: ['downloadProfileStatistics', profileId]})
+        void qc.invalidateQueries({queryKey: ['downloadProfileOutOfScope', profileId]})
 
+        if (toDelete?.length) {
+            // The delete runs in the background; the profile's page shows its progress.
+            navigate(`/download-profile/${profileId}`)
+            await deleteOutOfScope(toDelete.map((download) => download.id))
+            return
+        }
         navigate('/download-profiles')
     }
 
     const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfileUpdateOut) => {
         const res = await submitFn(dataOut)
         if (res?.ok) await onSuccess()
+        else deleteDecisionRef.current = null
         return res
     })
+
+    /** The profile's downloads that the form's filters leave out once saved, which its saved filters keep. */
+    const newlyOutOfScope = async (data: DownloadProfileUpdateOut) => {
+        const response = await fetch(`${apiUrl()}/download-profiles/${profileId}/out-of-scope-downloads/preview`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'include',
+            body: JSON.stringify({downloadWithCountdown: data.downloadWithCountdown, filters: data.filters}),
+        })
+        if (!response.ok) return []
+        const before = new Set((outOfScopeBefore ?? []).map((download) => download.id))
+        return OutOfScopeDownloadsSchema.parse(await response.json()).filter((download) => !before.has(download.id))
+    }
+
+    const onFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+        if (!mayDeleteFiles || outOfScopeBefore === undefined) {
+            void onSubmit(event)
+            return
+        }
+        void form.handleSubmit(async (data) => {
+            const falling = await newlyOutOfScope(data as DownloadProfileUpdateOut)
+            const remove = falling.filter((download) => download.keptBy === null)
+            if (!remove.length) {
+                void onSubmit()
+                return
+            }
+            setFallingOut({remove, kept: falling.filter((download) => download.keptBy !== null)})
+        })(event)
+    }
+
+    const continueSave = (remove: OutOfScopeDownload[] | null) => {
+        deleteDecisionRef.current = remove
+        setFallingOut(null)
+        void onSubmit()
+    }
 
     const {formState: {isSubmitting}} = form
 
@@ -131,7 +190,7 @@ export default function EditDownloadProfilePage() {
             ) : error ? (
                 <p>{error.message}</p>
             ) : (
-                <form className="form" onSubmit={onSubmit} noValidate>
+                <form className="form" onSubmit={onFormSubmit} noValidate>
                     {errors.root && (
                         <div className="form-error-card" role="alert" aria-live="polite">
                             {String(errors.root.message)}
@@ -203,6 +262,41 @@ export default function EditDownloadProfilePage() {
                     </div>
                 </form>
             )}
+
+            <ConfirmDialog
+                open={fallingOut !== null}
+                title="Delete downloads now outside this profile?"
+                icon={faIcon('fass', 'trash')}
+                iconTone="danger"
+                onDismiss={() => {
+                    if (!isSubmitting) setFallingOut(null)
+                }}
+                dismissOnOverlayClick={!isSubmitting}
+                cancelButton={{
+                    label: 'Save and keep them',
+                    disabled: isSubmitting,
+                    onClick: () => continueSave(null),
+                }}
+                confirmButton={{
+                    label: isSubmitting ? 'Saving…' : 'Save and delete',
+                    className: 'btn btn-danger',
+                    disabled: isSubmitting,
+                    onClick: () => continueSave(fallingOut?.remove ?? null),
+                }}
+            >
+                <p className="modal-text">
+                    These changes leave out {fallingOut ? downloadsSummary(fallingOut.remove) : ''} that this
+                    Download Profile downloaded or adopted. Delete them and their files? That runs in the background,
+                    and the profile's page shows how far it is.
+                </p>
+                <p className="modal-text">
+                    Episodes you downloaded by hand are never deleted, and neither are downloads marked to keep
+                    {fallingOut?.kept.length ? ` (${downloadsSummary(fallingOut.kept)} here)` : ''}.
+                </p>
+                <p className="modal-text">
+                    Close this dialog to keep editing. You can also delete them later from the Actions menu on the profile's page.
+                </p>
+            </ConfirmDialog>
 
             <ConfirmDeleteDialog
                 ref={confirmRef}

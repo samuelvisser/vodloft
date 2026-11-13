@@ -11,7 +11,12 @@ from backend.app import db_session
 from backend.services.example_episodes import example_session
 from backend.security.access import Area, Level
 from backend.security import deps
-from backend.security.deps import requires, requires_any
+from backend.security.deps import may_delete_files, requires, requires_any
+from backend.services.episode_filters import EpisodeSelection
+from backend.services.out_of_scope_downloads import (
+    download_profile_statistics, get_profile, out_of_scope_downloads, request_out_of_scope_delete, still_out_of_scope,
+)
+from backend.api.models.operations import DownloadProfileDeleteOutOfScopeOperationAccepted
 from backend.db.models import Collection
 from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, UpgradeChecksAPIRead,
@@ -121,6 +126,43 @@ def download_profiles_site_options(collection_id: int, request: Request):
             video_output_help=site.video_output_help,
             downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
         )
+
+
+def _out_of_scope_read(items) -> list[OutOfScopeDownloadAPIRead]:
+    return [OutOfScopeDownloadAPIRead.model_validate(item) for item in items]
+
+
+@router.get("/{download_profile_id}/statistics", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.VIEW)], response_model=DownloadProfileStatisticsAPIRead)
+def download_profile_statistics_read(download_profile_id: int):
+    """What the profile's page counts: its downloads, and which of them its filters leave out."""
+    with db_session() as s:
+        return DownloadProfileStatisticsAPIRead.model_validate(download_profile_statistics(s, get_profile(s, download_profile_id)))
+
+
+@router.get("/{download_profile_id}/out-of-scope-downloads", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.VIEW)], response_model=list[OutOfScopeDownloadAPIRead])
+def download_profile_out_of_scope_downloads(download_profile_id: int):
+    """The profile's downloads that its filters leave out. Downloads made by hand are not the profile's."""
+    with db_session() as s:
+        return _out_of_scope_read(out_of_scope_downloads(s, get_profile(s, download_profile_id)))
+
+
+@router.post("/{download_profile_id}/out-of-scope-downloads/preview", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE)], response_model=list[OutOfScopeDownloadAPIRead])
+def download_profile_out_of_scope_preview(download_profile_id: int, body: OutOfScopePreviewAPIRequest):
+    """The profile's downloads that the edit form's filters would leave out once saved."""
+    with db_session() as s:
+        profile = get_profile(s, download_profile_id)
+        selection = EpisodeSelection(
+            collection=profile.collection, download_with_countdown=body.download_with_countdown, filters=body.filters,
+        )
+        return _out_of_scope_read(out_of_scope_downloads(s, profile, selection))
+
+
+@router.post("/{download_profile_id}/out-of-scope-downloads/delete", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE), requires(Area.MANAGED_DOWNLOADS, Level.MANAGE), may_delete_files()], response_model=DownloadProfileDeleteOutOfScopeOperationAccepted, status_code=status.HTTP_202_ACCEPTED)
+def download_profile_delete_out_of_scope_downloads(download_profile_id: int, body: OutOfScopeDeleteAPIRequest):
+    """Delete the chosen downloads and their files in the background, if the profile still leaves them out."""
+    with db_session() as s:
+        ids = still_out_of_scope(s, download_profile_id, body.media_download_ids)
+    return run_write_transaction(lambda s: request_out_of_scope_delete(s, download_profile_id, ids))
 
 
 @router.get("/{download_profile_id}", dependencies=[requires_any((Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=DownloadProfileAPIRead)

@@ -213,7 +213,7 @@ export default function DownloadProfilesPage() {
                             </span>
                         </>
                     )}
-                    rowHref={(p) => `/edit-download-profile/${p.id}`}
+                    rowHref={(p) => `/download-profile/${p.id}`}
                     actions={(p) => [
                         {
                             href: `/edit-download-profile/${p.id}`,

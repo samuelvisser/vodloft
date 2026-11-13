@@ -38,6 +38,7 @@ from backend.services.removed_downloads import awaits_keep_answer
 from backend.services.regex_check import PatternError, compile_pattern, search, split_inline_ignore_case
 from backend.types.download_profile_types import (
     DATE_FIELDS,
+    DownloadKeptBy,
     DurationOperator,
     EpisodeFilterAction,
     EpisodeFilterField,
@@ -307,17 +308,26 @@ def _judged_by(evaluation: Evaluation, download) -> Evaluation:
     return evaluation
 
 
-def protected(evaluation: Evaluation, download) -> bool:
-    """Whether a download is safe from deletion: kept by hand, by a Keep filter, or while the
-    Home page asks whether to keep it because its episode left the Source."""
+def kept_by(evaluation: Evaluation, download) -> Optional[DownloadKeptBy]:
+    """What keeps a download safe from deletion, if anything: a person, a Keep filter, or the
+    Home page asking whether to keep it because its episode left the Source."""
     evaluation = _judged_by(evaluation, download)
-    if download.kept or download.media_item_id in evaluation.kept:
-        return True
+    if download.kept:
+        return DownloadKeptBy.HAND
+    if download.media_item_id in evaluation.kept:
+        return DownloadKeptBy.KEEP_FILTER
     if awaits_keep_answer(download, removed_from_source=download.media_item_id in evaluation.removed_from_source):
-        return True
-    return download.downloaded_at is not None and any(
+        return DownloadKeptBy.KEEP_QUESTION
+    if download.downloaded_at is not None and any(
         download.downloaded_at >= since for since in evaluation.keep_downloaded_since
-    )
+    ):
+        return DownloadKeptBy.KEEP_FILTER
+    return None
+
+
+def protected(evaluation: Evaluation, download) -> bool:
+    """Whether a download is safe from deletion."""
+    return kept_by(evaluation, download) is not None
 
 
 def date_line_leaves_out(evaluation: Evaluation, download, *, now: Optional[datetime] = None) -> bool:
@@ -341,6 +351,28 @@ def date_line_leaves_out(evaluation: Evaluation, download, *, now: Optional[date
         elif (item.count or item.days) and evaluation.left_out_by.get(episode_id) == f"filter:{index}":
             return True
     return False
+
+
+def filter_leaving_out(evaluation: Evaluation, download, *, now: Optional[datetime] = None) -> Optional[int]:
+    """The index of the filter that leaves this download out of the profile, if one does.
+
+    Any Skip or Only download filter counts here, unlike for retention. A downloaded line
+    leaves a download out N days after downloading, not by its publication date. An
+    episode that cannot be downloaded at all is not left out by a filter.
+    """
+    now = now or _utc_now()
+    evaluation = _judged_by(evaluation, download)
+    index = evaluation.left_out_by_filter(download.media_item_id)
+    if index is not None and evaluation.filters[index].field != EpisodeFilterField.DOWNLOADED:
+        return index
+    for index, item in enumerate(evaluation.filters):
+        if (
+            item.action == EpisodeFilterAction.ONLY and item.field == EpisodeFilterField.DOWNLOADED and item.days
+            and download.media_item_id in evaluation.reached[index]
+            and download.downloaded_at is not None and download.downloaded_at < _cutoff(item.days, now)
+        ):
+            return index
+    return None
 
 
 def left_out_by_date_line(evaluation: Evaluation, episode_id: int) -> bool:

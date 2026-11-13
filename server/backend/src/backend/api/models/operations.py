@@ -51,6 +51,10 @@ class LocalMediaProfileDeleteDownloadsOperationAccepted(
     download_profiles_disabled: int
 
 
+class DownloadProfileDeleteOutOfScopeOperationAccepted(TaskOperationAccepted):
+    downloads_queued: int
+
+
 class LocalMediaProfileRedownloadOperationAccepted(
     LocalMediaProfileMaintenanceOperationAccepted
 ):

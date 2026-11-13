@@ -262,3 +262,34 @@ export const SiteOptionsSchema = z.object({
     /** What the collection's site can download. */
     downloads: DownloadOptionsSchema,
 })
+
+// ------------ Downloads its filters leave out ------------
+/** A download of the profile that one of its filters leaves out. Downloads made by hand are not the profile's. */
+export const OutOfScopeDownloadSchema = z.object({
+    id: z.int(),
+    episodeId: z.int(),
+    episodeSlug: z.string(),
+    episodeTitle: z.string(),
+    publishedAt: z.string().nullable(),
+    downloadedAt: z.string().nullable(),
+    onDisk: z.boolean(),
+    sizeBytes: z.number().nullable(),
+    /** The position of the filter that leaves it out. */
+    filterIndex: z.int(),
+    /** What keeps it from being deleted unless it is picked; null when nothing does. */
+    keptBy: z.enum(['hand', 'keep_filter', 'keep_question']).nullable(),
+})
+export type OutOfScopeDownload = z.infer<typeof OutOfScopeDownloadSchema>
+export const OutOfScopeDownloadsSchema = z.array(OutOfScopeDownloadSchema)
+
+export const DownloadProfileStatisticsSchema = z.object({
+    downloaded: z.int(),
+    storageSizeBytes: z.number(),
+    /** Indexed episodes the profile downloads. */
+    wanted: z.int(),
+    /** Downloads its filters leave out that nothing keeps. */
+    outOfScope: z.int(),
+    /** Downloads its filters leave out that are kept. */
+    outOfScopeKept: z.int(),
+})
+export type DownloadProfileStatistics = z.infer<typeof DownloadProfileStatisticsSchema>
