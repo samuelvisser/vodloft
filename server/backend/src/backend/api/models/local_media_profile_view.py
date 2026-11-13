@@ -24,6 +24,12 @@ class LocalMediaProfileStatisticsAPIRead(ResponseBase):
     download_profile_count: int
 
 
+class LocalMediaProfilesStorageAPIRead(ResponseBase):
+    """The disk space the downloads of every Local Media Profile take together."""
+
+    storage_size_bytes: int
+
+
 class LocalMediaProfileViewAPIRead(ResponseBase):
     profile: LocalMediaProfileAPIRead
     statistics: LocalMediaProfileStatisticsAPIRead

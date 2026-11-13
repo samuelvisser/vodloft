@@ -43,6 +43,7 @@ export function formatDateTimeForDeadline(
 
 export function formatBytes(n: number | null | undefined) {
     if (!n && n !== 0) return ''
+    if (n >= 1024 ** 4) return `${(n / 1024 ** 4).toFixed(2)} TiB`
     if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GiB`
     if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MiB`
     return `${Math.round(n / 1024)} KiB`

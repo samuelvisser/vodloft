@@ -34,6 +34,8 @@ import {
 import {
     LocalMediaProfileRead,
     LocalMediaProfileReadSchema,
+    LocalMediaProfilesStorageRead,
+    LocalMediaProfilesStorageReadSchema,
     LocalMediaProfileViewRead,
     LocalMediaProfileViewReadSchema,
 } from "../types/schemas/local_media_profile";
@@ -114,6 +116,20 @@ export function useLocalMediaProfileSites() {
             LocalMediaProfileSitesReadSchema,
             signal,
         ),
+    })
+}
+
+/** The disk space the downloads of every Local Media Profile take together. */
+export function useLocalMediaProfilesStorage() {
+    return useQuery<LocalMediaProfilesStorageRead, Error, LocalMediaProfilesStorageRead, readonly ['localMediaProfilesStorage']>({
+        queryKey: ['localMediaProfilesStorage'] as const,
+        enabled: can('local_media_profiles'),
+        queryFn: ({signal}) => fetchParsed(
+            `${apiUrl()}/local-media-profiles/storage`,
+            LocalMediaProfilesStorageReadSchema,
+            signal,
+        ),
+        refetchOnMount: 'always',
     })
 }
 

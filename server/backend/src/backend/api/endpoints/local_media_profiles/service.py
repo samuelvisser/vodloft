@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, with_polymorphic
 from backend.api.list_filters import matches_any, matches_format, matches_words, scope_of, search_words
 from backend.api.models.local_media_profile_view import (
     LocalMediaProfileAPIRead,
+    LocalMediaProfilesStorageAPIRead,
     LocalMediaProfileStatisticsAPIRead,
     LocalMediaProfileViewAPIRead,
     LocalMediaProfileViewPageRead,
@@ -203,6 +204,14 @@ def _get_local_media_profile_statistics(
         )
         for local_media_profile_id in local_media_profile_ids
     }
+
+
+def get_local_media_profiles_storage(s: Session) -> LocalMediaProfilesStorageAPIRead:
+    """The Storage Used of every Local Media Profile added up."""
+    storage_size_bytes = s.scalar(
+        select(storage_size_bytes_sum()).where(MediaDownloadBase.local_media_profile_id.is_not(None))
+    )
+    return LocalMediaProfilesStorageAPIRead(storage_size_bytes=int(storage_size_bytes or 0))
 
 
 def _views(s: Session, items: list[LocalMediaProfileBase]) -> list[LocalMediaProfileViewAPIRead]:

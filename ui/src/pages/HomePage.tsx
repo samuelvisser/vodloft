@@ -8,6 +8,7 @@ import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgr
 import KeepQuestions from '../components/KeepQuestions/KeepQuestions'
 import {
     useLocalMediaProfiles,
+    useLocalMediaProfilesStorage,
     useMediaDownloadsCollection,
     useMovies,
     useRecentlyIndexedEpisodes,
@@ -22,6 +23,7 @@ import {
 import {EpisodeIndexedActivityRead} from '../types/schemas/episode'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
+import {formatBytes} from '../utils/formatting'
 
 const IN_PROGRESS = ['preparing', 'waiting', 'canceling', 'downloading', 'local_processing'] as const
 const QUEUED = ['pending'] as const
@@ -49,6 +51,7 @@ export default function HomePage() {
     const {data: collections} = useCollections()
     const {data: movies} = useMovies()
     const {data: profiles} = useLocalMediaProfiles()
+    const {data: storage} = useLocalMediaProfilesStorage()
     const defaultDownloadStatuses = useMemo(
         () => [...DEFAULT_DOWNLOAD_STATUS_FILTER].sort(),
         [],
@@ -161,6 +164,9 @@ export default function HomePage() {
                 <Link to={downloadsUrlForStatusFilters('pending')}><span>Queued</span><strong>{downloadsQuery.facets.pending ?? 0}</strong></Link>
                 <Link to={downloadsUrlForStatusFilters('error', 'missing', 'corrupted')}><span>Failed</span><strong>{problemsQuery.total}</strong></Link>
                 <Link to="/library"><span>Library</span><strong>{(collections?.length || 0) + (movies?.length || 0)}</strong></Link>
+                {can('local_media_profiles') && (
+                    <Link to="/local-media-profiles"><span>Storage used</span><strong>{storage ? formatBytes(storage.storageSizeBytes) || '0 KiB' : '–'}</strong></Link>
+                )}
             </div>
 
             {downloadError && <div className="form-error-card" role="alert">Could not load download status: {downloadError.message}</div>}
