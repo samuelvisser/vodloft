@@ -210,6 +210,16 @@ class EpisodePublishStatus(StrEnum):
     """The Source has nothing usable for it right now; VODLoft keeps checking for a while."""
 
 
+class ReleaseDate(StrEnum):
+    """Which moment a Source's release date of an item marks."""
+
+    START = "start"
+    """When the item came out or its stream began, as YouTube gives it: VODLoft calls it Released."""
+    END = "end"
+    """When the item was finished and put up, such as after a livestream ended, as The Daily Wire
+    gives it: VODLoft calls it Published."""
+
+
 @dataclass(frozen=True)
 class PublishStatusLabel:
     """How a Source names one publish status, with a sentence about what it means there."""
@@ -719,6 +729,8 @@ class Source(ABC):
     """What the search button names, when that is not the Source's name, such as YouTube for yt-dlp."""
     publish_status_labels: ClassVar[tuple[PublishStatusLabel, ...]] = DEFAULT_PUBLISH_STATUS_LABELS
     """What the Source calls each publish status, every status included."""
+    release_date: ClassVar[ReleaseDate] = ReleaseDate.START
+    """Which moment the release date the Source gives its items marks."""
     kind_names: ClassVar[Mapping[LinkKind, str]] = MappingProxyType({})
     """What the Source calls a kind of media where its own word differs from VODLoft's, such as
     Show for a Daily Wire collection. VODLoft uses these words only where it shows the Source's

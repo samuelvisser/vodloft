@@ -89,6 +89,9 @@ export const SourceReadSchema = z.object({
     searchLabel: z.string().nullable().optional(),
     /** What the Source calls a kind of media in its own catalogue, such as Show for a Daily Wire collection. */
     kindNames: z.record(z.string(), z.string()).optional(),
+    /** Which moment the Source's release dates mark: when an item came out or began (Released), or when it was
+     *  finished and put up, such as after a livestream ended (Published). */
+    releaseDate: z.enum(['start', 'end']),
     /** What a Local Media Profile can download for media of this Source: what any of its Sites offers. */
     downloadOptions: DownloadOptionsSchema,
 })

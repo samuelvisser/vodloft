@@ -10,7 +10,7 @@ from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.media_access import access_granted, access_locked, site_access
 from backend.types.collection_types import CollectionType
 from config.settings.site_settings import UpgradeRepeat
-from sources import Feature, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
+from sources import Feature, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
@@ -115,6 +115,7 @@ class SourceAPIRead(ResponseBase):
     sites_label: Optional[str] = None
     search_label: Optional[str] = None
     kind_names: dict[str, str] = {}
+    release_date: ReleaseDate
     download_options: DownloadOptionsAPIRead
 
     @field_validator("features", mode="before")

@@ -4,6 +4,7 @@ import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, usePublishStatusLabels, useSkippedByFilter, useSourceLookup, useWaitingForCountdown} from '../../lib/queries'
 import {useLibraryDefaults} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
@@ -11,6 +12,7 @@ import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableF
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import DisabledReason from '../../components/common/DisabledReason'
 import {siteName} from '../../lib/siteName'
 import {EpisodeDownloadRow} from '../../components/Episode/EpisodeDownloadRow'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
@@ -28,6 +30,32 @@ import EpisodeTypePill from '../../components/Episode/EpisodeTypePill'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
+
+/** A date on the summary line, shown with an icon only. What it is shows on hover, focus or a tap. */
+function SummaryDate({label, icon, value, placement}: {
+    label: string
+    icon: IconProp
+    value: Date | string | null | undefined
+    placement: 'below' | 'below-start'
+}) {
+    const text = `${label} ${formatDate(value)}`
+    return (
+        <DisabledReason reason={text} placement={placement} className="episode-summary-date">
+            {({describedBy, explain}) => (
+                <span
+                    className="episode-summary-item"
+                    tabIndex={0}
+                    aria-describedby={describedBy}
+                    onClick={explain}
+                >
+                    <FontAwesomeIcon icon={icon} aria-hidden="true"/>
+                    <span className="sr-only">{label} </span>
+                    <span>{formatDate(value)}</span>
+                </span>
+            )}
+        </DisabledReason>
+    )
+}
 
 function EpisodePageSkeleton() {
     return (
@@ -78,7 +106,10 @@ export default function EpisodePage() {
         collection?.id,
         String(episode?.publishStatus) === 'published_preliminary',
     )
-    const sourceName = useSourceLookup().name(episode?.sourceKey ?? collection?.sourceKey)
+    const sourceLookup = useSourceLookup()
+    const sourceName = sourceLookup.name(episode?.sourceKey ?? collection?.sourceKey)
+    // The Source's release date marks when the item was finished and put up, not when it began.
+    const releasedAtEnd = sourceLookup.get(episode?.sourceKey ?? collection?.sourceKey)?.releaseDate === 'end'
     const {data: publishStatusLabels} = usePublishStatusLabels(episode?.sourceKey)
     const {
         data: downloads,
@@ -192,6 +223,10 @@ export default function EpisodePage() {
             ? download.downloadedAt
             : latest
     }, null)
+    const siteLabel = collection.site?.name ?? (episode.sharingUrl ? siteName(episode.sharingUrl) : null) ?? sourceName
+    const detailsChecked = episode.metadataRefreshedAt
+        ? `Details checked ${formatDate(episode.metadataRefreshedAt)}`
+        : undefined
 
     const refreshMetadata = async () => {
         if (metadataRefreshBusy) return
@@ -258,32 +293,49 @@ export default function EpisodePage() {
                 <header className="episode-header">
                     <div className="episode-title-row">
                         <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
-                        <ActionMenu
-                            items={[
-                                ...(sourceControls(collection).metadataRefresh ? [{
-                                    label: 'Refresh metadata',
-                                    icon: faIcon('fass', 'arrows-rotate'),
-                                    disabled: metadataRefreshBusy,
-                                    disabledReason: metadataRefreshStarting
-                                        ? OPERATION_STARTING_MESSAGE
-                                        : metadataRefreshOperation
-                                            ? 'A metadata refresh is running for this episode.'
-                                            : undefined,
-                                    operation: metadataRefreshOperation,
-                                    onSelect: () => void refreshMetadata(),
-                                }] : []),
-                                ...(earlyDeleteAvailable ? [{
-                                    label: 'Early Delete',
-                                    icon: faIcon('fass', 'trash') as [string, string],
-                                    tone: 'danger' as const,
-                                    separatorBefore: true,
-                                    disabled: earlyDeleteDisabledReason !== undefined,
-                                    disabledReason: earlyDeleteDisabledReason,
-                                    operation: earlyDeleteOperation,
-                                    onSelect: () => setEarlyDeleteConfirm(true),
-                                }] : []),
-                            ]}
-                        />
+                        <div className="episode-title-actions">
+                            {episode.sharingUrl && (
+                                <a
+                                    className="btn btn-secondary episode-open-link"
+                                    href={episode.sharingUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    aria-label={`Open on ${siteLabel}`}
+                                    title={`Open on ${siteLabel}`}
+                                >
+                                    <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
+                                    <span className="episode-open-link-text">{siteLabel}</span>
+                                </a>
+                            )}
+                            <ActionMenu
+                                items={[
+                                    ...(sourceControls(collection).metadataRefresh ? [{
+                                        label: 'Refresh metadata',
+                                        description: detailsChecked,
+                                        icon: faIcon('fass', 'arrows-rotate'),
+                                        disabled: metadataRefreshBusy,
+                                        disabledReason: metadataRefreshStarting
+                                            ? OPERATION_STARTING_MESSAGE
+                                            : metadataRefreshOperation
+                                                ? 'A metadata refresh is running for this episode.'
+                                                : undefined,
+                                        operation: metadataRefreshOperation,
+                                        onSelect: () => void refreshMetadata(),
+                                    }] : []),
+                                    ...(earlyDeleteAvailable ? [{
+                                        label: 'Early Delete',
+                                        icon: faIcon('fass', 'trash') as [string, string],
+                                        tone: 'danger' as const,
+                                        separatorBefore: true,
+                                        disabled: earlyDeleteDisabledReason !== undefined,
+                                        disabledReason: earlyDeleteDisabledReason,
+                                        operation: earlyDeleteOperation,
+                                        onSelect: () => setEarlyDeleteConfirm(true),
+                                    }] : []),
+                                ]}
+                                note={sourceControls(collection).metadataRefresh ? undefined : detailsChecked}
+                            />
+                        </div>
                     </div>
                     <div className="episode-summary" aria-label="Episode metadata">
                         <EpisodeTypePill sourceKey={episode.sourceKey} type={episode.episodeType} asText/>
@@ -295,39 +347,30 @@ export default function EpisodePage() {
                             {statusLabel}
                         </span>
                         <span className="episode-summary-separator" aria-hidden="true"/>
-                        <span className="episode-summary-item">
-                            <FontAwesomeIcon icon={faIcon('fass', 'calendar')} aria-hidden="true"/>
-                            <span>
-                                {startsAt
-                                    ? `${publishStatus === 'delayed' ? 'Was due' : 'Starts'} ${formatDate(startsAt)}`
-                                    : `Released ${formatDate(episode.publishedDate)}`}
+                        {/* On a phone the dates start a line of their own, so the summary takes two lines at most. */}
+                        <span className="episode-summary-break" aria-hidden="true"/>
+                        {startsAt ? (
+                            <span className="episode-summary-item">
+                                <FontAwesomeIcon icon={faIcon('fass', 'calendar')} aria-hidden="true"/>
+                                <span>{`${publishStatus === 'delayed' ? 'Was due' : 'Starts'} ${formatDate(startsAt)}`}</span>
                             </span>
-                        </span>
+                        ) : (
+                            <SummaryDate
+                                label={releasedAtEnd ? 'Published' : 'Released'}
+                                icon={releasedAtEnd ? faIcon('fass', 'calendar-check') : faIcon('fass', 'calendar-day')}
+                                value={episode.publishedDate}
+                                placement="below-start"
+                            />
+                        )}
                         {latestDownloadedAt && (
                             <>
                                 <span className="episode-summary-separator" aria-hidden="true"/>
-                                <span className="episode-summary-item">
-                                    <FontAwesomeIcon icon={faIcon('fass', 'circle-down')} aria-hidden="true"/>
-                                    <span>Downloaded {formatDate(latestDownloadedAt)}</span>
-                                </span>
-                            </>
-                        )}
-                        {episode.metadataRefreshedAt && (
-                            <>
-                                <span className="episode-summary-separator" aria-hidden="true"/>
-                                <span className="episode-summary-item" title="When VODLoft last looked this episode up for changed details">
-                                    <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} aria-hidden="true"/>
-                                    <span>Details checked {formatDate(episode.metadataRefreshedAt)}</span>
-                                </span>
-                            </>
-                        )}
-                        {episode.sharingUrl && (
-                            <>
-                                <span className="episode-summary-separator" aria-hidden="true"/>
-                                <a className="episode-summary-item" href={episode.sharingUrl} target="_blank" rel="noreferrer">
-                                    <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                                    <span>Open on {collection.site?.name ?? siteName(episode.sharingUrl) ?? sourceName}</span>
-                                </a>
+                                <SummaryDate
+                                    label="Downloaded"
+                                    icon={faIcon('fass', 'circle-down')}
+                                    value={latestDownloadedAt}
+                                    placement="below"
+                                />
                             </>
                         )}
                     </div>
