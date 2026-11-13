@@ -51,7 +51,9 @@ export default function EditLocalMediaProfilePage() {
     const [restoredDraft, setRestoredDraft] = useState(false)
     const [renameTemplateConfirm, setRenameTemplateConfirm] = useState(false)
 
-    const {data: profile, isLoading, error} = useQuery<LocalMediaProfileRead | undefined>({
+    // The cache can still hold the profile as it was before the last save, so the form waits for this visit's own
+    // load instead of starting from it.
+    const {data: profile, isFetchedAfterMount, error} = useQuery<LocalMediaProfileRead | undefined>({
         queryKey: ['localMediaProfile', slug],
         enabled: !!slug,
         refetchOnMount: 'always',
@@ -85,7 +87,7 @@ export default function EditLocalMediaProfilePage() {
     ) as UseFormReturn<any>
 
     useEffect(() => {
-        if (!profile || !slug || initializedSlug.current === slug) return
+        if (!isFetchedAfterMount || !profile || !slug || initializedSlug.current === slug) return
 
         const canonical = canonicalProfileValues(profile)
         const draftKey = editLocalMediaProfileDraftKey(slug)
@@ -109,7 +111,7 @@ export default function EditLocalMediaProfilePage() {
         setRestoredDraft(hasRestoredChanges)
         if (draft && !hasRestoredChanges) clearLocalMediaProfileDraft(draftKey)
         setDraftReady(true)
-    }, [profile, slug, form])
+    }, [isFetchedAfterMount, profile, slug, form])
 
     useEffect(() => {
         if (!draftReady || !profile || !slug) return
@@ -128,7 +130,7 @@ export default function EditLocalMediaProfilePage() {
         navigate('/local-media-profiles')
     }, [navigate, slug])
 
-    if (isLoading) {
+    if (slug && !isFetchedAfterMount) {
         return (
             <section className="view" aria-labelledby="edit-media-profile-title">
                 <div className="view-header">

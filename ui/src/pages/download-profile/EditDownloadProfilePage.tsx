@@ -30,8 +30,9 @@ export default function EditDownloadProfilePage() {
 
     const profileId = id ? Number(id) : undefined
 
-    // Fetch the latest profile by id
-    const {data: downloadProfile, isLoading, error} = useQuery<DownloadProfileReadView | undefined>({
+    // Fetch the latest profile by id. The cache can still hold the profile as it was before the last save, so the
+    // form waits for this visit's own load instead of starting from it.
+    const {data: downloadProfile, isFetchedAfterMount, error} = useQuery<DownloadProfileReadView | undefined>({
         queryKey: ['downloadProfile', id],
         enabled: !!id,
         refetchOnMount: 'always',
@@ -55,11 +56,13 @@ export default function EditDownloadProfilePage() {
     })
     const {formState: {errors}} = form
 
-    // Populate form with existing data once it’s loaded
+    // Populate the form once this visit's load is in; a later background refetch must not undo the user's edits.
+    const initializedId = useRef<string | undefined>(undefined)
     useEffect(() => {
-        if (!downloadProfile) return
+        if (!isFetchedAfterMount || !downloadProfile || initializedId.current === id) return
+        initializedId.current = id
         form.reset(DownloadProfileUpdateSchema.parse(downloadProfile))
-    }, [downloadProfile, form])
+    }, [isFetchedAfterMount, downloadProfile, id, form])
 
     const collectionType = downloadProfile?.collectionType
     // The profile already in use stays offered after it was limited to other Sites.
@@ -108,6 +111,7 @@ export default function EditDownloadProfilePage() {
         await qc.invalidateQueries({queryKey: ['downloadProfilesView']})
         await qc.invalidateQueries({queryKey: ['downloadProfilesByCollectionSlug']})
         void qc.invalidateQueries({queryKey: ['downloadProfileView', profileId]})
+        void qc.invalidateQueries({queryKey: ['downloadProfile', id], refetchType: 'none'})
         void qc.invalidateQueries({queryKey: ['downloadProfileStatistics', profileId]})
         void qc.invalidateQueries({queryKey: ['downloadProfileOutOfScope', profileId]})
 
@@ -182,7 +186,7 @@ export default function EditDownloadProfilePage() {
                 <h1 id="edit-download-profile-title">Edit Download Profile</h1>
             </div>
 
-            {isLoading ? (
+            {!isFetchedAfterMount ? (
                 <p>Loading…</p>
             ) : error ? (
                 <p>{error.message}</p>

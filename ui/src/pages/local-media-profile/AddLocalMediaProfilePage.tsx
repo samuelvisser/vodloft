@@ -48,7 +48,8 @@ export default function AddLocalMediaProfilePage() {
     const [searchParams] = useSearchParams()
     const duplicateSlug = searchParams.get('duplicate')
 
-    const {data: source, isLoading, error} = useQuery<LocalMediaProfileRead>({
+    // The cache can still hold the profile as it was before its last save: copy it as loaded now.
+    const {data: source, isFetchedAfterMount, error} = useQuery<LocalMediaProfileRead>({
         queryKey: ['localMediaProfile', duplicateSlug],
         enabled: !!duplicateSlug,
         refetchOnMount: 'always',
@@ -61,13 +62,13 @@ export default function AddLocalMediaProfilePage() {
 
     if (!duplicateSlug) return <AddLocalMediaProfileForm/>
 
-    if (isLoading || !source || error) {
+    if (!isFetchedAfterMount || !source || error) {
         return (
             <section className="view" aria-labelledby="add-media-profile-title">
                 <div className="view-header">
                     <h1 id="add-media-profile-title">Duplicate local media profile</h1>
                 </div>
-                <p>{isLoading ? 'Loading…' : 'Profile not found.'}</p>
+                <p>{!isFetchedAfterMount ? 'Loading…' : 'Profile not found.'}</p>
             </section>
         )
     }
