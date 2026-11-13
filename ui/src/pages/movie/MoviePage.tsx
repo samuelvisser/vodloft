@@ -7,7 +7,8 @@ import toast from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
-import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
+import RunningActions from '../../components/RunningActions/RunningActions'
 import DownloadProgressStatus from '../../components/DownloadProgress/DownloadProgressStatus'
 import DownloadProgressButton from '../../components/DownloadProgress/DownloadProgressButton'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
@@ -493,6 +494,39 @@ export default function MoviePage() {
     const hasRedownloadableMedia = (downloads ?? []).some((download) => download.artifactStatus !== 'absent')
     const redownloadBusy = redownloadOperation !== undefined
 
+    const actionItems: ActionMenuItem[] = [
+        ...(collectionsExtras ? [{
+            label: 'Refresh extras',
+            icon: faIcon('fass', 'rotate'),
+            disabled: refreshingExtras,
+            disabledReason: refreshExtrasOperation
+                ? 'A movie-extra refresh is running.'
+                : refreshingExtrasStarting
+                    ? 'This task is starting...'
+                    : undefined,
+            operation: refreshExtrasOperation,
+            starting: refreshingExtrasStarting,
+            controls: operationControls(refreshExtrasOperation?.id, 'movie-extra refresh'),
+            onSelect: () => void refreshMovieExtras(),
+        }] : []),
+        {
+            label: 'Delete and re-download all media',
+            icon: faIcon('fass', 'arrows-rotate'),
+            tone: 'danger',
+            separatorBefore: true,
+            disabled: redownloadBusy || !hasRedownloadableMedia,
+            disabledReason: redownloadOperation
+                ? 'A re-download operation is running for this movie.'
+                : !hasRedownloadableMedia
+                    ? 'This movie has no previously downloaded media.'
+                    : undefined,
+            operation: redownloadOperation,
+            starting: isStarting('movie.redownload_media'),
+            controls: operationControls(redownloadOperation?.id, 're-download', false),
+            onSelect: () => setRedownloadConfirm(true),
+        },
+    ]
+
     return (
         <section className="view movie-detail-view" aria-labelledby="movie-title">
             <div className="movie-hero" style={hero ? {backgroundImage: `linear-gradient(0deg, var(--bg) 0%, rgba(9,18,33,.15) 72%), url(${hero})`} : undefined}>
@@ -546,41 +580,11 @@ export default function MoviePage() {
                     </button>
                 )}
                 {localMovie && (
-                    <ActionMenu
-                        items={[
-                            ...(collectionsExtras ? [{
-                                label: 'Refresh extras',
-                                icon: faIcon('fass', 'rotate'),
-                                disabled: refreshingExtras,
-                                disabledReason: refreshExtrasOperation
-                                    ? 'A movie-extra refresh is running.'
-                                    : refreshingExtrasStarting
-                                        ? 'This task is starting...'
-                                        : undefined,
-                                operation: refreshExtrasOperation,
-                                controls: operationControls(refreshExtrasOperation?.id, 'movie-extra refresh'),
-                                onSelect: () => void refreshMovieExtras(),
-                            }] : []),
-                            {
-                                label: 'Delete and re-download all media',
-                                icon: faIcon('fass', 'arrows-rotate'),
-                                tone: 'danger',
-                                separatorBefore: true,
-                                disabled: redownloadBusy || !hasRedownloadableMedia,
-                                disabledReason: redownloadOperation
-                                    ? 'A re-download operation is running for this movie.'
-                                    : !hasRedownloadableMedia
-                                        ? 'This movie has no previously downloaded media.'
-                                        : undefined,
-                                operation: redownloadOperation,
-                                starting: isStarting('movie.redownload_media'),
-                                controls: operationControls(redownloadOperation?.id, 're-download', false),
-                                onSelect: () => setRedownloadConfirm(true),
-                            },
-                        ]}
-                    />
+                    <ActionMenu items={actionItems}/>
                 )}
             </div>
+
+            {localMovie && <RunningActions className="movie-running-actions" actions={actionItems}/>}
 
             <div className="movie-detail-layout">
                 <div className="movie-description">

@@ -6,7 +6,8 @@ import toast from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
-import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
+import RunningActions from '../../components/RunningActions/RunningActions'
 import DisabledReason from '../../components/common/DisabledReason'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import OpaqueOutputTemplateCode from '../../components/LocalMediaProfile/OpaqueOutputTemplateCode'
@@ -225,6 +226,104 @@ export default function LocalMediaProfilePage() {
     const onlySites = !sites || everySite ? null
         : profile.includeUpcomingSites ? [siteNames, 'upcoming sites'].filter(Boolean).join(' and ') : `${siteNames} only`
 
+    const actionItems: ActionMenuItem[] = [
+        ...(profile.type === 'collection' ? [
+            {
+                label: 'Match existing files',
+                icon: faIcon('fass', 'file-import'),
+                disabled: statistics.downloadProfileCount === 0,
+                disabledReason: statistics.downloadProfileCount === 0
+                    ? 'No collection downloads with this Local Media Profile yet.'
+                    : undefined,
+                onSelect: () => void matchExistingFiles(),
+            },
+            {
+                label: 'Move episodes to another profile',
+                icon: faIcon('fass', 'file-export'),
+                disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)
+                    || statistics.managedMediaCount === 0,
+                disabledReason: renameOperation
+                    ? 'A file rename operation is running for this profile.'
+                    : deleteDownloadsOperation
+                        ? 'A delete downloads operation is running for this profile.'
+                        : redownloadOperation
+                            ? 'A re-download operation is running for this profile.'
+                            : statistics.managedMediaCount === 0
+                                ? 'This Local Media Profile does not manage any episodes yet.'
+                                : undefined,
+                operation: moveOperation,
+                controls: operationControls(moveOperation?.id, 'move', false),
+                onSelect: () => setMoveOpen(true),
+            },
+        ] : []),
+        {
+            label: 'Rename all managed files',
+            separatorBefore: true,
+            icon: faIcon('fass', 'file-pen'),
+            disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)
+                || statistics.managedMediaCount === 0,
+            disabledReason: renameOperation
+                ? 'A file rename operation is running for this profile.'
+                : deleteDownloadsOperation
+                    ? 'A delete downloads operation is running for this profile.'
+                    : redownloadOperation
+                        ? 'A re-download operation is running for this profile.'
+                        : statistics.managedMediaCount === 0
+                            ? 'This Local Media Profile does not manage any files yet.'
+                            : undefined,
+            operation: renameOperation,
+            starting: isStarting('local_media_profile.rename_files'),
+            controls: operationControls(renameOperation?.id, 'file rename'),
+            onSelect: () => setRenameConfirm(true),
+        },
+        {
+            label: 'Delete all downloads',
+            icon: faIcon('fass', 'trash'),
+            tone: 'danger',
+            separatorBefore: true,
+            disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
+            disabledReason: deleteDownloadsOperation
+                ? 'A delete downloads operation is running for this profile.'
+                : renameOperation
+                    ? 'A file rename operation is running for this profile.'
+                    : redownloadOperation
+                        ? 'A re-download operation is running for this profile.'
+                        : statistics.managedMediaCount === 0
+                            ? 'This Local Media Profile does not manage any downloads.'
+                            : undefined,
+            operation: deleteDownloadsOperation,
+            starting: isStarting('local_media_profile.delete_downloads'),
+            controls: operationControls(
+                deleteDownloadsOperation?.id,
+                'delete downloads',
+            ),
+            onSelect: () => setDeleteDownloadsConfirm(true),
+        },
+        {
+            label: 'Delete and re-download all media',
+            icon: faIcon('fass', 'arrows-rotate'),
+            tone: 'danger',
+            disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
+            disabledReason: redownloadOperation
+                ? 'A re-download operation is running for this profile.'
+                : deleteDownloadsOperation
+                    ? 'A delete downloads operation is running for this profile.'
+                    : renameOperation
+                        ? 'A file rename operation is running for this profile.'
+                        : statistics.managedMediaCount === 0
+                            ? 'This Local Media Profile does not manage any downloads.'
+                            : undefined,
+            operation: redownloadOperation,
+            starting: isStarting('local_media_profile.redownload_media'),
+            controls: operationControls(
+                redownloadOperation?.id,
+                're-download',
+                false,
+            ),
+            onSelect: () => setRedownloadConfirm(true),
+        },
+    ]
+
     return (
         <section className="view local-media-profile-view" aria-labelledby="local-media-profile-title">
             <div className="view-header">
@@ -294,107 +393,11 @@ export default function LocalMediaProfilePage() {
                                 </button>
                             )}
                         </DisabledReason>
-                        <ActionMenu
-                            items={[
-                                ...(profile.type === 'collection' ? [
-                                    {
-                                        label: 'Match existing files',
-                                        icon: faIcon('fass', 'file-import'),
-                                        disabled: statistics.downloadProfileCount === 0,
-                                        disabledReason: statistics.downloadProfileCount === 0
-                                            ? 'No collection downloads with this Local Media Profile yet.'
-                                            : undefined,
-                                        onSelect: () => void matchExistingFiles(),
-                                    },
-                                    {
-                                        label: 'Move episodes to another profile',
-                                        icon: faIcon('fass', 'file-export'),
-                                        disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)
-                                            || statistics.managedMediaCount === 0,
-                                        disabledReason: renameOperation
-                                            ? 'A file rename operation is running for this profile.'
-                                            : deleteDownloadsOperation
-                                                ? 'A delete downloads operation is running for this profile.'
-                                                : redownloadOperation
-                                                    ? 'A re-download operation is running for this profile.'
-                                                    : statistics.managedMediaCount === 0
-                                                        ? 'This Local Media Profile does not manage any episodes yet.'
-                                                        : undefined,
-                                        operation: moveOperation,
-                                        controls: operationControls(moveOperation?.id, 'move', false),
-                                        onSelect: () => setMoveOpen(true),
-                                    },
-                                ] : []),
-                                {
-                                    label: 'Rename all managed files',
-                                    separatorBefore: true,
-                                    icon: faIcon('fass', 'file-pen'),
-                                    disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)
-                                        || statistics.managedMediaCount === 0,
-                                    disabledReason: renameOperation
-                                        ? 'A file rename operation is running for this profile.'
-                                        : deleteDownloadsOperation
-                                            ? 'A delete downloads operation is running for this profile.'
-                                            : redownloadOperation
-                                                ? 'A re-download operation is running for this profile.'
-                                                : statistics.managedMediaCount === 0
-                                                    ? 'This Local Media Profile does not manage any files yet.'
-                                                    : undefined,
-                                    operation: renameOperation,
-                                    starting: isStarting('local_media_profile.rename_files'),
-                                    controls: operationControls(renameOperation?.id, 'file rename'),
-                                    onSelect: () => setRenameConfirm(true),
-                                },
-                                {
-                                    label: 'Delete all downloads',
-                                    icon: faIcon('fass', 'trash'),
-                                    tone: 'danger',
-                                    separatorBefore: true,
-                                    disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
-                                    disabledReason: deleteDownloadsOperation
-                                        ? 'A delete downloads operation is running for this profile.'
-                                        : renameOperation
-                                            ? 'A file rename operation is running for this profile.'
-                                            : redownloadOperation
-                                                ? 'A re-download operation is running for this profile.'
-                                                : statistics.managedMediaCount === 0
-                                                    ? 'This Local Media Profile does not manage any downloads.'
-                                                    : undefined,
-                                    operation: deleteDownloadsOperation,
-                                    starting: isStarting('local_media_profile.delete_downloads'),
-                                    controls: operationControls(
-                                        deleteDownloadsOperation?.id,
-                                        'delete downloads',
-                                    ),
-                                    onSelect: () => setDeleteDownloadsConfirm(true),
-                                },
-                                {
-                                    label: 'Delete and re-download all media',
-                                    icon: faIcon('fass', 'arrows-rotate'),
-                                    tone: 'danger',
-                                    disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
-                                    disabledReason: redownloadOperation
-                                        ? 'A re-download operation is running for this profile.'
-                                        : deleteDownloadsOperation
-                                            ? 'A delete downloads operation is running for this profile.'
-                                            : renameOperation
-                                                ? 'A file rename operation is running for this profile.'
-                                                : statistics.managedMediaCount === 0
-                                                    ? 'This Local Media Profile does not manage any downloads.'
-                                                    : undefined,
-                                    operation: redownloadOperation,
-                                    starting: isStarting('local_media_profile.redownload_media'),
-                                    controls: operationControls(
-                                        redownloadOperation?.id,
-                                        're-download',
-                                        false,
-                                    ),
-                                    onSelect: () => setRedownloadConfirm(true),
-                                },
-                            ]}
-                        />
+                        <ActionMenu items={actionItems}/>
                     </div>
                 </header>
+
+                <RunningActions actions={actionItems}/>
 
                 <div
                     className={`local-media-profile-statistics${profile.type === 'collection' ? '' : ' has-three-stats'}`}
