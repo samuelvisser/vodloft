@@ -1,5 +1,7 @@
 .progress-button-root {
     position: relative;
+    /* Lets the outgoing surface sit behind the incoming one while they swap. */
+    isolation: isolate;
     display: inline-flex;
     align-items: stretch;
     min-width: 0;
@@ -20,7 +22,7 @@
     justify-content: center;
 }
 
-.progress-button-root.is-progress .progress-button {
+.progress-button-root .progress-button.is-progress-surface {
     opacity: 1;
     cursor: default;
     border-color: rgba(59, 130, 246, 0.35);
@@ -46,7 +48,7 @@
     transition: width 220ms ease;
 }
 
-.progress-button-root.is-progress .progress-button {
+.progress-button-root .progress-button.is-progress-surface {
     flex-direction: column;
     gap: 1px;
     /* The title fits inside the normal button height, so the button keeps
@@ -54,7 +56,7 @@
     padding-block: 3px;
 }
 
-.progress-button-root.is-progress .progress-button-label {
+.progress-button-root .progress-button.is-progress-surface .progress-button-label {
     line-height: 1.15;
 }
 
@@ -129,7 +131,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-    .progress-button-root.is-progress .progress-button {
+    .progress-button-root .progress-button.is-progress-surface {
         border-color: rgba(96, 165, 250, 0.38);
         background: rgba(96, 165, 250, 0.12);
     }
@@ -146,5 +148,84 @@
     .progress-button-control:hover,
     .progress-button-control:focus-visible {
         background: rgba(255, 255, 255, 0.16);
+    }
+}
+
+/* Switching between the button and the progress bar.
+   To progress: the button presses in and fades while the progress bar pops in with a small overshoot.
+   Back to the button: the button wipes in from the left over the progress bar, the same way the fill grows,
+   and its label fades back in. */
+.progress-button-root[data-resizing] .progress-button,
+.progress-button-root[data-resizing] .progress-button > * {
+    white-space: nowrap;
+}
+
+.progress-button.is-leaving {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    pointer-events: none;
+}
+
+.progress-button-root.is-entering-progress .progress-button.is-leaving {
+    animation: progress-button-press-out 140ms ease-in both;
+}
+
+.progress-button-root.is-entering-progress .progress-button.is-entering {
+    animation: progress-button-pop 320ms cubic-bezier(.3, 1.5, .5, 1) both;
+}
+
+.progress-button-root.is-entering-progress .progress-button-controls {
+    animation: progress-button-fade-in 200ms 120ms ease-out both;
+}
+
+.progress-button-root.is-entering-button .progress-button.is-leaving {
+    z-index: -1;
+}
+
+.progress-button-root.is-entering-button .progress-button.is-leaving > :not(.progress-button-fill) {
+    animation: progress-button-fade-out 120ms ease-in both;
+}
+
+.progress-button-root.is-entering-button .progress-button.is-entering {
+    animation: progress-button-wipe 320ms cubic-bezier(.4, 0, .2, 1) both;
+}
+
+.progress-button-root.is-entering-button .progress-button.is-entering > * {
+    animation: progress-button-fade-in 180ms 200ms ease-out both;
+}
+
+@keyframes progress-button-press-out {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: scale(.94); }
+}
+
+@keyframes progress-button-pop {
+    from { opacity: 0; transform: scale(.92); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes progress-button-wipe {
+    from { clip-path: inset(0 100% 0 0 round 8px); }
+    to { clip-path: inset(0 0 0 0 round 8px); }
+}
+
+@keyframes progress-button-fade-in {
+    from { opacity: 0; }
+}
+
+@keyframes progress-button-fade-out {
+    to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .progress-button.is-leaving {
+        display: none;
+    }
+
+    .progress-button-root .progress-button,
+    .progress-button-root .progress-button > *,
+    .progress-button-root .progress-button-controls {
+        animation: none !important;
     }
 }
