@@ -146,21 +146,26 @@ def download_profile_out_of_scope_downloads(
 
 
 @router.post("/{download_profile_id}/out-of-scope-downloads/preview", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE)], response_model=OutOfScopePreviewAPIRead)
-def download_profile_out_of_scope_preview(download_profile_id: int, body: OutOfScopePreviewAPIRequest):
+def download_profile_out_of_scope_preview(
+        download_profile_id: int, body: OutOfScopePreviewAPIRequest,
+        offset: int = Query(default=0, ge=0), limit: int = Query(default=50, ge=1, le=200),
+):
     """The profile's downloads that the edit form's filters would newly leave out once saved."""
     with db_session() as s:
         profile = get_profile(s, download_profile_id)
         selection = EpisodeSelection(
             collection=profile.collection, download_with_countdown=body.download_with_countdown, filters=body.filters,
         )
-        return OutOfScopePreviewAPIRead.model_validate(newly_out_of_scope(s, profile, selection))
+        return OutOfScopePreviewAPIRead.model_validate(newly_out_of_scope(s, profile, selection, offset, limit))
 
 
 @router.post("/{download_profile_id}/out-of-scope-downloads/delete", dependencies=[requires(Area.DOWNLOAD_PROFILES, Level.MANAGE), requires(Area.MANAGED_DOWNLOADS, Level.MANAGE), may_delete_files()], response_model=DownloadProfileDeleteOutOfScopeOperationAccepted, status_code=status.HTTP_202_ACCEPTED)
 def download_profile_delete_out_of_scope_downloads(download_profile_id: int, body: OutOfScopeDeleteAPIRequest):
     """Delete the picked downloads and their files in the background, if the profile still leaves them out."""
     with db_session() as s:
-        ids = picked_out_of_scope(s, download_profile_id, body.pick, body.include, body.exclude)
+        ids = picked_out_of_scope(
+            s, download_profile_id, not_kept=body.not_kept, kept=body.kept, include=body.include, exclude=body.exclude,
+        )
     return run_write_transaction(lambda s: request_out_of_scope_delete(s, download_profile_id, ids))
 
 

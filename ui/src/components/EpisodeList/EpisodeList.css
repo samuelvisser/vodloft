@@ -1,0 +1,132 @@
+.episode-list {
+    --episode-list-border: rgba(100, 116, 139, 0.24);
+    --episode-list-badge: rgba(100, 116, 139, 0.14);
+    --episode-list-ok: #15803d;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 420px;
+    overflow-y: auto;
+    border: 1px solid var(--episode-list-border);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    .episode-list {
+        --episode-list-border: rgba(148, 163, 184, 0.22);
+        --episode-list-badge: rgba(148, 163, 184, 0.16);
+        --episode-list-ok: #4ade80;
+    }
+}
+
+.episode-list > li {
+    border-bottom: 1px solid var(--episode-list-border);
+    font-size: 0.92rem;
+}
+
+.episode-list > li:last-child {
+    border-bottom: 0;
+}
+
+.episode-list-row {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+}
+
+.episode-list-row.is-toggle {
+    cursor: pointer;
+}
+
+.episode-list-row input {
+    margin: 0;
+}
+
+.episode-list .is-ok {
+    color: var(--episode-list-ok);
+}
+
+.episode-list li.is-muted .episode-list-title {
+    color: var(--muted);
+}
+
+.episode-list-main {
+    display: grid;
+    min-width: 0;
+}
+
+.episode-list-note {
+    color: var(--muted);
+    font-size: 0.85em;
+}
+
+.episode-list-title,
+.episode-list-note {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Every row shows its fact columns at the same width, so type, length and date line up down the list. */
+.episode-list-meta {
+    display: grid;
+    grid-template-columns: 6rem 4.5rem 6.5rem;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.episode-list.has-size .episode-list-meta {
+    grid-template-columns: 6rem 4.5rem 5.5rem 6.5rem;
+}
+
+.episode-list-meta > :last-child,
+.episode-list.has-size .episode-list-meta > :nth-child(3) {
+    text-align: right;
+}
+
+.episode-list-type {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--episode-list-badge);
+    font-size: 0.8rem;
+}
+
+.episode-list > li.episode-list-end {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    color: var(--muted);
+}
+
+@media (max-width: 640px) {
+    .episode-list-row {
+        grid-template-columns: 16px minmax(0, 1fr);
+        row-gap: 2px;
+    }
+
+    .episode-list-meta {
+        grid-column: 2;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+    }
+
+    .episode-list-meta > :empty {
+        display: none;
+    }
+}

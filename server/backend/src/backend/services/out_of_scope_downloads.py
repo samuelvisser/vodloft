@@ -22,7 +22,7 @@ from backend.services.episode_filters import (
     EpisodeSelection, Evaluation, collection_episodes, evaluate, filter_leaving_out, kept_by, published_at,
 )
 from backend.services.errors import NotFoundError, ServiceError
-from backend.types.download_profile_types import DownloadKeptBy, MediaDownloadArtifactStatus, OutOfScopePick
+from backend.types.download_profile_types import DownloadKeptBy, MediaDownloadArtifactStatus
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
 
@@ -160,12 +160,7 @@ class OutOfScopePage:
     """The filters that leave any of them out, so a page can tell when one filter leaves out all of them."""
 
 
-def out_of_scope_page(s: Session, profile: DownloadProfile, offset: int, limit: int) -> OutOfScopePage:
-    """One page of ``out_of_scope_downloads``.
-
-    Every page walks the filters again: the list it pages through is only known by walking them.
-    """
-    out = out_of_scope_downloads(s, profile)
+def _page(out: list[OutOfScopeDownload], offset: int, limit: int) -> OutOfScopePage:
     kept = [item for item in out if item.kept_by is not None]
     return OutOfScopePage(
         items=out[offset:offset + limit], offset=offset, limit=limit, has_more=offset + limit < len(out),
@@ -174,48 +169,57 @@ def out_of_scope_page(s: Session, profile: DownloadProfile, offset: int, limit: 
     )
 
 
+def out_of_scope_page(s: Session, profile: DownloadProfile, offset: int, limit: int) -> OutOfScopePage:
+    """One page of ``out_of_scope_downloads``.
+
+    Every page walks the filters again: the list it pages through is only known by walking them.
+    """
+    return _page(out_of_scope_downloads(s, profile), offset, limit)
+
+
 @dataclass(frozen=True)
-class OutOfScopePreview:
-    """What saving the edit form's filters would newly leave out, apart from what is out already."""
-    media_download_ids: list[int]
-    """The ones nothing keeps."""
-    size_bytes: int
-    kept: int
-    kept_size_bytes: int
+class OutOfScopePreviewPage(OutOfScopePage):
+    """A page of what saving the edit form's filters would newly leave out, apart from what is out already.
+
+    The profile is saved before the delete starts, and after that nothing tells the new ones from
+    the ones left out before. So the preview carries the ids of all of them, for the form to say
+    exactly which ones to delete.
+    """
+    not_kept_ids: list[int]
+    kept_ids: list[int]
 
 
-def newly_out_of_scope(s: Session, profile: DownloadProfile, selection: EpisodeSelection) -> OutOfScopePreview:
+def newly_out_of_scope(
+        s: Session, profile: DownloadProfile, selection: EpisodeSelection, offset: int, limit: int,
+) -> OutOfScopePreviewPage:
     read = _ProfileDownloads.read(s, profile)
     before = {item.download.id for item in read.out_of_scope(read.evaluate(s, EpisodeSelection.of_profile(profile)))}
     new = [item for item in read.out_of_scope(read.evaluate(s, selection)) if item.download.id not in before]
-    remove = [item for item in new if item.kept_by is None]
-    kept = [item for item in new if item.kept_by is not None]
-    return OutOfScopePreview(
-        media_download_ids=[item.download.id for item in remove], size_bytes=_size(remove),
-        kept=len(kept), kept_size_bytes=_size(kept),
+    page = _page(new, offset, limit)
+    return OutOfScopePreviewPage(
+        **{field: getattr(page, field) for field in OutOfScopePage.__dataclass_fields__},
+        not_kept_ids=[item.download.id for item in new if item.kept_by is None],
+        kept_ids=[item.download.id for item in new if item.kept_by is not None],
     )
 
 
-def _starts_picked(pick: OutOfScopePick, item: OutOfScopeDownload) -> bool:
-    if pick == OutOfScopePick.ALL:
-        return True
-    return pick == OutOfScopePick.NOT_KEPT and item.kept_by is None
-
-
 def picked_out_of_scope(
-        s: Session, profile_id: int, pick: OutOfScopePick, include: Iterable[int] = (), exclude: Iterable[int] = (),
+        s: Session, profile_id: int, *, not_kept: bool, kept: bool,
+        include: Iterable[int] = (), exclude: Iterable[int] = (),
 ) -> list[int]:
     """The downloads picked to delete that the saved profile still leaves out.
 
-    ``pick`` says which ones start picked, then ``include`` and ``exclude`` add and take away
-    the ones picked by hand. Read before the delete starts, so a download the profile covers
-    again after a change in between is never deleted.
+    ``not_kept`` and ``kept`` pick every download that nothing keeps and every kept one,
+    then ``include`` and ``exclude`` add and take away the ones picked by hand. Read before
+    the delete starts, so a download the profile covers again after a change in between is
+    never deleted.
     """
     included, excluded = set(include), set(exclude)
     out = out_of_scope_downloads(s, get_profile(s, profile_id))
     return [
         item.download.id for item in out
-        if item.download.id not in excluded and (item.download.id in included or _starts_picked(pick, item))
+        if item.download.id not in excluded
+        and (item.download.id in included or (kept if item.kept_by is not None else not_kept))
     ]
 
 

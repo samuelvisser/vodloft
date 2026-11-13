@@ -3,7 +3,10 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {Link, useNavigate, useParams} from 'react-router-dom'
-import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionSeasons} from '../../lib/queries'
+import {
+    downloadProfileOutOfScopePreviewQuery, useDownloadProfileOutOfScopePreview, useDownloadProfilesByCollectionSlug,
+    useEpisodeTagsInCollection, useLocalMediaProfiles, useCollectionSeasons, type OutOfScopePreviewBody,
+} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
     DownloadProfileUpdateIn, DownloadProfileUpdateOut, DownloadProfileUpdateSchema,
@@ -18,8 +21,10 @@ import {apiUrl} from '../../lib/api'
 import {faIcon} from '../../icons/faIcon'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
-import {downloadsSummary, mayDeleteOutOfScope, useDeleteOutOfScope} from '../../components/DownloadProfile/OutOfScopeDownloadsDialog'
-import {OutOfScopePreviewSchema, type OutOfScopePreview} from '../../types/schemas/download_profile'
+import {
+    downloadsSummary, leftOutByText, mayDeleteOutOfScope, OutOfScopeChecklist, useDeleteOutOfScope, useOutOfScopePicks,
+} from '../../components/DownloadProfile/OutOfScopeDownloadsDialog'
+import type {OutOfScopePreview} from '../../types/schemas/download_profile'
 
 type RouteParams = { id?: string }
 
@@ -90,7 +95,12 @@ export default function EditDownloadProfilePage() {
 
     // Narrowing the filters never deletes by itself: saving asks whether to delete the downloads that fall out.
     const mayDeleteFiles = mayDeleteOutOfScope()
-    const [fallingOut, setFallingOut] = useState<OutOfScopePreview | null>(null)
+    const {data: tags} = useEpisodeTagsInCollection(downloadProfile?.collectionSlug)
+    /** The form's Which episodes lines being saved, while the dialog asks what to delete. */
+    const [fallingOut, setFallingOut] = useState<{body: OutOfScopePreviewBody, deleteOlder: boolean} | null>(null)
+    const preview = useDownloadProfileOutOfScopePreview(profileId, fallingOut?.body ?? null)
+    const previewSummary = preview.data?.pages[0]
+    const picks = useOutOfScopePicks(previewSummary, fallingOut)
     const deleteDecisionRef = useRef<number[] | null>(null)
     const deleteOutOfScope = useDeleteOutOfScope(
         profileId ?? 0, `${collectionTitle ?? ''} (${downloadProfile?.localMediaProfileName ?? ''})`,
@@ -114,11 +124,12 @@ export default function EditDownloadProfilePage() {
         void qc.invalidateQueries({queryKey: ['downloadProfile', id], refetchType: 'none'})
         void qc.invalidateQueries({queryKey: ['downloadProfileStatistics', profileId]})
         void qc.invalidateQueries({queryKey: ['downloadProfileOutOfScope', profileId]})
+        qc.removeQueries({queryKey: ['downloadProfileOutOfScopePreview', profileId]})
 
         if (toDelete?.length) {
             // The delete runs in the background; the profile's page shows its progress.
             navigate(`/download-profile/${profileId}`)
-            await deleteOutOfScope({pick: 'none', include: toDelete})
+            await deleteOutOfScope({notKept: false, kept: false, include: toDelete})
             return
         }
         navigate('/download-profiles')
@@ -131,31 +142,36 @@ export default function EditDownloadProfilePage() {
         return res
     })
 
-    /** The profile's downloads that the form's filters leave out once saved, which its saved filters keep. */
-    const newlyOutOfScope = async (data: DownloadProfileUpdateOut) => {
-        const response = await fetch(`${apiUrl()}/download-profiles/${profileId}/out-of-scope-downloads/preview`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            credentials: 'include',
-            body: JSON.stringify({downloadWithCountdown: data.downloadWithCountdown, filters: data.filters}),
-        })
-        if (!response.ok) return null
-        return OutOfScopePreviewSchema.parse(await response.json())
-    }
-
     const onFormSubmit = (event: FormEvent<HTMLFormElement>) => {
         if (!mayDeleteFiles) {
             void onSubmit(event)
             return
         }
         void form.handleSubmit(async (data) => {
-            const falling = await newlyOutOfScope(data as DownloadProfileUpdateOut)
-            if (!falling?.mediaDownloadIds.length) {
+            const out = data as DownloadProfileUpdateOut
+            const body = {downloadWithCountdown: out.downloadWithCountdown, filters: out.filters}
+            let falling: OutOfScopePreview | undefined
+            try {
+                // Read here first, so the dialog only opens when saving leaves out a download nothing keeps.
+                falling = (await qc.fetchInfiniteQuery(downloadProfileOutOfScopePreviewQuery(profileId, body))).pages[0]
+            } catch {
+                falling = undefined
+            }
+            if (!falling?.notKeptIds.length) {
                 void onSubmit()
                 return
             }
-            setFallingOut(falling)
+            setFallingOut({body, deleteOlder: out.deleteOlderEpisodes})
         })(event)
+    }
+
+    /** The downloads picked in the dialog, also the ones that did not load: the saved profile can no longer tell them apart. */
+    const pickedIds = () => {
+        if (!previewSummary) return []
+        const {notKept, kept, include = [], exclude = []} = picks.choice
+        const start = [...(notKept ? previewSummary.notKeptIds : []), ...(kept ? previewSummary.keptIds : [])]
+        const left = new Set(exclude)
+        return [...start.filter((id) => !left.has(id)), ...include]
     }
 
     const continueSave = (remove: number[] | null) => {
@@ -163,6 +179,12 @@ export default function EditDownloadProfilePage() {
         setFallingOut(null)
         void onSubmit()
     }
+
+    const typeLabel = (key: string) => tags?.find((tag) => tag.key === key)?.label ?? key
+    const seasonLabel = (slug: string) => seasonsData?.find((season) => season.slug === slug)?.name ?? slug
+    const previewFilterText = (index: number) => leftOutByText(
+        fallingOut?.body.filters[index] as Parameters<typeof leftOutByText>[0], typeLabel, seasonLabel, fallingOut?.deleteOlder ?? false,
+    )
 
     const {formState: {isSubmitting}} = form
 
@@ -279,23 +301,34 @@ export default function EditDownloadProfilePage() {
                     onClick: () => continueSave(null),
                 }}
                 confirmButton={{
-                    label: isSubmitting ? 'Saving…' : 'Save and delete',
+                    label: isSubmitting ? 'Saving…' : picks.count ? `Save and delete ${picks.count.toLocaleString()}` : 'Save and delete',
                     className: 'btn btn-danger',
-                    disabled: isSubmitting,
-                    onClick: () => continueSave(fallingOut?.mediaDownloadIds ?? null),
+                    disabled: isSubmitting || !picks.count,
+                    onClick: () => continueSave(pickedIds()),
                 }}
+                className="out-of-scope-dialog"
             >
                 <p className="modal-text">
-                    These changes leave out {fallingOut ? downloadsSummary(fallingOut.mediaDownloadIds.length, fallingOut.sizeBytes) : ''} that this
-                    Download Profile downloaded or adopted. Delete them and their files? That runs in the background,
-                    and the profile's page shows how far it is.
+                    These changes leave out downloads that this Download Profile downloaded or adopted. Delete the ones
+                    you pick, and their files? That runs in the background once the profile is saved, and the profile's
+                    page shows how far it is.
                 </p>
                 <p className="modal-text">
-                    Episodes you downloaded by hand are never deleted, and neither are downloads marked to keep
-                    {fallingOut?.kept ? ` (${downloadsSummary(fallingOut.kept, fallingOut.keptSizeBytes)} here)` : ''}.
+                    Episodes you downloaded by hand are never listed or deleted. Downloads marked to keep are listed,
+                    but picking all leaves them out: they have a checkbox of their own.
                 </p>
+                <OutOfScopeChecklist
+                    query={preview}
+                    picks={picks}
+                    filterText={previewFilterText}
+                    typeLabel={typeLabel}
+                    empty="Saving leaves out none of its downloads."
+                />
                 <p className="modal-text">
-                    Close this dialog to keep editing. You can also delete them later from the Actions menu on the profile's page.
+                    {picks.count
+                        ? <>Saving deletes {downloadsSummary(picks.count, picks.sizeBytes)} and their files. This can't be undone.</>
+                        : 'Nothing is picked, so saving deletes nothing.'}
+                    {' '}Close this dialog to keep editing. You can also delete them later from the Actions menu on the profile's page.
                 </p>
             </ConfirmDialog>
 

@@ -1,90 +1,38 @@
+/* Wide enough for the episode list's type, length, size and date columns. */
+.modal.out-of-scope-dialog {
+    max-width: 860px;
+}
+
 .out-of-scope-filter {
     font-weight: 600;
+}
+
+.out-of-scope-groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 20px;
+    margin: 4px 0 8px;
 }
 
 .out-of-scope-all {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 4px 0 8px;
     font-size: 13px;
     font-weight: 700;
 }
 
-.out-of-scope-list {
-    display: grid;
-    gap: 0;
+.confirm-dialog-content > .out-of-scope-list {
+    margin-top: 0;
     max-height: min(50vh, 420px);
-    margin: 0 0 8px;
-    padding: 0;
-    overflow-y: auto;
-    list-style: none;
-    border: 1px solid rgba(148, 163, 184, 0.26);
-    border-radius: 10px;
 }
 
-.out-of-scope-list li + li {
-    border-top: 1px solid rgba(148, 163, 184, 0.2);
-}
-
-.out-of-scope-list label {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 10px;
-    align-items: start;
-    padding: 9px 12px;
-    cursor: pointer;
-}
-
-.out-of-scope-list input {
-    margin-top: 3px;
-}
-
-.out-of-scope-copy {
-    display: grid;
-    gap: 2px;
-    min-width: 0;
-}
-
-.out-of-scope-copy a {
-    overflow-wrap: anywhere;
-    font-weight: 600;
-}
-
-.out-of-scope-copy small {
-    color: var(--muted);
-    overflow-wrap: anywhere;
-}
-
-.out-of-scope-loading,
-.out-of-scope-list .out-of-scope-more {
+.out-of-scope-loading {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--muted);
 }
 
-.out-of-scope-list .out-of-scope-more {
-    padding: 9px 12px;
-    font-size: 13px;
-}
-
-.out-of-scope-kept {
-    justify-self: start;
-    margin-top: 2px;
-    padding: 1px 8px;
-    border-radius: 999px;
-    background: rgba(148, 163, 184, 0.16);
-    font-size: 12px;
-    font-weight: 600;
-}
-
-@media (prefers-color-scheme: dark) {
-    .out-of-scope-list {
-        border-color: rgba(148, 163, 184, 0.18);
-    }
-
-    .out-of-scope-list li + li {
-        border-color: rgba(148, 163, 184, 0.16);
-    }
+.confirm-dialog-content > .out-of-scope-list + p {
+    margin-top: 12px;
 }

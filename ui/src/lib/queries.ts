@@ -40,7 +40,7 @@ import {
     LocalMediaProfileViewReadSchema,
 } from "../types/schemas/local_media_profile";
 import {LocalMediaProfileSitesReadSchema, type LocalMediaProfileSitesRead} from "../types/schemas/local_media_profile_base";
-import {DownloadProfileRead, DownloadProfileReadSchema, DownloadProfileStatisticsSchema, OutOfScopePageSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
+import {DownloadProfileRead, DownloadProfileReadSchema, DownloadProfileStatisticsSchema, OutOfScopePageSchema, OutOfScopePreviewSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {ProfileIdsSchema} from '../types/schemas/profile_bulk'
 
@@ -1037,6 +1037,32 @@ export function useDownloadProfileOutOfScope(id: number | undefined, enabled: bo
         ),
         getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.offset + lastPage.items.length : undefined,
     })
+}
+
+/** The Which episodes lines of the edit form, before they are saved. */
+export type OutOfScopePreviewBody = {downloadWithCountdown: boolean, filters: unknown[]}
+
+/** The profile's downloads that saving the edit form's filters would newly leave out, a page at a time. */
+export function downloadProfileOutOfScopePreviewQuery(id: number | undefined, body: OutOfScopePreviewBody | null) {
+    return {
+        queryKey: ['downloadProfileOutOfScopePreview', id, body] as const,
+        initialPageParam: 0,
+        queryFn: async ({pageParam, signal}: {pageParam: number, signal: AbortSignal}) => {
+            const response = await fetch(
+                `${apiUrl()}/download-profiles/${id}/out-of-scope-downloads/preview?offset=${pageParam}&limit=${OUT_OF_SCOPE_PAGE_SIZE}`,
+                {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify(body), signal},
+            )
+            if (!response.ok) throw new Error(`HTTP ${response.status}`)
+            return OutOfScopePreviewSchema.parse(await response.json())
+        },
+        getNextPageParam: (lastPage: {hasMore: boolean, offset: number, items: unknown[]}) =>
+            lastPage.hasMore ? lastPage.offset + lastPage.items.length : undefined,
+        staleTime: Infinity,
+    }
+}
+
+export function useDownloadProfileOutOfScopePreview(id: number | undefined, body: OutOfScopePreviewBody | null) {
+    return useInfiniteQuery({...downloadProfileOutOfScopePreviewQuery(id, body), enabled: id !== undefined && body !== null})
 }
 
 /** Episodes of a Collection that its Download Profiles' own filters skip, with the filter. */

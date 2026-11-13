@@ -270,6 +270,8 @@ export const OutOfScopeDownloadSchema = z.object({
     episodeId: z.int(),
     episodeSlug: z.string(),
     episodeTitle: z.string(),
+    episodeType: z.string().nullable(),
+    duration: z.number().nullable(),
     publishedAt: z.string().nullable(),
     downloadedAt: z.string().nullable(),
     onDisk: z.boolean(),
@@ -295,12 +297,10 @@ export const OutOfScopePageSchema = z.object({
 })
 export type OutOfScopePage = z.infer<typeof OutOfScopePageSchema>
 
-/** What saving the edit form's filters would newly leave out. */
-export const OutOfScopePreviewSchema = z.object({
-    mediaDownloadIds: z.array(z.int()),
-    sizeBytes: z.number(),
-    kept: z.int(),
-    keptSizeBytes: z.number(),
+/** A page of what saving the edit form's filters would newly leave out, with the ids of all of them. */
+export const OutOfScopePreviewSchema = OutOfScopePageSchema.extend({
+    notKeptIds: z.array(z.int()),
+    keptIds: z.array(z.int()),
 })
 export type OutOfScopePreview = z.infer<typeof OutOfScopePreviewSchema>
 
