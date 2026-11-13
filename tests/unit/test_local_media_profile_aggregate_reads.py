@@ -130,3 +130,48 @@ def test_local_media_profile_view_reports_managed_download_statistics() -> None:
     finally:
         session.close()
         engine.dispose()
+
+
+def test_local_media_profiles_storage_adds_up_every_profile() -> None:
+    from backend.api.endpoints.local_media_profiles.service import get_local_media_profiles_storage
+    from backend.db.models import Movie, MovieLocalMediaProfile, MovieMediaDownload
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from backend.types.media_types import MediaType
+
+    def movie(slug: str) -> Movie:
+        return Movie(
+            source_key="dailywire", uuid=f"{slug}-movie", type=MediaType.MOVIE.value, slug=slug, title=slug,
+            extended_title=slug, author_name="Director", mature_rating="PG", description=None, duration=60,
+        )
+
+    def profile(slug: str) -> MovieLocalMediaProfile:
+        return MovieLocalMediaProfile(
+            slug=slug, name=slug, output_template=f"/downloads/{slug}/{{{{ title }}}}.ext",
+            preferred_format="format_1080p",
+        )
+
+    session, engine = _new_session()
+    try:
+        assert get_local_media_profiles_storage(session).storage_size_bytes == 0
+
+        first, second = profile("first"), profile("second")
+        session.add_all([
+            MovieMediaDownload(
+                media=movie("one"), local_media_profile=first, file_path="/downloads/first/one.mp4",
+                **(available_artifact() | {"artifact_size_bytes": 1024}),
+            ),
+            MovieMediaDownload(
+                media=movie("two"), local_media_profile=second, file_path="/downloads/second/two.mp4",
+                **(available_artifact() | {"artifact_size_bytes": 4096}),
+            ),
+            MovieMediaDownload(
+                media=movie("three"), local_media_profile=second, file_path="/downloads/second/three.ext",
+                artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
+            ),
+        ])
+        session.commit()
+
+        assert get_local_media_profiles_storage(session).storage_size_bytes == 5120
+    finally:
+        session.close()
+        engine.dispose()

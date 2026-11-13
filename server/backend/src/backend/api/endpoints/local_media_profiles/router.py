@@ -12,6 +12,7 @@ from backend.api.models.local_media_profile import (
 )
 from backend.api.models.local_media_profile_view import (
     LocalMediaProfileAPIRead,
+    LocalMediaProfilesStorageAPIRead,
     LocalMediaProfileViewAPIRead,
     LocalMediaProfileViewPageRead,
 )
@@ -59,6 +60,7 @@ from .service import (
     get_local_media_profile_view,
     get_local_media_profile_views_page,
     get_local_media_profiles_list,
+    get_local_media_profiles_storage,
 )
 from backend.security.access import Area, Level
 from backend.security import deps
@@ -82,6 +84,13 @@ def local_media_profile_sites():
     """Every Site VODLoft knows that a Local Media Profile can be offered for."""
     with db_session() as s:
         return LocalMediaProfileSitesAPIRead.model_validate(profile_sites(s))
+
+
+@router.get("/storage", dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.VIEW)], response_model=LocalMediaProfilesStorageAPIRead)
+def local_media_profiles_storage():
+    """How much disk space the downloads of all Local Media Profiles take together."""
+    with db_session() as s:
+        return get_local_media_profiles_storage(s)
 
 
 @router.get("/as-view", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileViewPageRead)

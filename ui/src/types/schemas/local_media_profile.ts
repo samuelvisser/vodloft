@@ -96,6 +96,11 @@ export const LocalMediaProfileStatisticsReadSchema = z.object({
 })
 export type LocalMediaProfileStatisticsRead = z.infer<typeof LocalMediaProfileStatisticsReadSchema>
 
+export const LocalMediaProfilesStorageReadSchema = z.object({
+    storageSizeBytes: z.number().int().nonnegative(),
+})
+export type LocalMediaProfilesStorageRead = z.infer<typeof LocalMediaProfilesStorageReadSchema>
+
 export const LocalMediaProfileViewReadSchema = z.object({
     profile: LocalMediaProfileReadSchema,
     statistics: LocalMediaProfileStatisticsReadSchema,
