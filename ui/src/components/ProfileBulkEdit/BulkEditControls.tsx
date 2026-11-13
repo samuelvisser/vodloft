@@ -17,9 +17,14 @@ type ProfileTableActionsProps = {
 export function ProfileTableActions({selection, addTo, addLabel}: ProfileTableActionsProps) {
     return (
         <>
-            {selection.active
-                ? <PageHeaderAction icon={faIcon('fass', 'check')} label="Done" onClick={selection.stop}/>
-                : <PageHeaderAction icon={faIcon('fass', 'list-check')} label="Bulk edit" variant="secondary" onClick={selection.start}/>}
+            <PageHeaderAction
+                icon={selection.active ? faIcon('fass', 'check') : faIcon('fass', 'list-check')}
+                label={selection.active ? 'Done' : 'Bulk edit'}
+                variant="secondary"
+                keepLabel={selection.active}
+                toggled={selection.active}
+                onClick={selection.active ? selection.stop : selection.start}
+            />
             <PageHeaderAction icon={faIcon('fass', 'plus')} label={addLabel} to={addTo}/>
         </>
     )
@@ -86,6 +91,9 @@ export function BulkActionBar({selection, noun, busy, onEnable, onChange, onDele
                     <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/> Delete
                 </button>
             </div>
+            <button type="button" className="bulk-action-bar__close" aria-label="Stop bulk edit" title="Stop bulk edit" onClick={selection.stop}>
+                <FontAwesomeIcon icon={faIcon('fass', 'xmark')} aria-hidden="true"/>
+            </button>
         </div>
     )
 }
