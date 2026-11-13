@@ -41,6 +41,22 @@ def media_downloads_list():
         return get_media_downloads_list(s)
 
 
+@router.get("/keep-questions", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.VIEW)], response_model=list[KeepQuestionAPIRead])
+def media_downloads_keep_questions():
+    """Downloads whose episode left the Source, waiting for the person to say whether to keep them."""
+    with db_session() as s:
+        return get_keep_questions(s)
+
+
+@router.post("/keep-questions/answer", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE)], response_model=KeepQuestionAnswerAPIRead)
+def media_downloads_answer_keep_questions(body: KeepQuestionAnswerAPIRequest):
+    """Keep these episodes' downloads, or let retention treat them as usual again."""
+    def work(s):
+        return answer_keep_questions(s, body)
+
+    return run_write_transaction(work)
+
+
 @router.get("/as-view/action-ids", dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.VIEW)], response_model=list[int])
 def media_download_bulk_action_ids(
         action: str = Query(pattern="^(retry|cancel|delete-unavailable)$"),

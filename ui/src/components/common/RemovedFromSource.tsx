@@ -2,7 +2,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import './DrmProtected.css'
 
-export const REMOVED_FROM_SOURCE_MESSAGE = 'No longer available at the Source; downloaded files are kept'
+export const REMOVED_FROM_SOURCE_MESSAGE = 'No longer available at the Source; Home asks whether to keep its downloads'
 
 /** Marks an episode the Source no longer has, such as a deleted or private video; as text, a label on a details line. */
 export function RemovedBadge({onCover = false, asText = false}: {onCover?: boolean, asText?: boolean}) {

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import HTTPException
@@ -27,6 +27,9 @@ from backend.api.models.media_download import (
     MediaDownloadAPIRead,
     MediaDownloadAPIReadView,
     MediaDownloadKeptAPIRequest,
+    KeepQuestionAPIRead,
+    KeepQuestionAnswerAPIRead,
+    KeepQuestionAnswerAPIRequest,
     MediaDownloadAPIUpdate,
     MediaDownloadPageRead,
     MediaDownloadAPICreate,
@@ -53,7 +56,8 @@ from backend.types.media_download_history_types import MediaDownloadHistoryActio
 from backend.types.episode_types import EpisodePublishStatus
 from backend.services.media_access import media_access, media_locked
 from backend.services.local_media_profile_sites import profile_offered_for_site
-from backend.services.sites import collection_site_key, movie_site_key, video_site_key
+from backend.services.removed_downloads import answer_keep_question, downloads_awaiting_keep_answer
+from backend.services.sites import collection_site, collection_site_key, movie_site_key, video_site_key
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from downloader.storage.artifacts import remove_download_artifacts
@@ -856,5 +860,26 @@ def set_media_download_kept(s: Session, media_download_id: int, body: MediaDownl
     if item is None:
         raise HTTPException(status_code=404, detail="Episode download not found")
     item.kept = body.kept
+    if item.media.removed_from_source:
+        # Keeping or letting go of it by hand answers the Home page's question too.
+        item.removal_answered_at = datetime.now(timezone.utc)
     s.flush()
     return MediaDownloadAPIRead.model_validate(item)
+
+
+@dataclass(frozen=True)
+class _KeepQuestion:
+    download: EpisodeMediaDownload
+    site_name: str
+
+
+def get_keep_questions(s: Session) -> list[KeepQuestionAPIRead]:
+    """Downloads whose episode left the Source, waiting for the person to say whether to keep them."""
+    return [
+        KeepQuestionAPIRead.model_validate(_KeepQuestion(download, collection_site(download.media.collection).name))
+        for download in downloads_awaiting_keep_answer(s)
+    ]
+
+
+def answer_keep_questions(s: Session, body: KeepQuestionAnswerAPIRequest) -> KeepQuestionAnswerAPIRead:
+    return KeepQuestionAnswerAPIRead(answered=answer_keep_question(s, body.episode_ids, keep=body.keep))

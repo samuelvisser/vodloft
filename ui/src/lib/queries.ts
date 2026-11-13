@@ -82,6 +82,7 @@ import {
 import {apiJson, apiUrl, responseError} from './api'
 import {z} from 'zod'
 import {profilePageSchema} from '../types/schemas/profile_page'
+import {KeepQuestionReadSchema, type KeepQuestionRead} from '../types/schemas/media_download'
 import {LibraryCountsSchema, LibraryPreferencesSchema, type LibraryPreferences} from '../types/schemas/library'
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
@@ -627,6 +628,20 @@ export async function changeSourceApiKey(
     }
     if (!response.ok) throw await responseError(response)
     return ApiStatusReadSchema.parse(await response.json())
+}
+
+/** Downloads whose episode left the Source, waiting on Home for someone to say whether to keep them. */
+export function useKeepQuestions() {
+    return useQuery<KeepQuestionRead[], Error, KeepQuestionRead[], readonly ['keepQuestions']>({
+        queryKey: ['keepQuestions'] as const,
+        enabled: can('managed_downloads'),
+        queryFn: ({signal}) => fetchParsed(
+            `${apiUrl()}/media-downloads/keep-questions`,
+            KeepQuestionReadSchema.array(),
+            signal,
+        ),
+        refetchInterval: 60_000,
+    })
 }
 
 /** What the user should fix about any Source, for Needs attention on Home. */
