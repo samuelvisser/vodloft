@@ -79,7 +79,7 @@ def _bundle(tmp_path) -> Path:
     for name in ("audio-0", "360p", "720p"):
         (root / name).mkdir()
         (root / name / "media.mp4").write_bytes(b"x")
-        (root / name / "playlist.m3u8").write_text("#EXTM3U\n#EXTINF:6.0,\nmedia.mp4\n#EXTINF:4.5,\nmedia.mp4\n#EXT-X-ENDLIST\n")
+        (root / name / "playlist.m3u8").write_text("#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6.0,\nmedia.mp4\n#EXTINF:4.5,\nmedia.mp4\n#EXT-X-ENDLIST\n")
     return master
 
 
@@ -109,17 +109,66 @@ def test_subtitles_are_kept_in_the_bundle_and_listed_with_each_resolution(tmp_pa
         '#EXT-X-STREAM-INF:BANDWIDTH=2,AUDIO="audio",SUBTITLES="subtitles"',
     ]
     root = hls_asset_root(master)
-    assert (root / "subtitles-0" / "subtitles.vtt").read_text() == english.read_text()
-    # One WebVTT file as long as the video.
+    # Parts as long as the video's, each with the cues it shows.
     assert (root / "subtitles-1" / "playlist.m3u8").read_text() == (
-        "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:11\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n"
-        "#EXTINF:10.500,\nsubtitles.vtt\n#EXT-X-ENDLIST\n"
+        "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n"
+        "#EXTINF:6.000,\n0.vtt\n#EXTINF:4.500,\n1.vtt\n#EXT-X-ENDLIST\n"
     )
+    assert (root / "subtitles-0" / "0.vtt").read_text() == english.read_text()
+    assert (root / "subtitles-0" / "1.vtt").read_text() == "WEBVTT\n"
     assert missing_hls_bundle_files(master) == []
 
     # The bundle needs its subtitles, just like its video.
-    (root / "subtitles-1" / "subtitles.vtt").unlink()
-    assert missing_hls_bundle_files(master) == [(root / "subtitles-1" / "subtitles.vtt").resolve()]
+    (root / "subtitles-1" / "1.vtt").unlink()
+    assert missing_hls_bundle_files(master) == [(root / "subtitles-1" / "1.vtt").resolve()]
+
+
+def test_a_cue_that_crosses_into_the_next_part_is_in_both(tmp_path):
+    from downloader.hls_bundle import write_hls_subtitle_segments
+
+    write_hls_subtitle_segments(
+        "\ufeffWEBVTT\r\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:900000\r\n\r\nSTYLE\r\n::cue { color: lime }\r\n\r\n"
+        "NOTE left out\r\n\r\n1\r\n00:05.000 --> 00:07.000 align:start\r\nAcross\r\n\r\n"
+        "00:00:13.000 --> 00:00:14.000\r\nLast\r\n",
+        tmp_path, duration=14.0, segment_seconds=6,
+    )
+
+    header = "WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:900000\n\nSTYLE\n::cue { color: lime }"
+    across = "1\n00:05.000 --> 00:07.000 align:start\nAcross"
+    assert [(tmp_path / f"{number}.vtt").read_text() for number in range(3)] == [
+        f"{header}\n\n{across}\n", f"{header}\n\n{across}\n", f"{header}\n\n00:00:13.000 --> 00:00:14.000\nLast\n",
+    ]
+    assert "#EXTINF:2.000,\n2.vtt\n#EXT-X-ENDLIST" in (tmp_path / "playlist.m3u8").read_text()
+
+
+def test_whole_video_subtitles_of_earlier_downloads_are_split(tmp_path):
+    import importlib
+
+    from downloader import hls_asset_root, missing_hls_bundle_files
+
+    migration = importlib.import_module(
+        "backend.db.background_migrations.versions.875ce72375ca_split_hls_bundle_subtitles"
+    )
+    master = _bundle(tmp_path)
+    root = hls_asset_root(master)
+    (root / "subtitles-0").mkdir()
+    (root / "subtitles-0" / "subtitles.vtt").write_text("WEBVTT\n\n00:00:07.000 --> 00:00:08.000\nLater\n")
+    (root / "subtitles-0" / "playlist.m3u8").write_text(
+        "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:11\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n"
+        "#EXTINF:10.500,\nsubtitles.vtt\n#EXT-X-ENDLIST\n"
+    )
+    master.write_text(master.read_text().replace(
+        "#EXT-X-STREAM-INF:BANDWIDTH=1,", '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subtitles",NAME="en",URI="hls/subtitles-0/playlist.m3u8"\n'
+        "#EXT-X-STREAM-INF:BANDWIDTH=1,",
+    ))
+
+    assert migration._split(str(master)) == 1
+    assert not (root / "subtitles-0" / "subtitles.vtt").exists()
+    assert (root / "subtitles-0" / "0.vtt").read_text() == "WEBVTT\n"
+    assert (root / "subtitles-0" / "1.vtt").read_text() == "WEBVTT\n\n00:00:07.000 --> 00:00:08.000\nLater\n"
+    assert missing_hls_bundle_files(master) == []
+    # Split once.
+    assert migration._split(str(master)) == 0
 
 
 @pytest.mark.parametrize(("publish", "embed"), [(True, False), (False, True), (True, True)])
@@ -162,7 +211,7 @@ def test_a_daily_wire_hls_bundle_keeps_embedded_subtitles_inside_and_sidecars_be
         library = tmp_path / "library"
         master = library / "Episode.m3u8"
         assert execution.result.path == str(master) and missing_hls_bundle_files(master) == []
-        bundled = hls_asset_root(master) / "subtitles-0" / "subtitles.vtt"
+        bundled = hls_asset_root(master) / "subtitles-0" / "0.vtt"
         if embed:
             # The source's own WebVTT, as it is.
             assert bundled.read_bytes() == webvtt
