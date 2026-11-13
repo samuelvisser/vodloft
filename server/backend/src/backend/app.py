@@ -286,6 +286,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Background tasks wait at their queries while a request is answered, also while it is signed in.
+    from backend.requests_first import RequestsFirstMiddleware
+    app.add_middleware(RequestsFirstMiddleware)
+
     # Outermost, so a slow request's time includes every middleware above.
     from backend.slow_requests import SlowRequestMiddleware
     app.add_middleware(SlowRequestMiddleware)
