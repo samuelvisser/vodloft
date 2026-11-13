@@ -21,6 +21,7 @@ export const SourceFeature = {
     QUICK_CHECK: 'quick_check',
     CATALOGUE_REFRESH: 'catalogue_refresh',
     YTDLP_OPTIONS: 'ytdlp_options',
+    METADATA_REFRESH: 'metadata_refresh',
     EPISODE_LOOKUPS: 'episode_lookups',
     PAGE_STREAMS: 'page_streams',
     OWN_STUDIO: 'own_studio',
