@@ -88,7 +88,8 @@ function CountBadge({count, waiting, active, onShow}: {count: number | undefined
     return (
         <button
             type="button" className={`which-episodes-count${count === 0 ? ' is-zero' : ''}`}
-            title="Show the episodes this filter leaves out" disabled={count === 0} onClick={onShow} aria-pressed={!!active}
+            title={active ? 'Show all episodes again' : 'Show the episodes this filter leaves out'}
+            disabled={count === 0} onClick={onShow} aria-pressed={!!active}
         >
             −{count}
         </button>
@@ -241,9 +242,14 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
         if (from !== null && from !== index) move(from, index)
     }
 
-    // A filter's count opens the list on the episodes that filter leaves out.
+    // A filter's count opens the list on the episodes that filter leaves out; clicked again, it shows every episode.
     const showLeftOutBy = (index: number) => {
-        setShown(`filter:${sentIndexes.indexOf(index)}`)
+        const key = `filter:${sentIndexes.indexOf(index)}`
+        if (showWhich && shown === key) {
+            setShown('all')
+            return
+        }
+        setShown(key)
         setShowWhich(true)
         window.setTimeout(() => shownRef.current?.scrollIntoView({behavior: 'smooth', block: 'nearest'}), 50)
     }
