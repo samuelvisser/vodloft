@@ -26,6 +26,7 @@ import {useBulkSelection} from '../components/ProfileBulkEdit/useBulkSelection'
 import {ProfileTableActions, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
 import ProfileBulkEdit, {tableSelection} from '../components/ProfileBulkEdit/ProfileBulkEdit'
 import type {BulkFieldSpec} from '../components/ProfileBulkEdit/BulkChangeDialog'
+import {SubtitleWhereReg} from '../components/LocalMediaProfile/SubtitleFields'
 
 // Show each output path expression as just its first variable, without filters or if/else fallbacks.
 // Set to false to show the expressions as written again.
@@ -42,6 +43,12 @@ const STORAGE_OPTIONS = [
     {value: 'files', label: 'Has files'},
     {value: 'empty', label: 'Empty'},
 ]
+
+const CollectionAssetsReg = createSelectRegistry('BulkCollectionAssetsMode', {
+    system: {label: 'System setting'},
+    enabled: {label: 'Enabled'},
+    disabled: {label: 'Disabled'},
+})
 
 const BULK_FIELDS: BulkFieldSpec[] = [
     {
@@ -73,6 +80,18 @@ const BULK_FIELDS: BulkFieldSpec[] = [
             embed_and_nfo: {label: 'Both embed and download'},
         }),
         help: 'Files downloaded before keep their metadata as it is.',
+    },
+    {
+        key: 'subtitleMode', label: 'Subtitles', kind: 'select', defaultValue: 'sidecar',
+        registry: SubtitleWhereReg,
+        help: 'Each profile keeps its own subtitle languages. Files downloaded before keep their subtitles as they are.',
+    },
+    {
+        key: 'downloadCollectionAssets', label: 'Download collection images', kind: 'select', defaultValue: 'system',
+        registry: CollectionAssetsReg,
+        valueLabel: (value) => CollectionAssetsReg.getLabelLoose(value === null ? 'system' : value ? 'enabled' : 'disabled'),
+        toApi: (value) => value === 'system' ? null : value === 'enabled',
+        help: 'Poster, background and square artwork in each collection’s root folder. Existing custom artwork is preserved.',
     },
 ]
 
