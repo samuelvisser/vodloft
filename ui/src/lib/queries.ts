@@ -40,7 +40,7 @@ import {
     LocalMediaProfileViewReadSchema,
 } from "../types/schemas/local_media_profile";
 import {LocalMediaProfileSitesReadSchema, type LocalMediaProfileSitesRead} from "../types/schemas/local_media_profile_base";
-import {DownloadProfileRead, DownloadProfileReadSchema, DownloadProfileStatisticsSchema, OutOfScopeDownloadsSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
+import {DownloadProfileRead, DownloadProfileReadSchema, DownloadProfileStatisticsSchema, OutOfScopePageSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {ProfileIdsSchema} from '../types/schemas/profile_bulk'
 
@@ -1022,13 +1022,20 @@ export function useDownloadProfileStatistics(id?: number) {
     })
 }
 
-/** The Download Profile's downloads that its filters leave out, read when the dialog that lists them opens. */
+const OUT_OF_SCOPE_PAGE_SIZE = 50
+
+/** The Download Profile's downloads that its filters leave out, a page at a time as the dialog that lists them scrolls. */
 export function useDownloadProfileOutOfScope(id: number | undefined, enabled: boolean) {
-    return useQuery({
+    return useInfiniteQuery({
         queryKey: ['downloadProfileOutOfScope', id] as const,
         enabled: id !== undefined && enabled,
         refetchOnMount: 'always',
-        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/download-profiles/${id}/out-of-scope-downloads`, OutOfScopeDownloadsSchema, signal),
+        initialPageParam: 0,
+        queryFn: ({pageParam, signal}) => fetchParsed(
+            `${apiUrl()}/download-profiles/${id}/out-of-scope-downloads?offset=${pageParam}&limit=${OUT_OF_SCOPE_PAGE_SIZE}`,
+            OutOfScopePageSchema, signal,
+        ),
+        getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.offset + lastPage.items.length : undefined,
     })
 }
 

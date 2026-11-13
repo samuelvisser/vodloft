@@ -83,7 +83,7 @@ def _download(session, profile, episode, *, managed=True, **values):
     download = EpisodeMediaDownload(
         type="episode", media_item_id=episode.id, local_media_profile_id=profile.local_media_profile_id,
         download_profile_id=profile.id if managed else None, file_path=f"/tmp/scope-{episode.id}.mkv",
-        **available_artifact(), **values,
+        **{**available_artifact(), **values},
     )
     session.add(download)
     session.flush()
@@ -170,3 +170,65 @@ def test_statistics_count_the_left_out_downloads_apart_from_the_kept_ones(db_ses
     statistics = download_profile_statistics(db_session, profile)
 
     assert (statistics.downloaded, statistics.wanted, statistics.out_of_scope, statistics.out_of_scope_kept) == (3, 1, 1, 1)
+
+
+def test_a_page_carries_the_totals_of_every_out_of_scope_download(db_session):
+    from backend.services.out_of_scope_downloads import out_of_scope_page
+
+    collection = _collection(db_session)
+    profile = _profile(db_session, collection, line("skip", "title", pattern="(?i)trailer"))
+    for index in range(1, 6):
+        episode = _episode(db_session, collection, index, f"Trailer {index}", days_ago=index)
+        _download(db_session, profile, episode, kept=index == 5, artifact_size_bytes=100)
+
+    first = out_of_scope_page(db_session, profile, offset=0, limit=2)
+    last = out_of_scope_page(db_session, profile, offset=4, limit=2)
+
+    assert [item.episode.title for item in first.items] == ["Trailer 1", "Trailer 2"]
+    assert first.has_more and not last.has_more
+    assert [item.episode.title for item in last.items] == ["Trailer 5"]
+    assert (first.total, first.size_bytes, first.kept, first.kept_size_bytes) == (5, 500, 1, 100)
+    assert first.filter_indexes == [0]
+
+
+def test_a_delete_takes_the_downloads_picked_from_the_whole_list(db_session):
+    from backend.services.out_of_scope_downloads import picked_out_of_scope
+    from backend.types.download_profile_types import OutOfScopePick
+
+    collection = _collection(db_session)
+    profile = _profile(db_session, collection, line("skip", "title", pattern="(?i)trailer"))
+    wanted = _download(db_session, profile, _episode(db_session, collection, 1, "Bridges"))
+    one = _download(db_session, profile, _episode(db_session, collection, 2, "Trailer one"))
+    two = _download(db_session, profile, _episode(db_session, collection, 3, "Trailer two"))
+    kept = _download(db_session, profile, _episode(db_session, collection, 4, "Kept trailer"), kept=True)
+
+    def picked(pick, include=(), exclude=()):
+        return set(picked_out_of_scope(db_session, profile.id, pick, include, exclude))
+
+    assert picked(OutOfScopePick.NOT_KEPT) == {one.id, two.id}
+    assert picked(OutOfScopePick.NOT_KEPT, include=[kept.id], exclude=[two.id]) == {one.id, kept.id}
+    assert picked(OutOfScopePick.ALL) == {one.id, two.id, kept.id}
+    # A download the filters cover is never deleted, even when it is asked for.
+    assert picked(OutOfScopePick.NONE, include=[wanted.id, one.id]) == {one.id}
+
+
+def test_the_preview_only_counts_what_saving_newly_leaves_out(db_session):
+    from backend.services.episode_filters import EpisodeSelection
+    from backend.services.out_of_scope_downloads import newly_out_of_scope
+
+    collection = _collection(db_session)
+    profile = _profile(db_session, collection, line("skip", "title", pattern="(?i)trailer"))
+    _download(db_session, profile, _episode(db_session, collection, 1, "Trailer", days_ago=1), artifact_size_bytes=10)
+    newest = _download(db_session, profile, _episode(db_session, collection, 2, "Newest", days_ago=2), artifact_size_bytes=10)
+    older = _download(db_session, profile, _episode(db_session, collection, 3, "Older", days_ago=3), artifact_size_bytes=20)
+    _download(db_session, profile, _episode(db_session, collection, 4, "Oldest", days_ago=4), kept=True, artifact_size_bytes=40)
+    narrower = EpisodeSelection(
+        collection=collection, download_with_countdown=False,
+        filters=[line("skip", "title", pattern="(?i)trailer"), line("skip", "title", pattern="Old")],
+    )
+
+    preview = newly_out_of_scope(db_session, profile, narrower)
+
+    assert preview.media_download_ids == [older.id]
+    assert newest.id not in preview.media_download_ids
+    assert (preview.size_bytes, preview.kept, preview.kept_size_bytes) == (20, 1, 40)

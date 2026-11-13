@@ -14,7 +14,7 @@ import {can} from '../../lib/access'
 import {apiUrl} from '../../lib/api'
 import {OperationControlError, useControlOperation, useStartingOperations} from '../../lib/operations'
 import {
-    useCollectionSeasons, useDownloadProfileOutOfScope, useDownloadProfileStatistics, useDownloadProfileView,
+    useCollectionSeasons, useDownloadProfileStatistics, useDownloadProfileView,
     useEpisodeTagsInCollection, useLocalMediaProfiles,
 } from '../../lib/queries'
 import type {DownloadProfileRead} from '../../types/schemas/download_profile'
@@ -30,12 +30,11 @@ export default function DownloadProfilePage() {
     const profileId = id ? Number(id) : undefined
     const navigate = useNavigate()
     const {data: profile, isLoading, error} = useDownloadProfileView(profileId)
-    const {data: statistics} = useDownloadProfileStatistics(profileId)
+    const {data: statistics, error: statisticsError, refetch: refetchStatistics, isFetching: counting} = useDownloadProfileStatistics(profileId)
     const {data: localMediaProfiles} = useLocalMediaProfiles()
     const {data: seasons} = useCollectionSeasons(profile?.collectionSlug)
     const {data: tags} = useEpisodeTagsInCollection(profile?.collectionSlug)
     const [outOfScopeOpen, setOutOfScopeOpen] = useState(false)
-    const {data: outOfScope} = useDownloadProfileOutOfScope(profileId, outOfScopeOpen)
     const {isStarting, onStartingChange} = useStartingOperations()
     const controlOperation = useControlOperation()
     const [controlBusy, setControlBusy] = useState(false)
@@ -72,6 +71,13 @@ export default function DownloadProfilePage() {
         return filter ? `Left out by: ${sentence(filter).replace(/^\w/, (c) => c.toLowerCase())}` : ''
     }
     const outside = statistics ? statistics.outOfScope + statistics.outOfScopeKept : 0
+    // Counting walks the filters over every episode of the Collection, which takes a while on a busy server.
+    const counted = (value: number | string | undefined) => value !== undefined ? value : (
+        <span className="download-profile-stat-counting">
+            <FontAwesomeIcon icon={faIcon('fass', 'circle-notch')} spin aria-hidden="true"/>
+            <span>{statisticsError && !counting ? 'Not counted' : 'Counting…'}</span>
+        </span>
+    )
 
     const control = async (action: 'cancel') => {
         if (!operation || controlBusy) return
@@ -97,6 +103,8 @@ export default function DownloadProfilePage() {
                 ? 'You may not delete downloaded files.'
                 : operation
                 ? 'Downloads outside its filters are being deleted.'
+                : !statistics
+                    ? 'Still counting its downloads.'
                 : outside === 0
                     ? 'Its filters cover every download it has.'
                     : undefined,
@@ -146,23 +154,29 @@ export default function DownloadProfilePage() {
 
                 <RunningActions actions={actionItems}/>
 
-                <div className="local-media-profile-statistics" aria-label="Profile statistics">
+                {statisticsError && !counting && (
+                    <div className="form-error-card" role="alert">
+                        Could not count this profile's downloads ({statisticsError.message}).{' '}
+                        <button type="button" className="btn" onClick={() => void refetchStatistics()}>Try again</button>
+                    </div>
+                )}
+                <div className="local-media-profile-statistics" aria-label="Profile statistics" aria-busy={!statistics}>
                     <div className="local-media-profile-stat">
-                        <span className="local-media-profile-stat-value">{statistics?.wanted ?? '–'}</span>
+                        <span className="local-media-profile-stat-value">{counted(statistics?.wanted)}</span>
                         <span className="local-media-profile-stat-label">Episodes it downloads</span>
                     </div>
                     <div className="local-media-profile-stat">
-                        <span className="local-media-profile-stat-value">{statistics?.downloaded ?? '–'}</span>
+                        <span className="local-media-profile-stat-value">{counted(statistics?.downloaded)}</span>
                         <span className="local-media-profile-stat-label">Downloaded episodes</span>
                     </div>
                     <div className="local-media-profile-stat">
                         <span className="local-media-profile-stat-value">
-                            {statistics ? formatBytes(statistics.storageSizeBytes) || '0 KiB' : '–'}
+                            {formatBytes(statistics?.storageSizeBytes ?? profile.storageSizeBytes) || '0 KiB'}
                         </span>
                         <span className="local-media-profile-stat-label">Storage used</span>
                     </div>
                     <div className="local-media-profile-stat">
-                        <span className="local-media-profile-stat-value">{statistics ? outside : '–'}</span>
+                        <span className="local-media-profile-stat-value">{counted(statistics ? outside : undefined)}</span>
                         <span className="local-media-profile-stat-label">
                             Outside its filters{statistics?.outOfScopeKept ? `, ${statistics.outOfScopeKept} kept` : ''}
                         </span>
@@ -204,7 +218,6 @@ export default function DownloadProfilePage() {
                 profileId={profile.id}
                 collectionSlug={profile.collectionSlug}
                 resourceLabel={resourceLabel}
-                downloads={outOfScope}
                 filterText={filterText}
                 onDismiss={() => setOutOfScopeOpen(false)}
                 onStartingChange={onStartingChange(OPERATION_KIND)}

@@ -6,6 +6,7 @@ from pydantic import AliasPath, Field, field_validator, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.api.models.collection_example import ExampleCollectionAPIIn
+from backend.api.models.pagination import OffsetPageRead
 from backend.services.regex_check import MAX_PATTERN_LENGTH, PatternError, compile_pattern, split_inline_ignore_case
 from backend.types.download_profile_types import (
     DATE_FIELDS,
@@ -14,6 +15,7 @@ from backend.types.download_profile_types import (
     EpisodeFilterAction,
     EpisodeFilterField,
     EpisodeTagKey,
+    OutOfScopePick,
     UpgradeImprovement,
     UpgradeRepeat,
 )
@@ -258,8 +260,31 @@ class OutOfScopePreviewAPIRequest(RequestBase):
     filters: list[DownloadProfileFilterAPIIn] = Field(default_factory=list, max_length=50)
 
 
+class OutOfScopePageAPIRead(OffsetPageRead[OutOfScopeDownloadAPIRead]):
+    """A page of the profile's out-of-scope downloads, with totals for all of them."""
+
+    total: int
+    size_bytes: int
+    kept: int
+    kept_size_bytes: int
+    filter_indexes: list[int]
+
+
+class OutOfScopePreviewAPIRead(ResponseBase):
+    """What saving the edit form's filters would newly leave out."""
+
+    media_download_ids: list[int]
+    size_bytes: int
+    kept: int
+    kept_size_bytes: int
+
+
 class OutOfScopeDeleteAPIRequest(RequestBase):
-    media_download_ids: list[int] = Field(min_length=1, max_length=10000)
+    """Which out-of-scope downloads to delete: the ones ``pick`` starts with, plus ``include``, minus ``exclude``."""
+
+    pick: OutOfScopePick = OutOfScopePick.NONE
+    include: list[int] = Field(default_factory=list, max_length=100000)
+    exclude: list[int] = Field(default_factory=list, max_length=100000)
 
 
 class DownloadProfileStatisticsAPIRead(ResponseBase):
