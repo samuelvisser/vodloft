@@ -309,8 +309,12 @@ def delete_media_download_action(
         media_download_id: int,
         *,
         missing_ok: bool = False,
+        reason: str = "It was deleted by hand.",
 ) -> bool:
-    """Remove one download and all of its owned files after stopping active work."""
+    """Remove one download and all of its owned files after stopping active work.
+
+    The reason goes into the Episode deleted notification.
+    """
     cancel_media_download_action(
         media_download_id,
         allow_inactive=True,
@@ -354,7 +358,7 @@ def delete_media_download_action(
         path = download.file_path
         prepare_media_download_artifact(s, download, strict_cleanup=True)
         if had_file and isinstance(download.media, Episode):
-            episode_deleted(s, download.media, path=path, reason="It was deleted by hand.")
+            episode_deleted(s, download.media, path=path, reason=reason)
         # Unlike Delete unavailable, the episode is not dismissed: a Download
         # Profile that still covers it may download it again, which can be
         # the reason for deleting it.
