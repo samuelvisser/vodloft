@@ -63,7 +63,9 @@ class _Cue(NamedTuple):
 class DownloadedSubtitle(NamedTuple):
     srt: bytes
     webvtt: bytes
-    """One WebVTT document with the source's own cues, for an HLS bundle."""
+    """One WebVTT document with the source's own cues."""
+    parts: tuple[tuple[float, bytes], ...] = ()
+    """The source's own WebVTT parts, each with its length in seconds, for an HLS bundle to keep as they are."""
 
 
 def _map_offset_ms(document: str) -> int | None:
@@ -211,11 +213,13 @@ def download_hls_webvtt(
     position_ms = 0
     seen: set[tuple[int, int, str]] = set()
     entries: list[_Cue] = []
+    parts: list[tuple[float, bytes]] = []
     for index, (url, duration) in enumerate(zip(media.segment_urls, durations)):
         if urlsplit(url).scheme not in {"https", "http"}:
             raise DownloadError("HLS subtitle segment requires an HTTP(S) URL")
         data = _fetch_limited(url, maximum_bytes - consumed, should_cancel)
         consumed += len(data)
+        parts.append((duration, data))
         document = data.decode("utf-8-sig")
         mapping = _map_offset_ms(document)
         if mapping is not None:
@@ -253,4 +257,4 @@ def download_hls_webvtt(
     webvtt = _webvtt(entries, timestamp_map)
     if max(len(content), len(webvtt)) > maximum_bytes:
         raise DownloadError("Converted HLS subtitles exceed the configured size limit")
-    return DownloadedSubtitle(content, webvtt)
+    return DownloadedSubtitle(content, webvtt, tuple(parts))

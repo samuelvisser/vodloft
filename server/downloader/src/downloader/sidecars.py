@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
 from dataclasses import dataclass, replace
@@ -11,6 +12,7 @@ from typing import Sequence
 from .capacity import DownloadResources
 from .errors import DownloadCanceled, DownloadError, MediaUnavailableError
 from .http import http_get, wait_for_retry
+from .hls_bundle import write_hls_subtitle_parts
 from .lifecycle import DownloadTracker
 from .models import DownloadProgress, WrittenSubtitle, _extension_for_direct_file
 from .plan import SidecarSpec
@@ -27,6 +29,8 @@ class AcquiredSidecar:
     size_bytes: int
     webvtt: Path | None = None
     """A subtitle as WebVTT too, for an HLS bundle."""
+    webvtt_parts: Path | None = None
+    """A directory with the source's own WebVTT parts and their HLS playlist, for an HLS bundle to keep as they are."""
 
 
 def default_subtitle(subtitles: Sequence[AcquiredSidecar], languages: Sequence[str]) -> AcquiredSidecar | None:
@@ -85,7 +89,11 @@ def acquire_sidecar(spec: SidecarSpec, workspace: Path, tracker: DownloadTracker
                                 out.write(content)
                                 out.flush()
                                 os.fsync(out.fileno())
-                        return AcquiredSidecar(spec, path, spec.target_suffix or ".srt", len(subtitle.srt), webvtt)
+                        parts = workspace / f"{spec.id}.vtt-parts" if subtitle.parts else None
+                        if parts is not None:
+                            parts.mkdir()
+                            write_hls_subtitle_parts(subtitle.parts, parts)
+                        return AcquiredSidecar(spec, path, spec.target_suffix or ".srt", len(subtitle.srt), webvtt, parts)
                     with http_get(spec.url, retries=0) as response:
                         extension = _extension_for_direct_file(spec.url, response.headers.get("Content-Type"))
                         if extension == "bin":
@@ -115,6 +123,7 @@ def acquire_sidecar(spec: SidecarSpec, workspace: Path, tracker: DownloadTracker
                 if path is not None:
                     path.unlink(missing_ok=True)
                     path.with_suffix(".vtt").unlink(missing_ok=True)
+                    shutil.rmtree(path.with_suffix(".vtt-parts"), ignore_errors=True)
                 if isinstance(exc, (DownloadCanceled, InvalidSidecar, MediaUnavailableError)) or not isinstance(exc, Exception):
                     raise
                 if attempt + 1 == spec.attempts:
