@@ -308,7 +308,7 @@ export default function OutOfScopeDownloadsDialog({
             <p className="modal-text">
                 These downloads were downloaded or adopted by this Download Profile, but its filters leave
                 them out now. Downloads you made by hand are not the profile's, so they are never listed or deleted.
-                Downloads marked to keep are listed, but picking all leaves them out: they have a checkbox of their own.
+                Downloads marked to keep are listed, but not selected for deletion by default.
             </p>
             <OutOfScopeChecklist
                 query={query}

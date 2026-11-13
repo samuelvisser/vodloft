@@ -315,7 +315,7 @@ export default function EditDownloadProfilePage() {
                 </p>
                 <p className="modal-text">
                     Episodes you downloaded by hand are never listed or deleted. Downloads marked to keep are listed,
-                    but picking all leaves them out: they have a checkbox of their own.
+                    but disabled by default.
                 </p>
                 <OutOfScopeChecklist
                     query={preview}
