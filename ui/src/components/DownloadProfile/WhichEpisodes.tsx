@@ -177,7 +177,8 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
     ))
 
     const openLine = (id: string, index: number) => {
-        snapshot.current = {filter: getValues(`filters.${index}`), deleteOlder: !!getValues('deleteOlderEpisodes')}
+        // A copy: the form changes the line's own object in place while it is edited.
+        snapshot.current = {filter: structuredClone(getValues(`filters.${index}`)), deleteOlder: !!getValues('deleteOlderEpisodes')}
         setOpenId(id)
     }
     const closeLine = () => {
