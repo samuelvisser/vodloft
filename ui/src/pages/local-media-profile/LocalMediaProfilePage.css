@@ -177,3 +177,13 @@ a.local-media-profile-stat:hover {
     margin: 0;
     padding-left: 20px;
 }
+
+/* A Download Profile's counts walk its filters over the whole Collection, so they can take a moment. */
+.download-profile-stat-counting {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 15px;
+    font-weight: 600;
+}
