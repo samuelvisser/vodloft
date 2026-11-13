@@ -35,6 +35,10 @@
     gap: 8px;
 }
 
+.collection-page-running-actions {
+    grid-column: 1 / -1;
+}
+
 .collection-profile-summary {
     grid-column: 1 / -1;
     display: flex;
@@ -256,6 +260,10 @@
 
     .collection-page-actions {
         justify-content: flex-start;
+    }
+
+    .collection-page-running-actions {
+        grid-column: 1;
     }
 
     /* Phones: every profile on one line that scrolls sideways instead of wrapping. */

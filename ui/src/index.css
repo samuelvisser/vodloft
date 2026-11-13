@@ -2188,6 +2188,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .movie-hero p { color: var(--text); opacity: .8; }
 .movie-kicker { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-weight: 700; }
 .movie-detail-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 24px; }
+.movie-running-actions { margin: -12px 0 24px; }
 .movie-detail-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(290px, .8fr); gap: 24px; align-items: start; }
 .movie-description h2, .movie-download-panel h2, .movie-downloads h2, .movie-extras h2 { margin: 0 0 10px; font-size: 19px; }
 .movie-description > p { font-size: 15px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }

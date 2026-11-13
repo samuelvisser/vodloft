@@ -3,7 +3,8 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import toast from 'react-hot-toast'
 
-import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
+import RunningActions from '../../components/RunningActions/RunningActions'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
 import OutOfScopeDownloadsDialog, {mayDeleteOutOfScope} from '../../components/DownloadProfile/OutOfScopeDownloadsDialog'
 import {filterSentence, plainText} from '../../components/DownloadProfile/whichEpisodesText'
@@ -92,6 +93,34 @@ export default function DownloadProfilePage() {
         }
     }
 
+    const actionItems: ActionMenuItem[] = [
+        {
+            label: 'Delete downloads outside its filters',
+            icon: faIcon('fass', 'trash'),
+            tone: 'danger',
+            disabled: Boolean(operation) || outside === 0 || !mayDeleteOutOfScope(),
+            disabledReason: !mayDeleteOutOfScope()
+                ? 'You may not delete downloaded files.'
+                : operation
+                ? 'Downloads outside its filters are being deleted.'
+                : !statistics
+                    ? 'Still counting its downloads.'
+                : outside === 0
+                    ? 'Its filters cover every download it has.'
+                    : undefined,
+            operation,
+            starting: isStarting(OPERATION_KIND),
+            controls: operation ? [{
+                label: 'Cancel deleting downloads',
+                icon: faIcon('fass', 'xmark'),
+                tone: 'danger' as const,
+                disabled: controlBusy,
+                onSelect: () => void control('cancel'),
+            }] : undefined,
+            onSelect: () => setOutOfScopeOpen(true),
+        },
+    ]
+
     return (
         <section className="view local-media-profile-view" aria-labelledby="download-profile-title">
             <div className="view-header">
@@ -118,38 +147,12 @@ export default function DownloadProfilePage() {
                                 <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
                                 <span>Delete</span>
                             </button>
-                            <ActionMenu
-                                items={[
-                                    {
-                                        label: 'Delete downloads outside its filters',
-                                        icon: faIcon('fass', 'trash'),
-                                        tone: 'danger',
-                                        disabled: Boolean(operation) || outside === 0 || !mayDeleteOutOfScope(),
-                                        disabledReason: !mayDeleteOutOfScope()
-                                            ? 'You may not delete downloaded files.'
-                                            : operation
-                                            ? 'Downloads outside its filters are being deleted.'
-                                            : !statistics
-                                                ? 'Still counting its downloads.'
-                                            : outside === 0
-                                                ? 'Its filters cover every download it has.'
-                                                : undefined,
-                                        operation,
-                                        starting: isStarting(OPERATION_KIND),
-                                        controls: operation ? [{
-                                            label: 'Cancel deleting downloads',
-                                            icon: faIcon('fass', 'xmark'),
-                                            tone: 'danger' as const,
-                                            disabled: controlBusy,
-                                            onSelect: () => void control('cancel'),
-                                        }] : undefined,
-                                        onSelect: () => setOutOfScopeOpen(true),
-                                    },
-                                ]}
-                            />
+                            <ActionMenu items={actionItems}/>
                         </div>
                     )}
                 </header>
+
+                <RunningActions actions={actionItems}/>
 
                 {statisticsError && !counting && (
                     <div className="form-error-card" role="alert">
