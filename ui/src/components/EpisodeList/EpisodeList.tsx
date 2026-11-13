@@ -35,6 +35,8 @@ type EpisodeListProps = {
     loadingMore: boolean
     moreFailed: boolean
     loadMore: () => unknown
+    /** The rows are being asked for again: an empty list says it is loading, a full one dims until they come. */
+    loading?: boolean
     className?: string
 }
 
@@ -44,13 +46,21 @@ type EpisodeListProps = {
  * downloads to delete.
  */
 export default function EpisodeList({
-    rows, typeLabel, showSize = false, hasMore, loadingMore, moreFailed, loadMore, className,
+    rows, typeLabel, showSize = false, hasMore, loadingMore, moreFailed, loadMore, loading = false, className,
 }: EpisodeListProps) {
     const more = useCallback(() => void loadMore(), [loadMore])
     const {rootRef, endRef} = useLoadMoreOnScroll<HTMLUListElement, HTMLLIElement>(hasMore && !loadingMore && !moreFailed, more)
 
     return (
-        <ul className={['episode-list', showSize && 'has-size', className].filter(Boolean).join(' ')} ref={rootRef}>
+        <ul
+            className={['episode-list', showSize && 'has-size', loading && rows.length > 0 && 'is-refreshing', className].filter(Boolean).join(' ')}
+            ref={rootRef} aria-busy={loading}
+        >
+            {loading && rows.length === 0 && (
+                <li className="episode-list-end" role="status">
+                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Loading episodes…
+                </li>
+            )}
             {rows.map((row) => {
                 const content = (
                     <>

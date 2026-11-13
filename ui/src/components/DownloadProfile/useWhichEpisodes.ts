@@ -21,6 +21,14 @@ export type WhichEpisode = NonNullable<WhichEpisodes['episodes']>[number]
 const PAGE_SIZE = 50
 /** The most the backend sends in one page; a changed line asks again for what was already loaded, up to this. */
 const MAX_PAGE_SIZE = 200
+/** How long a changed line waits before asking, so typing a pattern does not ask after every key. */
+const TYPING_DELAY_MS = 300
+
+/** The request without what only changes the list, such as opening it or picking what it shows. */
+function countedPart(request: WhichEpisodesRequest): string {
+    const {includeEpisodes: _list, episodesShown: _shown, ...counted} = request
+    return JSON.stringify(counted)
+}
 
 type State = {
     result: WhichEpisodes | null
@@ -51,11 +59,14 @@ async function fetchPage(body: string, offset: number, limit: number, signal: Ab
  */
 export function useWhichEpisodes(request: WhichEpisodesRequest | null): State & {hasMore: boolean; loadMore: () => void} {
     const serialized = request ? JSON.stringify(request) : null
+    const counted = request ? countedPart(request) : null
     const [state, setState] = useState<State>({result: null, loading: false, episodes: null, loadingMore: false, moreFailed: false})
     // Read by loadMore and by the next change without making either run again.
     const current = useRef({serialized, state})
     current.current = {serialized, state}
     const more = useRef<AbortController | null>(null)
+    // What the last request counted, apart from the list.
+    const lastCounted = useRef<string | null>(null)
 
     useEffect(() => {
         more.current?.abort()
@@ -64,10 +75,13 @@ export function useWhichEpisodes(request: WhichEpisodesRequest | null): State & 
             return
         }
         const controller = new AbortController()
-        // Keep the episodes already scrolled past, so a changed line does not jump the list back to the top.
-        const loaded = current.current.state.episodes?.length ?? 0
+        // Opening the list or picking what it shows changes only the list: it starts over, and asks at once.
+        const onlyTheList = counted === lastCounted.current
+        lastCounted.current = counted
+        // A changed line keeps the episodes already scrolled past, so the list does not jump back to the top.
+        const loaded = onlyTheList ? 0 : current.current.state.episodes?.length ?? 0
         const limit = Math.min(Math.max(PAGE_SIZE, loaded), MAX_PAGE_SIZE)
-        setState((value) => ({...value, loading: true, loadingMore: false}))
+        setState((value) => ({...value, loading: true, loadingMore: false, ...(onlyTheList ? {episodes: null} : {})}))
         const timer = window.setTimeout(async () => {
             try {
                 const result = await fetchPage(serialized, 0, limit, controller.signal)
@@ -77,7 +91,7 @@ export function useWhichEpisodes(request: WhichEpisodesRequest | null): State & 
             } catch {
                 if (!controller.signal.aborted) setState((value) => ({...value, loading: false}))
             }
-        }, 300)
+        }, onlyTheList ? 0 : TYPING_DELAY_MS)
         return () => {
             controller.abort()
             window.clearTimeout(timer)

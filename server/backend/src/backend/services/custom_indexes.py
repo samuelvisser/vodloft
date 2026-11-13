@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import and_, delete, or_, select, true, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, lazyload
 
 from backend.db.models import CustomIndexState, Episode, Metadata, Collection, CollectionLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
@@ -320,7 +320,8 @@ def _synced_downloads_before_reindex(
             MediaDownloadArtifactStatus.AVAILABLE,
             MediaDownloadArtifactStatus.CORRUPTED,
         )),
-    ))
+    # Only the file's path is compared, so its sidecar files and metadata rows are not read.
+    ).options(lazyload(EpisodeMediaDownload.assets), lazyload(EpisodeMediaDownload.meta_items)))
     synced: dict[int, str] = {}
     definitions = indexing_value_definition_keys(profile)
     for download in downloads:

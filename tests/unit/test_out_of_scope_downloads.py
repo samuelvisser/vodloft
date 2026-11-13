@@ -172,6 +172,33 @@ def test_statistics_count_the_left_out_downloads_apart_from_the_kept_ones(db_ses
     assert (statistics.downloaded, statistics.wanted, statistics.out_of_scope, statistics.out_of_scope_kept) == (3, 1, 1, 1)
 
 
+def test_a_page_reads_the_downloads_and_episodes_once_and_without_their_metadata_or_sidecars(db_session):
+    """A large Collection has thousands of both, and many more metadata rows and sidecar files."""
+    from sqlalchemy import event
+
+    from backend.services.out_of_scope_downloads import out_of_scope_page
+
+    collection = _collection(db_session)
+    profile = _profile(db_session, collection, line("skip", "title", pattern="(?i)trailer"))
+    for index in range(1, 4):
+        episode = _episode(db_session, collection, index, f"Trailer {index}", days_ago=index)
+        episode.set_meta("example", "value")
+        download = _download(db_session, profile, episode)
+        download.set_meta("example", "value")
+        download.set_asset_path("nfo", "nfo", f"/tmp/scope-{index}.nfo")
+    db_session.commit()
+    # The profile itself, its Collection and its filters are read before.
+    assert profile.collection.title and profile.filters
+    statements = []
+    event.listen(db_session.get_bind(), "before_cursor_execute", lambda *args: statements.append(args[2]))
+
+    page = out_of_scope_page(db_session, profile, 0, 10)
+
+    assert [item.episode.title for item in page.items] == ["Trailer 1", "Trailer 2", "Trailer 3"]
+    assert not [statement for statement in statements if "FROM metadata" in statement or "FROM media_download_assets" in statement]
+    assert len([statement for statement in statements if "FROM media_items" in statement]) == 1
+
+
 def test_a_page_carries_the_totals_of_every_out_of_scope_download(db_session):
     from backend.services.out_of_scope_downloads import out_of_scope_page
 

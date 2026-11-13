@@ -30,7 +30,7 @@ from typing import Iterable, Optional, Protocol, Sequence
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, lazyload, selectinload
 
 from backend.db.models import Collection, DownloadProfile, DownloadProfileFilter, Episode
 from backend.services.media_access import AccessLocks
@@ -184,9 +184,14 @@ def _newest_first(episodes: Iterable[Episode]) -> list[Episode]:
 
 
 def collection_episodes(s: Session, collection_id: int) -> list[Episode]:
-    """Every indexed episode of the Collection, newest first."""
+    """Every indexed episode of the Collection, newest first.
+
+    Their metadata rows are left for whoever asks for one: the filters never read them, and in a
+    large Collection they outnumber the episodes many times over.
+    """
     return _newest_first(s.scalars(
-        select(Episode).where(Episode.collection_id == collection_id).options(selectinload(Episode.season))
+        select(Episode).where(Episode.collection_id == collection_id)
+        .options(selectinload(Episode.season), lazyload(Episode.meta_items))
     ))
 
 
@@ -293,11 +298,28 @@ def _walk(
     )
 
 
-def wanted_episodes(s: Session, selection: EpisodeSelection, *, only_episode_id: Optional[int] = None) -> list[Episode]:
-    """Episodes the profile downloads, newest first."""
+def _judged_alone(filters: Iterable[EpisodeFilter]) -> bool:
+    """Whether the filters decide about an episode by the episode alone.
+
+    Only a count, such as "the latest 25", weighs an episode against the Collection's other episodes.
+    """
+    return not any(
+        item.action != EpisodeFilterAction.KEEP and item.field == EpisodeFilterField.PUBLISHED and item.count
+        for item in filters
+    )
+
+
+def wanted_episodes(s: Session, selection: EpisodeSelection, *, only_episode: Optional[Episode] = None) -> list[Episode]:
+    """Episodes the profile downloads, newest first; with only_episode, that one if the profile downloads it.
+
+    Each new or published episode asks about itself. When the filters judge it alone, that does not
+    read the whole Collection: on a large one, many such questions at once kept the server busy.
+    """
+    if only_episode is not None and _judged_alone(selection.filters):
+        return evaluate(s, selection, episodes=[only_episode]).wanted
     wanted = evaluate(s, selection).wanted
-    if only_episode_id is not None:
-        return [episode for episode in wanted if episode.id == only_episode_id]
+    if only_episode is not None:
+        return [episode for episode in wanted if episode.id == only_episode.id]
     return wanted
 
 
