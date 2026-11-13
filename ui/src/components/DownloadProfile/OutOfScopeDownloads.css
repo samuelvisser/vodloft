@@ -56,6 +56,19 @@
     overflow-wrap: anywhere;
 }
 
+.out-of-scope-loading,
+.out-of-scope-list .out-of-scope-more {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+}
+
+.out-of-scope-list .out-of-scope-more {
+    padding: 9px 12px;
+    font-size: 13px;
+}
+
 .out-of-scope-kept {
     justify-self: start;
     margin-top: 2px;

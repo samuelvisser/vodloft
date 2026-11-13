@@ -13,7 +13,7 @@ import {can} from '../../lib/access'
 import {apiUrl} from '../../lib/api'
 import {OperationControlError, useControlOperation, useStartingOperations} from '../../lib/operations'
 import {
-    useCollectionSeasons, useDownloadProfileOutOfScope, useDownloadProfileStatistics, useDownloadProfileView,
+    useCollectionSeasons, useDownloadProfileStatistics, useDownloadProfileView,
     useEpisodeTagsInCollection, useLocalMediaProfiles,
 } from '../../lib/queries'
 import type {DownloadProfileRead} from '../../types/schemas/download_profile'
@@ -34,7 +34,6 @@ export default function DownloadProfilePage() {
     const {data: seasons} = useCollectionSeasons(profile?.collectionSlug)
     const {data: tags} = useEpisodeTagsInCollection(profile?.collectionSlug)
     const [outOfScopeOpen, setOutOfScopeOpen] = useState(false)
-    const {data: outOfScope} = useDownloadProfileOutOfScope(profileId, outOfScopeOpen)
     const {isStarting, onStartingChange} = useStartingOperations()
     const controlOperation = useControlOperation()
     const [controlBusy, setControlBusy] = useState(false)
@@ -216,7 +215,6 @@ export default function DownloadProfilePage() {
                 profileId={profile.id}
                 collectionSlug={profile.collectionSlug}
                 resourceLabel={resourceLabel}
-                downloads={outOfScope}
                 filterText={filterText}
                 onDismiss={() => setOutOfScopeOpen(false)}
                 onStartingChange={onStartingChange(OPERATION_KIND)}

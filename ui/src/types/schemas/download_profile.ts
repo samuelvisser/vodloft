@@ -280,7 +280,29 @@ export const OutOfScopeDownloadSchema = z.object({
     keptBy: z.enum(['hand', 'keep_filter', 'keep_question']).nullable(),
 })
 export type OutOfScopeDownload = z.infer<typeof OutOfScopeDownloadSchema>
-export const OutOfScopeDownloadsSchema = z.array(OutOfScopeDownloadSchema)
+export const OutOfScopePageSchema = z.object({
+    items: z.array(OutOfScopeDownloadSchema),
+    offset: z.int(),
+    limit: z.int(),
+    hasMore: z.boolean(),
+    /** How many its filters leave out in all, and their size; the page holds only some of them. */
+    total: z.int(),
+    sizeBytes: z.number(),
+    kept: z.int(),
+    keptSizeBytes: z.number(),
+    /** The filters that leave any of them out. */
+    filterIndexes: z.array(z.int()),
+})
+export type OutOfScopePage = z.infer<typeof OutOfScopePageSchema>
+
+/** What saving the edit form's filters would newly leave out. */
+export const OutOfScopePreviewSchema = z.object({
+    mediaDownloadIds: z.array(z.int()),
+    sizeBytes: z.number(),
+    kept: z.int(),
+    keptSizeBytes: z.number(),
+})
+export type OutOfScopePreview = z.infer<typeof OutOfScopePreviewSchema>
 
 export const DownloadProfileStatisticsSchema = z.object({
     downloaded: z.int(),
