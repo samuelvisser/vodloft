@@ -183,7 +183,11 @@ def test_a_daily_wire_hls_bundle_keeps_embedded_subtitles_inside_and_sidecars_be
 
     srt = b"1\n00:00:01,000 --> 00:00:02,000\nHello\n\n"
     webvtt = b"WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:900000\n\n00:00:01.000 --> 00:00:02.000\nHello\n"
-    monkeypatch.setattr(sidecars, "download_hls_webvtt", lambda *_args, **_kwargs: DownloadedSubtitle(srt, webvtt))
+    parts = (
+        (6.0, b"WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:900000\n\n00:00:01.000 --> 00:00:02.000\nHello\n"),
+        (4.5, b"WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:1440000\n\n"),
+    )
+    monkeypatch.setattr(sidecars, "download_hls_webvtt", lambda *_args, **_kwargs: DownloadedSubtitle(srt, webvtt, parts))
     monkeypatch.setattr(coordinator, "embed_media", lambda *_args, **_kwargs: pytest.fail("A bundle is not embedded into"))
     (tmp_path / "source").mkdir()
     made = _bundle(tmp_path / "source")
@@ -213,8 +217,9 @@ def test_a_daily_wire_hls_bundle_keeps_embedded_subtitles_inside_and_sidecars_be
         assert execution.result.path == str(master) and missing_hls_bundle_files(master) == []
         bundled = hls_asset_root(master) / "subtitles-0" / "0.vtt"
         if embed:
-            # The source's own WebVTT, as it is.
-            assert bundled.read_bytes() == webvtt
+            # The source's own WebVTT parts, as they are.
+            assert [bundled.read_bytes(), bundled.with_name("1.vtt").read_bytes()] == [data for _, data in parts]
+            assert "#EXTINF:6.000,\n0.vtt\n#EXTINF:4.500,\n1.vtt\n" in bundled.with_name("playlist.m3u8").read_text()
             assert 'SUBTITLES="subtitles"' in master.read_text() and 'NAME="en",LANGUAGE="en",DEFAULT=YES' in master.read_text()
         else:
             assert not bundled.exists() and "SUBTITLES" not in master.read_text()

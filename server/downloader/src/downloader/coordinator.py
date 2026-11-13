@@ -100,7 +100,7 @@ def _bundle_subtitles(subtitles: list[AcquiredSidecar], default: AcquiredSidecar
         names[name] = names.get(name, 0) + 1
         kept.append(BundleSubtitle(
             subtitle.webvtt, language, name if names[name] == 1 else f"{name} {names[name]}",
-            default=subtitle is default, forced=subtitle.spec.forced,
+            default=subtitle is default, forced=subtitle.spec.forced, parts=subtitle.webvtt_parts,
         ))
     return kept
 

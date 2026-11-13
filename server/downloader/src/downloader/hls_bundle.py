@@ -7,7 +7,7 @@ import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, Optional
+from typing import BinaryIO, Optional, Sequence
 from urllib.parse import urljoin, urlparse
 
 from .ffmpeg import segment_as_hls
@@ -301,6 +301,8 @@ class BundleSubtitle:
     """What players list it as; unique within the bundle."""
     default: bool = False
     forced: bool = False
+    parts: Path | None = None
+    """The source's own WebVTT parts and their playlist, kept as they are in place of ``path``."""
 
 
 def add_hls_subtitles(master_path: str | Path, subtitles: list[BundleSubtitle]) -> None:
@@ -324,10 +326,13 @@ def add_hls_subtitles(master_path: str | Path, subtitles: list[BundleSubtitle]) 
     for index, subtitle in enumerate(subtitles):
         directory = root / f"subtitles-{index}"
         shutil.rmtree(directory, ignore_errors=True)
-        directory.mkdir()
-        write_hls_subtitle_segments(
-            subtitle.path.read_text(encoding="utf-8-sig"), directory, duration=duration, segment_seconds=segment_seconds,
-        )
+        if subtitle.parts is not None:
+            shutil.copytree(subtitle.parts, directory)
+        else:
+            directory.mkdir()
+            write_hls_subtitle_segments(
+                subtitle.path.read_text(encoding="utf-8-sig"), directory, duration=duration, segment_seconds=segment_seconds,
+            )
         name = subtitle.name.replace('"', "'")
         media_lines.append(
             f'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="{_SUBTITLE_GROUP}",NAME="{name}",LANGUAGE="{subtitle.language}",'
@@ -357,16 +362,25 @@ def write_hls_subtitle_segments(webvtt: str, directory: Path, *, duration: float
     """
     header, cues = _split_webvtt(webvtt)
     count = max(1, math.ceil(duration / segment_seconds - 1e-6))
-    playlist = [
-        "#EXTM3U", "#EXT-X-VERSION:3", f"#EXT-X-TARGETDURATION:{segment_seconds}",
-        "#EXT-X-MEDIA-SEQUENCE:0", "#EXT-X-PLAYLIST-TYPE:VOD",
-    ]
+    parts = []
     for number in range(count):
         start = number * segment_seconds
         end = duration if number == count - 1 else start + segment_seconds
         shown = [text for cue_start, cue_end, text in cues if cue_start < end and cue_end > start]
-        (directory / f"{number}.vtt").write_text("\n\n".join((header, *shown)) + "\n", encoding="utf-8")
-        playlist += [f"#EXTINF:{end - start:.3f},", f"{number}.vtt"]
+        parts.append((end - start, ("\n\n".join((header, *shown)) + "\n").encode("utf-8")))
+    write_hls_subtitle_parts(parts, directory)
+
+
+def write_hls_subtitle_parts(parts: Sequence[tuple[float, bytes]], directory: Path) -> None:
+    """Write WebVTT parts, each with its length in seconds, as ``0.vtt``, ``1.vtt`` and so on in
+    ``directory``, and the ``playlist.m3u8`` that lists them."""
+    playlist = [
+        "#EXTM3U", "#EXT-X-VERSION:3", f"#EXT-X-TARGETDURATION:{max(1, math.ceil(max(seconds for seconds, _ in parts) - 1e-6))}",
+        "#EXT-X-MEDIA-SEQUENCE:0", "#EXT-X-PLAYLIST-TYPE:VOD",
+    ]
+    for number, (seconds, data) in enumerate(parts):
+        (directory / f"{number}.vtt").write_bytes(data)
+        playlist += [f"#EXTINF:{seconds:.3f},", f"{number}.vtt"]
     playlist.append("#EXT-X-ENDLIST")
     # Written last and replaced at once, so a player never gets a playlist that names a missing part.
     part_path = directory / "playlist.m3u8.part"
