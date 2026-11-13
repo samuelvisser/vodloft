@@ -25,7 +25,9 @@ export default function EditStreamProfilePage() {
 
     const profileId = id ? Number(id) : undefined
 
-    const {data: streamProfile, isLoading, error} = useQuery<StreamProfileReadView | undefined>({
+    // The cache can still hold the profile as it was before the last save, so the form waits for this visit's own
+    // load instead of starting from it.
+    const {data: streamProfile, isFetchedAfterMount, error} = useQuery<StreamProfileReadView | undefined>({
         queryKey: ['streamProfile', id],
         enabled: !!id,
         refetchOnMount: 'always',
@@ -56,13 +58,16 @@ export default function EditStreamProfilePage() {
     })
     const {formState: {errors, isSubmitting}} = form
 
+    // A later background refetch must not undo the user's edits, so the form is filled once.
+    const initializedId = useRef<string | undefined>(undefined)
     useEffect(() => {
-        if (!streamProfile) return
+        if (!isFetchedAfterMount || !streamProfile || initializedId.current === id) return
+        initializedId.current = id
         form.reset(RssStreamProfileUpdateSchema.parse({
             ...streamProfile.streamProfileImpl,
             title: streamProfile.streamProfileImpl.effectiveTitle,
         }))
-    }, [streamProfile, form])
+    }, [isFetchedAfterMount, streamProfile, id, form])
 
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
@@ -102,6 +107,7 @@ export default function EditStreamProfilePage() {
 
     const onSuccess = async () => {
         await qc.invalidateQueries({queryKey: ['streamProfilesView']})
+        void qc.invalidateQueries({queryKey: ['streamProfile', id], refetchType: 'none'})
         navigate('/stream-profiles')
     }
 
@@ -131,7 +137,7 @@ export default function EditStreamProfilePage() {
                 <h1 id="edit-stream-profile-title">Edit stream profile</h1>
             </div>
 
-            {isLoading ? (
+            {!isFetchedAfterMount ? (
                 <p>Loading…</p>
             ) : error ? (
                 <p>{error.message}</p>
