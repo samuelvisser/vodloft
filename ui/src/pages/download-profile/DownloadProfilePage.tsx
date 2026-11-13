@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
 import RunningActions from '../../components/RunningActions/RunningActions'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
-import OutOfScopeDownloadsDialog, {mayDeleteOutOfScope} from '../../components/DownloadProfile/OutOfScopeDownloadsDialog'
+import OutOfScopeDownloadsDialog, {leftOutByText, mayDeleteOutOfScope} from '../../components/DownloadProfile/OutOfScopeDownloadsDialog'
 import {filterSentence, plainText} from '../../components/DownloadProfile/whichEpisodesText'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {faIcon} from '../../icons/faIcon'
@@ -66,10 +66,7 @@ export default function DownloadProfilePage() {
     const sentence = (filter: DownloadProfileRead['filters'][number]) => plainText(
         filterSentence(filter, typeLabel, seasonLabel, profile.deleteOlderEpisodes),
     )
-    const filterText = (index: number) => {
-        const filter = profile.filters[index]
-        return filter ? `Left out by: ${sentence(filter).replace(/^\w/, (c) => c.toLowerCase())}` : ''
-    }
+    const filterText = (index: number) => leftOutByText(profile.filters[index], typeLabel, seasonLabel, profile.deleteOlderEpisodes)
     const outside = statistics ? statistics.outOfScope + statistics.outOfScopeKept : 0
     // Counting walks the filters over every episode of the Collection, which takes a while on a busy server.
     const counted = (value: number | string | undefined) => value !== undefined ? value : (
@@ -216,9 +213,9 @@ export default function DownloadProfilePage() {
             <OutOfScopeDownloadsDialog
                 open={outOfScopeOpen}
                 profileId={profile.id}
-                collectionSlug={profile.collectionSlug}
                 resourceLabel={resourceLabel}
                 filterText={filterText}
+                typeLabel={typeLabel}
                 onDismiss={() => setOutOfScopeOpen(false)}
                 onStartingChange={onStartingChange(OPERATION_KIND)}
             />

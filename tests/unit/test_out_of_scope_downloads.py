@@ -193,7 +193,6 @@ def test_a_page_carries_the_totals_of_every_out_of_scope_download(db_session):
 
 def test_a_delete_takes_the_downloads_picked_from_the_whole_list(db_session):
     from backend.services.out_of_scope_downloads import picked_out_of_scope
-    from backend.types.download_profile_types import OutOfScopePick
 
     collection = _collection(db_session)
     profile = _profile(db_session, collection, line("skip", "title", pattern="(?i)trailer"))
@@ -202,14 +201,17 @@ def test_a_delete_takes_the_downloads_picked_from_the_whole_list(db_session):
     two = _download(db_session, profile, _episode(db_session, collection, 3, "Trailer two"))
     kept = _download(db_session, profile, _episode(db_session, collection, 4, "Kept trailer"), kept=True)
 
-    def picked(pick, include=(), exclude=()):
-        return set(picked_out_of_scope(db_session, profile.id, pick, include, exclude))
+    def picked(not_kept=False, kept=False, include=(), exclude=()):
+        return set(picked_out_of_scope(
+            db_session, profile.id, not_kept=not_kept, kept=kept, include=include, exclude=exclude,
+        ))
 
-    assert picked(OutOfScopePick.NOT_KEPT) == {one.id, two.id}
-    assert picked(OutOfScopePick.NOT_KEPT, include=[kept.id], exclude=[two.id]) == {one.id, kept.id}
-    assert picked(OutOfScopePick.ALL) == {one.id, two.id, kept.id}
+    assert picked(not_kept=True) == {one.id, two.id}
+    assert picked(not_kept=True, include=[kept.id], exclude=[two.id]) == {one.id, kept.id}
+    assert picked(kept=True) == {kept.id}
+    assert picked(not_kept=True, kept=True) == {one.id, two.id, kept.id}
     # A download the filters cover is never deleted, even when it is asked for.
-    assert picked(OutOfScopePick.NONE, include=[wanted.id, one.id]) == {one.id}
+    assert picked(include=[wanted.id, one.id]) == {one.id}
 
 
 def test_the_preview_only_counts_what_saving_newly_leaves_out(db_session):
@@ -227,8 +229,12 @@ def test_the_preview_only_counts_what_saving_newly_leaves_out(db_session):
         filters=[line("skip", "title", pattern="(?i)trailer"), line("skip", "title", pattern="Old")],
     )
 
-    preview = newly_out_of_scope(db_session, profile, narrower)
+    preview = newly_out_of_scope(db_session, profile, narrower, offset=0, limit=1)
 
-    assert preview.media_download_ids == [older.id]
-    assert newest.id not in preview.media_download_ids
-    assert (preview.size_bytes, preview.kept, preview.kept_size_bytes) == (20, 1, 40)
+    assert preview.not_kept_ids == [older.id]
+    assert newest.id not in preview.not_kept_ids
+    assert len(preview.kept_ids) == 1
+    assert [item.download.id for item in preview.items] == [older.id]
+    assert preview.has_more
+    assert (preview.total, preview.size_bytes, preview.kept, preview.kept_size_bytes) == (2, 60, 1, 40)
+    assert preview.filter_indexes == [1]
