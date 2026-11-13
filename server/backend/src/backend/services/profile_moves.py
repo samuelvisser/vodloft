@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadProfile, Episode
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadAsset
-from backend.services.adoption import download_root, sidecar_assets
+from backend.services.adoption import sidecar_assets
 from backend.services.custom_indexes import profile_offered_for_collection_type
 from backend.services.download_metadata import build_episode_metadata, select_thumbnail
 from backend.services.download_options import effective_metadata_mode, effective_thumbnail_mode
@@ -291,7 +291,6 @@ def move_collection_downloads(
     skipped = planned.skipped + len(blocked)
     if remaining:
         relocate_downloads(remaining, progress=progress, reason="profile_move")
-        _remove_empty_folders(path.source.parent for move in remaining for path in move.paths)
     moved_items = [move.download_id for move in remaining] + planned.in_place_ids
 
     moved_ids, stayed = run_write_transaction(lambda session: _record_move(session, planned, moved_items))
@@ -523,18 +522,6 @@ def _write_new_file(path: Path, content: bytes) -> bool:
         path.unlink(missing_ok=True)
         return False
     return True
-
-
-def _remove_empty_folders(folders) -> None:
-    """Remove the folders the moved files left empty, up to the download folder."""
-    root = download_root()
-    for folder in sorted(set(folders), key=lambda path: len(path.parts), reverse=True):
-        while folder != root and folder.is_relative_to(root):
-            try:
-                folder.rmdir()
-            except OSError:
-                break
-            folder = folder.parent
 
 
 def _progress(progress, value: int, message: str) -> None:
