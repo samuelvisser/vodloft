@@ -213,7 +213,7 @@ export default function DownloadProfilesPage() {
                             </span>
                         </>
                     )}
-                    rowHref={(p) => `/edit-download-profile/${p.id}`}
+                    rowHref={(p) => `/download-profile/${p.id}`}
                     actions={(p) => [
                         {
                             href: `/edit-download-profile/${p.id}`,
@@ -253,6 +253,7 @@ export default function DownloadProfilesPage() {
                 )}
                 invalidateQueries={[["downloadProfilesView"], ["downloadProfilesByCollectionSlug"]]}
                 inUseMessage="This download profile is in use, it cannot be deleted"
+                deletedMessage={(p) => `Deleted the Download Profile of ${p.collectionTitle}`}
             />
         </section>
     )

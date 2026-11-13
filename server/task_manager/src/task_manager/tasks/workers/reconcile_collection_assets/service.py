@@ -14,6 +14,7 @@ from sqlalchemy import String, and_, cast, func, or_, select
 from backend.db.models import DownloadProfile, Episode, EpisodeMediaDownload, Collection, CollectionLocalMediaProfile
 from backend.db.core import run_write_transaction
 from backend.db.models.CollectionLocalAsset import CollectionLocalAsset
+from backend.services.download_relocation import remove_folders_left_empty
 from backend.services.collection_assets import (
     managed_collection_profile_pairs, resolve_collection_media_directory, shared_root_conflict,
     collection_asset_sources, collection_assets_enabled, collection_profile_is_managed, collection_profile_roots,
@@ -385,6 +386,7 @@ def _cleanup_old_roots(
             select(EpisodeMediaDownload.file_path).join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
             .where(Episode.collection_id == collection_id, EpisodeMediaDownload.local_media_profile_id == profile_id)
         ) if path]
+    emptied: set[Path] = set()
     for record_id, path in obsolete:
         check_canceled()
         if any(media.is_relative_to(path.parent) and not media.is_relative_to(current_root) for media in media_paths):
@@ -426,12 +428,16 @@ def _cleanup_old_roots(
                     if shared is None:
                         digest = asset_file_hash(path)
                         if digest is not None and digest in (row.content_hash, row.pending_hash):
-                            safe_asset_path(download_root, path).unlink(missing_ok=True)
+                            removed = safe_asset_path(download_root, path)
+                            removed.unlink(missing_ok=True)
+                            emptied.add(removed.parent)
                     session.delete(row)
 
                 run_write_transaction(work)
         except ArtworkConflict as exc:
             logger.warning("Old collection artwork was left untouched: %s", exc)
+    # The artwork was the last managed file in the folder the Collection's files were renamed out of.
+    remove_folders_left_empty(emptied, keep=[current_root])
 
 
 def run_reconcile_collection_assets(

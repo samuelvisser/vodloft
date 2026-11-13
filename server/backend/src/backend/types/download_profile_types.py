@@ -62,6 +62,16 @@ class EpisodeFilterField(StrEnum):
 DATE_FIELDS = (EpisodeFilterField.PUBLISHED, EpisodeFilterField.DOWNLOADED)
 
 
+class DownloadKeptBy(StrEnum):
+    """What keeps a download safe from deletion."""
+    HAND = "hand"
+    """Someone marked it to keep."""
+    KEEP_FILTER = "keep_filter"
+    """A Keep filter of its Download Profile."""
+    KEEP_QUESTION = "keep_question"
+    """Its episode left the Source, and the Home page still asks whether to keep it."""
+
+
 class DurationOperator(StrEnum):
     SHORTER = "shorter"
     LONGER = "longer"

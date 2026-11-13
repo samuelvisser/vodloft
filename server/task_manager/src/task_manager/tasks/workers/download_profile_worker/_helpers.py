@@ -19,10 +19,14 @@ from backend.utils.output_template import resolve_episode_output_path
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
+    media_downloads_with_an_operation,
     prepare_media_download_artifact,
     remaining_media_download_budget,
 )
-from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
+from task_manager.tasks.workers.file_watcher.service import (
+    media_download_file_is_as_recorded,
+    resolve_media_download_file,
+)
 
 
 def _download_profile_stmt():
@@ -82,6 +86,53 @@ def get_download_profile_episodes(
         EpisodeSelection.of_profile(profile),
         only_episode_id=only_episode.id if only_episode is not None else None,
     )
+
+
+_EPISODES_NAMED_IN_A_QUERY = 100
+
+
+def episodes_with_nothing_to_do(s: Session, profile: DownloadProfile, episodes: Sequence[Episode]) -> set[int]:
+    """The wanted episodes whose download is on disk and asks nothing of this pass.
+
+    A pass mostly finds what the one before it left: every file where it belongs. This finds that
+    out in a few reads and a look at each file, before any write transaction, so only the episodes
+    that do need something are reconciled one by one by ``ensure_episode_download``. It leaves out
+    no episode that function would change anything for.
+    """
+    wanted = {episode.id: episode for episode in episodes}
+    if not wanted:
+        return set()
+    statement = (
+        select(EpisodeMediaDownload)
+        .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+        .where(
+            Episode.collection_id == profile.collection_id,
+            EpisodeMediaDownload.local_media_profile_id == profile.local_media_profile_id,
+            EpisodeMediaDownload.download_profile_id == profile.id,
+            EpisodeMediaDownload.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value,
+        )
+    )
+    if len(wanted) <= _EPISODES_NAMED_IN_A_QUERY:
+        # A pass for one new episode has no use for the rest of the collection's downloads.
+        statement = statement.where(EpisodeMediaDownload.media_item_id.in_(wanted))
+    downloads = s.scalars(statement).all()
+    busy = media_downloads_with_an_operation(s)
+    marks_for_final = profile.download_with_countdown and profile.redownload_final
+    settled = set()
+    for download in downloads:
+        episode = wanted.get(download.media_item_id)
+        if episode is None or download.id in busy:
+            continue
+        if (
+            marks_for_final
+            and episode.publish_status == EpisodePublishStatus.PUBLISHED_PRELIMINARY
+            and not download.redownload_when_final
+            and not download.automatic_retry_suppressed
+        ):
+            continue
+        if media_download_file_is_as_recorded(download):
+            settled.add(episode.id)
+    return settled
 
 
 @dataclass(frozen=True)

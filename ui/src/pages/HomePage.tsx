@@ -5,6 +5,7 @@ import {Link} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
 
 import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
+import KeepQuestions from '../components/KeepQuestions/KeepQuestions'
 import {
     useLocalMediaProfiles,
     useLocalMediaProfilesStorage,
@@ -12,6 +13,7 @@ import {
     useMovies,
     useRecentlyIndexedEpisodes,
     useCollections,
+    useKeepQuestions,
     useSourceProblems,
 } from '../lib/queries'
 import {
@@ -61,6 +63,8 @@ export default function HomePage() {
         batchSize: 50,
     })
     const sourceProblemsQuery = useSourceProblems()
+    const keepQuestions = useKeepQuestions().data ?? []
+    const keepQuestionEpisodes = new Set(keepQuestions.map((question) => question.episodeId)).size
     const problemsQuery = useMediaDownloadsCollection({
         statuses: PROBLEMS,
         order: 'workflow',
@@ -84,6 +88,8 @@ export default function HomePage() {
     const metadataProblems = movies?.filter((movie) => movie.releaseDateLookupStatus === 'error') || []
     const sourceProblems = sourceProblemsQuery.data ?? []
     const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0 || sourceProblems.length > 0
+    // The keep question has its own card above, so it does not fill Needs attention.
+    const needsAnAnswer = hasAttention || keepQuestionEpisodes > 0
     const downloadError = (
         downloadsQuery.error
         ?? problemsQuery.error
@@ -99,6 +105,7 @@ export default function HomePage() {
         metadataProblems.length ? `${metadataProblems.length} movie metadata problem${metadataProblems.length === 1 ? '' : 's'}` : null,
         profiles?.length === 0 ? 'No Local Media Profiles' : null,
         ...sourceProblems.map((problem) => problem.title),
+        keepQuestionEpisodes ? `${keepQuestionEpisodes} download${keepQuestionEpisodes === 1 ? '' : 's'} removed from the Source` : null,
     ].filter(Boolean).join(' • ')
     const recentActivity = useMemo(() => {
         const activity: RecentActivityItem[] = []
@@ -142,13 +149,15 @@ export default function HomePage() {
                 )}
             </div>
 
-            <div className={`system-health ${hasAttention ? 'needs-attention' : 'is-healthy'}`}>
-                <FontAwesomeIcon icon={faIcon('fass', hasAttention ? 'triangle-exclamation' : 'circle-check')}/>
+            <div className={`system-health ${needsAnAnswer ? 'needs-attention' : 'is-healthy'}`}>
+                <FontAwesomeIcon icon={faIcon('fass', needsAnAnswer ? 'triangle-exclamation' : 'circle-check')}/>
                 <div>
-                    <strong>{hasAttention ? 'VODLoft needs attention' : 'VODLoft is running normally'}</strong>
-                    <small>{hasAttention ? attentionSummary : 'No download, metadata, profile or Source problems detected'}</small>
+                    <strong>{needsAnAnswer ? 'VODLoft needs attention' : 'VODLoft is running normally'}</strong>
+                    <small>{needsAnAnswer ? attentionSummary : 'No download, metadata, profile or Source problems detected'}</small>
                 </div>
             </div>
+
+            <KeepQuestions questions={keepQuestions}/>
 
             <div className="operation-stats" aria-label="VODLoft status summary">
                 <Link to={downloadsUrlForStatusFilters('downloading', 'local_processing')}><span>Active</span><strong>{IN_PROGRESS.reduce((total, status) => total + (downloadsQuery.facets[status] ?? 0), 0)}</strong></Link>

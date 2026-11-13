@@ -1,7 +1,7 @@
 """Changing or deleting many profiles of one table at once, from its bulk edit mode."""
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from typing import ClassVar, Generic, TypeVar
 
 from pydantic import Field, model_validator
 
@@ -10,6 +10,7 @@ from backend.types.download_profile_types import UpgradeRepeat
 from backend.types.local_media_profile_types import (
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
+    LocalMediaProfileSubtitleMode,
     LocalMediaProfileThumbnailMode,
 )
 
@@ -27,13 +28,16 @@ class BulkSelectionIn(RequestBase):
 
 
 class BulkChangesIn(RequestBase):
-    """Only the settings that are sent change; a setting cannot be sent empty."""
+    """Only the settings that are sent change; a setting cannot be sent empty, except one where empty is
+    a value of its own, such as following the system setting."""
+
+    nullable: ClassVar[frozenset[str]] = frozenset()
 
     @model_validator(mode="after")
     def _something_to_change(self):
         if not self.model_fields_set:
             raise ValueError("Choose a setting to change")
-        for name in self.model_fields_set:
+        for name in self.model_fields_set - self.nullable:
             if getattr(self, name) is None:
                 raise ValueError(f"Choose a value for {name}")
         return self
@@ -60,6 +64,11 @@ class LocalMediaProfileBulkChangesIn(BulkChangesIn):
     download_mode: LocalMediaProfileStorageMode | None = None
     thumbnail_mode: LocalMediaProfileThumbnailMode | None = None
     metadata_mode: LocalMediaProfileMetadataMode | None = None
+    subtitle_mode: LocalMediaProfileSubtitleMode | None = None
+    download_collection_assets: bool | None = None
+    """Empty follows the system setting; only collection profiles have it."""
+
+    nullable: ClassVar[frozenset[str]] = frozenset({"download_collection_assets"})
 
 
 ChangesT = TypeVar("ChangesT", bound=BulkChangesIn)

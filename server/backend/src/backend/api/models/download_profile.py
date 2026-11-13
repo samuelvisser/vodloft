@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasPath, Field, field_validator, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.api.models.collection_example import ExampleCollectionAPIIn
 from backend.services.regex_check import MAX_PATTERN_LENGTH, PatternError, compile_pattern, split_inline_ignore_case
 from backend.types.download_profile_types import (
     DATE_FIELDS,
+    DownloadKeptBy,
     DurationOperator,
     EpisodeFilterAction,
     EpisodeFilterField,
@@ -231,3 +232,39 @@ class WaitingForCountdownAPIRead(ResponseBase):
     local_media_profile_id: int
 
 
+
+
+class OutOfScopeDownloadAPIRead(ResponseBase):
+    """A download of the profile that one of its filters leaves out."""
+
+    id: int = Field(validation_alias=AliasPath("download", "id"))
+    episode_id: int = Field(validation_alias=AliasPath("episode", "id"))
+    episode_slug: str = Field(validation_alias=AliasPath("episode", "slug"))
+    episode_title: str = Field(validation_alias=AliasPath("episode", "title"))
+    published_at: datetime | None
+    downloaded_at: datetime | None = Field(validation_alias=AliasPath("download", "downloaded_at"))
+    on_disk: bool
+    size_bytes: int | None
+    filter_index: int
+    """The position of the filter that leaves it out, in the filters it was checked against."""
+    kept_by: DownloadKeptBy | None
+    """What keeps it from being deleted by default; None when nothing does."""
+
+
+class OutOfScopePreviewAPIRequest(RequestBase):
+    """The Which episodes lines of the edit form, before they are saved."""
+
+    download_with_countdown: bool
+    filters: list[DownloadProfileFilterAPIIn] = Field(default_factory=list, max_length=50)
+
+
+class OutOfScopeDeleteAPIRequest(RequestBase):
+    media_download_ids: list[int] = Field(min_length=1, max_length=10000)
+
+
+class DownloadProfileStatisticsAPIRead(ResponseBase):
+    downloaded: int
+    storage_size_bytes: int
+    wanted: int
+    out_of_scope: int
+    out_of_scope_kept: int

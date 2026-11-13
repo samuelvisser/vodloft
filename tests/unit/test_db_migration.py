@@ -21,13 +21,17 @@ RELEASE_REVISIONS = (
     ("0.5.0", "817515eb8209"),
     ("0.6.0", "d0f28c7f863e"),
     ("0.7.0", "c89f1a5ea2ba"),
-    ("0.8.0", "d7e173de7e72"),
 )
 VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
 VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
-HEAD_REVISION = "d7e173de7e72"
+SITE_REFRESH_REVISION = "5b75b63e55f2"
+NEUTRAL_STATUSES_REVISION = "b9dbb772c34e"
+UPCOMING_VIDEOS_REVISION = "158c03681e52"
+PROFILE_LOOKUP_INDEXES_REVISION = "5b8e1f3c2a90"
+IMPORTED_DOWNLOAD_PROFILES_REVISION = "a0eceaa70db5"
+HEAD_REVISION = "bb0e7c5e17cc"
 
 
 @pytest.fixture
@@ -463,14 +467,14 @@ def test_which_episodes_becomes_one_ordered_list_of_filters(migration_database):
                 "'collection')"
             ), {"id": profile_id, "slug": f"p{profile_id}"})
         profiles = (
-            # (id, collection, local media profile, types, days, count, retention)
-            (1, 1, 5, '["ep"]', 0, 25, "published"),
-            (2, 2, 5, '["ep"]', 30, 0, "downloaded"),
-            (3, 2, 5, '["trailer"]', 30, 0, "downloaded"),
-            (4, 2, 6, '["ep"]', 0, 10, "published"),
-            (5, 2, 6, '["aux"]', 0, 0, "published"),
+            # (id, collection, local media profile, types, days, count, retention, all seasons)
+            (1, 1, 5, '["ep"]', 0, 25, "published", 0),
+            (2, 2, 5, '["ep"]', 30, 0, "downloaded", 0),
+            (3, 2, 5, '["trailer"]', 30, 0, "downloaded", 0),
+            (4, 2, 6, '["ep"]', 0, 10, "published", 0),
+            (5, 2, 6, '["aux"]', 0, 0, "published", 0),
         )
-        for profile_id, collection_id, local_id, types, days, count, _retention in profiles:
+        for profile_id, collection_id, local_id, types, days, count, retention, all_seasons in profiles:
             connection.execute(text(
                 "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
                 "download_with_countdown, redownload_final, download_days_in_past, download_episode_count, "
@@ -481,12 +485,12 @@ def test_which_episodes_becomes_one_ordered_list_of_filters(migration_database):
         connection.execute(text(
             "INSERT INTO download_profile_seasons (download_profile_id, season_id) VALUES (1, 2)"
         ))
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "ce5df2342e6f")
     with engine.begin() as connection:
-        for profile_id, _collection, _local, _types, _days, _count, retention in profiles:
+        for profile_id, _collection, _local, _types, _days, _count, retention, all_seasons in profiles:
             connection.execute(text(
-                "UPDATE download_profiles SET retention_from = :retention WHERE id = :id"
-            ), {"id": profile_id, "retention": retention})
+                "UPDATE download_profiles SET retention_from = :retention, all_seasons = :all WHERE id = :id"
+            ), {"id": profile_id, "retention": retention, "all": all_seasons})
         connection.execute(text(
             "INSERT INTO download_profile_rules (download_profile_id, position, action, field, pattern, ignore_case) "
             "VALUES (1, 0, 'skip', 'title', 'trailer', 1)"
@@ -572,7 +576,7 @@ def test_a_start_date_becomes_a_published_filter_after_an_attempt_that_stopped(m
             "download_starting_from, delete_older_episodes, include_upcoming_seasons) "
             "VALUES (1, 1, 5, 1, '[\"ep\"]', 0, 0, 0, 0, '2026-01-10', 1, 1)"
         ))
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "ce5df2342e6f")
     # An earlier attempt created the filters table, then stopped before converting anything.
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE download_profile_filters (id INTEGER PRIMARY KEY)"))
@@ -591,7 +595,7 @@ def test_sites_migration_places_named_sources_and_moves_the_domain_preference(mi
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "7b3e9d2a4c61")
     with engine.begin() as connection:
         for collection_id, slug, source_key in ((1, "a-show", "dailywire"), (2, "UC123", "ytdlp")):
             connection.execute(text(
@@ -614,23 +618,28 @@ def test_sites_migration_places_named_sources_and_moves_the_domain_preference(mi
         )).all() == [("dailywire", "The Daily Wire", '["dailywire.com"]', None), ("npo", "NPO Start", '["npo.nl"]', "ytdlp")]
 
 
-def test_existing_videos_keep_their_metadata_final(migration_database):
+def test_site_refresh_migration_gives_the_daily_wire_and_youtube_their_own_schedule(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "2bd0eb5fe4a6")
     with engine.begin() as connection:
-        connection.execute(text("PRAGMA foreign_keys = OFF"))
-        connection.execute(text("INSERT INTO media_items (id, uuid, type, source_key) VALUES (1, 'v1', 'video', 'ytdlp')"))
-        connection.execute(text(
-            "INSERT INTO media_items_video (id, slug, sharing_url) VALUES (1, 'v1', 'https://www.youtube.com/watch?v=1')"
-        ))
+        for key, name in (("dailywire", "The Daily Wire"), ("youtube", "YouTube"), ("vimeo", "Vimeo")):
+            connection.execute(text(
+                "INSERT INTO sites (key, name, domains) VALUES (:key, :name, '[]')"
+            ), {"key": key, "name": name})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, "5b75b63e55f2")
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT metadata_is_final FROM media_items_video")).scalar_one() == 1
+        assert connection.execute(text(
+            "SELECT key, refresh_mode, refresh_intervals FROM sites ORDER BY key"
+        )).all() == [
+            ("dailywire", "own", "15m,30m,1h,3h,6h,24h,3d"),
+            ("vimeo", "system", None),
+            ("youtube", "own", "30m,2h,6h,24h,3d,7d,14d"),
+        ]
         columns = {row.name: row for row in connection.execute(text("PRAGMA table_info(media_items_video)"))}
         assert columns["metadata_is_final"].dflt_value == "'1'"
 
@@ -640,7 +649,7 @@ def test_publish_statuses_get_names_every_source_shares(migration_database):
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, SITE_REFRESH_REVISION)
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys = OFF"))
         for episode_id, status in ((10, "dw_processing"), (11, "published_with_countdown"), (12, "published_final")):
@@ -685,12 +694,46 @@ def test_publish_statuses_get_names_every_source_shares(migration_database):
         assert connection.execute(text("SELECT key FROM metadata")).scalar_one() == "ep_status.source_processing.slug"
 
 
+def test_every_site_adds_upcoming_and_live_videos(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, NEUTRAL_STATUSES_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('youtube', 'YouTube', '[]')"))
+
+    command.upgrade(config, UPCOMING_VIDEOS_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT pending_checks FROM sites WHERE key = 'youtube'")).scalar_one() == 1
+
+
+def test_site_scheduling_leaves_the_sites_table(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "9d1f3b6a2c84")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO sites (key, name, domains, refresh_mode, pending_checks) VALUES ('own', 'Own', '[]', 'off', 0)"
+        ))
+
+    command.upgrade(config, "2c7e4a9f1b38")
+
+    with engine.connect() as connection:
+        columns = {row.name for row in connection.execute(text("PRAGMA table_info(sites)"))}
+        assert columns == {"key", "name", "domains", "preferred_source_key"}
+        assert connection.execute(text("SELECT key FROM sites")).scalar_one() == "own"
+
+
 def test_the_daily_wire_profiles_move_to_its_own_resolutions_and_duplicates_merge(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "7e3b9d1a4c52")
     template = "/downloads/{{ collection }}/{{ episode_title }}.ext"
     with engine.begin() as connection:
         for collection_id, source_key in ((1, "dailywire"), (2, "ytdlp")):
@@ -725,12 +768,12 @@ def test_the_daily_wire_profiles_move_to_its_own_resolutions_and_duplicates_merg
             ), {"id": download_id, "media": media_id, "profile": profile_id})
             connection.execute(text("INSERT INTO media_downloads_episode (id) VALUES (:id)"), {"id": download_id})
         connection.execute(text(
-            "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
-            "sponsorblock_segments) VALUES (7, 1, 2, 1, '[]', '{}')"
+            "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, sponsorblock_segments) "
+            "VALUES (7, 1, 2, 1, '{}')"
         ))
         for stream_id, collection_id in ((20, 1), (21, 2)):
             connection.execute(text(
-                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_dw_stream, "
+                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_source_stream, "
                 "preferred_format, prefer_exact_match) VALUES (:id, 'rss', :collection, 1, :token, 1, 0, 'format_4k', 0)"
             ), {"id": stream_id, "collection": collection_id, "token": f"t{stream_id}"})
 
@@ -749,12 +792,12 @@ def test_the_daily_wire_profiles_move_to_its_own_resolutions_and_duplicates_merg
         }
 
 
-def test_youtube_feeds_stream_at_its_own_resolutions_through_vodloft(migration_database):
+def test_youtube_feeds_stream_at_its_own_resolutions_and_do_not_proxy(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "688634d39f23")
     with engine.begin() as connection:
         for collection_id, url in ((1, "https://www.youtube.com/@host"), (2, "https://vimeo.com/host")):
             connection.execute(text(
@@ -765,21 +808,21 @@ def test_youtube_feeds_stream_at_its_own_resolutions_through_vodloft(migration_d
         for stream_id, collection_id, streams, preferred in (
                 (20, 1, 1, "format_480p"), (21, 1, 1, "format_4k"), (22, 1, 0, "format_4k"), (23, 2, 1, "format_4k")):
             connection.execute(text(
-                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_dw_stream, "
+                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_source_stream, "
                 "preferred_format, prefer_exact_match) VALUES (:id, 'rss', :collection, 1, :token, 1, :streams, :format, 0)"
             ), {"id": stream_id, "collection": collection_id, "token": f"t{stream_id}", "streams": streams, "format": preferred})
             connection.execute(text(
                 "INSERT INTO stream_profiles_rss (id, feed_url, max_items) VALUES (:id, :url, 0)"
             ), {"id": stream_id, "url": f"https://example.test/{stream_id}"})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, "53adf1f1b502")
 
     with engine.connect() as connection:
         # Only feeds that stream from YouTube move; feeds of downloads keep any resolution.
         assert dict(connection.execute(text("SELECT id, preferred_format FROM stream_profiles")).all()) == {
             20: "format_720p", 21: "format_1080p", 22: "format_4k", 23: "format_4k",
         }
-        assert connection.execute(text("SELECT DISTINCT proxy_source_stream FROM stream_profiles_rss")).scalars().all() == [1]
+        assert connection.execute(text("SELECT DISTINCT proxy_source_stream FROM stream_profiles_rss")).scalars().all() == [0]
 
 
 def test_feeds_of_sites_without_hls_video_move_to_mp4(migration_database):
@@ -787,7 +830,7 @@ def test_feeds_of_sites_without_hls_video_move_to_mp4(migration_database):
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "53adf1f1b502")
     with engine.begin() as connection:
         for collection_id, source, url in (
                 (1, "ytdlp", "https://www.youtube.com/@host"), (2, "ytdlp", "https://vimeo.com/host"),
@@ -801,7 +844,7 @@ def test_feeds_of_sites_without_hls_video_move_to_mp4(migration_database):
                 (20, 1, "audio_hls"), (21, 2, "audio_hls"), (22, 2, "mp4_hls"), (23, 3, "mp4_hls"), (24, 4, "audio_hls"),
                 (25, 4, "mp4")):
             connection.execute(text(
-                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_dw_stream, "
+                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_source_stream, "
                 "preferred_format, prefer_exact_match) VALUES (:id, 'rss', :collection, 1, :token, 1, 0, 'format_1080p', 0)"
             ), {"id": stream_id, "collection": collection_id, "token": f"t{stream_id}"})
             connection.execute(text(
@@ -822,7 +865,7 @@ def test_daily_wire_profiles_get_the_upgrade_check_for_a_different_length(migrat
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "aa950d2ab545")
     with engine.begin() as connection:
         for collection_id, source_key in ((1, "dailywire"), (2, "ytdlp")):
             connection.execute(text(
@@ -837,9 +880,8 @@ def test_daily_wire_profiles_get_the_upgrade_check_for_a_different_length(migrat
         connection.execute(text("INSERT INTO local_media_profiles_collection (id) VALUES (1)"))
         for profile_id, collection_id in ((7, 1), (8, 2)):
             connection.execute(text(
-                "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
-                "sponsorblock_segments, upgrade_check, upgrade_improvements) "
-                "VALUES (:id, :collection, 1, 1, '[]', '{}', 0, '[\"resolution\"]')"
+                "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, sponsorblock_segments, "
+                "upgrade_check, upgrade_improvements) VALUES (:id, :collection, 1, 1, '{}', 0, '[\"resolution\"]')"
             ), {"id": profile_id, "collection": collection_id})
 
     command.upgrade(config, HEAD_REVISION)
@@ -860,7 +902,7 @@ def test_feeds_proxy_their_sites_video_by_default(migration_database):
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "d6346ad993ee")
     with engine.begin() as connection:
         connection.execute(text(
             "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
@@ -868,10 +910,11 @@ def test_feeds_proxy_their_sites_video_by_default(migration_database):
             "'free', 'series', 'numbered', 'Host', 'host', 'ytdlp')"
         ))
         connection.execute(text(
-            "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_dw_stream, "
+            "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, use_source_stream, "
             "preferred_format, prefer_exact_match) VALUES (20, 'rss', 1, 1, 't20', 1, 1, 'format_720p', 0)"
         ))
         connection.execute(text("INSERT INTO stream_profiles_rss (id, feed_url, max_items) VALUES (20, 'https://example.test/20', 0)"))
+        assert connection.execute(text("SELECT proxy_source_stream FROM stream_profiles_rss")).scalar_one() == 0
 
     command.upgrade(config, HEAD_REVISION)
 
@@ -890,7 +933,7 @@ def test_collections_keep_the_episode_order_their_identification_gave_them(migra
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "28c70478078a")
     with engine.begin() as connection:
         for collection_id, identifier in ((1, "date_based"), (2, "numbered"), (3, "seasonal")):
             connection.execute(text(
@@ -912,17 +955,17 @@ def test_imported_downloads_join_the_download_profile_of_their_collection(migrat
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, PROFILE_LOOKUP_INDEXES_REVISION)
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys = OFF"))
         connection.execute(text(
             "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-            "author_name, author_slug, source_key) VALUES (1, 'c1', 'c1', 'C', "
-            "'https://example.test/c1', 'free', 'series', 'date_based', 'Host', 'host', 'youtube')"
+            "author_name, author_slug, source_key, episode_order) VALUES (1, 'c1', 'c1', 'C', "
+            "'https://example.test/c1', 'free', 'series', 'date_based', 'Host', 'host', 'youtube', 'newest_first')"
         ))
         connection.execute(text(
-            "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
-            "sponsorblock_segments) VALUES (7, 1, 5, 1, '[]', '{}')"
+            "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, "
+            "sponsorblock_segments) VALUES (7, 1, 5, 1, '[]')"
         ))
         # 1 imported, 2 imported for a Local Media Profile without a Download Profile,
         # 3 downloaded by hand, 4 imported and already managed by another profile.
@@ -961,7 +1004,7 @@ def test_media_that_needed_a_subscription_says_which_access_it_needs(migration_d
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, IMPORTED_DOWNLOAD_PROFILES_REVISION)
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys = OFF"))
         for media_id, source_key, needs in ((1, "npo", 1), (2, "ytdlp", 1), (3, "dailywire", 1), (4, "ytdlp", 0)):
@@ -991,38 +1034,38 @@ def test_media_that_needed_a_subscription_says_which_access_it_needs(migration_d
 
 
 def test_every_download_profile_chooses_the_new_sponsorblock_types(migration_database):
-    """The new SponsorBlock types reach the Local Media Profile of a YouTube collection that has no Site yet."""
     _database_path, engine = migration_database
     import json
 
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, VODLOFT_0_6_0_REVISION)
     with engine.begin() as connection:
-        connection.execute(text(
-            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-            "author_name, author_slug, source_key) VALUES (1, 'c1', 'c1', 'C', 'https://www.youtube.com/@host', "
-            "'free', 'series', 'date_based', 'Host', 'host', 'ytdlp')"
-        ))
-        for profile_id, segments in ((5, None), (6, {"sponsor": "cut", "poi_highlight": "keep"})):
-            connection.execute(text(
-                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs) "
-                "VALUES (:id, :slug, :slug, 'collection', '/x/' || :slug || '/{{ title }}.ext', 'format_1080p', '[]')"
-            ), {"id": profile_id, "slug": f"p{profile_id}"})
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        for profile_id in (1, 2):
             connection.execute(text(
                 "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
-                "sponsorblock_enabled, sponsorblock_segments) VALUES (:id, 1, :local, 1, '[]', 1, :segments)"
-            ), {"id": profile_id - 4, "local": profile_id, "segments": json.dumps(segments or {})})
+                "download_with_countdown, redownload_final, download_days_in_past, download_episode_count, "
+                "delete_older_episodes, include_upcoming_seasons) "
+                "VALUES (:id, 1, :local, 1, '[]', 0, 0, 0, 0, 0, 1)"
+            ), {"id": profile_id, "local": 4 + profile_id})
+    command.upgrade(config, "7d3e9b2c41fa")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "UPDATE download_profiles SET sponsorblock_segments = :segments WHERE id = 2"
+        ), {"segments": json.dumps({"sponsor": "cut", "poi_highlight": "keep"})})
 
-    command.upgrade(config, HEAD_REVISION)
+    # The last revision before SponsorBlock moved to the Local Media Profiles.
+    command.upgrade(config, "d3a7f1c9e2b5")
 
     with engine.connect() as connection:
-        rows = connection.execute(text("SELECT id, sponsorblock_enabled, sponsorblock_segments FROM local_media_profiles"))
-        profiles = {profile_id: (bool(enabled), json.loads(value)) for profile_id, enabled, value in rows}
-    assert profiles[5][0] and profiles[6][0]
-    assert (profiles[5][1]["poi_highlight"], profiles[5][1]["hook"], profiles[5][1]["chapter"]) == ("chapter", "keep", "keep")
-    assert (profiles[6][1]["sponsor"], profiles[6][1]["poi_highlight"], profiles[6][1]["hook"]) == ("cut", "keep", "keep")
+        segments = {
+            profile_id: json.loads(value)
+            for profile_id, value in connection.execute(text("SELECT id, sponsorblock_segments FROM download_profiles"))
+        }
+    assert (segments[1]["poi_highlight"], segments[1]["hook"], segments[1]["chapter"]) == ("chapter", "keep", "keep")
+    assert segments[2] == {"sponsor": "cut", "poi_highlight": "keep", "hook": "keep", "chapter": "keep"}
 
 
 def test_local_media_profiles_move_from_sources_to_sites(migration_database):
@@ -1030,8 +1073,10 @@ def test_local_media_profiles_move_from_sources_to_sites(migration_database):
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "80a8b55fb9d6")
     with engine.begin() as connection:
+        for key in ("vimeo", "dailywire"):
+            connection.execute(text("INSERT INTO sites (key, name, domains) VALUES (:key, :key, '[]')"), {"key": key})
         profiles = (
             # id, type, source_keys
             (1, "collection", None),
@@ -1052,15 +1097,69 @@ def test_local_media_profiles_move_from_sources_to_sites(migration_database):
         rows = connection.execute(text("SELECT id, site_keys, include_upcoming_sites FROM local_media_profiles ORDER BY id")).all()
         sites = {profile_id: (json.loads(keys), bool(upcoming)) for profile_id, keys, upcoming in rows}
         assert sites == {
-            1: (["dailywire", "npo", "youtube"], True),
+            1: (["dailywire", "npo", "vimeo", "youtube"], True),
             2: (["dailywire"], False),
             # yt-dlp stands for every Site that is not The Daily Wire or NPO Start, and for Sites to come.
-            3: (["youtube"], True),
-            4: (["npo", "youtube"], True),
+            3: (["vimeo", "youtube"], True),
+            4: (["npo", "vimeo", "youtube"], True),
             5: (["dailywire"], True),
         }
         columns = {column["name"] for column in inspect(connection).get_columns("local_media_profiles")}
         assert "source_keys" not in columns
+
+
+def test_per_site_settings_of_an_earlier_migration_become_one_value_per_profile(migration_database):
+    """A database that ran the earlier version of e8b2c4f6a1d3 kept these settings per Site in site_settings."""
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "d3a7f1c9e2b5")
+    cut = {"sponsor": "cut"}
+    site_settings = {
+        1: {
+            "vimeo": {"auto_subtitles": "never", "sponsorblock_enabled": False, "sponsorblock_segments": {}},
+            "youtube": {"auto_subtitles": "always", "sponsorblock_enabled": True, "sponsorblock_segments": cut},
+        },
+        2: {"vimeo": {"auto_subtitles": "never", "sponsorblock_enabled": False, "sponsorblock_segments": {}}},
+        3: {},
+    }
+    with engine.begin() as connection:
+        # What the earlier e8b2c4f6a1d3 left behind.
+        connection.execute(text("ALTER TABLE local_media_profiles ADD COLUMN site_settings JSON NOT NULL DEFAULT '{}'"))
+        for column in ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments"):
+            connection.execute(text(f"ALTER TABLE download_profiles DROP COLUMN {column}"))
+        for profile_id, settings in site_settings.items():
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs, "
+                "site_keys, site_settings) VALUES (:id, :slug, :slug, 'collection', '/x/' || :slug || '/{{ title }}.ext', "
+                "'format_1080p', '[]', '[]', :settings)"
+            ), {"id": profile_id, "slug": f"p{profile_id}", "settings": json.dumps(settings)})
+    command.stamp(config, "e8b2c4f6a1d3")
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        profiles = {
+            row.id: (row.auto_subtitles, bool(row.sponsorblock_enabled), json.loads(row.sponsorblock_segments))
+            for row in connection.execute(text(
+                "SELECT id, auto_subtitles, sponsorblock_enabled, sponsorblock_segments FROM local_media_profiles"
+            ))
+        }
+        columns = {column["name"] for column in inspect(connection).get_columns("local_media_profiles")}
+    default_segments = {
+        "sponsor": "chapter", "selfpromo": "keep", "interaction": "keep", "intro": "chapter", "outro": "chapter",
+        "preview": "keep", "filler": "keep", "hook": "keep", "music_offtopic": "keep", "poi_highlight": "chapter",
+        "chapter": "keep",
+    }
+    assert profiles == {
+        # YouTube's settings win.
+        1: ("always", True, {**default_segments, **cut}),
+        # Without YouTube: the other Sites' auto-generated subtitles, and SponsorBlock off.
+        2: ("never", False, default_segments),
+        3: ("fallback", False, default_segments),
+    }
+    assert "site_settings" not in columns
 
 
 def test_auto_subtitles_and_sponsorblock_move_to_the_local_media_profile(migration_database):
@@ -1068,24 +1167,21 @@ def test_auto_subtitles_and_sponsorblock_move_to_the_local_media_profile(migrati
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, VODLOFT_0_7_0_REVISION)
+    command.upgrade(config, "d3a7f1c9e2b5")
     cut = {"sponsor": "cut"}
     with engine.begin() as connection:
-        collections = (
-            (1, "ytdlp", "https://www.youtube.com/@one"), (2, "ytdlp", "https://youtu.be/two"),
-            (3, "ytdlp", "https://www.youtube.com/@three"), (4, "ytdlp", "https://vimeo.com/four"),
-            (5, "dailywire", "https://www.dailywire.com/show/five"),
-        )
-        for collection_id, source_key, url in collections:
+        for key in ("youtube", "vimeo", "dailywire"):
+            connection.execute(text("INSERT INTO sites (key, name, domains) VALUES (:key, :key, '[]')"), {"key": key})
+        for collection_id, site_key in ((1, "youtube"), (2, "youtube"), (3, "youtube"), (4, "vimeo"), (5, "dailywire")):
             connection.execute(text(
                 "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
-                "author_name, author_slug, source_key) VALUES (:id, :uuid, :uuid, 'C', :url, 'free', 'series', "
-                "'numbered', 'Host', 'host', :source)"
-            ), {"id": collection_id, "uuid": f"c{collection_id}", "url": url, "source": source_key})
+                "author_name, author_slug, source_key, site_key, episode_order) VALUES (:id, :uuid, :uuid, 'C', "
+                "'https://example.test/' || :uuid, 'free', 'series', 'numbered', 'Host', 'host', 'ytdlp', :site, 'newest_first')"
+            ), {"id": collection_id, "uuid": f"c{collection_id}", "site": site_key})
         for profile_id in (1, 2):
             connection.execute(text(
-                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs) "
-                "VALUES (:id, :slug, :slug, 'collection', '/x/' || :slug || '/{{ title }}.ext', 'format_1080p', '[]')"
+                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs, "
+                "site_keys) VALUES (:id, :slug, :slug, 'collection', '/x/' || :slug || '/{{ title }}.ext', 'format_1080p', '[]', '[]')"
             ), {"id": profile_id, "slug": f"p{profile_id}"})
         # Two of the three YouTube Download Profiles of profile 1 use auto-generated subtitles always and cut sponsors.
         rows = (
@@ -1094,9 +1190,8 @@ def test_auto_subtitles_and_sponsorblock_move_to_the_local_media_profile(migrati
         )
         for download_profile_id, collection_id, profile_id, auto, sponsorblock, segments in rows:
             connection.execute(text(
-                "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, ep_id_type_list, "
-                "auto_subtitles, sponsorblock_enabled, sponsorblock_segments) "
-                "VALUES (:id, :collection, :profile, 1, '[]', :auto, :sb, :segments)"
+                "INSERT INTO download_profiles (id, collection_id, local_media_profile_id, enable_profile, auto_subtitles, "
+                "sponsorblock_enabled, sponsorblock_segments) VALUES (:id, :collection, :profile, 1, :auto, :sb, :segments)"
             ), {"id": download_profile_id, "collection": collection_id, "profile": profile_id, "auto": auto,
                 "sb": sponsorblock, "segments": json.dumps(segments)})
 
@@ -1122,3 +1217,24 @@ def test_auto_subtitles_and_sponsorblock_move_to_the_local_media_profile(migrati
         2: ("fallback", False, default_segments),
     }
     assert not {"auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments"} & columns
+
+
+def test_the_database_unlinks_downloads_from_a_deleted_download_profile(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "d7e173de7e72")
+
+    def ondelete() -> str | None:
+        with engine.connect() as connection:
+            [foreign_key] = [
+                key for key in inspect(connection).get_foreign_keys("media_downloads_episode")
+                if key["constrained_columns"] == ["download_profile_id"]
+            ]
+        assert foreign_key["name"] == "fk_media_downloads_episode_download_profile_id_download_profiles"
+        return foreign_key["options"].get("ondelete")
+
+    assert ondelete() is None
+    command.upgrade(config, HEAD_REVISION)
+    assert ondelete() == "SET NULL"

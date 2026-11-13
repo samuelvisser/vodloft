@@ -44,16 +44,23 @@ def ensure_unique_profile_settings(
     *,
     exclude_id: int | None = None,
 ) -> None:
-    duplicate_stmt = select(profile_model.id).where(
+    duplicate_stmt = select(profile_model.name).where(
         profile_model.output_template == body.output_template,
         profile_model.preferred_format == body.preferred_format,
     )
     if exclude_id is not None:
         duplicate_stmt = duplicate_stmt.where(profile_model.id != exclude_id)
-    if s.scalar(duplicate_stmt.limit(1)) is not None:
+    duplicate_name = s.scalar(duplicate_stmt.limit(1))
+    if duplicate_name is not None:
+        # Either setting can tell the two profiles apart, so both fields say what clashes.
         raise ServiceError(
-            "A Local Media Profile with this output path template and preferred format already exists",
+            f"Local Media Profile '{duplicate_name}' already uses this output path template with the same "
+            "download format. Change the template or the format.",
             field="outputTemplate", status_code=409, kind="unique_violation",
+            other_fields={
+                "preferredFormat": f"Local Media Profile '{duplicate_name}' already downloads this format "
+                                   "with the same output path template. Change the format or the template.",
+            },
         )
 
     query = s.query(profile_model)

@@ -21,6 +21,8 @@ export type ActionMenuControl = {
 
 export type ActionMenuItem = {
     label: string
+    /** A short line under the label, such as when the action last ran. */
+    description?: string
     icon?: any
     disabled?: boolean
     disabledReason?: string
@@ -41,6 +43,8 @@ export type ActionMenuItem = {
 type Props = {
     label?: string
     items: ActionMenuItem[]
+    /** A line at the foot of the menu about the item it acts on, for a fact that has no action of its own. */
+    note?: string
     className?: string
 }
 
@@ -49,7 +53,7 @@ function normalizedProgress(value: number | undefined) {
     return Math.max(0, Math.min(100, Math.round(value)))
 }
 
-export default function ActionMenu({label = 'Actions', items, className = ''}: Props) {
+export default function ActionMenu({label = 'Actions', items, note, className = ''}: Props) {
     const [open, setOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
     const triggerRef = useRef<HTMLButtonElement>(null)
@@ -92,7 +96,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
         control.onSelect()
     }
 
-    if (items.length === 0) return null
+    if (items.length === 0 && !note) return null
 
     return (
         <div ref={rootRef} className={`action-menu${open ? ' is-open' : ''}${className ? ` ${className}` : ''}`}>
@@ -146,12 +150,18 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                         {items.map((item, index) => {
                             const progress = normalizedProgress(item.progress)
                             const presentation = item.presentation ?? presentOperationProgress(item.operation, item.starting)
+                            const accessibleName = item.description ? `${item.label}, ${item.description}` : item.label
                             const itemContent = (
                                 <>
                                     {item.icon && (
                                         <FontAwesomeIcon className="action-menu-item-icon" icon={item.icon} aria-hidden="true"/>
                                     )}
-                                    <span>{item.label}</span>
+                                    {item.description ? (
+                                        <span className="action-menu-item-text">
+                                            <span>{item.label}</span>
+                                            <span className="action-menu-item-description">{item.description}</span>
+                                        </span>
+                                    ) : <span>{item.label}</span>}
                                     {presentation && <DownloadProgressActionItem presentation={presentation}/>}
                                 </>
                             )
@@ -166,7 +176,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                 >
                                     {({describedBy, explain}) => (
                                         <>
-                                            {item.separatorBefore && <div className="action-menu-separator" role="separator"/>}
+                                            {item.separatorBefore && index > 0 && <div className="action-menu-separator" role="separator"/>}
                                             <div className="action-menu-item-row">
                                                 {presentation ? (
                                                     <ProgressFill
@@ -185,7 +195,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                                         to={item.href}
                                                         role="menuitem"
                                                         className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}`}
-                                                        aria-label={presentation ? `${item.label}: ${presentation.detail}` : item.label}
+                                                        aria-label={presentation ? `${item.label}: ${presentation.detail}` : accessibleName}
                                                         onClick={() => setOpen(false)}
                                                     >
                                                         {itemContent}
@@ -197,7 +207,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                                         className={`action-menu-item${item.tone === 'danger' ? ' is-danger' : ''}${item.disabled ? ' is-disabled' : ''}`}
                                                         aria-disabled={item.disabled || undefined}
                                                         aria-describedby={describedBy}
-                                                        aria-label={presentation ? `${item.label}: ${presentation.detail}` : item.label}
+                                                        aria-label={presentation ? `${item.label}: ${presentation.detail}` : accessibleName}
                                                         onClick={() => selectItem(item, explain)}
                                                     >
                                                         {itemContent}
@@ -232,6 +242,12 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                                 </DisabledReason>
                             )
                         })}
+                        {note && (
+                            <>
+                                {items.length > 0 && <div className="action-menu-separator" role="separator"/>}
+                                <p className="action-menu-note">{note}</p>
+                            </>
+                        )}
                     </div>
                 </>
             )}

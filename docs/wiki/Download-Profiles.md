@@ -102,8 +102,12 @@ removes downloaded files that fall outside it: on **published**, once an episode
 published longer ago than the window; on **downloaded**, once it was downloaded longer ago. When a download is deleted,
 its download record and download history go as well, so it no longer appears on the Downloads page.
 
-Downloads you keep, and downloads a Keep filter matches, are never deleted. Downloads of episodes that can't be
-downloaded any more, for example because the Source removed them, are never deleted either.
+Downloads you keep, and downloads a Keep filter matches, are never deleted.
+
+When the Source removes an episode VODLoft already downloaded, your file may be the last copy. The Home page then asks
+whether to keep it, and the question stays until you answer. Until then no date filter deletes that download.
+**Keep** pins it, as the pin button below does. **Don't keep** lets the date filter handle it as if the episode were
+still at the Source.
 
 Leave the switch off if you only want the date filter to decide which new episodes are downloaded while keeping older
 files already on disk.
@@ -144,8 +148,8 @@ change under **Settings → Downloads**. The defaults below are the ones VODLoft
   SponsorBlock segments a download cut out don't count as a different length.
 
 The check first asks the site what it has now, and only downloads when one of your improvements is there. The old
-file stays until the new one is complete. Kept downloads are checked too: Keep protects a download from being deleted,
-not from a better copy. Downloads made after the check is turned on are the ones that get checked.
+file stays until the new one is complete. Kept downloads are not checked: a download you keep stays exactly as it
+is. Stop keeping it and its check picks up again. Downloads made after the check is turned on are the ones that get checked.
 Files you imported or matched get the same check, timed from the day the episode came out instead of the day you
 imported them, so an imported backlog is not checked all at once. An episode whose check day has already passed is not
 checked.

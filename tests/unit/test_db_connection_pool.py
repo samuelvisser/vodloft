@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+from sqlalchemy.engine import make_url
 from sqlalchemy.pool import QueuePool
+
+from conftest import POSTGRESQL_TEST_URL
 
 
 def _configure(monkeypatch, url: str, database_path=None):
@@ -54,3 +58,17 @@ def test_the_database_label_hides_the_password(monkeypatch):
         assert core.get_sqlite_database_path() is None
     finally:
         core.get_engine().dispose()
+
+
+@pytest.mark.skipif(not POSTGRESQL_TEST_URL, reason="Needs VL_TEST_POSTGRESQL_URL")
+def test_postgresql_compiles_no_queries_on_the_fly(monkeypatch):
+    """PostgreSQL's JIT compiler took seconds to compile the Downloads page's query, which then ran
+    in a few hundred milliseconds. Options the database URL sets are kept."""
+    url = make_url(POSTGRESQL_TEST_URL).update_query_dict({"options": "-c work_mem=7MB"})
+    engine = _configure(monkeypatch, url.render_as_string(hide_password=False))
+    try:
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("SHOW jit").scalar() == "off"
+            assert connection.exec_driver_sql("SHOW work_mem").scalar() == "7MB"
+    finally:
+        engine.dispose()

@@ -40,7 +40,7 @@ import {
     LocalMediaProfileViewReadSchema,
 } from "../types/schemas/local_media_profile";
 import {LocalMediaProfileSitesReadSchema, type LocalMediaProfileSitesRead} from "../types/schemas/local_media_profile_base";
-import {DownloadProfileRead, DownloadProfileReadSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
+import {DownloadProfileRead, DownloadProfileReadSchema, DownloadProfileStatisticsSchema, OutOfScopeDownloadsSchema, SiteOptionsSchema, SkippedByFilterSchema, WaitingForCountdownSchema} from "../types/schemas/download_profile";
 import {DownloadProfileReadView, DownloadProfileReadViewSchema} from "../types/schemas/download_profile_view";
 import {ProfileIdsSchema} from '../types/schemas/profile_bulk'
 
@@ -84,6 +84,7 @@ import {
 import {apiJson, apiUrl, responseError} from './api'
 import {z} from 'zod'
 import {profilePageSchema} from '../types/schemas/profile_page'
+import {KeepQuestionReadSchema, type KeepQuestionRead} from '../types/schemas/media_download'
 import {LibraryCountsSchema, LibraryPreferencesSchema, type LibraryPreferences} from '../types/schemas/library'
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
@@ -645,6 +646,20 @@ export async function changeSourceApiKey(
     return ApiStatusReadSchema.parse(await response.json())
 }
 
+/** Downloads whose episode left the Source, waiting on Home for someone to say whether to keep them. */
+export function useKeepQuestions() {
+    return useQuery<KeepQuestionRead[], Error, KeepQuestionRead[], readonly ['keepQuestions']>({
+        queryKey: ['keepQuestions'] as const,
+        enabled: can('managed_downloads'),
+        queryFn: ({signal}) => fetchParsed(
+            `${apiUrl()}/media-downloads/keep-questions`,
+            KeepQuestionReadSchema.array(),
+            signal,
+        ),
+        refetchInterval: 60_000,
+    })
+}
+
 /** What the user should fix about any Source, for Needs attention on Home. */
 export function useSourceProblems() {
     return useQuery<SourceProblemRead[], Error, SourceProblemRead[], readonly ['sourceProblems']>({
@@ -984,6 +999,36 @@ export function useCollectionSeasons(collectionSlug?: string) {
     return useQuery({
         ...seasonsQueryOptions(collectionSlug),
         enabled: !!collectionSlug,
+    })
+}
+
+/** One Download Profile with its Collection and Local Media Profile, as its page and edit form show it. */
+export function useDownloadProfileView(id?: number) {
+    return useQuery({
+        queryKey: ['downloadProfileView', id] as const,
+        enabled: id !== undefined,
+        refetchOnMount: 'always',
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/download-profiles/as-view/${id}`, DownloadProfileReadViewSchema, signal),
+    })
+}
+
+/** What a Download Profile's page counts: its downloads, and which of them its filters leave out. */
+export function useDownloadProfileStatistics(id?: number) {
+    return useQuery({
+        queryKey: ['downloadProfileStatistics', id] as const,
+        enabled: id !== undefined,
+        refetchOnMount: 'always',
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/download-profiles/${id}/statistics`, DownloadProfileStatisticsSchema, signal),
+    })
+}
+
+/** The Download Profile's downloads that its filters leave out, read when the dialog that lists them opens. */
+export function useDownloadProfileOutOfScope(id: number | undefined, enabled: boolean) {
+    return useQuery({
+        queryKey: ['downloadProfileOutOfScope', id] as const,
+        enabled: id !== undefined && enabled,
+        refetchOnMount: 'always',
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/download-profiles/${id}/out-of-scope-downloads`, OutOfScopeDownloadsSchema, signal),
     })
 }
 

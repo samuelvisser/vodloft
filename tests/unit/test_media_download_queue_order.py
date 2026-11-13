@@ -1258,6 +1258,7 @@ def test_workflow_orders_publication_waits_in_dispatch_queue_order():
         engine.dispose()
 
 
+@pytest.mark.sqlite_only
 def test_download_statuses_join_their_operations_through_an_index():
     """Without statistics SQLite guessed the queue was tiny and scanned all of it for every download,
     so a few thousand queued downloads made the Downloads page take minutes."""
@@ -1268,7 +1269,7 @@ def test_download_statuses_join_their_operations_through_an_index():
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
-    statement = MediaDownloadCollectionQuery.build().walk_statement(order="workflow")
+    statement = MediaDownloadCollectionQuery.build().summary_statement(statuses=["error"], order="workflow")
     sql = str(statement.compile(engine, compile_kwargs={"literal_binds": True}))
 
     with engine.connect() as connection:
@@ -1278,3 +1279,58 @@ def test_download_statuses_join_their_operations_through_an_index():
     assert joins
     assert not [step for step in joins if step.startswith("SCAN")], plan
     engine.dispose()
+
+
+def test_download_statuses_are_worked_out_once_per_page():
+    """Every workflow sort key reads a download's status. Inlined, PostgreSQL copied the status
+    expression into each of them and parsed every task run's JSON again for each copy, so the
+    Downloads page took seconds."""
+    import backend.db.models  # noqa: F401
+    import task_manager.scheduler.db  # noqa: F401
+    from backend.db import Base
+    from backend.services.media_download_collection import MediaDownloadCollectionQuery
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    statement = MediaDownloadCollectionQuery.build().summary_statement(statuses=["error"], order="workflow")
+    sql = str(statement.compile(engine, compile_kwargs={"literal_binds": True}))
+
+    with engine.connect() as connection:
+        if engine.dialect.name == "sqlite":
+            plan = [row[3] for row in connection.exec_driver_sql(f"EXPLAIN QUERY PLAN {sql}")]
+            assert "MATERIALIZE download_status" in plan, plan
+        else:
+            plan = [row[0] for row in connection.exec_driver_sql(f"EXPLAIN {sql}")]
+            assert any("CTE Scan on download_status" in step for step in plan), plan
+    engine.dispose()
+
+
+def test_a_download_page_reads_a_handful_of_rows_however_many_downloads_there_are():
+    """SQLite hands Python one row at a time, and beside a busy task thread each row waits
+    milliseconds for the interpreter lock. A page that read a row per download took over thirty
+    seconds with a few thousand downloads, even when it showed none of them."""
+    from backend.services.media_download_collection import (
+        MediaDownloadCollectionQuery,
+        read_media_download_page_window,
+    )
+
+    session, engine = _session()
+    try:
+        downloads = [_make_download(session, slug=f"handful-{number}") for number in range(6)]
+        session.commit()
+
+        query = MediaDownloadCollectionQuery.build()
+        summary = session.execute(query.summary_statement(statuses=[], order="workflow")).all()
+        # One row for the only status and file state in use, and one listing the ids.
+        assert len(summary) == 2
+        bulk = session.execute(query.bulk_action_ids_statement(statuses=[], action="delete-unavailable")).all()
+        assert len(bulk) == 1
+
+        window = read_media_download_page_window(session, statuses=[], order="recent", limit=2)
+        assert window.total == 6
+        assert window.facets == {"not_downloaded": 6}
+        assert window.actions == {"retry": 0, "cancel": 0, "delete-unavailable": 6}
+        assert window.ids == sorted((download.id for download in downloads), reverse=True)[:3]
+    finally:
+        session.close()
+        engine.dispose()

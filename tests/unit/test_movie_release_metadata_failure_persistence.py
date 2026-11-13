@@ -50,6 +50,7 @@ def test_failed_lookup_uses_conditional_path_and_creates_download(tmp_path, monk
         title="Unknown Movie",
         duration=6000,
         sharing_url="https://www.dailywire.com/videos/unknown-movie",
+        has_video=True,
         is_downloadable=True,
     )
 

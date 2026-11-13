@@ -1,4 +1,4 @@
-import type {ReactNode} from 'react'
+import {useState, type ReactNode} from 'react'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link} from 'react-router-dom'
@@ -37,15 +37,31 @@ type PageHeaderActionProps = {
     /** The button's words: shown when there is room, otherwise kept for screen readers and as a tooltip. */
     label: string
     variant?: 'primary' | 'secondary'
+    /** Keep the words while the header has room for them, after the other buttons have become icons. */
+    keepLabel?: boolean
+    /** For a button that switches something on and off: whether it is on. Switching plays a short swap animation. */
+    toggled?: boolean
 } & ({to: string, onClick?: never} | {onClick: () => void, to?: never})
 
 /** A button in a PageHeader: a link with `to`, or a button with `onClick`. */
-export function PageHeaderAction({icon, label, variant = 'primary', to, onClick}: PageHeaderActionProps) {
-    const className = `btn btn-${variant} page-header-action`
+export function PageHeaderAction({icon, label, variant = 'primary', keepLabel, toggled, to, onClick}: PageHeaderActionProps) {
+    // A toggle animates only once it has been switched, not when the page first shows it.
+    const [firstToggled, setFirstToggled] = useState(toggled)
+    const [switched, setSwitched] = useState(false)
+    if (toggled !== firstToggled && !switched) {
+        setFirstToggled(toggled)
+        setSwitched(true)
+    }
+    const className = [
+        `btn btn-${variant} page-header-action`,
+        keepLabel && 'keeps-label',
+        switched && 'is-switching',
+    ].filter(Boolean).join(' ')
+    // The key makes the icon and words new elements on each switch, so their entrance animation plays again.
     const content = (
         <>
-            <FontAwesomeIcon icon={icon} aria-hidden="true"/>
-            <span className="page-header-action-label">{label}</span>
+            <FontAwesomeIcon key={`icon-${toggled}`} icon={icon} aria-hidden="true" className="page-header-action-icon"/>
+            <span key={`label-${toggled}`} className="page-header-action-label">{label}</span>
         </>
     )
     if (to !== undefined) return <Link className={className} to={to} title={label}>{content}</Link>

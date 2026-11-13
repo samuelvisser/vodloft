@@ -23,7 +23,7 @@ from .errors import DownloadCanceled, DownloadError, EncryptedMediaError, FileTo
 from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, SponsorSegment, VideoStream, WrittenSubtitle
 from .plan import ResolvedDownloadSource, YtdlpSponsorBlock, YtdlpSubtitles
 from .source import FORMAT_HEIGHTS
-from .subtitles import webvtt_to_srt
+from .subtitles import srt_to_webvtt, webvtt_to_srt
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,8 @@ _TRACK = "[vodloft-track]"
 _MARKS = (_FILE, _SPONSORBLOCK, _VIDEO, _TRACK)
 _CODECS = (("avc", "h264"), ("h264", "h264"), ("hev", "h265"), ("hvc", "h265"), ("h265", "h265"), ("vp09", "vp9"), ("vp9", "vp9"), ("av01", "av1"), ("av1", "av1"))
 _SUBTITLE_FORMAT = ("--sub-format", "srt/vtt/best")
+# An HLS bundle keeps its subtitles as WebVTT, so it takes a site's own WebVTT first.
+_BUNDLE_SUBTITLE_FORMAT = ("--sub-format", "vtt/srt/best")
 # Every language, never YouTube's live chat.
 _EVERY_LANGUAGE = "all,-live_chat"
 # media.<language>.<format> from the download; auto.<language>.<format> from
@@ -203,16 +205,18 @@ def _language_patterns(subtitles: YtdlpSubtitles) -> str:
     return ",".join(f"{re.escape(language)}(-[A-Za-z0-9]+)*" for language in subtitles.languages)
 
 
-def ytdlp_subtitle_options(subtitles: YtdlpSubtitles) -> tuple[str, ...]:
+def ytdlp_subtitle_options(subtitles: YtdlpSubtitles, *, webvtt: bool = False) -> tuple[str, ...]:
     """Options for the subtitles written during the download.
 
     With both real and auto-generated subtitles asked for, yt-dlp uses the
     real one of a language when there is one, so ``fallback`` is just that.
     --ignore-errors turns a subtitle that fails to download into a warning;
-    any other error still ends yt-dlp with a non-zero exit status.
+    any other error still ends yt-dlp with a non-zero exit status. With
+    ``webvtt``, for an HLS bundle, a site's WebVTT is taken before its SRT.
     """
     auto = ("--write-auto-subs",) if subtitles.auto_generated == "fallback" else ()
-    return ("--write-subs", *auto, "--sub-langs", _language_patterns(subtitles), *_SUBTITLE_FORMAT, "--ignore-errors")
+    subtitle_format = _BUNDLE_SUBTITLE_FORMAT if webvtt else _SUBTITLE_FORMAT
+    return ("--write-subs", *auto, "--sub-langs", _language_patterns(subtitles), *subtitle_format, "--ignore-errors")
 
 
 QUICK_VIDEO_CODECS = ("h264", "h265", "vp9", "av1")
@@ -365,9 +369,10 @@ def _choose_subtitles(found: dict[str, Path], subtitles: YtdlpSubtitles) -> list
     return chosen
 
 
-def _readable_subtitles(work: Path, stem: str) -> dict[str, tuple[Path, bytes]]:
-    """Each subtitle yt-dlp wrote under ``stem``, as SRT; one that can't be read is left out."""
-    readable: dict[str, tuple[Path, bytes]] = {}
+def _readable_subtitles(work: Path, stem: str, *, webvtt: bool) -> dict[str, tuple[Path, bytes, bytes | None]]:
+    """Each subtitle yt-dlp wrote under ``stem``, as SRT and, with ``webvtt``, as WebVTT: the site's
+    own when it gave WebVTT. One that can't be read is left out."""
+    readable: dict[str, tuple[Path, bytes, bytes | None]] = {}
     for path in sorted(work.iterdir()):
         match = _SUBTITLE_FILE.match(path.name)
         if match is None or match.group("stem") != stem:
@@ -379,31 +384,44 @@ def _readable_subtitles(work: Path, stem: str) -> dict[str, tuple[Path, bytes]]:
             if path.stat().st_size > _MAX_SUBTITLE_BYTES:
                 raise DownloadError("The subtitle is larger than allowed")
             text = path.read_bytes().decode("utf-8-sig")
-            content = webvtt_to_srt(text) if match.group("format") == "vtt" else text.replace("\r\n", "\n").encode("utf-8")
+            is_webvtt = match.group("format") == "vtt"
+            content = webvtt_to_srt(text) if is_webvtt else text.replace("\r\n", "\n").encode("utf-8")
             if not content.strip():
                 raise DownloadError("The subtitle is empty")
+            vtt = None
+            if webvtt:
+                vtt = text.encode("utf-8") if is_webvtt else srt_to_webvtt(text)
         except (DownloadError, OSError, UnicodeDecodeError) as exc:
             logger.info("Leaving out the %s subtitle yt-dlp wrote: %s", language, exc)
             continue
-        readable[language] = (path, content)
+        readable[language] = (path, content, vtt)
     return readable
 
 
-def _keep_subtitles(work: Path, target: Path, subtitles: YtdlpSubtitles) -> tuple[WrittenSubtitle, ...]:
-    """The subtitles the profile wants from what yt-dlp wrote, as SRT files in ``target``."""
+def _keep_subtitles(work: Path, target: Path, subtitles: YtdlpSubtitles, *, webvtt: bool = False) -> tuple[WrittenSubtitle, ...]:
+    """The subtitles the profile wants from what yt-dlp wrote, as SRT files in ``target``, and with
+    ``webvtt`` as WebVTT files beside them."""
     kept: list[WrittenSubtitle] = []
     for stem, auto_generated in (("media", False), ("auto", True)):
-        readable = _readable_subtitles(work, stem)
-        found = {language: path for language, (path, _content) in readable.items()}
-        contents = {path: content for path, content in readable.values()}
+        readable = _readable_subtitles(work, stem, webvtt=webvtt)
+        found = {language: path for language, (path, _content, _vtt) in readable.items()}
+        contents = {path: (content, vtt) for path, content, vtt in readable.values()}
         for language, path in _choose_subtitles(found, subtitles):
-            destination = target / f"ytdlp-subtitle.{language}{'.auto' if auto_generated else ''}.srt"
-            destination.write_bytes(contents[path])
-            kept.append(WrittenSubtitle(language, str(destination), auto_generated))
+            content, vtt = contents[path]
+            name = f"ytdlp-subtitle.{language}{'.auto' if auto_generated else ''}"
+            destination = target / f"{name}.srt"
+            destination.write_bytes(content)
+            vtt_destination = None
+            if vtt is not None:
+                vtt_destination = target / f"{name}.vtt"
+                vtt_destination.write_bytes(vtt)
+            kept.append(WrittenSubtitle(language, str(destination), auto_generated, str(vtt_destination) if vtt_destination else None))
     return tuple(kept)
 
 
-def _write_auto_generated(url: str, work: Path, command: tuple[str, ...], subtitles: YtdlpSubtitles) -> None:
+def _write_auto_generated(
+        url: str, work: Path, command: tuple[str, ...], subtitles: YtdlpSubtitles, *, webvtt: bool = False,
+) -> None:
     """Fetch auto-generated subtitles on their own, next to the real ones the download wrote.
 
     yt-dlp gives one subtitle per language, preferring the real one, so the
@@ -413,7 +431,8 @@ def _write_auto_generated(url: str, work: Path, command: tuple[str, ...], subtit
     argv = [
         *command, "--no-playlist", "--skip-download", "--ignore-no-formats-error",
         "-P", str(work), "-o", "auto.%(ext)s",
-        "--write-auto-subs", "--sub-langs", _language_patterns(subtitles), *_SUBTITLE_FORMAT, "--ignore-errors",
+        "--write-auto-subs", "--sub-langs", _language_patterns(subtitles),
+        *(_BUNDLE_SUBTITLE_FORMAT if webvtt else _SUBTITLE_FORMAT), "--ignore-errors",
         "--", url,
     ]
     try:
@@ -541,7 +560,8 @@ def download_ytdlp_hls_bundle(
         sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock(),
 ) -> DownloadResult:
     """Run yt-dlp with ``ytdlp_hls_options`` and keep the files it downloads as an HLS bundle at
-    ``master_path``, with a variant for each resolution the video has."""
+    ``master_path``, with a variant for each resolution the video has. Its subtitles are written as
+    SRT and WebVTT, so they can go into the bundle too."""
     if should_cancel and should_cancel():
         raise DownloadCanceled("Download canceled")
     work = Path(master_path + ".ytdlp")
@@ -555,7 +575,7 @@ def download_ytdlp_hls_bundle(
         "--print", f"after_move:{_TRACK} %(format_id)s %(width)s %(height)s %(vcodec)s %(acodec)s %(tbr)s %(abr)s %(filepath)s",
         *(("--print", f"after_move:{_SPONSORBLOCK} %(sponsorblock_chapters)j") if sponsorblock.enabled else ()),
         "-P", str(work), "-o", "track-%(format_id)s.%(ext)s", "-o", "subtitle:media.%(ext)s",
-        *(ytdlp_subtitle_options(subtitles) if subtitles_dir is not None else ()),
+        *(ytdlp_subtitle_options(subtitles, webvtt=True) if subtitles_dir is not None else ()),
         "--", url,
     ]
     try:
@@ -585,8 +605,8 @@ def download_ytdlp_hls_bundle(
         written: tuple[WrittenSubtitle, ...] = ()
         if subtitles_dir is not None:
             if subtitles.auto_generated == "always" and not (should_cancel and should_cancel()):
-                _write_auto_generated(url, work, command, subtitles)
-            written = _keep_subtitles(work, subtitles_dir, subtitles)
+                _write_auto_generated(url, work, command, subtitles, webvtt=True)
+            written = _keep_subtitles(work, subtitles_dir, subtitles, webvtt=True)
         size = sum(track.path.stat().st_size for track in (*videos, audio))
         if progress:
             progress(DownloadProgress(bytes_downloaded=size, total_bytes=size))

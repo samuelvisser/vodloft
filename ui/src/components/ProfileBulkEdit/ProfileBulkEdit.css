@@ -19,7 +19,15 @@ tr.bulk-row.is-selected > td { background: rgba(59, 130, 246, .12); }
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
   padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 14px;
   background: #fff; box-shadow: 0 12px 40px rgba(15, 23, 42, .25);
+  padding-right: 48px;
 }
+/* Stops bulk edit, like the header's Done. */
+.bulk-action-bar__close {
+  position: absolute; top: 6px; right: 6px;
+  display: grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 16px; cursor: pointer;
+}
+.bulk-action-bar__close:hover { background: rgba(148, 163, 184, .18); color: inherit; }
 .bulk-action-bar__count { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .bulk-action-bar__hidden { padding: 2px 8px; border-radius: 999px; background: rgba(234, 88, 12, .14); color: #c2410c; font-size: 12px; }
 .bulk-action-bar__actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -57,7 +65,8 @@ tr.bulk-row.is-selected > td { background: rgba(59, 130, 246, .12); }
 @media (max-width: 640px) {
   .view:has(.bulk-action-bar) { padding-bottom: 170px; }
   .bulk-action-bar { position: fixed; left: 8px; right: 8px; bottom: 8px; margin: 0; gap: 8px; padding: 10px; }
-  .bulk-action-bar__count { width: 100%; justify-content: space-between; }
+  .bulk-action-bar__count { width: 100%; justify-content: space-between; padding-right: 30px; }
+  .bulk-action-bar__close { top: 4px; right: 4px; }
   .bulk-action-bar__actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
   .bulk-action-bar__actions .btn { justify-content: center; }
   .bulk-field__head { grid-template-columns: auto minmax(0, 1fr); }

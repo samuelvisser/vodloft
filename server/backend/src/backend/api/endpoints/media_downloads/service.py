@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import HTTPException
@@ -27,6 +27,9 @@ from backend.api.models.media_download import (
     MediaDownloadAPIRead,
     MediaDownloadAPIReadView,
     MediaDownloadKeptAPIRequest,
+    KeepQuestionAPIRead,
+    KeepQuestionAnswerAPIRead,
+    KeepQuestionAnswerAPIRequest,
     MediaDownloadAPIUpdate,
     MediaDownloadPageRead,
     MediaDownloadAPICreate,
@@ -53,7 +56,8 @@ from backend.types.media_download_history_types import MediaDownloadHistoryActio
 from backend.types.episode_types import EpisodePublishStatus
 from backend.services.media_access import media_access, media_locked
 from backend.services.local_media_profile_sites import profile_offered_for_site
-from backend.services.sites import collection_site_key, movie_site_key, video_site_key
+from backend.services.removed_downloads import answer_keep_question, downloads_awaiting_keep_answer
+from backend.services.sites import collection_site, collection_site_key, movie_site_key, video_site_key
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from downloader.storage.artifacts import remove_download_artifacts
@@ -469,9 +473,8 @@ def get_media_downloads_page(
     except LookupError:
         raise HTTPException(status_code=422, detail="Invalid download cursor key")
 
-    has_more = len(window.rows) > limit
-    page_rows = window.rows[:limit]
-    selected_ids = [int(row.id) for row in page_rows]
+    has_more = len(window.ids) > limit
+    selected_ids = window.ids[:limit]
     revision = window.revision
 
     if selected_ids:
@@ -493,21 +496,13 @@ def get_media_downloads_page(
             for media_download_id in selected_ids
             if media_download_id in selected_downloads_by_id
         ]
-        latest_runs = latest_download_runs(s, selected_ids)
-        queue_positions = {
-            int(row.id): int(row.queue_position)
-            for row in page_rows
-            if row.queue_position is not None
-        }
     else:
         selected_downloads = []
-        latest_runs = {}
-        queue_positions = {}
 
     next_cursor = None
-    if has_more and page_rows:
+    if has_more:
         # The next page continues after this row while the order stays the same.
-        cursor_key = [int(page_rows[-1].id)]
+        cursor_key = [selected_ids[-1]]
         next_cursor = encode_cursor({
             "kind": "media-download",
             "order": order,
@@ -520,8 +515,6 @@ def get_media_downloads_page(
         items=_build_media_download_views(
             s,
             selected_downloads,
-            latest_runs=latest_runs,
-            queue_positions=queue_positions,
         ),
         total=window.total,
         limit=limit,
@@ -664,9 +657,11 @@ def create_movie_download(
     """Persist a download target for an indexed movie."""
     _ensure_downloadable(movie)
     profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE, movie_site_key(movie))
-    if not movie.is_downloadable:
+    # The Daily Wire's isDownloadable only says whether its own apps offer offline downloads.
+    # VODLoft downloads the stream its web player uses, so a movie only needs a video.
+    if not movie.has_video:
         source_name = get_source(movie.source_key).name
-        raise HTTPException(status_code=422, detail=f"{source_name} marks this movie as unavailable for download")
+        raise HTTPException(status_code=422, detail=f"{source_name} has no video for this movie yet")
 
     existing: Optional[MovieMediaDownload] = (
         s.query(MovieMediaDownload)
@@ -865,5 +860,26 @@ def set_media_download_kept(s: Session, media_download_id: int, body: MediaDownl
     if item is None:
         raise HTTPException(status_code=404, detail="Episode download not found")
     item.kept = body.kept
+    if item.media.removed_from_source:
+        # Keeping or letting go of it by hand answers the Home page's question too.
+        item.removal_answered_at = datetime.now(timezone.utc)
     s.flush()
     return MediaDownloadAPIRead.model_validate(item)
+
+
+@dataclass(frozen=True)
+class _KeepQuestion:
+    download: EpisodeMediaDownload
+    site_name: str
+
+
+def get_keep_questions(s: Session) -> list[KeepQuestionAPIRead]:
+    """Downloads whose episode left the Source, waiting for the person to say whether to keep them."""
+    return [
+        KeepQuestionAPIRead.model_validate(_KeepQuestion(download, collection_site(download.media.collection).name))
+        for download in downloads_awaiting_keep_answer(s)
+    ]
+
+
+def answer_keep_questions(s: Session, body: KeepQuestionAnswerAPIRequest) -> KeepQuestionAnswerAPIRead:
+    return KeepQuestionAnswerAPIRead(answered=answer_keep_question(s, body.episode_ids, keep=body.keep))

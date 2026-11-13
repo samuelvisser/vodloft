@@ -244,10 +244,11 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     # advertised renditions rather than requesting a second, potentially
     # expiring signed manifest for subtitles.
     publish_subtitles = subtitle_mode in (LocalMediaProfileSubtitleMode.SIDECAR, LocalMediaProfileSubtitleMode.EMBED_AND_SIDECAR)
+    # An HLS bundle keeps embedded subtitles as WebVTT files inside the bundle, listed in its playlist.
     embed_subtitles = (
         subtitle_mode in (LocalMediaProfileSubtitleMode.EMBED, LocalMediaProfileSubtitleMode.EMBED_AND_SIDECAR)
-        and not source.hls_bundle and not source.audio_only
-        and source.extension in {"mp4", "m4v", "mkv"}
+        and not source.audio_only
+        and (source.hls_bundle or source.extension in {"mp4", "m4v", "mkv"})
     )
     embedded_subtitle_ids: list[str] = []
     if (publish_subtitles or embed_subtitles) and source.ytdlp_command:

@@ -23,7 +23,8 @@ function upgradeText(download: MediaDownloadViewRead): string | null {
         return 'Re-downloads once the countdown is removed'
     }
     if (download.upgradeResult === 'upgraded') return 'Upgraded to a better version'
-    if (download.upgradeCheckAt) {
+    // A kept download stays as it is: the upgrade check leaves it alone until it is no longer kept.
+    if (download.upgradeCheckAt && !download.kept) {
         const day = download.upgradeCheckAt.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})
         return `${download.upgradeCheckAt.getTime() > Date.now() ? 'Checks' : 'Checked'} for a better version on ${day}`
     }
@@ -231,7 +232,7 @@ export function EpisodeDownloadRow({
         <span title="Which episodes on its Download Profile">Skipped by filter: {plainText(filterSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}</span>
     ) : waitsForCountdown && !download ? (
         <span title="Its Download Profile does not download episodes that still contain the countdown">Waiting for the countdown to be removed</span>
-    ) : kept ? <span>Kept</span> : null
+    ) : kept ? <span>Marked to never be deleted automatically</span> : null
     const upgrade = download && upgradeText(download)
     const note = skippedNote || upgrade
         ? <>{skippedNote}{skippedNote && upgrade && ' · '}{upgrade}</>

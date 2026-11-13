@@ -13,6 +13,7 @@ behind a subscription VODLoft is not signed in with).
 
 Only a date line deletes. With delete older episodes on, a download is removed when an
 Only download date line leaves its episode out, unless a Keep filter or a person kept
+it, or the Source no longer has the episode and the Home page still asks whether to keep
 it. Changing the other filters never deletes anything.
 
 Everything that asks which episodes a profile wants uses this module: the Download
@@ -33,9 +34,11 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.db.models import Collection, DownloadProfile, DownloadProfileFilter, Episode
 from backend.services.media_access import AccessLocks
+from backend.services.removed_downloads import awaits_keep_answer
 from backend.services.regex_check import PatternError, compile_pattern, search, split_inline_ignore_case
 from backend.types.download_profile_types import (
     DATE_FIELDS,
+    DownloadKeptBy,
     DurationOperator,
     EpisodeFilterAction,
     EpisodeFilterField,
@@ -156,7 +159,7 @@ def _in_date_line(item: EpisodeFilter, episodes: Sequence[Episode], now: datetim
     return {episode.id for episode in episodes}
 
 
-def _available(selection: EpisodeSelection, episode: Episode, locks: AccessLocks) -> bool:
+def _available(selection: EpisodeSelection, episode: Episode, locks: AccessLocks, *, at_source: bool = False) -> bool:
     eligible = {EpisodePublishStatus.PUBLISHED_FINAL.value}
     if selection.download_with_countdown:
         eligible.add(EpisodePublishStatus.PUBLISHED_PRELIMINARY.value)
@@ -164,13 +167,15 @@ def _available(selection: EpisodeSelection, episode: Episode, locks: AccessLocks
         episode.publish_status in eligible
         # Media protected by DRM cannot be downloaded, nor can media the Source no longer has.
         and not episode.drm_protected
-        and not episode.removed_from_source
+        and (at_source or not episode.removed_from_source)
         # Nor can media locked behind an access VODLoft does not have, such as a channel membership.
         and not locks.locked(episode)
     )
 
 
 def _newest_first(episodes: Iterable[Episode]) -> list[Episode]:
+    # A query result can only be read once, and it is read twice below.
+    episodes = list(episodes)
     dated = [episode for episode in episodes if published_at(episode) is not None]
     undated = [episode for episode in episodes if published_at(episode) is None]
     dated.sort(key=lambda episode: (published_at(episode), episode.id), reverse=True)
@@ -204,6 +209,11 @@ class Evaluation:
     """Episodes whose downloads a Keep filter protects."""
     keep_downloaded_since: list[datetime]
     """A Keep filter on the downloaded date protects downloads downloaded since each of these."""
+    removed_from_source: set[int] = field(default_factory=set)
+    """Episodes the Source no longer has: their downloads wait for the person's keep answer."""
+    as_if_at_source: Optional["Evaluation"] = None
+    """The same walk with those episodes still at the Source. Retention judges their downloads by it
+    once the person chose not to keep them, so the date lines apply to them as before."""
 
     def left_out_by_filter(self, episode_id: int) -> Optional[int]:
         reason = self.left_out_by.get(episode_id, "")
@@ -221,12 +231,21 @@ def evaluate(
     now = now or _utc_now()
     episodes = collection_episodes(s, selection.collection.id) if episodes is None else episodes
     locks = AccessLocks()
+    evaluation = _walk(selection, episodes, locks, now, at_source=False)
+    if evaluation.removed_from_source:
+        evaluation.as_if_at_source = _walk(selection, episodes, locks, now, at_source=True)
+    return evaluation
+
+
+def _walk(
+        selection: EpisodeSelection, episodes: Sequence[Episode], locks: AccessLocks, now: datetime, *, at_source: bool,
+) -> Evaluation:
     filters = list(selection.filters)
 
     left_out_by: dict[int, str] = {}
     remaining: list[Episode] = []
     for episode in episodes:
-        if _available(selection, episode, locks):
+        if _available(selection, episode, locks, at_source=at_source):
             remaining.append(episode)
         else:
             left_out_by[episode.id] = "unavailable"
@@ -270,6 +289,7 @@ def evaluate(
         reached=reached,
         kept=kept,
         keep_downloaded_since=keep_downloaded_since,
+        removed_from_source={episode.id for episode in episodes if episode.removed_from_source},
     )
 
 
@@ -281,13 +301,33 @@ def wanted_episodes(s: Session, selection: EpisodeSelection, *, only_episode_id:
     return wanted
 
 
-def protected(evaluation: Evaluation, download) -> bool:
-    """Whether a download is safe from deletion: kept by hand, or by a Keep filter."""
-    if download.kept or download.media_item_id in evaluation.kept:
-        return True
-    return download.downloaded_at is not None and any(
+def _judged_by(evaluation: Evaluation, download) -> Evaluation:
+    """A download of an episode the Source no longer has is judged as if the episode were still there."""
+    if download.media_item_id in evaluation.removed_from_source and evaluation.as_if_at_source is not None:
+        return evaluation.as_if_at_source
+    return evaluation
+
+
+def kept_by(evaluation: Evaluation, download) -> Optional[DownloadKeptBy]:
+    """What keeps a download safe from deletion, if anything: a person, a Keep filter, or the
+    Home page asking whether to keep it because its episode left the Source."""
+    evaluation = _judged_by(evaluation, download)
+    if download.kept:
+        return DownloadKeptBy.HAND
+    if download.media_item_id in evaluation.kept:
+        return DownloadKeptBy.KEEP_FILTER
+    if awaits_keep_answer(download, removed_from_source=download.media_item_id in evaluation.removed_from_source):
+        return DownloadKeptBy.KEEP_QUESTION
+    if download.downloaded_at is not None and any(
         download.downloaded_at >= since for since in evaluation.keep_downloaded_since
-    )
+    ):
+        return DownloadKeptBy.KEEP_FILTER
+    return None
+
+
+def protected(evaluation: Evaluation, download) -> bool:
+    """Whether a download is safe from deletion."""
+    return kept_by(evaluation, download) is not None
 
 
 def date_line_leaves_out(evaluation: Evaluation, download, *, now: Optional[datetime] = None) -> bool:
@@ -297,6 +337,7 @@ def date_line_leaves_out(evaluation: Evaluation, download, *, now: Optional[date
     deletes. A downloaded line deletes a download that reached it, N days after downloading.
     """
     now = now or _utc_now()
+    evaluation = _judged_by(evaluation, download)
     episode_id = download.media_item_id
     for index, item in enumerate(evaluation.filters):
         if item.action != EpisodeFilterAction.ONLY or not is_date_line(item):
@@ -310,6 +351,28 @@ def date_line_leaves_out(evaluation: Evaluation, download, *, now: Optional[date
         elif (item.count or item.days) and evaluation.left_out_by.get(episode_id) == f"filter:{index}":
             return True
     return False
+
+
+def filter_leaving_out(evaluation: Evaluation, download, *, now: Optional[datetime] = None) -> Optional[int]:
+    """The index of the filter that leaves this download out of the profile, if one does.
+
+    Any Skip or Only download filter counts here, unlike for retention. A downloaded line
+    leaves a download out N days after downloading, not by its publication date. An
+    episode that cannot be downloaded at all is not left out by a filter.
+    """
+    now = now or _utc_now()
+    evaluation = _judged_by(evaluation, download)
+    index = evaluation.left_out_by_filter(download.media_item_id)
+    if index is not None and evaluation.filters[index].field != EpisodeFilterField.DOWNLOADED:
+        return index
+    for index, item in enumerate(evaluation.filters):
+        if (
+            item.action == EpisodeFilterAction.ONLY and item.field == EpisodeFilterField.DOWNLOADED and item.days
+            and download.media_item_id in evaluation.reached[index]
+            and download.downloaded_at is not None and download.downloaded_at < _cutoff(item.days, now)
+        ):
+            return index
+    return None
 
 
 def left_out_by_date_line(evaluation: Evaluation, episode_id: int) -> bool:

@@ -46,6 +46,13 @@ class MediaDownloadKeptAPIRequest(RequestBase):
     kept: bool
 
 
+class KeepQuestionAnswerAPIRequest(RequestBase):
+    """Answer the Home page's question for downloads whose episode left the Source."""
+
+    episode_ids: list[int] = Field(min_length=1, max_length=500)
+    keep: bool
+
+
 class MediaDownloadBulkActionAPIRequest(RequestBase):
     """Exact download rows selected by a Downloads-page bulk action."""
 
@@ -184,3 +191,24 @@ class DownloadedLocalMediaProfileAPIRead(ResponseBase):
     id: int
     name: str
     preferred_format: Optional[str] = None
+
+
+class KeepQuestionAPIRead(ResponseBase):
+    """A download whose episode its Source no longer has, waiting for the person to say whether to keep it.
+
+    Retention leaves it alone until they answer.
+    """
+
+    id: int = Field(validation_alias=AliasPath("download", "id"))
+    episode_id: int = Field(validation_alias=AliasPath("download", "media_item_id"))
+    episode_title: str = Field(validation_alias=AliasPath("download", "media", "title"))
+    episode_slug: str = Field(validation_alias=AliasPath("download", "media", "slug"))
+    collection_title: str = Field(validation_alias=AliasPath("download", "media", "collection", "title"))
+    collection_slug: str = Field(validation_alias=AliasPath("download", "media", "collection", "slug"))
+    local_media_profile_name: str = Field(validation_alias=AliasPath("download", "local_media_profile", "name"))
+    downloaded_at: Optional[datetime] = Field(validation_alias=AliasPath("download", "downloaded_at"))
+    site_name: str
+
+
+class KeepQuestionAnswerAPIRead(ResponseBase):
+    answered: int

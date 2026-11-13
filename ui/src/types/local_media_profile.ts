@@ -17,13 +17,6 @@ export const PreferredFormatReg = createSelectRegistry("PreferredFormat", {
   'format_audio_only':   { label: "Audio Only",   help: "Download audio only" },
 });
 
-export const MoviePreferredFormatReg = createSelectRegistry("MoviePreferredFormat", {
-  'format_4k': { label: "4k", help: "Download a 4k video" },
-  'format_1080p': { label: "1080p", help: "Download a 1080p video" },
-  'format_720p': { label: "720p", help: "Download a 720p video" },
-  'format_480p': { label: "480p", help: "Download a 480p video" },
-});
-
 export const VideoPreferredFormatReg = createSelectRegistry("VideoPreferredFormat", {
   'format_360p': { label: "360p" },
   'format_480p': { label: "480p" },

@@ -518,3 +518,68 @@ def test_a_feed_lists_a_live_episode_only_past_the_filters_that_are_not_date_lin
 
     assert filters_allow_new_episode([only_types("ep"), latest(1)], live)
     assert not filters_allow_new_episode([line("skip", "title", pattern="Trailer"), latest(1)], live)
+
+
+
+def test_retention_waits_for_the_keep_answer_on_downloads_the_source_no_longer_has(db_session):
+    from backend.services.removed_downloads import answer_keep_question, downloads_awaiting_keep_answer
+    from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
+
+    collection, season = _collection(db_session)
+    gone = _episode(db_session, collection, season, 1, "Gone", days_ago=60)
+    also_gone = _episode(db_session, collection, season, 2, "Also gone", days_ago=60)
+    profile = _profile(db_session, collection, downloaded_days(30), delete_older_episodes=True)
+    _download(db_session, profile, gone, downloaded_at=NOW - timedelta(days=40))
+    _download(db_session, profile, also_gone, downloaded_at=NOW - timedelta(days=40))
+    gone.removed_from_source = also_gone.removed_from_source = True
+    db_session.flush()
+
+    # Nobody answered yet: retention leaves both alone and the Home page asks about both.
+    assert cleanup_older_episodes(db_session, profile) == 0
+    assert {row.media_item_id for row in downloads_awaiting_keep_answer(db_session)} == {gone.id, also_gone.id}
+
+    assert answer_keep_question(db_session, [gone.id], keep=True) == 1
+    assert answer_keep_question(db_session, [also_gone.id], keep=False) == 1
+    assert downloads_awaiting_keep_answer(db_session) == []
+
+    # Kept stays; the other is judged by the date line as if it were still at the Source.
+    assert cleanup_older_episodes(db_session, profile) == 1
+    assert _remaining(db_session) == {gone.id}
+
+
+def test_a_released_download_takes_its_old_place_in_the_latest_episodes(db_session):
+    from backend.services.removed_downloads import answer_keep_question
+    from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
+
+    collection, season = _collection(db_session)
+    newest = _episode(db_session, collection, season, 1, "Newest", days_ago=1)
+    newer_gone = _episode(db_session, collection, season, 2, "Newer, gone", days_ago=2)
+    older_gone = _episode(db_session, collection, season, 3, "Older, gone", days_ago=3)
+    profile = _profile(db_session, collection, latest(2), delete_older_episodes=True)
+    for episode in (newest, newer_gone, older_gone):
+        _download(db_session, profile, episode)
+    newer_gone.removed_from_source = older_gone.removed_from_source = True
+    db_session.flush()
+    answer_keep_question(db_session, [newer_gone.id, older_gone.id], keep=False)
+
+    assert cleanup_older_episodes(db_session, profile) == 1
+    assert _remaining(db_session) == {newest.id, newer_gone.id}
+
+
+def test_only_downloads_on_disk_are_asked_about(db_session):
+    from backend.services.removed_downloads import downloads_awaiting_keep_answer
+
+    collection, season = _collection(db_session)
+    on_disk = _episode(db_session, collection, season, 1, "On disk")
+    not_yet = _episode(db_session, collection, season, 2, "Not downloaded yet")
+    already_kept = _episode(db_session, collection, season, 3, "Kept already")
+    still_there = _episode(db_session, collection, season, 4, "Still at the Source")
+    profile = _profile(db_session, collection)
+    _download(db_session, profile, on_disk)
+    _download(db_session, profile, not_yet).artifact_status = "absent"
+    _download(db_session, profile, already_kept, kept=True)
+    _download(db_session, profile, still_there)
+    on_disk.removed_from_source = not_yet.removed_from_source = already_kept.removed_from_source = True
+    db_session.flush()
+
+    assert [row.media_item_id for row in downloads_awaiting_keep_answer(db_session)] == [on_disk.id]

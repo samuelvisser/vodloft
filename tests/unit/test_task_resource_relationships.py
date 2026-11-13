@@ -137,3 +137,103 @@ def test_deleting_collection_cascades_scheduler_work_and_exposes_relationships(t
             assert session.get(TaskOperationTarget, target_id) is None
     finally:
         engine.dispose()
+
+
+def test_deleting_a_download_profile_takes_the_same_few_statements_however_much_it_has(tmp_path):
+    """Its task history goes and its downloads stay, without a statement per row."""
+    import backend.db.models  # noqa: F401
+    import task_manager.scheduler.db  # noqa: F401
+    from conftest import available_artifact
+    from sqlalchemy import event, func, select
+    from backend.db import Base
+    from backend.db.models import (
+        Collection, DownloadProfile, Episode, EpisodeMediaDownload, LocalMediaProfile, Season, Site,
+    )
+    from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskOperationRun, TaskOperationTarget, TaskRun
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+
+    engine = create_engine(f"sqlite:///{(tmp_path / 'profile.db').as_posix()}")
+    event.listen(engine, "connect", lambda connection, _record: connection.execute("PRAGMA foreign_keys=ON"))
+    Base.metadata.create_all(engine)
+
+    def statements_to_delete_a_profile(index: int, rows: int) -> int:
+        with Session(engine) as session:
+            if session.get(Site, "dailywire") is None:
+                session.add(Site(key="dailywire", name="The Daily Wire", domains=["dailywire.com"]))
+                session.add(TaskDefinition(key="worker", title="Worker", default_max_retries=0))
+                session.flush()
+            definition_id = session.scalar(select(TaskDefinition.id))
+            profile = LocalMediaProfile(
+                slug=f"audio-{index}", name=f"Audio {index}", preferred_format="format_audio_only",
+                output_template=f"/downloads/{index}/{{{{ episode }}}}.ext",
+            )
+            collection = Collection(
+                source_key="dailywire", site_key="dailywire", uuid=f"collection-{index}", slug=f"show-{index}",
+                title="Show", description=None, membership_level="FREE", sharing_url=f"https://example.test/show/{index}",
+                type="podcast", episode_identifier="numbered", author_name="Host", author_slug="host",
+            )
+            season = Season(collection=collection, index=1, slug="season-1", name="Season 1")
+            session.add_all([profile, collection, season])
+            session.flush()
+            download_profile = DownloadProfile(collection_id=collection.id, local_media_profile_id=profile.id)
+            session.add(download_profile)
+            session.flush()
+            for row in range(rows):
+                episode = Episode(
+                    source_key="dailywire", uuid=f"episode-{index}-{row}", type="episode", collection=collection,
+                    season=season, index=row, episode_identifier=f"ep{row}", slug=f"episode-{index}-{row}", title="Episode",
+                    description="", duration=60, publish_status="published_final", sharing_url="https://example.test/e",
+                )
+                run = TaskRun(
+                    definition_id=definition_id, resource_type=ResourceType.DOWNLOAD_PROFILE,
+                    resource_id=download_profile.id, status=TaskStatus.SUCCEEDED,
+                )
+                operation = TaskOperation(
+                    id=f"operation-{index}-{row}", kind="kind", source="user", resource_type="download_profile",
+                    resource_id=download_profile.id, title="Operation", status="succeeded",
+                )
+                session.add_all([episode, run, operation])
+                session.flush()
+                target = TaskOperationTarget(
+                    operation_id=operation.id, task_key="worker", resource_type="download_profile",
+                    resource_id=download_profile.id, slot_key="slot",
+                )
+                session.add(target)
+                session.add(EpisodeMediaDownload(
+                    type="episode", media_item_id=episode.id, local_media_profile_id=profile.id,
+                    download_profile_id=download_profile.id, file_path=f"/downloads/{index}/{row}.mp3",
+                    **(available_artifact() | {"artifact_stat_ino": f"{index}-{row}"}),
+                ))
+                session.flush()
+                session.add(TaskOperationRun(target_id=target.id, task_run_id=run.id, operation_id=operation.id))
+            session.commit()
+            profile_id = download_profile.id
+
+        count = 0
+
+        def counted(*_arguments) -> None:
+            nonlocal count
+            count += 1
+
+        event.listen(engine, "before_cursor_execute", counted)
+        try:
+            with Session(engine) as session:
+                session.delete(session.get(DownloadProfile, profile_id))
+                session.commit()
+        finally:
+            event.remove(engine, "before_cursor_execute", counted)
+
+        with Session(engine) as session:
+            downloads = session.scalars(
+                select(EpisodeMediaDownload.download_profile_id)
+                .where(EpisodeMediaDownload.file_path.like(f"/downloads/{index}/%"))
+            ).all()
+            assert downloads == [None] * rows
+            for model in (TaskRun, TaskOperation, TaskOperationTarget, TaskOperationRun):
+                assert session.scalar(select(func.count()).select_from(model)) == 0
+        return count
+
+    try:
+        assert statements_to_delete_a_profile(1, rows=2) == statements_to_delete_a_profile(2, rows=40)
+    finally:
+        engine.dispose()

@@ -24,6 +24,17 @@
 
 .page-header-action { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 
+/* A toggle such as Bulk edit / Done: its icon turns into the other one and its words fade in, so it reads as one
+   button switching rather than two different buttons. */
+.page-header-action.is-switching .page-header-action-icon { animation: page-header-toggle-icon .22s ease-out; }
+.page-header-action.is-switching .page-header-action-label { animation: page-header-toggle-label .22s ease-out; }
+@keyframes page-header-toggle-icon { from { transform: rotate(-120deg) scale(.4); opacity: 0; } }
+@keyframes page-header-toggle-label { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .page-header-action.is-switching .page-header-action-icon,
+  .page-header-action.is-switching .page-header-action-label { animation: none; }
+}
+
 @container (max-width: 639px) {
   /* The buttons line up with the title, and the subtitle takes the whole width under both. */
   .page-header-actions { grid-row: 1; align-self: start; margin-top: -6px; }
@@ -44,5 +55,23 @@
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
+  }
+}
+
+/* A button that keeps its words, such as bulk edit's Done, stays a pill until even a short word no longer fits. */
+@container (min-width: 300px) and (max-width: 639px) {
+  .page-header .page-header-action.keeps-label {
+    width: auto;
+    padding: 0 16px;
+    border-radius: 20px;
+    font-size: 15px;
+  }
+  .page-header-action.keeps-label .page-header-action-label {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
   }
 }

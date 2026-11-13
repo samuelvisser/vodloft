@@ -130,7 +130,7 @@ def local_media_profiles_bulk_summary(body: BulkSelectionIn):
 
 @router.post("/bulk/change", dependencies=[requires(Area.LOCAL_MEDIA_PROFILES, Level.MANAGE)], response_model=BulkResultRead)
 def local_media_profiles_bulk_change(body: BulkChangeIn[LocalMediaProfileBulkChangesIn]):
-    """Give the chosen profiles the same download, thumbnail and metadata behavior."""
+    """Give the chosen profiles the same download, thumbnail, metadata, subtitle and collection image behavior."""
     return run_write_transaction(lambda s: change_local_media_profiles(s, body))
 
 

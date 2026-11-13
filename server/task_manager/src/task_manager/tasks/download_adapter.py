@@ -17,6 +17,7 @@ from backend.db.models import Episode
 from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
 from backend.services.collection_cookies import note_failed_download
 from backend.services.download_plans import prepare_download_plan
+from backend.services.download_relocation import remove_folders_left_empty
 from backend.services.media_access import lock_refused, media_access, media_site_key, site_access
 from backend.services.sites import collection_site
 from backend.services.upgrade_check import schedule_first_upgrade_check
@@ -159,7 +160,16 @@ def _retire_previous_after_commit(previous: PreviousDownload, execution: Downloa
         execution.result.path,
         *(asset.path for asset in execution.assets),
     ))
+    superseded = [
+        path for path in (previous.media.path, *(asset.path for asset in previous.assets))
+        if str(path) not in retained and path.exists()
+    ]
     retire_superseded_files(previous, retained_paths=retained)
+    # A new name can put the download in another folder; the old one goes when nothing at all is left in it.
+    remove_folders_left_empty(
+        (path.parent for path in superseded if not path.exists()),
+        keep=(Path(path) for path in retained),
+    )
 
 
 def _allow_automatic_retry(session: Session, media_download_id: int) -> None:

@@ -14,7 +14,9 @@ from .capacity import DownloadResources, resources as default_resources
 from .downloader import download_file, download_hls
 from .errors import DownloadCanceled, DownloadError
 from .ffmpeg import convert_video_to_m4a, embed_media, remux_to_mp4
-from .hls_bundle import download_hls_bundle, hls_asset_marker, hls_asset_root, missing_hls_bundle_files
+from .hls_bundle import (
+    BundleSubtitle, add_hls_subtitles, download_hls_bundle, hls_asset_marker, hls_asset_root, missing_hls_bundle_files,
+)
 from .lifecycle import DownloadTracker
 from .models import DownloadProgress, DownloadResult
 from .plan import DownloadPlan
@@ -82,6 +84,25 @@ def _local_activity(tracker: DownloadTracker, resources: DownloadResources, acti
             waiting=lambda value: tracker.wait(activity, "processing_capacity" if value else None),
         ):
             yield
+
+
+def _bundle_subtitles(subtitles: list[AcquiredSidecar], default: AcquiredSidecar | None) -> list[BundleSubtitle]:
+    """The subtitles to keep in an HLS bundle, each named by its language and what sets it apart,
+    such as "en (forced)"; players need a different name for each."""
+    kept = []
+    names: dict[str, int] = {}
+    for subtitle in subtitles:
+        if subtitle.webvtt is None:
+            continue
+        language = subtitle.spec.language or "und"
+        marks = [mark.lower() for mark in ("forced" if subtitle.spec.forced else None, subtitle.spec.title) if mark]
+        name = f"{language} ({', '.join(marks)})" if marks else language
+        names[name] = names.get(name, 0) + 1
+        kept.append(BundleSubtitle(
+            subtitle.webvtt, language, name if names[name] == 1 else f"{name} {names[name]}",
+            default=subtitle is default, forced=subtitle.spec.forced, parts=subtitle.webvtt_parts,
+        ))
+    return kept
 
 
 def _tree_size(root: Path) -> int:
@@ -251,14 +272,18 @@ def execute_download_plan(
                 for asset in embedded
             )
             with _local_activity(tracker, resources, "embed"):
-                embed_media(
-                    str(media_path), metadata=dict(plan.metadata_tags),
-                    thumbnail_path=str(artwork.path) if artwork is not None else None,
-                    subtitles=subtitle_assets,
-                    default_subtitle=next((index for index, asset in enumerate(embedded) if asset is default), None),
-                    audio_only=plan.source.audio_only, ffmpeg_path=plan.ffmpeg_path,
-                    should_cancel=tracker.is_canceled,
-                )
+                if plan.source.hls_bundle:
+                    # An HLS bundle keeps its subtitles as WebVTT files of its own, listed in its master.
+                    add_hls_subtitles(media_path, _bundle_subtitles(embedded, default))
+                else:
+                    embed_media(
+                        str(media_path), metadata=dict(plan.metadata_tags),
+                        thumbnail_path=str(artwork.path) if artwork is not None else None,
+                        subtitles=subtitle_assets,
+                        default_subtitle=next((index for index, asset in enumerate(embedded) if asset is default), None),
+                        audio_only=plan.source.audio_only, ffmpeg_path=plan.ffmpeg_path,
+                        should_cancel=tracker.is_canceled,
+                    )
             owned_media = inspect_artifact(media_path)
         acquired: list[AcquiredSidecar] = []
         planned_by_asset: dict[str, str] = {}

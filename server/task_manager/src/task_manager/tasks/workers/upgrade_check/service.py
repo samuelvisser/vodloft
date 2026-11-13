@@ -42,6 +42,8 @@ def run_upgrade_checks(s: Session, *, now: datetime | None = None) -> TaskResult
         .where(
             EpisodeMediaDownload.upgrade_check_at.is_not(None),
             EpisodeMediaDownload.upgrade_check_at <= now,
+            # A kept download stays as it is; its check waits until it is no longer kept.
+            EpisodeMediaDownload.kept.is_(False),
         )
         .order_by(EpisodeMediaDownload.upgrade_check_at)
         .limit(_CHECKS_PER_RUN)
@@ -86,7 +88,7 @@ def _check_later(download_id: int, when: datetime | None) -> None:
 def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
     """Ask the site about one download, then record what it offered in a short write."""
     download = s.get(EpisodeMediaDownload, download_id)
-    if download is None:
+    if download is None or download.kept:
         s.rollback()
         return None
     if _site(download) is None:
@@ -115,7 +117,7 @@ def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
 
 def _record_offer(s: Session, download_id: int, offer, now: datetime) -> UpgradeResult | None:
     download = s.get(EpisodeMediaDownload, download_id)
-    if download is None or download.download_profile is None:
+    if download is None or download.download_profile is None or download.kept:
         return None
     site = _site(download)
     if site is None:

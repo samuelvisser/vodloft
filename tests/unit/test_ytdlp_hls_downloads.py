@@ -45,6 +45,15 @@ FAKE_YTDLP = textwrap.dedent('''
 ''')
 
 
+def _part_header(playlist):
+    """The header the parts of an HLS playlist share."""
+    byte_range = playlist.read_text().split('BYTERANGE="', 1)[1].split('"', 1)[0]
+    length, offset = (int(value) for value in byte_range.split("@"))
+    with (playlist.parent / "media.mp4").open("rb") as media:
+        media.seek(offset)
+        return media.read(length)
+
+
 @pytest.fixture
 def fake_ytdlp(tmp_path):
     script = tmp_path / "fake_ytdlp.py"
@@ -73,8 +82,10 @@ def test_a_youtube_video_downloads_as_an_hls_bundle(fake_ytdlp, tmp_path):
     assert missing_hls_bundle_files(master) == []
     assert not (tmp_path / "episode.m3u8.ytdlp").exists()
 
-    # The parts play: ffmpeg reads each track back from its playlist.
+    # The parts play: ffmpeg reads each track back from its playlist. Their header has no edit list,
+    # which Apple's players would show no picture with.
     for name in ("360p", "720p", "audio-0"):
+        assert b"edts" not in _part_header(tmp_path / "episode.m3u8.assets" / name / "playlist.m3u8")
         probe = subprocess.run(
             ["ffmpeg", "-v", "error", "-i", str(tmp_path / "episode.m3u8.assets" / name / "playlist.m3u8"), "-f", "null", "-"],
             capture_output=True, text=True,

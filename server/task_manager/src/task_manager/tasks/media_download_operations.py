@@ -242,6 +242,21 @@ def get_active_media_download_operation(
     )
 
 
+def media_downloads_with_an_operation(session: Session) -> set[int]:
+    """Every download an operation is queued, running or waiting for, in one read.
+
+    A canceled operation that has not ended yet counts too, so this never leaves out a
+    download that ``get_active_media_download_operation`` finds an operation for.
+    """
+    return set(session.scalars(
+        select(TaskOperation.resource_id).where(
+            TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
+            TaskOperation.resource_type == "media_download",
+            TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
+        )
+    ))
+
+
 def _prioritize_queued_operation(
     session: Session,
     operation: TaskOperation,

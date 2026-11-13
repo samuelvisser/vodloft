@@ -215,6 +215,47 @@ def test_local_media_profiles_change_behavior_and_delete_skips_one_in_use(sessio
     assert [item.id for item in session.query(LocalMediaProfileBase)] == [audio.id]
 
 
+def test_local_media_profiles_change_subtitles_and_collection_images_where_they_have_them(session) -> None:
+    from backend.api.endpoints.local_media_profiles.bulk import (
+        change_local_media_profiles, summarize_local_media_profiles,
+    )
+    from backend.api.models.profile_bulk import BulkChangeIn, BulkSelectionIn, LocalMediaProfileBulkChangesIn
+    from backend.db.models import LocalMediaProfile, MovieLocalMediaProfile
+
+    audio, video, _collections = _library(session)
+    video.download_collection_assets = True
+    movie = MovieLocalMediaProfile(slug="movies", name="Movies", preferred_format="format_1080p",
+                                   output_template="/downloads/movies/{{ title }}.ext")
+    session.add(movie)
+    session.commit()
+    ids = [audio.id, video.id, movie.id]
+
+    summary = summarize_local_media_profiles(session, BulkSelectionIn(ids=ids))
+    # Movies have no collection images.
+    assert summary.fields["downloadCollectionAssets"].offered == 2
+    assert {item.value: item.count for item in summary.fields["downloadCollectionAssets"].values} == {None: 1, True: 1}
+    assert summary.fields["subtitleMode"].offered == 3
+
+    # Empty is a value of its own here: back to the system setting.
+    body = BulkChangeIn[LocalMediaProfileBulkChangesIn].model_validate(
+        {"ids": ids, "changes": {"downloadCollectionAssets": None, "subtitleMode": "embed"}})
+    assert change_local_media_profiles(session, body).done == 3
+    session.commit()
+    assert {item.download_collection_assets for item in session.query(LocalMediaProfile)} == {None}
+    assert {item.subtitle_mode for item in (audio, video, movie)} == {"embed"}
+
+    images = BulkChangeIn[LocalMediaProfileBulkChangesIn].model_validate(
+        {"ids": ids, "changes": {"downloadCollectionAssets": False}})
+    result = change_local_media_profiles(session, images)
+    session.commit()
+    assert result.done == 2
+    assert [item.name for item in result.skipped] == ["Movies"]
+    assert (audio.download_collection_assets, video.download_collection_assets) == (False, False)
+
+    with pytest.raises(ValueError):
+        BulkChangeIn[LocalMediaProfileBulkChangesIn].model_validate({"ids": ids, "changes": {"subtitleMode": None}})
+
+
 def test_bulk_endpoints_take_camel_case_and_return_what_happened(session) -> None:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

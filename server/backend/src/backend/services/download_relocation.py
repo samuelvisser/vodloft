@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import logging
+import re
+from collections import Counter
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,7 +14,10 @@ from backend.db.core import run_write_transaction
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.media_download_history import record_media_download_history
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
+from config import get_settings
+from config.settings.base import get_config_path
 from downloader import hls_asset_marker, hls_asset_root
+from downloader.storage.empty_folders import remove_emptied_folders
 from downloader.storage.identity import inspect_artifact
 from downloader.storage.relocation import PathMove, RelocationTransaction
 
@@ -52,6 +58,48 @@ def plan_download_relocation(download: MediaDownloadBase, source: Path, destinat
     return DownloadRelocation(download.id, source, destination, tuple(paths), tuple(assets), recovered)
 
 
+def number_shared_destinations(planned: Sequence[tuple[Path, Path]]) -> list[Path]:
+    """The destination of each ``(source, destination)`` pair, numbered where several files share one.
+
+    The downloader stores a file whose name is taken as ``name-1.ext``, ``name-2.ext`` and so on, for
+    example two extras of one movie with the same type when the template tells them apart only by
+    ``media_type``. A rename numbers them the same way: a file that already has one of the shared
+    name's numbered forms keeps it, and the others take the lowest free number in the given order.
+    A number is free when no other planned file claims it and no file outside this rename is there.
+    """
+    counts = Counter(destination for _source, destination in planned)
+    sources = {source for source, _destination in planned}
+    result = [destination for _source, destination in planned]
+    taken = {destination for destination, count in counts.items() if count == 1}
+    for shared in (destination for destination, count in counts.items() if count > 1):
+        indexes = [index for index, (_source, destination) in enumerate(planned) if destination == shared]
+        pending = []
+        for index in indexes:
+            source = planned[index][0]
+            if _is_numbered_form(source, shared) and source not in taken:
+                taken.add(source)
+                result[index] = source
+            else:
+                pending.append(index)
+        number = 0
+        for index in pending:
+            while True:
+                candidate = shared if number == 0 else shared.with_name(f"{shared.stem}-{number}{shared.suffix}")
+                number += 1
+                if candidate not in taken and (candidate in sources or not candidate.exists()):
+                    break
+            taken.add(candidate)
+            result[index] = candidate
+    return result
+
+
+def _is_numbered_form(path: Path, destination: Path) -> bool:
+    return (
+        path.parent == destination.parent and path.suffix == destination.suffix
+        and re.fullmatch(re.escape(destination.stem) + r"(-[1-9][0-9]*)?", path.stem) is not None
+    )
+
+
 def filter_relocation_conflicts(moves: list[DownloadRelocation]) -> tuple[list[DownloadRelocation], list[DownloadRelocation]]:
     """Skip whole downloads transitively while retaining safe internal cycles."""
     remaining, skipped = list(moves), []
@@ -87,7 +135,38 @@ def relocate_downloads(
     except BaseException:
         transaction.rollback()
         raise
+    # Only once the files are at their new place and recorded there, and only where files left in this run.
+    remove_folders_left_empty(
+        (path.source.parent for path in transaction.moves),
+        keep=(path.destination for path in transaction.moves),
+    )
     return len(moves), len(skipped)
+
+
+# Folders VODLoft uses for itself. They stay, also when they are empty.
+_OWN_FOLDER_SETTINGS = (
+    "temporary_download_root", "rss_cache_root", "quick_download_root", "thumbnail_root", "lock_root",
+)
+
+
+def remove_folders_left_empty(folders: Iterable[Path], *, keep: Iterable[Path] = ()) -> list[Path]:
+    """Remove the folders that managed files just left, and their parents, where nothing at all is left in them.
+
+    Pass only folders that VODLoft moved or deleted its own files out of in this run. The download folder
+    itself, VODLoft's own folders and the ``keep`` paths always stay; see ``downloader.storage.empty_folders``
+    for what makes it impossible to remove a folder that still holds a file.
+    """
+    download_settings = get_settings().download_settings
+    own = [Path(getattr(download_settings, setting)) for setting in _OWN_FOLDER_SETTINGS]
+    try:
+        return remove_emptied_folders(
+            folders, root=Path(download_settings.download_root).resolve(),
+            keep=[*keep, *own, get_config_path()],
+        )
+    except Exception:
+        # The files are already where they belong; a folder that stays behind must never fail the work.
+        logger.exception("Could not remove the folders left empty")
+        return []
 
 
 def _record_relocations(session: Session, moves: list[DownloadRelocation], identities, reason: str) -> None:

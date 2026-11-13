@@ -30,7 +30,7 @@ from .models import (
     VideoRendition,
 )
 
-__version__ = "0.7.0"
+__version__ = "0.6.0"
 
 __all__ = [
     "measure_rendition",

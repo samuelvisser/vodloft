@@ -12,7 +12,7 @@ import ReadMore from '../../utils/ReadMore'
 import SimpleSelect from '../common/SimpleSelect'
 import './SubtitleFields.css'
 
-const WhereReg = createSelectRegistry('SubtitleWhere', {
+export const SubtitleWhereReg = createSelectRegistry('SubtitleWhere', {
     no_subtitles: {label: 'Not at all'},
     embed: {label: 'Inside the media', help: 'As tracks you can pick in your player, in MP4 and MKV files.'},
     sidecar: {label: 'Beside the media', help: 'As SRT files next to the media, such as Episode.en.srt.'},
@@ -58,7 +58,7 @@ export default function SubtitleFields({form, mode: profileType, onSubtitleModeC
     const stores = subtitleMode && subtitleMode !== 'no_subtitles'
     const everyLanguage = languageMode === 'site'
     const help = modeHelp(languageMode, list, subtitleMode === 'sidecar' || subtitleMode === 'embed_and_sidecar')
-    const whereHelp = WhereReg.values.includes(subtitleMode as any) ? WhereReg.getHelp(subtitleMode as any) : undefined
+    const whereHelp = SubtitleWhereReg.values.includes(subtitleMode as any) ? SubtitleWhereReg.getHelp(subtitleMode as any) : undefined
 
     const setLanguages = (next: string[]) => setValue('subtitleLanguages', next, OPTIONS)
     const move = (from: number, to: number) => {
@@ -78,7 +78,7 @@ export default function SubtitleFields({form, mode: profileType, onSubtitleModeC
                 <label htmlFor="subtitle-mode">Subtitles</label>
                 <SimpleSelect
                     inputId="subtitle-mode"
-                    registry={WhereReg}
+                    registry={SubtitleWhereReg}
                     value={subtitleMode}
                     onChange={(value) => {
                         onSubtitleModeChange?.(value)
@@ -172,7 +172,7 @@ export default function SubtitleFields({form, mode: profileType, onSubtitleModeC
 
             <div className="help">
                 <ReadMore summary={`Subtitles from ${siteNames(subtitleSites)}. Subtitles saved beside the media are always SRT.`}>
-                    <p>Embedding needs an MP4 or MKV video, not an HLS bundle or audio.</p>
+                    <p>Embedding needs an MP4, MKV or HLS video, not audio. An HLS bundle keeps embedded subtitles inside it as WebVTT, so players that stream it can show them; subtitles beside it stay separate SRT files the bundle does not need.</p>
                 </ReadMore>
             </div>
 

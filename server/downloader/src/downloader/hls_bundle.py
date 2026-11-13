@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import math
 import os
 import re
 import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, Optional
+from typing import BinaryIO, Optional, Sequence
 from urllib.parse import urljoin, urlparse
 
 from .ffmpeg import segment_as_hls
@@ -21,6 +22,10 @@ _PROGRESS_INTERVAL_S = 1.0
 _CHUNK_SIZE = 256 * 1024
 _URI_ATTRIBUTE_RE = re.compile(r'URI="[^"]*"')
 _HLS_BUNDLE_MARKER = ".vodloft-hls-bundle"
+_SUBTITLE_GROUP = "subtitles"
+# A variant's subtitles, captions and other video renditions are not downloaded, so a bundle's master
+# must not name their groups: Apple's players refuse a playlist that names a group it does not define.
+_GROUPS_NOT_KEPT_RE = re.compile(r',(?:SUBTITLES|CLOSED-CAPTIONS|VIDEO)="[^"]*"')
 
 
 @dataclass(frozen=True)
@@ -286,6 +291,149 @@ def write_hls_bundle(
         raise
 
 
+@dataclass(frozen=True)
+class BundleSubtitle:
+    """A WebVTT subtitle to keep in an HLS bundle."""
+
+    path: Path
+    language: str
+    name: str
+    """What players list it as; unique within the bundle."""
+    default: bool = False
+    forced: bool = False
+    parts: Path | None = None
+    """The source's own WebVTT parts and their playlist, kept as they are in place of ``path``."""
+
+
+def add_hls_subtitles(master_path: str | Path, subtitles: list[BundleSubtitle]) -> None:
+    """Keep each subtitle in the bundle as one WebVTT file with a playlist of its own, and list them
+    in the master, so players offer them with the video.
+
+    The bundle then needs these files, just like its video: a bundle that misses one is incomplete.
+    """
+    if not subtitles:
+        return
+    master = Path(master_path)
+    root = hls_asset_root(master)
+    text = master.read_text(encoding="utf-8")
+    playlists = _listed_playlists(master, root)
+    duration = _playlist_duration(playlists[-1]) if playlists else 0.0
+    if duration <= 0:
+        raise DownloadError("The HLS bundle has no length to give its subtitles")
+
+    segment_seconds = _playlist_target_duration(playlists[-1])
+    media_lines = []
+    for index, subtitle in enumerate(subtitles):
+        directory = root / f"subtitles-{index}"
+        shutil.rmtree(directory, ignore_errors=True)
+        if subtitle.parts is not None:
+            shutil.copytree(subtitle.parts, directory)
+        else:
+            directory.mkdir()
+            write_hls_subtitle_segments(
+                subtitle.path.read_text(encoding="utf-8-sig"), directory, duration=duration, segment_seconds=segment_seconds,
+            )
+        name = subtitle.name.replace('"', "'")
+        media_lines.append(
+            f'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="{_SUBTITLE_GROUP}",NAME="{name}",LANGUAGE="{subtitle.language}",'
+            f'DEFAULT={"YES" if subtitle.default else "NO"},AUTOSELECT=YES,FORCED={"YES" if subtitle.forced else "NO"},'
+            f'URI="hls/subtitles-{index}/playlist.m3u8"'
+        )
+
+    lines = text.splitlines()
+    first_variant = next(index for index, line in enumerate(lines) if line.startswith("#EXT-X-STREAM-INF:"))
+    lines = [
+        *lines[:first_variant], *media_lines,
+        *(f'{line},SUBTITLES="{_SUBTITLE_GROUP}"' if line.startswith("#EXT-X-STREAM-INF:") else line for line in lines[first_variant:]),
+    ]
+    part_path = Path(f"{master}.part")
+    part_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.replace(part_path, master)
+
+
+def write_hls_subtitle_segments(webvtt: str, directory: Path, *, duration: float, segment_seconds: int) -> None:
+    """Write a WebVTT subtitle as parts of ``segment_seconds`` each, numbered ``0.vtt``, ``1.vtt`` and so
+    on, and the ``playlist.m3u8`` that lists them.
+
+    Apple's players stopped playing a few minutes in when a bundle's subtitles were one part as long as
+    the video, so they are split like the video is. Every part starts with the subtitle's own header,
+    with its ``X-TIMESTAMP-MAP`` and styles, and holds each cue that shows during it: a cue that
+    crosses from one part into the next is in both, as HLS asks.
+    """
+    header, cues = _split_webvtt(webvtt)
+    count = max(1, math.ceil(duration / segment_seconds - 1e-6))
+    parts = []
+    for number in range(count):
+        start = number * segment_seconds
+        end = duration if number == count - 1 else start + segment_seconds
+        shown = [text for cue_start, cue_end, text in cues if cue_start < end and cue_end > start]
+        parts.append((end - start, ("\n\n".join((header, *shown)) + "\n").encode("utf-8")))
+    write_hls_subtitle_parts(parts, directory)
+
+
+def write_hls_subtitle_parts(parts: Sequence[tuple[float, bytes]], directory: Path) -> None:
+    """Write WebVTT parts, each with its length in seconds, as ``0.vtt``, ``1.vtt`` and so on in
+    ``directory``, and the ``playlist.m3u8`` that lists them."""
+    playlist = [
+        "#EXTM3U", "#EXT-X-VERSION:3", f"#EXT-X-TARGETDURATION:{max(1, math.ceil(max(seconds for seconds, _ in parts) - 1e-6))}",
+        "#EXT-X-MEDIA-SEQUENCE:0", "#EXT-X-PLAYLIST-TYPE:VOD",
+    ]
+    for number, (seconds, data) in enumerate(parts):
+        (directory / f"{number}.vtt").write_bytes(data)
+        playlist += [f"#EXTINF:{seconds:.3f},", f"{number}.vtt"]
+    playlist.append("#EXT-X-ENDLIST")
+    # Written last and replaced at once, so a player never gets a playlist that names a missing part.
+    part_path = directory / "playlist.m3u8.part"
+    part_path.write_text("\n".join(playlist) + "\n", encoding="utf-8")
+    os.replace(part_path, directory / "playlist.m3u8")
+
+
+_CUE_TIMING_RE = re.compile(r"^\s*((?:\d+:)?\d{2}:\d{2}\.\d{3})\s+-->\s+((?:\d+:)?\d{2}:\d{2}\.\d{3})")
+
+
+def _split_webvtt(webvtt: str) -> tuple[str, list[tuple[float, float, str]]]:
+    """A WebVTT file's header, with its styles and regions, and its cues with their start and end."""
+    blocks = [block.strip("\n") for block in re.split(r"\n[ \t]*\n", webvtt.removeprefix("\ufeff").replace("\r\n", "\n").replace("\r", "\n"))]
+    blocks = [block for block in blocks if block.strip()]
+    header = [blocks[0]] if blocks else ["WEBVTT"]
+    cues = []
+    for block in blocks[1:]:
+        lines = block.split("\n")
+        timing = next((_CUE_TIMING_RE.match(line) for line in lines[:2] if _CUE_TIMING_RE.match(line)), None)
+        if timing is not None:
+            cues.append((_webvtt_seconds(timing.group(1)), _webvtt_seconds(timing.group(2)), block))
+        elif not cues and lines[0].startswith(("STYLE", "REGION")):
+            header.append(block)
+    return "\n\n".join(header), cues
+
+
+def _webvtt_seconds(timestamp: str) -> float:
+    parts = timestamp.split(":")
+    hours = int(parts[0]) if len(parts) == 3 else 0
+    return hours * 3600 + int(parts[-2]) * 60 + float(parts[-1])
+
+
+def _playlist_target_duration(playlist: Path) -> int:
+    for line in playlist.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#EXT-X-TARGETDURATION:"):
+            try:
+                return max(1, int(line.split(":", 1)[1]))
+            except ValueError:
+                break
+    return 6
+
+
+def _playlist_duration(playlist: Path) -> float:
+    total = 0.0
+    for line in playlist.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#EXTINF:"):
+            try:
+                total += float(line.split(":", 1)[1].split(",", 1)[0])
+            except ValueError:
+                continue
+    return total
+
+
 def _select_required_renditions(
         renditions: list[VideoRendition],
 ) -> dict[int, VideoRendition]:
@@ -401,7 +549,7 @@ def _build_master_and_jobs(
         public_uri = f"hls/{height}p/playlist.m3u8"
         text = http_get_text(source_url)
         _validate_vod_media_playlist(text)
-        master_out.append(stream_line)
+        master_out.append(_GROUPS_NOT_KEPT_RE.sub("", stream_line))
         master_out.append(public_uri)
         jobs.append(_PlaylistJob(
             source_url=source_url,
@@ -587,6 +735,8 @@ def _missing_playlist_files(playlist: Path, *, root: Path) -> list[Path]:
     missing: list[Path] = []
     saw_segment = False
     resolved_root = root.resolve()
+    # A bundle's parts are byte ranges of one file, listed once for every part: look at each file once.
+    uris: dict[str, None] = {}
     for raw in text.splitlines():
         line = raw.strip()
         uri: str | None = None
@@ -595,9 +745,10 @@ def _missing_playlist_files(playlist: Path, *, root: Path) -> list[Path]:
         elif line and not line.startswith("#"):
             uri = line
             saw_segment = True
+        if uri:
+            uris[uri] = None
 
-        if not uri:
-            continue
+    for uri in uris:
         candidate = (playlist.parent / uri).resolve()
         if not candidate.is_relative_to(resolved_root) or not candidate.is_file():
             missing.append(candidate)

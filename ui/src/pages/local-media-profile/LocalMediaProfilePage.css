@@ -38,6 +38,11 @@
     gap: 12px;
 }
 
+/* Only Collection profiles have Download Profiles, so other types show three statistics. */
+.local-media-profile-statistics.has-three-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .local-media-profile-stat {
     display: grid;
     gap: 5px;
@@ -127,7 +132,7 @@ a.local-media-profile-stat:hover {
 }
 
 @media (max-width: 800px) {
-    .local-media-profile-statistics {
+    .local-media-profile-statistics:not(.has-three-stats) {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -154,7 +159,8 @@ a.local-media-profile-stat:hover {
         flex-wrap: wrap;
     }
 
-    .local-media-profile-statistics {
+    .local-media-profile-statistics,
+    .local-media-profile-statistics.has-three-stats {
         grid-template-columns: 1fr;
     }
 }
@@ -163,3 +169,11 @@ a.local-media-profile-stat:hover {
    and drop the Actions menu's taller minimum so every button in the row is the same height. */
 .local-media-profile-page-actions .btn { font-size: 0.8333rem; }
 .local-media-profile-page-actions .action-menu-trigger { min-height: 0; }
+
+/* A Download Profile's page lists its Which episodes lines in the order they apply. */
+.download-profile-filter-list {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding-left: 20px;
+}

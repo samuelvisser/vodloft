@@ -1,4 +1,4 @@
-"""Acquire segmented HLS WebVTT and convert it to Plex-friendly UTF-8 SRT.
+"""Acquire segmented HLS WebVTT as Plex-friendly UTF-8 SRT, and as one WebVTT document for an HLS bundle.
 
 HLS subtitle segments are independent WebVTT documents, not text that can be
 concatenated. In particular, X-TIMESTAMP-MAP maps local cue timestamps into
@@ -9,6 +9,7 @@ from __future__ import annotations
 import html
 import re
 from collections.abc import Callable
+from typing import NamedTuple
 from urllib.parse import urlsplit
 
 from .errors import DownloadCanceled, DownloadError
@@ -19,6 +20,7 @@ from .models import DownloadProgress
 _CUE_TIME = r"(?:\d{2,}:)?\d{2}:\d{2}[.,]\d{3}"
 _TIMING = re.compile(rf"^\s*({_CUE_TIME})\s+-->\s+({_CUE_TIME})(?:\s+.*)?$")
 _TIMESTAMP_MAP = re.compile(r"^X-TIMESTAMP-MAP=(.*)$", re.MULTILINE)
+_SRT_TIMING = re.compile(rf"^\s*({_CUE_TIME})\s+-->\s+({_CUE_TIME})\s*$")
 _INLINE_TAG = re.compile(r"<[^>]*>")
 _CLOCK_WRAP_SECONDS = (1 << 33) / 90000
 _MAX_SEGMENTS = 10000
@@ -43,6 +45,29 @@ def _format_timestamp(milliseconds: int) -> str:
     return f"{hours:02}:{minutes:02}:{seconds:02},{fraction:03}"
 
 
+def _format_vtt_timestamp(milliseconds: int) -> str:
+    return _format_timestamp(milliseconds).replace(",", ".")
+
+
+class _Cue(NamedTuple):
+    start: int
+    end: int
+    text: str
+    """Plain text, as SRT has it."""
+    settings: str = ""
+    """WebVTT cue settings, such as ``line:90%``."""
+    payload: str = ""
+    """The cue's own WebVTT text, tags and all."""
+
+
+class DownloadedSubtitle(NamedTuple):
+    srt: bytes
+    webvtt: bytes
+    """One WebVTT document with the source's own cues."""
+    parts: tuple[tuple[float, bytes], ...] = ()
+    """The source's own WebVTT parts, each with its length in seconds, for an HLS bundle to keep as they are."""
+
+
 def _map_offset_ms(document: str) -> int | None:
     """Return the MPEGTS-to-LOCAL offset; a 33-bit PTS can wrap."""
     match = _TIMESTAMP_MAP.search(document)
@@ -61,11 +86,11 @@ def _map_offset_ms(document: str) -> int | None:
         return None
 
 
-def _cues(document: str) -> list[tuple[int, int, str]]:
+def _cues(document: str) -> list[_Cue]:
     text = document.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
     if not text.startswith("WEBVTT"):
         raise DownloadError("HLS subtitle segment is not WebVTT")
-    result: list[tuple[int, int, str]] = []
+    result: list[_Cue] = []
     for block in re.split(r"\n\s*\n", text)[1:]:
         lines = block.strip().splitlines()
         if not lines or lines[0].startswith(("NOTE", "STYLE", "REGION")):
@@ -79,23 +104,54 @@ def _cues(document: str) -> list[tuple[int, int, str]]:
             continue
         start, end = _timestamp(timing.group(1)), _timestamp(timing.group(2))
         if end > start:
-            result.append((start, end, body))
+            settings = lines[timing_index].split("-->", 1)[1].strip().split(None, 1)
+            payload = "\n".join(line for line in lines[timing_index + 1:] if line.strip()).strip()
+            result.append(_Cue(start, end, body, settings[1] if len(settings) > 1 else "", payload))
     return result
 
 
-def _srt(entries: list[tuple[int, int, str]]) -> bytes:
+def _srt(entries: list[_Cue]) -> bytes:
     return "".join(
-        f"{index}\n{_format_timestamp(start)} --> {_format_timestamp(end)}\n{body}\n\n"
-        for index, (start, end, body) in enumerate(entries, 1)
+        f"{index}\n{_format_timestamp(cue.start)} --> {_format_timestamp(cue.end)}\n{cue.text}\n\n"
+        for index, cue in enumerate(entries, 1)
     ).encode("utf-8")
+
+
+def _webvtt(entries: list[_Cue], timestamp_map: str | None) -> bytes:
+    header = "WEBVTT\n" + (f"X-TIMESTAMP-MAP={timestamp_map}\n" if timestamp_map else "")
+    cues = "".join(
+        f"\n{_format_vtt_timestamp(cue.start)} --> {_format_vtt_timestamp(cue.end)}"
+        f"{' ' + cue.settings if cue.settings else ''}\n{cue.payload}\n"
+        for cue in entries
+    )
+    return (header + cues).encode("utf-8")
 
 
 def webvtt_to_srt(document: str) -> bytes:
     """One whole WebVTT document, such as a subtitle yt-dlp wrote, as UTF-8 SRT."""
-    entries = sorted(set(_cues(document)), key=lambda item: (item[0], item[1]))
+    entries = sorted(set(_cues(document)), key=lambda cue: (cue.start, cue.end))
     if not entries:
         raise DownloadError("The subtitle has no usable cues")
     return _srt(entries)
+
+
+def srt_to_webvtt(document: str) -> bytes:
+    """An SRT subtitle, such as one a site only has as SRT, as a WebVTT document."""
+    blocks = re.split(r"\n\s*\n", document.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n").strip())
+    cues = []
+    for block in blocks:
+        lines = block.strip().splitlines()
+        index = next((number for number, line in enumerate(lines[:2]) if _SRT_TIMING.match(line)), None)
+        if index is None:
+            continue
+        timing = _SRT_TIMING.match(lines[index])
+        start, end = _timestamp(timing.group(1)), _timestamp(timing.group(2))
+        payload = "\n".join(lines[index + 1:]).strip()
+        if end > start and payload:
+            cues.append(_Cue(start, end, payload, "", payload))
+    if not cues:
+        raise DownloadError("The subtitle has no usable cues")
+    return _webvtt(cues, None)
 
 
 def _fetch_limited(
@@ -122,8 +178,12 @@ def download_hls_webvtt(
     playlist_url: str, *, maximum_bytes: int,
     should_cancel: Callable[[], bool],
     progress: Callable[[DownloadProgress], None] | None = None,
-) -> bytes:
-    """Download VOD subtitles and return one language track as UTF-8 SRT."""
+) -> DownloadedSubtitle:
+    """Download VOD subtitles and return one language track as UTF-8 SRT and as one WebVTT document.
+
+    The WebVTT keeps the source's own cues and the first segment's timestamp map, with every cue on
+    that segment's timeline, so it lines up with the video just as the segments did.
+    """
     raw_playlist = _fetch_limited(playlist_url, maximum_bytes, should_cancel)
     text = raw_playlist.decode("utf-8-sig")
     if not is_playlist(text):
@@ -149,19 +209,23 @@ def download_hls_webvtt(
 
     consumed = len(raw_playlist)
     offset_origin: int | None = None
+    timestamp_map: str | None = None
     position_ms = 0
     seen: set[tuple[int, int, str]] = set()
-    entries: list[tuple[int, int, str]] = []
+    entries: list[_Cue] = []
+    parts: list[tuple[float, bytes]] = []
     for index, (url, duration) in enumerate(zip(media.segment_urls, durations)):
         if urlsplit(url).scheme not in {"https", "http"}:
             raise DownloadError("HLS subtitle segment requires an HTTP(S) URL")
         data = _fetch_limited(url, maximum_bytes - consumed, should_cancel)
         consumed += len(data)
+        parts.append((duration, data))
         document = data.decode("utf-8-sig")
         mapping = _map_offset_ms(document)
         if mapping is not None:
             if offset_origin is None:
                 offset_origin = mapping
+                timestamp_map = _TIMESTAMP_MAP.search(document).group(1).strip()
             # Correct for the 33-bit MPEGTS counter rolling over mid-stream.
             relative = (mapping - offset_origin) / 1000
             if relative > _CLOCK_WRAP_SECONDS / 2:
@@ -171,24 +235,26 @@ def download_hls_webvtt(
             correction = round(relative * 1000)
         else:
             correction = 0
-        for start, end, body in _cues(document):
+        for cue in _cues(document):
             # WebVTT without a map may use either global or segment-relative
             # timestamps. Apply EXTINF only when cues clearly reset to zero.
             shift = correction if mapping is not None else (
-                position_ms if index > 0 and start < position_ms - 1000 else 0
+                position_ms if index > 0 and cue.start < position_ms - 1000 else 0
             )
-            item = (max(0, start + shift), max(0, end + shift), body)
-            if item[1] > item[0] and item not in seen:
-                seen.add(item)
+            item = cue._replace(start=max(0, cue.start + shift), end=max(0, cue.end + shift))
+            key = (item.start, item.end, item.text)
+            if item.end > item.start and key not in seen:
+                seen.add(key)
                 entries.append(item)
         position_ms += round(duration * 1000)
         if progress is not None:
             progress(DownloadProgress(consumed, maximum_bytes, segments_done=index + 1, segments_total=len(media.segment_urls)))
 
-    entries.sort(key=lambda item: (item[0], item[1]))
+    entries.sort(key=lambda cue: (cue.start, cue.end))
     if not entries:
         raise DownloadError("HLS subtitle playlist contains no usable cues")
     content = _srt(entries)
-    if len(content) > maximum_bytes:
+    webvtt = _webvtt(entries, timestamp_map)
+    if max(len(content), len(webvtt)) > maximum_bytes:
         raise DownloadError("Converted HLS subtitles exceed the configured size limit")
-    return content
+    return DownloadedSubtitle(content, webvtt, tuple(parts))

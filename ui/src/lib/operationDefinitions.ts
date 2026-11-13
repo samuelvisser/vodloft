@@ -240,6 +240,19 @@ function invalidateLocalMediaProfileDownloadDeletion(
   )
 }
 
+function invalidateDownloadProfileOutOfScope(
+  queryClient: QueryClient,
+  operation: TaskOperationRead,
+  invalidations: InvalidationCollector,
+) {
+  invalidateLocalMediaProfileDownloadDeletion(queryClient, operation, invalidations)
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['downloadProfileView']}),
+    queryClient.invalidateQueries({queryKey: ['downloadProfileStatistics']}),
+    queryClient.invalidateQueries({queryKey: ['downloadProfileOutOfScope']}),
+  )
+}
+
 function invalidateMediaDownload(
   queryClient: QueryClient,
   operation: TaskOperationRead,
@@ -614,6 +627,17 @@ export const frontendOperationDefinitions = {
         ? `; ${disabledProfiles} ${plural(disabledProfiles, 'Download Profile')} disabled`
         : ''
       return `Deleted downloads for ${profileName}: ${files} ${plural(files, 'file')} removed${disabledDetail}`
+    },
+  },
+  'download_profile.delete_out_of_scope': {
+    kind: 'download_profile.delete_out_of_scope',
+    resourceType: 'download_profile',
+    label: 'Delete downloads outside its filters',
+    invalidate: invalidateDownloadProfileOutOfScope,
+    success: (operation) => {
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const deleted = resultNumber(operation, 'downloads_deleted') ?? operation.progressTotal
+      return `Deleted ${deleted} ${plural(deleted, 'download')} outside the filters of ${collectionTitle}`
     },
   },
   'collection.delete_downloads': {

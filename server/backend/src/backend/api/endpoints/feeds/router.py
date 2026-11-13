@@ -29,6 +29,7 @@ from .service import (
     get_source_stream_url,
     get_episode_for_feed,
     get_local_download_for_episode,
+    get_local_hls_master,
     get_rss_stream_profile_by_token,
     remember_live_episode_handoff,
     render_rss_feed,
@@ -466,13 +467,7 @@ def rss_feed_episode_hls_asset(
 
         episode = get_episode_for_feed(s, profile, episode_slug)
         _save_feed_state(s)
-        download = get_local_download_for_episode(
-            s,
-            profile,
-            episode,
-            kind="hls",
-        )
-        master_path = _resolved_download_path(s, download)
+        master_path = get_local_hls_master(s, profile, episode)
         if master_path is None:
             raise HTTPException(status_code=404, detail="Local HLS video is not available")
 
@@ -486,6 +481,8 @@ def rss_feed_episode_hls_asset(
         media_type = "application/x-mpegURL"
     elif candidate.suffix.lower() == ".ts":
         media_type = "video/mp2t"
+    elif candidate.suffix.lower() == ".vtt":
+        media_type = "text/vtt"
 
     return FileResponse(
         candidate,

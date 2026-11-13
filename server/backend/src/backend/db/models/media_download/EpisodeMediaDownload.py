@@ -18,12 +18,15 @@ class EpisodeMediaDownload(MediaDownloadBase):
 
     # Columns
     id: Mapped[int] = mapped_column(ForeignKey("media_downloads.id", ondelete="CASCADE"), primary_key=True)
-    download_profile_id: Mapped[Optional[int]] = mapped_column(ForeignKey("download_profiles.id"), index=True)
+    download_profile_id: Mapped[Optional[int]] = mapped_column(ForeignKey("download_profiles.id", ondelete="SET NULL"), index=True)
     downloaded_publish_status: Mapped[Optional[str]]
     redownload_when_final: Mapped[bool] = mapped_column(default=False)
     redownload_when_delay_passed: Mapped[bool] = mapped_column(default=False)
     kept: Mapped[bool] = mapped_column(
         default=False, server_default="0", comment="Kept by hand: retention never deletes this download"
+    )
+    removal_answered_at: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(), comment="When the person answered whether to keep it after its episode left the Source",
     )
 
     upgrade_checks: Mapped[int] = mapped_column(

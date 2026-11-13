@@ -30,12 +30,13 @@ import {
     profileDownloadOptions,
     profileSitesOffering,
     siteNames,
+    type LocalMediaProfileType,
 } from '../../types/local_media_profile'
 import './QualityField.css'
 
 type Props = {
     form: UseFormReturn<any>
-    mode: 'collection' | 'video'
+    mode: LocalMediaProfileType
 }
 
 const OPTIONS = {shouldDirty: true, shouldValidate: true} as const
@@ -120,7 +121,8 @@ export default function QualityField({form, mode}: Props) {
         {
             label: 'Other',
             options: [
-                ...(!offered || offered.audioOnly ? [option('format_audio_only')] : []),
+                // A movie is always kept as a video.
+                ...(mode !== 'movie' && (!offered || offered.audioOnly) ? [option('format_audio_only')] : []),
                 // Only episodes of a collection are kept as an HLS bundle, for podcast feeds.
                 ...(mode === 'collection' && offered?.hlsBundle ? [option('format_hls')] : []),
             ],

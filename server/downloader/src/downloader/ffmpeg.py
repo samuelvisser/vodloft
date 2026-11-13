@@ -151,13 +151,17 @@ def segment_as_hls(
 ) -> None:
     """Write one track as ``media.mp4`` in ``directory`` and an HLS ``playlist.m3u8`` that lists its
     parts as byte ranges of that file. Nothing is encoded again: the parts start at the video's
-    keyframes."""
+    keyframes.
+
+    The parts carry no edit list. A video whose first frame does not start at 0, as YouTube's do,
+    would otherwise get one that begins with an empty edit, and Apple's players then show no picture
+    while the sound plays."""
     if not ffmpeg_available(ffmpeg_path):
         raise FfmpegNotFoundError(f"ffmpeg binary '{ffmpeg_path}' not found on PATH; ffmpeg is required for HLS downloads")
     command = [
         ffmpeg_path, "-y", "-i", src_path, "-map", "0", "-c", "copy",
         "-f", "hls", "-hls_time", "6", "-hls_playlist_type", "vod",
-        "-hls_segment_type", "fmp4", "-hls_flags", "single_file",
+        "-hls_segment_type", "fmp4", "-hls_flags", "single_file", "-hls_segment_options", "use_editlist=0",
         "-hls_segment_filename", str(directory / "media.mp4"), str(directory / "playlist.m3u8"),
     ]
     result = (
