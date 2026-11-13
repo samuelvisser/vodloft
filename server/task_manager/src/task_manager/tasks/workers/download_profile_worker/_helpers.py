@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from typing import Optional, Sequence, cast
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload, lazyload, selectinload
 
-from backend.db.models import DownloadProfile, Episode, LocalMediaProfileBase
+from backend.db.models import DownloadProfile, Episode, LocalMediaProfileBase, Metadata
+from backend.db.models.media_item.Episode import DOWNLOAD_DISMISSED_META_PREFIX
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
@@ -89,6 +90,8 @@ def get_download_profile_episodes(
 
 
 _EPISODES_NAMED_IN_A_QUERY = 100
+# SQLite allows a query this many values at most.
+_IDS_PER_QUERY = 900
 
 
 def episodes_with_nothing_to_do(s: Session, profile: DownloadProfile, episodes: Sequence[Episode]) -> set[int]:
@@ -111,6 +114,8 @@ def episodes_with_nothing_to_do(s: Session, profile: DownloadProfile, episodes: 
             EpisodeMediaDownload.download_profile_id == profile.id,
             EpisodeMediaDownload.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value,
         )
+        # Looking at the file needs neither its sidecar files nor its metadata rows.
+        .options(lazyload(EpisodeMediaDownload.assets), lazyload(EpisodeMediaDownload.meta_items))
     )
     if len(wanted) <= _EPISODES_NAMED_IN_A_QUERY:
         # A pass for one new episode has no use for the rest of the collection's downloads.
@@ -133,6 +138,25 @@ def episodes_with_nothing_to_do(s: Session, profile: DownloadProfile, episodes: 
         if media_download_file_is_as_recorded(download):
             settled.add(episode.id)
     return settled
+
+
+def dismissed_episodes(s: Session, profile: DownloadProfile, episode_ids: Sequence[int]) -> set[int]:
+    """Which of these episodes had their download for the profile's Local Media Profile deleted by a person.
+
+    ``Episode.download_dismissed`` in one read, for episodes loaded without their metadata rows.
+    """
+    if not episode_ids:
+        return set()
+    key = f"{DOWNLOAD_DISMISSED_META_PREFIX}{profile.local_media_profile_id}"
+    dismissed: set[int] = set()
+    for start in range(0, len(episode_ids), _IDS_PER_QUERY):
+        dismissed.update(s.scalars(select(Metadata.parent_id).where(
+            Metadata.parent_table == Episode.__tablename__,
+            Metadata.key == key,
+            Metadata.value.is_not(None),
+            Metadata.parent_id.in_(episode_ids[start:start + _IDS_PER_QUERY]),
+        )))
+    return dismissed
 
 
 @dataclass(frozen=True)
@@ -273,9 +297,14 @@ def cleanup_older_episodes(s: Session, profile: DownloadProfile) -> int:
     if not any(is_date_line(item) for item in profile.filters):
         return 0
     evaluation = evaluate(s, EpisodeSelection.of_profile(profile))
+    downloads = s.scalars(
+        select(EpisodeMediaDownload).where(EpisodeMediaDownload.download_profile_id == profile.id)
+        # Most stay: the few that go load their sidecar files and metadata rows when they are deleted.
+        .options(lazyload(EpisodeMediaDownload.assets), lazyload(EpisodeMediaDownload.meta_items))
+    )
     rows = [
         row
-        for row in s.scalars(select(EpisodeMediaDownload).where(EpisodeMediaDownload.download_profile_id == profile.id))
+        for row in downloads
         if retention_removes(evaluation, row, delete_older_episodes=profile.delete_older_episodes)
     ]
     for row in rows:

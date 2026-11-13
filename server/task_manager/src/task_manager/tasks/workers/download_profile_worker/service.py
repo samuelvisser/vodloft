@@ -23,6 +23,7 @@ from task_manager.tasks.media_download_operations import (
 
 from ._helpers import (
     cleanup_older_episodes,
+    dismissed_episodes,
     ensure_episode_download,
     episodes_with_nothing_to_do,
     get_download_profile_episodes,
@@ -129,11 +130,9 @@ def _reconcile_profile(s: Session, profile_id: int, only_episode_id: Optional[in
     cleanup = only_episode_id is None or has_latest_count(profile.filters)
     episodes = get_download_profile_episodes(s, profile, only_episode=only_episode)
     settled = episodes_with_nothing_to_do(s, profile, episodes)
-    episode_ids = [
-        episode.id
-        for episode in episodes
-        if episode.id not in settled and not episode.download_dismissed(profile.local_media_profile_id)
-    ]
+    unsettled = [episode.id for episode in episodes if episode.id not in settled]
+    dismissed = dismissed_episodes(s, profile, unsettled)
+    episode_ids = [episode_id for episode_id in unsettled if episode_id not in dismissed]
     s.rollback()
 
     created = 0

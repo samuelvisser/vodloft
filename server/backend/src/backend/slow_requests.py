@@ -3,7 +3,8 @@
 API requests and task threads share one Python process. A request that is slow on a
 busy server is usually waiting for those threads, not for its own query, so its own
 timings do not explain it. While a request waits longer than a second, this samples
-where every other thread is and logs the ones that are working.
+where every other thread is and logs the ones that are working: every second at first,
+then less and less often, so a request that waits a minute still shows what held it up.
 """
 
 from __future__ import annotations
@@ -19,7 +20,9 @@ logger = logging.getLogger(__name__)
 
 SLOW_REQUEST_SECONDS = 1.0
 _SAMPLE_EVERY_SECONDS = 1.0
-_SAMPLES_PER_REQUEST = 3
+_SAMPLES_PER_REQUEST = 10
+_STEADY_SAMPLES = 3
+"""Samples a second apart; each one after them waits twice as long as the one before."""
 _THREADS_PER_SAMPLE = 12
 _FRAMES_PER_THREAD = 4
 
@@ -86,6 +89,14 @@ def working_threads(*, skip: frozenset[int] = frozenset()) -> list[str]:
     return lines
 
 
+def _sample_at(samples: int) -> float:
+    """How long a request has waited when it is sampled again, after this many samples."""
+    if samples < _STEADY_SAMPLES:
+        return SLOW_REQUEST_SECONDS + samples * _SAMPLE_EVERY_SECONDS
+    last_steady = SLOW_REQUEST_SECONDS + (_STEADY_SAMPLES - 1) * _SAMPLE_EVERY_SECONDS
+    return last_steady * 2 ** (samples - _STEADY_SAMPLES + 1)
+
+
 def _watch() -> None:
     while True:
         time.sleep(_SAMPLE_EVERY_SECONDS / 4)
@@ -94,7 +105,7 @@ def _watch() -> None:
             due = [
                 request for request in _requests.values()
                 if request.samples < _SAMPLES_PER_REQUEST
-                and now - request.started >= SLOW_REQUEST_SECONDS + request.samples * _SAMPLE_EVERY_SECONDS
+                and now - request.started >= _sample_at(request.samples)
             ]
             for request in due:
                 request.samples += 1
