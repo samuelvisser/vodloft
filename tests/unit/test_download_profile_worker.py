@@ -1199,6 +1199,31 @@ def test_a_pass_leaves_out_an_episode_whose_download_a_person_deleted(db_session
     assert len(metadata_reads) < len(expected)
 
 
+def test_a_run_for_one_episode_reads_the_collection_only_when_a_count_weighs_the_others(db_session, monkeypatch):
+    """Each new or published episode asks about itself; on a large Collection, many such runs at once
+    each reading every episode kept the server busy."""
+    from backend.db.models import Episode
+    from backend.services import episode_filters
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    profile = _large_show(db_session, 6)
+    newest, oldest = (
+        db_session.query(Episode).order_by(Episode.published_date.desc()).first(),
+        db_session.query(Episode).order_by(Episode.published_date).first(),
+    )
+    reads = []
+    real = episode_filters.collection_episodes
+    monkeypatch.setattr(episode_filters, "collection_episodes", lambda s, collection_id: reads.append(collection_id) or real(s, collection_id))
+
+    assert get_download_profile_episodes(db_session, profile, only_episode=oldest) == [oldest]
+    assert reads == []
+
+    with_filters(profile, only_types("ep"), published_days(30), latest(2))
+    assert get_download_profile_episodes(db_session, profile, only_episode=newest) == [newest]
+    assert get_download_profile_episodes(db_session, profile, only_episode=oldest) == []
+    assert len(reads) == 2
+
+
 def test_an_episode_with_a_queued_download_is_not_passed_over(db_session):
     from backend.db.core import run_write_transaction
     from backend.db.models.media_download import EpisodeMediaDownload

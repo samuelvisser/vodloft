@@ -85,7 +85,7 @@ def get_download_profile_episodes(
     return wanted_episodes(
         s,
         EpisodeSelection.of_profile(profile),
-        only_episode_id=only_episode.id if only_episode is not None else None,
+        only_episode=only_episode,
     )
 
 

@@ -298,11 +298,28 @@ def _walk(
     )
 
 
-def wanted_episodes(s: Session, selection: EpisodeSelection, *, only_episode_id: Optional[int] = None) -> list[Episode]:
-    """Episodes the profile downloads, newest first."""
+def _judged_alone(filters: Iterable[EpisodeFilter]) -> bool:
+    """Whether the filters decide about an episode by the episode alone.
+
+    Only a count, such as "the latest 25", weighs an episode against the Collection's other episodes.
+    """
+    return not any(
+        item.action != EpisodeFilterAction.KEEP and item.field == EpisodeFilterField.PUBLISHED and item.count
+        for item in filters
+    )
+
+
+def wanted_episodes(s: Session, selection: EpisodeSelection, *, only_episode: Optional[Episode] = None) -> list[Episode]:
+    """Episodes the profile downloads, newest first; with only_episode, that one if the profile downloads it.
+
+    Each new or published episode asks about itself. When the filters judge it alone, that does not
+    read the whole Collection: on a large one, many such questions at once kept the server busy.
+    """
+    if only_episode is not None and _judged_alone(selection.filters):
+        return evaluate(s, selection, episodes=[only_episode]).wanted
     wanted = evaluate(s, selection).wanted
-    if only_episode_id is not None:
-        return [episode for episode in wanted if episode.id == only_episode_id]
+    if only_episode is not None:
+        return [episode for episode in wanted if episode.id == only_episode.id]
     return wanted
 
 
