@@ -126,3 +126,17 @@ export const DownloadedLocalMediaProfileSchema = z.object({
     preferredFormat: z.string().nullable().optional(),
 })
 export type DownloadedLocalMediaProfile = z.infer<typeof DownloadedLocalMediaProfileSchema>
+
+/** A download whose episode its Source no longer has; retention leaves it alone until someone says whether to keep it. */
+export const KeepQuestionReadSchema = z.object({
+    id: z.number(),
+    episodeId: z.number(),
+    episodeTitle: z.string(),
+    episodeSlug: z.string(),
+    collectionTitle: z.string(),
+    collectionSlug: z.string(),
+    localMediaProfileName: z.string(),
+    downloadedAt: ApiDateTimeSchema.nullable(),
+    siteName: z.string(),
+})
+export type KeepQuestionRead = z.infer<typeof KeepQuestionReadSchema>

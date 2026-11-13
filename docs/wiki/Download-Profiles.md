@@ -102,8 +102,12 @@ removes downloaded files that fall outside it: on **published**, once an episode
 published longer ago than the window; on **downloaded**, once it was downloaded longer ago. When a download is deleted,
 its download record and download history go as well, so it no longer appears on the Downloads page.
 
-Downloads you keep, and downloads a Keep filter matches, are never deleted. Downloads of episodes that can't be
-downloaded any more, for example because the Source removed them, are never deleted either.
+Downloads you keep, and downloads a Keep filter matches, are never deleted.
+
+When the Source removes an episode VODLoft already downloaded, your file may be the last copy. The Home page then asks
+whether to keep it, and the question stays until you answer. Until then no date filter deletes that download.
+**Keep** pins it, as the pin button below does. **Don't keep** lets the date filter handle it as if the episode were
+still at the Source.
 
 Leave the switch off if you only want the date filter to decide which new episodes are downloaded while keeping older
 files already on disk.
