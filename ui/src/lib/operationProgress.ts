@@ -23,7 +23,6 @@ export function presentOperationProgress(operation?: TaskOperationRead, starting
         estimated: isBatch, icon: faIcon('fass', 'spinner'), canCancel: true, canRetry: false}
 }
 
-/** A Collection's indexing: its percentage when the Source knows the total, otherwise how many episodes it found so far. */
 /** After the new episodes are saved, VODLoft looks at each one's picture; that takes a request per episode. */
 function thumbnailCheckLabel(operation: TaskOperationRead): string | null {
     const check = operation.progressMeta?.thumbnails as {checked?: unknown, total?: unknown} | undefined
@@ -31,19 +30,34 @@ function thumbnailCheckLabel(operation: TaskOperationRead): string | null {
     return `Checking thumbnails… ${check.checked.toLocaleString()} of ${check.total.toLocaleString()}`
 }
 
+/** How far a Collection's indexing is: its percentage when the Source knows the total, otherwise how many episodes it found so far. */
+export function presentIndexingStatus(operation: TaskOperationRead): string | null {
+    const thumbnails = thumbnailCheckLabel(operation)
+    if (thumbnails) return thumbnails
+    if (typeof operation.progress === 'number' && operation.progress > 0) return `${operation.progress}%`
+    const found = operation.progressMeta?.found
+    return typeof found === 'number' ? `${found} episode${found === 1 ? '' : 's'} found` : null
+}
+
 export function presentIndexingLabel(operation: TaskOperationRead): string {
     const thumbnails = thumbnailCheckLabel(operation)
     if (thumbnails) return thumbnails
-    if (typeof operation.progress === 'number' && operation.progress > 0) return `Indexing… ${operation.progress}%`
-    const found = operation.progressMeta?.found
-    return typeof found === 'number' ? `Indexing… ${found} episode${found === 1 ? '' : 's'} found` : 'Indexing…'
+    const status = presentIndexingStatus(operation)
+    return status ? `Indexing… ${status}` : 'Indexing…'
 }
 
-/** A Collection's Sync now scan: its percentage when the Source knows the total, otherwise the new episodes it found so far. */
+/** How far a Collection's Sync now scan is: its percentage when the Source knows the total, otherwise the new episodes it found so far. */
+export function presentScanningStatus(operation: TaskOperationRead): string | null {
+    const thumbnails = thumbnailCheckLabel(operation)
+    if (thumbnails) return thumbnails
+    if (typeof operation.progress === 'number' && operation.progress > 0) return `${operation.progress}%`
+    const found = operation.progressMeta?.found
+    return typeof found === 'number' ? `${found} new episode${found === 1 ? '' : 's'} found` : null
+}
+
 export function presentScanningLabel(operation: TaskOperationRead): string {
     const thumbnails = thumbnailCheckLabel(operation)
     if (thumbnails) return thumbnails
-    if (typeof operation.progress === 'number' && operation.progress > 0) return `Scanning… ${operation.progress}%`
-    const found = operation.progressMeta?.found
-    return typeof found === 'number' ? `Scanning… ${found} new episode${found === 1 ? '' : 's'} found` : 'Scanning…'
+    const status = presentScanningStatus(operation)
+    return status ? `Scanning… ${status}` : 'Scanning…'
 }

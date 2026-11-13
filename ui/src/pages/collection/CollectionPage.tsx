@@ -8,9 +8,9 @@ import SourceBadge from '../../components/Source/SourceBadge'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
 import ActionConfirmDialogue, {type ActionConfirmDialogueLocalMediaProfile} from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
-import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
-import CollectionIndexingProgress from '../../components/CollectionIndexingProgress/CollectionIndexingProgress'
+import RunningActions from '../../components/RunningActions/RunningActions'
 import CollectionSyncLogModal from '../../components/CollectionSyncLogModal/CollectionSyncLogModal'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {OperationControlError, type OperationControlAction, useControlOperation, useStartOperation, useStartingOperations} from '../../lib/operations'
@@ -21,6 +21,7 @@ import CollectionDownloadAllDialog from './CollectionDownloadAllDialog'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import './CollectionPage.css'
 import {faIcon} from '../../icons/faIcon'
+import {presentIndexingStatus, presentScanningStatus} from '../../lib/operationProgress'
 import {siteName} from '../../lib/siteName'
 import ExistingFilesDialog from '../../components/ExistingFiles/ExistingFilesDialog'
 import ExistingFilesBanner from '../../components/ExistingFiles/ExistingFilesBanner'
@@ -291,6 +292,7 @@ export default function CollectionPage() {
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
 
   const operationResourceId = collection?.id ?? null
+  const indexingOperation = useActiveOperation('collection.index', 'collection', operationResourceId)
   const syncOperation = useActiveOperation('collection.sync', 'collection', operationResourceId)
   const metadataRefreshOperation = useActiveOperation('collection.refresh_metadata', 'collection', operationResourceId)
   const fileRenameOperation = useActiveOperation('collection.rename_files', 'collection', operationResourceId)
@@ -517,6 +519,91 @@ export default function CollectionPage() {
     }
   }
 
+  const actionItems: ActionMenuItem[] = [
+    {
+      label: 'Sync log',
+      icon: faIcon('fass', 'clock-rotate-left'),
+      onSelect: () => setSyncLogOpen(true),
+    },
+    {
+      label: 'Bulk download',
+      icon: faIcon('fass', 'download'),
+      disabled: downloadAllBusy,
+      disabledReason: downloadAllBusy ? `A bulk download is running for ${collection.title}.` : undefined,
+      operation: downloadAllOperation,
+      starting: isStarting('collection.download_all'),
+      controls: operationControls(downloadAllOperation?.id, 'bulk download'),
+      onSelect: () => setDownloadAllConfirm(true),
+    },
+    ...(lockedCount ? [{
+      label: `Check locked videos again (${lockedCount})`,
+      icon: faIcon('fass', 'unlock') as [string, string],
+      disabled: lockedCheckBusy,
+      disabledReason: lockedCheckBusy ? 'The locked videos are being checked again.' : undefined,
+      onSelect: () => void checkLockedAgain(),
+    }] : []),
+    ...(sourceControls(collection).metadataRefresh ? [{
+      label: 'Refresh all metadata',
+      icon: faIcon('fass', 'clipboard-list') as [string, string],
+      disabled: metadataRefreshBusy,
+      disabledReason: metadataRefreshDisabledReason,
+      operation: metadataRefreshOperation,
+      starting: isStarting('collection.refresh_metadata'),
+      controls: operationControls(metadataRefreshOperation?.id, 'metadata refresh'),
+      onSelect: () => setMetadataRefreshConfirm(true),
+    }] : []),
+    {
+      label: 'Rename all episode files',
+      icon: faIcon('fass', 'file-pen'),
+      disabled: fileRenameDisabledReason !== undefined,
+      disabledReason: fileRenameDisabledReason,
+      operation: fileRenameOperation,
+      starting: isStarting('collection.rename_files'),
+      controls: operationControls(fileRenameOperation?.id, 'File Rename'),
+      onSelect: () => setFileRenameConfirm(true),
+    },
+    {
+      label: 'Match existing files',
+      icon: faIcon('fass', 'file-import'),
+      disabled: existingFilesProfiles.length === 0,
+      disabledReason: existingFilesProfiles.length === 0 ? 'Add a Local Media Profile first.' : undefined,
+      onSelect: () => setExistingFilesProfileId(existingFilesProfiles[0]?.id ?? null),
+    },
+    {
+      label: 'Bulk delete downloads',
+      icon: faIcon('fass', 'trash'),
+      tone: 'danger',
+      disabled: deleteDownloadsDisabledReason !== undefined,
+      disabledReason: deleteDownloadsDisabledReason,
+      operation: deleteDownloadsOperation,
+      starting: isStarting('collection.delete_downloads'),
+      controls: operationControls(deleteDownloadsOperation?.id, 'bulk delete downloads'),
+      onSelect: () => setDeleteDownloadsConfirm(true),
+    },
+    {
+      label: 'Bulk delete and re-download',
+      icon: faIcon('fass', 'trash'),
+      tone: 'danger',
+      disabled: redownloadDisabledReason !== undefined,
+      disabledReason: redownloadDisabledReason,
+      operation: redownloadOperation,
+      starting: isStarting('collection.redownload_episodes'),
+      controls: operationControls(redownloadOperation?.id, 'bulk delete and re-download', false),
+      onSelect: () => setRedownloadConfirm(true),
+    },
+    {
+      label: 'Create download profile',
+      icon: faIcon('fass', 'download'),
+      separatorBefore: true,
+      href: `/add-download-profile?collection=${encodeURIComponent(id)}`,
+    },
+    {
+      label: 'Create stream profile',
+      icon: faIcon('fass', 'rss'),
+      href: `/add-stream-profile?collection=${encodeURIComponent(id)}`,
+    },
+    ]
+
   const openOnName = collection.site?.name ?? (sources.get(collection.sourceKey)?.domains.includes('*') ? siteName(collection.sharingUrl) ?? sources.name(collection.sourceKey) : sources.name(collection.sourceKey))
 
   return (
@@ -546,92 +633,7 @@ export default function CollectionPage() {
               <FontAwesomeIcon icon={faIcon('fass', 'pen-to-square')} aria-hidden="true"/>
               <span>Edit</span>
             </Link>
-            <ActionMenu
-              items={[
-                {
-                  label: 'Sync log',
-                  icon: faIcon('fass', 'clock-rotate-left'),
-                  onSelect: () => setSyncLogOpen(true),
-                },
-                {
-                  label: 'Bulk download',
-                  icon: faIcon('fass', 'download'),
-                  disabled: downloadAllBusy,
-                  disabledReason: downloadAllBusy ? `A bulk download is running for ${collection.title}.` : undefined,
-                  operation: downloadAllOperation,
-                  starting: isStarting('collection.download_all'),
-                  controls: operationControls(downloadAllOperation?.id, 'bulk download'),
-                  onSelect: () => setDownloadAllConfirm(true),
-                },
-                ...(lockedCount ? [{
-                  label: `Check locked videos again (${lockedCount})`,
-                  icon: faIcon('fass', 'unlock') as [string, string],
-                  disabled: lockedCheckBusy,
-                  disabledReason: lockedCheckBusy ? 'The locked videos are being checked again.' : undefined,
-                  onSelect: () => void checkLockedAgain(),
-                }] : []),
-                ...(sourceControls(collection).metadataRefresh ? [{
-                  label: 'Refresh all metadata',
-                  icon: faIcon('fass', 'clipboard-list') as [string, string],
-                  disabled: metadataRefreshBusy,
-                  disabledReason: metadataRefreshDisabledReason,
-                  operation: metadataRefreshOperation,
-                  starting: isStarting('collection.refresh_metadata'),
-                  controls: operationControls(metadataRefreshOperation?.id, 'metadata refresh'),
-                  onSelect: () => setMetadataRefreshConfirm(true),
-                }] : []),
-                {
-                  label: 'Rename all episode files',
-                  icon: faIcon('fass', 'file-pen'),
-                  disabled: fileRenameDisabledReason !== undefined,
-                  disabledReason: fileRenameDisabledReason,
-                  operation: fileRenameOperation,
-                  starting: isStarting('collection.rename_files'),
-                  controls: operationControls(fileRenameOperation?.id, 'File Rename'),
-                  onSelect: () => setFileRenameConfirm(true),
-                },
-                {
-                  label: 'Match existing files',
-                  icon: faIcon('fass', 'file-import'),
-                  disabled: existingFilesProfiles.length === 0,
-                  disabledReason: existingFilesProfiles.length === 0 ? 'Add a Local Media Profile first.' : undefined,
-                  onSelect: () => setExistingFilesProfileId(existingFilesProfiles[0]?.id ?? null),
-                },
-                {
-                  label: 'Bulk delete downloads',
-                  icon: faIcon('fass', 'trash'),
-                  tone: 'danger',
-                  disabled: deleteDownloadsDisabledReason !== undefined,
-                  disabledReason: deleteDownloadsDisabledReason,
-                  operation: deleteDownloadsOperation,
-                  starting: isStarting('collection.delete_downloads'),
-                  controls: operationControls(deleteDownloadsOperation?.id, 'bulk delete downloads'),
-                  onSelect: () => setDeleteDownloadsConfirm(true),
-                },
-                {
-                  label: 'Bulk delete and re-download',
-                  icon: faIcon('fass', 'trash'),
-                  tone: 'danger',
-                  disabled: redownloadDisabledReason !== undefined,
-                  disabledReason: redownloadDisabledReason,
-                  operation: redownloadOperation,
-                  starting: isStarting('collection.redownload_episodes'),
-                  controls: operationControls(redownloadOperation?.id, 'bulk delete and re-download', false),
-                  onSelect: () => setRedownloadConfirm(true),
-                },
-                {
-                  label: 'Create download profile',
-                  icon: faIcon('fass', 'download'),
-                  separatorBefore: true,
-                  href: `/add-download-profile?collection=${encodeURIComponent(id)}`,
-                },
-                {
-                  label: 'Create stream profile',
-                  icon: faIcon('fass', 'rss'),
-                  href: `/add-stream-profile?collection=${encodeURIComponent(id)}`,
-                },
-              ]}
-            />
+            <ActionMenu items={actionItems}/>
               </>
             )}
           </div>
@@ -644,11 +646,24 @@ export default function CollectionPage() {
             />
           )}
 
-          <CollectionIndexingProgress
-            collectionId={collection.id}
-            collectionSlug={collection.slug}
-            pollForStart={total === 0}
-            className="collection-page-indexing"
+          <RunningActions
+            className="collection-page-running-actions"
+            actions={[
+              {
+                label: 'Indexing',
+                icon: faIcon('fass', 'list'),
+                operation: indexingOperation,
+                status: indexingOperation ? presentIndexingStatus(indexingOperation) ?? undefined : undefined,
+              },
+              {
+                label: 'Sync',
+                icon: faIcon('fass', 'arrows-rotate'),
+                operation: syncOperation,
+                starting: syncStarting,
+                status: syncOperation ? presentScanningStatus(syncOperation) ?? undefined : undefined,
+              },
+              ...actionItems,
+            ]}
           />
 
           {(attachedDownloadProfiles.length > 0 || attachedStreamProfiles.length > 0) && (
