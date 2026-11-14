@@ -124,6 +124,17 @@ export default function OperationNotifier({
   // finished meanwhile, so the operations a pull brings are refreshed,
   // acknowledged and pulled again together: one round for all of them.
   useEffect(() => {
+    // Toasts that finished operations made obsolete, such as the offer of a
+    // file that has since been downloaded here, in another tab or on another
+    // device. Their toasts close, and are not shown if they had not been yet.
+    const obsoleteToasts = new Set<string>()
+    for (const operation of operations) {
+      if (operation.status !== 'SUCCEEDED') continue
+      const toastId = definitions[operation.kind]?.dismissesToast?.(operation)
+      if (toastId) obsoleteToasts.add(toastId)
+    }
+    for (const toastId of obsoleteToasts) toast.dismiss(toastId)
+
     const finished: TaskOperationRead[] = []
     for (const operation of operations) {
       if (
@@ -140,7 +151,9 @@ export default function OperationNotifier({
         const action = operation.status === 'SUCCEEDED'
           ? definitions[operation.kind]?.successAction?.(operation)
           : undefined
-        if (action) {
+        if (action?.toastId && obsoleteToasts.has(action.toastId)) {
+          // Already done, so nothing left to offer.
+        } else if (action) {
           // Long enough to come back to the tab and press it.
           toast.success((t) => (
             <span className="toast-with-action">
@@ -155,7 +168,7 @@ export default function OperationNotifier({
                 <FontAwesomeIcon icon={faIcon('fass', 'xmark')} aria-hidden="true"/>
               </button>
             </span>
-          ), {duration: 60_000})
+          ), {id: action.toastId, duration: 60_000})
         } else if (operation.status === 'SUCCEEDED') {
           toast.success(message, {duration: 5000})
         } else if (operation.status === 'PARTIAL' || operation.status === 'CANCELED') {

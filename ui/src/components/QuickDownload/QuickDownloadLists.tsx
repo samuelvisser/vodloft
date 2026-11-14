@@ -10,6 +10,7 @@ import {
     quickDownloadFileUrl,
     quickDownloadHistoryQueryKey,
     quickDownloadsQueryKey,
+    quickDownloadToastId,
     removeQuickDownload,
 } from '../../lib/quickDownloads'
 import {formatBytes} from '../../utils/formatting'
@@ -139,7 +140,8 @@ export function QuickReadyList({ready}: {ready: QuickDownloadReady[]}) {
                             </small>
                         </span>
                         <span className="quick-list-actions">
-                            <a className="btn btn-primary" href={quickDownloadFileUrl(item.id)} download={item.fileName}>
+                            <a className="btn btn-primary" href={quickDownloadFileUrl(item.id)} download={item.fileName}
+                               onClick={() => toast.dismiss(quickDownloadToastId(item.id))}>
                                 <FontAwesomeIcon icon={faIcon('fass', 'download')}/>
                                 Download file
                             </a>
