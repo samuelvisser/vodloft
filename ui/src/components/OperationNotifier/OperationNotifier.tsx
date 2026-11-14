@@ -115,9 +115,10 @@ export default function OperationNotifier({
     previousActiveRef.current = currentActive
   }, [operations, pullData, queryClient])
 
-  // Every terminal operation stays in the generic pull until a frontend has
-  // processed the domain-data refresh it implies. UI operations additionally get
-  // a toast; automated/API work is acknowledged silently after invalidation.
+  // A finished operation's domain-data refresh runs in every browser that sees
+  // it. An operation started from the UI also gets a toast and stays in the pull
+  // until a browser acknowledges that toast; automated and API work leaves the
+  // pull by itself a while after it finished.
   //
   // A page opened after a quiet night finds everything the scheduled work
   // finished meanwhile, so the operations a pull brings are refreshed,
@@ -167,7 +168,7 @@ export default function OperationNotifier({
     if (finished.length === 0) return
 
     const unseen = finished
-      .filter((operation) => !operation.notificationSeenAt)
+      .filter((operation) => operation.source === 'UI' && !operation.notificationSeenAt)
       .map((operation) => operation.id)
     void (async () => {
       try {

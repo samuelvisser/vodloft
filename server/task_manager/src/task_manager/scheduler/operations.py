@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from math import isfinite
 from typing import Any, Iterable, Sequence
 from uuid import uuid4
@@ -41,6 +41,9 @@ _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.RUNNING.value,
     OperationStatus.WAITING.value,
 }
+# How long finished work that nobody started from the UI stays in the pull, so
+# the browsers open meanwhile see it finish and refresh what it changed.
+FINISHED_WORK_RELEVANT_FOR = timedelta(minutes=10)
 _TERMINAL_TASK_STATUSES = {
     TaskStatus.SUCCEEDED,
     TaskStatus.FAILED,
@@ -1062,9 +1065,21 @@ def list_operations(
             statement = statement.where(TaskOperation.kind == kind)
         order_by = [TaskOperation.created_at.desc()]
         if relevant:
+            # What a person started stays until a browser has shown its
+            # notification. Work nobody started from the UI only needs to be
+            # seen by the browsers open while it finishes, to refresh what it
+            # changed; one opened later loads everything fresh anyway.
+            finished_after = datetime.now(timezone.utc) - FINISHED_WORK_RELEVANT_FOR
             statement = statement.where(
                 (TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES))
-                | (TaskOperation.notification_seen_at.is_(None))
+                | (
+                    (TaskOperation.source == OperationSource.UI.value)
+                    & TaskOperation.notification_seen_at.is_(None)
+                )
+                | (
+                    (TaskOperation.source != OperationSource.UI.value)
+                    & (func.coalesce(TaskOperation.finished_at, TaskOperation.updated_at) >= finished_after)
+                )
             )
             # One bulk action can create thousands of child operations, more
             # than the limit. The operations a person started and the work
