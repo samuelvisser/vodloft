@@ -3,11 +3,11 @@ import {test} from 'node:test'
 import {renderToStaticMarkup} from 'react-dom/server'
 import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@fortawesome/free-solid-svg-icons'
-import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
+import {QueryClient, QueryClientProvider, QueryObserver} from '@tanstack/react-query'
 import FrontendPuller from '../src/lib/puller'
 import {isPublicationDelayWait, presentDownloadProgress} from '../src/lib/downloadProgress'
 import {presentOperationProgress} from '../src/lib/operationProgress'
-import {invalidateForOperation} from '../src/lib/operationDefinitions'
+import {invalidateForOperations} from '../src/lib/operationDefinitions'
 import {reconcileOperationSnapshots} from '../src/lib/operationSnapshots'
 import ProgressBar from '../src/components/common/ProgressBar'
 import DownloadProgressStatus from '../src/components/DownloadProgress/DownloadProgressStatus'
@@ -159,10 +159,22 @@ test('media download completion invalidates cached history for that download', a
     client.setQueryData(history50,{items:[]})
     client.setQueryData(history100,{items:[]})
     client.setQueryData(otherHistory,{items:[]})
-    await invalidateForOperation(client,operation({status:'SUCCEEDED'}))
+    await invalidateForOperations(client,[operation({status:'SUCCEEDED'})])
     assert.equal(client.getQueryState(history50)?.isInvalidated,true)
     assert.equal(client.getQueryState(history100)?.isInvalidated,true)
     assert.equal(client.getQueryState(otherHistory)?.isInvalidated,false)
+})
+test('operations that finished together refresh a shared query once', async()=>{
+    const client=new QueryClient()
+    let fetches=0
+    const observer=new QueryObserver(client,{queryKey:['mediaDownloadsView'],queryFn:async()=>++fetches,staleTime:Infinity})
+    const unsubscribe=observer.subscribe(()=>{})
+    await observer.refetch()
+    fetches=0
+    const finished=Array.from({length:30},(_,index)=>operation({id:`download-${index}`,resourceId:index,status:'SUCCEEDED'}))
+    await invalidateForOperations(client,finished)
+    assert.equal(fetches,1)
+    unsubscribe()
 })
 test('application version remains readable from a future incompatible pull payload',()=>{
     const incompatible={appVersion:'2.0.0',mode:'future',data:null}

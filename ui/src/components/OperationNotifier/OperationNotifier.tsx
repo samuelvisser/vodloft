@@ -11,7 +11,7 @@ import {toast} from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {type TaskOperationRead} from '../../types/schemas/operation'
-import {invalidateForOperation} from '../../lib/operationInvalidation'
+import {invalidateForOperations} from '../../lib/operationInvalidation'
 import {refreshFrontendPuller, useFrontendPuller} from '../../lib/puller'
 import {type OperationNotificationDefinitions} from './OperationNotificationDefinitions'
 import {apiUrl} from '../../lib/api'
@@ -33,11 +33,13 @@ const OperationContext = createContext<OperationContextValue>({
   findActive: () => undefined,
 })
 
-async function markSeen(operationId: string): Promise<void> {
+async function markSeen(operationIds: string[]): Promise<void> {
   const base = apiUrl()
-  const response = await fetch(`${base}/operations/${encodeURIComponent(operationId)}/seen`, {
+  const response = await fetch(`${base}/operations/seen`, {
     method: 'POST',
     credentials: 'include',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({operationIds}),
   })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
 }
@@ -106,17 +108,23 @@ export default function OperationNotifier({
         .map((operation) => [operation.id, operation]),
     )
 
-    for (const [operationId, previous] of previousActiveRef.current) {
-      if (currentActive.has(operationId) || currentById.has(operationId)) continue
-      void invalidateForOperation(queryClient, previous)
-    }
+    const vanished = [...previousActiveRef.current]
+      .filter(([operationId]) => !currentActive.has(operationId) && !currentById.has(operationId))
+      .map(([, previous]) => previous)
+    void invalidateForOperations(queryClient, vanished)
     previousActiveRef.current = currentActive
   }, [operations, pullData, queryClient])
 
-  // Every terminal operation stays in the generic pull until a frontend has
-  // processed the domain-data refresh it implies. UI operations additionally get
-  // a toast; automated/API work is acknowledged silently after invalidation.
+  // A finished operation's domain-data refresh runs in every browser that sees
+  // it. An operation started from the UI also gets a toast and stays in the pull
+  // until a browser acknowledges that toast; automated and API work leaves the
+  // pull by itself a while after it finished.
+  //
+  // A page opened after a quiet night finds everything the scheduled work
+  // finished meanwhile, so the operations a pull brings are refreshed,
+  // acknowledged and pulled again together: one round for all of them.
   useEffect(() => {
+    const finished: TaskOperationRead[] = []
     for (const operation of operations) {
       if (
         !TERMINAL_STATUSES.has(operation.status)
@@ -126,6 +134,7 @@ export default function OperationNotifier({
       }
 
       handledRef.current.add(operation.id)
+      finished.push(operation)
       if (operation.source === 'UI' && !operation.notificationSeenAt) {
         const message = terminalMessage(operation, definitions)
         const action = operation.status === 'SUCCEEDED'
@@ -155,20 +164,24 @@ export default function OperationNotifier({
           toast.error(message, {duration: 6000})
         }
       }
-
-      void (async () => {
-        try {
-          await invalidateForOperation(queryClient, operation)
-          if (!operation.notificationSeenAt) {
-            await markSeen(operation.id)
-            await refreshFrontendPuller(queryClient)
-          }
-        } catch {
-          // Leave an unacknowledged operation durable server-side so a later
-          // browser reload can retry the cache refresh/acknowledgement path.
-        }
-      })()
     }
+    if (finished.length === 0) return
+
+    const unseen = finished
+      .filter((operation) => operation.source === 'UI' && !operation.notificationSeenAt)
+      .map((operation) => operation.id)
+    void (async () => {
+      try {
+        await invalidateForOperations(queryClient, finished)
+        if (unseen.length > 0) {
+          await markSeen(unseen)
+          await refreshFrontendPuller(queryClient)
+        }
+      } catch {
+        // Leave unacknowledged operations durable server-side so a later
+        // browser reload can retry the cache refresh/acknowledgement path.
+      }
+    })()
   }, [definitions, operations, queryClient])
 
   const value = useMemo<OperationContextValue>(() => ({

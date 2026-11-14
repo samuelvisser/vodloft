@@ -217,12 +217,17 @@ def test_users_only_see_their_own_operations(app):
 
     assert [operation["id"] for operation in downloader.get("/api/operations").json()] == ["mine"]
     assert downloader.get("/api/operations/theirs").status_code == 404
-    assert downloader.post("/api/operations/theirs/seen").status_code == 404
     assert [operation["id"] for operation in downloader.get("/api/pull").json()["data"]["operations"]] == ["mine"]
+
+    # Acknowledging marks only the operations this user may see.
+    assert downloader.post("/api/operations/seen", json={"operationIds": ["mine", "theirs"]}).status_code == 204
 
     admin = TestClient(app)
     admin.post("/api/auth/login", json={"username": "admin", "passwordHash": derive_admin_password_client_value("admin-password")})
-    assert {operation["id"] for operation in admin.get("/api/operations").json()} == {"mine", "theirs"}
+    seen = {operation["id"]: operation["notificationSeenAt"] for operation in admin.get("/api/operations").json()}
+    assert seen.keys() == {"mine", "theirs"}
+    assert seen["mine"] is not None
+    assert seen["theirs"] is None
 
 
 def test_operations_remember_who_asked(app):
