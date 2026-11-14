@@ -5,6 +5,7 @@ busy server is usually waiting for those threads, not for its own query, so its 
 timings do not explain it. While a request waits longer than a second, this samples
 where every other thread is and logs the ones that are working: every second at first,
 then less and less often, so a request that waits a minute still shows what held it up.
+All of it is logged at DEBUG, so it shows only when the log level is DEBUG.
 """
 
 from __future__ import annotations
@@ -44,9 +45,14 @@ _lock = threading.Lock()
 _watcher: threading.Thread | None = None
 
 
+def _logging() -> bool:
+    """Whether the log level is DEBUG. These diagnostics are too much for an ordinary log."""
+    return logger.isEnabledFor(logging.DEBUG)
+
+
 def _say(message: str) -> None:
     """Into VODLoft's own log and the server's output, where `docker logs` shows it."""
-    logger.warning(message)
+    logger.debug(message)
     print(message, file=sys.stderr, flush=True)
 
 
@@ -109,7 +115,7 @@ def _watch() -> None:
             ]
             for request in due:
                 request.samples += 1
-        if not due:
+        if not due or not _logging():
             continue
         lines = working_threads(skip=frozenset({threading.get_ident()}))
         waiting = ", ".join(f"{request.method} {request.path} ({now - request.started:.1f}s)" for request in due)
@@ -150,7 +156,7 @@ class SlowRequestMiddleware:
                 if _requests.pop(request_id, None) is None:
                     return
             took = time.monotonic() - request.started
-            if took >= SLOW_REQUEST_SECONDS:
+            if took >= SLOW_REQUEST_SECONDS and _logging():
                 _say(f"Slow request: {request.method} {request.path} answered after {took:.1f}s")
 
         async def send_and_time(message) -> None:
