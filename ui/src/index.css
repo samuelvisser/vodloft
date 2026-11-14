@@ -1157,6 +1157,19 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
     color: var(--muted);
     font-size: 13px;
   }
+  /* A summary with a title spans the whole card, so the line under the title
+     can run beneath the chevron. Only the title keeps clear of it. */
+  .mobile-data-summary:has(.mobile-summary-title) .mobile-data-summary-content {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .mobile-data-summary:has(.mobile-summary-title) .mobile-data-chevron {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .mobile-data-card:not(.bulk-card) .mobile-summary-title {
+    padding-right: 24px;
+  }
   .mobile-data-details {
     border-top: 1px solid #e2e8f0;
     background: #fafbfc;
