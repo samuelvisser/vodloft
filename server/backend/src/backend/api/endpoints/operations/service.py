@@ -15,7 +15,7 @@ from task_manager.tasks.media_download_operations import (
 from task_manager.scheduler.operations import (
     get_operation as get_task_operation,
     list_operations as list_task_operations,
-    mark_operation_seen as mark_task_operation_seen,
+    mark_operations_seen as mark_task_operations_seen,
 )
 
 
@@ -60,10 +60,12 @@ def get_operation(access: Access, operation_id: str) -> TaskOperationRead | None
     return _read(snapshot)
 
 
-def mark_operation_seen(access: Access, operation_id: str) -> TaskOperationRead | None:
-    if get_operation(access, operation_id) is None:
-        return None
-    return _read(mark_task_operation_seen(operation_id))
+def mark_operations_seen(access: Access, operation_ids: list[str]) -> None:
+    """Acknowledge the operations this user may see; the ids of others are left alone."""
+    mark_task_operations_seen(
+        operation_ids,
+        requested_by_user_id=None if access.allows(Area.TASKS) else access.user_id or -1,
+    )
 
 
 def cancel_operation(operation_id: str) -> TaskOperationRead | None:

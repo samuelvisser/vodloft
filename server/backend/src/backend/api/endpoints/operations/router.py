@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
-from backend.api.models.operations import TaskOperationRead
+from backend.api.models.operations import OperationsSeenRequest, TaskOperationRead
 from .service import (
     cancel_operation,
     get_operation,
     list_operations,
-    mark_operation_seen,
+    mark_operations_seen,
     restart_operation,
 )
 from backend.security.access import Access, Area, Level
@@ -42,18 +42,16 @@ def operations(
     )
 
 
+@router.post("/seen", status_code=204)
+def operations_seen(body: OperationsSeenRequest, access: Access = signed_in()):
+    """Acknowledge finished operations after their notifications were shown, all in one go."""
+    mark_operations_seen(access, body.operation_ids)
+    return Response(status_code=204)
+
+
 @router.get("/{operation_id}", response_model=TaskOperationRead)
 def operation(operation_id: str, access: Access = signed_in()):
     result = get_operation(access, operation_id)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Operation not found")
-    return result
-
-
-@router.post("/{operation_id}/seen", response_model=TaskOperationRead)
-def operation_seen(operation_id: str, access: Access = signed_in()):
-    """Acknowledge a terminal UI operation after its notification was presented."""
-    result = mark_operation_seen(access, operation_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Operation not found")
     return result

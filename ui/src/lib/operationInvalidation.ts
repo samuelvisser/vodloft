@@ -1,1 +1,1 @@
-export {invalidateForOperation} from './operationDefinitions'
+export {invalidateForOperations} from './operationDefinitions'
