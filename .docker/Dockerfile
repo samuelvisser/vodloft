@@ -28,7 +28,8 @@ RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
             --no-fund; \
     fi
 
-# Optional label shown after the version number, e.g. "PR#15" -> "0.1.0 PR#15".
+# Optional label shown after the version number, e.g. "PR#15" -> "0.1.0 PR#15". It may hold a
+# branch name such as "pre-release/0.8.0", so sed uses | and the label's |, & and \ are escaped.
 # Test deployments use it to show which build is running. Declared only after
 # npm ci on purpose: every RUN after an ARG has that ARG in its cache key, so a
 # label that changes per deploy would otherwise reinstall all packages each time.
@@ -37,7 +38,8 @@ ARG VODLOFT_BUILD_LABEL=
 # Give Vite the correct application version to bake in
 COPY pyproject.toml /pyproject.toml
 RUN if [ -n "$VODLOFT_BUILD_LABEL" ]; then \
-        sed -i -E "s/^version = \"([^\"]*)\"/version = \"\1 ${VODLOFT_BUILD_LABEL}\"/" /pyproject.toml; \
+        label=$(printf '%s' "$VODLOFT_BUILD_LABEL" | sed -e 's/[\\|&]/\\&/g'); \
+        sed -i -E "s|^version = \"([^\"]*)\"|version = \"\1 $label\"|" /pyproject.toml; \
     fi
 COPY ui/ ./
 
@@ -87,7 +89,8 @@ RUN --mount=type=cache,id=vodloft-uv,target=/root/.cache/uv,sharing=locked \
 # Applied after uv sync: the labelled version is for display only, not a valid package version.
 ARG VODLOFT_BUILD_LABEL=
 RUN if [ -n "$VODLOFT_BUILD_LABEL" ]; then \
-        sed -i -E "s/^version = \"([^\"]*)\"/version = \"\1 ${VODLOFT_BUILD_LABEL}\"/" pyproject.toml; \
+        label=$(printf '%s' "$VODLOFT_BUILD_LABEL" | sed -e 's/[\\|&]/\\&/g'); \
+        sed -i -E "s|^version = \"([^\"]*)\"|version = \"\1 $label\"|" pyproject.toml; \
     fi
 
 # Default config seed, copied into the /config volume on first run if missing.
