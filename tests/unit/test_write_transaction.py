@@ -266,3 +266,28 @@ def test_reserved_work_takes_its_turn_before_it_reads_and_runs_once(wal_database
     holder.join(5)
     thread.join(5)
     assert len(runs) == 1
+
+
+def test_finished_automated_work_leaves_the_pull_by_itself(task_database):
+    from datetime import datetime, timedelta, timezone
+
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operations import FINISHED_WORK_RELEVANT_FOR, list_operations
+
+    now = datetime.now(timezone.utc)
+    old = now - FINISHED_WORK_RELEVANT_FOR - timedelta(minutes=1)
+    with task_database() as session:
+        for op_id, source, finished_at in (
+            ("ui-old", "UI", old),
+            ("system-old", "SYSTEM", old),
+            ("system-new", "SYSTEM", now),
+        ):
+            session.add(TaskOperation(
+                id=op_id, kind="example", source=source, resource_type="system", resource_id=None,
+                title=op_id, status="SUCCEEDED", finished_at=finished_at,
+            ))
+        session.commit()
+
+    # A notification for what a person started waits for a browser; automated
+    # work only stays while browsers that are open could still see it finish.
+    assert {snapshot.id for snapshot in list_operations(relevant=True)} == {"ui-old", "system-new"}
