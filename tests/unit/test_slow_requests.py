@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import time
 
@@ -7,11 +8,24 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
-def test_a_slow_request_logs_the_threads_that_were_working(monkeypatch, capsys):
+def _slow_app(slow_requests, seconds: float) -> FastAPI:
+    app = FastAPI()
+    app.add_middleware(slow_requests.SlowRequestMiddleware)
+
+    @app.get("/api/slow")
+    def slow():
+        time.sleep(seconds)
+        return {}
+
+    return app
+
+
+def test_a_slow_request_logs_the_threads_that_were_working(monkeypatch, capsys, caplog):
     """A request that is slow on a busy server waits for task threads, so the log has to say
     what those were doing: the request's own timings do not explain it."""
     from backend import slow_requests
 
+    caplog.set_level(logging.DEBUG, logger=slow_requests.__name__)
     monkeypatch.setattr(slow_requests, "SLOW_REQUEST_SECONDS", 0.2)
     monkeypatch.setattr(slow_requests, "_SAMPLE_EVERY_SECONDS", 0.2)
 
@@ -38,10 +52,11 @@ def test_a_slow_request_logs_the_threads_that_were_working(monkeypatch, capsys):
     assert "/api/fast" not in logged
 
 
-def test_a_request_that_waits_long_is_still_sampled_after_the_first_seconds(monkeypatch, capsys):
+def test_a_request_that_waits_long_is_still_sampled_after_the_first_seconds(monkeypatch, capsys, caplog):
     """What holds a request up for a minute is often not what held it up in its first seconds."""
     from backend import slow_requests
 
+    caplog.set_level(logging.DEBUG, logger=slow_requests.__name__)
     monkeypatch.setattr(slow_requests, "SLOW_REQUEST_SECONDS", 0.1)
     monkeypatch.setattr(slow_requests, "_SAMPLE_EVERY_SECONDS", 0.1)
 
@@ -58,6 +73,21 @@ def test_a_request_that_waits_long_is_still_sampled_after_the_first_seconds(monk
 
     # A sample a second apart at first (here a tenth), then one after twice as long.
     assert capsys.readouterr().err.count("Still waiting for GET /api/long") == 4
+
+
+def test_a_slow_request_is_only_logged_at_debug(monkeypatch, capsys, caplog):
+    """At the ordinary INFO level these diagnostics would fill the log."""
+    from backend import slow_requests
+
+    caplog.set_level(logging.INFO, logger=slow_requests.__name__)
+    monkeypatch.setattr(slow_requests, "SLOW_REQUEST_SECONDS", 0.1)
+    monkeypatch.setattr(slow_requests, "_SAMPLE_EVERY_SECONDS", 0.1)
+
+    with TestClient(_slow_app(slow_requests, 0.4)) as client:
+        assert client.get("/api/slow").status_code == 200
+
+    assert "/api/slow" not in capsys.readouterr().err
+    assert "/api/slow" not in caplog.text
 
 
 def test_pool_workers_waiting_for_work_are_left_out_of_the_working_threads():

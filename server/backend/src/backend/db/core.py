@@ -524,6 +524,8 @@ def is_lock_conflict(error: BaseException) -> bool:
 
 
 def _log_slow_write(work: Callable, turn: _WriteTurn | None) -> None:
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
     if turn is None or turn.began is None or turn.asked is None or turn.ended is None:
         return
     waited, held = turn.began - turn.asked, turn.ended - turn.began
@@ -533,7 +535,7 @@ def _log_slow_write(work: Callable, turn: _WriteTurn | None) -> None:
     committed = turn.ended - max(turn.committing, turn.began) if turn.committing is not None else 0.0
     code = getattr(work, "__code__", None)
     where = f"{code.co_filename.rsplit('/src/', 1)[-1]}:{code.co_firstlineno}" if code else repr(work)
-    logger.warning(
+    logger.debug(
         "Slow %s write transaction %s (%s): waited %.1fs for its turn, held it %.1fs, %.1fs of that to commit",
         turn.priority, getattr(work, "__qualname__", "?"), where, waited, held, committed,
     )
