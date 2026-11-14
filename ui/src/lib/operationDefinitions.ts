@@ -1,4 +1,4 @@
-import {type QueryClient} from '@tanstack/react-query'
+import {partialMatchKey, type QueryClient, type QueryKey} from '@tanstack/react-query'
 
 import {PUBLISH_STATUS_LABELS} from '../types/episode'
 import {type TaskOperationRead} from '../types/schemas/operation'
@@ -24,9 +24,9 @@ export type OperationNotificationDefinitions = Readonly<
   Record<string, OperationNotificationDefinition>
 >
 
-type InvalidationCollector = Promise<unknown>[]
+/** The query keys an operation's outcome makes stale; each matches its key and every longer one. */
+type InvalidationCollector = QueryKey[]
 type OperationInvalidation = (
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) => void
@@ -94,76 +94,70 @@ function fileRenameSuccessMessage(operation: TaskOperationRead, title: string): 
 }
 
 function invalidateCollectionEpisodeQueries(
-  queryClient: QueryClient,
   collectionSlug: string,
   invalidations: InvalidationCollector,
 ) {
   removeEpisodePreviewFromStorage(collectionSlug)
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: episodeQueryKeys.forCollection(collectionSlug)}),
+    episodeQueryKeys.forCollection(collectionSlug),
   )
 }
 
 function invalidateCollectionEpisodeData(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
   const collectionSlug = contextString(operation, 'collection_slug')
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['collections']}),
-    queryClient.invalidateQueries({queryKey: ['collectionsView']}),
+    ['collections'],
+    ['collectionsView'],
   )
   if (collectionSlug) {
-    invalidations.push(queryClient.invalidateQueries({queryKey: ['collection', collectionSlug]}))
-    invalidateCollectionEpisodeQueries(queryClient, collectionSlug, invalidations)
+    invalidations.push(['collection', collectionSlug])
+    invalidateCollectionEpisodeQueries(collectionSlug, invalidations)
   }
 }
 
 function invalidateCollectionStructure(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateCollectionEpisodeData(queryClient, operation, invalidations)
+  invalidateCollectionEpisodeData(operation, invalidations)
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['recentlyIndexedEpisodes']}),
+    ['recentlyIndexedEpisodes'],
   )
   const collectionSlug = contextString(operation, 'collection_slug')
   if (!collectionSlug) return
 
   removeSeasonsFromStorage(collectionSlug)
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['seasons', collectionSlug]}),
+    ['seasons', collectionSlug],
   )
 }
 
 function invalidateCollectionFiles(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
   const collectionSlug = contextString(operation, 'collection_slug')
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+    ['mediaDownloads'],
+    ['mediaDownloadsView'],
   )
   if (collectionSlug) {
-    invalidations.push(queryClient.invalidateQueries({queryKey: ['collectionDownloads', collectionSlug]}))
+    invalidations.push(['collectionDownloads', collectionSlug])
   }
 }
 
 function invalidateCollectionDownloadDeletion(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateCollectionFiles(queryClient, operation, invalidations)
-  invalidations.push(queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}))
+  invalidateCollectionFiles(operation, invalidations)
+  invalidations.push(['downloadProfilesView'])
 }
 
 function invalidateEpisode(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
@@ -171,90 +165,84 @@ function invalidateEpisode(
   const resultEpisodeSlug = resultString(operation, 'episode_slug')
   const collectionSlug = contextString(operation, 'collection_slug')
   if (episodeSlug) {
-    invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}))
+    invalidations.push(['episode', episodeSlug])
   }
   if (resultEpisodeSlug && resultEpisodeSlug !== episodeSlug) {
-    invalidations.push(queryClient.invalidateQueries({queryKey: ['episode', resultEpisodeSlug]}))
+    invalidations.push(['episode', resultEpisodeSlug])
   }
   if (collectionSlug) {
-    invalidateCollectionEpisodeQueries(queryClient, collectionSlug, invalidations)
+    invalidateCollectionEpisodeQueries(collectionSlug, invalidations)
   }
 }
 
 function invalidateMovie(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
   const movieSlug = contextString(operation, 'movie_slug')
-  invalidations.push(queryClient.invalidateQueries({queryKey: ['movies']}))
+  invalidations.push(['movies'])
   if (movieSlug) {
     invalidations.push(
-      queryClient.invalidateQueries({queryKey: ['dailywireMovie', movieSlug]}),
+      ['dailywireMovie', movieSlug],
     )
   }
 }
 
 function invalidateMovieFiles(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateMovie(queryClient, operation, invalidations)
+  invalidateMovie(operation, invalidations)
   const movieSlug = contextString(operation, 'movie_slug')
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+    ['mediaDownloads'],
+    ['mediaDownloadsView'],
   )
   if (movieSlug) {
-    invalidations.push(queryClient.invalidateQueries({queryKey: ['movieDownloads', movieSlug]}))
+    invalidations.push(['movieDownloads', movieSlug])
   }
 }
 
 function invalidateLocalMediaProfileFiles(
-  queryClient: QueryClient,
   _operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
-    queryClient.invalidateQueries({queryKey: ['episodeDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['movieDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['collectionDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['localMediaProfiles']}),
-    queryClient.invalidateQueries({queryKey: ['localMediaProfile']}),
-    queryClient.invalidateQueries({queryKey: ['localMediaProfileView']}),
+    ['mediaDownloads'],
+    ['mediaDownloadsView'],
+    ['episodeDownloads'],
+    ['movieDownloads'],
+    ['collectionDownloads'],
+    ['localMediaProfiles'],
+    ['localMediaProfile'],
+    ['localMediaProfileView'],
   )
 }
 
 function invalidateLocalMediaProfileDownloadDeletion(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateLocalMediaProfileFiles(queryClient, operation, invalidations)
+  invalidateLocalMediaProfileFiles(operation, invalidations)
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}),
-    queryClient.invalidateQueries({queryKey: ['downloadProfilesByCollectionSlug']}),
+    ['downloadProfilesView'],
+    ['downloadProfilesByCollectionSlug'],
   )
 }
 
 function invalidateDownloadProfileOutOfScope(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateLocalMediaProfileDownloadDeletion(queryClient, operation, invalidations)
+  invalidateLocalMediaProfileDownloadDeletion(operation, invalidations)
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['downloadProfileView']}),
-    queryClient.invalidateQueries({queryKey: ['downloadProfileStatistics']}),
-    queryClient.invalidateQueries({queryKey: ['downloadProfileOutOfScope']}),
+    ['downloadProfileView'],
+    ['downloadProfileStatistics'],
+    ['downloadProfileOutOfScope'],
   )
 }
 
 function invalidateMediaDownload(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
@@ -263,38 +251,37 @@ function invalidateMediaDownload(
   const movieSlug = contextString(operation, 'movie_slug')
 
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+    ['mediaDownloads'],
+    ['mediaDownloadsView'],
   )
   if (operation.resourceId != null) {
     invalidations.push(
-      queryClient.invalidateQueries({queryKey: ['mediaDownloadHistory', operation.resourceId]}),
+      ['mediaDownloadHistory', operation.resourceId],
     )
   }
   if (episodeSlug) {
     invalidations.push(
-      queryClient.invalidateQueries({queryKey: ['episodeDownloads', episodeSlug]}),
+      ['episodeDownloads', episodeSlug],
     )
   }
   if (collectionSlug) {
     invalidations.push(
-      queryClient.invalidateQueries({queryKey: ['collectionDownloads', collectionSlug]}),
+      ['collectionDownloads', collectionSlug],
     )
   }
   if (movieSlug) {
     invalidations.push(
-      queryClient.invalidateQueries({queryKey: ['movieDownloads', movieSlug]}),
-      queryClient.invalidateQueries({queryKey: ['movies']}),
+      ['movieDownloads', movieSlug],
+      ['movies'],
     )
   }
 }
 
 function invalidateQuickDownloads(
-  queryClient: QueryClient,
   _operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidations.push(queryClient.invalidateQueries({queryKey: ['quickDownloads']}))
+  invalidations.push(['quickDownloads'])
 }
 
 function quickDownloadFile(operation: TaskOperationRead): OperationNotificationAction | undefined {
@@ -309,119 +296,108 @@ function quickDownloadFile(operation: TaskOperationRead): OperationNotificationA
 }
 
 function invalidateMediaDownloadCollection(
-  queryClient: QueryClient,
   _operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
-    queryClient.invalidateQueries({queryKey: ['episodeDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['movieDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['collectionDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['movies']}),
+    ['mediaDownloads'],
+    ['mediaDownloadsView'],
+    ['episodeDownloads'],
+    ['movieDownloads'],
+    ['collectionDownloads'],
+    ['movies'],
   )
 }
 
 function invalidateTaskLedgerDefinition(
-  queryClient: QueryClient,
   definitionKey: string,
   invalidations: InvalidationCollector,
 ) {
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['taskLedger', definitionKey]}),
-    queryClient.invalidateQueries({queryKey: ['taskLedger', 'list', definitionKey]}),
+    ['taskLedger', definitionKey],
+    ['taskLedger', 'list', definitionKey],
   )
 }
 
 function invalidateEpisodeCronJob(
-  queryClient: QueryClient,
   _operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['collections']}),
-    queryClient.invalidateQueries({queryKey: ['collectionsView']}),
-    queryClient.invalidateQueries({queryKey: ['episodes']}),
-    queryClient.invalidateQueries({queryKey: ['recentlyIndexedEpisodes']}),
+    ['collections'],
+    ['collectionsView'],
+    ['episodes'],
+    ['recentlyIndexedEpisodes'],
   )
 }
 
 function invalidateEpisodeAndDownloadCronJob(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateEpisodeCronJob(queryClient, operation, invalidations)
+  invalidateEpisodeCronJob(operation, invalidations)
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+    ['mediaDownloads'],
+    ['mediaDownloadsView'],
   )
 }
 
 function invalidateDownloadCronJob(
-  queryClient: QueryClient,
   _operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
   invalidations.push(
-    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
-    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+    ['mediaDownloads'],
+    ['mediaDownloadsView'],
   )
 }
 
 function invalidateFindEpisodesCron(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateEpisodeCronJob(queryClient, operation, invalidations)
-  invalidateTaskLedgerDefinition(queryClient, 'fetch_new_episodes', invalidations)
+  invalidateEpisodeCronJob(operation, invalidations)
+  invalidateTaskLedgerDefinition('fetch_new_episodes', invalidations)
 }
 
 function invalidateQuickCheckCron(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateEpisodeCronJob(queryClient, operation, invalidations)
-  invalidateTaskLedgerDefinition(queryClient, 'quick_check_new_videos', invalidations)
+  invalidateEpisodeCronJob(operation, invalidations)
+  invalidateTaskLedgerDefinition('quick_check_new_videos', invalidations)
 }
 
 function invalidateFullRescanCron(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateEpisodeCronJob(queryClient, operation, invalidations)
-  invalidateTaskLedgerDefinition(queryClient, 'rescan_quick_checked_collections', invalidations)
+  invalidateEpisodeCronJob(operation, invalidations)
+  invalidateTaskLedgerDefinition('rescan_quick_checked_collections', invalidations)
 }
 
 function invalidateNoUsableMediaCron(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateEpisodeAndDownloadCronJob(queryClient, operation, invalidations)
-  invalidateTaskLedgerDefinition(queryClient, 'monitor_no_usable_media_episode', invalidations)
+  invalidateEpisodeAndDownloadCronJob(operation, invalidations)
+  invalidateTaskLedgerDefinition('monitor_no_usable_media_episode', invalidations)
 }
 
 function invalidateVerifyDownloadsCron(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateDownloadCronJob(queryClient, operation, invalidations)
-  invalidateTaskLedgerDefinition(queryClient, 'download_profile_worker', invalidations)
+  invalidateDownloadCronJob(operation, invalidations)
+  invalidateTaskLedgerDefinition('download_profile_worker', invalidations)
 }
 
 function invalidateFileWatcherCron(
-  queryClient: QueryClient,
   operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidateDownloadCronJob(queryClient, operation, invalidations)
-  invalidateTaskLedgerDefinition(queryClient, 'file_watcher', invalidations)
+  invalidateDownloadCronJob(operation, invalidations)
+  invalidateTaskLedgerDefinition('file_watcher', invalidations)
 }
 
 export const frontendOperationDefinitions = {
@@ -548,11 +524,11 @@ export const frontendOperationDefinitions = {
     kind: 'collection.scan_existing_files',
     resourceType: 'collection',
     label: 'Existing files scan',
-    invalidate: (queryClient, operation, invalidations) => {
+    invalidate: (operation, invalidations) => {
       const collectionSlug = contextString(operation, 'collection_slug')
       invalidations.push(
-        queryClient.invalidateQueries({queryKey: ['existingFiles', collectionSlug]}),
-        queryClient.invalidateQueries({queryKey: ['existingFilesScans', collectionSlug]}),
+        ['existingFiles', collectionSlug],
+        ['existingFilesScans', collectionSlug],
       )
     },
     success: (operation) => {
@@ -584,12 +560,12 @@ export const frontendOperationDefinitions = {
     kind: 'local_media_profile.move_episodes',
     resourceType: 'local_media_profile',
     label: 'Move episodes',
-    invalidate: (queryClient, operation, invalidations) => {
-      invalidateLocalMediaProfileFiles(queryClient, operation, invalidations)
+    invalidate: (operation, invalidations) => {
+      invalidateLocalMediaProfileFiles(operation, invalidations)
       invalidations.push(
-        queryClient.invalidateQueries({queryKey: ['localMediaProfileMovePreview']}),
-        queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}),
-        queryClient.invalidateQueries({queryKey: ['localMediaProfilesView']}),
+        ['localMediaProfileMovePreview'],
+        ['downloadProfilesView'],
+        ['localMediaProfilesView'],
       )
     },
     success: (operation) => {
@@ -830,19 +806,31 @@ function taskLedgerQueryMatchesOperation(
   return Array.isArray(resourceFilter) && resourceFilter.includes(operation.resourceId)
 }
 
-export async function invalidateForOperation(
+/**
+ * Refresh what the finished operations changed, all in one go.
+ *
+ * Every matching query refetches once, however many of the operations touch it.
+ * One invalidation per operation would refetch a shared query (the library, the
+ * collections) once per operation, each time cancelling the fetch before it,
+ * which the server still answers in full.
+ */
+export async function invalidateForOperations(
   queryClient: QueryClient,
-  operation: TaskOperationRead,
+  operations: readonly TaskOperationRead[],
 ) {
-  const invalidations: InvalidationCollector = [
-    queryClient.invalidateQueries({
-      predicate: (query) => taskLedgerQueryMatchesOperation(query.queryKey, operation),
-    }),
-  ]
+  if (operations.length === 0) return
 
-  frontendOperationDefinitions[
-    operation.kind as keyof typeof frontendOperationDefinitions
-  ]?.invalidate?.(queryClient, operation, invalidations)
+  const keys: InvalidationCollector = []
+  for (const operation of operations) {
+    frontendOperationDefinitions[
+      operation.kind as keyof typeof frontendOperationDefinitions
+    ]?.invalidate?.(operation, keys)
+  }
 
-  await Promise.all(invalidations)
+  await queryClient.invalidateQueries({
+    predicate: ({queryKey}) => (
+      keys.some((key) => partialMatchKey(queryKey, key))
+      || operations.some((operation) => taskLedgerQueryMatchesOperation(queryKey, operation))
+    ),
+  })
 }

@@ -1110,18 +1110,38 @@ def _read_snapshot(operation: TaskOperation) -> OperationSnapshot:
     return _operation_snapshot(_refresh_loaded_operation(operation))
 
 
-def mark_operation_seen(operation_id: str) -> OperationSnapshot | None:
-    def work(session):
-        operation = _load_operation_with_runs(session, operation_id)
-        if operation is None:
-            return None
-        _refresh_loaded_operation(operation)
-        operation.notification_seen_at = datetime.now(timezone.utc)
-        session.flush()
-        payload = _operation_snapshot(operation)
-        return payload
+def mark_operations_seen(
+        operation_ids: Sequence[str],
+        *,
+        requested_by_user_id: int | None = None,
+) -> None:
+    """Acknowledge the given operations in one write transaction.
 
-    return run_write_transaction(work)
+    A browser that comes back after a quiet night finds every operation the
+    scheduled work finished meanwhile, and acknowledges all of them at once:
+    one transaction for the lot keeps the writer's turn free for everything
+    else the page loads. With ``requested_by_user_id``, only operations that
+    user asked for are acknowledged; the others are left as they are.
+    """
+    ids = sorted(set(operation_ids))
+    if not ids:
+        return
+
+    def work(session):
+        statement = (
+            select(TaskOperation)
+            .where(TaskOperation.id.in_(ids), TaskOperation.notification_seen_at.is_(None))
+            .options(*_operation_run_graph())
+            .execution_options(populate_existing=True)
+        )
+        if requested_by_user_id is not None:
+            statement = statement.where(TaskOperation.requested_by_user_id == requested_by_user_id)
+        seen_at = datetime.now(timezone.utc)
+        for operation in session.scalars(statement):
+            _refresh_loaded_operation(operation)
+            operation.notification_seen_at = seen_at
+
+    run_write_transaction(work)
 
 
 def _operation_progress_meta(

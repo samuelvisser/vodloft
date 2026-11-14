@@ -3,7 +3,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from backend.api.models.base import ResponseBase
+from pydantic import Field
+
+from backend.api.models.base import RequestBase, ResponseBase
+
+
+class OperationsSeenRequest(RequestBase):
+    """Operations whose finished state a browser has shown and refreshed its data for."""
+
+    operation_ids: list[str] = Field(min_length=1, max_length=500)
 
 
 class TaskOperationAccepted(ResponseBase):
