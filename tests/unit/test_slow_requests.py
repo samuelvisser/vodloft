@@ -87,7 +87,7 @@ def test_a_slow_request_is_only_logged_at_debug(monkeypatch, capsys, caplog):
         assert client.get("/api/slow").status_code == 200
 
     assert "/api/slow" not in capsys.readouterr().err
-    assert "/api/slow" not in caplog.text
+    assert not [record for record in caplog.records if record.name == slow_requests.__name__]
 
 
 def test_pool_workers_waiting_for_work_are_left_out_of_the_working_threads():
