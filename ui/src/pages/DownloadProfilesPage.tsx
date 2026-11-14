@@ -214,6 +214,7 @@ export default function DownloadProfilesPage() {
                         </>
                     )}
                     rowHref={(p) => `/download-profile/${p.id}`}
+                    mobileRowActionLabel="View"
                     actions={(p) => [
                         {
                             href: `/edit-download-profile/${p.id}`,
