@@ -11,6 +11,7 @@ from typing import Any, Optional
 from sqlalchemy import case, func, select, update
 
 from backend.db.core import get_session, run_write_transaction
+from backend.requests_first import background_work
 from task_manager.scheduler.db import *
 from task_manager.scheduler.db.TaskRun import (
     TASK_RUN_COMPLETION_PROGRESS_META_KEY,
@@ -638,6 +639,8 @@ def execute_task(
         if cancellation_reason is None:
             with (
                 operation_context(prepared.linked_operation_ids),
+                # Page requests go first: the worker waits at its queries while one is answered.
+                background_work(),
                 request_context(
                     observer=on_request_wait, should_cancel=updater,
                     priority=_execution_request_priority(prepared.linked_operation_ids),

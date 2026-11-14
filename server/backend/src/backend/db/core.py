@@ -11,6 +11,7 @@ import importlib
 import logging
 import os
 import pkgutil
+import sqlite3
 import threading
 import time
 import weakref
@@ -22,6 +23,8 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import NullPool, QueuePool
 
 from config import get_settings
+
+from backend.requests_first import in_background_work, let_requests_go_first
 
 from .datetime_types import UTCDateTime
 from .text_types import create_case_insensitive_collation
@@ -114,6 +117,30 @@ def _sqlite_path(url: URL) -> Path | None:
     return Path(database)
 
 
+_ROWS_BETWEEN_WAITS = 5
+
+
+class _SqliteCursor(sqlite3.Cursor):
+    def fetchall(self) -> list:
+        """All rows; in a background task a few at a time, so it can wait for requests in between.
+
+        sqlite3 gives the GIL away at every row it reads and then has to win it back. A task that
+        reads a whole collection's downloads in one go would otherwise take it from a request thousands of times.
+        """
+        if not in_background_work():
+            return super().fetchall()
+        rows = []
+        while chunk := self.fetchmany(_ROWS_BETWEEN_WAITS):
+            rows.extend(chunk)
+            _wait_for_requests()
+        return rows
+
+
+class _SqliteConnection(sqlite3.Connection):
+    def cursor(self, factory=_SqliteCursor):
+        return super().cursor(factory)
+
+
 def _create_sqlite_engine(url: URL, path: Path | None) -> Engine:
     if path is not None:
         os.makedirs(path.parent, exist_ok=True)
@@ -133,6 +160,7 @@ def _create_sqlite_engine(url: URL, path: Path | None) -> Engine:
             # sqlite3 defaults to five seconds. Other processes, such as a command
             # line, can hold the writer, so give their short bursts time to finish.
             "timeout": _SQLITE_BUSY_TIMEOUT_SECONDS,
+            "factory": _SqliteConnection,
         },
         **pool,
     )
@@ -371,6 +399,20 @@ def _take_turn_before_the_first_write(connection, _cursor, statement, _parameter
         return
     if not statement.lstrip().upper().startswith(_NON_WRITING_STATEMENTS):
         turn.take(statement)
+
+
+def _wait_for_requests() -> None:
+    """In a background task, wait while a page request is being answered; see ``backend.requests_first``.
+
+    Never in a write transaction: other writers may queue for its turn.
+    """
+    if not getattr(_writing, "active", False):
+        let_requests_go_first()
+
+
+@event.listens_for(Engine, "before_cursor_execute")
+def _background_queries_wait_for_requests(_connection, _cursor, _statement, _parameters, _context, _executemany) -> None:
+    _wait_for_requests()
 
 
 def take_write_turn(session: Session) -> None:
