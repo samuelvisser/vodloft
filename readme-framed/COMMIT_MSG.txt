@@ -1,0 +1,10 @@
+Make the README more inviting, with real screenshots
+
+Lead with YouTube and the many sites yt-dlp supports, give the README the
+same header as WireLoft's (logo, tagline, framed screenshots), and move
+The Daily Wire and NPO Start to a short section about their built-in
+support. Replace the WireLoft screenshots with VODLoft ones.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01NCjbHXcSX31ZMAUz9VyZt2
+
