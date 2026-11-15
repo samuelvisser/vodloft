@@ -4,17 +4,25 @@ import {PUBLISH_STATUS_LABELS} from '../types/episode'
 import {type TaskOperationRead} from '../types/schemas/operation'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from './cache'
 import {episodeQueryKeys} from './collectionQueryOptions'
-import {apiUrl} from './api'
+import {quickDownloadFileUrl, quickDownloadToastId} from './quickDownloads'
 
 export type OperationMessageResolver = (operation: TaskOperationRead) => string
 
-export type OperationNotificationAction = {label: string; href: string; download?: string}
+export type OperationNotificationAction = {
+  label: string
+  href: string
+  download?: string
+  /** Names the toast, so another operation's `dismissesToast` can close it. */
+  toastId?: string
+}
 
 export type OperationNotificationDefinition = {
   label: string
   success?: OperationMessageResolver
   /** A link the success notification offers, such as the file a quick download made. */
   successAction?: (operation: TaskOperationRead) => OperationNotificationAction | undefined
+  /** The toast this operation makes obsolete, such as the offer of a file that has now been downloaded. */
+  dismissesToast?: (operation: TaskOperationRead) => string | undefined
   partial?: OperationMessageResolver
   canceled?: OperationMessageResolver
   failed?: OperationMessageResolver
@@ -284,15 +292,25 @@ function invalidateQuickDownloads(
   invalidations.push(['quickDownloads'])
 }
 
+function quickDownloadId(operation: TaskOperationRead): string | undefined {
+  return resultString(operation, 'quick_download_id') ?? contextString(operation, 'quick_download_id')
+}
+
 function quickDownloadFile(operation: TaskOperationRead): OperationNotificationAction | undefined {
-  const quickId = resultString(operation, 'quick_download_id') ?? contextString(operation, 'quick_download_id')
+  const quickId = quickDownloadId(operation)
   if (!quickId) return undefined
-  const base = (apiUrl()).replace(/\/+$/, '')
   return {
     label: 'Download',
-    href: `${base}/quick-downloads/${encodeURIComponent(quickId)}/file`,
+    href: quickDownloadFileUrl(quickId),
     download: resultString(operation, 'file_name'),
+    toastId: quickDownloadToastId(quickId),
   }
+}
+
+/** A file that went out, from wherever it was downloaded, no longer needs its offer. */
+function quickDownloadDeliveredToast(operation: TaskOperationRead): string | undefined {
+  const quickId = quickDownloadId(operation)
+  return quickId ? quickDownloadToastId(quickId) : undefined
 }
 
 function invalidateMediaDownloadCollection(
@@ -776,6 +794,7 @@ export const frontendOperationDefinitions = {
     label: 'Quick download delivered',
     invalidate: invalidateQuickDownloads,
     success: (operation) => `${operation.title} was downloaded`,
+    dismissesToast: quickDownloadDeliveredToast,
   },
 } satisfies Readonly<Record<string, FrontendOperationDefinition>>
 

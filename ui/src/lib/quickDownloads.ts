@@ -111,6 +111,11 @@ export function quickDownloadFileUrl(quickId: string): string {
     return `${apiUrl()}/quick-downloads/${encodeURIComponent(quickId)}/file`
 }
 
+/** The id of the toast that offers a ready file, so any download of that file can close it. */
+export function quickDownloadToastId(quickId: string): string {
+    return `quick-download-ready:${quickId}`
+}
+
 export const quickDownloadHistoryQueryKey = ['quickDownloads', 'history'] as const
 
 export function useQuickDownloadHistory(enabled = true) {
