@@ -14,9 +14,13 @@ export default function DownloadsActivity() {
 
     return (
         <>
-            <svg className="nav-activity-ring" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
-                <circle cx="14" cy="14" r="13" />
-            </svg>
+            {/* The span turns, not the svg: Safari on iPhone did not repaint a turning svg, so the arc stood
+                still and only jumped now and then. A span gets its own layer that turns without repainting. */}
+            <span className="nav-activity-ring" aria-hidden="true">
+                <svg viewBox="0 0 28 28" focusable="false">
+                    <circle cx="14" cy="14" r="13" />
+                </svg>
+            </span>
             <span className="nav-activity-dot" aria-hidden="true" />
         </>
     )

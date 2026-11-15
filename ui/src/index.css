@@ -109,9 +109,15 @@ body *::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-rad
   width: 1.44em;
   height: 1.44em;
   margin: -0.72em 0 0 -0.72em;
-  overflow: visible;
   pointer-events: none;
+  will-change: transform;
   animation: nav-activity-spin 1.8s linear infinite;
+}
+.nav-activity-ring svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 .nav-activity-ring circle {
   fill: none;
