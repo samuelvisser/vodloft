@@ -64,7 +64,7 @@ def _profile(max_items: int):
         preferred_format="format_1080p",
         prefer_exact_match=False,
         ep_id_type_list=["ep"],
-        video_output_mode="mp4",
+        media_kinds=("mp4",),
         stream_live_episodes=False,
         live_episode_handoff_ids=[],
         max_items=max_items,
@@ -72,35 +72,35 @@ def _profile(max_items: int):
 
 
 def test_feed_limit_keeps_newest_items():
-    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.services.stream_episodes import get_stream_items
 
     now = datetime(2026, 1, 1, 12, 0, 0)
     episodes = [_episode(index, now - timedelta(days=index)) for index in range(5)]
 
-    items = get_feed_items(_FakeSession(episodes), _profile(2))
+    items = get_stream_items(_FakeSession(episodes), _profile(2))
 
     assert [episode.id for episode, _ in items] == [0, 1]
 
 
 def test_zero_feed_limit_keeps_full_history():
-    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.services.stream_episodes import get_stream_items
 
     now = datetime(2026, 1, 1, 12, 0, 0)
     episodes = [_episode(index, now - timedelta(days=index)) for index in range(5)]
 
-    items = get_feed_items(_FakeSession(episodes), _profile(0))
+    items = get_stream_items(_FakeSession(episodes), _profile(0))
 
     assert [episode.id for episode, _ in items] == [0, 1, 2, 3, 4]
 
 
 def test_feed_limit_scans_past_ineligible_newest_items():
-    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.services.stream_episodes import get_stream_items
 
     now = datetime(2026, 1, 1, 12, 0, 0)
     episodes = [_episode(index, now - timedelta(minutes=index)) for index in range(60)]
     for episode in episodes[:55]:
         episode.publish_status = "source_processing"
 
-    items = get_feed_items(_FakeSession(episodes), _profile(2))
+    items = get_stream_items(_FakeSession(episodes), _profile(2))
 
     assert [episode.id for episode, _ in items] == [55, 56]

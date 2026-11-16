@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.types.download_profile_types import EpIdType
-from backend.types.stream_profile_types import StreamProfileType
+from backend.types.stream_profile_types import StreamMediaKind, StreamProfileType
 from backend.utils.helpers import generate_stream_profile_token
 
 if TYPE_CHECKING:
@@ -51,6 +51,20 @@ class StreamProfileBase(Base):
         nullable=False,
     )
 
+    max_items: Mapped[int] = mapped_column(default=0, server_default="0", comment="The most episodes offered, newest first; 0 offers every one")
+    stream_live_episodes: Mapped[bool] = mapped_column(default=False, server_default="0", nullable=False)
+    proxy_source_stream: Mapped[bool] = mapped_column(
+        default=True, server_default="1", nullable=False,
+        comment="Pass the Site's stream on through VODLoft instead of sending apps to the Site",
+    )
+    # Live episodes played from the Site that stay playable from there until their final download lands.
+    live_episode_handoff_ids: Mapped[list[int]] = mapped_column(
+        MutableList.as_mutable(JSON),
+        default=list,
+        server_default="[]",
+        nullable=False,
+    )
+
     owner_user_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True, default=None,
         comment="The user whose feed this is; only they and those who manage every Stream Profile see it",
@@ -66,6 +80,11 @@ class StreamProfileBase(Base):
     # Relationships
     collection: Mapped["Collection"] = relationship(back_populates="stream_profiles")
 
+
+    @property
+    def media_kinds(self) -> tuple[StreamMediaKind, ...]:
+        """What the profile serves of each episode, its main media first."""
+        raise NotImplementedError
 
     def __repr__(self) -> str:
         return f"<StreamProfileBase(id={self.id}, enable_profile={self.enable_profile}, use_downloads={self.use_downloads}, use_source_stream={self.use_source_stream}, created_at={self.created_at}, updated_at={self.updated_at})>"

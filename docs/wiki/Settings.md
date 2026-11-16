@@ -85,11 +85,11 @@ These settings are available under **Settings → Downloads**.
 | `downloadSettings.downloadRoot` | `VL_DOWNLOAD_SETTINGS__DOWNLOAD_ROOT` | `<project>/downloads` | Root directory used for paths beginning with `/downloads/`. In the supplied Docker layout, set/use `/downloads` to target the mounted media volume. |
 | `downloadSettings.downloadMode` | `VL_DOWNLOAD_SETTINGS__DOWNLOAD_MODE` | `temporary` | System default: stage downloads in the temporary folder before publishing them. Local Media Profiles can inherit or override it. |
 | `downloadSettings.temporaryDownloadRoot` | `VL_DOWNLOAD_SETTINGS__TEMPORARY_DOWNLOAD_ROOT` | system temp directory (`/tmp/vodloft-downloads` in Docker) | Staging directory used by temporary download mode. Keeping this on local storage avoids repeated remux/metadata I/O against a network media library. |
-| `downloadSettings.rssCacheRoot` | `VL_DOWNLOAD_SETTINGS__RSS_CACHE_ROOT` | `<download root>/.vodloft-rss-cache` | Root for media cached while fulfilling RSS requests. When omitted, its default follows the download root; an explicit value stays independent. |
+| `downloadSettings.streamCacheRoot` | `VL_DOWNLOAD_SETTINGS__STREAM_CACHE_ROOT` | `<download root>/.vodloft-stream-cache` | Root of the Stream Video Cache, where VODLoft keeps video it prepares while streaming episodes to your apps. When omitted, its default follows the download root; an explicit value stays independent. |
 | `downloadSettings.quickDownloadRoot` | `VL_DOWNLOAD_SETTINGS__QUICK_DOWNLOAD_ROOT` | `<download root>/.vodloft-quick-downloads` | Where quick downloads are prepared and kept until they are fetched. On the download volume by default, so ready files survive a container update. When omitted, its default follows the download root. |
 | `downloadSettings.thumbnailRoot` | `VL_DOWNLOAD_SETTINGS__THUMBNAIL_ROOT` | `thumbnails` next to the config file (`/config/thumbnails` in Docker) | Where VODLoft keeps the thumbnails it makes itself, such as the first frame of a video without a thumbnail. Kept out of the download library by default. |
 | `downloadSettings.lockRoot` | `VL_DOWNLOAD_SETTINGS__LOCK_ROOT` | `locks` next to the config file (`/config/locks` in Docker) | Where VODLoft keeps the small lock files that stop two tasks from changing the same collection artwork or episode numbering at once. Kept out of the download library by default. |
-| `downloadSettings.rssCacheRetentionSeconds` | `VL_DOWNLOAD_SETTINGS__RSS_CACHE_RETENTION_SECONDS` | `604800` (7 days) | Retains cached RSS media for this long since it was last served. Expired files are cleaned at startup and while new cache entries are prepared. |
+| `downloadSettings.streamCacheRetentionSeconds` | `VL_DOWNLOAD_SETTINGS__STREAM_CACHE_RETENTION_SECONDS` | `604800` (7 days) | Keeps cached video for this long since it was last served. Expired files are cleaned at startup and while new cache entries are prepared. |
 | `downloadSettings.maxConcurrentDownloads` | `VL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` | `5` | Maximum primary-media transfers running at once. Their slots are released while post-processing continues. |
 | `downloadSettings.maxDownloadAttempts` | `VL_DOWNLOAD_SETTINGS__MAX_DOWNLOAD_ATTEMPTS` | `3` | Automatic attempts before a download is left failed. |
 | `downloadSettings.episodeDownloadDelayMinutes` | `VL_DOWNLOAD_SETTINGS__EPISODE_DOWNLOAD_DELAY_MINUTES` | `10` | Delay after publication before automatically downloading an episode. Manual downloads can be scheduled until the delay expires or started immediately. |
@@ -106,7 +106,7 @@ These settings are available under **Settings → Downloads**.
 | `downloadSettings.pauseStart` | `VL_DOWNLOAD_SETTINGS__PAUSE_START` | `01:00` | When the pause starts, in VODLoft's timezone. |
 | `downloadSettings.pauseEnd` | `VL_DOWNLOAD_SETTINGS__PAUSE_END` | `07:00` | When downloads start again. The pause may run past midnight. |
 
-When you move the temporary, RSS cache, quick download, thumbnail or lock folder, VODLoft removes the old folder the next time it starts, but only if VODLoft alone uses it: a hidden `.vodloft-…` folder or the setting's default folder. Quick downloads and thumbnails move to the new folder first. A folder of your own, and the download root itself, are never removed.
+When you move the temporary, Stream Video Cache, quick download, thumbnail or lock folder, VODLoft removes the old folder the next time it starts, but only if VODLoft alone uses it: a hidden `.vodloft-…` folder or the setting's default folder. Quick downloads and thumbnails move to the new folder first. A folder of your own, and the download root itself, are never removed.
 
 ### Per-site defaults
 
@@ -421,7 +421,7 @@ downloadSettings:
   downloadRoot: /downloads
   downloadMode: temporary
   temporaryDownloadRoot: /tmp/vodloft-downloads
-  rssCacheRoot: /tmp/vodloft-rss-cache
+  streamCacheRoot: /tmp/vodloft-stream-cache
   maxConcurrentDownloads: 3
   episodeDownloadDelayMinutes: 10
   filenameRestrictionMode: windows

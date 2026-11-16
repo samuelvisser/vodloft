@@ -81,6 +81,7 @@ def wireloft_installation(folder: Path, downloads: Path, *, target: str = HEAD) 
     c.close()
     (folder / "config.yml").write_text(
         "downloadSettings:\n  maxConcurrentDownloads: 3\n  downloadRoot: /downloads\n  downloadShowAssets: false\n"
+        "  rssCacheRetentionSeconds: 3600\n"
         "scheduler:\n  maxWorkers: 5\n",
         encoding="utf-8",
     )

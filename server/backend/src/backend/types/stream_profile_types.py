@@ -1,4 +1,5 @@
 from enum import Enum, StrEnum
+from typing import Literal
 
 
 class StreamProfileType(Enum):
@@ -6,6 +7,10 @@ class StreamProfileType(Enum):
 
     # For instances of StreamProfileBase class (parent class)
     BASE = "base"
+
+
+# What a stream profile serves of an episode: its audio, an MP4 video file or an HLS video stream.
+StreamMediaKind = Literal["audio", "mp4", "hls"]
 
 
 class RssVideoOutputMode(StrEnum):
@@ -32,3 +37,11 @@ RSS_AUDIO_PRIMARY_OUTPUT_MODES = frozenset({
     RssVideoOutputMode.AUDIO_HLS,
     RssVideoOutputMode.AUDIO_MP4,
 })
+
+# What a video feed serves of each episode in each output mode, its main enclosure first.
+RSS_OUTPUT_MODE_MEDIA_KINDS: dict[RssVideoOutputMode, tuple[StreamMediaKind, ...]] = {
+    RssVideoOutputMode.AUDIO_HLS: ("audio", "hls"),
+    RssVideoOutputMode.AUDIO_MP4: ("audio", "mp4"),
+    RssVideoOutputMode.MP4: ("mp4",),
+    RssVideoOutputMode.MP4_HLS: ("mp4", "hls"),
+}

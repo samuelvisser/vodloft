@@ -421,3 +421,61 @@ def test_site_settings_already_there_win_over_old_schedules():
     }}}
     # A file without old schedules is left alone.
     assert _with_site_settings("siteSettings:\n  youtube:\n    metadataRefresh: 2h\n").endswith("2h\n")
+
+
+def test_the_rss_cache_settings_become_the_stream_video_cache_and_the_rest_of_the_file_stays():
+    from backend.db.background_migrations.versions.a158febaa920_stream_video_cache import _renamed_settings
+
+    source = (
+        "downloadSettings:\n"
+        "  downloadRoot: /media\n"
+        "  rssCacheRoot: /media/.vodloft-rss-cache  # on the big disk\n"
+        "  rssCacheRetentionSeconds: 3600\n"
+        "logLevel: INFO\n"
+    )
+
+    updated = _renamed_settings(source)
+
+    assert updated == (
+        "downloadSettings:\n"
+        "  downloadRoot: /media\n"
+        "  streamCacheRoot: /media/.vodloft-stream-cache  # on the big disk\n"
+        "  streamCacheRetentionSeconds: 3600\n"
+        "logLevel: INFO\n"
+    )
+    assert _renamed_settings(updated) == updated
+    # A folder of the user's own keeps its name.
+    assert _renamed_settings("downloadSettings:\n  rssCacheRoot: /tmp/cache\n") == (
+        "downloadSettings:\n  streamCacheRoot: /tmp/cache\n"
+    )
+
+
+def test_the_stream_video_cache_moves_out_of_the_old_default_folder(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from backend.db.background_migrations.versions import a158febaa920_stream_video_cache as migration
+
+    config = tmp_path / "config.yml"
+    config.write_text("downloadSettings:\n  rssCacheRetentionSeconds: 60\n", encoding="utf-8")
+    old = tmp_path / ".vodloft-rss-cache"
+    (old / "video").mkdir(parents=True)
+    (old / "video" / "joined.mp4").write_bytes(b"joined")
+    (old / "video" / "both.mp4").write_bytes(b"old")
+    new = tmp_path / ".vodloft-stream-cache"
+    (new / "video").mkdir(parents=True)
+    (new / "video" / "both.mp4").write_bytes(b"new")
+    settings = SimpleNamespace(download_settings=SimpleNamespace(stream_cache_root=new))
+    monkeypatch.setattr(migration, "get_config_path", lambda: config)
+    monkeypatch.setattr(migration, "get_settings", lambda: settings)
+    monkeypatch.setattr(migration, "reload_settings", lambda: None)
+
+    class Context:
+        def raise_if_canceled(self):
+            pass
+
+    asyncio.run(migration.migrate(Context()))
+
+    assert config.read_text(encoding="utf-8") == "downloadSettings:\n  streamCacheRetentionSeconds: 60\n"
+    assert not old.exists()
+    assert (new / "video" / "joined.mp4").read_bytes() == b"joined"
+    assert (new / "video" / "both.mp4").read_bytes() == b"new"

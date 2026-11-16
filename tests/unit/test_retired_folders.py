@@ -33,7 +33,7 @@ def test_the_first_start_only_remembers_the_folders(tmp_path, config_dir):
     assert retired_folders.retire_changed_folders(settings) == 0
     stored = json.loads((config_dir / "folders.json").read_text())
     assert stored["lock_root"] == str(config_dir / "locks")
-    assert stored["rss_cache_root"] == str(tmp_path / "downloads" / ".vodloft-rss-cache")
+    assert stored["stream_cache_root"] == str(tmp_path / "downloads" / ".vodloft-stream-cache")
 
 
 def test_a_hidden_vodloft_folder_goes_after_its_setting_changes(tmp_path, config_dir):
@@ -83,10 +83,10 @@ def test_thumbnails_move_to_the_new_folder(tmp_path, config_dir):
 
 def test_a_former_folder_that_holds_a_current_one_stays(tmp_path, config_dir):
     old = tmp_path / "downloads" / ".vodloft-cache"
-    retired_folders.retire_changed_folders(_settings(tmp_path, rss_cache_root=old))
+    retired_folders.retire_changed_folders(_settings(tmp_path, stream_cache_root=old))
     old.mkdir()
 
-    settings = _settings(tmp_path, rss_cache_root=old / "rss", lock_root=old / "locks")
+    settings = _settings(tmp_path, stream_cache_root=old / "rss", lock_root=old / "locks")
     assert retired_folders.retire_changed_folders(settings) == 0
     assert old.is_dir()
 
@@ -97,7 +97,7 @@ def test_a_former_folder_that_holds_the_download_root_stays(tmp_path, config_dir
     downloads.mkdir(parents=True)
     settings = DownloadSettings(download_root=downloads, temporary_download_root=tmp_path / "local")
     retired_folders.retire_changed_folders(settings)
-    retired_folders._store_state({"rss_cache_root": str(outer)})
+    retired_folders._store_state({"stream_cache_root": str(outer)})
 
     assert retired_folders.retire_changed_folders(settings) == 0
     assert downloads.is_dir()

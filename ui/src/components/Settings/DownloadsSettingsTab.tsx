@@ -117,12 +117,12 @@ export default function DownloadsSettingsTab({
                                                  downloadStorage,
                                              }: SettingsTabProps) {
     const temporaryDownloadRoot = draft.downloadSettings.temporaryDownloadRoot
-    const rssCacheRoot = (
-        !isFieldExplicit('downloadSettings.rssCacheRoot')
-        && !isFieldDirty('downloadSettings.rssCacheRoot')
+    const streamCacheRoot = (
+        !isFieldExplicit('downloadSettings.streamCacheRoot')
+        && !isFieldDirty('downloadSettings.streamCacheRoot')
     )
-        ? childPath(draft.downloadSettings.downloadRoot, '.vodloft-rss-cache')
-        : draft.downloadSettings.rssCacheRoot
+        ? childPath(draft.downloadSettings.downloadRoot, '.vodloft-stream-cache')
+        : draft.downloadSettings.streamCacheRoot
     const quickDownloadRoot = (
         !isFieldExplicit('downloadSettings.quickDownloadRoot')
         && !isFieldDirty('downloadSettings.quickDownloadRoot')
@@ -192,22 +192,22 @@ export default function DownloadsSettingsTab({
                     </div>
                 ) : null}
                 <TextField
-                    id="settings-rss-cache-root"
-                    label="RSS cache folder"
-                    value={rssCacheRoot}
-                    error={errorFor('downloadSettings.rssCacheRoot')}
-                    environmentVariable={environmentVariableFor('downloadSettings.rssCacheRoot')}
+                    id="settings-stream-cache-root"
+                    label="Stream Video Cache folder"
+                    value={streamCacheRoot}
+                    error={errorFor('downloadSettings.streamCacheRoot')}
+                    environmentVariable={environmentVariableFor('downloadSettings.streamCacheRoot')}
                     onChange={(value) => updateDraft((next) => {
-                        next.downloadSettings.rssCacheRoot = value
+                        next.downloadSettings.streamCacheRoot = value
                     })}
                     help={
-                        <ReadMore summary="Stores media VODLoft prepares or caches while fulfilling RSS requests.">
+                        <ReadMore summary="Stores the video VODLoft prepares while it streams episodes to your apps.">
                             <p>
-                                By default, the cache lives in <code>.vodloft-rss-cache</code> inside the download root.
+                                By default, the cache lives in <code>.vodloft-stream-cache</code> inside the download root.
                             </p>
                             <p>
                                 You may explicitly place it anywhere VODLoft can write, including container-local storage such
-                                as <code>/tmp/vodloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the
+                                as <code>/tmp/vodloft-stream-cache</code>. A container-local cache does not need a host volume, but is lost when the
                                 container is recreated.
                             </p>
                         </ReadMore>
@@ -251,16 +251,16 @@ export default function DownloadsSettingsTab({
                     wide
                 />
                 <DurationField
-                    id="settings-rss-cache-retention"
-                    label="RSS cache retention period"
-                    value={draft.downloadSettings.rssCacheRetentionSeconds}
+                    id="settings-stream-cache-retention"
+                    label="Stream Video Cache retention period"
+                    value={draft.downloadSettings.streamCacheRetentionSeconds}
                     backendUnit="seconds"
-                    error={errorFor('downloadSettings.rssCacheRetentionSeconds')}
-                    environmentVariable={environmentVariableFor('downloadSettings.rssCacheRetentionSeconds')}
+                    error={errorFor('downloadSettings.streamCacheRetentionSeconds')}
+                    environmentVariable={environmentVariableFor('downloadSettings.streamCacheRetentionSeconds')}
                     onChange={(value) => updateDraft((next) => {
-                        next.downloadSettings.rssCacheRetentionSeconds = value
+                        next.downloadSettings.streamCacheRetentionSeconds = value
                     })}
-                    help="Cached RSS media expires after this much time without being served. Serving a cached MP4 refreshes its retention period."
+                    help="Cached video expires after this much time without being served. Serving a cached MP4 refreshes its retention period."
                 />
                 <SelectField
                     id="settings-download-mode"

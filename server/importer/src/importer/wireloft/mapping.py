@@ -77,6 +77,8 @@ _SETTINGS_SECTIONS = {
 }
 # Folders inside WireLoft's container: VODLoft keeps its own.
 _FOLDER_SETTINGS = {"downloadRoot", "temporaryDownloadRoot", "rssCacheRoot", "ffmpegPath"}
+# WireLoft settings VODLoft calls differently, by their names in config.yml.
+_SETTING_NAMES = {"rssCacheRetentionSeconds": "streamCacheRetentionSeconds"}
 
 
 def _snake(name: str) -> str:
@@ -452,7 +454,7 @@ def _settings(data: WireLoftData) -> list[SettingPlan]:
         if not isinstance(values, dict):
             continue
         for name, value in sorted(values.items()):
-            key = f"settings.{target}.{_collection_word(_snake(name))}"
+            key = f"settings.{target}.{_collection_word(_snake(_SETTING_NAMES.get(name, name)))}"
             if name in _FOLDER_SETTINGS:
                 settings.append(SettingPlan(key, value, "unsupported", "A folder in WireLoft's container; VODLoft keeps its own"))
             elif isinstance(value, (dict, list)):

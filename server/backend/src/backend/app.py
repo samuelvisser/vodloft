@@ -76,11 +76,11 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
             logger.exception("Could not remove the folders of changed folder settings")
         recovery = recover_download_filesystem(download_settings)
         logger.info(
-            "Download filesystem recovery complete: reconciled %s replacement(s), cleaned %s stale path claim(s), %s temporary workspace(s), %s expired RSS cache file(s) and %s quick download(s)",
+            "Download filesystem recovery complete: reconciled %s replacement(s), cleaned %s stale path claim(s), %s temporary workspace(s), %s expired Stream Video Cache file(s) and %s quick download(s)",
             recovery.replacements,
             recovery.reservations,
             recovery.temporary_workspaces,
-            recovery.rss_cache_files,
+            recovery.stream_cache_files,
             recovery.quick_downloads,
         )
     except Exception:

@@ -184,7 +184,7 @@ def test_hls_endpoint_falls_back_directly_to_dailywire_without_mp4_preparation(
 
     profile = SimpleNamespace(
         preferred_format="format_1080p",
-        video_output_mode="audio_hls",
+        media_kinds=("audio", "hls"),
         collection=SimpleNamespace(sharing_url="https://www.dailywire.com/show/a-show", source_key="dailywire"),
     )
     episode = SimpleNamespace(
@@ -208,12 +208,12 @@ def test_hls_endpoint_falls_back_directly_to_dailywire_without_mp4_preparation(
     monkeypatch.setattr(feed_router, "db_session", fake_db_session)
     monkeypatch.setattr(
         feed_router,
-        "get_rss_stream_profile_by_token",
-        lambda _s, _token: profile,
+        "_stream_profile",
+        lambda _s, _profile_type, _token: profile,
     )
     monkeypatch.setattr(
         feed_router,
-        "get_episode_for_feed",
+        "get_stream_episode",
         lambda _s, _profile, _slug: episode,
     )
     monkeypatch.setattr(
@@ -238,7 +238,8 @@ def test_hls_endpoint_falls_back_directly_to_dailywire_without_mp4_preparation(
     )
 
     request = SimpleNamespace(method="GET")
-    response = feed_router.rss_feed_episode_video_hls(
+    response = feed_router.episode_video_hls(
+        "rss",
         "token",
         "episode-1",
         request,

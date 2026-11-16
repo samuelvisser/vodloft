@@ -489,9 +489,9 @@ class DownloadSettings(SubmodelBase):
         default_factory=lambda: Path(tempfile.gettempdir()) / "vodloft-downloads",
         description="Directory used to stage complete downloads before publishing them to the download root",
     )
-    rss_cache_root: Path = Field(
-        default_factory=lambda data: data["download_root"] / ".vodloft-rss-cache",
-        description="Directory used as the root for media cached while fulfilling RSS requests",
+    stream_cache_root: Path = Field(
+        default_factory=lambda data: data["download_root"] / ".vodloft-stream-cache",
+        description="Directory of the Stream Video Cache: video VODLoft prepares while streaming episodes to apps",
     )
     quick_download_root: Path = Field(
         default_factory=lambda data: data["download_root"] / ".vodloft-quick-downloads",
@@ -509,10 +509,10 @@ class DownloadSettings(SubmodelBase):
                     "collection artwork or episode numbering at once. Next to the config file by default, "
                     "so the lock files stay out of the download library",
     )
-    rss_cache_retention_seconds: int = Field(
+    stream_cache_retention_seconds: int = Field(
         default=7 * 24 * 60 * 60,
         ge=1,
-        description="Seconds an RSS cache entry remains valid since it was last served",
+        description="Seconds a Stream Video Cache file remains valid since it was last served",
     )
     filename_restriction_mode: FilenameRestrictionMode = Field(
         default=FilenameRestrictionMode.WINDOWS,
@@ -549,8 +549,8 @@ class DownloadSettings(SubmodelBase):
     _validate_temporary_download_root = field_validator(
         "temporary_download_root", mode="before"
     )(_validate_non_empty_path)
-    _validate_rss_cache_root = field_validator(
-        "rss_cache_root", mode="before"
+    _validate_stream_cache_root = field_validator(
+        "stream_cache_root", mode="before"
     )(_validate_non_empty_path)
     _validate_quick_download_root = field_validator(
         "quick_download_root", mode="before"

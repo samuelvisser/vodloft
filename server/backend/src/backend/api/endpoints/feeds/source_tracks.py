@@ -7,7 +7,7 @@ video has no sound, so a feed plays it in one of two ways:
   that index and writes an HLS playlist that lists every fragment as a byte range of the Site's own
   file, with one variant per resolution and the audio as its own rendition. Nothing is joined or
   stored, so it plays at once.
-* MP4: VODLoft joins video and audio into one MP4 file in the RSS cache, without re-encoding. Until it
+* MP4: VODLoft joins video and audio into one MP4 file in the Stream Video Cache, without re-encoding. Until it
   is ready, the episode plays the Site's MP4 file with sound. The newest episodes of a feed are joined
   as soon as the feed is fetched, so they are usually ready before anyone plays them.
 

@@ -147,7 +147,7 @@ def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch)
     from config import get_settings
 
     from backend.services import video_cache as cached_video
-    monkeypatch.setattr(cached_video, "cleanup_expired_rss_cache", lambda: 0)
+    monkeypatch.setattr(cached_video, "cleanup_expired_stream_cache", lambda: 0)
     calls: list[str] = []
     cleanup_started = threading.Event()
     allow_cleanup_to_finish = threading.Event()

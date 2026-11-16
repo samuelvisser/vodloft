@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Settings whose folder holds only what VODLoft put there.
 _MANAGED_FOLDER_SETTINGS = (
     "temporary_download_root",
-    "rss_cache_root",
+    "stream_cache_root",
     "quick_download_root",
     "thumbnail_root",
     "lock_root",

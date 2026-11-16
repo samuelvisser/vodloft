@@ -29,11 +29,11 @@ _CACHE_LOCKS: KeyedLocks[Path] = KeyedLocks()
 
 
 def _video_cache_root() -> Path:
-    return Path(get_settings().download_settings.rss_cache_root) / _VIDEO_CACHE_DIRECTORY
+    return Path(get_settings().download_settings.stream_cache_root) / _VIDEO_CACHE_DIRECTORY
 
 
 def _cache_retention_seconds() -> int:
-    return get_settings().download_settings.rss_cache_retention_seconds
+    return get_settings().download_settings.stream_cache_retention_seconds
 
 
 def _cache_path(episode_uuid: str) -> Path:
@@ -42,7 +42,7 @@ def _cache_path(episode_uuid: str) -> Path:
 
 
 def mp4_cache_path(key: str) -> Path:
-    """Where the RSS cache keeps the MP4 file of ``key``, such as an episode's UUID."""
+    """Where the Stream Video Cache keeps the MP4 file of ``key``, such as an episode's UUID."""
     return _cache_path(key)
 
 
@@ -104,7 +104,7 @@ def _cleanup_expired_files(root: Path, *, retention_seconds: int) -> int:
     return removed
 
 
-def cleanup_expired_rss_cache() -> int:
+def cleanup_expired_stream_cache() -> int:
     return _cleanup_expired_files(
         _video_cache_root(),
         retention_seconds=_cache_retention_seconds(),

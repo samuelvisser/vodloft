@@ -144,7 +144,7 @@ def test_tmdb_dns_outage_does_not_retry_locally(monkeypatch) -> None:
 
 
 def test_rss_stream_outage_is_not_downgraded_to_episode_502() -> None:
-    from backend.api.endpoints.feeds import service
+    from backend.services import stream_episodes as service
     from backend.types.dailywire_user_info import DwMembershipLevel
     from config.network import is_no_internet_error
     from sources.dailywire.api.dw_api.client import MiddlewareAPIError

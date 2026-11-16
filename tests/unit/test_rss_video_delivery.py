@@ -90,7 +90,7 @@ def test_rss_video_output_modes_use_stable_vodloft_urls(
     assert item.find("guid").text == "episode-uuid"
 
 
-def test_mp4_video_in_the_rss_cache_gives_its_own_size(monkeypatch):
+def test_mp4_video_in_the_stream_cache_gives_its_own_size(monkeypatch):
     from backend.api.endpoints.feeds import service
 
     monkeypatch.setattr(service, "get_cached_mp4_size", lambda key: {"episode-uuid-1080p": 123_456}.get(key))
@@ -144,14 +144,14 @@ def test_feed_url_does_not_encode_video_delivery_mode():
     ) == "https://vodloft.example/feeds/rss/token/collection.xml"
 
 
-def test_cached_mp4_path_uses_configured_rss_cache_root(monkeypatch, tmp_path):
+def test_cached_mp4_path_uses_configured_stream_cache_root(monkeypatch, tmp_path):
     import backend.services.video_cache as cached_video
 
     monkeypatch.setattr(
         cached_video,
         "get_settings",
         lambda: SimpleNamespace(
-            download_settings=SimpleNamespace(rss_cache_root=tmp_path)
+            download_settings=SimpleNamespace(stream_cache_root=tmp_path)
         ),
     )
 
@@ -161,7 +161,7 @@ def test_cached_mp4_path_uses_configured_rss_cache_root(monkeypatch, tmp_path):
     assert path.suffix == ".mp4"
 
 
-def test_rss_cache_cleanup_uses_configured_sliding_retention(monkeypatch, tmp_path):
+def test_stream_cache_cleanup_uses_configured_sliding_retention(monkeypatch, tmp_path):
     import backend.services.video_cache as cached_video
 
     video_root = tmp_path / "video"
@@ -175,8 +175,8 @@ def test_rss_cache_cleanup_uses_configured_sliding_retention(monkeypatch, tmp_pa
 
     settings = SimpleNamespace(
         download_settings=SimpleNamespace(
-            rss_cache_root=tmp_path,
-            rss_cache_retention_seconds=60,
+            stream_cache_root=tmp_path,
+            stream_cache_retention_seconds=60,
         )
     )
     monkeypatch.setattr(cached_video, "get_settings", lambda: settings)
@@ -184,7 +184,7 @@ def test_rss_cache_cleanup_uses_configured_sliding_retention(monkeypatch, tmp_pa
 
     assert cached_video._is_current(current)
     assert not cached_video._is_current(expired)
-    assert cached_video.cleanup_expired_rss_cache() == 1
+    assert cached_video.cleanup_expired_stream_cache() == 1
     assert current.exists()
     assert not expired.exists()
 
@@ -199,7 +199,7 @@ def test_using_a_cached_mp4_keeps_it_without_changing_what_apps_see(monkeypatch,
     joined.write_bytes(b"joined-video")
     os.utime(joined, (900, 900))
     settings = SimpleNamespace(
-        download_settings=SimpleNamespace(rss_cache_root=tmp_path, rss_cache_retention_seconds=60),
+        download_settings=SimpleNamespace(stream_cache_root=tmp_path, stream_cache_retention_seconds=60),
     )
     monkeypatch.setattr(cached_video, "get_settings", lambda: settings)
 
@@ -220,7 +220,7 @@ def test_using_a_cached_mp4_keeps_it_without_changing_what_apps_see(monkeypatch,
     monkeypatch.setattr(cached_video.time, "time", lambda: 1000)
     os.utime(joined, (990, 900))
     assert cached_video._is_current(joined)
-    assert cached_video.cleanup_expired_rss_cache() == 0
+    assert cached_video.cleanup_expired_stream_cache() == 0
 
 
 def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):
@@ -241,7 +241,7 @@ def test_cached_mp4_is_prepared_once_and_reused(monkeypatch, tmp_path):
         lambda: SimpleNamespace(
             download_settings=SimpleNamespace(
                 ffmpeg_path="ffmpeg",
-                rss_cache_retention_seconds=7 * 24 * 60 * 60,
+                stream_cache_retention_seconds=7 * 24 * 60 * 60,
             )
         ),
     )
@@ -293,11 +293,11 @@ def test_feed_and_stable_media_routes_accept_head_requests():
 
     expected_paths = {
         "/feeds/rss/{token}/{collection_slug}.xml",
-        "/feeds/rss/{token}/episodes/{episode_slug}",
-        "/feeds/rss/{token}/episodes/{episode_slug}/audio.m4a",
-        "/feeds/rss/{token}/episodes/{episode_slug}/video.mp4",
-        "/feeds/rss/{token}/episodes/{episode_slug}/video.m3u8",
-        "/feeds/rss/{token}/episodes/{episode_slug}/hls/{asset_path:path}",
+        "/feeds/{profile_type}/{token}/episodes/{episode_slug}",
+        "/feeds/{profile_type}/{token}/episodes/{episode_slug}/audio.m4a",
+        "/feeds/{profile_type}/{token}/episodes/{episode_slug}/video.mp4",
+        "/feeds/{profile_type}/{token}/episodes/{episode_slug}/video.m3u8",
+        "/feeds/{profile_type}/{token}/episodes/{episode_slug}/hls/{asset_path:path}",
     }
     routes = {route.path: route for route in router.routes if route.path in expected_paths}
 
@@ -309,7 +309,7 @@ def test_feed_and_stable_media_routes_accept_head_requests():
 def test_hls_parts_are_served_without_checking_the_whole_download_again(monkeypatch):
     """A player asks for a part every few seconds; checking every part of the download each time made
     the picture fall behind, so a part only needs the download VODLoft already knows."""
-    from backend.api.endpoints.feeds import service
+    from backend.services import stream_episodes as service
 
     def download(preferred_format, status, path, day):
         return SimpleNamespace(

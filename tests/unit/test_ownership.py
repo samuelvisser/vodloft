@@ -170,18 +170,20 @@ def test_stream_profiles_belong_to_whoever_made_them(session, monkeypatch):
 
 
 def test_a_disabled_users_feeds_stop_answering(session, monkeypatch):
-    from backend.api.endpoints.feeds.service import get_rss_stream_profile_by_token
+    from backend.services.errors import ServiceError
+    from backend.services.stream_episodes import get_stream_profile_by_token
+    from backend.types.stream_profile_types import StreamProfileType
     from backend.api.endpoints.rss_stream_profiles import service as rss
     from backend.db.models import RssStreamProfile, User
 
     monkeypatch.setattr(rss, "ensure_site_can_stream", lambda collection, **_: None)
     _add_users(session, 1)
     profile = session.get(RssStreamProfile, _profile(session, _user(1, "viewer"), _collection(session)).id)
-    assert get_rss_stream_profile_by_token(session, profile.token).id == profile.id
+    assert get_stream_profile_by_token(session, profile.token, StreamProfileType.RSS).id == profile.id
     session.get(User, 1).is_enabled = False
     session.flush()
-    with pytest.raises(HTTPException) as gone:
-        get_rss_stream_profile_by_token(session, profile.token)
+    with pytest.raises(ServiceError) as gone:
+        get_stream_profile_by_token(session, profile.token, StreamProfileType.RSS)
     assert gone.value.status_code == 404
 
 
@@ -237,7 +239,7 @@ def test_collections_remember_who_added_them(session):
 
 
 def test_a_feed_streams_only_what_its_owner_may_use(session, monkeypatch):
-    from backend.api.endpoints.feeds import service as feeds
+    from backend.services import stream_episodes as feeds
     from backend.api.endpoints.rss_stream_profiles import service as rss
     from backend.db.models import RssStreamProfile, User
 

@@ -94,6 +94,7 @@ def test_the_plan_keeps_daily_wire_ids_numbers_and_tokens(tmp_path):
     assert keys["settings.download_settings.max_concurrent_downloads"].value == 3
     assert keys["settings.download_settings.download_collection_assets"].value is False
     assert keys["settings.download_settings.download_root"].support == "unsupported"
+    assert keys["settings.download_settings.stream_cache_retention_seconds"].value == 3600
     assert keys["dailywire.sign_in"].secret
     assert plan.warnings == ()
 
