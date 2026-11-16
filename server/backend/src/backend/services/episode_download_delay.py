@@ -4,15 +4,17 @@ from datetime import datetime, timedelta, timezone
 
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode
+from backend.services.site_settings import site_setting
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
 from config import get_settings
+from config.settings.site_settings import SiteSetting
 
 
 def episode_download_delay_ready_at(episode: Episode) -> datetime | None:
-    """Return when VODLoft's configured post-publication download delay expires."""
+    """Return when the post-publication download delay of the episode's Site expires."""
     settings = get_settings().download_settings
-    delay_minutes = settings.episode_download_delay_minutes
+    delay_minutes = site_setting(episode.collection.site_key, SiteSetting.DOWNLOAD_DELAY_MINUTES)
     if delay_minutes <= 0:
         return None
 

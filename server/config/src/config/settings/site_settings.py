@@ -139,6 +139,7 @@ class SiteSetting(StrEnum):
     UPCOMING_AND_LIVE = "upcomingAndLive"
     LOOKUP_MINUTES = "lookupMinutes"
     DOWNLOAD_WITH_COUNTDOWN = "downloadWithCountdown"
+    DOWNLOAD_DELAY_MINUTES = "downloadDelayMinutes"
     UPGRADE_CHECK = "upgradeCheck"
     UPGRADE_AFTER_DAYS = "upgradeAfterDays"
     UPGRADE_REPEAT = "upgradeRepeat"
@@ -196,6 +197,7 @@ class SiteSettingValues(SubmodelBase):
     upcoming_and_live: Optional[Union[Default, bool]] = None
     lookup_minutes: Optional[Union[Default, LookupMinutes]] = None
     download_with_countdown: Optional[bool] = None
+    download_delay_minutes: Optional[Union[Default, Annotated[int, Field(ge=0, le=7 * 24 * 60)]]] = None
     upgrade_check: Optional[Union[Default, bool]] = None
     upgrade_after_days: Optional[Union[Default, Annotated[int, Field(ge=1, le=365)]]] = None
     upgrade_repeat: Optional[Union[Default, UpgradeRepeat]] = None
@@ -273,6 +275,10 @@ SITE_SETTINGS: Mapping[SiteSetting, SiteSettingSpec] = {spec.key: spec for spec 
     ),
     SiteSettingSpec(SiteSetting.LOOKUP_MINUTES, SiteSettingGroup.SCHEDULING, _lookup_minutes),
     SiteSettingSpec(SiteSetting.DOWNLOAD_WITH_COUNTDOWN, SiteSettingGroup.DOWNLOAD_PROFILE, builtin=False),
+    SiteSettingSpec(
+        SiteSetting.DOWNLOAD_DELAY_MINUTES, SiteSettingGroup.DOWNLOAD_PROFILE,
+        lambda settings: settings.download_settings.episode_download_delay_minutes,
+    ),
     SiteSettingSpec(SiteSetting.UPGRADE_CHECK, SiteSettingGroup.DOWNLOAD_PROFILE, _profile_default("upgrade_check")),
     SiteSettingSpec(SiteSetting.UPGRADE_AFTER_DAYS, SiteSettingGroup.DOWNLOAD_PROFILE, _profile_default("upgrade_after_days")),
     SiteSettingSpec(SiteSetting.UPGRADE_REPEAT, SiteSettingGroup.DOWNLOAD_PROFILE, _profile_default("upgrade_repeat")),

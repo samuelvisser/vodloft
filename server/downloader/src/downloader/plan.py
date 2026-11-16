@@ -76,6 +76,8 @@ class ResolvedDownloadSource:
     """When set, yt-dlp downloads ``url`` (a web page) with this command line."""
     ytdlp_subtitles: YtdlpSubtitles = YtdlpSubtitles()
     ytdlp_sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock()
+    ytdlp_throttle_guard: bool = False
+    """Refuse a video yt-dlp only got in a throttled resolution (``ThrottledError``) instead of keeping it."""
 
 
 @dataclass(frozen=True)

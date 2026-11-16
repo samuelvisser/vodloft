@@ -229,6 +229,7 @@ def execute_download_plan(
                         subtitles_dir=workspace.workspace if ytdlp_subtitles else None,
                         subtitles=plan.source.ytdlp_subtitles,
                         sponsorblock=plan.source.ytdlp_sponsorblock,
+                        **({} if plan.source.hls_bundle else {"throttle_guard": plan.source.ytdlp_throttle_guard}),
                     )
                 else:
                     transfer = download_hls_bundle if plan.source.hls_bundle else download_hls if plan.source.use_hls else download_file

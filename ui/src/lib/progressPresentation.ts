@@ -16,9 +16,16 @@ const WAITS: Record<string, [string, string]> = {
     publication_delay: ['Delayed', 'Waiting for the post-publication safety delay before downloading.'],
     downloads_paused: ['Paused', 'Downloads are paused for the night in Settings › Downloads. It starts when the pause ends.'],
     publication_countdown: ['Countdown', 'Waiting for the episode countdown to finish before downloading final media.'],
+    site_throttled: ['Throttled', 'The site only offered a low resolution, so its downloads wait a while.'],
 }
 
-function publicationDelayDeadline(until?: number | null): string | undefined {
+/** Waits that end at a known time, with how their label and detail say it. */
+const DEADLINES: Record<string, {label: string; detail: string}> = {
+    publication_delay: {label: 'Delayed until', detail: 'The safety delay ends at'},
+    site_throttled: {label: 'Waiting until', detail: 'Trying again at'},
+}
+
+function waitDeadline(until?: number | null): string | undefined {
     if (until == null || !Number.isFinite(until)) return undefined
 
     const deadline = new Date(until * 1000)
@@ -33,16 +40,17 @@ export function waitingPresentation(
     until?: number | null,
 ): ProgressPresentation {
     const value = WAITS[reason]
-    const deadline = reason === 'publication_delay' ? publicationDelayDeadline(until) : undefined
-    const frontendDetail = deadline && value?.[1]
-        ? `${value[1]} The safety delay ends at ${deadline}.`
-        : value?.[1]
+    const timed = DEADLINES[reason]
+    const deadline = timed ? waitDeadline(until) : undefined
+    // The backend names the Site that throttled, which the generic text cannot.
+    const base = reason === 'site_throttled' ? backendDetail || value?.[1] : value?.[1]
+    const frontendDetail = deadline && base ? `${base.replace(/\.$/, '')}. ${timed.detail} ${deadline}.` : base
 
     return {
         mode: 'waiting',
         active: true,
         percent,
-        label: `${deadline ? `Delayed until ${deadline}` : value?.[0] || 'Waiting'}...`,
+        label: `${deadline ? `${timed.label} ${deadline}` : value?.[0] || 'Waiting'}...`,
         compactLabel: reason === 'publication_delay' ? 'Delayed...' : undefined,
         detail: frontendDetail || backendDetail || 'Waiting for a dependency.',
         icon: faIcon('fass', 'clock'),

@@ -14,6 +14,8 @@ class MediaDownloadHistoryAction(StrEnum):
     FAILED = "failed"
     LOCKED = "locked"
     """The Source refused the download for lack of an access, such as a channel membership."""
+    THROTTLED = "throttled"
+    """The Site served only a low resolution while it held better ones back; the download waits and tries again."""
     ACCESS_CHECK_REQUESTED = "access_check_requested"
     """The user asked VODLoft to check locked media again, or the Source's sign-in changed."""
     CANCEL_REQUESTED = "cancel_requested"

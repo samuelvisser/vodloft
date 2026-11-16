@@ -27,6 +27,7 @@ from backend.services.download_quality import (
 )
 from backend.types.download_profile_types import AutoSubtitles
 from backend.services.source_options import ytdlp_source_options
+from backend.services.throttle_guard import refuses_throttled
 from backend.services.movies import update_movie_extra_source_metadata
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat
@@ -102,6 +103,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     title, slug, media_id = media.title, media.slug, media.id
     thumbnail = select_thumbnail(media)
     media_source = get_source(media.source_key)
+    throttle_guard = refuses_throttled(session, media_download_id)
     if (episode is not None and media_source.has(Feature.EPISODE_LISTS)) or video is not None:
         # A listed episode is a video on a page, just like a single video.
         page_url = media.sharing_url
@@ -120,7 +122,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                 quality=quality, subtitles=subtitle_request,
                 sponsorblock=sponsorblock,
                 custom_options=custom_ytdlp_options(*option_texts) if media_source.has(Feature.YTDLP_OPTIONS) else (),
-                ffmpeg_path=ffmpeg_path,
+                ffmpeg_path=ffmpeg_path, throttle_guard=throttle_guard,
             )
         else:
             tracker.preparing("inspect_stream")

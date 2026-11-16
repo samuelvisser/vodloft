@@ -11,6 +11,7 @@ from backend.api.models.media_download_history import (
     MediaDownloadHistoryPageRead,
 )
 from backend.db.models.media_download import MediaDownloadBase, MediaDownloadHistory
+from backend.services.throttle_guard import THROTTLED_TRIES
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 
 
@@ -106,6 +107,13 @@ def _presentation(entry: MediaDownloadHistory) -> tuple[str, str, str | None]:
             str(metadata.get("access_label") or "Locked"),
             "locked",
             str(metadata.get("error")) if metadata.get("error") else None,
+        )
+    if action == MediaDownloadHistoryAction.THROTTLED:
+        site, height, attempt = metadata.get("site") or "The site", metadata.get("height"), metadata.get("try")
+        return (
+            f"{site} only offered {height}p" if height else f"{site} throttled the download",
+            "pending",
+            f"Try {attempt} of {THROTTLED_TRIES}; tried again after a pause" if attempt else None,
         )
     if action == MediaDownloadHistoryAction.ACCESS_CHECK_REQUESTED:
         return "Check for access requested", "pending", None

@@ -406,7 +406,7 @@ export default function DownloadsSettingsTab({
                             </p>
                             <p>
                                 This delay applies to automatic downloads. For manual downloads, you can choose to wait until the delay expires or download immediately.
-                                Set the delay to 0 to disable it.
+                                Set the delay to 0 to disable it. Each Site can have a delay of its own, or none, under Sites below.
                             </p>
                         </ReadMore>
                     }

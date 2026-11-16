@@ -193,6 +193,7 @@ const SiteSettingValuesSchema = z.object({
     upcomingAndLive: orDefault(z.boolean()),
     lookupMinutes: orDefault(LookupMinutesSchema),
     downloadWithCountdown: z.boolean().nullish(),
+    downloadDelayMinutes: orDefault(z.number()),
     upgradeCheck: orDefault(z.boolean()),
     upgradeAfterDays: orDefault(z.number()),
     upgradeRepeat: orDefault(z.enum(UpgradeRepeatValues)),
@@ -274,6 +275,7 @@ const wholeNumber = (min: number, max: number, unit: string) => requiredNumber()
     .max(max, `Must be at most ${max} ${unit}.`)
 const upgradeAfterDays = wholeNumber(1, 365, 'days')
 const upgradeLengthMinutes = wholeNumber(1, 600, 'minutes')
+const downloadDelayMinutes = wholeNumber(0, 7 * 24 * 60, 'minutes')
 
 const SiteSettingValuesFormSchema = SiteSettingValuesSchema.extend({
     metadataRefresh: z.string().nullish().refine(
@@ -286,6 +288,7 @@ const SiteSettingValuesFormSchema = SiteSettingValuesSchema.extend({
         starting: pendingMinutes(60),
         live: pendingMinutes(60),
     })),
+    downloadDelayMinutes: orDefault(downloadDelayMinutes),
     upgradeAfterDays: orDefault(upgradeAfterDays),
     upgradeLengthMinutes: orDefault(upgradeLengthMinutes),
 })

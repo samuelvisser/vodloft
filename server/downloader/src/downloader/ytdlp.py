@@ -19,7 +19,9 @@ from pathlib import Path
 from typing import Optional
 
 from .hls_bundle import BundleTrack, write_hls_bundle
-from .errors import DownloadCanceled, DownloadError, EncryptedMediaError, FileTooLargeError, MediaUnavailableError
+from .errors import (
+    DownloadCanceled, DownloadError, EncryptedMediaError, FileTooLargeError, MediaUnavailableError, ThrottledError,
+)
 from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, SponsorSegment, VideoStream, WrittenSubtitle
 from .plan import ResolvedDownloadSource, YtdlpSponsorBlock, YtdlpSubtitles
 from .source import FORMAT_HEIGHTS
@@ -51,6 +53,15 @@ _SORT_NAMES = {"av1": "av01", "vp9": "vp9", "h264": "h264", "h265": "h265"}
 _CODEC_PATTERNS = {"av1": "av0?1", "vp9": "vp0?9", "h264": "avc|h264", "h265": "hev|hvc|h265"}
 _AUDIO_SORT_NAMES = {"aac": "aac", "opus": "opus"}
 AUDIO_FORMATS = ("m4a", "opus", "mp3")
+
+THROTTLED_HEIGHT = 360
+"""The resolution a throttled YouTube still serves: a download that asked for more and got this or less while
+yt-dlp warned that formats were held back was throttled."""
+_WITHHELD_FORMATS = (
+    "formats may be missing", "formats have been skipped as they are missing a url",
+    "they will be skipped as they may yield http error 403",
+)
+"""What yt-dlp warns when the site held back formats it has, in lower case."""
 
 
 @dataclass(frozen=True)
@@ -165,8 +176,13 @@ def resolve_ytdlp_source(
     sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock(),
     custom_options: tuple[str, ...] = (),
     ffmpeg_path: str = "ffmpeg",
+    throttle_guard: bool = False,
 ) -> ResolvedDownloadSource:
-    """``custom_options`` are the user's own yt-dlp options; VODLoft's own come after them and win."""
+    """``custom_options`` are the user's own yt-dlp options; VODLoft's own come after them and win.
+
+    With ``throttle_guard``, a video download that asks for more than ``THROTTLED_HEIGHT`` refuses a throttled
+    file: see ``download_ytdlp``.
+    """
     if not command:
         raise DownloadError("A yt-dlp download needs the yt-dlp command")
     hls = preferred_format == "format_hls"
@@ -195,6 +211,7 @@ def resolve_ytdlp_source(
         ytdlp_command=(*command, *options),
         ytdlp_subtitles=subtitles,
         ytdlp_sponsorblock=sponsorblock,
+        ytdlp_throttle_guard=throttle_guard and not hls and not audio_only and (height or 0) > THROTTLED_HEIGHT,
     )
 
 
@@ -492,12 +509,16 @@ def download_ytdlp(
         subtitles_dir: Path | None = None,
         subtitles: YtdlpSubtitles = YtdlpSubtitles(),
         sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock(),
+        throttle_guard: bool = False,
 ) -> DownloadResult:
     """Run yt-dlp for ``url`` and move the file it produces to ``dest_path``.
 
     With ``subtitles_dir``, yt-dlp also writes the video's subtitles that
     ``subtitles`` asks for; each one is saved there as SRT and listed in the
     result. A subtitle that fails never fails the download.
+
+    With ``throttle_guard``, a video of ``THROTTLED_HEIGHT`` or less that yt-dlp got while it warned that the
+    site held formats back raises ``ThrottledError`` and is not kept. A video that has nothing better is kept.
     """
     if should_cancel and should_cancel():
         raise DownloadCanceled("Download canceled")
@@ -520,7 +541,7 @@ def download_ytdlp(
     segments: tuple[SponsorSegment, ...] | None = None
     video: VideoStream | None = None
     try:
-        output, marked = _run(argv, progress=progress, should_cancel=should_cancel)
+        output, marked, warnings = _run(argv, progress=progress, should_cancel=should_cancel)
         for line in marked:
             if line.startswith(_FILE):
                 produced = line.removeprefix(_FILE).strip()
@@ -533,6 +554,8 @@ def download_ytdlp(
             if any("larger than max-filesize" in line for line in output):
                 raise FileTooLargeError("The file is larger than the largest file allowed")
             raise DownloadError("yt-dlp finished without producing a file")
+        if throttle_guard and video is not None and video.height <= THROTTLED_HEIGHT and _withheld_formats(warnings):
+            raise ThrottledError(f"Only {video.height}p was offered while better versions were held back", video.height)
         size = Path(produced).stat().st_size
         os.replace(produced, dest_path)
         written: tuple[WrittenSubtitle, ...] = ()
@@ -579,7 +602,7 @@ def download_ytdlp_hls_bundle(
         "--", url,
     ]
     try:
-        _output, marked = _run(argv, progress=progress, should_cancel=should_cancel)
+        _output, marked, _warnings = _run(argv, progress=progress, should_cancel=should_cancel)
         tracks: dict[str, BundleTrack] = {}
         audio: BundleTrack | None = None
         segments: tuple[SponsorSegment, ...] | None = None
@@ -614,14 +637,20 @@ def download_ytdlp_hls_bundle(
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
+def _withheld_formats(warnings: list[str]) -> bool:
+    """Whether yt-dlp warned that the site held back formats the video has."""
+    return any(pattern in warning.lower() for warning in warnings for pattern in _WITHHELD_FORMATS)
+
+
 def _run(
         argv: list[str], *, progress: Optional[ProgressCallback], should_cancel: Optional[CancelCheck],
-) -> tuple[list[str], list[str]]:
-    """Run yt-dlp, report its progress, and return its last lines of output and the lines VODLoft's
-    own ``--print`` options wrote, in order. Raises for a failure or when canceled."""
+) -> tuple[list[str], list[str], list[str]]:
+    """Run yt-dlp, report its progress, and return its last lines of output, the lines VODLoft's
+    own ``--print`` options wrote and every warning, in order. Raises for a failure or when canceled."""
     lines: queue.Queue[str | None] = queue.Queue()
     output: list[str] = []
     marked: list[str] = []
+    warnings: list[str] = []
     finished = 0
     current = 0
 
@@ -666,11 +695,13 @@ def _run(
             elif line.startswith(_MARKS):
                 marked.append(line)
             else:
+                if line.startswith("WARNING:"):
+                    warnings.append(line)
                 output.append(line)
                 del output[:-50]
         if process.wait() != 0:
             raise _error(output)
-        return output, marked
+        return output, marked, warnings
     finally:
         if process.poll() is None:
             process.terminate()

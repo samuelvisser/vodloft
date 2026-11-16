@@ -20,6 +20,7 @@ from backend.services.download_plans import prepare_download_plan
 from backend.services.download_relocation import remove_folders_left_empty
 from backend.services.media_access import lock_refused, media_access, media_site_key, site_access
 from backend.services.sites import collection_site
+from backend.services.throttle_guard import record_throttled
 from backend.services.upgrade_check import schedule_first_upgrade_check
 from backend.services.notifications.emitters import episode_downloaded
 from backend.services.media_download_history import (
@@ -31,7 +32,7 @@ from backend.types.media_download_history_types import MediaDownloadHistoryActio
 from config import get_settings
 from sources import UnknownSourceError, get_source
 from sources.pacing import RequestCanceled, request_context
-from downloader import AccessRequiredError, DownloadCanceled, EncryptedMediaError, media_duration
+from downloader import AccessRequiredError, DownloadCanceled, EncryptedMediaError, ThrottledError, media_duration
 from downloader.capacity import resources
 from downloader.coordinator import DownloadExecution, execute_download_plan
 from downloader.storage.replacement import (
@@ -380,6 +381,13 @@ def run_download(
             **attempt, error=exc, lifecycle=asdict(tracker.snapshot()),
         )
         canceled = isinstance(exc, (DownloadCanceled, RequestCanceled))
+        if isinstance(exc, ThrottledError):
+            # Not a failure: the download waits for the Site's pause to end and is tried again.
+            height = exc.height
+            run_write_transaction(lambda w: record_throttled(
+                w, media_download_id, height=height, now=finished, metadata=metadata,
+            ))
+            return TaskResult(summary=f"{title}: only {height}p was offered, so it is tried again later", outcome="failed")
         refused = None
         if not canceled and not isinstance(exc, EncryptedMediaError):
             try:
