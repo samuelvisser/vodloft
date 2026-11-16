@@ -50,3 +50,9 @@ export async function apiJson<T>(
     if (!response.ok) throw await responseError(response)
     return parse(await response.json())
 }
+
+/** The full address of one of VODLoft's public paths, such as an IPTV playlist, on the address VODLoft is reached on. */
+export function publicAddress(path: string): string {
+    const base = apiUrl().replace(/\/api$/, '')
+    return new URL(`${base}${path}`, window.location.href).href
+}

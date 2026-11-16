@@ -35,6 +35,19 @@ def stream_profiles_by_collection_slug_list(collection_slug: str, access: Access
     with db_session() as s:
         return get_stream_profiles_list(s, access, collection_slug)
 
+@router.get("/stream-access", dependencies=[requires(Area.STREAM_PROFILES, Level.VIEW)], response_model=StreamAccessRead)
+def stream_access(access: Access = signed_in()):
+    """The addresses of the playlist and guide with all of the user's channels."""
+    with db_session() as s:
+        return get_stream_access(s, access)
+
+
+@router.post("/stream-access/regenerate", dependencies=[requires(Area.STREAM_PROFILES, Level.VIEW)], response_model=StreamAccessRead)
+def stream_access_regenerate(access: Access = signed_in()):
+    """Give the user's playlist and guide new addresses, so a leaked one stops working."""
+    return run_write_transaction(lambda s: regenerate_stream_access(s, access))
+
+
 @router.post("/bulk/summary", dependencies=[requires(Area.STREAM_PROFILES, Level.VIEW)], response_model=BulkSummaryRead)
 def stream_profiles_bulk_summary(body: BulkSelectionIn, access: Access = signed_in()):
     """What the chosen profiles are set to now, for the bulk edit's Change settings."""

@@ -8,30 +8,44 @@ import {SelectRegistry} from '../../utils/selectRegistry'
 import Select from 'react-select'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
-import StreamProfileForm, {StreamProfileMode} from '../../components/StreamProfile/StreamProfileForm'
+import StreamProfileForm from '../../components/StreamProfile/StreamProfileForm'
 import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
-import {RssStreamProfileCreateIn, RssStreamProfileCreateOut, RssStreamProfileCreateSchema} from '../../types/schemas/rss_stream_profile'
+import {STREAM_PROFILE_TYPES, type StreamProfileType} from '../../components/StreamProfile/streamProfileTypes'
 import {useQueryClient} from '@tanstack/react-query'
 import ReadMore from "../../utils/ReadMore";
 import {downloadedEpisodeTypes} from '../../components/DownloadProfile/episodeFilters'
 import {apiUrl} from '../../lib/api'
+
+// Settings whose defaults differ per type, so they start from the new type's default when the type changes.
+const OWN_FIELDS = {streamLiveEpisodes: true}
 
 export default function AddStreamProfilePage() {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const qc = useQueryClient()
 
-    const [mode, setMode] = useState<StreamProfileMode>('rss')
+    const [mode, setMode] = useState<StreamProfileType>('rss')
+    const createSchema = STREAM_PROFILE_TYPES[mode].createSchema
 
     const {data: collections} = useCollections()
     const collectionReg: SelectRegistry = buildCollectionSelectRegistry(collections)
 
-    const form = useForm<RssStreamProfileCreateIn>({
-        resolver: zodResolver(RssStreamProfileCreateSchema),
+    const form = useForm<any>({
+        resolver: (values, context, options) => zodResolver(createSchema as any)(values, context, options),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: getZodDefaults(RssStreamProfileCreateSchema),
+        defaultValues: getZodDefaults(STREAM_PROFILE_TYPES.rss.createSchema),
     })
+
+    // Another type keeps what both types have, and starts its own settings from their defaults.
+    const changeMode = (next: StreamProfileType) => {
+        if (next === mode) return
+        const current = form.getValues()
+        const schema = STREAM_PROFILE_TYPES[next].createSchema
+        const shared = Object.keys(schema.shape).filter((key) => key in current && !(key in OWN_FIELDS))
+        form.reset({...getZodDefaults(schema), ...Object.fromEntries(shared.map((key) => [key, current[key]]))})
+        setMode(next)
+    }
     const {watch, formState: {errors, isSubmitting}} = form
     const prefillApplied = useRef(false)
     const requestedCollectionSlug = searchParams.get('collection')
@@ -63,8 +77,8 @@ export default function AddStreamProfilePage() {
 
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
 
-    const submitFn = async (data: RssStreamProfileCreateOut) => {
-        return fetch(`${apiUrl()}/rss-stream-profiles`, {
+    const submitFn = async (data: unknown) => {
+        return fetch(`${apiUrl()}/${STREAM_PROFILE_TYPES[mode].endpoint}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',
@@ -74,7 +88,7 @@ export default function AddStreamProfilePage() {
 
     const onSuccess = async (result: {id: number}) => {
         await qc.invalidateQueries({queryKey: ['streamProfilesView']})
-        navigate(`/edit-stream-profile/rss/${result.id}`)
+        navigate(`/edit-stream-profile/${mode}/${result.id}`)
     }
 
     const onSubmit = buildServerAwareSubmit(form as any, submitFn, {
@@ -129,7 +143,7 @@ export default function AddStreamProfilePage() {
                     <SegmentedOptions
                         name="stream-profile-mode"
                         value={mode}
-                        onChange={(v) => setMode(v as StreamProfileMode)}
+                        onChange={(v) => changeMode(v as StreamProfileType)}
                         options={[
                             {
                                 value: 'rss',
@@ -142,7 +156,20 @@ export default function AddStreamProfilePage() {
                                         your membership using your favorite podcast app.</p>
                                     </ReadMore>
                                 ),
-                            }
+                            },
+                            {
+                                value: 'iptv',
+                                label: 'IPTV',
+                                description: (
+                                    <ReadMore summary={<span>A TV channel with a programme guide.</span>}>
+                                        <p>
+                                            With an IPTV Stream Profile, the collection becomes a channel in TV apps such as
+                                            TiviMate, Kodi&apos;s IPTV Simple, or Jellyfin and Emby Live TV. Live episodes play
+                                            live on the channel, and the guide shows the episodes of the last week.
+                                        </p>
+                                    </ReadMore>
+                                ),
+                            },
                         ]}
                     />
                 </div>

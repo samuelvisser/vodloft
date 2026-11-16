@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 from backend.db.text_types import case_insensitive_string
+from backend.utils.helpers import generate_stream_profile_token
 
 if TYPE_CHECKING:
     from .UserAccess import UserAccess
@@ -65,6 +66,10 @@ class User(Base):
     )
     library_collection_sort_reversed: Mapped[bool] = mapped_column(
         default=False, server_default=false(), comment="Whether the user turned that order around",
+    )
+    stream_token: Mapped[str] = mapped_column(
+        unique=True, default=generate_stream_profile_token,
+        comment="Secret in the addresses of the user's own playlist and guide, with all their channels",
     )
     created_by_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),

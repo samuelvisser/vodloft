@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
+from backend.utils.helpers import generate_stream_profile_token
 
 
 class Settings(Base):
@@ -28,6 +29,10 @@ class Settings(Base):
     ytdlp_options: Mapped[str] = mapped_column(
         Text, default="", server_default="", nullable=False,
         comment="Your own yt-dlp options for every download of the yt-dlp Source, one or more per line",
+    )
+    stream_token: Mapped[str] = mapped_column(
+        String(64), default=generate_stream_profile_token,
+        comment="Secret in the addresses of the playlist and guide with every channel, for an install without user accounts",
     )
     alembic_version_num: Mapped[Optional[str]] = mapped_column(
         String(32),

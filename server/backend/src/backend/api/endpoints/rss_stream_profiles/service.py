@@ -13,48 +13,12 @@ from backend.api.models.rss_stream_profile import (
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.db.models import Collection
 from backend.db.models.stream_profile import RssStreamProfile
-from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, PreferredFormat
-from backend.types.stream_profile_types import RSS_HLS_OUTPUT_MODES
 from backend.utils.feed_urls import build_rss_feed_url, request_base_url
 from backend.security.access import Access
 from backend.services.stream_profile_owners import check_owner, owned_by
 from backend.utils.helpers import generate_stream_profile_token
-from backend.services.sites import collection_site
 from backend.services.stream_episodes import keeps_live_episode_handoff
-from sources import StreamMethod
-
-
-def _title_override(title: str, collection_title: str) -> Optional[str]:
-    normalized = title.strip()
-    return None if normalized == collection_title else normalized
-
-
-def ensure_site_can_stream(
-        collection: Collection, *, use_source_stream: bool, stream_live_episodes: bool,
-        preferred_format: str, video_output_mode: Optional[str],
-) -> None:
-    """A feed only streams episodes that are not downloaded in a way the collection's Site offers:
-    as files, as HLS video, and live. HLS video also needs the Site to stream it or keep it as a download."""
-    site = collection_site(collection)
-    if use_source_stream and not site.streams:
-        raise HTTPException(
-            status_code=422,
-            detail=f"{site.name} cannot stream episodes; a feed for this collection serves downloaded files only",
-        )
-    hls_video = (
-        preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value and video_output_mode in RSS_HLS_OUTPUT_MODES
-    )
-    # HLS video comes from the Site's stream or from downloads kept as an HLS bundle.
-    if hls_video and StreamMethod.HLS not in site.stream_methods and not site.downloads.hls_bundle:
-        raise HTTPException(status_code=422, detail=f"{site.name} has no HLS video; choose an MP4 video output")
-    if stream_live_episodes and StreamMethod.LIVE not in site.stream_methods:
-        raise HTTPException(status_code=422, detail=f"{site.name} cannot stream live episodes")
-    # A feed serves the downloaded version nearest to its format, or the Site's own stream, which only
-    # comes in the resolutions the Site streams.
-    height = PREFERRED_FORMAT_HEIGHTS.get(preferred_format)
-    heights = set(site.stream_video_heights if use_source_stream and site.stream_video_heights else site.downloads.video_heights)
-    if height is not None and height not in heights:
-        raise HTTPException(status_code=422, detail=f"{site.name} has no {preferred_format.removeprefix('format_')} video")
+from ..stream_profiles.service import ensure_site_can_stream, title_override
 
 
 def get_rss_stream_profiles_list(s: Session, access: Access) -> list[RssStreamProfileAPIRead]:
@@ -108,7 +72,7 @@ def create_stream_profile_rss(
         body,
         exclude_fields={"feed_url", "title"},
     )
-    item.overwrite_collection_title = _title_override(body.title, collection.title)
+    item.overwrite_collection_title = title_override(body.title, collection.title)
     item.collection = collection
     item.token = token
     item.feed_url = feed_url
@@ -139,7 +103,7 @@ def update_stream_profile_rss(
 
     feed_url = body.feed_url.strip()
     update_database_fields(item, body, exclude_fields={"feed_url", "title"})
-    item.overwrite_collection_title = _title_override(body.title, item.collection.title)
+    item.overwrite_collection_title = title_override(body.title, item.collection.title)
     if not keeps_live_episode_handoff(item):
         item.live_episode_handoff_ids = []
     item.feed_url = feed_url

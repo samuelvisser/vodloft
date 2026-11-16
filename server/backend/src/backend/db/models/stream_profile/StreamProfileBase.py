@@ -25,6 +25,10 @@ class StreamProfileBase(Base):
         "polymorphic_identity": StreamProfileType.BASE.value,
     }
 
+    # Whether an episode needs every media in ``media_kinds``, as an app gets an address for each (RSS);
+    # a profile that plays one of them at a time needs only one.
+    plays_every_media_kind = True
+
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     type: Mapped[str]

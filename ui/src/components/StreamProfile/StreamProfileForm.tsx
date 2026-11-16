@@ -6,13 +6,14 @@ import ReadMore from '../../utils/ReadMore'
 import {episodeTagLabel, SourceFeature, sourceHas} from '../../types/schemas/source'
 import {FORMAT_HEIGHTS, PreferredFormatReg} from '../../types/local_media_profile'
 import RssStreamProfileForm from './RssStreamProfileForm'
+import IptvStreamProfileForm from './IptvStreamProfileForm'
 import StreamProfileAdvisory, {type StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {MediaTypeReg} from "../../types/stream_profile";
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {useCollectionEpisodeTags, useCollections, useSiteOptions, useSourceLookup} from '../../lib/queries'
 
-export type StreamProfileMode = 'rss' | 'base'
+export type StreamProfileMode = 'rss' | 'iptv' | 'base'
 
 export type {StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 
@@ -48,6 +49,9 @@ type Props = {
     /** The link of a collection that is not saved yet. */
     collectionUrl?: string
     canOpenDownloadProfiles?: boolean
+    /** An IPTV channel's own playlist and guide, once it is saved. */
+    playlistPath?: string
+    guidePath?: string
 }
 
 export default function StreamProfileForm({
@@ -65,6 +69,8 @@ export default function StreamProfileForm({
     sourceKey,
     collectionUrl,
     canOpenDownloadProfiles = true,
+    playlistPath,
+    guidePath,
 }: Props) {
     const {control, formState: {errors}, getValues, register, setValue, watch} = form
     collectionRoot ??= true
@@ -528,6 +534,19 @@ export default function StreamProfileForm({
                 </div>
             )}
 
+            {mode === 'iptv' && (
+                <IptvStreamProfileForm
+                    form={form}
+                    isCreating={isCreating}
+                    playlistPath={playlistPath}
+                    guidePath={guidePath}
+                    onRegenerateToken={onRegenerateToken}
+                    regeneratingToken={regeneratingToken}
+                    liveEpisodes={canStreamLiveEpisodes}
+                    proxyChoice={canStreamFromSource && !!site?.streamProxyChoice}
+                    siteName={streamSourceName}
+                />
+            )}
             {mode === 'rss' ? (
                 <RssStreamProfileForm
                     form={form}

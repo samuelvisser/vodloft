@@ -28,7 +28,7 @@ import ExistingFilesBanner from '../../components/ExistingFiles/ExistingFilesBan
 import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
 import LockedEpisodesFilter from '../../components/Episode/LockedEpisodesFilter'
-import {apiFetch, apiUrl} from '../../lib/api'
+import {apiFetch, apiUrl, publicAddress} from '../../lib/api'
 
 const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
 
@@ -698,7 +698,9 @@ export default function CollectionPage() {
                   </div>
                   <div className="collection-profile-links">
                     {attachedStreamProfiles.map((profile) => {
-                      const feedUrl = profile.type === 'rss' ? profile.streamProfileImpl?.feedUrl : undefined
+                      const impl = profile.streamProfileImpl
+                      const feedUrl = impl.type === 'rss' ? impl.feedUrl : publicAddress(impl.playlistPath)
+                      const what = impl.type === 'rss' ? 'RSS URL' : 'playlist URL'
                       const copied = copiedStreamProfileId === profile.id
                       const label = `${profile.type.toUpperCase()} ${preferredFormatLabel(profile.preferredFormat)}`
                       return (
@@ -711,13 +713,13 @@ export default function CollectionPage() {
                             <span>{label}</span>
                             <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
                           </Link>
-                          {profile.type === 'rss' && feedUrl && (
+                          {feedUrl && (
                             <button
                               type="button"
                               className="collection-profile-copy"
                               onClick={() => copyFeedUrl(profile.id, feedUrl)}
-                              aria-label={copied ? 'RSS URL copied' : 'Copy RSS URL'}
-                              title={copied ? 'Copied!' : 'Copy RSS URL'}
+                              aria-label={copied ? `${what} copied` : `Copy ${what}`}
+                              title={copied ? 'Copied!' : `Copy ${what}`}
                             >
                               <FontAwesomeIcon icon={faIcon('fass', copied ? 'check' : 'copy') as any} aria-hidden="true"/>
                             </button>

@@ -28,7 +28,7 @@ VODLOFT_0_5_0_REVISION = "817515eb8209"
 VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
-HEAD_REVISION = "555cdd9ad18a"
+HEAD_REVISION = "a323216be495"
 
 
 @pytest.fixture
@@ -1188,3 +1188,25 @@ def test_stream_profiles_keep_their_feed_settings_when_every_type_shares_them(mi
         assert connection.execute(text(
             "SELECT max_items, proxy_source_stream FROM stream_profiles_rss WHERE id = 20"
         )).one() == (25, 0)
+
+
+def test_iptv_migration_gives_each_user_and_the_install_a_stream_token(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "555cdd9ad18a")
+    with engine.begin() as connection:
+        for name in ("ann", "bob"):
+            connection.execute(text(
+                "INSERT INTO users (username, password_hash, session_version, library_collection_sort) "
+                "VALUES (:name, 'x', 0, 'name')"
+            ), {"name": name})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        tokens = connection.execute(text("SELECT stream_token FROM users")).scalars().all()
+        install = connection.execute(text("SELECT stream_token FROM settings")).scalar_one()
+    assert len(set(tokens)) == 2 and all(len(token) >= 32 for token in tokens)
+    assert install and install not in tokens

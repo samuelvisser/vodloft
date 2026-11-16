@@ -14,7 +14,7 @@ from backend.api.models.profile_list import StreamProfileListQuery, StreamsFrom
 from backend.api.models.source import SiteAPIRead
 from backend.api.models.stream_profile import StreamProfileAPIReadView, StreamProfileViewPageRead
 from backend.api.pagination import InvalidCursorError, SortKey, keyset_page
-from backend.db.models import RssStreamProfile, Collection, Site, StreamProfileBase
+from backend.db.models import Collection, Site, StreamProfileBase
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ def _to_view(item: AliasedClass[StreamProfileBase]) -> StreamProfileAPIReadView:
 
 def _filtered(s: Session, access: Access, filters: StreamProfileListQuery):
     """The Stream Profiles the user may see that the filters match, and the alias to sort them by."""
-    profile = with_polymorphic(StreamProfileBase, [RssStreamProfile])
+    profile = with_polymorphic(StreamProfileBase, "*")
     streams_from = {
         StreamsFrom.DOWNLOADS: profile.use_downloads.is_(True),
         StreamsFrom.SOURCE: profile.use_source_stream.is_(True),
@@ -87,7 +87,7 @@ def get_stream_profile_views_by_collection(
     collection_slug: str,
 ) -> list[StreamProfileAPIReadView]:
     """Every Stream Profile of one Collection the user may see."""
-    profile = with_polymorphic(StreamProfileBase, [RssStreamProfile])
+    profile = with_polymorphic(StreamProfileBase, "*")
     items = (
         owned_by(s.query(profile), profile.owner_user_id, access)
         .join(Collection, Collection.id == profile.collection_id)
@@ -104,7 +104,7 @@ def get_stream_profile_view(
     access: Access,
     stream_profile_id: int,
 ) -> StreamProfileAPIReadView:
-    profile = with_polymorphic(StreamProfileBase, [RssStreamProfile])
+    profile = with_polymorphic(StreamProfileBase, "*")
     item = (
         s.query(profile)
         .options(joinedload(profile.collection))

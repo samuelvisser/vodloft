@@ -4,6 +4,7 @@ from typing import Literal
 
 class StreamProfileType(Enum):
     RSS = "rss"
+    IPTV = "iptv"
 
     # For instances of StreamProfileBase class (parent class)
     BASE = "base"

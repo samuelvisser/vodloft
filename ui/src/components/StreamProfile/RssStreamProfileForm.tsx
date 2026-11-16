@@ -1,12 +1,10 @@
-import {ReactNode, useEffect, useState} from 'react'
+import {ReactNode, useEffect} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Select from 'react-select'
-import Switch from 'react-switch'
-import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import ReadMore from '../../utils/ReadMore'
 import {RssHlsOutputModes, RssVideoOutputModeReg} from '../../types/stream_profile'
-import {faIcon} from '../../icons/faIcon'
-import NumberInput from '../common/NumberInput'
+import StreamAddressField from './StreamAddressField'
+import StreamDeliveryFields from './StreamDeliveryFields'
 
 
 const VIDEO_FORMATS = new Set(['format_4k', 'format_1080p', 'format_720p', 'format_360p', 'format_hls'])
@@ -44,16 +42,12 @@ export default function RssStreamProfileForm({
     siteName = 'its site',
 }: Props) {
     const {control, formState: {errors}, register, setValue, watch} = form
-    const [copied, setCopied] = useState(false)
 
     const feedUrl: string | undefined = watch('feedUrl')
-    const useSourceStream: boolean = watch('useSourceStream')
     const preferredFormat: string | undefined = watch('preferredFormat')
     const videoOutputMode: string | null | undefined = watch('videoOutputMode')
-    const streamLiveEpisodes: boolean = watch('streamLiveEpisodes')
     const usesVideo = VIDEO_FORMATS.has(preferredFormat ?? '')
     const usesHlsVideo = usesVideo && RssHlsOutputModes.has(videoOutputMode ?? '')
-    const offersLiveEpisodes = liveEpisodes && usesHlsVideo
 
     useEffect(() => {
         if (preferredFormat === 'format_audio_only') {
@@ -79,45 +73,13 @@ export default function RssStreamProfileForm({
         }
     }, [hlsVideo, preferredFormat, setValue, usesVideo, videoOutputMode])
 
-    useEffect(() => {
-        if (!offersLiveEpisodes && streamLiveEpisodes) {
-            setValue('streamLiveEpisodes', false, {
-                shouldDirty: true,
-                shouldValidate: true,
-            })
-        }
-    }, [offersLiveEpisodes, setValue, streamLiveEpisodes])
-
-    const onCopy = async () => {
-        if (!feedUrl) return
-        try {
-            await navigator.clipboard.writeText(feedUrl)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-        } catch {
-            // The field remains selectable when clipboard access is unavailable.
-        }
-    }
-
     return (
         <>
-            <div className="form-row">
-                <label htmlFor="rss-max-items">Maximum episodes in RSS feed</label>
-                <NumberInput
-                    id="rss-max-items"
-                    inputMode="numeric"
-                    min={0}
-                    step={1}
-                    {...register('maxItems', {valueAsNumber: true})}
-                    aria-invalid={!!errors.maxItems}
-                    aria-describedby={errors.maxItems ? 'rss-max-items-error' : 'rss-max-items-help'}
-                />
-                {errors.maxItems && (
-                    <div id="rss-max-items-error" className="error" role="alert" aria-live="polite">
-                        {String(errors.maxItems.message)}
-                    </div>
-                )}
-                <div className="help" id="rss-max-items-help">
+            <StreamDeliveryFields
+                form={form}
+                app="podcast app"
+                maxItemsLabel="Maximum episodes in RSS feed"
+                maxItemsHelp={(
                     <ReadMore summary={<span>Include only the newest episodes. Keeping this low speeds up RSS experience.</span>}>
                         <p>
                             Capping the amount of included episodes usually greatly improves the performance of your RSS feed.
@@ -126,213 +88,67 @@ export default function RssStreamProfileForm({
                             Set to 0 to remove all limits.
                         </p>
                     </ReadMore>
-                </div>
-            </div>
-
-            {usesVideo && (
-                <div className="form-row">
-                    <label htmlFor="rss-video-output-mode">Video podcast output</label>
-                    <Controller
-                        control={control}
-                        name="videoOutputMode"
-                        render={({field}) => (
-                            <Select
-                                inputId="rss-video-output-mode"
-                                classNamePrefix="select"
-                                options={RssVideoOutputModeReg.options.filter((option) => hlsVideo || !RssHlsOutputModes.has(option.value))}
-                                value={RssVideoOutputModeReg.options.find(option => option.value === field.value) ?? null}
-                                onChange={(option) => field.onChange((option as any)?.value)}
-                                onBlur={field.onBlur}
-                                isClearable={false}
-                                aria-invalid={!!errors.videoOutputMode}
-                                aria-describedby={errors.videoOutputMode ? 'rss-video-output-mode-error' : 'rss-video-output-mode-help'}
-                            />
-                        )}
-                    />
-                    {errors.videoOutputMode && (
-                        <div id="rss-video-output-mode-error" className="error" role="alert" aria-live="polite">
-                            {String(errors.videoOutputMode.message)}
-                        </div>
-                    )}
-                    <div className="help" id="rss-video-output-mode-help">
-                        <ReadMore summary={<span>Choose how to serve video in your RSS feed depending on what your podcast player supports.</span>}>
-                            {RssVideoOutputModeReg.options
-                                .filter((option) => hlsVideo || !RssHlsOutputModes.has(option.value))
-                                .map((option) => (
-                                    <p key={option.value}>
-                                        <strong>{option.label}</strong> {videoOutputHelp[option.value] ?? RssVideoOutputModeReg.getHelp(option.value)}
-                                    </p>
-                                ))}
-                            <p>
-                                The episode URLs in the RSS never change when a local download appears. The same VODLoft URL resolves to local media when available, and streams from the collection's site only when the profile permits that fallback.
-                            </p>
-                        </ReadMore>
-                    </div>
-                </div>
-            )}
-
-            {usesVideo && proxyChoice && useSourceStream && (
-                <div className="form-row">
-                    <label htmlFor="rss-proxy-source-stream">Proxy video through VODLoft</label>
-                    <Controller
-                        control={control}
-                        name="proxySourceStream"
-                        render={({field}) => (
-                            <Switch
-                                id="rss-proxy-source-stream"
-                                checked={!!field.value}
-                                onChange={(checked) => field.onChange(checked)}
-                                onColor="#0ea5e9"
-                                offColor="#d1d5db"
-                                uncheckedIcon={false}
-                                checkedIcon={false}
-                                aria-invalid={!!errors.proxySourceStream}
-                                aria-describedby={errors.proxySourceStream ? 'rss-proxy-source-stream-error' : 'rss-proxy-source-stream-help'}
-                            />
-                        )}
-                    />
-                    {errors.proxySourceStream && (
-                        <div id="rss-proxy-source-stream-error" className="error" role="alert" aria-live="polite">
-                            {String(errors.proxySourceStream.message)}
-                        </div>
-                    )}
-                    <div className="help" id="rss-proxy-source-stream-help">
-                        <ReadMore summary={<span>Pass video from {siteName} through VODLoft, instead of letting your podcast app fetch it straight from {siteName}.</span>}>
-                            <p>
-                                This is on by default, because it plays most reliably: when {siteName} refuses a link, VODLoft
-                                looks the video up again before your podcast app notices. It does add bandwidth overhead: every
-                                video you watch is downloaded by your VODLoft server and uploaded again to your podcast app.
-                            </p>
-                            <p>
-                                When it is off, your podcast app still asks VODLoft for each part of the video, and VODLoft
-                                sends it on to {siteName} with a link that has not expired yet. The video itself then comes
-                                straight from {siteName}.
-                            </p>
-                            <p>
-                                This only applies to video streamed from {siteName}. Downloaded video always comes from VODLoft.
-                            </p>
-                        </ReadMore>
-                    </div>
-                </div>
-            )}
-
-            {offersLiveEpisodes && (
-                <div className="form-row">
-                    <label htmlFor="rss-stream-live-episodes">Stream live episodes</label>
-                    <Controller
-                        control={control}
-                        name="streamLiveEpisodes"
-                        render={({field}) => (
-                            <Switch
-                                id="rss-stream-live-episodes"
-                                checked={!!field.value}
-                                onChange={(checked) => field.onChange(checked)}
-                                onColor="#0ea5e9"
-                                offColor="#d1d5db"
-                                uncheckedIcon={false}
-                                checkedIcon={false}
-                                aria-invalid={!!errors.streamLiveEpisodes}
-                                aria-describedby={errors.streamLiveEpisodes ? 'rss-stream-live-episodes-error' : 'rss-stream-live-episodes-help'}
-                            />
-                        )}
-                    />
-                    {errors.streamLiveEpisodes && (
-                        <div id="rss-stream-live-episodes-error" className="error" role="alert" aria-live="polite">
-                            {String(errors.streamLiveEpisodes.message)}
-                        </div>
-                    )}
-                    <div className="help" id="rss-stream-live-episodes-help">
-                        <ReadMore summary={<span>Include matching episodes while they are live.</span>}>
-                            <p>
-                                With this setting enabled, you can view even episodes that are currently live at {siteName} straight in your podcast player!
-                            </p>
-                            <p>
-                                Live episodes still have to match this Stream Profile&apos;s episode-type filter in order to show up in the feed.
-                            </p>
-                            {!useSourceStream && (
-                                <>
-                                    <p>
-                                        Even though streaming from {siteName} is disabled for this stream profile, streaming live episodes from {siteName}
-                                        still works. VODLoft even provides a clean handoff to the downloaded HLS file after the episode is no longer
-                                        live: it waits for the download to finish first, and only then switches to streaming from your local file.
-                                        Your podcasting app should not even notice this switch!
-                                    </p>
-                                    <p>
-                                        <strong>Note:</strong> The profile does check whether the episode in question, when no longer live, will be
-                                        downloaded by your download profiles as HLS. If not, the episode is not considered part of this
-                                        downloads- only feed and will also not be included as a live episode.
-                                    </p>
-                                </>
+                )}
+                offersLiveEpisodes={liveEpisodes && usesHlsVideo}
+                proxyChoice={proxyChoice}
+                siteName={siteName}
+            >
+                {usesVideo && (
+                    <div className="form-row">
+                        <label htmlFor="rss-video-output-mode">Video podcast output</label>
+                        <Controller
+                            control={control}
+                            name="videoOutputMode"
+                            render={({field}) => (
+                                <Select
+                                    inputId="rss-video-output-mode"
+                                    classNamePrefix="select"
+                                    options={RssVideoOutputModeReg.options.filter((option) => hlsVideo || !RssHlsOutputModes.has(option.value))}
+                                    value={RssVideoOutputModeReg.options.find(option => option.value === field.value) ?? null}
+                                    onChange={(option) => field.onChange((option as any)?.value)}
+                                    onBlur={field.onBlur}
+                                    isClearable={false}
+                                    aria-invalid={!!errors.videoOutputMode}
+                                    aria-describedby={errors.videoOutputMode ? 'rss-video-output-mode-error' : 'rss-video-output-mode-help'}
+                                />
                             )}
-                            <p>
-                                <strong>Note:</strong> live video only works if your podcast player supports playing HLS video.
-                                A live episode has no length yet, so your podcast player may show its progress oddly.
-                            </p>
-                        </ReadMore>
+                        />
+                        {errors.videoOutputMode && (
+                            <div id="rss-video-output-mode-error" className="error" role="alert" aria-live="polite">
+                                {String(errors.videoOutputMode.message)}
+                            </div>
+                        )}
+                        <div className="help" id="rss-video-output-mode-help">
+                            <ReadMore summary={<span>Choose how to serve video in your RSS feed depending on what your podcast player supports.</span>}>
+                                {RssVideoOutputModeReg.options
+                                    .filter((option) => hlsVideo || !RssHlsOutputModes.has(option.value))
+                                    .map((option) => (
+                                        <p key={option.value}>
+                                            <strong>{option.label}</strong> {videoOutputHelp[option.value] ?? RssVideoOutputModeReg.getHelp(option.value)}
+                                        </p>
+                                    ))}
+                                <p>
+                                    The episode URLs in the RSS never change when a local download appears. The same VODLoft URL resolves to local media when available, and streams from the collection's site only when the profile permits that fallback.
+                                </p>
+                            </ReadMore>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
+            </StreamDeliveryFields>
 
             {advisory}
 
             {!isCreating && (
-                <div className="form-row">
-                    <label htmlFor="feed-url">RSS feed URL</label>
-                    <div className={`rss-feed-url-group${errors.feedUrl ? ' rss-feed-url-group-invalid' : ''}`}>
-                        <input
-                            id="feed-url"
-                            className="input rss-feed-url-input"
-                            type="text"
-                            placeholder="https://example.com/feed.xml"
-                            {...register('feedUrl')}
-                            aria-invalid={!!errors.feedUrl}
-                            aria-describedby={errors.feedUrl ? 'feed-url-error' : 'feed-url-help'}
-                        />
-                        <div className="rss-feed-url-actions">
-                            <button
-                                type="button"
-                                className="rss-feed-url-action"
-                                onClick={onCopy}
-                                disabled={!feedUrl}
-                                aria-label={copied ? 'RSS feed URL copied' : 'Copy RSS feed URL'}
-                                title={copied ? 'Copied!' : 'Copy RSS feed URL'}
-                                aria-live="polite"
-                            >
-                                <FontAwesomeIcon
-                                    className="rss-feed-url-action-icon"
-                                    icon={faIcon('fass', copied ? 'check' : 'copy') as any}
-                                    aria-hidden="true"
-                                />
-                                <span className="rss-feed-url-action-text">{copied ? 'Copied!' : 'Copy'}</span>
-                            </button>
-                            {onRegenerateToken && (
-                                <button
-                                    type="button"
-                                    className="rss-feed-url-action rss-feed-url-action-danger"
-                                    onClick={onRegenerateToken}
-                                    disabled={!!regeneratingToken}
-                                    aria-label={regeneratingToken ? 'Regenerating RSS feed URL' : 'Regenerate RSS feed URL'}
-                                    title={regeneratingToken ? 'Regenerating…' : 'Regenerate RSS feed URL'}
-                                >
-                                    <FontAwesomeIcon
-                                        className="rss-feed-url-action-icon"
-                                        icon={faIcon('fass', regeneratingToken ? 'spinner' : 'arrows-rotate') as any}
-                                        spin={!!regeneratingToken}
-                                        aria-hidden="true"
-                                    />
-                                    <span className="rss-feed-url-action-text">
-                                        {regeneratingToken ? 'Regenerating…' : 'Regenerate'}
-                                    </span>
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                    {errors.feedUrl && (
-                        <div id="feed-url-error" className="error" role="alert" aria-live="polite">
-                            {String(errors.feedUrl.message)}
-                        </div>
-                    )}
-                    <div className="help" id="feed-url-help">
+                <StreamAddressField
+                    id="feed-url"
+                    label="RSS feed URL"
+                    what="RSS feed URL"
+                    value={feedUrl}
+                    inputProps={{placeholder: 'https://example.com/feed.xml', ...register('feedUrl')}}
+                    onRegenerate={onRegenerateToken}
+                    regenerating={regeneratingToken}
+                    error={errors.feedUrl ? String(errors.feedUrl.message) : undefined}
+                    help={(
                         <ReadMore summary={<span>Paste this URL into your podcast app.</span>}>
                             <p>
                                 This feed stays reachable even when local authentication is enabled for the VODLoft UI, so your podcast app never needs to log in. You can freely edit this text, for example to use a different hostname.
@@ -341,8 +157,8 @@ export default function RssStreamProfileForm({
                                 If this URL ever leaks, use <strong>Regenerate</strong> to mint a new one and immediately invalidate the old one.
                             </p>
                         </ReadMore>
-                    </div>
-                </div>
+                    )}
+                />
             )}
         </>
     )

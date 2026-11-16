@@ -1,6 +1,7 @@
 import {z} from 'zod'
 import {ApiDateTimeSchema} from './datetime'
 import {RssStreamProfileReadSchema} from './rss_stream_profile'
+import {IptvStreamProfileReadSchema} from './iptv_stream_profile'
 
 export const StreamProfileReadSchema = z.looseObject({
     id: z.int(),
@@ -11,7 +12,7 @@ export const StreamProfileReadSchema = z.looseObject({
     preferredFormat: z.string(),
     preferExactMatch: z.boolean(),
     epIdTypeList: z.array(z.string()),
-    type: z.enum(['rss']),
+    type: z.enum(['rss', 'iptv']),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })
@@ -22,6 +23,6 @@ export const StreamProfileReadViewSchema = StreamProfileReadSchema.extend({
     collectionTitle: z.string(),
     collectionSlug: z.string(),
     collectionSourceKey: z.string(),
-    streamProfileImpl: RssStreamProfileReadSchema,
+    streamProfileImpl: z.discriminatedUnion('type', [RssStreamProfileReadSchema, IptvStreamProfileReadSchema]),
 })
 export type StreamProfileReadView = z.infer<typeof StreamProfileReadViewSchema>

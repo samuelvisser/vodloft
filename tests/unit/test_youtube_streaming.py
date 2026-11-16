@@ -94,7 +94,7 @@ def test_a_site_that_cannot_stream_is_not_looked_up():
 
 
 def test_a_feed_on_a_site_that_cannot_stream_is_refused():
-    from backend.api.endpoints.rss_stream_profiles.service import ensure_site_can_stream
+    from backend.api.endpoints.stream_profiles.service import ensure_site_can_stream
 
     vimeo = SimpleNamespace(sharing_url="https://vimeo.com/channels/staffpicks", source_key="ytdlp")
     youtube = SimpleNamespace(sharing_url="https://www.youtube.com/@channel-for-refusals", source_key="ytdlp")

@@ -1,6 +1,6 @@
 """Which episodes a stream profile offers, and what it plays for each one.
 
-Every stream profile type (an RSS feed today) picks its episodes the same way: from its collection,
+Every stream profile type (an RSS feed or an IPTV channel) picks its episodes the same way: from its collection,
 the episode types it lists, its downloads and its Site's stream, live episodes and at most
 ``max_items`` of them. A type only differs in which media it serves of an episode, its
 ``media_kinds``, and in how it hands them to an app.
@@ -52,7 +52,7 @@ def _not_offered() -> ServiceError:
     return ServiceError("Episode not offered by this stream profile", status_code=404)
 
 
-def _owner_may_stream(s: Session, profile: StreamProfileBase) -> bool:
+def owner_may_stream(s: Session, profile: StreamProfileBase) -> bool:
     """A disabled user's stream profiles stop answering until they are enabled again."""
     if profile.owner_user_id is None:
         return True
@@ -77,7 +77,7 @@ def get_stream_profile_by_token(s: Session, token: str, profile_type: StreamProf
         .filter_by(token=token, type=profile_type.value, enable_profile=True)
         .one_or_none()
     )
-    if item is None or not _owner_may_stream(s, item):
+    if item is None or not owner_may_stream(s, item):
         raise NotFoundError("Feed")
     return item
 
@@ -260,14 +260,19 @@ def _relevant_local_download(
     return next((download for download in local.values() if download is not None), None)
 
 
-def _has_required_local_media(local: dict[StreamMediaKind, Optional[EpisodeMediaDownload]]) -> bool:
-    """Whether every kind of media the profile offers is available locally.
+def _has_required_local_media(
+        profile: StreamProfileBase,
+        local: dict[StreamMediaKind, Optional[EpisodeMediaDownload]],
+) -> bool:
+    """Whether the media the profile needs of an episode is available locally: every kind it offers, or one
+    for a profile that plays one at a time.
 
     A download-only profile must never publish a stable media URL that only the Site can
     satisfy. When streaming from the Site is enabled, partial local coverage is fine because
     each stable URL can independently fall back at request time.
     """
-    return all(download is not None for download in local.values())
+    available = (download is not None for download in local.values())
+    return all(available) if profile.plays_every_media_kind else any(available)
 
 
 def _episode_type_prefix(episode: Episode) -> str:
@@ -333,9 +338,11 @@ def _can_stream_live_episode(
         return True
     # A download-only profile lists a live episode only when its Download Profiles
     # will provide every kind of media it offers once the episode is published.
+    # A profile that plays one media at a time keeps playing the episode from its HLS download.
+    kinds = profile.media_kinds if profile.plays_every_media_kind else ("hls",)
     return profile.use_downloads and all(
         _has_download_profile_for_episode(s, episode, kind)
-        for kind in profile.media_kinds
+        for kind in kinds
     )
 
 
@@ -515,7 +522,7 @@ def get_stream_items(
         if episode.publish_status in _UNAVAILABLE_PUBLISH_STATUSES:
             return
 
-        if collect and (profile.use_source_stream or _has_required_local_media(local)):
+        if collect and (profile.use_source_stream or _has_required_local_media(profile, local)):
             items.append((episode, relevant_local))
 
     if profile.max_items > 0:
@@ -613,7 +620,7 @@ def get_stream_episode(
 
     if local is None:
         local = _local_media(s, profile, _episode_downloads(s, profile, episode.id))
-    if _has_required_local_media(local) or profile.use_source_stream:
+    if _has_required_local_media(profile, local) or profile.use_source_stream:
         return episode
 
     raise ServiceError("No media available for this episode", status_code=404)

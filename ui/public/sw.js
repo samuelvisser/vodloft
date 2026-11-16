@@ -27,7 +27,7 @@ self.addEventListener('activate', (event) => {
 function isAppNavigation(request, url) {
   if (request.mode !== 'navigate') return false
   // Never replace a feed/API request with HTML, even when opened in a browser tab.
-  if (['/api', '/feeds', '/assets'].some((path) => url.pathname === path || url.pathname.startsWith(path + '/'))) {
+  if (['/api', '/feeds', '/iptv', '/assets'].some((path) => url.pathname === path || url.pathname.startsWith(path + '/'))) {
     return false
   }
   // Static resources are not React routes.
@@ -74,7 +74,7 @@ self.addEventListener('fetch', (event) => {
 // A notification only ever opens a page of this VODLoft, never another site or the API.
 function notificationRoute(raw) {
   if (typeof raw !== 'string' || !raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return '/'
-  return raw === '/api' || raw.startsWith('/api/') || raw.startsWith('/feeds/') ? '/' : raw
+  return raw === '/api' || raw.startsWith('/api/') || raw.startsWith('/feeds/') || raw.startsWith('/iptv/') ? '/' : raw
 }
 
 self.addEventListener('push', (event) => {

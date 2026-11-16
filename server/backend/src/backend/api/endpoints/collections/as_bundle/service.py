@@ -25,7 +25,7 @@ from backend.utils.helpers import generate_stream_profile_token
 from task_manager.scheduler.requester import current_requester
 from backend.utils.season_ordering import number_initial_seasons
 
-from ...rss_stream_profiles.service import ensure_site_can_stream
+from ...stream_profiles.service import ensure_site_can_stream
 from ...collection_local_media_profiles.service import create_collection_local_media_profile, update_collection_local_media_profile
 from backend.services.collections import add_collection, index_new_collection
 

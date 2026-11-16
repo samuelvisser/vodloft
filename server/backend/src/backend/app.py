@@ -318,9 +318,11 @@ def create_app() -> FastAPI:
         meta_router,
         config_router,
         rss_stream_profile_router,
+        iptv_stream_profile_router,
         stream_profile_router,
         task_router,
         feeds_router,
+        iptv_router,
         custom_metadata_router,
         logs_router,
         user_router,
@@ -337,8 +339,9 @@ def create_app() -> FastAPI:
     # Signing in, and who is signed in
     app.include_router(auth_router, prefix="/api")
 
-    # Keep podcast feed endpoints outside of /api to prevent authentication
+    # Keep podcast feed and IPTV endpoints outside of /api to prevent authentication
     app.include_router(feeds_router)
+    app.include_router(iptv_router)
     app.include_router(health_router, prefix="/api")
 
     # Protected API endpoints (shielded by middleware above)
@@ -367,6 +370,7 @@ def create_app() -> FastAPI:
     app.include_router(meta_router, prefix="/api")
     app.include_router(config_router, prefix="/api")
     app.include_router(rss_stream_profile_router, prefix="/api")
+    app.include_router(iptv_stream_profile_router, prefix="/api")
     app.include_router(stream_profile_router, prefix="/api")
     app.include_router(task_router, prefix="/api")
     app.include_router(logs_router, prefix="/api")

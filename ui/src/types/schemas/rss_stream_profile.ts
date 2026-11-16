@@ -1,24 +1,10 @@
 import {z} from 'zod'
-import {PreferredFormatReg} from "../local_media_profile";
 import {RssVideoOutputModeReg} from "../stream_profile";
-import {ApiDateTimeSchema} from "./datetime";
+import {StreamProfileFieldsReadSchema, StreamProfileFieldsSchema} from './stream_profile_fields'
 
 // ---------- Strict request (create/update) ----------
-const RssStreamProfileBaseSchema = z.object({
-    title: z.string().trim().min(1),
-    enableProfile: z.boolean().default(true),
-    useDownloads: z.boolean().default(true),
-    useSourceStream: z.boolean().default(true),
-    preferredFormat: z.enum(PreferredFormatReg.values).refine(
-        (value) => value !== 'format_hls',
-        {message: 'HLS is a Local Media Profile download format, not a Stream Profile preferred format'},
-    ),
-    preferExactMatch: z.boolean().default(false),
-    epIdTypeList: z.array(z.string()).default(['ep', 'aux']),
+const RssStreamProfileBaseSchema = StreamProfileFieldsSchema.extend({
     videoOutputMode: z.enum(RssVideoOutputModeReg.values).nullable().default(null),
-    streamLiveEpisodes: z.boolean().default(false),
-    proxySourceStream: z.boolean().default(true),
-    maxItems: z.int().nonnegative().default(100),
 })
 
 const validateVideoOutput = (
@@ -73,22 +59,9 @@ export const RssStreamProfileUpdateSchema = RssStreamProfileBaseSchema.extend({
 export type RssStreamProfileUpdateIn = z.input<typeof RssStreamProfileUpdateSchema>
 export type RssStreamProfileUpdateOut = z.output<typeof RssStreamProfileUpdateSchema>
 
-export const RssStreamProfileReadSchema = z.looseObject({
-    id: z.int(),
-    collectionId: z.int(),
-    enableProfile: z.boolean(),
-    useDownloads: z.boolean(),
-    useSourceStream: z.boolean(),
-    preferredFormat: z.union([z.enum(PreferredFormatReg.values), z.string()]),
-    preferExactMatch: z.boolean(),
-    epIdTypeList: z.array(z.string()),
+export const RssStreamProfileReadSchema = StreamProfileFieldsReadSchema.extend({
+    type: z.literal('rss'),
     videoOutputMode: z.union([z.enum(RssVideoOutputModeReg.values), z.string()]).nullable(),
-    streamLiveEpisodes: z.boolean(),
-    proxySourceStream: z.boolean(),
-    maxItems: z.number(),
     feedUrl: z.string(),
-    effectiveTitle: z.string(),
-    createdAt: ApiDateTimeSchema,
-    updatedAt: ApiDateTimeSchema,
 })
 export type RssStreamProfileRead = z.infer<typeof RssStreamProfileReadSchema>
