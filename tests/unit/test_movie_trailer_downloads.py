@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from config.settings.submodels import FilenameRestrictionMode
 
 
 def test_movie_profile_requires_an_item_specific_variable() -> None:
@@ -80,7 +81,7 @@ def test_movie_extra_output_uses_parent_movie_and_actual_media_fields(tmp_path: 
         "/downloads/movies/{{ movie_title }}/{{ title }}-{{ slug }}-{{ media_type }}.ext",
         movie=movie,
         media_item=trailer,
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
 
     assert result == (
@@ -123,7 +124,7 @@ def test_movie_extra_type_suffix_is_added_before_extension(tmp_path: Path, monke
         "/downloads/movies/{{ movie_title }}/{{ title }}{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext",
         movie=movie,
         media_item=interview,
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
 
     assert result == (tmp_path / "movies" / "Movie" / "Cast Interview-interview.mp4").resolve()

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from config.settings.submodels import FilenameRestrictionMode
 
 
 def test_tmdb_client_uses_runtime_to_choose_the_definitive_title_match(monkeypatch):
@@ -259,7 +260,7 @@ def test_movie_release_date_condition_omits_unknown_metadata(tmp_path, monkeypat
     result = resolve_movie_output_path(
         "/downloads/{{ movie_title }}{% if movie_year %} ({{ movie_year }}){% endif %}/"
         "{{ movie_slug }}.ext",
-        movie=movie,
+        movie=movie, filename_mode=FilenameRestrictionMode.WINDOWS,
     )
 
     assert result == (tmp_path / "A Movie" / "a-movie.ext").resolve()
@@ -287,7 +288,7 @@ def test_collection_date_component_placeholders_use_episode_publish_datetime(tmp
     result = resolve_episode_output_path(
         "/downloads/{{ year }}-{{ month }}-{{ day }}_{{ hour }}-{{ minute }}-{{ second }}/{{ episode }}.ext",
         episode=episode,
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
 
     assert result == (

@@ -43,6 +43,7 @@ from backend.utils.custom_metadata import (
     custom_metadata_template_variable,
 )
 from backend.utils.output_template import (
+    rendering_with_filename_mode,
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
     MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
     COLLECTION_OUTPUT_TEMPLATE_FIELDS,
@@ -58,8 +59,6 @@ from backend.utils.output_template import (
     typed_characters_the_mode_replaces,
 )
 from backend.utils.search import search_all_terms, search_relevance_score
-from config import get_settings
-from config.settings.submodels import FilenameRestrictionMode
 
 from ..custom_metadata.service import get_custom_metadata_fields
 
@@ -1077,6 +1076,14 @@ def get_output_template_preview(
     session: Session | None,
     body: LocalMediaProfileTemplatePreview,
 ) -> LocalMediaProfileTemplatePreviewResult:
+    with rendering_with_filename_mode(body.filename_restriction_mode):
+        return _output_template_preview(session, body)
+
+
+def _output_template_preview(
+    session: Session | None,
+    body: LocalMediaProfileTemplatePreview,
+) -> LocalMediaProfileTemplatePreviewResult:
     index_keys = output_template_custom_index_keys(body.output_template)
     definition_keys: frozenset[str] = frozenset()
     provisional_keys: frozenset[str] = frozenset()
@@ -1106,7 +1113,7 @@ def get_output_template_preview(
     else:
         raise ValueError("Template previews are only available for Collection, Movie and Video profiles")
 
-    filename_mode = FilenameRestrictionMode(get_settings().download_settings.filename_restriction_mode)
+    filename_mode = body.filename_restriction_mode
     if body.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:
         extension = "m4a"
     elif body.preferred_format == PreferredFormat.FORMAT_HLS:

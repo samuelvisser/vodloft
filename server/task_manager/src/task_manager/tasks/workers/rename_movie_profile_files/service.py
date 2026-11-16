@@ -108,6 +108,7 @@ def _plan_renames(
             destination = resolve_video_output_path(
                 profile.output_template,
                 video=media,
+                filename_mode=profile.filename_restriction_mode,
                 extension=extension,
             )
         elif isinstance(media, (Movie, MovieExtra)):
@@ -115,6 +116,7 @@ def _plan_renames(
                 profile.output_template,
                 movie=media if isinstance(media, Movie) else media.movie,
                 media_item=media,
+                filename_mode=profile.filename_restriction_mode,
                 extension=extension,
             )
         else:

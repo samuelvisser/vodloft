@@ -119,6 +119,7 @@ async def run_rename_file_worker(
                 episode=episode,
                 local_media_profile=download.local_media_profile,
                 media_download=download,
+                filename_mode=download.local_media_profile.filename_restriction_mode,
                 extension=extension,
             )
             destination = settle_no_ascii_name(download, destination, session=s)

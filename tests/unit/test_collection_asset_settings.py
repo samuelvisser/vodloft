@@ -61,24 +61,24 @@ def test_preview_uses_selected_episodes_collection_and_unsaved_template(monkeypa
     ))
     received = []
 
-    def resolve(actual_collection, template, *, values_overrides=None):
+    def resolve(actual_collection, template, *, filename_mode, values_overrides=None):
         received.append((actual_collection, template))
         return CollectionMediaDirectory('/library/Actual collection')
 
     monkeypatch.setattr(assets, 'resolve_collection_media_directory', resolve)
     monkeypatch.setattr(assets, 'collection_profile_roots', lambda _session, **kwargs: {})
     result = assets.get_collection_asset_root_preview(
-        session, source_id='episode:42', output_template='unsaved-template', local_media_profile_id=None,
+        session, source_id='episode:42', output_template='unsaved-template', filename_mode='windows', local_media_profile_id=None,
     )
     assert received == [(collection, 'unsaved-template')]
     assert result.path == '/library/Actual collection'
     assert result.collection_title == 'Actual collection'
     assert result.system_enabled is True
     assert assets.get_collection_asset_root_preview(
-        session, source_id='example', output_template='unsaved-template', local_media_profile_id=None,
+        session, source_id='example', output_template='unsaved-template', filename_mode='windows', local_media_profile_id=None,
     ).path is None
     assert assets.get_collection_asset_root_preview(
-        session, source_id='episode:99', output_template='unsaved-template', local_media_profile_id=None,
+        session, source_id='episode:99', output_template='unsaved-template', filename_mode='windows', local_media_profile_id=None,
     ).path is None
 
 
@@ -90,7 +90,7 @@ def test_preview_rejects_another_collections_root_but_allows_same_collection_pro
     monkeypatch.setattr(assets, 'resolve_collection_media_directory', lambda *_args, **_kwargs: CollectionMediaDirectory('/library/shared'))
     roots = {(1, 2): CollectionMediaDirectory('/library/shared')}
     monkeypatch.setattr(assets, 'collection_profile_roots', lambda *_args, **_kwargs: roots)
-    arguments = dict(source_id='episode:42', output_template='draft', local_media_profile_id=2)
+    arguments = dict(source_id='episode:42', output_template='draft', filename_mode='windows', local_media_profile_id=2)
     assert assets.get_collection_asset_root_preview(session, **arguments).path == '/library/shared'
     roots[2, 3] = CollectionMediaDirectory('/library/shared')
     result = assets.get_collection_asset_root_preview(session, **arguments)

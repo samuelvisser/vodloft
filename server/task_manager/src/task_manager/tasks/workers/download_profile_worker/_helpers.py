@@ -215,6 +215,7 @@ def ensure_episode_download(
             episode=episode,
             local_media_profile=local_media_profile,
             media_download=download,
+            filename_mode=local_media_profile.filename_restriction_mode,
         ))
         s.flush()
         record_media_download_history(
@@ -237,6 +238,7 @@ def ensure_episode_download(
         episode=episode,
         local_media_profile=local_media_profile,
         media_download=existing,
+        filename_mode=local_media_profile.filename_restriction_mode,
     ))
 
     if get_active_media_download_operation(s, existing.id) is not None:

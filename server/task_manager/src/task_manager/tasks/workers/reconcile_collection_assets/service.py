@@ -16,7 +16,7 @@ from backend.db.core import run_write_transaction
 from backend.db.models.CollectionLocalAsset import CollectionLocalAsset
 from backend.services.download_relocation import remove_folders_left_empty
 from backend.services.collection_assets import (
-    managed_collection_profile_pairs, resolve_collection_media_directory, shared_root_conflict,
+    CollectionNfoFile, collection_nfo_files, resolve_collection_media_directory, shared_root_conflict,
     collection_asset_sources, collection_assets_enabled, collection_profile_is_managed, collection_profile_roots,
 )
 from backend.utils.collection_asset_files import (
@@ -72,7 +72,9 @@ def _current(session, plan: AssetPlan) -> bool:
         return False
     source = next((candidate for candidate in collection_asset_sources(collection) if candidate.kind == plan.kind), None)
     return (
-        resolve_collection_media_directory(collection, profile.output_template).path == str(plan.directory)
+        resolve_collection_media_directory(
+            collection, profile.output_template, filename_mode=profile.filename_restriction_mode,
+        ).path == str(plan.directory)
         and source is not None
         and source.url == plan.url
         and source.forced_format == plan.forced_format
@@ -125,7 +127,8 @@ def _owned_file(session, plan: AssetPlan, target: Path):
     if any(row.collection_id != plan.collection_id for row in rows):
         raise ArtworkConflict(f"Another collection owns artwork at {target}")
 
-    for suffix in _SUPPORTED_EXTENSIONS:
+    # Artwork may sit beside the same picture in another format; an NFO file has no other format.
+    for suffix in _SUPPORTED_EXTENSIONS if target.suffix.lower() in _SUPPORTED_EXTENSIONS else ():
         alternate = target.with_suffix(suffix)
         if alternate == target or not (alternate.exists() or alternate.is_symlink()):
             continue
@@ -316,52 +319,178 @@ def _refresh_asset(plan: AssetPlan, check_canceled: Callable[[], None]) -> bool:
             check_canceled=check_canceled,
         )
         target = plan.directory / f"{plan.kind}.{prepared.output_format}"
-        new_hash = asset_file_hash(prepared.path)
-        if new_hash is None:
-            raise ValueError("Prepared collection artwork disappeared before publication")
-        check_canceled()
-        with asset_file_lock(plan.download_root, target):
-            def claim(session) -> tuple[list[int], str | None] | None:
-                """Mark the file as being replaced; None when the plan is no longer current."""
-                if not _current(session, plan):
-                    return None
-                if shared_root_conflict(collection_profile_roots(session), plan.collection_id, str(plan.directory)):
-                    raise ArtworkConflict("The collection directory became shared by another collection")
-                rows, previous_hash = _owned_file(session, plan, target)
-                _owner(session, rows, plan, target)
-                for row in rows:
-                    row.pending_hash = new_hash
-                session.flush()
-                return [row.id for row in rows], previous_hash
 
-            claimed = run_write_transaction(claim)
-            if claimed is None:
-                return False
-            row_ids, previous_hash = claimed
-            if new_hash != previous_hash:
-                publish_collection_asset(
-                    prepared.path,
-                    target,
-                    download_root=plan.download_root,
-                    expected_hash=previous_hash,
-                    check_canceled=check_canceled,
-                )
+        def record(row: CollectionLocalAsset) -> None:
+            row.source_url = plan.url
+            row.source_format = prepared.source_format
+            row.checked_at = now
 
-            def publish(session) -> None:
-                for row_id in row_ids:
-                    row = session.get(CollectionLocalAsset, row_id)
-                    if row is None:
-                        continue
-                    row.content_hash = new_hash
-                    row.pending_hash = None
-                    row.source_url = plan.url
-                    row.source_format = prepared.source_format
-                    row.checked_at = now
-
-            run_write_transaction(publish)
+        if not _publish_owned_file(
+            plan, prepared.path, target, current=lambda session: _current(session, plan), record=record,
+            check_canceled=check_canceled,
+        ):
+            return False
 
     _cleanup_obsolete_variants(plan, target, check_canceled)
     return True
+
+
+def _publish_owned_file(
+    plan: AssetPlan | NfoPlan,
+    prepared: Path,
+    target: Path,
+    *,
+    current: Callable[[object], bool],
+    record: Callable[[CollectionLocalAsset], None],
+    check_canceled: Callable[[], None],
+) -> bool:
+    """Put a prepared file at ``target`` for the plan's profile, unless someone else's file is there.
+
+    False when the plan stopped being current. ``record`` notes where the file came from on each owner.
+    """
+    new_hash = asset_file_hash(prepared)
+    if new_hash is None:
+        raise ValueError("Prepared collection file disappeared before publication")
+    check_canceled()
+    with asset_file_lock(plan.download_root, target):
+        def claim(session) -> tuple[list[int], str | None] | None:
+            """Mark the file as being replaced; None when the plan is no longer current."""
+            if not current(session):
+                return None
+            if shared_root_conflict(collection_profile_roots(session), plan.collection_id, str(plan.directory)):
+                raise ArtworkConflict("The collection directory became shared by another collection")
+            rows, previous_hash = _owned_file(session, plan, target)
+            _owner(session, rows, plan, target)
+            for row in rows:
+                row.pending_hash = new_hash
+            session.flush()
+            return [row.id for row in rows], previous_hash
+
+        claimed = run_write_transaction(claim)
+        if claimed is None:
+            return False
+        row_ids, previous_hash = claimed
+        if new_hash != previous_hash:
+            publish_collection_asset(
+                prepared,
+                target,
+                download_root=plan.download_root,
+                expected_hash=previous_hash,
+                check_canceled=check_canceled,
+            )
+
+        def publish(session) -> None:
+            for row_id in row_ids:
+                row = session.get(CollectionLocalAsset, row_id)
+                if row is None:
+                    continue
+                row.content_hash = new_hash
+                row.pending_hash = None
+                record(row)
+
+        run_write_transaction(publish)
+    return True
+
+
+@dataclass(frozen=True)
+class NfoPlan:
+    """A show or season NFO file to write for one collection and profile."""
+
+    collection_id: int
+    profile_id: int
+    directory: Path
+    """The collection's folder."""
+    download_root: Path
+    file: CollectionNfoFile
+
+    @property
+    def kind(self) -> str:
+        return self.file.kind
+
+
+def _wanted_nfos(session, collection_id: int, profile_id: int, roots) -> tuple[Path, tuple[CollectionNfoFile, ...]] | None:
+    """The collection's folder and the NFO files the profile wants in it; None when it has no folder of its own."""
+    profile = session.get(CollectionLocalMediaProfile, profile_id)
+    collection = session.get(Collection, collection_id)
+    root = roots.get((collection_id, profile_id))
+    if profile is None or collection is None or root is None or root.path is None:
+        return None
+    if shared_root_conflict(roots, collection_id, root.path):
+        return None
+    return Path(root.path), collection_nfo_files(session, collection, profile, Path(root.path))
+
+
+def _current_nfo(session, plan: NfoPlan) -> bool:
+    wanted = _wanted_nfos(session, plan.collection_id, plan.profile_id, collection_profile_roots(session))
+    return wanted is not None and wanted[0] == plan.directory and plan.file in wanted[1]
+
+
+def _write_nfo(plan: NfoPlan, check_canceled: Callable[[], None]) -> bool:
+    target = plan.file.path
+    with tempfile.TemporaryDirectory(prefix="vodloft-show-nfo-") as temporary:
+        prepared = Path(temporary) / target.name
+        prepared.write_bytes(plan.file.content)
+        new_hash = asset_file_hash(prepared)
+        with db_session() as session:
+            written = session.scalar(select(CollectionLocalAsset.id).where(
+                CollectionLocalAsset.local_media_profile_id == plan.profile_id,
+                CollectionLocalAsset.asset_type == plan.kind,
+                CollectionLocalAsset.file_path == str(target),
+                CollectionLocalAsset.content_hash == new_hash,
+                CollectionLocalAsset.pending_hash.is_(None),
+            ))
+        if written is not None and asset_file_hash(target) == new_hash:
+            return True
+        return _publish_owned_file(
+            plan, prepared, target, current=lambda session: _current_nfo(session, plan),
+            record=lambda row: None, check_canceled=check_canceled,
+        )
+
+
+def _nfo_asset_filter():
+    return or_(CollectionLocalAsset.asset_type == "tvshow", CollectionLocalAsset.asset_type.startswith("season-"))
+
+
+def _cleanup_unwanted_nfos(
+    collection_id: int, profile_id: int, wanted: set[Path], download_root: Path, check_canceled: Callable[[], None],
+) -> None:
+    """Remove the NFO files VODLoft wrote for the profile that it no longer wants, such as a renamed season's."""
+    with db_session() as session:
+        unwanted = [
+            (row_id, Path(file_path))
+            for row_id, file_path in session.execute(
+                select(CollectionLocalAsset.id, CollectionLocalAsset.file_path).where(
+                    CollectionLocalAsset.collection_id == collection_id,
+                    CollectionLocalAsset.local_media_profile_id == profile_id,
+                    _nfo_asset_filter(),
+                )
+            )
+            if Path(file_path) not in wanted
+        ]
+    emptied: set[Path] = set()
+    for record_id, path in unwanted:
+        check_canceled()
+        try:
+            with asset_file_lock(download_root, path):
+                def work(session):
+                    row = session.get(CollectionLocalAsset, record_id)
+                    if row is None:
+                        return
+                    shared = session.scalar(select(CollectionLocalAsset.id).where(
+                        CollectionLocalAsset.file_path == str(path), CollectionLocalAsset.id != record_id,
+                    ).limit(1))
+                    if shared is None:
+                        digest = asset_file_hash(path)
+                        if digest is not None and digest in (row.content_hash, row.pending_hash):
+                            removed = safe_asset_path(download_root, path)
+                            removed.unlink(missing_ok=True)
+                            emptied.add(removed.parent)
+                    session.delete(row)
+
+                run_write_transaction(work)
+        except ArtworkConflict as exc:
+            logger.warning("An old show or season NFO file was left untouched: %s", exc)
+    remove_folders_left_empty(emptied)
 
 
 def _cleanup_old_roots(
@@ -379,6 +508,8 @@ def _cleanup_old_roots(
                         CollectionLocalAsset.file_path,
                         current_root,
                     ),
+                    # NFO files are written again from what VODLoft knows, so they need no replacement first.
+                    ~_nfo_asset_filter(),
                 )
             )
         ]
@@ -401,7 +532,9 @@ def _cleanup_old_roots(
                         return None
                     if not collection_profile_is_managed(session, collection_id, profile_id):
                         return None
-                    if resolve_collection_media_directory(collection, profile.output_template).path != str(current_root):
+                    if resolve_collection_media_directory(
+                        collection, profile.output_template, filename_mode=profile.filename_restriction_mode,
+                    ).path != str(current_root):
                         return None
                     replacement = session.scalar(
                         select(CollectionLocalAsset)
@@ -446,6 +579,8 @@ def run_reconcile_collection_assets(
     warnings = []
     plans = []
     cleanup = []
+    nfo_plans: list[NfoPlan] = []
+    nfo_cleanup: list[tuple[int, int, set[Path]]] = []
     download_root = Path(get_settings().download_settings.download_root).resolve()
     with db_session() as session:
         if resource_type == "download_profile" and resource_id:
@@ -465,7 +600,15 @@ def run_reconcile_collection_assets(
                 continue
             profile = session.get(CollectionLocalMediaProfile, profile_id)
             collection = session.get(Collection, current_collection_id)
-            if profile is None or collection is None or not collection_assets_enabled(profile):
+            if profile is None or collection is None:
+                continue
+            wanted = _wanted_nfos(session, current_collection_id, profile_id, roots)
+            if wanted is not None:
+                nfo_plans.extend(
+                    NfoPlan(current_collection_id, profile_id, wanted[0], download_root, file) for file in wanted[1]
+                )
+                nfo_cleanup.append((current_collection_id, profile_id, {file.path for file in wanted[1]}))
+            if not collection_assets_enabled(profile):
                 continue
             if root.path is None or shared_root_conflict(roots, current_collection_id, root.path):
                 warnings.append(
@@ -510,8 +653,26 @@ def run_reconcile_collection_assets(
     for collection_id, profile_id, directory in cleanup:
         if (collection_id, profile_id) not in failed_pairs:
             _cleanup_old_roots(collection_id, profile_id, directory, download_root, check_canceled)
+    failed_nfo_pairs = set()
+    for index, plan in enumerate(nfo_plans):
+        update_progress(progress, 90 + int(index * 10 / len(nfo_plans)), f"Writing show and season NFO files ({index + 1}/{len(nfo_plans)})")
+        try:
+            if not _write_nfo(plan, check_canceled):
+                failed_nfo_pairs.add((plan.collection_id, plan.profile_id))
+        except DownloadCanceled:
+            raise
+        except ArtworkConflict as exc:
+            warnings.append(str(exc))
+            failed_nfo_pairs.add((plan.collection_id, plan.profile_id))
+        except Exception as exc:
+            logger.exception("Collection %s NFO file %s could not be written", plan.collection_id, plan.file.path)
+            errors.append(str(exc))
+            failed_nfo_pairs.add((plan.collection_id, plan.profile_id))
+    for collection_id, profile_id, wanted_paths in nfo_cleanup:
+        if (collection_id, profile_id) not in failed_nfo_pairs:
+            _cleanup_unwanted_nfos(collection_id, profile_id, wanted_paths, download_root, check_canceled)
     for warning in warnings:
         logger.warning("Collection artwork: %s", warning)
     if errors:
-        raise RuntimeError(f"Could not refresh {len(errors)} collection artwork file(s): {errors[0]}")
+        raise RuntimeError(f"Could not refresh {len(errors)} collection artwork or NFO file(s): {errors[0]}")
     update_progress(progress, 100, f"Reconciled collection artwork; {len(warnings)} skipped or ambiguous destination(s)")

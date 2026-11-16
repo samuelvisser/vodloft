@@ -43,6 +43,7 @@ const CollectionLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.ext
     ),
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
     downloadCollectionAssets: z.boolean().nullable().default(null),
+    showNfo: z.boolean().default(false),
     indexingValues: CollectionLocalMediaProfileIndexingValuesSchema.default([]),
 })
 
@@ -69,6 +70,7 @@ export const CollectionLocalMediaProfileReadSchema = LocalMediaProfileSchemaResp
         .optional()
         .transform((value) => value ?? 'both'),
     downloadCollectionAssets: z.boolean().nullable().default(null),
+    showNfo: z.boolean().default(false),
     indexingValues: z.array(IndexingValueEntrySchema).default([]),
 })
 export type CollectionLocalMediaProfileRead = z.infer<typeof CollectionLocalMediaProfileReadSchema>

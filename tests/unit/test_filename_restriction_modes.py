@@ -26,12 +26,11 @@ def _movie(title: str = "Amélie: Test?") -> SimpleNamespace:
 def _resolve(tmp_path, monkeypatch, mode: FilenameRestrictionMode, title: str = "Amélie: Test?") -> str:
     settings = get_settings()
     monkeypatch.setattr(settings.download_settings, "download_root", tmp_path)
-    monkeypatch.setattr(settings.download_settings, "filename_restriction_mode", mode)
 
     path = resolve_movie_output_path(
         "/downloads/Fïlms: Collection/{{ title }}.ext",
         movie=_movie(title),
-        extension="mp4",
+        extension="mp4", filename_mode=mode,
     )
     return path.relative_to(tmp_path.resolve()).as_posix()
 
@@ -60,16 +59,11 @@ def test_windows_mode_preserves_unicode_and_uses_look_alikes_for_windows_invalid
 def test_windows_mode_protects_reserved_device_names(tmp_path, monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings.download_settings, "download_root", tmp_path)
-    monkeypatch.setattr(
-        settings.download_settings,
-        "filename_restriction_mode",
-        FilenameRestrictionMode.WINDOWS,
-    )
 
     path = resolve_movie_output_path(
         "/downloads/{{ title }}.ext",
         movie=_movie("CON"),
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
     assert path.relative_to(tmp_path.resolve()).as_posix() == "_CON.mp4"
 
@@ -84,20 +78,15 @@ def test_restricted_mode_uses_conservative_ascii_names(tmp_path, monkeypatch):
 def test_windows_reserved_name_is_only_changed_for_concrete_download_filename(tmp_path, monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings.download_settings, "download_root", tmp_path)
-    monkeypatch.setattr(
-        settings.download_settings,
-        "filename_restriction_mode",
-        FilenameRestrictionMode.WINDOWS,
-    )
 
     provisional = resolve_movie_output_path(
         "/downloads/{{ title }}.ext",
-        movie=_movie("AUX"),
+        movie=_movie("AUX"), filename_mode=FilenameRestrictionMode.WINDOWS,
     )
     concrete = resolve_movie_output_path(
         "/downloads/{{ title }}.ext",
         movie=_movie("AUX"),
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
 
     assert provisional.relative_to(tmp_path.resolve()).as_posix() == "AUX.ext"
@@ -107,16 +96,11 @@ def test_windows_reserved_name_is_only_changed_for_concrete_download_filename(tm
 def test_windows_reserved_word_inside_filename_is_not_rewritten(tmp_path, monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings.download_settings, "download_root", tmp_path)
-    monkeypatch.setattr(
-        settings.download_settings,
-        "filename_restriction_mode",
-        FilenameRestrictionMode.WINDOWS,
-    )
 
     path = resolve_movie_output_path(
         "/downloads/Episode - {{ title }}.ext",
         movie=_movie("AUX"),
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
 
     assert path.relative_to(tmp_path.resolve()).as_posix() == "Episode - AUX.mp4"

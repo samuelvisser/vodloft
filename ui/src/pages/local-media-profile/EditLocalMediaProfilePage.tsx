@@ -190,9 +190,12 @@ export default function EditLocalMediaProfilePage() {
     })
 
     const onFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+        // A new filename mode names the files differently, just like a new template.
         const outputTemplateChanged = (
-            profile.type === 'collection'
-            && form.getValues('outputTemplate') !== profile.outputTemplate
+            profile.type === 'collection' && (
+                form.getValues('outputTemplate') !== profile.outputTemplate
+                || form.getValues('filenameRestrictionMode') !== profile.filenameRestrictionMode
+            )
         )
         const indexKeysChanged = profile.type === 'collection' &&
             JSON.stringify((form.getValues('indexingValues') ?? []).map((value: {key: string, keepNumbers?: boolean}) => `${value.key}:${!!value.keepNumbers}`).sort()) !==

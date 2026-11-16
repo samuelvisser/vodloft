@@ -7,6 +7,7 @@ facts (a response's actual size, a collision-resolved name) do not change policy
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from math import isfinite
 from typing import Literal
@@ -171,6 +172,8 @@ class DownloadPlan:
     subtitle_asset_ids: tuple[str, ...] = ()
     default_subtitle_languages: tuple[str, ...] = ()
     """The first of these languages that a subtitle has becomes the track players pick by default; none marks no track."""
+    file_date: datetime | None = None
+    """The date the published files get, such as when the media was published; None keeps when they were written."""
 
     def __post_init__(self) -> None:
         stages = {stage.id: stage for stage in self.stages}
@@ -249,6 +252,7 @@ def build_download_plan(
     attempt_id: str | None = None,
     media_lane: tuple[str, int] | None = None,
     default_subtitle_languages: tuple[str, ...] = (),
+    file_date: datetime | None = None,
 ) -> DownloadPlan:
     """Resolve optional work once; the coordinator executes this plan verbatim."""
     if download_mode not in ("direct", "temporary"):
@@ -363,4 +367,5 @@ def build_download_plan(
         artwork_asset_id, tuple(stages), copying, media_lane=media_lane,
         subtitle_asset_ids=tuple(subtitle_asset_ids),
         default_subtitle_languages=tuple(default_subtitle_languages),
+        file_date=file_date,
     )

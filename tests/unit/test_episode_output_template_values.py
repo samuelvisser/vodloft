@@ -121,7 +121,7 @@ def test_episode_index_does_not_require_custom_index_state_or_recount_gaps(monke
     episode.index = 105
     monkeypatch.setattr(output_template, "_finish_output_path", lambda rendered, **kwargs: rendered)
     assert output_template.resolve_episode_output_path(
-        "/downloads/{{ episode_index }}.ext", episode=episode,
+        "/downloads/{{ episode_index }}.ext", episode=episode, filename_mode="windows",
     ) == "/downloads/105.ext"
 
 
@@ -149,7 +149,7 @@ def test_episode_index_is_available_in_real_and_fallback_preview_sources() -> No
     for values, expected in ((source.values, "42"), (_EXAMPLE_COLLECTION_VALUES, "1")):
         result = get_output_template_preview(None, LocalMediaProfileTemplatePreview(
             type="collection", output_template="/downloads/{{ episode_index }}.ext",
-            preferred_format="format_1080p", values=values, indexing_values=[],
+            preferred_format="format_1080p", values=values, indexing_values=[],filename_restriction_mode="windows",
         ))
         assert result.output_path == f"/downloads/{expected}.mp4"
         assert result.used_variables == ["episode_index"]

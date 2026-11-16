@@ -20,7 +20,7 @@ from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Movie, MovieExtra, Video
 from backend.services.site_settings import local_media_profile_site_choices
 from backend.db.models.media_download import MediaDownloadBase
-from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, select_thumbnail
+from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, publish_time, select_thumbnail
 from backend.services.download_options import effective_download_mode, effective_metadata_mode, effective_thumbnail_mode
 from backend.services.download_quality import (
     chosen_subtitle_tracks, custom_ytdlp_options, default_subtitle_languages, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
@@ -83,7 +83,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     settings = get_settings().download_settings
     download_mode = effective_download_mode(profile).value
     thumbnail_mode = effective_thumbnail_mode(profile)
-    metadata_mode = effective_metadata_mode(profile)
+    metadata_mode, kodi_safe_nfo = effective_metadata_mode(profile), profile.kodi_safe_nfo
     subtitle_mode = LocalMediaProfileSubtitleMode(profile.subtitle_mode)
     quality = ytdlp_quality(profile)
     site_choices = local_media_profile_site_choices(profile, media_site) if media_site is not None else None
@@ -97,7 +97,8 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     subtitle_request = ytdlp_subtitles(profile, AutoSubtitles.NEVER)
     default_languages = default_subtitle_languages(profile)
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
-    output_template = profile.output_template
+    output_template, filename_mode = profile.output_template, profile.filename_restriction_mode
+    file_date_from_publish_date = profile.file_date_from_publish_date
     title, slug, media_id = media.title, media.slug, media.id
     thumbnail = select_thumbnail(media)
     media_source = get_source(media.source_key)
@@ -207,16 +208,17 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         raise DownloadCanceled("Download was deleted while preparing output paths")
     media = download.media
     if isinstance(media, Episode):
-        destination = resolve_episode_output_path(output_template, episode=media, local_media_profile=download.local_media_profile, media_download=download, extension=source.extension)
+        destination = resolve_episode_output_path(output_template, episode=media, local_media_profile=download.local_media_profile, media_download=download, filename_mode=filename_mode, extension=source.extension)
         metadata = build_episode_metadata(media, media.collection)
     elif isinstance(media, Video):
-        destination = resolve_video_output_path(output_template, video=media, extension=source.extension)
+        destination = resolve_video_output_path(output_template, video=media, filename_mode=filename_mode, extension=source.extension)
         metadata = build_video_metadata(media, source_name=media_source.name)
     else:
         movie = media.movie if isinstance(media, MovieExtra) else media
-        destination = resolve_movie_output_path(output_template, movie=movie, media_item=media, extension=source.extension)
+        destination = resolve_movie_output_path(output_template, movie=movie, media_item=media, filename_mode=filename_mode, extension=source.extension)
         metadata = build_movie_metadata(movie, media)
     destination = settle_no_ascii_name(download, destination, session=session)
+    file_date = publish_time(media) if file_date_from_publish_date else None
     session.rollback()
 
     assets: list[SidecarSpec] = []
@@ -238,7 +240,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     if metadata_mode in (MetadataMode.EMBED, MetadataMode.EMBED_AND_NFO) and embeddable:
         tags = tuple(metadata.ffmpeg_tags().items())
     if metadata_mode in (MetadataMode.NFO, MetadataMode.EMBED_AND_NFO):
-        assets.append(SidecarSpec("nfo", "nfo", content=render_nfo(metadata), extension="nfo", target_suffix=".nfo"))
+        assets.append(SidecarSpec("nfo", "nfo", content=render_nfo(metadata, kodi_safe=kodi_safe_nfo), extension="nfo", target_suffix=".nfo"))
 
     # The source resolver already inspected the HLS master once. Reuse those
     # advertised renditions rather than requesting a second, potentially
@@ -277,6 +279,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         subtitle_asset_ids=tuple(embedded_subtitle_ids),
         default_subtitle_languages=default_languages,
         attempt_id=tracker.attempt_id,
+        file_date=file_date,
         media_lane=(f"source:{media_source.id}", streams) if (streams := media_source.download_streams) else None,
     )
 

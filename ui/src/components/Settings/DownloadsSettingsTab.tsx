@@ -7,6 +7,7 @@ import type {
 } from '../../types/schemas/settings'
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import {FilenameRestrictionModeReg} from '../../types/local_media_profile'
 import {AutoSubtitlesReg} from '../../types/quality'
 import {UpgradeImprovementSchema} from '../../types/schemas/download_profile'
 import {UpgradeRepeatReg} from '../../types/schemas/siteSettings'
@@ -24,12 +25,6 @@ import {
     TextField,
     ToggleField,
 } from './SettingsControls'
-
-const FilenameRestrictionModeReg = createSelectRegistry('FilenameRestrictionMode', {
-    unrestricted: {label: 'Minimal restrictions'},
-    windows: {label: 'Windows-compatible filenames'},
-    restricted: {label: 'Restricted filenames'},
-})
 
 const DownloadModeReg = createSelectRegistry('DownloadMode', {
     direct: {label: 'Save directly to downloads'},
@@ -363,7 +358,7 @@ export default function DownloadsSettingsTab({
                 />
                 <SelectField
                     id="settings-filename-restriction-mode"
-                    label="Filename restrictions"
+                    label="Filename restrictions for new profiles"
                     value={draft.downloadSettings.filenameRestrictionMode}
                     registry={FilenameRestrictionModeReg}
                     error={errorFor('downloadSettings.filenameRestrictionMode')}
@@ -372,23 +367,16 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.filenameRestrictionMode = value as FilenameRestrictionMode
                     })}
                     help={
-                        <ReadMore summary={<span>Choose filename restriction mode to ensure filesystem compatibility.</span>}>
+                        <ReadMore summary={<span>The filename mode a new Local Media Profile starts with, and the one quick downloads use.</span>}>
                             <p>
-                                The modes follow yt-dlp, so new files are named as yt-dlp and Pinchflat name them.
-                                Files you already have keep their names until you rename a profile's files.
+                                Each Local Media Profile has a filename mode of its own, so a Windows-compatible library
+                                can sit beside an ASCII-only copy for a car stereo. Changing this does not change the
+                                profiles you already have.
                             </p>
                             <p>
-                                <strong>Minimal restrictions</strong> preserves Unicode and punctuation. Only a <code>/</code> in
-                                a value changes, to <code>⧸</code>.
-                            </p>
-                            <p>
-                                <strong>Windows-compatible</strong> turns characters Windows does not allow into look-alikes,
-                                such as <code>：</code> for <code>:</code>, and keeps reserved names from being used.
-                                Unicode is preserved.
-                            </p>
-                            <p>
-                                <strong>Restricted</strong> uses ASCII-only names without spaces or ampersands. A name with
-                                nothing ASCII left becomes <code>no_ascii_file_name</code>.
+                                <strong>Minimal restrictions</strong> preserves Unicode and punctuation,
+                                <strong> Windows-compatible</strong> replaces what Windows does not allow, and
+                                <strong> Restricted</strong> uses ASCII-only names without spaces or ampersands.
                             </p>
                         </ReadMore>
                     }

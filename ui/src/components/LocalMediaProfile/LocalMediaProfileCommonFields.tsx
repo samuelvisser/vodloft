@@ -4,6 +4,7 @@ import {Controller, UseFormReturn} from 'react-hook-form'
 import {type LocalMediaProfileType} from '../../types/local_media_profile'
 import CollectionLocalMediaProfileScopeField from './CollectionLocalMediaProfileScopeField'
 import LocalMediaProfileSitesField from './LocalMediaProfileSitesField'
+import MediaServerFileFields from './MediaServerFileFields'
 import QualityField from './QualityField'
 import SubtitleFields from './SubtitleFields'
 import SponsorBlockSection from './SponsorBlockSection'
@@ -47,6 +48,12 @@ export default function LocalMediaProfileCommonFields({
     }, [sites, getValues, setValue])
     const {onSubtitleModeChange, onScopeChange} = useSubtitleModeDefaults(form, mode, isCreating)
     const {data: defaults} = useLibraryDefaults()
+    // A new profile starts with the filename mode in Settings.
+    useEffect(() => {
+        if (defaults && getValues('filenameRestrictionMode') === undefined) {
+            setValue('filenameRestrictionMode', defaults.filenameRestrictionMode, {shouldDirty: false})
+        }
+    }, [defaults, getValues, setValue])
     const systemDownloadModeLabel = !defaults
         ? 'Loading system setting…'
         : defaults.downloadMode === 'temporary'
@@ -234,6 +241,8 @@ export default function LocalMediaProfileCommonFields({
                     </ReadMore>
                 </div>
             </div>
+
+            <MediaServerFileFields form={form} mode={mode}/>
 
             <hr className="form-section-divider" aria-hidden="true"/>
 

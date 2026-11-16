@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
+from config.settings.submodels import FilenameRestrictionMode
 from backend.types.local_media_profile_types import (
     AudioCodec,
     AudioFormat,
@@ -71,6 +72,19 @@ class LocalMediaProfileBase(Base):
         default=LocalMediaProfileMetadataMode.SYSTEM.value,
         server_default=LocalMediaProfileMetadataMode.SYSTEM.value,
         nullable=False,
+    )
+    kodi_safe_nfo: Mapped[bool] = mapped_column(
+        default=False, server_default=false(), nullable=False,
+        comment="NFO files replace the characters Kodi cannot show, such as emoji",
+    )
+    filename_restriction_mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=FilenameRestrictionMode.WINDOWS.value,
+        comment="How file and folder names are made safe: unrestricted, windows or restricted (ASCII only)",
+    )
+    """A new profile without one starts with the mode in Settings."""
+    file_date_from_publish_date: Mapped[bool] = mapped_column(
+        default=False, server_default=false(), nullable=False,
+        comment="Downloaded files get the date the media was published, so players sort them by air date",
     )
 
     subtitle_mode: Mapped[str] = mapped_column(
@@ -163,6 +177,12 @@ def _start_new_profile(_mapper, connection, target: LocalMediaProfileBase) -> No
         if getattr(target, field) is None:
             defaults = defaults or local_media_profile_defaults()
             setattr(target, field, defaults[field])
+    if target.filename_restriction_mode is None:
+        from config import get_settings
+
+        target.filename_restriction_mode = FilenameRestrictionMode(
+            get_settings().download_settings.filename_restriction_mode,
+        ).value
     if target.site_keys is None:
         from backend.services.local_media_profile_sites import every_known_site
 

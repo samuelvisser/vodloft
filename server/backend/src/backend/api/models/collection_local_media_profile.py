@@ -30,4 +30,5 @@ class CollectionLocalMediaProfileAPIRead(LocalMediaProfileAPIBaseOut):
     type: Literal["collection"] = LocalMediaProfileType.COLLECTION.value
     collection_scope: Union[CollectionLocalMediaProfileScope, str] = CollectionLocalMediaProfileScope.BOTH
     download_collection_assets: bool | None = None
+    show_nfo: bool
     indexing_values: list[IndexingValueDefinitionAPI] = Field(default_factory=list)

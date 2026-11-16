@@ -88,7 +88,9 @@ def collection_folder(collection: Collection, profile: LocalMediaProfileBase) ->
     from backend.services.collection_assets import resolve_collection_media_directory
 
     try:
-        root = resolve_collection_media_directory(collection, profile.output_template)
+        root = resolve_collection_media_directory(
+            collection, profile.output_template, filename_mode=profile.filename_restriction_mode,
+        )
         return virtual_path(Path(root.path)) if root.path else None
     except (AdoptionError, OSError, ValueError):
         return None
@@ -219,7 +221,10 @@ def _episode_facts(session: Session, collection: Collection, profile: LocalMedia
         values = episode_output_template_values(episode)
         expected: str | None = None
         try:
-            path = resolve_episode_output_path(profile.output_template, episode=episode, local_media_profile=profile)
+            path = resolve_episode_output_path(
+                profile.output_template, episode=episode, local_media_profile=profile,
+                filename_mode=profile.filename_restriction_mode,
+            )
             expected = virtual_path(path).removesuffix(".ext")
         except (CustomIndexNotReadyError, ValueError, OSError):
             expected = None
@@ -349,6 +354,7 @@ def _collection_folders(session: Session, scan: ExistingFileScan, collection: Co
             try:
                 expected.append(resolve_episode_output_path(
                     profile.output_template, episode=episode, local_media_profile=profile,
+                    filename_mode=profile.filename_restriction_mode,
                 ))
             except (CustomIndexNotReadyError, ValueError, OSError):
                 continue

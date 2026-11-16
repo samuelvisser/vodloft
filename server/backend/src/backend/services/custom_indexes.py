@@ -333,6 +333,7 @@ def _synced_downloads_before_reindex(
             old_path = resolve_episode_output_path_with_index_values(
                 profile.output_template, episode=episode, index_definitions=definitions,
                 index_values=get_episode_index_assignments(episode, profile.id),
+                filename_mode=profile.filename_restriction_mode,
                 extension=source.suffix.removeprefix("."),
             )
         except (CustomIndexNotReadyError, ValueError):

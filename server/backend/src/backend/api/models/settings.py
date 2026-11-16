@@ -696,6 +696,8 @@ class LibraryDefaultsAPIRead(ResponseBase):
     download_mode: DownloadMode
     thumbnail_mode: ThumbnailMode
     metadata_mode: MetadataMode
+    filename_restriction_mode: FilenameRestrictionMode
+    """The filename mode a new Local Media Profile starts with."""
     no_usable_media_delete_after_minutes: int
 
 

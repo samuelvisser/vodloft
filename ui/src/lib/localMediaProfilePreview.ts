@@ -11,6 +11,7 @@ type PreviewRequest = {
     type: 'collection' | 'movie' | 'video'
     outputTemplate: string
     preferredFormat: string
+    filenameRestrictionMode: string
     sourceId: string
     values: Record<string, string>
     localMediaProfileId: number | null

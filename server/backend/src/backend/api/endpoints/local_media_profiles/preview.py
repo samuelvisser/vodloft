@@ -171,7 +171,7 @@ def get_local_media_profile_preview(
         # Use the same concrete filesystem root and filename policy as collection art,
         # rather than mixing a logical /downloads path with a real collection path.
         result.output.output_path = str(_finish_output_path(
-            rendered.output_path, extension=Path(rendered.output_path).suffix,
+            rendered.output_path, extension=Path(rendered.output_path).suffix, mode=draft.filename_restriction_mode,
         ))
     except (TemplateError, ValueError, TypeError, ArithmeticError) as exc:
         result.output.output_path = None
@@ -181,7 +181,7 @@ def get_local_media_profile_preview(
         try:
             result.collection_root = LocalMediaProfileCollectionPreview.model_validate(get_collection_asset_root_preview(
                 session, source_id=draft.source_id, output_template=draft.output_template,
-                local_media_profile_id=draft.local_media_profile_id, values_overrides=values,
+                filename_mode=draft.filename_restriction_mode, local_media_profile_id=draft.local_media_profile_id, values_overrides=values,
             ))
         except (TemplateError, ValueError, TypeError, ArithmeticError) as exc:
             result.collection_root.reason = str(exc)

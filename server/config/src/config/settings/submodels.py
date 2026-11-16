@@ -516,7 +516,8 @@ class DownloadSettings(SubmodelBase):
     )
     filename_restriction_mode: FilenameRestrictionMode = Field(
         default=FilenameRestrictionMode.WINDOWS,
-        description="Filename compatibility mode: minimal restrictions, Windows-compatible, or restricted ASCII",
+        description="Filename compatibility mode new Local Media Profiles and quick downloads start with: minimal "
+                    "restrictions, Windows-compatible, or restricted ASCII",
     )
     remux_video_to_mp4: bool = Field(
         default=True,
