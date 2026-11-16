@@ -26,3 +26,18 @@ export const RssVideoOutputModeReg = createSelectRegistry("RssVideoOutputMode", 
 
 export const RssHlsOutputModes = new Set(['audio_hls', 'mp4_hls'])
 export const RssMp4OutputModes = new Set(['audio_mp4', 'mp4', 'mp4_hls'])
+
+export const IptvBetweenLiveEpisodesReg = createSelectRegistry("IptvBetweenLiveEpisodes", {
+  'newest_episode': {
+    label: "Newest episode",
+    help: "plays the newest episode the channel aired, on a loop, until the next one starts.",
+  },
+  'off_air': {
+    label: "Off air",
+    help: "shows an off-air screen until the next episode starts.",
+  },
+  'hide_channel': {
+    label: "Hide channel",
+    help: "lists the channel only while one of its episodes is live. Your TV app may only notice when it next reloads the playlist.",
+  },
+});

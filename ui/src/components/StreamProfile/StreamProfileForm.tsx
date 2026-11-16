@@ -6,7 +6,7 @@ import ReadMore from '../../utils/ReadMore'
 import {episodeTagLabel, SourceFeature, sourceHas} from '../../types/schemas/source'
 import {FORMAT_HEIGHTS, PreferredFormatReg} from '../../types/local_media_profile'
 import RssStreamProfileForm from './RssStreamProfileForm'
-import IptvStreamProfileForm from './IptvStreamProfileForm'
+import IptvStreamProfileForm, {IptvAddresses} from './IptvStreamProfileForm'
 import StreamProfileAdvisory, {type StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {MediaTypeReg} from "../../types/stream_profile";
@@ -49,9 +49,8 @@ type Props = {
     /** The link of a collection that is not saved yet. */
     collectionUrl?: string
     canOpenDownloadProfiles?: boolean
-    /** An IPTV channel's own playlist and guide, once it is saved. */
-    playlistPath?: string
-    guidePath?: string
+    /** An IPTV channel's own playlists and guide, once it is saved. */
+    iptvAddresses?: IptvAddresses
 }
 
 export default function StreamProfileForm({
@@ -69,8 +68,7 @@ export default function StreamProfileForm({
     sourceKey,
     collectionUrl,
     canOpenDownloadProfiles = true,
-    playlistPath,
-    guidePath,
+    iptvAddresses,
 }: Props) {
     const {control, formState: {errors}, getValues, register, setValue, watch} = form
     collectionRoot ??= true
@@ -538,8 +536,7 @@ export default function StreamProfileForm({
                 <IptvStreamProfileForm
                     form={form}
                     isCreating={isCreating}
-                    playlistPath={playlistPath}
-                    guidePath={guidePath}
+                    addresses={iptvAddresses}
                     onRegenerateToken={onRegenerateToken}
                     regeneratingToken={regeneratingToken}
                     liveEpisodes={canStreamLiveEpisodes}

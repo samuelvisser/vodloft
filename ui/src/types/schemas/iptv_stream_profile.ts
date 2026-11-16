@@ -1,5 +1,6 @@
 import {z} from 'zod'
 import {StreamProfileFieldsReadSchema, StreamProfileFieldsSchema} from './stream_profile_fields'
+import {IptvBetweenLiveEpisodesReg} from '../stream_profile'
 
 // ---------- Strict request (create/update) ----------
 const IptvStreamProfileBaseSchema = StreamProfileFieldsSchema.extend({
@@ -9,14 +10,27 @@ const IptvStreamProfileBaseSchema = StreamProfileFieldsSchema.extend({
     channelNumber: z.int().min(1).max(99999).nullable().default(null),
     // Empty uses the collection's Site name.
     channelGroup: z.string().trim().nullable().default(null),
+    betweenLiveEpisodes: z.enum(IptvBetweenLiveEpisodesReg.values).default('newest_episode'),
+    catchUpDays: z.int('Enter a whole number of days').min(1).max(30).default(7),
+    listEpisodes: z.boolean().default(false),
 })
 
-const validateLive = (value: {preferredFormat: string; streamLiveEpisodes: boolean}, ctx: z.RefinementCtx) => {
+const validateLive = (
+    value: {preferredFormat: string; streamLiveEpisodes: boolean; betweenLiveEpisodes: string},
+    ctx: z.RefinementCtx,
+) => {
     if (value.streamLiveEpisodes && value.preferredFormat === 'format_audio_only') {
         ctx.addIssue({
             code: 'custom',
             path: ['streamLiveEpisodes'],
             message: 'Live episode streaming requires a video preferred format',
+        })
+    }
+    if (value.betweenLiveEpisodes === 'hide_channel' && !value.streamLiveEpisodes) {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['betweenLiveEpisodes'],
+            message: 'A channel that is only listed while live needs Stream live episodes, or it is never listed',
         })
     }
 }
@@ -35,7 +49,11 @@ export const IptvStreamProfileReadSchema = StreamProfileFieldsReadSchema.extend(
     type: z.literal('iptv'),
     channelNumber: z.int(),
     channelGroup: z.string().nullable(),
+    betweenLiveEpisodes: z.enum(IptvBetweenLiveEpisodesReg.values),
+    catchUpDays: z.int(),
+    listEpisodes: z.boolean(),
     playlistPath: z.string(),
     guidePath: z.string(),
+    episodesPath: z.string(),
 })
 export type IptvStreamProfileRead = z.infer<typeof IptvStreamProfileReadSchema>

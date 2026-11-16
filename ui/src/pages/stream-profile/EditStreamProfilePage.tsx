@@ -167,8 +167,7 @@ export default function EditStreamProfilePage() {
                         form={form as any}
                         mode={type as 'rss' | 'iptv'}
                         collectionRoot={false}
-                        playlistPath={streamProfile?.streamProfileImpl.type === 'iptv' ? streamProfile.streamProfileImpl.playlistPath : undefined}
-                        guidePath={streamProfile?.streamProfileImpl.type === 'iptv' ? streamProfile.streamProfileImpl.guidePath : undefined}
+                        iptvAddresses={streamProfile?.streamProfileImpl.type === 'iptv' ? streamProfile.streamProfileImpl : undefined}
                         onRegenerateToken={onRegenerateToken}
                         regeneratingToken={regenerating}
                         downloadProfileDefaults={downloadProfileDefaults}

@@ -10,6 +10,14 @@ class StreamProfileType(Enum):
     BASE = "base"
 
 
+class IptvBetweenLiveEpisodes(StrEnum):
+    """What an IPTV channel shows while none of its episodes is live."""
+
+    NEWEST_EPISODE = "newest_episode"
+    OFF_AIR = "off_air"
+    HIDE_CHANNEL = "hide_channel"
+
+
 # What a stream profile serves of an episode: its audio, an MP4 video file or an HLS video stream.
 StreamMediaKind = Literal["audio", "mp4", "hls"]
 

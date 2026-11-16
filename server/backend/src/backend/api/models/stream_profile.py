@@ -67,3 +67,8 @@ class StreamAccessRead(ResponseBase):
     @property
     def guide_path(self) -> str:
         return f"/iptv/{self.stream_token}/guide.xml"
+
+    @computed_field
+    @property
+    def episodes_path(self) -> str:
+        return f"/iptv/{self.stream_token}/vod.m3u"

@@ -1,8 +1,10 @@
-"""What an IPTV stream profile's channel shows: its programme guide and what it plays now.
+"""What an IPTV stream profile's channel shows: its programme guide, what it plays now and what it played before.
 
 A channel's episodes are the ones its stream profile offers (``stream_episodes``). Each sits in the guide
 from the moment it went live, or else was published, for its length rounded up to whole slots. Between
-episodes the channel loops the newest one it has aired, and a scheduled episode shows as upcoming.
+episodes the channel loops the newest one it has aired, is off air, or is not listed at all, as its
+profile chooses. A scheduled episode shows as upcoming. The guide reaches back as far as apps may play
+an episode again from it (catch-up).
 """
 from __future__ import annotations
 
@@ -23,13 +25,13 @@ from backend.services.errors import NotFoundError
 from backend.services.sites import collection_site
 from backend.services.stream_episodes import get_local_download_for_episode, get_stream_items, owner_may_stream
 from backend.types.episode_types import EpisodePublishStatus
+from backend.types.stream_profile_types import IptvBetweenLiveEpisodes
 from backend.utils.episode import episode_identifier_type_predicate
 from sources import StreamMethod
 
 SLOT = timedelta(minutes=5)
 # A loop of a short episode shows in the guide as blocks of at least this long, of whole plays.
 _MIN_REPEAT = timedelta(minutes=30)
-GUIDE_PAST = timedelta(days=7)
 GUIDE_AHEAD = timedelta(days=1)
 # How long the guide gives a live episode beyond now, while it has no length yet.
 _LIVE_AHEAD = timedelta(minutes=30)
@@ -37,9 +39,9 @@ _LIVE_AHEAD = timedelta(minutes=30)
 
 @dataclass(frozen=True)
 class Programme:
-    """One slot of a channel's guide."""
+    """One slot of a channel's guide. A slot without an episode is off air."""
 
-    episode: Episode
+    episode: Optional[Episode]
     start: datetime
     stop: datetime
     live: bool = False
@@ -153,9 +155,25 @@ def _repeats(episode: Episode, start: datetime, until: datetime, *, after: datet
     return repeats
 
 
+def _between(
+    profile: IptvStreamProfile, previous: Optional[Episode], start: datetime, until: datetime, *, after: datetime,
+) -> list[Programme]:
+    """What fills the guide from ``start`` until ``until``, after ``previous`` aired or before any episode did."""
+    if start >= until:
+        return []
+    between = IptvBetweenLiveEpisodes(profile.between_live_episodes)
+    if between is IptvBetweenLiveEpisodes.OFF_AIR:
+        return [Programme(None, max(start, after), until)] if until > after else []
+    if between is IptvBetweenLiveEpisodes.NEWEST_EPISODE and previous is not None:
+        return _repeats(previous, start, until, after=after)
+    return []
+
+
 def channel_programmes(s: Session, profile: IptvStreamProfile, now: datetime) -> list[Programme]:
-    """The channel's guide from a week ago until a day ahead, in time order and without overlaps."""
-    window_start, window_end = now - GUIDE_PAST, _round_up(now + GUIDE_AHEAD)
+    """The channel's guide from the start of its catch-up window until a day ahead, in time order and without
+    overlaps."""
+    window_start = _round_up(now - timedelta(days=profile.catch_up_days))
+    window_end = _round_up(now + GUIDE_AHEAD)
     aired = sorted(
         (
             (start, episode)
@@ -167,7 +185,7 @@ def channel_programmes(s: Session, profile: IptvStreamProfile, now: datetime) ->
     upcoming = _upcoming_episodes(s, profile, now)
     loop_until = upcoming[0][0] if upcoming else window_end
 
-    programmes: list[Programme] = []
+    programmes = _between(profile, None, window_start, aired[0][0] if aired else loop_until, after=window_start)
     for index, (start, episode) in enumerate(aired):
         live = episode.publish_status == EpisodePublishStatus.LIVE.value
         next_start = aired[index + 1][0] if index + 1 < len(aired) else loop_until
@@ -179,7 +197,7 @@ def channel_programmes(s: Session, profile: IptvStreamProfile, now: datetime) ->
             continue
         programmes.append(Programme(episode, start, stop, live=live))
         if not live:
-            programmes.extend(_repeats(episode, stop, next_start, after=window_start))
+            programmes.extend(_between(profile, episode, stop, next_start, after=window_start))
 
     for index, (start, episode) in enumerate(upcoming):
         next_start = upcoming[index + 1][0] if index + 1 < len(upcoming) else window_end
@@ -194,23 +212,62 @@ def channel_programmes(s: Session, profile: IptvStreamProfile, now: datetime) ->
 
 
 def playing_now(s: Session, profile: IptvStreamProfile, now: datetime) -> Optional[Programme]:
-    """What the channel plays now: the guide's current slot, or the newest episode it aired while the
-    current slot is an episode that has not started yet."""
+    """What the channel plays now, or None while it is not on at all.
+
+    That is the guide's current slot. While that is an episode that has not started yet, a looping channel
+    plays the newest episode it aired and another is off air. A channel that is only on while live plays
+    nothing else.
+    """
     programmes = [programme for programme in channel_programmes(s, profile, now) if not programme.upcoming]
     current = next((programme for programme in programmes if programme.start <= now < programme.stop), None)
+    between = IptvBetweenLiveEpisodes(profile.between_live_episodes)
+    if between is IptvBetweenLiveEpisodes.HIDE_CHANNEL:
+        return current if current is not None and current.live else None
     if current is not None:
         return current
+    if between is IptvBetweenLiveEpisodes.OFF_AIR:
+        return Programme(None, now, now)
     started = [programme for programme in programmes if programme.start <= now]
     return started[-1] if started else None
 
 
-def channel_media_name(s: Session, profile: IptvStreamProfile, programme: Programme) -> str:
-    """Which of the episode's media addresses the channel plays: HLS where it can, as IPTV apps expect, and
+def listed_channels(s: Session, channels: list[IptvStreamProfile], now: datetime) -> list[IptvStreamProfile]:
+    """The channels a playlist and guide list now: all but those only on while live, while they are not."""
+    return [
+        channel for channel in channels
+        if channel.between_live_episodes != IptvBetweenLiveEpisodes.HIDE_CHANNEL.value
+        or playing_now(s, channel, now) is not None
+    ]
+
+
+def catch_up_programme(s: Session, profile: IptvStreamProfile, moment: datetime, now: datetime) -> Optional[Programme]:
+    """The episode the guide has on at ``moment``, for an app that plays it again; None outside the guide's
+    catch-up window, while the channel was off air or for a slot that has not started yet.
+
+    An app asks by the start of a guide slot, sometimes a little early, so a slot that starts shortly after
+    ``moment`` counts too.
+    """
+    if moment > now:
+        return None
+    programmes = [
+        programme for programme in channel_programmes(s, profile, now)
+        if programme.episode is not None and not programme.upcoming
+    ]
+    return next(
+        (programme for programme in programmes if programme.start <= moment < programme.stop),
+        next((programme for programme in programmes if moment < programme.start <= moment + SLOT), None),
+    )
+
+
+def media_name(s: Session, profile: IptvStreamProfile, episode: Episode) -> str:
+    """Which of the episode's media addresses an IPTV app plays: HLS where it can, as IPTV apps expect, and
     otherwise a downloaded MP4."""
-    episode = programme.episode
     if "audio" in profile.media_kinds:
         return "audio.m4a"
-    if programme.live or get_local_download_for_episode(s, profile, episode, kind="hls") is not None:
+    if (
+        episode.publish_status == EpisodePublishStatus.LIVE.value
+        or get_local_download_for_episode(s, profile, episode, kind="hls") is not None
+    ):
         return "video.m3u8"
     if get_local_download_for_episode(s, profile, episode, kind="mp4") is not None:
         return "video.mp4"

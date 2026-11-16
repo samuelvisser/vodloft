@@ -7,7 +7,7 @@ import {apiJson, publicAddress} from '../../lib/api'
 import {faIcon} from '../../icons/faIcon'
 import './Account.css'
 
-const StreamAccessSchema = z.object({playlistPath: z.string(), guidePath: z.string()})
+const StreamAccessSchema = z.object({playlistPath: z.string(), guidePath: z.string(), episodesPath: z.string()})
 const QUERY_KEY = ['streamAccess']
 
 /** The playlist and guide with all of the user's IPTV channels, for TV apps that list them together. */
@@ -55,6 +55,18 @@ export default function StreamAccessCard() {
                     value={data ? publicAddress(data.guidePath) : undefined}
                     help="Most apps find the guide in the playlist; add it yourself where an app asks for an EPG address."
                 />
+                <StreamAddressField
+                    id="account-episodes-url"
+                    label="Episode playlist URL"
+                    what="episode playlist URL"
+                    value={data ? publicAddress(data.episodesPath) : undefined}
+                    help={(
+                        <>
+                            Every episode of the channels that have <strong>Also list episodes on their own</strong> on,
+                            for apps without a guide, such as VLC.
+                        </>
+                    )}
+                />
             </div>
             <ConfirmDialog
                 open={confirmOpen}
@@ -69,7 +81,7 @@ export default function StreamAccessCard() {
                     className: 'btn btn-danger',
                 }}
             >
-                <p>Your current playlist and guide addresses stop working at once.</p>
+                <p>Your current playlist, guide and episode playlist addresses stop working at once.</p>
                 <p>TV apps that use them will need the new ones.</p>
             </ConfirmDialog>
         </div>

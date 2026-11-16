@@ -1,11 +1,11 @@
 from typing import Optional
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .StreamProfileBase import StreamProfileBase
 from backend.types.local_media_profile_types import PreferredFormat
-from backend.types.stream_profile_types import StreamMediaKind, StreamProfileType
+from backend.types.stream_profile_types import IptvBetweenLiveEpisodes, StreamMediaKind, StreamProfileType
 
 
 class IptvStreamProfile(StreamProfileBase):
@@ -26,6 +26,16 @@ class IptvStreamProfile(StreamProfileBase):
         nullable=True, default=None,
         comment="The group an app lists the channel under; empty uses the collection's Site name",
     )
+    between_live_episodes: Mapped[str] = mapped_column(
+        String(32), default=IptvBetweenLiveEpisodes.NEWEST_EPISODE.value,
+        comment="What the channel shows while none of its episodes is live: an IptvBetweenLiveEpisodes value",
+    )
+    catch_up_days: Mapped[int] = mapped_column(
+        default=7, comment="How many days back the guide reaches, and apps can play an episode again from it",
+    )
+    list_episodes: Mapped[bool] = mapped_column(
+        default=False, comment="Whether the channel's episodes are also listed on their own, in the episode playlist",
+    )
 
     @property
     def media_kinds(self) -> tuple[StreamMediaKind, ...]:
@@ -37,5 +47,6 @@ class IptvStreamProfile(StreamProfileBase):
     def __repr__(self) -> str:
         return (
             f"<IptvStreamProfile(id={self.id}, channel_number={self.channel_number}, "
-            f"channel_group={self.channel_group}, enable_profile={self.enable_profile})>"
+            f"channel_group={self.channel_group}, between_live_episodes={self.between_live_episodes}, "
+            f"enable_profile={self.enable_profile})>"
         )
