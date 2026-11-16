@@ -447,6 +447,7 @@ def episode_track(profile_type: str, token: str, episode_slug: str, name: str, r
     methods=["GET", "HEAD"],
 )
 def episode_hls_asset(
+    profile_type: str,
     token: str,
     episode_slug: str,
     asset_path: str,

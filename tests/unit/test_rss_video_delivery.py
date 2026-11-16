@@ -333,3 +333,31 @@ def test_hls_parts_are_served_without_checking_the_whole_download_again(monkeypa
     assert service.get_local_hls_master(None, _profile("audio_hls"), episode) == Path("/c/episode.m3u8")
     downloads.pop()
     assert service.get_local_hls_master(None, _profile("audio_hls"), episode) is None
+
+
+def test_a_part_of_a_downloaded_hls_episode_is_served_for_the_profile_type_in_its_address(monkeypatch, tmp_path):
+    from contextlib import nullcontext
+
+    from backend.api.endpoints.feeds import router as feeds
+
+    bundle = tmp_path / "episode"
+    bundle.mkdir()
+    (bundle / "part-1.ts").write_bytes(b"part")
+    asked = []
+
+    def stream_profile(s, profile_type, token):
+        asked.append((profile_type, token))
+        return SimpleNamespace(media_kinds=("hls",))
+
+    monkeypatch.setattr(feeds, "db_session", lambda: nullcontext(None))
+    monkeypatch.setattr(feeds, "_stream_profile", stream_profile)
+    monkeypatch.setattr(feeds, "get_stream_episode", lambda s, profile, slug: SimpleNamespace(slug=slug))
+    monkeypatch.setattr(feeds, "_save_feed_state", lambda s: None)
+    monkeypatch.setattr(feeds, "get_local_hls_master", lambda s, profile, episode: bundle / "video.m3u8")
+    monkeypatch.setattr(feeds, "hls_asset_root", lambda master: bundle)
+
+    response = feeds.episode_hls_asset("rss", "token", "episode", "part-1.ts")
+
+    assert asked == [("rss", "token")]
+    assert (Path(response.path), response.media_type) == (bundle / "part-1.ts", "video/mp2t")
+
