@@ -20,7 +20,8 @@ from .service import run_reconcile_collection_assets
 @task(
     key="reconcile_collection_assets",
     title="Reconcile collection artwork",
-    description="Download and reconcile shared collection posters, backgrounds, square artwork and clear logos.",
+    description="Download and reconcile shared collection posters, backgrounds, square artwork and clear logos, "
+                "and write show and season NFO files.",
     allowed_resource_types=("collection", "download_profile"),
     default_max_retries=3,
     tracks_progress=True,

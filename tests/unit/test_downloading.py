@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from config.settings.submodels import FilenameRestrictionMode
 
 
 # ---------- downloader: HLS parsing ----------
@@ -178,17 +179,17 @@ def test_resolve_episode_output_path(tmp_path, monkeypatch):
     path = resolve_episode_output_path(
         "/downloads/audio/{{ collection }}/{{ season }}/{{ episode_identifier }} - {{ episode }}.ext",
         episode=episode,
-        extension="m4a",
+        extension="m4a", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
     assert path == tmp_path.resolve() / "audio" / "test-collection" / "season-2026" / "ep.101 - test-episode-101.m4a"
 
     # Unsafe characters in substitutions never escape into the path structure
-    titled = resolve_episode_output_path("/downloads/{{ title }}.ext", episode=episode, extension="ts")
+    titled = resolve_episode_output_path("/downloads/{{ title }}.ext", episode=episode, extension="ts", filename_mode=FilenameRestrictionMode.WINDOWS)
     assert titled.parent == tmp_path.resolve()
     assert "/" not in titled.name and "<" not in titled.name
 
     # Without a known extension the template's .ext marker is kept
-    pending = resolve_episode_output_path("/downloads/{{ collection }}/{{ episode }}.ext", episode=episode)
+    pending = resolve_episode_output_path("/downloads/{{ collection }}/{{ episode }}.ext", episode=episode, filename_mode=FilenameRestrictionMode.WINDOWS)
     assert pending.name == "test-episode-101.ext"
 
     session.close()

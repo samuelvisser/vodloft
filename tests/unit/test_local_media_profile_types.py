@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from backend.services.errors import ServiceError
 
 from config.settings.site_settings import DEFAULT_SPONSORBLOCK_SEGMENTS
+from config.settings.submodels import FilenameRestrictionMode
 
 # What every Download Profile request names; the UI starts them from the Site's settings.
 PROFILE_CHOICES = dict(
@@ -288,7 +289,7 @@ def test_movie_output_template_uses_movie_metadata(tmp_path: Path, monkeypatch) 
     result = resolve_movie_output_path(
         "/downloads/{{ movie_author }}/{{ movie_extended_title }} [{{ rating }}]/{{ movie_slug }}.ext",
         movie=movie,
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
 
     assert result == (

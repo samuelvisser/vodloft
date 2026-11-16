@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, false
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 
@@ -24,6 +24,10 @@ class CollectionLocalMediaProfile(LocalMediaProfileBase, HasMetadataMixin):
 
     # None inherits the system default; explicit booleans override it.
     download_collection_assets: Mapped[bool | None] = mapped_column(nullable=True)
+    show_nfo: Mapped[bool] = mapped_column(
+        default=False, server_default=false(), nullable=False,
+        comment="Write tvshow.nfo in the collection's folder and season.nfo in each season's folder",
+    )
 
     @property
     def indexing_values(self):

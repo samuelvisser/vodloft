@@ -1,6 +1,7 @@
 import {z} from 'zod'
 import {ApiDateTimeSchema} from "./datetime";
 import {DownloadOptionsSchema} from "./source";
+import {FilenameRestrictionModeSchema} from "./settings";
 
 
 export const LocalMediaProfileStorageModeSchema = z.enum(['system', 'direct', 'temporary'])
@@ -64,6 +65,10 @@ export const LocalMediaProfileSchemaRequest = z.object({
     downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
+    kodiSafeNfo: z.boolean().default(false),
+    /** How file names are made safe; the form fills in a new profile's from Settings. */
+    filenameRestrictionMode: FilenameRestrictionModeSchema.optional(),
+    fileDateFromPublishDate: z.boolean().default(false),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     /** The Sites the profile is offered for; null until the form fills in every Site VODLoft knows. */
     siteKeys: z.array(z.string()).nullable().default(null),
@@ -108,6 +113,9 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
+    kodiSafeNfo: z.boolean().default(false),
+    filenameRestrictionMode: FilenameRestrictionModeSchema,
+    fileDateFromPublishDate: z.boolean().default(false),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     ...QualityAndLanguageFields,
     siteKeys: z.array(z.string()).default([]),

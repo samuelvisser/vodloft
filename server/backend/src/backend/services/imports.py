@@ -902,7 +902,9 @@ def _unique_name(session: Session, name: str) -> str:
     return candidate
 
 
-def _upsert_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report) -> CollectionLocalMediaProfile | None:
+def _upsert_profile(
+    session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report, filename_mode: FilenameRestrictionMode,
+) -> CollectionLocalMediaProfile | None:
     if plan.output_template is None:
         report.add("failed", plan.name, "The output template could not be converted; its sources were not imported",
                    warnings=[_warning(warning) for warning in plan.warnings])
@@ -923,6 +925,8 @@ def _upsert_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, 
             profile = create_collection_local_media_profile(session, NewCollectionLocalMediaProfile.model_validate({
                 **{name: value for name, value in wanted.items() if value is not None},
                 "name": _unique_name(session, plan.name),
+                # The files were named in the other program's mode, as the path proof showed them.
+                "filename_restriction_mode": filename_mode,
             }))
             _write, hashes, _changes = _merge_fields(_profile_values(profile), wanted, None, unsupported)
             _remember(session, links, run.importer, "profile", plan.external_id, profile.id, hashes, unsupported, run.id)
@@ -1225,7 +1229,7 @@ def _apply_loaded_plan(
     for external_id in sorted(needed, key=lambda key: (key.count(":"), key)):
         if external_id in profile_plans:
             profile_plan = profile_plans[external_id]
-            profiles[external_id] = _upsert_profile(session, profile_plan, links, run, report)
+            profiles[external_id] = _upsert_profile(session, profile_plan, links, run, report, _filename_mode(plan))
             if profile_plan.merged_from:
                 report.add("merged", profile_plan.name, profile_plan.report[-1])
             elif profile_plan.kept_separate:
@@ -1319,7 +1323,7 @@ def _apply_record_plan(session: Session, plan: ImportPlan, options: ImportOption
         if profile_plan.settings.get("type") == "movie":
             profiles[profile_plan.external_id] = _upsert_movie_profile(session, profile_plan, links, run, report)
         else:
-            profiles[profile_plan.external_id] = _upsert_profile(session, profile_plan, links, run, report)
+            profiles[profile_plan.external_id] = _upsert_profile(session, profile_plan, links, run, report, _filename_mode(plan))
     session.flush()
     chosen = set(options.collections) if options.collections is not None else None
     skip = {record.external_id for record in plan.records

@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date, datetime
 
 import pytest
+
+from config.settings.submodels import FilenameRestrictionMode
 def test_jinja_conditionals_omit_missing_year_and_suffix_movie_extras(tmp_path, monkeypatch):
     from backend.db.models import Movie, MovieExtra
     from backend.types.media_types import MediaType
@@ -38,8 +40,8 @@ def test_jinja_conditionals_omit_missing_year_and_suffix_movie_extras(tmp_path, 
         "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
     )
 
-    movie_path = resolve_movie_output_path(template, movie=movie)
-    trailer_path = resolve_movie_output_path(template, movie=movie, media_item=trailer)
+    movie_path = resolve_movie_output_path(template, movie=movie, filename_mode=FilenameRestrictionMode.WINDOWS)
+    trailer_path = resolve_movie_output_path(template, movie=movie, media_item=trailer, filename_mode=FilenameRestrictionMode.WINDOWS)
 
     assert movie_path == (tmp_path / "Example Movie (2020)" / "Example Movie (2020).ext").resolve()
     assert trailer_path == (
@@ -170,7 +172,7 @@ def test_preview_uses_edited_values_and_returns_referenced_variables():
             "/downloads/{{ movie_title }}/{{ title }}"
             "{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
         ),
-        values={"movie_title": "Lady Ballers", "title": "Lady Ballers", "media_type": "movie"},
+        values={"movie_title": "Lady Ballers", "title": "Lady Ballers", "media_type": "movie"},filename_restriction_mode="windows",
     ))
 
     assert result.output_path == "/downloads/Lady Ballers/Lady Ballers.mp4"
@@ -186,7 +188,7 @@ def test_preview_prefix_error_includes_actual_rendered_output():
         type="collection",
         preferred_format="format_audio_only",
         output_template="{{ collection_title }}/downloads/{{ episode_title }}.ext",
-        values={"collection_title": "Example Show", "episode_title": "Episode One"},
+        values={"collection_title": "Example Show", "episode_title": "Episode One"},filename_restriction_mode="windows",
     )
 
     with pytest.raises(
@@ -204,7 +206,7 @@ def test_preview_resolves_audio_extension_in_backend():
         type="collection",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext",
-        values={"collection_title": "Example Show", "episode_title": "Episode One"},
+        values={"collection_title": "Example Show", "episode_title": "Episode One"},filename_restriction_mode="windows",
     ))
 
     assert result.output_path == "/downloads/Example Show/Episode One.m4a"
@@ -218,7 +220,7 @@ def test_preview_reports_filter_argument_errors_as_validation_errors():
         type="collection",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ episode_title | regex_replace('Episode') }}.ext",
-        values={"episode_title": "Episode One"},
+        values={"episode_title": "Episode One"},filename_restriction_mode="windows",
     )
 
     with pytest.raises(ValueError) as exc_info:
@@ -268,7 +270,7 @@ def test_preview_does_not_apply_filename_restrictions(monkeypatch) -> None:
         type="collection",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ episode_type }}.ext",
-        values={"episode_type": "aux"},
+        values={"episode_type": "aux"},filename_restriction_mode="windows",
     ))
 
     assert result.output_path == "/downloads/aux.m4a"

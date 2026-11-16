@@ -22,6 +22,7 @@ import {
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
 import CustomIndexAdvisories from './CustomIndexAdvisories'
+import OutputTemplateStartFields from './OutputTemplateStartFields'
 import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
 import {
     analyzeJinjaStatement,
@@ -533,6 +534,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
+    const filenameRestrictionMode = useWatch({control, name: 'filenameRestrictionMode'})
     const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'both'
     const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
     // Movies are only on The Daily Wire, so a movie profile has no Sites filter.
@@ -821,10 +823,11 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
         })
     }, [selectedSource, usedVariablesKey])
 
-    const preview = useLocalMediaProfilePreview(template && selectedSource ? {
+    const preview = useLocalMediaProfilePreview(template && selectedSource && filenameRestrictionMode ? {
         type: mode,
         outputTemplate: template,
         preferredFormat,
+        filenameRestrictionMode,
         values: testValues,
         sourceId: selectedSource.id,
         localMediaProfileId: mode === 'collection' ? localMediaProfileId : null,
@@ -875,6 +878,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                 </>
             )}
             <hr className="form-section-divider" aria-hidden="true"/>
+            <OutputTemplateStartFields form={form} mode={mode}/>
             <div className="form-row output-template-field">
                 <section className="template-workbench" aria-labelledby="template-editor-heading">
                     <div className="template-editor-heading">

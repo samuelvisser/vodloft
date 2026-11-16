@@ -578,6 +578,7 @@ def resolve_episode_output_path_with_index_values(
     episode: "Episode",
     index_definitions: frozenset[str],
     index_values: dict[str, int],
+    filename_mode: FilenameRestrictionMode,
     extension: Optional[str] = None,
 ) -> Path:
     def resolver(key: str, _group: object = ()) -> object:
@@ -589,14 +590,15 @@ def resolve_episode_output_path_with_index_values(
             )
         return index_values[key]
 
-    rendered = render_output_template(
+    return _render_output_path(
         output_template,
         episode_output_template_values(episode),
+        filename_mode=filename_mode,
+        extension=extension,
         allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
         custom_index_resolver=resolver,
     )
-    return _finish_output_path(rendered, extension=extension)
 
 
 def resolve_episode_output_path(
@@ -605,17 +607,19 @@ def resolve_episode_output_path(
     episode: "Episode",
     local_media_profile=None,
     media_download: "MediaDownloadBase | None" = None,
+    filename_mode: FilenameRestrictionMode,
     extension: Optional[str] = None,
 ) -> Path:
     index_keys = output_template_custom_index_keys(output_template)
     if not index_keys:
-        rendered = render_output_template(
+        return _render_output_path(
             output_template,
             episode_output_template_values(episode),
+            filename_mode=filename_mode,
+            extension=extension,
             allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
             allowed_metadata_scopes=COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
         )
-        return _finish_output_path(rendered, extension=extension)
 
     if local_media_profile is None:
         raise CustomIndexNotReadyError(
@@ -635,6 +639,7 @@ def resolve_episode_output_path(
             episode=episode,
             index_definitions=indexing_value_definition_keys(local_media_profile),
             index_values=get_episode_index_assignments(episode, local_media_profile.id),
+            filename_mode=filename_mode,
             extension=extension,
         )
     except CustomIndexNotReadyError as exc:
@@ -649,36 +654,39 @@ def resolve_movie_output_path(
     *,
     movie: "Movie",
     media_item: "Movie | MovieExtra | None" = None,
+    filename_mode: FilenameRestrictionMode,
     extension: Optional[str] = None,
 ) -> Path:
     """Resolve a Movie Local Media Profile for a movie or one of its extras."""
     if output_template_custom_index_keys(output_template):
         raise ValueError("custom_index is only available to Collection Local Media Profiles")
-    values = movie_output_template_values(movie, media_item)
-    rendered = render_output_template(
+    return _render_output_path(
         output_template,
-        values,
+        movie_output_template_values(movie, media_item),
+        filename_mode=filename_mode,
+        extension=extension,
         allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
         allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
-    return _finish_output_path(rendered, extension=extension)
 
 
 def resolve_video_output_path(
     output_template: str,
     *,
     video: "Video",
+    filename_mode: FilenameRestrictionMode,
     extension: Optional[str] = None,
 ) -> Path:
     """Resolve a Video Local Media Profile for a single video."""
     if output_template_custom_index_keys(output_template):
         raise ValueError("custom_index is only available to Collection Local Media Profiles")
-    rendered = render_output_template(
+    return _render_output_path(
         output_template,
         video_output_template_values(video),
+        filename_mode=filename_mode,
+        extension=extension,
         allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
     )
-    return _finish_output_path(rendered, extension=extension)
 
 
 def _date_substitutions(value: Optional[date | datetime]) -> dict[str, str]:
@@ -708,18 +716,30 @@ def replace_output_extension(resolved: str, extension: Optional[str]) -> str:
     return resolved
 
 
-def finalize_output_path(resolved: str, extension: Optional[str]) -> str:
+def finalize_output_path(resolved: str, extension: Optional[str], *, mode: FilenameRestrictionMode) -> str:
     """Apply filename restrictions once the concrete filename is known."""
     resolved = replace_output_extension(resolved, extension)
     if extension is None:
         return resolved
-
-    mode = get_settings().download_settings.filename_restriction_mode
     return _sanitize_rendered_path(resolved, mode=mode, extension=extension.lstrip("."))
 
 
-def _finish_output_path(resolved: str, *, extension: Optional[str]) -> Path:
-    resolved = finalize_output_path(resolved, extension)
+def _render_output_path(
+    output_template: str,
+    values: dict[str, object],
+    *,
+    filename_mode: FilenameRestrictionMode,
+    extension: Optional[str],
+    **render_options,
+) -> Path:
+    """Render a profile's template with the profile's filename mode, into a path in the download root."""
+    with rendering_with_filename_mode(filename_mode):
+        rendered = render_output_template(output_template, values, **render_options)
+    return _finish_output_path(rendered, extension=extension, mode=filename_mode)
+
+
+def _finish_output_path(resolved: str, *, extension: Optional[str], mode: FilenameRestrictionMode) -> Path:
+    resolved = finalize_output_path(resolved, extension, mode=FilenameRestrictionMode(mode))
     if resolved.startswith(_DOWNLOADS_PREFIX):
         resolved = resolved[len(_DOWNLOADS_PREFIX):]
     resolved = resolved.lstrip("/")

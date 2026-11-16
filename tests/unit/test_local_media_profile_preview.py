@@ -75,6 +75,7 @@ def _body(**overrides):
         "source_id": "episode:1",
         "output_template": "/downloads/TV/{{ collection_title }}/Season {{ season_number }}/{{ title }}.ext",
         "preferred_format": "format_1080p",
+        "filename_restriction_mode": "windows",
         **overrides,
     })
 
@@ -92,7 +93,9 @@ def test_edited_values_drive_both_paths_without_mutating_source(examples):
     assert examples.collections[0].title == "Saved Show 1"
     assert body.values == {"collection_title": "Edited Show", "season_number": "9", "title": "Edited Episode"}
     # A later production resolution still uses the saved title, not the edit.
-    actual = collection_assets.resolve_collection_media_directory(examples.collections[0], body.output_template)
+    actual = collection_assets.resolve_collection_media_directory(
+        examples.collections[0], body.output_template, filename_mode=body.filename_restriction_mode,
+    )
     assert actual.path == str(examples.root / "TV/Saved Show 1")
 
 
@@ -110,11 +113,11 @@ def test_a_collection_directory_is_worked_out_once_until_what_decides_it_changes
     collection = examples.collections[0]
 
     for _ in range(3):
-        assert collection_assets.resolve_collection_media_directory(collection, template).path == str(
+        assert collection_assets.resolve_collection_media_directory(collection, template, filename_mode="windows").path == str(
             examples.root / "Asked Often/Saved Show 1"
         )
     collection.title = "Renamed Show"
-    assert collection_assets.resolve_collection_media_directory(collection, template).path == str(
+    assert collection_assets.resolve_collection_media_directory(collection, template, filename_mode="windows").path == str(
         examples.root / "Asked Often/Renamed Show"
     )
 
@@ -235,7 +238,7 @@ def test_generic_http_contract_and_validation(examples, monkeypatch):
     with TestClient(app) as client:
         response = client.post("/local-media-profiles/preview", json={
             "type": "collection", "sourceId": "episode:1", "preferredFormat": "format_1080p",
-            "outputTemplate": "/downloads/{{ collection_title }}/{{ title }}.ext",
+            "filenameRestrictionMode": "windows", "outputTemplate": "/downloads/{{ collection_title }}/{{ title }}.ext",
             "values": {"collection_title": "HTTP Example"},
         })
         assert response.status_code == 200

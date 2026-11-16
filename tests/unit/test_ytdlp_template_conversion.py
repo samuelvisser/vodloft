@@ -89,7 +89,7 @@ def _render_vodloft(template: str, video: dict, monkeypatch, tmp_path) -> str:
         allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         custom_index_resolver=lambda key, _group=(): INDEXES[key],
     )
-    return finalize_output_path(rendered, video["ext"]).removeprefix("/downloads/")
+    return finalize_output_path(rendered, video["ext"], mode=FilenameRestrictionMode.WINDOWS).removeprefix("/downloads/")
 
 
 def _render_ytdlp(template: str, video: dict) -> str:

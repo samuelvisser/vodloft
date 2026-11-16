@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import errno
+import logging
 import os
 import shutil
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
 from typing import Callable, Iterator
@@ -31,6 +33,8 @@ from .storage.replacement import (
 )
 from .speed import limiter
 from .ytdlp import download_ytdlp, download_ytdlp_hls_bundle
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -366,6 +370,8 @@ def execute_download_plan(
                             progress=lambda value, activity=activity: tracker.progress(activity, value),
                         )
                         published.append(PublishedSidecar(asset.spec.id, asset.spec.kind, str(path), inspect_artifact(path)))
+        if plan.file_date is not None:
+            _set_file_date(plan.file_date, destination, *(sidecar.path for sidecar in published))
         with tracker.activity("verify"):
             identity = inspect_artifact(destination)
             if identity.size_bytes <= 0:
@@ -405,3 +411,14 @@ def execute_download_plan(
             workspace.cleanup()
         if reservation is not None:
             reservation.release_if_unclaimed()
+
+
+def _set_file_date(when: datetime, *paths: str | Path) -> None:
+    """Give the published files a date, so players that sort by file date show them in order."""
+    timestamp = (when if when.tzinfo else when.replace(tzinfo=timezone.utc)).timestamp()
+    for path in paths:
+        try:
+            os.utime(path, (timestamp, timestamp))
+        except OSError:
+            # A file keeps the time it was written where the filesystem refuses another.
+            logger.info("Could not set the date of %s", path, exc_info=True)

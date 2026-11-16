@@ -47,7 +47,10 @@ def writer(tmp_path, monkeypatch):
             if model is service.Collection:
                 return SimpleNamespace(id=key)
             if model is service.CollectionLocalMediaProfile:
-                return SimpleNamespace(id=key, output_template="template", download_collection_assets=True)
+                return SimpleNamespace(
+                    id=key, output_template="template", filename_restriction_mode="windows",
+                    download_collection_assets=True, show_nfo=False,
+                )
             return self.session.get(model, key)
 
         def scalars(self, statement):
@@ -111,7 +114,7 @@ def writer(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "collection_profile_roots", lambda *_: {})
     monkeypatch.setattr(service, "collection_profile_is_managed", lambda *_: True)
     monkeypatch.setattr(service, "collection_assets_enabled", lambda _: True)
-    monkeypatch.setattr(service, "resolve_collection_media_directory", lambda *_: SimpleNamespace(path=str(state.current_root)))
+    monkeypatch.setattr(service, "resolve_collection_media_directory", lambda *_, **__: SimpleNamespace(path=str(state.current_root)))
     monkeypatch.setattr(service, "download_collection_asset", download)
     plan = service.AssetPlan(
         1,
@@ -348,3 +351,59 @@ def test_relocation_preserves_artwork_still_owned_by_another_profile(writer):
     assert {(row.local_media_profile_id, row.file_path) for row in _rows(writer)} == {
         (1, str(_target(writer))), (2, str(old)),
     }
+
+
+def _nfo_plan(writer, path=None, content=b"<tvshow><title>Show</title></tvshow>", kind="tvshow"):
+    from backend.services.collection_assets import CollectionNfoFile
+
+    path = path or writer.current_root / "tvshow.nfo"
+    return service.NfoPlan(1, 1, writer.current_root, writer.plan.download_root, CollectionNfoFile(kind, path, content))
+
+
+@pytest.fixture
+def nfo_writer(writer, monkeypatch):
+    monkeypatch.setattr(service, "_current_nfo", lambda *_: True)
+    writer.emptied = []
+    monkeypatch.setattr(service, "remove_folders_left_empty", lambda folders, **_: writer.emptied.extend(folders))
+    return writer
+
+
+def test_show_nfo_is_written_once_and_rewritten_when_it_changes(nfo_writer):
+    plan = _nfo_plan(nfo_writer)
+    assert service._write_nfo(plan, _active)
+    target = plan.file.path
+    assert target.read_bytes() == plan.file.content
+    [row] = _rows(nfo_writer)
+    assert (row.asset_type, row.content_hash, row.pending_hash) == ("tvshow", asset_file_hash(target), None)
+
+    assert service._write_nfo(plan, _active)
+    changed = _nfo_plan(nfo_writer, content=b"<tvshow><title>Renamed</title></tvshow>")
+    assert service._write_nfo(changed, _active)
+    assert target.read_bytes() == changed.file.content
+    assert [row.content_hash for row in _rows(nfo_writer)] == [asset_file_hash(target)]
+
+
+def test_a_show_nfo_someone_else_wrote_is_left_alone(nfo_writer):
+    plan = _nfo_plan(nfo_writer)
+    plan.file.path.parent.mkdir()
+    plan.file.path.write_bytes(b"<tvshow><title>Mine</title></tvshow>")
+    with pytest.raises(ArtworkConflict):
+        service._write_nfo(plan, _active)
+    assert plan.file.path.read_bytes() == b"<tvshow><title>Mine</title></tvshow>"
+    assert not _rows(nfo_writer)
+
+
+def test_a_season_nfo_that_is_no_longer_wanted_is_removed_with_its_folder(nfo_writer):
+    old = _nfo_plan(nfo_writer, nfo_writer.current_root / "Season 1" / "season.nfo", b"<season/>", "season-1")
+    service._write_nfo(old, _active)
+    edited = _nfo_plan(nfo_writer, nfo_writer.current_root / "Season 2" / "season.nfo", b"<season/>", "season-2")
+    service._write_nfo(edited, _active)
+    edited.file.path.write_bytes(b"<season><title>My own</title></season>")
+
+    service._cleanup_unwanted_nfos(1, 1, set(), nfo_writer.plan.download_root, _active)
+
+    assert not old.file.path.exists()
+    assert nfo_writer.emptied == [old.file.path.parent]
+    # A file changed since VODLoft wrote it stays; VODLoft only stops keeping it.
+    assert edited.file.path.exists()
+    assert not _rows(nfo_writer)

@@ -40,6 +40,12 @@ export const CollectionLocalMediaProfileScopeReg = createSelectRegistry("Collect
   'series': { label: "Series", help: "Offer this profile only for Series" },
 });
 
+export const FilenameRestrictionModeReg = createSelectRegistry("FilenameRestrictionMode", {
+  'unrestricted': { label: "Minimal restrictions" },
+  'windows': { label: "Windows-compatible filenames" },
+  'restricted': { label: "Restricted filenames" },
+});
+
 export type LocalMediaProfileType = 'collection' | 'movie' | 'video'
 /** The API collection that creates, updates and deletes profiles of one type. */
 export function localMediaProfileEndpoint(type: LocalMediaProfileType | string): string {

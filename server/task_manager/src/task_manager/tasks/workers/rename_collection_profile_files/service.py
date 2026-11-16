@@ -127,6 +127,7 @@ def _plan_renames(
             episode=episode,
             local_media_profile=profile,
             media_download=download,
+            filename_mode=profile.filename_restriction_mode,
             extension=extension,
         )
         planned.append((download, source, settle_no_ascii_name(download, destination, session=session)))
