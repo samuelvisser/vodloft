@@ -7,16 +7,39 @@
     margin: 0 auto;
 }
 
+/* The breadcrumb and the page's buttons share one row above the cover, so the title gets the full width. */
+.episode-view .episode-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
 .episode-view .episode-breadcrumb {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 14px;
+    min-width: 0;
     color: var(--muted, #777);
     font-size: 0.9rem;
 }
 
+/* A long collection name is cut short rather than pushing the buttons onto a row of their own. */
+.episode-view .episode-breadcrumb a {
+    flex: 0 0 auto;
+}
+
+.episode-view .episode-breadcrumb a:last-child {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .episode-view .episode-breadcrumb svg {
+    flex: 0 0 auto;
     width: 9px;
     opacity: 0.6;
 }
@@ -65,13 +88,6 @@
     margin-top: 20px;
 }
 
-.episode-view .episode-title-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-}
-
 .episode-view .episode-title-actions {
     display: flex;
     align-items: center;
@@ -79,15 +95,17 @@
     flex: 0 0 auto;
 }
 
+.episode-view .episode-title-actions .btn {
+    min-height: 36px;
+}
+
 .episode-view .episode-open-link {
-    min-height: 38px;
     gap: 8px;
     text-decoration: none;
     white-space: nowrap;
 }
 
 .episode-view .episode-title-text {
-    min-width: 0;
     margin: 0;
     font-size: clamp(1.5rem, 3vw, 2.15rem);
     line-height: 1.18;
@@ -360,7 +378,7 @@
 .episode-view .episode-page-skeleton-breadcrumb {
     width: min(32%, 220px);
     height: 13px;
-    margin-bottom: 14px;
+    margin: 12px 0 23px;
     border-radius: 5px;
 }
 
@@ -453,8 +471,13 @@
         width: 100%;
     }
 
+    .episode-view .episode-topbar {
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
     .episode-view .episode-breadcrumb {
-        margin-bottom: 12px;
+        gap: 8px;
         font-size: 0.82rem;
     }
 
@@ -471,10 +494,6 @@
 
     .episode-view .episode-header {
         margin-top: 14px;
-    }
-
-    .episode-view .episode-title-row {
-        gap: 10px;
     }
 
     .episode-view .episode-title-text {
@@ -506,8 +525,11 @@
         gap: 6px;
     }
 
+    .episode-view .episode-title-actions .btn {
+        min-height: 38px;
+    }
+
     .episode-view .episode-open-link {
-        min-height: 40px;
         padding-inline: 12px;
     }
 
@@ -554,10 +576,6 @@
 
     .episode-view .download-row-actions {
         align-self: center;
-    }
-
-    .episode-view .episode-page-skeleton-breadcrumb {
-        margin-bottom: 12px;
     }
 
     .episode-view .episode-page-skeleton-cover {

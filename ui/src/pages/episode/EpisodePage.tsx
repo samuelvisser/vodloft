@@ -272,11 +272,57 @@ export default function EpisodePage() {
     return (
         <section className="view episode-view" aria-labelledby="episode-title">
             <article className="episode-details" aria-label="Episode details">
-                <nav className="episode-breadcrumb" aria-label="Breadcrumb">
-                    <Link className="quiet-link" to="/library">Library</Link>
-                    <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
-                    <Link className="quiet-link" to={`/collection/${collectionId}`}>{collection.title}</Link>
-                </nav>
+                {/* The buttons share the breadcrumb's row, so the title below gets the full width. */}
+                <div className="episode-topbar">
+                    <nav className="episode-breadcrumb" aria-label="Breadcrumb">
+                        <Link className="quiet-link" to="/library">Library</Link>
+                        <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
+                        <Link className="quiet-link" to={`/collection/${collectionId}`}>{collection.title}</Link>
+                    </nav>
+                    <div className="episode-title-actions">
+                        {episode.sharingUrl && (
+                            <a
+                                className="btn btn-secondary episode-open-link"
+                                href={episode.sharingUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label={`Open on ${siteLabel}`}
+                                title={`Open on ${siteLabel}`}
+                            >
+                                <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
+                                <span className="episode-open-link-text">{siteLabel}</span>
+                            </a>
+                        )}
+                        <ActionMenu
+                            items={[
+                                ...(sourceControls(collection).metadataRefresh ? [{
+                                    label: 'Refresh metadata',
+                                    description: detailsChecked,
+                                    icon: faIcon('fass', 'arrows-rotate'),
+                                    disabled: metadataRefreshBusy,
+                                    disabledReason: metadataRefreshStarting
+                                        ? OPERATION_STARTING_MESSAGE
+                                        : metadataRefreshOperation
+                                            ? 'A metadata refresh is running for this episode.'
+                                            : undefined,
+                                    operation: metadataRefreshOperation,
+                                    onSelect: () => void refreshMetadata(),
+                                }] : []),
+                                ...(earlyDeleteAvailable ? [{
+                                    label: 'Early Delete',
+                                    icon: faIcon('fass', 'trash') as [string, string],
+                                    tone: 'danger' as const,
+                                    separatorBefore: true,
+                                    disabled: earlyDeleteDisabledReason !== undefined,
+                                    disabledReason: earlyDeleteDisabledReason,
+                                    operation: earlyDeleteOperation,
+                                    onSelect: () => setEarlyDeleteConfirm(true),
+                                }] : []),
+                            ]}
+                            note={sourceControls(collection).metadataRefresh ? undefined : detailsChecked}
+                        />
+                    </div>
+                </div>
 
                 <div className="episode-cover">
                     <img src={coverUrl} alt="Episode cover"/>
@@ -291,52 +337,7 @@ export default function EpisodePage() {
                 </div>
 
                 <header className="episode-header">
-                    <div className="episode-title-row">
-                        <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
-                        <div className="episode-title-actions">
-                            {episode.sharingUrl && (
-                                <a
-                                    className="btn btn-secondary episode-open-link"
-                                    href={episode.sharingUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    aria-label={`Open on ${siteLabel}`}
-                                    title={`Open on ${siteLabel}`}
-                                >
-                                    <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                                    <span className="episode-open-link-text">{siteLabel}</span>
-                                </a>
-                            )}
-                            <ActionMenu
-                                items={[
-                                    ...(sourceControls(collection).metadataRefresh ? [{
-                                        label: 'Refresh metadata',
-                                        description: detailsChecked,
-                                        icon: faIcon('fass', 'arrows-rotate'),
-                                        disabled: metadataRefreshBusy,
-                                        disabledReason: metadataRefreshStarting
-                                            ? OPERATION_STARTING_MESSAGE
-                                            : metadataRefreshOperation
-                                                ? 'A metadata refresh is running for this episode.'
-                                                : undefined,
-                                        operation: metadataRefreshOperation,
-                                        onSelect: () => void refreshMetadata(),
-                                    }] : []),
-                                    ...(earlyDeleteAvailable ? [{
-                                        label: 'Early Delete',
-                                        icon: faIcon('fass', 'trash') as [string, string],
-                                        tone: 'danger' as const,
-                                        separatorBefore: true,
-                                        disabled: earlyDeleteDisabledReason !== undefined,
-                                        disabledReason: earlyDeleteDisabledReason,
-                                        operation: earlyDeleteOperation,
-                                        onSelect: () => setEarlyDeleteConfirm(true),
-                                    }] : []),
-                                ]}
-                                note={sourceControls(collection).metadataRefresh ? undefined : detailsChecked}
-                            />
-                        </div>
-                    </div>
+                    <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
                     <div className="episode-summary" aria-label="Episode metadata">
                         <EpisodeTypePill sourceKey={episode.sourceKey} type={episode.episodeType} asText/>
                         {episode.drmProtected && <DrmBadge asText/>}
