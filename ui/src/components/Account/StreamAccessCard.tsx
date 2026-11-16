@@ -7,10 +7,12 @@ import {apiJson, publicAddress} from '../../lib/api'
 import {faIcon} from '../../icons/faIcon'
 import './Account.css'
 
-const StreamAccessSchema = z.object({playlistPath: z.string(), guidePath: z.string(), episodesPath: z.string()})
+const StreamAccessSchema = z.object({
+    playlistPath: z.string(), guidePath: z.string(), episodesPath: z.string(), sharePath: z.string(),
+})
 const QUERY_KEY = ['streamAccess']
 
-/** The playlist and guide with all of the user's IPTV channels, for TV apps that list them together. */
+/** The addresses with all of the user's IPTV channels and WebDAV shows, for apps that list them together. */
 export default function StreamAccessCard() {
     const qc = useQueryClient()
     const {data} = useQuery({
@@ -36,7 +38,8 @@ export default function StreamAccessCard() {
             <h2>Watch in other apps</h2>
             <p>
                 Add this playlist to a TV app, such as TiviMate or Kodi&apos;s IPTV Simple, to watch all your IPTV
-                channels with their guide. Create a channel with an IPTV Stream Profile.
+                channels with their guide, or the share to a media player such as Infuse, to watch all your WebDAV
+                shows. Create them with IPTV and WebDAV Stream Profiles.
             </p>
             <div className="form">
                 <StreamAddressField
@@ -67,10 +70,17 @@ export default function StreamAccessCard() {
                         </>
                     )}
                 />
+                <StreamAddressField
+                    id="account-share-url"
+                    label="WebDAV share URL"
+                    what="share URL"
+                    value={data ? publicAddress(data.sharePath) : undefined}
+                    help="A read-only network folder with a folder for each of your WebDAV shows. If an app asks for a user name and password, leave them empty."
+                />
             </div>
             <ConfirmDialog
                 open={confirmOpen}
-                title="Regenerate your playlist address"
+                title="Regenerate your addresses"
                 onDismiss={() => setConfirmOpen(false)}
                 icon={faIcon('fass', 'rotate')}
                 iconTone="danger"
@@ -81,8 +91,8 @@ export default function StreamAccessCard() {
                     className: 'btn btn-danger',
                 }}
             >
-                <p>Your current playlist, guide and episode playlist addresses stop working at once.</p>
-                <p>TV apps that use them will need the new ones.</p>
+                <p>Your current playlist, guide, episode playlist and share addresses stop working at once.</p>
+                <p>Apps that use them will need the new ones.</p>
             </ConfirmDialog>
         </div>
     )

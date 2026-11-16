@@ -14,16 +14,14 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from backend.db.datetime_types import utc_datetime
-from backend.db.models import Episode, Settings
+from backend.db.models import Episode
 from backend.db.models.stream_profile import IptvStreamProfile
-from backend.db.models.user import User
-from backend.services import users
-from backend.services.errors import NotFoundError
 from backend.services.sites import collection_site
-from backend.services.stream_episodes import get_local_download_for_episode, get_stream_items, owner_may_stream
+from backend.services.stream_episodes import get_local_download_for_episode, get_stream_items
+from backend.services.stream_tokens import profiles_for_token
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.stream_profile_types import IptvBetweenLiveEpisodes
 from backend.utils.episode import episode_identifier_type_predicate
@@ -50,43 +48,8 @@ class Programme:
 
 
 def channels_for_token(s: Session, token: str) -> list[IptvStreamProfile]:
-    """The enabled channels a playlist or guide address opens, in channel number order.
-
-    The token is a channel's own, a user's stream token (their own channels) or, in an install without
-    user accounts, the install's stream token (every channel).
-    """
-    query = (
-        s.query(IptvStreamProfile)
-        .options(joinedload(IptvStreamProfile.collection))
-        .filter(IptvStreamProfile.enable_profile.is_(True))
-        .order_by(IptvStreamProfile.channel_number, IptvStreamProfile.id)
-    )
-    own = query.filter(IptvStreamProfile.token == token).one_or_none()
-    if own is not None:
-        if not owner_may_stream(s, own):
-            raise NotFoundError("Playlist")
-        return [own]
-
-    user = s.scalars(select(User).where(User.stream_token == token)).one_or_none()
-    if user is not None:
-        if not user.is_enabled:
-            raise NotFoundError("Playlist")
-        return query.filter(IptvStreamProfile.owner_user_id == user.id).all()
-
-    install = s.scalars(select(Settings).where(Settings.stream_token == token)).first()
-    if install is not None and not install.user_accounts_enabled:
-        return [channel for channel in query.all() if owner_may_stream(s, channel)]
-    raise NotFoundError("Playlist")
-
-
-def stream_token_holder(s: Session, user_id: Optional[int]) -> User | Settings:
-    """Where the stream token of whoever is signed in is kept: their account, or the install without accounts."""
-    if user_id is not None:
-        user = s.get(User, user_id)
-        if user is None:
-            raise NotFoundError("User")
-        return user
-    return users.settings_row(s)
+    """The enabled channels a playlist or guide address opens, in channel number order."""
+    return profiles_for_token(s, token, IptvStreamProfile, IptvStreamProfile.channel_number, what="Playlist")
 
 
 def channel_name(profile: IptvStreamProfile) -> str:

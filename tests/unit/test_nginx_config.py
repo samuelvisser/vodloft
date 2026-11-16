@@ -10,7 +10,7 @@ def _location_block(config: str, path: str) -> str:
     return config[start:end]
 
 
-_PUBLIC_PATHS = ("/feeds/", "/iptv/")
+_PUBLIC_PATHS = ("/feeds/", "/iptv/", "/webdav/")
 
 
 def test_public_feed_routes_are_proxied_to_backend():

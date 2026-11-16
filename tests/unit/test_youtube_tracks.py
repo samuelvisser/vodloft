@@ -60,7 +60,7 @@ def test_youtube_tracks_are_its_h264_video_per_resolution_and_the_original_audio
 
 
 def test_a_feed_streams_at_the_highest_resolution_up_to_its_format():
-    from backend.api.endpoints.feeds.source_tracks import joins_mp4, stream_height
+    from backend.services.video_cache import joins_mp4, stream_height
 
     youtube = site_for("https://www.youtube.com/@channel", "ytdlp")
     assert stream_height(youtube, 1080) == 1080

@@ -41,3 +41,15 @@ export const IptvBetweenLiveEpisodesReg = createSelectRegistry("IptvBetweenLiveE
     help: "lists the channel only while one of its episodes is live. Your TV app may only notice when it next reloads the playlist.",
   },
 });
+
+export const WebdavSeasonFoldersReg = createSelectRegistry("WebdavSeasonFolders", {
+  'season': {label: "One per season", help: "puts each season's episodes in a Season 01 folder, and names them S01E05."},
+  'year': {label: "One per year", help: "puts each year's episodes in a Season 2026 folder, and names them by date."},
+  'none': {label: "All in one folder", help: "puts every episode in the show's folder, named by date."},
+});
+
+export const WebdavMetadataFilesReg = createSelectRegistry("WebdavMetadataFiles", {
+  'nfo_and_artwork': {label: "NFO files and artwork", help: "lists tvshow.nfo, season.nfo and an NFO file per episode, with the show's poster and each episode's picture."},
+  'artwork': {label: "Artwork only", help: "lists the show's poster and each episode's picture, for players that look up the rest themselves."},
+  'none': {label: "Media files only", help: "lists only the episodes."},
+});

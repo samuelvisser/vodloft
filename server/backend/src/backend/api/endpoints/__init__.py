@@ -24,6 +24,8 @@ from .stream_profiles import stream_profile_router
 from .feeds import feeds_router
 from .iptv import iptv_router
 from .iptv_stream_profiles import iptv_stream_profile_router
+from .webdav import webdav_router
+from .webdav_stream_profiles import webdav_stream_profile_router
 from .custom_metadata import custom_metadata_router
 from .logs import logs_router
 from .users import user_router

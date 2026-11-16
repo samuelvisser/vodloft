@@ -28,6 +28,8 @@ class StreamProfileBase(Base):
     # Whether an episode needs every media in ``media_kinds``, as an app gets an address for each (RSS);
     # a profile that plays one of them at a time needs only one.
     plays_every_media_kind = True
+    # Whether an app plays the Site's stream through the profile, so it can choose to pass it through VODLoft.
+    passes_site_streams = True
 
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

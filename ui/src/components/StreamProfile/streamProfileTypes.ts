@@ -1,5 +1,6 @@
 import {IptvStreamProfileCreateSchema, IptvStreamProfileUpdateSchema} from '../../types/schemas/iptv_stream_profile'
 import {RssStreamProfileCreateSchema, RssStreamProfileUpdateSchema} from '../../types/schemas/rss_stream_profile'
+import {WebdavStreamProfileCreateSchema, WebdavStreamProfileUpdateSchema} from '../../types/schemas/webdav_stream_profile'
 
 /** What the pages need to know of each stream profile type: its name, API and form schemas. */
 export const STREAM_PROFILE_TYPES = {
@@ -14,6 +15,12 @@ export const STREAM_PROFILE_TYPES = {
         endpoint: 'iptv-stream-profiles',
         createSchema: IptvStreamProfileCreateSchema,
         updateSchema: IptvStreamProfileUpdateSchema,
+    },
+    webdav: {
+        label: 'WebDAV',
+        endpoint: 'webdav-stream-profiles',
+        createSchema: WebdavStreamProfileCreateSchema,
+        updateSchema: WebdavStreamProfileUpdateSchema,
     },
 } as const
 

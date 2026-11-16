@@ -165,7 +165,20 @@ export default function AddStreamProfilePage() {
                                         <p>
                                             With an IPTV Stream Profile, the collection becomes a channel in TV apps such as
                                             TiviMate, Kodi&apos;s IPTV Simple, or Jellyfin and Emby Live TV. Live episodes play
-                                            live on the channel, and the guide shows the episodes of the last week.
+                                            live on the channel, and TV apps with catch-up play older episodes from the guide.
+                                        </p>
+                                    </ReadMore>
+                                ),
+                            },
+                            {
+                                value: 'webdav',
+                                label: 'WebDAV',
+                                description: (
+                                    <ReadMore summary={<span>A network folder laid out as a TV show.</span>}>
+                                        <p>
+                                            With a WebDAV Stream Profile, the collection becomes a read-only network folder that
+                                            media players such as Infuse, Kodi and VLC show as a TV show, with its artwork and
+                                            episode details. It lists the episodes VODLoft has a whole file of.
                                         </p>
                                     </ReadMore>
                                 ),

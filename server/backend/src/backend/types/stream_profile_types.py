@@ -5,6 +5,7 @@ from typing import Literal
 class StreamProfileType(Enum):
     RSS = "rss"
     IPTV = "iptv"
+    WEBDAV = "webdav"
 
     # For instances of StreamProfileBase class (parent class)
     BASE = "base"
@@ -16,6 +17,22 @@ class IptvBetweenLiveEpisodes(StrEnum):
     NEWEST_EPISODE = "newest_episode"
     OFF_AIR = "off_air"
     HIDE_CHANNEL = "hide_channel"
+
+
+class WebdavSeasonFolders(StrEnum):
+    """How a WebDAV share sorts a show's episodes into folders."""
+
+    SEASON = "season"
+    YEAR = "year"
+    NONE = "none"
+
+
+class WebdavMetadataFiles(StrEnum):
+    """What a WebDAV share lists beside the episodes, for media players."""
+
+    NFO_AND_ARTWORK = "nfo_and_artwork"
+    ARTWORK = "artwork"
+    NONE = "none"
 
 
 # What a stream profile serves of an episode: its audio, an MP4 video file or an HLS video stream.

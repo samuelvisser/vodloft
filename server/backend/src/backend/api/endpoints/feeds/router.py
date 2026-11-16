@@ -8,7 +8,14 @@ from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import inspect
 from sqlalchemy.orm.attributes import set_committed_value
 
-from backend.services.video_cache import VideoCacheError, get_cached_mp4_path, mark_used, prepare_cached_mp4
+from backend.services.video_cache import (
+    VideoCacheError,
+    get_cached_mp4_path,
+    joins_mp4,
+    mark_used,
+    prepare_cached_mp4,
+    stream_height,
+)
 from .source_stream import episode_stream, proxy_response
 from .source_live import live_audio_response, live_master_response, live_part_response, live_playlist_response
 from .source_tracks import (
@@ -16,10 +23,8 @@ from .source_tracks import (
     join_in_background,
     joined_mp4,
     joined_mp4_response,
-    joins_mp4,
     master_playlist_response,
     note_file_streamed,
-    stream_height,
     track_part_response,
     track_playlist_response,
     track_redirect_response,

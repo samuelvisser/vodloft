@@ -8,9 +8,11 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS
 from backend.utils.keyed_locks import KeyedLocks
 from config import get_settings
 from config.network import NO_INTERNET_CONNECTION_MESSAGE, message_indicates_no_internet
+from sources import Site
 
 
 logger = logging.getLogger(__name__)
@@ -25,11 +27,18 @@ class VideoCacheError(Exception):
         self.detail = detail
 
 _VIDEO_CACHE_DIRECTORY = "video"
+_ARTWORK_CACHE_DIRECTORY = "artwork"
 _CACHE_LOCKS: KeyedLocks[Path] = KeyedLocks()
 
 
 def _video_cache_root() -> Path:
     return Path(get_settings().download_settings.stream_cache_root) / _VIDEO_CACHE_DIRECTORY
+
+
+def artwork_cache_path(url: str, image_format: str) -> Path:
+    """Where the cache keeps a picture from ``url``, for a WebDAV share that lists it."""
+    digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    return Path(get_settings().download_settings.stream_cache_root) / _ARTWORK_CACHE_DIRECTORY / f"{digest}.{image_format}"
 
 
 def _cache_retention_seconds() -> int:
@@ -44,6 +53,32 @@ def _cache_path(episode_uuid: str) -> Path:
 def mp4_cache_path(key: str) -> Path:
     """Where the Stream Video Cache keeps the MP4 file of ``key``, such as an episode's UUID."""
     return _cache_path(key)
+
+
+def stream_height(site: Site, preferred_format_height: int | None) -> int | None:
+    """The resolution a feed streams the Site's video at: the highest it has up to the feed's format."""
+    heights = sorted(site.stream_video_heights)
+    if not heights:
+        return None
+    if preferred_format_height is None:
+        return heights[-1]
+    return max((height for height in heights if height <= preferred_format_height), default=heights[0])
+
+
+def joins_mp4(site: Site, height: int | None) -> bool:
+    """Whether a feed's MP4 at this resolution is joined from the Site's tracks."""
+    return site.stream_file_height is not None and height is not None and height != site.stream_file_height
+
+
+def joined_key(episode_uuid: str, height: int) -> str:
+    return f"{episode_uuid}-{height}p"
+
+
+def episode_mp4_key(site: Site, preferred_format: str, episode_uuid: str) -> str:
+    """Under which key the cache keeps the episode's MP4 for a profile of this format: joined from the Site's
+    tracks at the profile's resolution, or else the Site's own video as one file."""
+    height = stream_height(site, PREFERRED_FORMAT_HEIGHTS.get(preferred_format))
+    return joined_key(episode_uuid, height) if joins_mp4(site, height) else episode_uuid
 
 
 def _last_used(stat: os.stat_result) -> float:
@@ -105,9 +140,10 @@ def _cleanup_expired_files(root: Path, *, retention_seconds: int) -> int:
 
 
 def cleanup_expired_stream_cache() -> int:
-    return _cleanup_expired_files(
-        _video_cache_root(),
-        retention_seconds=_cache_retention_seconds(),
+    root = Path(get_settings().download_settings.stream_cache_root)
+    return sum(
+        _cleanup_expired_files(root / directory, retention_seconds=_cache_retention_seconds())
+        for directory in (_VIDEO_CACHE_DIRECTORY, _ARTWORK_CACHE_DIRECTORY)
     )
 
 

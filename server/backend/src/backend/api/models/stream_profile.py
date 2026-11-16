@@ -8,6 +8,7 @@ from pydantic import AliasPath, Field, computed_field
 from backend.api.models.base import ResponseBase, response_model_config
 from backend.api.models.pagination import CursorPageRead
 from backend.api.models.iptv_stream_profile import IptvStreamProfileAPIRead
+from backend.api.models.webdav_stream_profile import WebdavStreamProfileAPIRead
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.types.stream_profile_types import StreamProfileType
 
@@ -43,7 +44,7 @@ class StreamProfileAPIReadView(StreamProfileAPIRead):
     collection_slug: str = Field(validation_alias=AliasPath("profile", "collection", "slug"))
     collection_source_key: str = Field(validation_alias=AliasPath("profile", "collection", "source_key"))
     stream_profile_impl: Annotated[
-        Union[RssStreamProfileAPIRead, IptvStreamProfileAPIRead], Field(discriminator="type"),
+        Union[RssStreamProfileAPIRead, IptvStreamProfileAPIRead, WebdavStreamProfileAPIRead], Field(discriminator="type"),
     ] = Field(validation_alias="profile")
 
 
@@ -72,3 +73,8 @@ class StreamAccessRead(ResponseBase):
     @property
     def episodes_path(self) -> str:
         return f"/iptv/{self.stream_token}/vod.m3u"
+
+    @computed_field
+    @property
+    def share_path(self) -> str:
+        return f"/webdav/{self.stream_token}/"

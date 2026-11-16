@@ -153,7 +153,9 @@ def test_stream_profiles_belong_to_whoever_made_them(session, monkeypatch):
     from backend.api.endpoints.rss_stream_profiles import service as rss
     from backend.api.endpoints.stream_profiles.service import get_stream_profiles_list
 
-    monkeypatch.setattr(rss, "ensure_site_can_stream", lambda collection, **_: None)
+    from backend.api.endpoints.stream_profiles import service as stream_profiles
+
+    monkeypatch.setattr(stream_profiles, "ensure_site_can_stream", lambda collection, **_: None)
     _add_users(session, 1, 2)
     collection = _collection(session)
     mine = _profile(session, _user(1, "viewer"), collection)
@@ -176,7 +178,9 @@ def test_a_disabled_users_feeds_stop_answering(session, monkeypatch):
     from backend.api.endpoints.rss_stream_profiles import service as rss
     from backend.db.models import RssStreamProfile, User
 
-    monkeypatch.setattr(rss, "ensure_site_can_stream", lambda collection, **_: None)
+    from backend.api.endpoints.stream_profiles import service as stream_profiles
+
+    monkeypatch.setattr(stream_profiles, "ensure_site_can_stream", lambda collection, **_: None)
     _add_users(session, 1)
     profile = session.get(RssStreamProfile, _profile(session, _user(1, "viewer"), _collection(session)).id)
     assert get_stream_profile_by_token(session, profile.token, StreamProfileType.RSS).id == profile.id
@@ -192,7 +196,9 @@ def test_profiles_from_before_accounts_go_to_the_first_administrator(session, mo
     from backend.db.models import RssStreamProfile, Settings
     from backend.services import users
 
-    monkeypatch.setattr(rss, "ensure_site_can_stream", lambda collection, **_: None)
+    from backend.api.endpoints.stream_profiles import service as stream_profiles
+
+    monkeypatch.setattr(stream_profiles, "ensure_site_can_stream", lambda collection, **_: None)
     session.add(Settings())
     profile = _profile(session, Access.full(), _collection(session))
     admin = users.set_accounts_enabled(session, True, first_administrator=("sam", "hash"))
@@ -205,7 +211,9 @@ def test_deleting_a_user_transfers_or_deletes_their_profiles(session, monkeypatc
     from backend.db.models import RssStreamProfile, User
     from backend.services import users
 
-    monkeypatch.setattr(rss, "ensure_site_can_stream", lambda collection, **_: None)
+    from backend.api.endpoints.stream_profiles import service as stream_profiles
+
+    monkeypatch.setattr(stream_profiles, "ensure_site_can_stream", lambda collection, **_: None)
     _add_users(session, 1, 2)
     profile_id = _profile(session, _user(2, "viewer"), _collection(session)).id
     users.delete_user(session, session.get(User, 2), stream_profiles=choice, heir_id=1)
@@ -243,7 +251,9 @@ def test_a_feed_streams_only_what_its_owner_may_use(session, monkeypatch):
     from backend.api.endpoints.rss_stream_profiles import service as rss
     from backend.db.models import RssStreamProfile, User
 
-    monkeypatch.setattr(rss, "ensure_site_can_stream", lambda collection, **_: None)
+    from backend.api.endpoints.stream_profiles import service as stream_profiles
+
+    monkeypatch.setattr(stream_profiles, "ensure_site_can_stream", lambda collection, **_: None)
     _add_users(session, 1)
     profile = session.get(RssStreamProfile, _profile(session, _user(1, "viewer"), _collection(session)).id)
     profile.collection.membership_level = "PREMIUM"

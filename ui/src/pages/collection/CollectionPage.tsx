@@ -699,8 +699,10 @@ export default function CollectionPage() {
                   <div className="collection-profile-links">
                     {attachedStreamProfiles.map((profile) => {
                       const impl = profile.streamProfileImpl
-                      const feedUrl = impl.type === 'rss' ? impl.feedUrl : publicAddress(impl.playlistPath)
-                      const what = impl.type === 'rss' ? 'RSS URL' : 'playlist URL'
+                      const feedUrl = impl.type === 'rss' ? impl.feedUrl : publicAddress(
+                        impl.type === 'iptv' ? impl.playlistPath : impl.sharePath,
+                      )
+                      const what = {rss: 'RSS URL', iptv: 'playlist URL', webdav: 'share URL'}[impl.type]
                       const copied = copiedStreamProfileId === profile.id
                       const label = `${profile.type.toUpperCase()} ${preferredFormatLabel(profile.preferredFormat)}`
                       return (

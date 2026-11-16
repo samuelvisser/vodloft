@@ -17,6 +17,7 @@ from backend.api.models.profile_bulk import (
 )
 from backend.api.models.iptv_stream_profile import IptvStreamProfileAPIRead, IptvStreamProfileAPIUpdate
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead, RssStreamProfileAPIUpdate
+from backend.api.models.webdav_stream_profile import WebdavStreamProfileAPIRead, WebdavStreamProfileAPIUpdate
 from backend.api.profile_bulk import in_order, offered_changes, reason_of, skipped, summarize
 from backend.db.models.stream_profile import StreamProfileBase
 from backend.security.access import Access
@@ -28,6 +29,7 @@ from sources import StreamMethod
 
 from ..iptv_stream_profiles.service import delete_stream_profile_iptv, update_stream_profile_iptv
 from ..rss_stream_profiles.service import delete_stream_profile_rss, update_stream_profile_rss
+from ..webdav_stream_profiles.service import delete_stream_profile_webdav, update_stream_profile_webdav
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,10 @@ _PROFILE_TYPES = {
     StreamProfileType.IPTV.value: _ProfileType(
         IptvStreamProfileAPIRead, IptvStreamProfileAPIUpdate, update_stream_profile_iptv, delete_stream_profile_iptv,
     ),
+    StreamProfileType.WEBDAV.value: _ProfileType(
+        WebdavStreamProfileAPIRead, WebdavStreamProfileAPIUpdate, update_stream_profile_webdav,
+        delete_stream_profile_webdav,
+    ),
 }
 
 
@@ -57,7 +63,7 @@ def _offers(profile: StreamProfileBase, name: str) -> bool:
     if name == "use_source_stream":
         return site.streams
     if name == "proxy_source_stream":
-        return video and site.streams and site.stream_proxy_choice
+        return profile.passes_site_streams and video and site.streams and site.stream_proxy_choice
     if name == "stream_live_episodes":
         return "hls" in profile.media_kinds and StreamMethod.LIVE in site.stream_methods
     return True

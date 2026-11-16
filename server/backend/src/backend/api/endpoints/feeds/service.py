@@ -27,9 +27,9 @@ from backend.types.stream_profile_types import (
     RssVideoOutputMode,
 )
 from backend.utils.feed_urls import request_base_url
-from backend.services.video_cache import get_cached_mp4_size
+from backend.services.video_cache import get_cached_mp4_size, joined_key, joins_mp4, stream_height
 from .source_stream import estimated_audio_size, estimated_video_size
-from .source_tracks import NEWEST_EPISODES_JOINED_AHEAD, EpisodeRef, join_in_background, joined_key, joins_mp4, stream_height
+from .source_tracks import NEWEST_EPISODES_JOINED_AHEAD, EpisodeRef, join_in_background
 from backend.services.collection_cookies import uses_cookies
 from sources import EpisodeTag, Feature, UnknownSourceError, get_source
 

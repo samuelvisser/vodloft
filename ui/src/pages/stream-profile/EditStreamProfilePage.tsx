@@ -165,9 +165,9 @@ export default function EditStreamProfilePage() {
 
                     <StreamProfileForm
                         form={form as any}
-                        mode={type as 'rss' | 'iptv'}
+                        mode={isStreamProfileType(type) ? type : 'rss'}
                         collectionRoot={false}
-                        iptvAddresses={streamProfile?.streamProfileImpl.type === 'iptv' ? streamProfile.streamProfileImpl : undefined}
+                        saved={streamProfile?.streamProfileImpl}
                         onRegenerateToken={onRegenerateToken}
                         regeneratingToken={regenerating}
                         downloadProfileDefaults={downloadProfileDefaults}
