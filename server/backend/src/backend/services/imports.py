@@ -35,6 +35,7 @@ from backend.services.sites import CollectionAlreadyAddedError, collection_site
 
 import importer.pinchflat  # noqa: F401  (registers the importer)
 import importer.wireloft  # noqa: F401  (registers the importer)
+import importer.ytdl_sub  # noqa: F401  (registers the importer)
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 from importer.contract import CollectionPlan, FilePlan, Importer, ImportPlan, ImportWarning, ProfilePlan, SettingPlan
@@ -81,14 +82,14 @@ _PROFILE_FIELDS = (
     "output_template", "preferred_format", "subtitle_mode", "thumbnail_mode", "metadata_mode",
     "collection_scope", "download_collection_assets", "indexing_values",
     "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs", "container", "audio_codec",
-    "audio_language",
+    "audio_language", "audio_format", "show_nfo", "kodi_safe_nfo",
 )
 _DOWNLOAD_PROFILE_FIELDS = ("delete_older_episodes",)
 _SITE_CHOICE_FIELDS = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments")
 """What the other program had per Download Profile, which VODLoft keeps on the Local Media Profile per Site."""
 _OPTIONAL_DOWNLOAD_PROFILE_FIELDS = ("upgrade_check", "upgrade_after_days", "upgrade_repeat")
 """Download Profile fields an importer only sends when the other program had the setting."""
-_COLLECTION_FIELDS = ("cookies_mode", "check_frequency", "check_cron")
+_COLLECTION_FIELDS = ("cookies_mode", "check_frequency", "check_cron", "genre", "content_rating")
 _DEFAULT_SETTINGS = frozenset({
     "downloads.filename_restriction_mode", "ytdlp.youtube_api_key",
     "settings.download_settings.speed_limit_mode", "settings.download_settings.speed_limit_mbps",
@@ -255,11 +256,12 @@ def load_plan(importer: Importer, options: ImportOptions) -> LoadedPlan:
         if record.kind == "download" and record.values.get("original_path")
         and record.values.get("artifact_status") == MediaDownloadArtifactStatus.AVAILABLE.value
     ]
-    samples = _samples(original)
+    samples = _samples([*original, *plan.probes])
     if options.path_map is not None:
         chosen = options.path_map
     else:
-        chosen, _found = detect_path_map(samples, _exists, path_map_candidates(samples, _vodloft_folders()))
+        candidates = path_map_candidates(samples, _vodloft_folders(), root=plan.download_folder)
+        chosen, _found = detect_path_map(samples, _exists, candidates)
     if chosen != DEFAULT_PATH_MAP:
         with work_location(importer, chosen) as location:
             plan = importer.read(location)
@@ -370,6 +372,9 @@ def _profile_values(profile: CollectionLocalMediaProfile) -> dict[str, object]:
         "container": profile.container,
         "audio_codec": profile.audio_codec,
         "audio_language": profile.audio_language,
+        "audio_format": profile.audio_format,
+        "show_nfo": profile.show_nfo,
+        "kodi_safe_nfo": profile.kodi_safe_nfo,
         "indexing_values": [
             {"key": item.key, "name": item.name, "keep_numbers": item.keep_numbers}
             for item in get_indexing_value_definitions(profile)

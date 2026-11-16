@@ -109,6 +109,8 @@ export const CollectionReadSchema = z.looseObject({
     thumbnailSquarePath: z.string().nullable().optional(),
     /** Your own yt-dlp options for this Collection, added after its Local Media Profile's. */
     ytdlpOptions: z.string().default(''),
+    genre: z.string().nullable().optional(),
+    contentRating: z.string().nullable().optional(),
     cookiesMode: z.enum(['automatic', 'never', 'always']).default('automatic'),
     cookiesNeededUntil: ApiDateTimeSchema.nullable().optional(),
     checkFrequency: z.enum(['default', 'less_often', 'own']).default('default'),

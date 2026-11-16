@@ -272,7 +272,7 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
     left_out = {
         name for name in ("membership_level", "ytdlp_options", "cookies_mode", "episode_order", "check_frequency", "check_cron")
         if getattr(body, name) is None
-    }
+    } | {name for name in ("genre", "content_rating") if name not in body.model_fields_set}
     update_database_fields(collection, body, exclude_fields=left_out or None)
     s.flush()
     request_collection_custom_index_reconciliation(s, collection.id)

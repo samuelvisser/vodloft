@@ -68,6 +68,10 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     )
     author_name: Mapped[str]
     author_slug: Mapped[str]
+    genre: Mapped[Optional[str]] = mapped_column(comment="The show's genre in its NFO files")
+    content_rating: Mapped[Optional[str]] = mapped_column(
+        comment="The show's content rating in its NFO files, such as TV-14",
+    )
     author_headshot_path: Mapped[Optional[str]]
     background_image_path: Mapped[Optional[str]] = mapped_column(comment=PICTURE_PATH_COMMENT)
     logo_image_path: Mapped[Optional[str]]

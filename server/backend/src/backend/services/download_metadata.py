@@ -47,6 +47,8 @@ def build_episode_metadata(episode: Episode, collection) -> MediaServerMetadata:
         duration_seconds=episode.duration,
         authors=_strings((collection.author_name,)),
         studios=_studios(episode.source_key),
+        genres=_strings((collection.genre,)),
+        content_rating=collection.content_rating,
         media_type="episode",
     )
 
@@ -62,6 +64,8 @@ def build_show_metadata(collection) -> MediaServerMetadata:
         source_url=collection.sharing_url,
         authors=_strings((collection.author_name,)),
         studios=_studios(collection.source_key),
+        genres=_strings((collection.genre,)),
+        content_rating=collection.content_rating,
     )
 
 

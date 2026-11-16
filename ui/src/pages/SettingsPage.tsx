@@ -50,7 +50,7 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'notifications', label: 'Messages and actions', description: 'Notifications, media server refreshes, webhooks and scripts', area: 'settings'},
     {id: 'sources', label: 'Sources', description: 'Services, sign-ins and their settings', area: 'sources'},
     {id: 'users', label: 'Users', description: 'Who may sign in, and what they may do', area: 'users'},
-    {id: 'import', label: 'Import', description: 'Bring over Pinchflat or WireLoft', area: 'users'},
+    {id: 'import', label: 'Import', description: 'Bring over Pinchflat, ytdl-sub or WireLoft', area: 'users'},
     {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
 ]
 

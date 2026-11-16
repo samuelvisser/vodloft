@@ -14,6 +14,9 @@ from .options import (
 )
 from .pinchflat import CUSTOM_VALUES, ITEM_VALUES, PSEUDO_FIELD_PREFIX, expand
 from .report import ConversionReport, PartReport
+from .ytdl_sub import Expansion, convert_ytdl_sub
+from .ytdl_sub import expand as expand_ytdl_sub
+from .ytdl_sub import render as render_ytdl_sub
 
 __all__ = [
     "COMMAND_LINE",
@@ -41,6 +44,10 @@ __all__ = [
     "Text",
     "convert_pinchflat",
     "convert_ytdlp",
+    "convert_ytdl_sub",
+    "Expansion",
+    "expand_ytdl_sub",
+    "render_ytdl_sub",
     "expand",
     "parse",
 ]
