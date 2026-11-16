@@ -117,24 +117,14 @@ export default function VideoPage() {
     return (
         <section className="view episode-view video-view" aria-labelledby="video-title">
             <article className="episode-details" aria-label="Video details">
-                <nav className="episode-breadcrumb" aria-label="Breadcrumb">
-                    <Link to="/library">Library</Link>
-                    <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
-                    <Link to="/library?type=videos">Videos</Link>
-                </nav>
-
-                <div className="episode-cover">
-                    {cover
-                        ? <img src={cover} alt="Video thumbnail"/>
-                        : <div className="video-cover-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'film')}/></div>}
-                    {video.duration > 0 && (
-                        <span className="thumb-corner thumb-corner-large"><DurationPill seconds={video.duration} large/></span>
-                    )}
-                </div>
-
-                <header className="episode-header">
-                    <div className="episode-title-row">
-                        <h1 id="video-title" className="episode-title-text">{video.title}</h1>
+                {/* The menu shares the breadcrumb's row, so the title below gets the full width. */}
+                <div className="episode-topbar">
+                    <nav className="episode-breadcrumb" aria-label="Breadcrumb">
+                        <Link to="/library">Library</Link>
+                        <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
+                        <Link to="/library?type=videos">Videos</Link>
+                    </nav>
+                    <div className="episode-title-actions">
                         <ActionMenu
                             items={[
                                 {
@@ -154,6 +144,19 @@ export default function VideoPage() {
                             ]}
                         />
                     </div>
+                </div>
+
+                <div className="episode-cover">
+                    {cover
+                        ? <img src={cover} alt="Video thumbnail"/>
+                        : <div className="video-cover-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'film')}/></div>}
+                    {video.duration > 0 && (
+                        <span className="thumb-corner thumb-corner-large"><DurationPill seconds={video.duration} large/></span>
+                    )}
+                </div>
+
+                <header className="episode-header">
+                    <h1 id="video-title" className="episode-title-text">{video.title}</h1>
                     <div className="episode-summary" aria-label="Video metadata">
                         <SourceBadge sourceKey={video.sourceKey}/>
                         {video.drmProtected && <DrmBadge asText/>}
