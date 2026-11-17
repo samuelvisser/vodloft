@@ -34,9 +34,15 @@ Authorization: Bearer {{access_token}}
 ### HLS stream example (episode)
 GET https://stream.mux.com/TBeDD9d34hgzel7el8rBC00X026KukfgpF.m3u8?token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJ2IiwiZXhwIjoxNzg5NjI3NTg2LCJraWQiOiJCZXVLOE1NaE9SVzAxTEpYMXhZV2tJQmE3NmxQMVlNZzAwIiwic3ViIjoiVEJlREQ5ZDM0aGd6ZWw3ZWw4ckJDMDBYMDI2S3VrZmdwRiJ9.nk_I9C39542LoB-6trNjoi9Q4Y2CWE_ydyi_-5_4htU3zTdAPe8oY-xNcySmSvnWy2a0UGyweWE6hThaVuJqpw4_PyAoFmEkKgjehBWTgHywOJcOSCeHX_v0kGYKZr_UP9Co2Sz28YqNZR8egljygH0mGLyMXfeuEWv4cGAkimo9pEEOzXzJg3bF7NdpcnKux2O2AyzYl7Ls-ay73xrV9ttyuEV0C6EwPG3S-uPFKRZ5PHS5W-RL-kpvh0UVSe7OIc_QtIemEPJNpWPhNj0Vl0UfaW7UXRS1pqwtpA_s79svY9U5OWEX7s0WPEnEkquyKTymBkigX_OD01uTSBEH4g
 
-### Get movie details: Run Hide Fight infidels
-GET https://middleware-prod.dailywire.com/middleware/v4/getVideoPage?slug=run-hide-fight-infidels
+### Get movie page: Run Hide Fight infidels
+GET https://middleware-prod.dailywire.com/middleware/v4/getMoviePage?slug=run-hide-fight-infidels
 Authorization: Bearer {{access_token}}
+
+### Get movie page: Confession
+GET https://middleware-prod.dailywire.com/middleware/v4/getMoviePage?slug=confession
+Authorization: Bearer {{access_token}}
+
+
 
 ### Get video details: Run Hide Fight infidels
 GET https://middleware-prod.dailywire.com/middleware/v2/getVideo?slug=shut-in

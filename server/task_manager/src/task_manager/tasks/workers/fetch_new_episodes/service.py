@@ -153,6 +153,7 @@ async def run_fetch_new_episodes(
     """Scan one collection, or all collections. ``quick_checked`` limits a scan of all collections to the
     collections whose Source has quick checks (True), which get a full re-scan once a day,
     or to the other collections (False)."""
+
     collections: Sequence[Collection] = get_collections(s, collection_id=collection_id, collection_slug=collection_slug)
     if quick_checked is not None and collection_id is None and not collection_slug:
         collections = [collection for collection in collections if get_source(collection.source_key).has(Feature.QUICK_CHECK) == quick_checked]
