@@ -6,18 +6,25 @@ import {faIcon} from '../../icons/faIcon'
 import type {SelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
 
-/** "Follows Settings" while a value comes from Settings; otherwise a button that makes it follow Settings again. */
-export function FollowsSettingsBadge({following, onUseSettings}: {following: boolean; onUseSettings: () => void}) {
+/**
+ * "Follows Settings" while a value comes from Settings: clicking it makes that value the profile's own. Otherwise a
+ * "Use Settings" button that makes the value follow Settings again.
+ */
+export function FollowsSettingsBadge({following, onChoose, onUseSettings}: {
+    following: boolean
+    onChoose: () => void
+    onUseSettings: () => void
+}) {
     if (following) {
         return (
-            <span className="follows-settings-badge" title="This profile uses the value in Settings. Click a box to choose your own.">
+            <button type="button" className="follows-settings-badge" onClick={onChoose} title="Uses the value in Settings. Click to choose your own.">
                 <FontAwesomeIcon icon={faIcon('fass', 'link')}/>
                 <span><span className="follows-settings-badge__long">Follows </span>Settings</span>
-            </span>
+            </button>
         )
     }
     return (
-        <button type="button" className="follows-settings-badge" onClick={onUseSettings} title="Use the value in Settings again">
+        <button type="button" className="follows-settings-badge follows-settings-badge--use" onClick={onUseSettings} title="Use the value in Settings again">
             <FontAwesomeIcon icon={faIcon('fass', 'arrow-rotate-left')}/>
             <span>Use Settings</span>
         </button>
@@ -85,7 +92,7 @@ export function FollowsSettingsSelect({form, name, id, label, registry, systemLa
                                 <span className="follows-settings-line__text">
                                     <span>{label}</span>
                                     <span className="follows-settings-line__value">{systemLabel}</span>
-                                    <FollowsSettingsBadge following onUseSettings={() => undefined}/>
+                                    <FollowsSettingsBadge following onChoose={() => setChanging(true)} onUseSettings={() => undefined}/>
                                 </span>
                                 <button
                                     type="button"

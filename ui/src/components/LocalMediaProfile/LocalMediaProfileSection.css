@@ -66,21 +66,27 @@
     font-weight: 600;
     line-height: 1.6;
     white-space: nowrap;
-}
-
-button.follows-settings-badge {
-    border-color: rgba(100, 116, 139, 0.35);
-    background: transparent;
-    color: var(--muted);
     cursor: pointer;
     font: inherit;
     font-size: 11.5px;
     font-weight: 600;
 }
 
-button.follows-settings-badge:hover,
-button.follows-settings-badge:focus-visible {
+.follows-settings-badge:hover,
+.follows-settings-badge:focus-visible {
+    background: #bfdbfe;
+}
+
+.follows-settings-badge--use {
+    border-color: rgba(100, 116, 139, 0.35);
+    background: transparent;
+    color: var(--muted);
+}
+
+.follows-settings-badge--use:hover,
+.follows-settings-badge--use:focus-visible {
     border-color: #3b82f6;
+    background: transparent;
     color: #1d4ed8;
 }
 
@@ -233,25 +239,6 @@ button.follows-settings-badge:focus-visible {
     text-transform: uppercase;
 }
 
-.media-files-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 18px;
-    color: var(--muted);
-    font-size: 12.5px;
-}
-
-.media-files-legend .follow-check {
-    cursor: default;
-    font-size: 12.5px;
-}
-
-.media-files-legend .follow-check input {
-    width: 15px;
-    height: 15px;
-    pointer-events: none;
-}
-
 @media (max-width: 600px) {
     .media-files-grid > * {
         padding: 9px 10px;
@@ -301,13 +288,19 @@ button.follows-settings-badge:focus-visible {
         color: #93c5fd;
     }
 
-    button.follows-settings-badge {
+    .follows-settings-badge:hover,
+    .follows-settings-badge:focus-visible {
+        background: rgba(59, 130, 246, 0.3);
+    }
+
+    .follows-settings-badge--use {
         background: transparent;
         color: var(--muted);
     }
 
-    button.follows-settings-badge:hover,
-    button.follows-settings-badge:focus-visible {
+    .follows-settings-badge--use:hover,
+    .follows-settings-badge--use:focus-visible {
+        background: transparent;
         color: #93c5fd;
     }
 

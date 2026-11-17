@@ -49,7 +49,11 @@ function GridRow({form, name, modes, systemValue, label, description, insideLabe
                     <>
                         <div className="media-files-grid__name">
                             <strong>{label}</strong>
-                            <FollowsSettingsBadge following={following} onUseSettings={() => field.onChange('system')}/>
+                            <FollowsSettingsBadge
+                                following={following}
+                                onChoose={() => systemValue && field.onChange(systemValue)}
+                                onUseSettings={() => field.onChange('system')}
+                            />
                             <span>{description}</span>
                         </div>
                         <div>
@@ -126,11 +130,6 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
 
     return (
         <>
-            <div className="media-files-legend" aria-hidden="true">
-                <span className="follow-check is-following"><input type="checkbox" checked readOnly tabIndex={-1}/>Follows Settings: click to choose your own</span>
-                <span className="follow-check"><input type="checkbox" checked readOnly tabIndex={-1}/>Chosen for this profile</span>
-            </div>
-
             <div className="media-files-grid" role="group" aria-label="Saved with each download">
                 <div className="media-files-grid__head">Saved with each {mode === 'collection' ? 'episode' : mode}</div>
                 <div className="media-files-grid__head">Inside the media</div>
@@ -178,7 +177,11 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                                         label={(
                                             <span className="media-files-check-label">
                                                 Poster and background{' '}
-                                                <FollowsSettingsBadge following={following} onUseSettings={() => field.onChange(null)}/>
+                                                <FollowsSettingsBadge
+                                                    following={following}
+                                                    onChoose={() => systemEnabled !== undefined && field.onChange(systemEnabled)}
+                                                    onUseSettings={() => field.onChange(null)}
+                                                />
                                             </span>
                                         )}
                                         description="Saved in the collection root that Output path shows. Artwork you added yourself is kept."
