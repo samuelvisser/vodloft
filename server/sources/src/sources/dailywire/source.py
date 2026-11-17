@@ -185,6 +185,14 @@ class DailyWireSource(Source):
         found.sort(key=lambda item: item[0].published_date, reverse=True)
         return [_video(record, refs.get(season_slug)) for record, season_slug in found]
 
+    def channel_of(self, url: str) -> str | None:
+        """The host of a show."""
+        slug = self.collection_ref(url)
+        if slug is None:
+            return None
+        catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
+        return next((show.author_slug for show in catalog.collections if show.slug == slug and show.author_slug), None)
+
     def channel_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> ChannelDetails:
         """A host, by the slug The Daily Wire gives them: their shows and movies from the Browse page.
 

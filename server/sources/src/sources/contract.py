@@ -941,6 +941,11 @@ class Source(ABC):
         "Listing the playlists"."""
         raise NotImplementedError(f"{self.name} has no channels")
 
+    def channel_of(self, url: str) -> str | None:
+        """The channel a collection's link belongs to, as ``channel_details`` takes it, or None when the link is not
+        one channel's. Slow: it may ask the Site. Only Sources with ``Feature.CHANNELS`` implement it."""
+        raise NotImplementedError(f"{self.name} has no channels")
+
     def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
         """The collection's episodes whose slugs are not in ``known``.
 

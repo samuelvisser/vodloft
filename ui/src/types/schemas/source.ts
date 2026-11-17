@@ -25,6 +25,7 @@ export const SourceFeature = {
     EPISODE_LOOKUPS: 'episode_lookups',
     PAGE_STREAMS: 'page_streams',
     OWN_STUDIO: 'own_studio',
+    CHANNELS: 'channels',
 } as const
 export type SourceFeatureValue = typeof SourceFeature[keyof typeof SourceFeature]
 

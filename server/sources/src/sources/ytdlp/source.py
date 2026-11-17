@@ -621,6 +621,15 @@ class YtDlpSource(Source):
             access=_access(info),
         )
 
+    def channel_of(self, url: str) -> str | None:
+        """A channel's tab is the channel; a playlist belongs to the channel that made it."""
+        if root := channel_root(collection_url(url)):
+            return root
+        if mapping.youtube_ref(collection_url(url)) is None:
+            return None
+        author = self.collection_details(url).author_url
+        return channel_root(author) if author else None
+
     def channel_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> ChannelDetails:
         """A YouTube channel through yt-dlp, which costs no API quota: its details, the Videos, Live and Shorts tabs
         it has, and its playlists. ``ref`` is the channel's link or its ID."""

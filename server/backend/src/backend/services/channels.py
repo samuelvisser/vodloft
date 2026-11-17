@@ -11,10 +11,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Channel, ChannelSection, Collection, CollectionLink
+from backend.db.models import Channel, ChannelSection, Collection, CollectionLink, CollectionLinkItem, Episode
 from backend.services.collections import add_collection, index_new_collection, reindex_collection
 from backend.services.errors import ServiceError
 from backend.services.sites import site_record
@@ -145,6 +145,22 @@ def _section_record(section: SectionRef, position: int, status: SectionStatus = 
     )
 
 
+def _new_channel(
+    s: Session, source_key: str, site_key: str, details: ChannelDetails, *, added_by_id: int | None,
+    new_sections: NewSectionAction = NewSectionAction.ASK,
+) -> Channel:
+    channel = Channel(
+        uuid=generate_uuid(), slug=_unique_slug(s, Channel, slugify(details.handle or details.title) or details.ref), source_key=source_key,
+        site_key=site_key, site_ref=details.ref, url=details.url, title=details.title, handle=details.handle,
+        description=details.description, avatar_path=details.avatar_url, banner_path=details.banner_url,
+        links=list(details.links), facts=list(details.facts), added_by_id=added_by_id, new_sections=new_sections.value,
+    )
+    channel.sections = [_section_record(section, position) for position, section in enumerate(details.sections)]
+    s.add(channel)
+    s.flush()
+    return channel
+
+
 def add_channel(
     s: Session, *, source_key: str, details: ChannelDetails, plans: list[SectionPlan], settings: NewCollectionSettings,
     added_by_id: int | None = None, new_sections: NewSectionAction = NewSectionAction.ASK,
@@ -161,15 +177,7 @@ def add_channel(
     unknown = [plan.ref for plan in plans if plan.ref not in by_ref]
     if unknown:
         raise ServiceError(f"{details.title} has no section {unknown[0]}")
-    channel = Channel(
-        uuid=generate_uuid(), slug=_unique_slug(s, Channel, slugify(details.handle or details.title) or details.ref), source_key=source_key,
-        site_key=record.key, site_ref=details.ref, url=details.url, title=details.title, handle=details.handle,
-        description=details.description, avatar_path=details.avatar_url, banner_path=details.banner_url,
-        links=list(details.links), facts=list(details.facts), added_by_id=added_by_id, new_sections=new_sections.value,
-    )
-    channel.sections = [_section_record(section, position) for position, section in enumerate(details.sections)]
-    s.add(channel)
-    s.flush()
+    channel = _new_channel(s, source_key, record.key, details, added_by_id=added_by_id, new_sections=new_sections)
     order = {ref: position for position, ref in enumerate(claim_order(list(details.sections)))}
     collections = _place(s, channel, plans, order, settings, added_by_id=added_by_id)
     return channel, collections
@@ -250,6 +258,39 @@ def channel_order(channel: Channel) -> list[CollectionLink]:
     return sorted(links, key=lambda link: (link.position, link.id or 0))
 
 
+def _make_room(channel: Channel, adding: Sequence[ChannelSection], *, after: Sequence[CollectionLink] = ()) -> dict[str, int]:
+    """Renumber the channel's order with the sections in ``adding`` that it does not keep yet: a list goes above
+    everything, as the newest list, and a feed to its place among the feeds. Returns their positions by ref. Links of
+    the channel's collections that list no section of it go last, after them the links in ``after``."""
+    existing = channel_order(channel)
+    loose = sorted(
+        (link for collection in channel.collections for link in collection.links if link.channel_section_id is None),
+        key=lambda link: (link.position, link.id or 0),
+    )
+    placed = {link.channel_section_id for link in existing}
+    by_ref = {section.ref: section for section in adding}
+    new_refs = [ref for ref in claim_order([_as_ref(section) for section in adding]) if by_ref[ref].id not in placed]
+    new_lists = [ref for ref in new_refs if by_ref[ref].kind != SectionKind.FEED]
+    new_feeds = [ref for ref in new_refs if by_ref[ref].kind == SectionKind.FEED]
+    entries: list[CollectionLink | str] = [*new_lists, *existing]
+    for ref in new_feeds:
+        rank = _FEED_ORDER[SectionRole(by_ref[ref].role)]
+        at = next(
+            (index for index, entry in enumerate(entries) if isinstance(entry, CollectionLink) and entry.section is not None
+             and entry.section.kind == SectionKind.FEED and _FEED_ORDER[SectionRole(entry.section.role)] > rank),
+            len(entries),
+        )
+        entries.insert(at, ref)
+    entries += [link for link in loose if link not in after] + list(after)
+    order: dict[str, int] = {}
+    for position, entry in enumerate(entries):
+        if isinstance(entry, str):
+            order[entry] = position
+        else:
+            entry.position = position
+    return order
+
+
 def place_sections(s: Session, channel: Channel, plans: list[SectionPlan], *, added_by_id: int | None = None) -> list[Collection]:
     """Add sections of a channel that is in the Library to its collections, or ignore them. A list goes above
     everything in the channel's order, as the newest list; a feed goes to its place among the feeds.
@@ -265,27 +306,7 @@ def place_sections(s: Session, channel: Channel, plans: list[SectionPlan], *, ad
     adding = [plan for plan in plans if plan.target is not SectionTarget.SKIP]
     if not adding:
         return []
-    # Renumber the channel's order with the new sections in it.
-    existing = channel_order(channel)
-    placed = {link.channel_section_id for link in existing}
-    new_refs = [ref for ref in claim_order([_as_ref(sections[plan.ref]) for plan in adding]) if sections[ref].id not in placed]
-    new_lists = [ref for ref in new_refs if sections[ref].kind != SectionKind.FEED]
-    new_feeds = [ref for ref in new_refs if sections[ref].kind == SectionKind.FEED]
-    entries: list[CollectionLink | str] = [*new_lists, *existing]
-    for ref in new_feeds:
-        rank = _FEED_ORDER[SectionRole(sections[ref].role)]
-        at = next(
-            (index for index, entry in enumerate(entries) if isinstance(entry, CollectionLink) and entry.section is not None
-             and entry.section.kind == SectionKind.FEED and _FEED_ORDER[SectionRole(entry.section.role)] > rank),
-            len(entries),
-        )
-        entries.insert(at, ref)
-    order: dict[str, int] = {}
-    for position, entry in enumerate(entries):
-        if isinstance(entry, str):
-            order[entry] = position
-        else:
-            entry.position = position
+    order = _make_room(channel, [sections[plan.ref] for plan in adding])
     return _place(s, channel, [plan for plan in adding if plan.ref in order], order, _settings_of(channel), added_by_id=added_by_id)
 
 
@@ -417,3 +438,115 @@ def _site_key_of(source_key: str) -> str:
     if len(sites) != 1:
         raise ServiceError("This channel has no link, and its Site could not be told")
     return sites[0].key
+
+
+@dataclass(frozen=True)
+class LinkMatch:
+    """Which section of a channel one of a collection's links is, if any, and the collection that keeps that section
+    already, when another one does."""
+
+    link: CollectionLink
+    section: SectionRef | ChannelSection | None
+    kept_by: str | None = None
+
+
+def match_links(
+    s: Session, collection: Collection, source_key: str, details: ChannelDetails, channel: Channel | None,
+) -> list[LinkMatch]:
+    """Match each of the collection's links to a section of the channel: the section at the same link, or the
+    section the collection is known by, such as a playlist added by its own link before."""
+    sections: Sequence[SectionRef | ChannelSection] = channel.sections if channel is not None else details.sections
+    by_url = {section.url: section for section in sections}
+    by_ref = {section.ref: section for section in sections}
+    links = sorted(collection.links, key=lambda link: (link.position, link.id or 0))
+    matched: dict[int, SectionRef | ChannelSection] = {
+        id(link): by_url[link.url] for link in links if link.url in by_url
+    }
+    kept = sections_in_library(s, source_key, details.ref, list(sections))
+    for ref, slug in kept.items():
+        if slug != collection.slug or any(section.ref == ref for section in matched.values()):
+            continue
+        free = next((link for link in links if id(link) not in matched), None)
+        if free is not None:
+            matched[id(free)] = by_ref[ref]
+    # A section another of the channel's collections keeps stays there.
+    elsewhere: dict[int, str] = {}
+    if channel is not None:
+        for other in channel.collections:
+            if other.id == collection.id:
+                continue
+            for link in other.links:
+                if link.channel_section_id is not None:
+                    elsewhere[link.channel_section_id] = other.title
+    result = []
+    for link in links:
+        section = matched.get(id(link))
+        taken = elsewhere.get(section.id) if isinstance(section, ChannelSection) else None
+        result.append(LinkMatch(link, None if taken else section, taken))
+    return result
+
+
+def join_channel(
+    s: Session, collection: Collection, *, source_key: str, details: ChannelDetails, added_by_id: int | None = None,
+) -> Channel:
+    """Make a collection one of a channel's, adding the channel when it is not in the Library yet. Each of its links
+    that is a section of the channel becomes that section's link, in the channel's order. Nothing is indexed again
+    and no file moves; videos without files that another of the channel's collections keeps move there.
+
+    ``details`` was looked up before the write transaction. ``s`` is a write transaction's session."""
+    if collection.channel_id is not None:
+        raise ServiceError(f"{collection.title} is already in {collection.channel.title}")
+    site = channel_site(source_key, details.url or _site_key_of(source_key))
+    record = site_record(s, site)
+    channel = channel_in_library(s, record.key, details.ref)
+    had_collections = channel is not None and bool(channel.collections)
+    if channel is None:
+        channel = _new_channel(s, source_key, record.key, details, added_by_id=added_by_id)
+    matches = match_links(s, collection, source_key, details, channel)
+    paired = [(match.link, match.section) for match in matches if isinstance(match.section, ChannelSection)]
+    if not paired:
+        raise ServiceError(f"None of the links of {collection.title} is a playlist or show of {channel.title}")
+    order = _make_room(channel, [section for _link, section in paired], after=[m.link for m in matches if m.section is None])
+    for link, section in paired:
+        link.section = section
+        link.position = order[section.ref]
+        section.status = SectionStatus.KNOWN.value
+    collection.channel = channel
+    main = next((section for _link, section in paired if section.kind == SectionKind.FEED and section.role == SectionRole.MAIN), None)
+    if main is not None and channel.main_collection is None:
+        channel.main_collection = collection
+    s.flush()
+    if had_collections:
+        queue_task_after_commit(s, def_key=RECLAIM_TASK_KEY, resource_type="channel", resource_id=channel.id)
+    return channel
+
+
+def leave_channel(s: Session, collection: Collection) -> None:
+    """Make a channel's collection a plain one again. It keeps its links, episodes, files and settings.
+
+    ``s`` is a write transaction's session."""
+    channel = collection.channel
+    if channel is None:
+        raise ServiceError(f"{collection.title} is not in a channel")
+    for link in collection.links:
+        link.section = None
+    if channel.main_collection_id == collection.id:
+        channel.main_collection = None
+    collection.channel = None
+    s.flush()
+
+
+def videos_kept_elsewhere(s: Session, collection: Collection) -> int:
+    """How many videos the collection's links list that another of its channel's collections keeps. Once it leaves
+    the channel, it adds them too."""
+    if collection.channel_id is None:
+        return 0
+    others = select(Collection.id).where(Collection.channel_id == collection.channel_id, Collection.id != collection.id)
+    listed = (
+        select(CollectionLinkItem.source_slug).join(CollectionLink, CollectionLink.id == CollectionLinkItem.link_id)
+        .where(CollectionLink.collection_id == collection.id)
+    )
+    return s.scalar(
+        select(func.count(func.distinct(Episode.source_slug)))
+        .where(Episode.collection_id.in_(others), Episode.source_slug.in_(listed))
+    ) or 0

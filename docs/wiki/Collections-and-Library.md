@@ -177,6 +177,12 @@ The channel's **Edit** page holds:
 - **When the channel adds a playlist or show**: the choice described under Following a channel.
 - **Genre** and **Content rating**: written to the NFO file of each of the channel's collections that has none of its own. Changing them here changes the collections that still had the old value.
 
+### Adding a collection to a channel, and removing it
+
+A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its channel later. Choose **Add to channel** in the collection's **Actions** menu. VODLoft finds the channel or host behind the collection's links, adds the channel to your Library if it is not there yet, and shows which of the channel's playlists or shows each link becomes. The collection keeps its seasons, episode numbers, profiles and files; nothing is indexed again. A playlist goes first in the channel's order, and a feed such as Shorts goes to its usual place. When a video is also in another of the channel's collections, it goes to the one higher in that order, unless it is already downloaded.
+
+**Remove from channel** in the same menu makes it a plain collection again. It keeps its episodes, profiles, files, genre and content rating. Because it no longer follows the channel's order, videos that another of the channel's collections has may be listed in it too after its next sync.
+
 Output templates can use the channel too: `channel_title`, `channel_handle` and `channel_kind`, and for a video that came from a playlist or show, `section_title` and `section_kind`. See [Local Media Profiles](Local-Media-Profiles#collection-template-variable-reference).
 
 ## NPO Start

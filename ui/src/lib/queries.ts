@@ -24,6 +24,7 @@ import {useFrontendPuller} from './puller'
 import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/siteSettings'
 import {
     ChannelLookupReadSchema, ChannelPageReadSchema, ChannelReadSchema, type ChannelLookupRead, type ChannelPageRead, type ChannelRead,
+    CollectionChannelLeaveSchema, CollectionChannelMatchSchema, type CollectionChannelLeave, type CollectionChannelMatch,
     type SectionPlan,
 } from '../types/schemas/channel'
 import {downloadStatusesForApi} from './downloadStatusFilters'
@@ -820,6 +821,44 @@ export async function addChannelSections(slug: string, sections: SectionPlan[]):
     })
     if (!response.ok) throw await responseError(response)
     return ChannelPageReadSchema.parse(await response.json())
+}
+
+function collectionChannelPath(slug: string, rest = ''): string {
+    return `${apiUrl()}/collections/${encodeURIComponent(slug)}/channel${rest}`
+}
+
+/** Find the channel behind a collection's links, and which of its sections each link becomes. Slow: asks the site. */
+export function useCollectionChannelMatch(slug: string, enabled: boolean) {
+    return useQuery<CollectionChannelMatch, Error>({
+        queryKey: ['collection-channel-match', slug] as const,
+        enabled,
+        retry: false,
+        staleTime: 60_000,
+        queryFn: async () => {
+            const response = await fetch(collectionChannelPath(slug, '/match'), {credentials: 'include'})
+            if (!response.ok) throw await responseError(response)
+            return CollectionChannelMatchSchema.parse(await response.json())
+        },
+    })
+}
+
+export function useCollectionChannelLeave(slug: string, enabled: boolean) {
+    return useQuery<CollectionChannelLeave, Error>({
+        queryKey: ['collection-channel-leave', slug] as const,
+        enabled,
+        retry: false,
+        queryFn: async () => {
+            const response = await fetch(collectionChannelPath(slug, '/leave'), {credentials: 'include'})
+            if (!response.ok) throw await responseError(response)
+            return CollectionChannelLeaveSchema.parse(await response.json())
+        },
+    })
+}
+
+/** Add a collection to the channel behind its links, or take it out of its channel again. */
+export async function setCollectionChannel(slug: string, inChannel: boolean): Promise<void> {
+    const response = await fetch(collectionChannelPath(slug), {method: inChannel ? 'POST' : 'DELETE', credentials: 'include'})
+    if (!response.ok) throw await responseError(response)
 }
 
 /** Look for the channel's new playlists and shows now. */

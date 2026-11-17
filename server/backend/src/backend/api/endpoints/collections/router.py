@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from .as_bundle import collection_as_bundle_router
 from .as_view import collection_view_router
 from .existing_files.router import router as existing_files_router
 from .sync_log import collection_scans
+from backend.api.endpoints.channels.service import (
+    CollectionNotFoundError, collection_channel_leave, collection_channel_match, collection_links, join_collection_channel,
+    leave_collection_channel, look_up_collection_channel,
+)
+from backend.api.models.channel import CollectionChannelLeaveAPIRead, CollectionChannelMatchAPIRead
 from .service import (
     get_collections_list,
     create_collection,
@@ -290,3 +295,62 @@ def collection_delete(collection_slug: str):
         return delete_collection(s, collection_slug)
 
     return run_write_transaction(work)
+
+
+def _collection_found(work):
+    try:
+        return work()
+    except CollectionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def _channel_behind(collection_slug: str):
+    with db_session() as s:
+        links = _collection_found(lambda: collection_links(s, collection_slug))
+    return links.source_key, look_up_collection_channel(links)
+
+
+@router.get(
+    "/{collection_slug}/channel/match",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CollectionChannelMatchAPIRead,
+)
+def collection_channel_match_get(collection_slug: str):
+    """Find the channel behind the collection's links, and which section each link becomes."""
+    source_key, details = _channel_behind(collection_slug)
+    with db_session() as s:
+        return _collection_found(lambda: collection_channel_match(s, collection_slug, source_key, details))
+
+
+@router.post(
+    "/{collection_slug}/channel",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CollectionAPIRead,
+)
+def collection_channel_join(collection_slug: str, access: Access = signed_in()):
+    """Add the collection to the channel behind its links, adding the channel when it is not in the Library."""
+    source_key, details = _channel_behind(collection_slug)
+    return _collection_found(lambda: run_write_transaction(
+        lambda s: join_collection_channel(s, collection_slug, source_key, details, added_by_id=access.user_id)
+    ))
+
+
+@router.get(
+    "/{collection_slug}/channel/leave",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CollectionChannelLeaveAPIRead,
+)
+def collection_channel_leave_get(collection_slug: str):
+    """What removing the collection from its channel changes."""
+    with db_session() as s:
+        return _collection_found(lambda: collection_channel_leave(s, collection_slug))
+
+
+@router.delete(
+    "/{collection_slug}/channel",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CollectionAPIRead,
+)
+def collection_channel_remove(collection_slug: str):
+    """Make the collection a plain one again. It keeps its episodes, files and settings."""
+    return _collection_found(lambda: run_write_transaction(lambda s: leave_collection_channel(s, collection_slug)))
