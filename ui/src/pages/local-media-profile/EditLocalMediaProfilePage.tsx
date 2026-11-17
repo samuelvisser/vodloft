@@ -234,7 +234,7 @@ export default function EditLocalMediaProfilePage() {
                 {profile.type === 'collection' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
-            <form id={formId} className="form" onSubmit={onFormSubmit} noValidate>
+            <form id={formId} className="form local-media-profile-form" onSubmit={onFormSubmit} noValidate>
                 <div className="form-row">
                     <label>Profile type</label>
                     <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(profile.type)}</div>

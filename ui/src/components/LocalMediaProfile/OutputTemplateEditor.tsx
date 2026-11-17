@@ -12,7 +12,7 @@ import {EditorView, type ViewUpdate} from '@codemirror/view'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import ReadMore from '../../utils/ReadMore'
-import {useLocalMediaProfilePreview, type LocalMediaProfilePreviewState} from '../../lib/localMediaProfilePreview'
+import {useLocalMediaProfilePreview} from '../../lib/localMediaProfilePreview'
 import {
     type LocalMediaProfileTemplateSource,
     useLocalMediaProfileTemplateSources,
@@ -22,7 +22,8 @@ import {
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
 import CustomIndexAdvisories from './CustomIndexAdvisories'
-import OutputTemplateStartFields from './OutputTemplateStartFields'
+import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStartFields'
+import CollectionRootNote from './CollectionRootNote'
 import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
 import {
     analyzeJinjaStatement,
@@ -44,7 +45,6 @@ type Props = {
     mode: LocalMediaProfileMode
     placeholder: string
     help: ReactNode
-    renderPreviewFields?: (preview: LocalMediaProfilePreviewState) => ReactNode
 }
 
 type TemplateCodeEditorProps = {
@@ -530,7 +530,7 @@ function describeTypedCharacter(char: string): string {
     return char
 }
 
-export default function OutputTemplateEditor({form, mode, placeholder, help, renderPreviewFields}: Props) {
+export default function OutputTemplateEditor({form, mode, placeholder, help}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
@@ -871,13 +871,6 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
 
     return (
         <>
-            {renderPreviewFields && (
-                <>
-                    <hr className="form-section-divider" aria-hidden="true"/>
-                    {renderPreviewFields(preview)}
-                </>
-            )}
-            <hr className="form-section-divider" aria-hidden="true"/>
             <OutputTemplateStartFields form={form} mode={mode}/>
             <div className="form-row output-template-field">
                 <section className="template-workbench" aria-labelledby="template-editor-heading">
@@ -910,6 +903,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                             {String(errors.outputTemplate.message)}
                         </div>
                     )}
+                    <FilenameModeField form={form}/>
                     {variableQuery.isError && (
                         <div className="error" role="alert">
                             Custom metadata fields could not be loaded. Try refreshing the page.
@@ -1033,6 +1027,8 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, ren
                                         : <code>{previewLoading ? 'Rendering…' : 'Add a variable to preview this path.'}</code>
                             }
                         </div>
+
+                        {mode === 'collection' && <CollectionRootNote preview={preview}/>}
 
                         <div className="template-test-values">
                             {!testValuesExpanded && (

@@ -29,48 +29,7 @@ export default function SponsorBlockFields({idPrefix, enabled, segments, onChang
                 onColor="#0ea5e9" offColor="#d1d5db" uncheckedIcon={false} checkedIcon={false}
                 aria-describedby={`${idPrefix}-sponsorblock-help`}
             />
-            {enabled && (
-                <div className="sponsorblock-groups">
-                    {SPONSORBLOCK_GROUPS.map((group) => (
-                        <fieldset key={group.label} className="sponsorblock-group">
-                            <legend>{group.label}</legend>
-                            {group.categories.map((category) => {
-                                const label = SponsorBlockCategoryReg.getLabel(category)
-                                const help = SponsorBlockCategoryReg.getHelp(category)
-                                return (
-                                    <div key={category} className="sponsorblock-row">
-                                        <span className="sponsorblock-row__name" id={`${idPrefix}-sponsorblock-${category}-label`} title={help}>
-                                            <span className="sponsorblock-swatch" style={{background: SPONSORBLOCK_COLORS[category]}} aria-hidden="true"/>
-                                            {label}
-                                        </span>
-                                        <span className="sr-only" id={`${idPrefix}-sponsorblock-${category}-help`}>{help}</span>
-                                        <span
-                                            className="sponsorblock-choice"
-                                            role="radiogroup"
-                                            aria-labelledby={`${idPrefix}-sponsorblock-${category}-label`}
-                                            aria-describedby={`${idPrefix}-sponsorblock-${category}-help`}
-                                        >
-                                            {sponsorBlockActionReg(category).values.map((action) => (
-                                                <label key={action} title={SponsorBlockActionReg.getHelp(action)}>
-                                                    <input
-                                                        type="radio"
-                                                        name={`${idPrefix}-sponsorblock-${category}`}
-                                                        value={action}
-                                                        aria-label={`${label}: ${SponsorBlockActionReg.getLabel(action)}`}
-                                                        checked={segments[category] === action}
-                                                        onChange={() => choose(category, action)}
-                                                    />
-                                                    <span>{SponsorBlockActionReg.getLabel(action)}</span>
-                                                </label>
-                                            ))}
-                                        </span>
-                                    </div>
-                                )
-                            })}
-                        </fieldset>
-                    ))}
-                </div>
-            )}
+            {enabled && <SponsorBlockSegmentsGrid idPrefix={idPrefix} segments={segments} onChoose={choose}/>}
             <div className="help" id={`${idPrefix}-sponsorblock-help`}>
                 <ReadMore summary={`Mark or cut out sponsor reads and other parts of a video. ${appliesTo}`}>
                     <p>SponsorBlock is a community database of parts of YouTube videos, such as sponsor reads and “like and subscribe” reminders.
@@ -80,6 +39,56 @@ export default function SponsorBlockFields({idPrefix, enabled, segments, onChang
                         {' '}<strong>Cut out</strong> is final; the cut part isn’t kept anywhere. The Highlight and viewer chapters mark a moment or name a part, so they can only be kept or made a chapter.</p>
                 </ReadMore>
             </div>
+        </div>
+    )
+}
+
+/** Keep, Chapter or Cut out for every segment type, in their groups. */
+export function SponsorBlockSegmentsGrid({idPrefix, segments, onChoose}: {
+    idPrefix: string
+    segments: Record<string, string>
+    onChoose: (category: string, action: string) => void
+}) {
+    return (
+        <div className="sponsorblock-groups">
+            {SPONSORBLOCK_GROUPS.map((group) => (
+                <fieldset key={group.label} className="sponsorblock-group">
+                    <legend>{group.label}</legend>
+                    {group.categories.map((category) => {
+                        const label = SponsorBlockCategoryReg.getLabel(category)
+                        const help = SponsorBlockCategoryReg.getHelp(category)
+                        return (
+                            <div key={category} className="sponsorblock-row">
+                                <span className="sponsorblock-row__name" id={`${idPrefix}-sponsorblock-${category}-label`} title={help}>
+                                    <span className="sponsorblock-swatch" style={{background: SPONSORBLOCK_COLORS[category]}} aria-hidden="true"/>
+                                    {label}
+                                </span>
+                                <span className="sr-only" id={`${idPrefix}-sponsorblock-${category}-help`}>{help}</span>
+                                <span
+                                    className="sponsorblock-choice"
+                                    role="radiogroup"
+                                    aria-labelledby={`${idPrefix}-sponsorblock-${category}-label`}
+                                    aria-describedby={`${idPrefix}-sponsorblock-${category}-help`}
+                                >
+                                    {sponsorBlockActionReg(category).values.map((action) => (
+                                        <label key={action} title={SponsorBlockActionReg.getHelp(action)}>
+                                            <input
+                                                type="radio"
+                                                name={`${idPrefix}-sponsorblock-${category}`}
+                                                value={action}
+                                                aria-label={`${label}: ${SponsorBlockActionReg.getLabel(action)}`}
+                                                checked={segments[category] === action}
+                                                onChange={() => onChoose(category, action)}
+                                            />
+                                            <span>{SponsorBlockActionReg.getLabel(action)}</span>
+                                        </label>
+                                    ))}
+                                </span>
+                            </div>
+                        )
+                    })}
+                </fieldset>
+            ))}
         </div>
     )
 }

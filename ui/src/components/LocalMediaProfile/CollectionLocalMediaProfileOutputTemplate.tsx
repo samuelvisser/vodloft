@@ -1,7 +1,6 @@
 import {UseFormReturn} from 'react-hook-form'
 
 import OutputTemplateEditor from './OutputTemplateEditor'
-import CollectionAssetsField from './CollectionAssetsField'
 
 export default function CollectionLocalMediaProfileOutputTemplate({form}: { form: UseFormReturn<any> }) {
     return (
@@ -9,7 +8,6 @@ export default function CollectionLocalMediaProfileOutputTemplate({form}: { form
             form={form}
             mode="collection"
             placeholder={'/downloads/shows/{{ collection }}/{{ episode_title }}.ext'}
-            renderPreviewFields={(preview) => <CollectionAssetsField form={form} preview={preview}/>}
             help={(
                 <>
                     <p>

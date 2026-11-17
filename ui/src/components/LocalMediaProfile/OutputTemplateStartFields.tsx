@@ -1,5 +1,5 @@
 import {useState} from 'react'
-import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
+import {type UseFormReturn, useWatch} from 'react-hook-form'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import SimpleSelect from '../common/SimpleSelect'
@@ -8,15 +8,12 @@ import {FilenameRestrictionModeReg} from '../../types/local_media_profile'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import ReadMore from '../../utils/ReadMore'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
+import {FollowsSettingsSelect} from './FollowsSettings'
 import {parseOutputTemplate, renderCompactOutputTemplate} from './outputTemplateFormatting'
 import {outputTemplatePreset, outputTemplatePresetRegistry, templateBaseFolder} from './outputTemplatePresets'
 
-/** The filename mode and, for collections, the media server presets: the choices above the output template. */
-export default function OutputTemplateStartFields({form, mode}: { form: UseFormReturn<any>, mode: LocalMediaProfileMode }) {
-    const {control, getValues, setValue, formState: {errors}} = form
-    const preferredFormat = useWatch({control, name: 'preferredFormat'})
-    const [pendingPreset, setPendingPreset] = useState<string | null>(null)
-    const audioOnly = preferredFormat === 'format_audio_only'
+/** Which characters file and folder names may hold: the mode in Settings, or the profile's own. */
+export function FilenameModeField({form}: {form: UseFormReturn<any>}) {
     const {data: defaults} = useLibraryDefaults()
     const systemFilenameModeLabel = defaults
         ? FilenameRestrictionModeReg.getLabelLoose(defaults.filenameRestrictionMode)
@@ -27,6 +24,46 @@ export default function OutputTemplateStartFields({form, mode}: { form: UseFormR
         windows: {label: FilenameRestrictionModeReg.getLabelLoose('windows')},
         restricted: {label: FilenameRestrictionModeReg.getLabelLoose('restricted')},
     })
+    return (
+        <FollowsSettingsSelect
+            form={form}
+            name="filenameRestrictionMode"
+            id="mp-filename-restriction-mode"
+            label="Filenames"
+            registry={filenameModeReg}
+            systemLabel={systemFilenameModeLabel}
+            help={(
+                <ReadMore summary="Choose which characters file and folder names may hold, for the devices that read them.">
+                    <p>
+                        The modes follow yt-dlp, so new files are named as yt-dlp and Pinchflat name them.
+                        <strong> System</strong> uses the mode chosen in Settings. Files you already have keep their
+                        names until you rename the profile's files.
+                    </p>
+                    <p>
+                        <strong>Minimal restrictions</strong> preserves Unicode and punctuation. Only a <code>/</code> in
+                        a value changes, to <code>⧸</code>.
+                    </p>
+                    <p>
+                        <strong>Windows-compatible</strong> turns characters Windows does not allow into look-alikes,
+                        such as <code>：</code> for <code>:</code>, and keeps reserved names from being used.
+                        Unicode is preserved. Choose it for a library on a Windows computer or a network share.
+                    </p>
+                    <p>
+                        <strong>Restricted</strong> uses ASCII-only names without spaces or ampersands, for a car
+                        stereo or an older player. A name with nothing ASCII left becomes <code>no_ascii_file_name</code>.
+                    </p>
+                </ReadMore>
+            )}
+        />
+    )
+}
+
+/** For collections, the media server presets: a choice above the output template. */
+export default function OutputTemplateStartFields({form, mode}: { form: UseFormReturn<any>, mode: LocalMediaProfileMode }) {
+    const {control, getValues, setValue} = form
+    const preferredFormat = useWatch({control, name: 'preferredFormat'})
+    const [pendingPreset, setPendingPreset] = useState<string | null>(null)
+    const audioOnly = preferredFormat === 'format_audio_only'
 
     const applyPreset = (key: string) => {
         const preset = outputTemplatePreset(key)
@@ -45,52 +82,6 @@ export default function OutputTemplateStartFields({form, mode}: { form: UseFormR
 
     return (
         <>
-            <div className="form-row">
-                <label htmlFor="mp-filename-restriction-mode">Filename restrictions</label>
-                <Controller
-                    control={control}
-                    name="filenameRestrictionMode"
-                    render={({field}) => (
-                        <SimpleSelect
-                            inputId="mp-filename-restriction-mode"
-                            registry={filenameModeReg}
-                            value={field.value ?? null}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                            aria-invalid={!!errors.filenameRestrictionMode}
-                            aria-describedby={errors.filenameRestrictionMode ? 'mp-filename-restriction-mode-error' : 'mp-filename-restriction-mode-help'}
-                        />
-                    )}
-                />
-                {errors.filenameRestrictionMode && (
-                    <div id="mp-filename-restriction-mode-error" className="error" role="alert" aria-live="polite">
-                        {String(errors.filenameRestrictionMode.message)}
-                    </div>
-                )}
-                <div className="help" id="mp-filename-restriction-mode-help">
-                    <ReadMore summary="Choose which characters file and folder names may hold, for the devices that read them.">
-                        <p>
-                            The modes follow yt-dlp, so new files are named as yt-dlp and Pinchflat name them.
-                            <strong> System</strong> uses the mode chosen in Settings. Files you already have keep their
-                            names until you rename the profile's files.
-                        </p>
-                        <p>
-                            <strong>Minimal restrictions</strong> preserves Unicode and punctuation. Only a <code>/</code> in
-                            a value changes, to <code>⧸</code>.
-                        </p>
-                        <p>
-                            <strong>Windows-compatible</strong> turns characters Windows does not allow into look-alikes,
-                            such as <code>：</code> for <code>:</code>, and keeps reserved names from being used.
-                            Unicode is preserved. Choose it for a library on a Windows computer or a network share.
-                        </p>
-                        <p>
-                            <strong>Restricted</strong> uses ASCII-only names without spaces or ampersands, for a car
-                            stereo or an older player. A name with nothing ASCII left becomes <code>no_ascii_file_name</code>.
-                        </p>
-                    </ReadMore>
-                </div>
-            </div>
-
             {mode === 'collection' && (
                 <div className="form-row">
                     <label htmlFor="mp-output-template-preset">Start from a preset</label>

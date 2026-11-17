@@ -1,0 +1,355 @@
+/* The Local Media Profile form in folding sections, as in Settings. */
+.form.local-media-profile-form {
+    max-width: 960px;
+}
+
+.local-media-profile-section > summary {
+    min-height: 64px;
+    padding: 14px 20px;
+}
+
+.local-media-profile-section > summary > span {
+    min-width: 0;
+}
+
+.local-media-profile-section > summary small.local-media-profile-section__summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.local-media-profile-section__body {
+    display: grid;
+    gap: 16px;
+}
+
+.local-media-profile-section .template-workbench {
+    width: 100%;
+    max-width: none;
+}
+
+@media (max-width: 600px) {
+    .local-media-profile-section > summary {
+        padding: 12px 14px;
+    }
+
+    .local-media-profile-section > .settings-disclosure__body {
+        padding: 14px;
+    }
+}
+
+/* Name next to... and Available for next to Sites on wide screens. */
+.local-media-profile-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+    gap: 16px;
+    align-items: start;
+}
+
+@media (max-width: 760px) {
+    .local-media-profile-pair {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* "Follows Settings": a value this profile takes from Settings, and the way back to it. */
+.follows-settings-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 9px;
+    border: 1px solid #3b82f6;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.6;
+    white-space: nowrap;
+}
+
+button.follows-settings-badge {
+    border-color: rgba(100, 116, 139, 0.35);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+button.follows-settings-badge:hover,
+button.follows-settings-badge:focus-visible {
+    border-color: #3b82f6;
+    color: #1d4ed8;
+}
+
+.follows-settings-badge svg {
+    width: 10px;
+    height: 10px;
+}
+
+.follows-settings-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px dashed rgba(100, 116, 139, 0.4);
+    border-radius: 8px;
+}
+
+.follows-settings-line__text {
+    display: flex;
+    flex: 1 1 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    min-width: 0;
+}
+
+.follows-settings-line__value {
+    color: var(--muted);
+}
+
+.follows-settings-line .btn {
+    flex: none;
+}
+
+/* A checkbox that shows the Settings value until it is clicked. */
+.follow-check {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.follow-check input {
+    width: 18px;
+    height: 18px;
+    margin: 1px 0 0;
+    flex: 0 0 auto;
+    accent-color: #3b82f6;
+    cursor: pointer;
+}
+
+.follow-check.is-following input {
+    appearance: none;
+    display: inline-grid;
+    place-content: center;
+    border: 1.5px dashed #3b82f6;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.follow-check.is-following input:checked {
+    background: #dbeafe;
+}
+
+.follow-check.is-following input:checked::after {
+    content: '';
+    width: 9px;
+    height: 5px;
+    margin-top: -2px;
+    border-left: 2px solid #1d4ed8;
+    border-bottom: 2px solid #1d4ed8;
+    transform: rotate(-45deg);
+}
+
+.follow-check.is-following input:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: 2px;
+}
+
+.follow-check__text small {
+    display: block;
+    color: var(--muted);
+    font-size: 12.5px;
+}
+
+/* Thumbnail and metadata, inside and beside the media. */
+.media-files-grid {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid rgba(100, 116, 139, 0.25);
+    border-radius: 10px;
+}
+
+.media-files-grid > * {
+    padding: 10px 12px;
+    border-top: 1px solid rgba(100, 116, 139, 0.18);
+    min-width: 0;
+}
+
+.media-files-grid > .media-files-grid__head {
+    border-top: 0;
+    background: rgba(148, 163, 184, 0.1);
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.media-files-grid__name {
+    display: grid;
+    gap: 3px;
+    justify-items: start;
+}
+
+.media-files-grid__name strong {
+    font-weight: 600;
+}
+
+.media-files-grid__name > span:last-child {
+    color: var(--muted);
+    font-size: 12.5px;
+}
+
+.media-files-grid .follow-check {
+    align-items: center;
+}
+
+.media-files-grid .follow-check input {
+    margin: 0;
+}
+
+.media-files-checks {
+    display: grid;
+    gap: 10px;
+}
+
+.media-files-checks--indented {
+    padding-left: 26px;
+    margin-top: -6px;
+}
+
+.media-files-subheading {
+    margin: 4px 0 -6px;
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.media-files-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    color: var(--muted);
+    font-size: 12.5px;
+}
+
+.media-files-legend .follow-check {
+    cursor: default;
+    font-size: 12.5px;
+}
+
+.media-files-legend .follow-check input {
+    width: 15px;
+    height: 15px;
+    pointer-events: none;
+}
+
+@media (max-width: 600px) {
+    .media-files-grid > * {
+        padding: 9px 10px;
+    }
+
+    .media-files-grid__label {
+        display: none;
+    }
+
+    .follows-settings-badge .follows-settings-badge__long {
+        display: none;
+    }
+}
+
+/* SponsorBlock in one sentence, with the segments in a dialog. */
+.sponsorblock-summary {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid rgba(100, 116, 139, 0.22);
+    border-radius: 10px;
+    background: rgba(148, 163, 184, 0.08);
+}
+
+.sponsorblock-summary__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.sponsorblock-dialog {
+    width: min(760px, calc(100vw - 24px));
+    max-width: none;
+}
+
+.subtitle-where {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 24px;
+}
+
+@media (prefers-color-scheme: dark) {
+    .follows-settings-badge {
+        background: rgba(59, 130, 246, 0.18);
+        color: #93c5fd;
+    }
+
+    button.follows-settings-badge {
+        background: transparent;
+        color: var(--muted);
+    }
+
+    button.follows-settings-badge:hover,
+    button.follows-settings-badge:focus-visible {
+        color: #93c5fd;
+    }
+
+    .follow-check.is-following input {
+        background: transparent;
+    }
+
+    .follow-check.is-following input:checked {
+        background: rgba(59, 130, 246, 0.18);
+    }
+
+    .follow-check.is-following input:checked::after {
+        border-color: #93c5fd;
+    }
+
+    .media-files-grid,
+    .sponsorblock-summary {
+        border-color: rgba(148, 163, 184, 0.2);
+    }
+}
+
+.local-media-profile-section .link-button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #2563eb;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+    .local-media-profile-section .link-button {
+        color: #93c5fd;
+    }
+}
+
+.media-files-grid > div:not(.media-files-grid__head):not(.media-files-grid__name) {
+    display: flex;
+    align-items: center;
+}
+
+.sponsorblock-dialog .help {
+    margin-top: 12px;
+}

@@ -4,7 +4,7 @@ VODLoft can save shared collection artwork alongside your downloaded library. Th
 
 ## Enable or override
 
-**Settings / Downloads / Download collection assets** controls the system default and is enabled by default. In a Collection Local Media Profile, **Download collection assets** has three choices: **System**, **Enabled**, or **Disabled**. New profiles inherit the system setting.
+**Settings / Downloads / Download collection assets** controls the system default and is enabled by default. In a Collection Local Media Profile, **Poster and background** under **Files and metadata** follows that setting until you tick or untick it for the profile; **Use Settings** makes it follow the setting again. New profiles follow the system setting.
 
 The corresponding configuration value is:
 

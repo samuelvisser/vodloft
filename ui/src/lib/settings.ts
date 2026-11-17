@@ -89,6 +89,7 @@ export const LibraryDefaultsSchema = z.object({
     downloadMode: DownloadModeSchema,
     thumbnailMode: ThumbnailModeSchema,
     metadataMode: MetadataModeSchema,
+    downloadCollectionAssets: z.boolean(),
     filenameRestrictionMode: FilenameRestrictionModeSchema,
     noUsableMediaDeleteAfterMinutes: z.number(),
 })

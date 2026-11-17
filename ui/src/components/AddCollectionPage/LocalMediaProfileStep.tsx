@@ -3,9 +3,8 @@ import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {ChosenCollectionCard} from './CollectionPreviewCard'
 import type {CollectionCreatePayloadOut} from '../../types/schemas/collection'
-import LocalMediaProfileCommonFields from '../LocalMediaProfile/LocalMediaProfileCommonFields'
+import LocalMediaProfileForm from '../LocalMediaProfile/LocalMediaProfileForm'
 import IndexingValuesEditorButton from '../LocalMediaProfile/IndexingValuesEditorButton'
-import CollectionLocalMediaProfileOutputTemplate from '../LocalMediaProfile/CollectionLocalMediaProfileOutputTemplate'
 import {useLocalMediaProfileSites, useLocalMediaProfiles} from '../../lib/queries'
 import {CollectionLocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {
@@ -154,7 +153,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                         {watchedOp === 'update_by_slug' ? 'Update current profile' : 'Or create a new profile'}
                     </div>
 
-                    <LocalMediaProfileCommonFields
+                    <LocalMediaProfileForm
                         key={watchedOp === 'update_by_slug' ? watchedSlug : 'create_new'}
                         form={form}
                         mode="collection"
@@ -175,8 +174,6 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                     </aside>
                 ) : null}
             </div>
-
-            <CollectionLocalMediaProfileOutputTemplate form={form}/>
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>

@@ -10,6 +10,7 @@ import {AutoSubtitlesReg, LANGUAGES, SubtitleLanguageModeReg, languageName} from
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import ReadMore from '../../utils/ReadMore'
 import SimpleSelect from '../common/SimpleSelect'
+import {FollowCheck} from './FollowsSettings'
 import './SubtitleFields.css'
 
 export const SubtitleWhereReg = createSelectRegistry('SubtitleWhere', {
@@ -43,6 +44,15 @@ type Props = {
     onSubtitleModeChange?: (value: any) => void
 }
 
+/** Whether any of the profile's Sites has subtitles, so there is something to choose. */
+export function useOffersSubtitles(form: UseFormReturn<any>, profileType: LocalMediaProfileType): boolean {
+    const [siteKeys, includeUpcomingSites] = useWatch({control: form.control, name: ['siteKeys', 'includeUpcomingSites']}) as [string[] | null, boolean]
+    const {data: sites} = useLocalMediaProfileSites()
+    if (!sites) return true
+    const subtitleSites = profileSitesOffering(sites, profileType, siteKeys, includeUpcomingSites, (options) => options.subtitles)
+    return subtitleSites.sites.length > 0 || subtitleSites.upcoming
+}
+
 /** Subtitles: where they are stored, which languages in which order, and what to do with several. */
 export default function SubtitleFields({form, mode: profileType, onSubtitleModeChange}: Props) {
     const {control, setValue, formState: {errors}} = form
@@ -60,6 +70,14 @@ export default function SubtitleFields({form, mode: profileType, onSubtitleModeC
     const help = modeHelp(languageMode, list, subtitleMode === 'sidecar' || subtitleMode === 'embed_and_sidecar')
     const whereHelp = SubtitleWhereReg.values.includes(subtitleMode as any) ? SubtitleWhereReg.getHelp(subtitleMode as any) : undefined
 
+    const inside = subtitleMode === 'embed' || subtitleMode === 'embed_and_sidecar'
+    const beside = subtitleMode === 'sidecar' || subtitleMode === 'embed_and_sidecar'
+    const chooseWhere = (nextInside: boolean, nextBeside: boolean) => {
+        const value = nextInside ? (nextBeside ? 'embed_and_sidecar' : 'embed') : (nextBeside ? 'sidecar' : 'no_subtitles')
+        onSubtitleModeChange?.(value)
+        setValue('subtitleMode', value, OPTIONS)
+    }
+
     const setLanguages = (next: string[]) => setValue('subtitleLanguages', next, OPTIONS)
     const move = (from: number, to: number) => {
         if (to < 0 || to >= list.length || from === to) return
@@ -75,19 +93,25 @@ export default function SubtitleFields({form, mode: profileType, onSubtitleModeC
     return (
         <div className="subtitle-fields" id="subtitle-fields">
             <div className="form-row">
-                <label htmlFor="subtitle-mode">Subtitles</label>
-                <SimpleSelect
-                    inputId="subtitle-mode"
-                    registry={SubtitleWhereReg}
-                    value={subtitleMode}
-                    onChange={(value) => {
-                        onSubtitleModeChange?.(value)
-                        setValue('subtitleMode', value, OPTIONS)
-                    }}
-                    aria-invalid={!!errors.subtitleMode}
-                />
+                <span id="subtitle-mode-label">Save subtitles</span>
+                <div className="subtitle-where" role="group" aria-labelledby="subtitle-mode-label">
+                    <FollowCheck
+                        id="subtitle-mode-inside"
+                        checked={inside}
+                        following={false}
+                        onChange={(checked) => chooseWhere(checked, beside)}
+                        label="Inside the media"
+                    />
+                    <FollowCheck
+                        id="subtitle-mode-beside"
+                        checked={beside}
+                        following={false}
+                        onChange={(checked) => chooseWhere(inside, checked)}
+                        label="Beside the media"
+                    />
+                </div>
                 {errors.subtitleMode && <div className="error" role="alert">{String(errors.subtitleMode.message)}</div>}
-                {whereHelp && <div className="help">{whereHelp}</div>}
+                <div className="help">{whereHelp ?? 'Tick a box to save subtitles.'}</div>
             </div>
 
             {stores && (
