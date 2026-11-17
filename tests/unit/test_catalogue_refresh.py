@@ -94,6 +94,19 @@ def test_without_a_key_other_sites_refresh_from_their_listing(lookups):
     assert refresh.details["vimeo-1"].title == "Renamed"
 
 
+def test_a_playlist_says_which_videos_it_still_lists_and_a_channel_does_not(youtube, lookups):
+    answers, _ = lookups
+    quota.mark_exhausted()
+    playlist = "https://www.youtube.com/playlist?list=PL1"
+    entries = {"entries": [{"id": "v1", "ie_key": "Youtube", "url": "https://www.youtube.com/watch?v=v1", "title": "Kept"}]}
+    answers[("--flat-playlist", playlist)] = entries
+    answers[("--flat-playlist", CHANNEL)] = entries
+
+    assert YtDlpSource().refresh_items(playlist, _refs("v1", "left")).listed == {"v1"}
+    # A channel's tabs may leave a video out, so its listing says nothing about which videos it still has.
+    assert YtDlpSource().refresh_items(CHANNEL, _refs("v1", "left")).listed is None
+
+
 def test_with_a_key_the_listing_still_marks_members_only_videos(youtube, lookups):
     answers, _ = lookups
     youtube.videos["v1"] = _video_item("v1")

@@ -30,7 +30,7 @@ VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
-HEAD_REVISION = "409629042e13"
+HEAD_REVISION = "151eb3823901"
 
 
 @pytest.fixture
@@ -1254,3 +1254,47 @@ def test_movie_profiles_become_video_profiles_that_keep_their_sites(migration_da
     assert rows[1].output_template == "/downloads/movies/{{ movie_title }}/{{ title }}.ext"
     # A Jinja comment keeps the clashing template apart without naming any file differently.
     assert rows[3].output_template == "/downloads/videos/{{ title }} [{{ slug }}].ext{# kept apart from p2 #}"
+
+
+def test_every_collection_gets_its_own_link_and_its_episodes_belong_to_it(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "409629042e13")
+    with engine.begin() as connection:
+        for collection_id in (1, 2):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order) VALUES (:id, :uuid, :slug, 'A', :url, 'free', 'series', "
+                "'numbered', 'The Host', 'host', 'ytdlp', 'newest_first')"
+            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": f"c{collection_id}",
+                "url": f"https://example.test/{collection_id}"})
+            connection.execute(text(
+                "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+                "VALUES (:id, :id, 1, '2024', '2024', 'normal', 2024)"
+            ), {"id": collection_id})
+        for episode_id, collection_id in ((10, 1), (11, 1), (12, 2)):
+            connection.execute(text(
+                "INSERT INTO media_items (id, uuid, type, source_key) VALUES (:id, :uuid, 'episode', 'ytdlp')"
+            ), {"id": episode_id, "uuid": f"episode-{episode_id}"})
+            connection.execute(text(
+                "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
+                "publish_status, sharing_url, source_slug) VALUES (:id, :collection, :collection, :id, :identifier, :slug, "
+                "'published_final', 'https://example.test', :slug)"
+            ), {"id": episode_id, "collection": collection_id, "identifier": f"ep.{episode_id}", "slug": f"e{episode_id}"})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        links = connection.execute(text(
+            "SELECT id, collection_id, url, position, placement FROM collection_links ORDER BY collection_id"
+        )).all()
+        assert [tuple(link)[1:] for link in links] == [
+            (1, "https://example.test/1", 0, "site_seasons"), (2, "https://example.test/2", 0, "site_seasons"),
+        ]
+        link_of = {link.collection_id: link.id for link in links}
+        episodes = connection.execute(text("SELECT id, collection_link_id FROM media_items_episode ORDER BY id")).all()
+        assert [tuple(row) for row in episodes] == [(10, link_of[1]), (11, link_of[1]), (12, link_of[2])]
+        items = connection.execute(text("SELECT link_id, source_slug FROM collection_link_items ORDER BY source_slug")).all()
+        assert [tuple(row) for row in items] == [(link_of[1], "e10"), (link_of[1], "e11"), (link_of[2], "e12")]

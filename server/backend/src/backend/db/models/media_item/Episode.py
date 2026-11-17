@@ -73,6 +73,10 @@ class Episode(
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
     collection_id: Mapped[int] = mapped_column(ForeignKey("collections.id"),primary_key=True,)
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
+    collection_link_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("collection_links.id", ondelete="SET NULL"), index=True,
+        comment="The link of the collection that keeps the episode",
+    )
     index: Mapped[int]
     episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the collection")
     dw_episode_number: Mapped[Optional[str]] = mapped_column(comment="Episode number exactly as returned by The Daily Wire")
