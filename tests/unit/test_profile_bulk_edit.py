@@ -188,16 +188,16 @@ def test_local_media_profiles_change_behavior_and_delete_skips_one_in_use(sessio
     from backend.api.endpoints.local_media_profiles.service import get_local_media_profile_ids
     from backend.api.models.profile_bulk import BulkChangeIn, BulkSelectionIn, LocalMediaProfileBulkChangesIn
     from backend.api.models.profile_list import LocalMediaProfileListQuery
-    from backend.db.models import LocalMediaProfileBase, MovieLocalMediaProfile
+    from backend.db.models import LocalMediaProfileBase, VideoLocalMediaProfile
 
     audio, video, _collections = _library(session)
-    movie = MovieLocalMediaProfile(slug="movies", name="Movies", preferred_format="format_1080p",
+    movie = VideoLocalMediaProfile(slug="movies", name="Movies", preferred_format="format_1080p",
                                    output_template="/downloads/movies/{{ title }}.ext")
     session.add(movie)
     session.commit()
     ids = get_local_media_profile_ids(session, LocalMediaProfileListQuery()).ids
     assert ids == [audio.id, movie.id, video.id]
-    assert get_local_media_profile_ids(session, LocalMediaProfileListQuery(used_for=["movie"])).ids == [movie.id]
+    assert get_local_media_profile_ids(session, LocalMediaProfileListQuery(used_for=["video"])).ids == [movie.id]
 
     body = BulkChangeIn[LocalMediaProfileBulkChangesIn].model_validate(
         {"ids": ids, "changes": {"thumbnailMode": "sidecar", "metadataMode": "nfo"}})
@@ -220,11 +220,11 @@ def test_local_media_profiles_change_subtitles_and_collection_images_where_they_
         change_local_media_profiles, summarize_local_media_profiles,
     )
     from backend.api.models.profile_bulk import BulkChangeIn, BulkSelectionIn, LocalMediaProfileBulkChangesIn
-    from backend.db.models import LocalMediaProfile, MovieLocalMediaProfile
+    from backend.db.models import LocalMediaProfile, VideoLocalMediaProfile
 
     audio, video, _collections = _library(session)
     video.download_collection_assets = True
-    movie = MovieLocalMediaProfile(slug="movies", name="Movies", preferred_format="format_1080p",
+    movie = VideoLocalMediaProfile(slug="movies", name="Movies", preferred_format="format_1080p",
                                    output_template="/downloads/movies/{{ title }}.ext")
     session.add(movie)
     session.commit()

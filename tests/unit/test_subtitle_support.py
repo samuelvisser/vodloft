@@ -157,11 +157,11 @@ def test_download_plan_uses_existing_sidecar_and_embedding_stages(tmp_path):
     assert plan.subtitle_asset_ids == ("subtitle_0",)
 
 
-def test_movie_profiles_default_to_subtitle_sidecars():
-    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
+def test_video_profiles_default_to_subtitle_sidecars():
+    from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPICreate
 
-    movie = MovieLocalMediaProfileAPICreate(
-        name="Movie", type="movie", preferred_format="format_1080p",
+    movie = VideoLocalMediaProfileAPICreate(
+        name="Movie", type="video", preferred_format="format_1080p",
         output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
     )
     assert movie.subtitle_mode == "sidecar"

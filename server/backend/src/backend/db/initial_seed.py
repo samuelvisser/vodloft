@@ -53,15 +53,19 @@ def _add_missing_profiles(session: Session, profiles) -> None:
 
 
 def _seed_local_media_profiles(session: Session) -> None:
-    from backend.db.models import MovieLocalMediaProfile, VideoLocalMediaProfile
+    from backend.db.models import VideoLocalMediaProfile
+    from backend.services.local_media_profile_sites import movie_site_keys
 
     _add_missing_profiles(session, (
-        MovieLocalMediaProfile(
+        # The movie template names files after the movie, so this profile is only for the Sites that have movies.
+        VideoLocalMediaProfile(
             slug="vodloft-movies",
             name="VODLoft Movies",
             subtitle_mode="sidecar",
             output_template=_MOVIE_TEMPLATE,
             preferred_format="format_1080p",
+            site_keys=movie_site_keys(session),
+            include_upcoming_sites=False,
         ),
         VideoLocalMediaProfile(
             slug="vodloft-videos",

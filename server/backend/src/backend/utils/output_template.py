@@ -55,23 +55,21 @@ COLLECTION_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
-MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
+# A Video profile keeps single videos and movies with their extras. The movie_* values are empty for a
+# single video, and source names the Site the media came from.
+VIDEO_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "movie_slug", "movie_title", "movie_extended_title", "movie_author",
     "movie_mature_rating", "movie_duration_seconds",
     "slug", "title", "extended_title",
-    "author", "mature_rating", "rating", "duration_seconds", "media_type",
+    "author", "mature_rating", "rating", "duration_seconds", "media_type", "source",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS | MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS
 
-VIDEO_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "slug", "title", "author", "duration_seconds", "source",
-}) | DATE_OUTPUT_TEMPLATE_FIELDS
-
 COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"collection"})
-MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"movie"})
+VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"movie"})
 
 # These are values likely to be different between Movies and Movie Extra's.
 # They are useful for verifying movie and movie extra paths are distinct.
-MOVIE_MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS = frozenset({
+MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "slug", "title", "extended_title", "author", "duration_seconds", "media_type",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
@@ -354,9 +352,10 @@ def validate_output_template_fields(
     return output_template
 
 
-def movie_template_has_media_item_field(output_template: str) -> bool:
-    """Whether a movie template references a value that varies by downloaded item."""
-    return bool(output_template_fields(output_template) & MOVIE_MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS)
+def template_has_media_item_field(output_template: str) -> bool:
+    """Whether a Video profile's template references a value that varies by downloaded item, so a movie and its
+    extras get paths of their own."""
+    return bool(output_template_fields(output_template) & MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS)
 
 
 def movie_template_uses_release_date(output_template: str) -> bool:
@@ -412,7 +411,7 @@ def movie_output_template_values(
     movie: "Movie",
     media_item: "Movie | MovieExtra | None" = None,
 ) -> dict[str, str]:
-    """Build the complete Movie-profile context for a movie or one of its extras."""
+    """Build the complete Video-profile context for a movie or one of its extras."""
     item = media_item or movie
     is_movie_extra = getattr(item, "type", None) == "movie_extra"
     media_type = getattr(item, "movie_extra_type", "other") if is_movie_extra else "movie"
@@ -458,6 +457,7 @@ def movie_output_template_values(
         "rating": item_rating,
         "duration_seconds": item_duration_seconds,
         "media_type": media_type,
+        "source": _source_name(getattr(movie, "source_key", "")),
         **_date_substitutions(item_date),
     }
     values.update(custom_metadata_template_values(
@@ -467,20 +467,26 @@ def movie_output_template_values(
     return values
 
 
-def video_output_template_values(video: "Video") -> dict[str, str]:
-    """Build the complete Video-profile context for a single video."""
+def _source_name(source_key: str) -> str:
     from sources import UnknownSourceError, get_source
 
     try:
-        source_name = get_source(video.source_key).name
+        return get_source(source_key).name
     except UnknownSourceError:
-        source_name = video.source_key
+        return source_key
+
+
+def video_output_template_values(video: "Video") -> dict[str, str]:
+    """Build the complete Video-profile context for a single video. The movie values stay empty."""
     return {
+        **{field: "" for field in VIDEO_OUTPUT_TEMPLATE_FIELDS},
         "slug": video.slug,
         "title": video.title,
+        "extended_title": video.title,
         "author": video.author_name or "",
         "duration_seconds": str(round(video.duration or 0)),
-        "source": source_name,
+        "media_type": "video",
+        "source": _source_name(video.source_key),
         **_date_substitutions(video.published_at),
     }
 
@@ -657,7 +663,7 @@ def resolve_movie_output_path(
     filename_mode: FilenameRestrictionMode,
     extension: Optional[str] = None,
 ) -> Path:
-    """Resolve a Movie Local Media Profile for a movie or one of its extras."""
+    """Resolve a Video Local Media Profile for a movie or one of its extras."""
     if output_template_custom_index_keys(output_template):
         raise ValueError("custom_index is only available to Collection Local Media Profiles")
     return _render_output_path(
@@ -665,8 +671,8 @@ def resolve_movie_output_path(
         movie_output_template_values(movie, media_item),
         filename_mode=filename_mode,
         extension=extension,
-        allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
-        allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
 
 
@@ -686,6 +692,7 @@ def resolve_video_output_path(
         filename_mode=filename_mode,
         extension=extension,
         allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
 
 

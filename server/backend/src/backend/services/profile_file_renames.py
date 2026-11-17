@@ -7,7 +7,6 @@ from backend.services.errors import NotFoundError, ServiceError
 from backend.db.models import (
     Episode,
     LocalMediaProfileBase,
-    MovieLocalMediaProfile,
     CollectionLocalMediaProfile,
     VideoLocalMediaProfile,
 )
@@ -94,14 +93,10 @@ def request_collection_local_media_profile_file_rename(
 
 def request_movie_local_media_profile_file_rename(
         s: Session,
-        local_media_profile: MovieLocalMediaProfile | VideoLocalMediaProfile,
+        local_media_profile: VideoLocalMediaProfile,
 ) -> dict[str, bool | int | str]:
-    """Rename the files of a Movie or Video profile, which one task handles."""
-    media_types = (
-        (MediaType.VIDEO.value,)
-        if isinstance(local_media_profile, VideoLocalMediaProfile)
-        else (MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value)
-    )
+    """Rename the files of a Video profile: its single videos, movies and movie extras."""
+    media_types = (MediaType.VIDEO.value, MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value)
     download_ids = tuple(s.scalars(
         select(MediaDownloadBase.id)
         .where(
@@ -141,8 +136,8 @@ def request_movie_local_media_profile_file_rename(
     s.flush()
     return {
         "queued": bool(download_ids),
-        # Retain the existing accepted response contract. For Movie profiles this
-        # field represents managed movie/movie-extra artifacts rather than episodes.
+        # Retain the existing accepted response contract. For Video profiles this
+        # field represents managed video, movie and movie-extra artifacts rather than episodes.
         "episodes_queued": len(download_ids),
         "operation_id": operation.id,
     }
@@ -165,11 +160,6 @@ def request_local_media_profile_file_rename(
             s,
             local_media_profile_slug,
         )
-    if profile.type == LocalMediaProfileType.MOVIE.value:
-        movie_profile = s.get(MovieLocalMediaProfile, profile.id)
-        if movie_profile is None:
-            raise NotFoundError("Media profile")
-        return request_movie_local_media_profile_file_rename(s, movie_profile)
     if profile.type == LocalMediaProfileType.VIDEO.value:
         video_profile = s.get(VideoLocalMediaProfile, profile.id)
         if video_profile is None:

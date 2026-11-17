@@ -185,7 +185,7 @@ def test_the_local_media_profile_table_offers_only_sites_vodloft_has_media_from(
 def test_local_media_profiles_page_in_name_order_with_filters(session) -> None:
     from backend.api.endpoints.local_media_profiles.service import get_local_media_profile_views_page
     from backend.api.models.profile_list import LocalMediaProfileListQuery
-    from backend.db.models import Episode, EpisodeMediaDownload, LocalMediaProfile, MovieLocalMediaProfile, Season
+    from backend.db.models import Episode, EpisodeMediaDownload, LocalMediaProfile, VideoLocalMediaProfile, Season
     from backend.types.media_types import MediaType
 
     profiles = [
@@ -194,7 +194,7 @@ def test_local_media_profiles_page_in_name_order_with_filters(session) -> None:
                           collection_scope="podcast", site_keys=["youtube"] if index % 5 == 0 else ["dailywire"])
         for index in range(55)
     ]
-    movie = MovieLocalMediaProfile(slug="movies", name="Movies", preferred_format="format_audio_only",
+    movie = VideoLocalMediaProfile(slug="movies", name="Movies", preferred_format="format_audio_only",
                                    output_template="/downloads/movies/{{ title }}.ext", site_keys=["dailywire", "youtube"])
     collection = _collection(1)
     session.add_all([*profiles, movie, collection])
@@ -222,7 +222,7 @@ def test_local_media_profiles_page_in_name_order_with_filters(session) -> None:
     names = [item.profile.name for item in items]
     assert names == sorted(names, key=str.lower)
 
-    assert page(used_for=["movie"]).total == 1
+    assert page(used_for=["video"]).total == 1
     assert page(used_for=["podcast"]).total == 55
     assert page(used_for=["series"]).total == 0
     assert page(format=["audio"]).total == 1
@@ -258,7 +258,7 @@ def test_profile_table_endpoints_read_filters_from_the_query_string(session) -> 
         "hasMore": False, "hasPrevious": False, "total": 0,
     }
     assert api_client.get("/stream-profiles/as-view", params={"streams_from": "source"}).status_code == 200
-    assert api_client.get("/local-media-profiles/as-view", params={"used_for": ["movie", "video"]}).status_code == 200
+    assert api_client.get("/local-media-profiles/as-view", params={"used_for": ["podcast", "video"]}).status_code == 200
     assert api_client.get("/local-media-profiles/as-view", params={"site": ["youtube"]}).status_code == 200
     assert api_client.get("/download-profiles/as-view", params={"status": "maybe"}).status_code == 422
     assert api_client.get("/download-profiles/as-view", params={"site": ["youtube"]}).status_code == 200

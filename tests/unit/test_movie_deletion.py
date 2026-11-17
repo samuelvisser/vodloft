@@ -7,7 +7,7 @@ def test_delete_movie_cascades_download_records_without_deleting_files(tmp_path)
     import backend.db.models  # noqa: F401
     from backend.api.endpoints.movies.service import delete_movie
     from backend.db import Base
-    from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
+    from backend.db.models import Movie, MovieExtra, VideoLocalMediaProfile
     from backend.db.models.media_download import (
         MediaDownloadBase,
         MovieExtraMediaDownload,
@@ -20,13 +20,13 @@ def test_delete_movie_cascades_download_records_without_deleting_files(tmp_path)
     Base.metadata.create_all(engine)
     session = Session(engine)
     try:
-        active_profile = MovieLocalMediaProfile(
+        active_profile = VideoLocalMediaProfile(
             slug="active-movies",
             name="Active Movies",
             output_template="/downloads/active/{title}.ext",
             preferred_format="format_1080p",
         )
-        completed_profile = MovieLocalMediaProfile(
+        completed_profile = VideoLocalMediaProfile(
             slug="completed-movies",
             name="Completed Movies",
             output_template="/downloads/completed/{title}.ext",

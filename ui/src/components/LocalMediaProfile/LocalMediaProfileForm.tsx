@@ -5,7 +5,6 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import LocalMediaProfileCommonFields from './LocalMediaProfileCommonFields'
 import LocalMediaProfileSection from './LocalMediaProfileSection'
 import MediaFilesFields from './MediaFilesFields'
-import MovieLocalMediaProfileForm from './MovieLocalMediaProfileForm'
 import CollectionLocalMediaProfileForm from './CollectionLocalMediaProfileForm'
 import QualityField from './QualityField'
 import SponsorBlockSection, {useOffersSponsorBlock} from './SponsorBlockSection'
@@ -20,7 +19,7 @@ type Props = {
     isCreating: boolean
 }
 
-export type LocalMediaProfileMode = 'collection' | 'movie' | 'video'
+export type LocalMediaProfileMode = 'collection' | 'video'
 
 // The form fields in each section, so a section with an error opens.
 const PROFILE_FIELDS = ['name', 'slug', 'collectionScope', 'siteKeys', 'includeUpcomingSites'] as const
@@ -112,7 +111,6 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
                 form={form} title="Output path" description="Where files go and how they are named"
                 summary={summaries.outputPath} fields={OUTPUT_FIELDS} defaultOpen={isCreating}
             >
-                {mode === 'movie' && <MovieLocalMediaProfileForm form={form}/>}
                 {mode === 'video' && <VideoLocalMediaProfileForm form={form}/>}
                 {mode === 'collection' && <CollectionLocalMediaProfileForm form={form}/>}
             </LocalMediaProfileSection>

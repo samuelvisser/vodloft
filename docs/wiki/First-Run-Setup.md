@@ -56,7 +56,7 @@ You do not have to configure everything at once. A good first step is to add the
 
 ### Movies
 
-Movies use Movie Local Media Profiles and are downloaded manually from their movie page. When The Daily Wire provides extras such as trailers or featurettes, those can be downloaded from the same page using the movie profile.
+Movies use Video Local Media Profiles and are downloaded manually from their movie page. When The Daily Wire provides extras such as trailers or featurettes, those can be downloaded from the same page using the same profile.
 
 Upcoming movies can remain in your Library before the actual media is available.
 

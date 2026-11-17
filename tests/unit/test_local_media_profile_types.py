@@ -34,7 +34,7 @@ def _new_session() -> tuple[Session, object]:
 def test_local_media_profile_models_are_polymorphic_and_unique_by_type() -> None:
     from backend.db.models import (
         LocalMediaProfileBase,
-        MovieLocalMediaProfile,
+        VideoLocalMediaProfile,
         CollectionLocalMediaProfile,
     )
 
@@ -46,7 +46,7 @@ def test_local_media_profile_models_are_polymorphic_and_unique_by_type() -> None
     collection_profile = CollectionLocalMediaProfile(
         slug="collection-video", name="Collection video", **shared_settings,
     )
-    movie_profile = MovieLocalMediaProfile(
+    movie_profile = VideoLocalMediaProfile(
         slug="movie-video", name="Movie video", **shared_settings,
     )
     session.add_all([collection_profile, movie_profile])
@@ -54,8 +54,8 @@ def test_local_media_profile_models_are_polymorphic_and_unique_by_type() -> None
 
     profiles = session.query(LocalMediaProfileBase).order_by(LocalMediaProfileBase.id).all()
     assert isinstance(profiles[0], CollectionLocalMediaProfile)
-    assert isinstance(profiles[1], MovieLocalMediaProfile)
-    assert [profile.type for profile in profiles] == ["collection", "movie"]
+    assert isinstance(profiles[1], VideoLocalMediaProfile)
+    assert [profile.type for profile in profiles] == ["collection", "video"]
 
     # Download behavior is not part of the profile identity. The same type,
     # output template and preferred format must remain unique even when the
@@ -75,24 +75,24 @@ def test_local_media_profile_models_are_polymorphic_and_unique_by_type() -> None
 
 
 def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders() -> None:
-    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
+    from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPICreate
     from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 
-    movie = MovieLocalMediaProfileAPICreate(
-        type="movie",
+    movie = VideoLocalMediaProfileAPICreate(
         name="Movie 1080p",
         output_template="/downloads/movies/{{ movie_extended_title }}/{{ title }}.ext",
         preferred_format="format_1080p",
     )
-    assert movie.type == "movie"
+    assert movie.type == "video"
     assert movie.output_template == "/downloads/movies/{{ movie_extended_title }}/{{ title }}.ext"
 
-    with pytest.raises(ValidationError, match="require a normal video format"):
-        MovieLocalMediaProfileAPICreate(
-            name="Movie audio",
-            output_template="/downloads/movies/{{ movie_slug }}.ext",
-            preferred_format="format_audio_only",
-        )
+    # One profile keeps videos and movies, so it can keep their audio only.
+    audio = VideoLocalMediaProfileAPICreate(
+        name="Movie audio",
+        output_template="/downloads/movies/{{ movie_slug }}/{{ title }}.ext",
+        preferred_format="format_audio_only",
+    )
+    assert audio.preferred_format == "format_audio_only"
 
     hls_collection = CollectionLocalMediaProfileAPICreate(
         name="Podcast HLS",
@@ -101,29 +101,29 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
     )
     assert hls_collection.preferred_format == "format_hls"
 
-    with pytest.raises(ValidationError, match="normal video format"):
-        MovieLocalMediaProfileAPICreate(
+    with pytest.raises(ValidationError, match="cannot keep an HLS bundle"):
+        VideoLocalMediaProfileAPICreate(
             name="Movie HLS",
             output_template="/downloads/movies/{{ movie_slug }}/{{ title }}.ext",
             preferred_format="format_hls",
         )
 
     with pytest.raises(ValidationError, match="episode"):
-        MovieLocalMediaProfileAPICreate(
+        VideoLocalMediaProfileAPICreate(
             name="Wrong movie template",
             output_template="/downloads/movies/{{ episode }}.ext",
             preferred_format="format_720p",
         )
 
     with pytest.raises(ValidationError, match="dw_id"):
-        MovieLocalMediaProfileAPICreate(
+        VideoLocalMediaProfileAPICreate(
             name="Rotating ID template",
             output_template="/downloads/movies/{{ movie_title }}/{{ dw_id }}.ext",
             preferred_format="format_1080p",
         )
 
     with pytest.raises(ValidationError, match="movie_dw_id"):
-        MovieLocalMediaProfileAPICreate(
+        VideoLocalMediaProfileAPICreate(
             name="Rotating parent ID template",
             output_template="/downloads/movies/{{ movie_dw_id }}/{{ title }}.ext",
             preferred_format="format_1080p",
@@ -138,15 +138,15 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
 
 
 def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -> None:
-    from backend.api.endpoints.movie_local_media_profiles.service import (
-        create_movie_local_media_profile,
+    from backend.api.endpoints.video_local_media_profiles.service import (
+        create_video_local_media_profile,
     )
     from backend.api.endpoints.collection_local_media_profiles.service import (
         create_collection_local_media_profile,
         update_collection_local_media_profile,
     )
-    from backend.api.models.movie_local_media_profile import (
-        MovieLocalMediaProfileAPICreate,
+    from backend.api.models.video_local_media_profile import (
+        VideoLocalMediaProfileAPICreate,
     )
     from backend.api.models.collection_local_media_profile import (
         CollectionLocalMediaProfileAPICreate,
@@ -162,12 +162,12 @@ def test_local_media_profile_service_rejects_duplicate_and_colliding_outputs() -
         session,
         CollectionLocalMediaProfileAPICreate(name="Collection", **common),
     )
-    movie = create_movie_local_media_profile(
+    movie = create_video_local_media_profile(
         session,
-        MovieLocalMediaProfileAPICreate(name="Movie", **common),
+        VideoLocalMediaProfileAPICreate(name="Movie", **common),
     )
     assert collection.type == "collection"
-    assert movie.type == "movie"
+    assert movie.type == "video"
 
     # Exact uniqueness remains type + output template + preferred format. A
     # different Local Media Profile storage override does not make it unique.
@@ -310,7 +310,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
     from backend.api.models.download_profile import DownloadProfileAPICreate
     from backend.db.models import (
         Episode,
-        MovieLocalMediaProfile,
+        VideoLocalMediaProfile,
         Season,
         Collection,
         CollectionLocalMediaProfile,
@@ -326,7 +326,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
         output_template="/downloads/shows/{{ collection }}/{{ episode }}.ext",
         preferred_format="format_1080p",
     )
-    movie_profile = MovieLocalMediaProfile(
+    movie_profile = VideoLocalMediaProfile(
         slug="movies",
         name="Movies",
         output_template="/downloads/movies/{{ movie_slug }}.ext",
@@ -374,7 +374,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
     movie = Movie(source_key="dailywire", uuid=generate_uuid(), slug="a-movie", title="A Movie", sharing_url="https://example.test/a-movie")
     session.add(movie)
     session.flush()
-    with pytest.raises(HTTPException, match="Movie Local Media Profile") as movie_error:
+    with pytest.raises(HTTPException, match="Video Local Media Profile") as movie_error:
         create_movie_download(
             session,
             movie,

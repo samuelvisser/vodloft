@@ -18,13 +18,11 @@ from backend.services.local_media_profile_sites import profile_download_options
 from backend.types.local_media_profile_types import LocalMediaProfileType
 
 from ..collection_local_media_profiles.service import delete_collection_local_media_profile
-from ..movie_local_media_profiles.service import delete_movie_local_media_profile
 from ..video_local_media_profiles.service import delete_video_local_media_profile
 from .service import ensure_local_media_profile_can_be_deleted
 
 _DELETE = {
     LocalMediaProfileType.COLLECTION.value: delete_collection_local_media_profile,
-    LocalMediaProfileType.MOVIE.value: delete_movie_local_media_profile,
     LocalMediaProfileType.VIDEO.value: delete_video_local_media_profile,
 }
 

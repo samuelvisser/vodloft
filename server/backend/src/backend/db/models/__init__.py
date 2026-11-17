@@ -1,7 +1,6 @@
 # Ensure base and referenced tables are imported before dependents
 from .local_media_profile import (
     LocalMediaProfileBase,
-    MovieLocalMediaProfile,
     CollectionLocalMediaProfile,
     VideoLocalMediaProfile,
 )

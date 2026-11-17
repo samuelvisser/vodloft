@@ -9,10 +9,6 @@ import {
     LocalMediaProfileRead,
 } from '../../types/schemas/local_media_profile'
 import {
-    MovieLocalMediaProfileCreateIn,
-    MovieLocalMediaProfileCreateSchema,
-} from '../../types/schemas/movie_local_media_profile'
-import {
     CollectionLocalMediaProfileCreateIn,
     CollectionLocalMediaProfileCreateSchema,
 } from '../../types/schemas/collection_local_media_profile'
@@ -39,7 +35,6 @@ import {apiUrl} from '../../lib/api'
 /** The settings of an existing profile as a new profile, under a name the user still has to accept. */
 function duplicateValues(profile: LocalMediaProfileRead): LocalMediaProfileCreateIn {
     const values = {...profile, name: `${profile.name} (copy)`}
-    if (profile.type === 'movie') return MovieLocalMediaProfileCreateSchema.parse(values)
     if (profile.type === 'video') return VideoLocalMediaProfileCreateSchema.parse(values)
     return CollectionLocalMediaProfileCreateSchema.parse(values)
 }
@@ -89,7 +84,7 @@ function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) 
         [source],
     )
     const requestedMode = searchParams.get('type')
-    const explicitMode = !source && (requestedMode === 'movie' || requestedMode === 'collection' || requestedMode === 'video')
+    const explicitMode = !source && (requestedMode === 'collection' || requestedMode === 'video')
         ? requestedMode
         : undefined
     const initialMode: LocalMediaProfileMode = explicitMode || (restoredDraft?.mode ?? 'collection')
@@ -107,18 +102,6 @@ function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) 
         },
     })
 
-    const formMovie = useForm<WithRoot<MovieLocalMediaProfileCreateIn>>({
-        resolver: zodResolver(MovieLocalMediaProfileCreateSchema),
-        mode: 'onBlur',
-        shouldFocusError: true,
-        defaultValues: {
-            ...getZodDefaults(MovieLocalMediaProfileCreateSchema),
-            ...(restoredDraft?.mode === 'movie'
-                ? restoredDraft.values as Partial<MovieLocalMediaProfileCreateIn>
-                : {}),
-        },
-    })
-
     const formVideo = useForm<WithRoot<VideoLocalMediaProfileCreateIn>>({
         resolver: zodResolver(VideoLocalMediaProfileCreateSchema),
         mode: 'onBlur',
@@ -131,7 +114,7 @@ function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) 
         },
     })
 
-    const form = ({collection: formCollection, movie: formMovie, video: formVideo}[mode]) as UseFormReturn<any>
+    const form = ({collection: formCollection, video: formVideo}[mode]) as UseFormReturn<any>
 
     useEffect(() => {
         if (!draftKey) return
@@ -200,14 +183,9 @@ function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) 
                                 description: 'Store downloaded collection episodes',
                             },
                             {
-                                value: 'movie',
-                                label: 'Movie',
-                                description: 'Store manually downloaded movies and their extras',
-                            },
-                            {
                                 value: 'video',
                                 label: 'Video',
-                                description: 'Store single videos added on their own',
+                                description: 'Store single videos and movies added on their own',
                             },
                         ]}
                     />}

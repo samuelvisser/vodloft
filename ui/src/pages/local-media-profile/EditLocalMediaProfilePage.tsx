@@ -12,10 +12,6 @@ import {
     LocalMediaProfileUpdateOut,
 } from '../../types/schemas/local_media_profile'
 import {
-    MovieLocalMediaProfileUpdateIn,
-    MovieLocalMediaProfileUpdateSchema,
-} from '../../types/schemas/movie_local_media_profile'
-import {
     CollectionLocalMediaProfileUpdateIn,
     CollectionLocalMediaProfileUpdateSchema,
 } from '../../types/schemas/collection_local_media_profile'
@@ -37,7 +33,6 @@ import './EditLocalMediaProfilePage.css'
 import {apiUrl} from '../../lib/api'
 
 function canonicalProfileValues(profile: LocalMediaProfileRead): LocalMediaProfileUpdateIn {
-    if (profile.type === 'movie') return MovieLocalMediaProfileUpdateSchema.parse(profile)
     if (profile.type === 'video') return VideoLocalMediaProfileUpdateSchema.parse(profile)
     return CollectionLocalMediaProfileUpdateSchema.parse(profile)
 }
@@ -72,12 +67,6 @@ export default function EditLocalMediaProfilePage() {
         shouldFocusError: true,
     })
 
-    const formMovie = useForm<WithRoot<MovieLocalMediaProfileUpdateIn>>({
-        resolver: zodResolver(MovieLocalMediaProfileUpdateSchema),
-        mode: 'onBlur',
-        shouldFocusError: true,
-    })
-
     const formVideo = useForm<WithRoot<VideoLocalMediaProfileUpdateIn>>({
         resolver: zodResolver(VideoLocalMediaProfileUpdateSchema),
         mode: 'onBlur',
@@ -85,7 +74,7 @@ export default function EditLocalMediaProfilePage() {
     })
 
     const form = (
-        profile?.type === 'movie' ? formMovie : profile?.type === 'video' ? formVideo : formCollection
+        profile?.type === 'video' ? formVideo : formCollection
     ) as UseFormReturn<any>
 
     useEffect(() => {

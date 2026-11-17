@@ -152,7 +152,7 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
     from backend.services import movies as movie_service
     from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db.core import Base
-    from backend.db.models import Movie, MovieLocalMediaProfile
+    from backend.db.models import Movie, VideoLocalMediaProfile
     from backend.integrations.tmdb import MovieReleaseLookupResult
     from config import get_settings
     from sources.dailywire.api.records import DwMovieExtraRecord, DwMovieRecord
@@ -176,7 +176,7 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
 
     monkeypatch.setattr(movie_service, "lookup_movie_release_metadata", fake_lookup)
 
-    profile = MovieLocalMediaProfile(
+    profile = VideoLocalMediaProfile(
         slug="plex-movies",
         name="Plex movies",
         output_template=(

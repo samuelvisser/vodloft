@@ -18,16 +18,16 @@ from sources import ANY_DOMAIN, DownloadOptions, Feature, Site, SiteSetting, Sou
 
 from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, LocalMediaProfileType, PreferredFormat
 
-# The Feature a Source needs before a profile of each type can store its media.
+# The Features of which a Source needs one before a profile of each type can store its media. A Video profile
+# keeps single videos, and movies with their extras.
 _PROFILE_TYPE_FEATURES = {
-    LocalMediaProfileType.COLLECTION: Feature.COLLECTIONS,
-    LocalMediaProfileType.MOVIE: Feature.MOVIES,
-    LocalMediaProfileType.VIDEO: Feature.VIDEOS,
+    LocalMediaProfileType.COLLECTION: (Feature.COLLECTIONS,),
+    LocalMediaProfileType.VIDEO: (Feature.VIDEOS, Feature.MOVIES),
 }
 
 
-def _feature(profile_type: LocalMediaProfileType | str) -> Feature:
-    return _PROFILE_TYPE_FEATURES[LocalMediaProfileType(profile_type)]
+def _stores_type(source: Source, profile_type: LocalMediaProfileType | str) -> bool:
+    return any(source.has(feature) for feature in _PROFILE_TYPE_FEATURES[LocalMediaProfileType(profile_type)])
 
 
 def _fetching_sources(site_key: str) -> list[Source]:
@@ -36,25 +36,22 @@ def _fetching_sources(site_key: str) -> list[Source]:
 
 
 def site_offered_for_type(profile_type: LocalMediaProfileType | str, site_key: str) -> bool:
-    """Whether a profile of this type can store media from the Site, such as movies only from The Daily Wire."""
-    feature = _feature(profile_type)
-    return any(source.has(feature) for source in _fetching_sources(site_key))
+    """Whether a profile of this type can store media from the Site, such as collections from YouTube."""
+    return any(_stores_type(source, profile_type) for source in _fetching_sources(site_key))
 
 
 def takes_upcoming_sites(profile_type: LocalMediaProfileType | str) -> bool:
     """Whether a profile of this type can get media from Sites VODLoft has not seen yet: only a Source that
     fetches any site brings new ones."""
-    feature = _feature(profile_type)
-    return any(ANY_DOMAIN in source.domains and source.has(feature) for source in all_sources())
+    return any(ANY_DOMAIN in source.domains and _stores_type(source, profile_type) for source in all_sources())
 
 
 def _upcoming_sites(profile_type: LocalMediaProfileType | str | None = None) -> list[Site]:
     """What a Site VODLoft has not seen yet is like: what each Source that fetches any site makes of a Site it
     has no contract of its own for."""
-    feature = _feature(profile_type) if profile_type is not None else None
     return [
         site for source in all_sources()
-        if ANY_DOMAIN in source.domains and (feature is None or source.has(feature))
+        if ANY_DOMAIN in source.domains and (profile_type is None or _stores_type(source, profile_type))
         and (site := source.site_of(_UNSEEN_SITE)) is not None
     ]
 
@@ -98,6 +95,15 @@ def known_site_keys(connection: Connection | Session) -> set[str]:
 def every_known_site(connection: Connection | Session, profile_type: LocalMediaProfileType | str) -> list[str]:
     """The Sites a new profile of this type starts with: every Site VODLoft knows that it can store media from."""
     return sorted(key for key in known_site_keys(connection) if site_offered_for_type(profile_type, key))
+
+
+def movie_site_keys(connection: Connection | Session) -> list[str]:
+    """The Sites VODLoft knows that have movies, such as The Daily Wire: the Sites a profile made for movies starts
+    with."""
+    return sorted(
+        key for key in known_site_keys(connection)
+        if any(source.has(Feature.MOVIES) for source in _fetching_sources(key))
+    )
 
 
 def profile_offered_for_site(s: Session, profile, site_key: str | None) -> bool:
@@ -177,8 +183,9 @@ def profile_download_options(
     """What a profile can download: everything one of the Sites it is offered for can. Without a list yet, a new
     profile gets every Site, so it can download whatever a Source for its type can."""
     if site_keys is None:
-        feature = _feature(profile_type)
-        return DownloadOptions.combined(source.download_options for source in all_sources() if source.has(feature))
+        return DownloadOptions.combined(
+            source.download_options for source in all_sources() if _stores_type(source, profile_type)
+        )
     options = [site_of(key).downloads for key in site_keys if site_offered_for_type(profile_type, key)]
     if include_upcoming_sites and takes_upcoming_sites(profile_type):
         options.append(_upcoming_downloads(profile_type))

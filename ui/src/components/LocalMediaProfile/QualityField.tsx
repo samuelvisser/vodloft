@@ -121,8 +121,7 @@ export default function QualityField({form, mode}: Props) {
         {
             label: 'Other',
             options: [
-                // A movie is always kept as a video.
-                ...(mode !== 'movie' && (!offered || offered.audioOnly) ? [option('format_audio_only')] : []),
+                ...(!offered || offered.audioOnly ? [option('format_audio_only')] : []),
                 // Only episodes of a collection are kept as an HLS bundle, for podcast feeds.
                 ...(mode === 'collection' && offered?.hlsBundle ? [option('format_hls')] : []),
             ],

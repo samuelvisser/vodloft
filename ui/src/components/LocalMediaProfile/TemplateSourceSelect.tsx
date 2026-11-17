@@ -103,7 +103,7 @@ export default function TemplateSourceSelect({
             onLoadPrevious={onLoadPrevious}
             placeholder="Search media…"
             noOptionsMessage="No matching media found"
-            ariaLabel="Example episode"
+            ariaLabel={mode === 'collection' ? 'Example episode' : 'Example video or movie'}
         />
     )
 }

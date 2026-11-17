@@ -30,7 +30,7 @@ export function loadLocalMediaProfileDraft<T>(key: string): LocalMediaProfileDra
             localStorage.removeItem(key)
             return null
         }
-        if (!['collection', 'movie', 'video'].includes(parsed.data.mode)) {
+        if (!['collection', 'video'].includes(parsed.data.mode)) {
             localStorage.removeItem(key)
             return null
         }
