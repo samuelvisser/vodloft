@@ -29,6 +29,7 @@ from backend.db.models import (
     MediaDownloadBase,
 )
 from backend.services.adoption import AdoptionError, adopt, download_root, find_file, real_path, virtual_path
+from backend.services.download_options import effective_filename_mode
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_index import CustomIndexNotReadyError
 from backend.utils.output_template import episode_output_template_values, resolve_episode_output_path
@@ -89,7 +90,7 @@ def collection_folder(collection: Collection, profile: LocalMediaProfileBase) ->
 
     try:
         root = resolve_collection_media_directory(
-            collection, profile.output_template, filename_mode=profile.filename_restriction_mode,
+            collection, profile.output_template, filename_mode=effective_filename_mode(profile),
         )
         return virtual_path(Path(root.path)) if root.path else None
     except (AdoptionError, OSError, ValueError):
@@ -223,7 +224,7 @@ def _episode_facts(session: Session, collection: Collection, profile: LocalMedia
         try:
             path = resolve_episode_output_path(
                 profile.output_template, episode=episode, local_media_profile=profile,
-                filename_mode=profile.filename_restriction_mode,
+                filename_mode=effective_filename_mode(profile),
             )
             expected = virtual_path(path).removesuffix(".ext")
         except (CustomIndexNotReadyError, ValueError, OSError):
@@ -354,7 +355,7 @@ def _collection_folders(session: Session, scan: ExistingFileScan, collection: Co
             try:
                 expected.append(resolve_episode_output_path(
                     profile.output_template, episode=episode, local_media_profile=profile,
-                    filename_mode=profile.filename_restriction_mode,
+                    filename_mode=effective_filename_mode(profile),
                 ))
             except (CustomIndexNotReadyError, ValueError, OSError):
                 continue

@@ -77,7 +77,8 @@ def settings_update(body: SettingsAPIUpdate):
 
     if set(body.changed_fields) & {
         "downloadSettings.downloadCollectionAssets", "downloadSettings.collectionArtworkFallbackFormat",
-        "downloadSettings.downloadRoot", "downloadSettings.ffmpegPath",
+        "downloadSettings.downloadRoot", "downloadSettings.filenameRestrictionMode",
+        "downloadSettings.ffmpegPath",
     }:
         def work(session):
             request_collection_asset_reconciliation(session)

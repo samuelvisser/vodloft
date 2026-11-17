@@ -21,7 +21,7 @@ from backend.db.models import Episode, Movie, MovieExtra, Video
 from backend.services.site_settings import local_media_profile_site_choices
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, publish_time, select_thumbnail
-from backend.services.download_options import effective_download_mode, effective_metadata_mode, effective_thumbnail_mode
+from backend.services.download_options import effective_download_mode, effective_filename_mode, effective_metadata_mode, effective_thumbnail_mode
 from backend.services.download_quality import (
     chosen_subtitle_tracks, custom_ytdlp_options, default_subtitle_languages, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
 )
@@ -98,7 +98,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     subtitle_request = ytdlp_subtitles(profile, AutoSubtitles.NEVER)
     default_languages = default_subtitle_languages(profile)
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
-    output_template, filename_mode = profile.output_template, profile.filename_restriction_mode
+    output_template, filename_mode = profile.output_template, effective_filename_mode(profile)
     file_date_from_publish_date = profile.file_date_from_publish_date
     title, slug, media_id = media.title, media.slug, media.id
     thumbnail = select_thumbnail(media)

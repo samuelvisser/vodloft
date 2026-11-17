@@ -3,7 +3,9 @@ import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import SimpleSelect from '../common/SimpleSelect'
+import {useLibraryDefaults} from '../../lib/settings'
 import {FilenameRestrictionModeReg} from '../../types/local_media_profile'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 import ReadMore from '../../utils/ReadMore'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import {parseOutputTemplate, renderCompactOutputTemplate} from './outputTemplateFormatting'
@@ -15,6 +17,16 @@ export default function OutputTemplateStartFields({form, mode}: { form: UseFormR
     const preferredFormat = useWatch({control, name: 'preferredFormat'})
     const [pendingPreset, setPendingPreset] = useState<string | null>(null)
     const audioOnly = preferredFormat === 'format_audio_only'
+    const {data: defaults} = useLibraryDefaults()
+    const systemFilenameModeLabel = defaults
+        ? FilenameRestrictionModeReg.getLabelLoose(defaults.filenameRestrictionMode)
+        : 'Loading system setting…'
+    const filenameModeReg = createSelectRegistry('LocalMediaProfileFilenameMode', {
+        system: {label: `System (${systemFilenameModeLabel})`},
+        unrestricted: {label: FilenameRestrictionModeReg.getLabelLoose('unrestricted')},
+        windows: {label: FilenameRestrictionModeReg.getLabelLoose('windows')},
+        restricted: {label: FilenameRestrictionModeReg.getLabelLoose('restricted')},
+    })
 
     const applyPreset = (key: string) => {
         const preset = outputTemplatePreset(key)
@@ -41,7 +53,7 @@ export default function OutputTemplateStartFields({form, mode}: { form: UseFormR
                     render={({field}) => (
                         <SimpleSelect
                             inputId="mp-filename-restriction-mode"
-                            registry={FilenameRestrictionModeReg}
+                            registry={filenameModeReg}
                             value={field.value ?? null}
                             onChange={field.onChange}
                             onBlur={field.onBlur}
@@ -58,9 +70,9 @@ export default function OutputTemplateStartFields({form, mode}: { form: UseFormR
                 <div className="help" id="mp-filename-restriction-mode-help">
                     <ReadMore summary="Choose which characters file and folder names may hold, for the devices that read them.">
                         <p>
-                            The modes follow yt-dlp, so new files are named as yt-dlp and Pinchflat name them. A new
-                            profile starts with the mode chosen in Settings. Files you already have keep their names
-                            until you rename the profile's files.
+                            The modes follow yt-dlp, so new files are named as yt-dlp and Pinchflat name them.
+                            <strong> System</strong> uses the mode chosen in Settings. Files you already have keep their
+                            names until you rename the profile's files.
                         </p>
                         <p>
                             <strong>Minimal restrictions</strong> preserves Unicode and punctuation. Only a <code>/</code> in

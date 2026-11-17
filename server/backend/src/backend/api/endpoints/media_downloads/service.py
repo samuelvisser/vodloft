@@ -69,6 +69,7 @@ from backend.services.media_download_collection import (
     read_media_download_page_window,
 )
 from backend.services.media_download_history import record_media_download_history
+from backend.services.download_options import effective_filename_mode
 from backend.utils.output_template import (
     resolve_episode_output_path,
     resolve_movie_output_path,
@@ -94,7 +95,7 @@ def _resolve_episode_download_path(
         episode=episode,
         local_media_profile=profile,
         media_download=download,
-        filename_mode=profile.filename_restriction_mode,
+        filename_mode=effective_filename_mode(profile),
     ))
 
 
@@ -679,7 +680,7 @@ def create_movie_download(
             raise HTTPException(status_code=409, detail=f"Movie already has a downloaded file for profile '{profile.name}'")
         prepare_media_download_artifact(s, existing)
         existing.file_path = str(resolve_movie_output_path(
-            profile.output_template, movie=movie, filename_mode=profile.filename_restriction_mode,
+            profile.output_template, movie=movie, filename_mode=effective_filename_mode(profile),
         ))
         s.flush()
         return existing
@@ -690,7 +691,7 @@ def create_movie_download(
         local_media_profile_id=profile.id,
         artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
         file_path=str(resolve_movie_output_path(
-            profile.output_template, movie=movie, filename_mode=profile.filename_restriction_mode,
+            profile.output_template, movie=movie, filename_mode=effective_filename_mode(profile),
         )),
     )
     s.add(download)
@@ -738,7 +739,7 @@ def create_movie_extra_download(
             raise HTTPException(status_code=409, detail=f"Movie extra already has a downloaded file for profile '{profile.name}'")
         prepare_media_download_artifact(s, existing)
         existing.file_path = str(resolve_movie_output_path(
-            profile.output_template, movie=movie, media_item=movie_extra, filename_mode=profile.filename_restriction_mode,
+            profile.output_template, movie=movie, media_item=movie_extra, filename_mode=effective_filename_mode(profile),
         ))
         s.flush()
         return existing
@@ -749,7 +750,7 @@ def create_movie_extra_download(
         local_media_profile_id=profile.id,
         artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
         file_path=str(resolve_movie_output_path(
-            profile.output_template, movie=movie, media_item=movie_extra, filename_mode=profile.filename_restriction_mode,
+            profile.output_template, movie=movie, media_item=movie_extra, filename_mode=effective_filename_mode(profile),
         )),
     )
     s.add(download)
@@ -789,7 +790,7 @@ def create_video_download(
             raise HTTPException(status_code=409, detail=f"Video already has a downloaded file for profile '{profile.name}'")
         prepare_media_download_artifact(s, existing)
         existing.file_path = str(resolve_video_output_path(
-            profile.output_template, video=video, filename_mode=profile.filename_restriction_mode,
+            profile.output_template, video=video, filename_mode=effective_filename_mode(profile),
         ))
         s.flush()
         return existing
@@ -800,7 +801,7 @@ def create_video_download(
         local_media_profile_id=profile.id,
         artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
         file_path=str(resolve_video_output_path(
-            profile.output_template, video=video, filename_mode=profile.filename_restriction_mode,
+            profile.output_template, video=video, filename_mode=effective_filename_mode(profile),
         )),
     )
     s.add(download)

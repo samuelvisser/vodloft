@@ -12,6 +12,7 @@ from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.services.local_media_profile_sites import profile_offered_for_site
 from backend.services.sites import collection_site_key
+from backend.services.download_options import effective_filename_mode
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.utils.custom_index import (
     CustomIndexNotReadyError,
@@ -333,7 +334,7 @@ def _synced_downloads_before_reindex(
             old_path = resolve_episode_output_path_with_index_values(
                 profile.output_template, episode=episode, index_definitions=definitions,
                 index_values=get_episode_index_assignments(episode, profile.id),
-                filename_mode=profile.filename_restriction_mode,
+                filename_mode=effective_filename_mode(profile),
                 extension=source.suffix.removeprefix("."),
             )
         except (CustomIndexNotReadyError, ValueError):

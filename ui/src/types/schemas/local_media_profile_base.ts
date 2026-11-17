@@ -22,6 +22,8 @@ export const LocalMediaProfileMetadataModeSchema = z.enum([
     'embed_and_nfo',
 ])
 export type LocalMediaProfileMetadataMode = z.infer<typeof LocalMediaProfileMetadataModeSchema>
+export const LocalMediaProfileFilenameModeSchema = z.enum(['system', ...FilenameRestrictionModeSchema.options])
+export type LocalMediaProfileFilenameMode = z.infer<typeof LocalMediaProfileFilenameModeSchema>
 export const LocalMediaProfileSubtitleModeSchema = z.enum([
     'no_subtitles', 'embed', 'sidecar', 'embed_and_sidecar',
 ])
@@ -66,8 +68,7 @@ export const LocalMediaProfileSchemaRequest = z.object({
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
     kodiSafeNfo: z.boolean().default(false),
-    /** How file names are made safe; the form fills in a new profile's from Settings. */
-    filenameRestrictionMode: FilenameRestrictionModeSchema.optional(),
+    filenameRestrictionMode: LocalMediaProfileFilenameModeSchema.default('system'),
     fileDateFromPublishDate: z.boolean().default(false),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     /** The Sites the profile is offered for; null until the form fills in every Site VODLoft knows. */
@@ -114,7 +115,7 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
     kodiSafeNfo: z.boolean().default(false),
-    filenameRestrictionMode: FilenameRestrictionModeSchema,
+    filenameRestrictionMode: LocalMediaProfileFilenameModeSchema.default('system'),
     fileDateFromPublishDate: z.boolean().default(false),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     ...QualityAndLanguageFields,

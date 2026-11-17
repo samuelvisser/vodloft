@@ -46,6 +46,11 @@ export const FilenameRestrictionModeReg = createSelectRegistry("FilenameRestrict
   'restricted': { label: "Restricted filenames" },
 });
 
+/** The filename mode a profile names its files in: its own, or the one in Settings when it follows System. */
+export function effectiveFilenameMode(mode: string | undefined, systemMode: string | undefined): string | undefined {
+  return mode === 'system' ? systemMode : mode
+}
+
 export type LocalMediaProfileType = 'collection' | 'movie' | 'video'
 /** The API collection that creates, updates and deletes profiles of one type. */
 export function localMediaProfileEndpoint(type: LocalMediaProfileType | string): string {

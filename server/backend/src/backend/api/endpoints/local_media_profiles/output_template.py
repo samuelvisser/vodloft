@@ -25,6 +25,7 @@ from backend.services.custom_index_preview import (
     plan_custom_index_preview,
 )
 from backend.services.custom_indexes import simulate_episode_indexes
+from backend.services.download_options import effective_filename_mode
 from backend.services.example_episodes import (
     EXAMPLE_SOURCE_PREFIX,
     ExampleCollection,
@@ -1076,7 +1077,7 @@ def get_output_template_preview(
     session: Session | None,
     body: LocalMediaProfileTemplatePreview,
 ) -> LocalMediaProfileTemplatePreviewResult:
-    with rendering_with_filename_mode(body.filename_restriction_mode):
+    with rendering_with_filename_mode(effective_filename_mode(body)):
         return _output_template_preview(session, body)
 
 
@@ -1113,7 +1114,7 @@ def _output_template_preview(
     else:
         raise ValueError("Template previews are only available for Collection, Movie and Video profiles")
 
-    filename_mode = body.filename_restriction_mode
+    filename_mode = effective_filename_mode(body)
     if body.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY:
         extension = "m4a"
     elif body.preferred_format == PreferredFormat.FORMAT_HLS:

@@ -16,6 +16,7 @@ from backend.services.notifications.emitters import episode_deleted
 from backend.services.episode_filters import EpisodeSelection, evaluate, is_date_line, retention_removes, wanted_episodes
 from backend.types.media_types import MediaType
 from backend.services.media_download_history import record_media_download_history
+from backend.services.download_options import effective_filename_mode
 from backend.utils.output_template import resolve_episode_output_path
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
@@ -215,7 +216,7 @@ def ensure_episode_download(
             episode=episode,
             local_media_profile=local_media_profile,
             media_download=download,
-            filename_mode=local_media_profile.filename_restriction_mode,
+            filename_mode=effective_filename_mode(local_media_profile),
         ))
         s.flush()
         record_media_download_history(
@@ -238,7 +239,7 @@ def ensure_episode_download(
         episode=episode,
         local_media_profile=local_media_profile,
         media_download=existing,
-        filename_mode=local_media_profile.filename_restriction_mode,
+        filename_mode=effective_filename_mode(local_media_profile),
     ))
 
     if get_active_media_download_operation(s, existing.id) is not None:

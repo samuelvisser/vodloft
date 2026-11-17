@@ -16,6 +16,7 @@ from backend.db.models import DownloadProfile, Episode, EpisodeMediaDownload, Co
 from backend.db.models.CollectionLocalAsset import CollectionLocalAsset
 from backend.services.download_metadata import build_season_metadata, build_show_metadata
 from backend.services.example_episodes import EXAMPLE_SOURCE_PREFIX
+from backend.services.download_options import effective_filename_mode
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_metadata import custom_metadata_template_values, get_custom_metadata
 from backend.utils.output_template import (
@@ -190,7 +191,7 @@ def collection_profile_roots(
         collection, profile = collections.get(collection_id), profiles.get(profile_id)
         if collection is None or profile is None:
             continue
-        template, mode = profile.output_template, profile.filename_restriction_mode
+        template, mode = profile.output_template, effective_filename_mode(profile)
         if profile_id == draft_profile_id and draft_template is not None:
             template, mode = draft_template, draft_filename_mode or mode
         try:

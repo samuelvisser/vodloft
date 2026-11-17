@@ -15,6 +15,7 @@ from backend.db.models import DownloadProfile, Episode, EpisodeMediaDownload, Co
 from backend.db.core import run_write_transaction
 from backend.db.models.CollectionLocalAsset import CollectionLocalAsset
 from backend.services.download_relocation import remove_folders_left_empty
+from backend.services.download_options import effective_filename_mode
 from backend.services.collection_assets import (
     CollectionNfoFile, collection_nfo_files, resolve_collection_media_directory, shared_root_conflict,
     collection_asset_sources, collection_assets_enabled, collection_profile_is_managed, collection_profile_roots,
@@ -73,7 +74,7 @@ def _current(session, plan: AssetPlan) -> bool:
     source = next((candidate for candidate in collection_asset_sources(collection) if candidate.kind == plan.kind), None)
     return (
         resolve_collection_media_directory(
-            collection, profile.output_template, filename_mode=profile.filename_restriction_mode,
+            collection, profile.output_template, filename_mode=effective_filename_mode(profile),
         ).path == str(plan.directory)
         and source is not None
         and source.url == plan.url
@@ -533,7 +534,7 @@ def _cleanup_old_roots(
                     if not collection_profile_is_managed(session, collection_id, profile_id):
                         return None
                     if resolve_collection_media_directory(
-                        collection, profile.output_template, filename_mode=profile.filename_restriction_mode,
+                        collection, profile.output_template, filename_mode=effective_filename_mode(profile),
                     ).path != str(current_root):
                         return None
                     replacement = session.scalar(

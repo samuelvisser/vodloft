@@ -54,10 +54,9 @@ def _collection(session, **seasons: str):
 def _profile(session, **values):
     from backend.db.models import CollectionLocalMediaProfile
 
-    profile = CollectionLocalMediaProfile(
-        slug="shows", name="Shows", output_template="/downloads/{{ collection_title }}/{{ title }}.ext",
-        preferred_format="format_1080p", collection_scope="both", **values,
-    )
+    profile = CollectionLocalMediaProfile(**{
+        "slug": "shows", "name": "Shows", "preferred_format": "format_1080p", **values,
+    }, output_template="/downloads/{{ collection_title }}/{{ title }}.ext", collection_scope="both")
     session.add(profile)
     session.flush()
     return profile
@@ -135,24 +134,29 @@ def test_a_profile_without_show_nfo_files_wants_none(db_session, tmp_path):
     assert collection_nfo_files(db_session, collection, profile, tmp_path) == ()
 
 
-def test_a_new_profile_starts_with_the_filename_mode_in_settings(db_session, monkeypatch):
+def test_a_new_profile_follows_the_filename_mode_in_settings(db_session, monkeypatch):
+    from backend.services.download_options import effective_filename_mode
+
+    profile = _profile(db_session)
+    assert profile.filename_restriction_mode == "system"
     monkeypatch.setattr(get_settings().download_settings, "filename_restriction_mode", FilenameRestrictionMode.RESTRICTED)
+    assert effective_filename_mode(profile) == FilenameRestrictionMode.RESTRICTED
 
-    assert _profile(db_session).filename_restriction_mode == "restricted"
 
-
-def test_profiles_get_the_filename_mode_settings_had(db_session, monkeypatch):
+def test_profiles_with_the_filename_mode_in_settings_follow_settings(db_session, monkeypatch):
     from importlib import import_module
 
-    migration = import_module("backend.db.background_migrations.versions.144079ab4232_filename_mode_per_local_media_profile")
-    profile = _profile(db_session, filename_restriction_mode="windows")
+    migration = import_module("backend.db.background_migrations.versions.949968df4516_filename_mode_follows_settings")
+    same = _profile(db_session, filename_restriction_mode="unrestricted")
+    own = _profile(db_session, slug="car-stereo", name="Car stereo", preferred_format="format_audio_only", filename_restriction_mode="restricted")
     db_session.commit()
     monkeypatch.setattr(get_settings().download_settings, "filename_restriction_mode", FilenameRestrictionMode.UNRESTRICTED)
 
     asyncio.run(migration.migrate(SimpleNamespace(raise_if_canceled=lambda: None)))
 
     db_session.expire_all()
-    assert db_session.get(type(profile), profile.id).filename_restriction_mode == "unrestricted"
+    assert db_session.get(type(same), same.id).filename_restriction_mode == "system"
+    assert db_session.get(type(own), own.id).filename_restriction_mode == "restricted"
 
 
 def test_each_profile_names_files_in_its_own_filename_mode(db_session, tmp_path):

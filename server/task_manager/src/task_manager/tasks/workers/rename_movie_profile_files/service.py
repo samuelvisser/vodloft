@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend.services.no_ascii_names import settle_no_ascii_name
+from backend.services.download_options import effective_filename_mode
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -108,7 +109,7 @@ def _plan_renames(
             destination = resolve_video_output_path(
                 profile.output_template,
                 video=media,
-                filename_mode=profile.filename_restriction_mode,
+                filename_mode=effective_filename_mode(profile),
                 extension=extension,
             )
         elif isinstance(media, (Movie, MovieExtra)):
@@ -116,7 +117,7 @@ def _plan_renames(
                 profile.output_template,
                 movie=media if isinstance(media, Movie) else media.movie,
                 media_item=media,
-                filename_mode=profile.filename_restriction_mode,
+                filename_mode=effective_filename_mode(profile),
                 extension=extension,
             )
         else:

@@ -17,6 +17,7 @@ from backend.services.custom_indexes import (
     profile_uses_custom_indexes,
     request_custom_index_reconciliation,
 )
+from backend.services.download_options import effective_filename_mode
 from backend.services.errors import NotFoundError, ServiceError
 from backend.services.profile_file_renames import request_collection_local_media_profile_file_rename
 from backend.services.local_media_profile_inputs import (
@@ -31,7 +32,6 @@ from backend.utils.output_template import (
 from backend.utils.output_template_analysis import analyze_profile_outputs, compare_profile_outputs
 from backend.utils.output_template_jinja import create_output_template_environment
 
-from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 from task_manager.scheduler.operations import OperationTargetSpec, create_operation, queue_operation_target_dispatch
 from task_manager.scheduler.types import OperationSource
@@ -70,11 +70,7 @@ def ensure_unique_profile_settings(
         query = query.filter(profile_model.id != exclude_id)
 
     # Both sides are named as the profile being saved names its files.
-    mode = FilenameRestrictionMode(
-        body.filename_restriction_mode
-        or (exclude_id is not None and s.get(profile_model, exclude_id).filename_restriction_mode)
-        or get_settings().download_settings.filename_restriction_mode
-    )
+    mode = effective_filename_mode(body)
     environment = create_output_template_environment()
     environment.finalize = _sanitize_emitted_output_value
     with rendering_with_filename_mode(mode):
@@ -187,7 +183,7 @@ def update_collection_local_media_profile(
     item = _profile_by_slug(s, CollectionLocalMediaProfile, local_media_profile_slug, "Collection Local Media Profile")
 
     previous_template = item.output_template
-    previous_mode = item.filename_restriction_mode
+    previous_mode = effective_filename_mode(item)
     previous_index_keys = output_template_custom_index_keys(previous_template)
     previous_definition_keys = indexing_value_definition_keys(item)
     previous_kept_keys = kept_index_keys(item)
@@ -206,7 +202,7 @@ def update_collection_local_media_profile(
     current_definition_keys = indexing_value_definition_keys(item)
     definition_keys_changed = previous_definition_keys != current_definition_keys
     # A new filename mode names the files differently, just like a new template.
-    template_changed = (previous_template, previous_mode) != (item.output_template, item.filename_restriction_mode)
+    template_changed = (previous_template, previous_mode) != (item.output_template, effective_filename_mode(item))
     scope_changed = previous_scope != (item.collection_scope, set(item.site_keys))
 
     assignment_change = compare_custom_index_assignments(

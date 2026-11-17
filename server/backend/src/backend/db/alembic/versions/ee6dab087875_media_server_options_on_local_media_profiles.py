@@ -6,8 +6,8 @@ Create Date: 2026-11-16
 
 Every Local Media Profile gets the filename mode that was a system setting, a choice to give files
 their publish date, and a choice for NFO files Kodi can read. Collection Local Media Profiles can
-also write show and season NFO files. The filename mode starts as Windows-compatible; a background
-migration gives existing profiles the mode their Settings had, as config.yml is outside the database.
+also write show and season NFO files. The filename mode starts as System, so existing profiles keep
+the mode in Settings.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def upgrade() -> None:
             comment="NFO files replace the characters Kodi cannot show, such as emoji",
         ))
         batch.add_column(sa.Column(
-            "filename_restriction_mode", sa.String(16), nullable=False, server_default="windows",
+            "filename_restriction_mode", sa.String(16), nullable=False, server_default="system",
             comment="How file and folder names are made safe: unrestricted, windows or restricted (ASCII only)",
         ))
         batch.add_column(sa.Column(

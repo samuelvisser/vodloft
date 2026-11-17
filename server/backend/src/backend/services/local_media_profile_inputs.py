@@ -24,6 +24,7 @@ from backend.types.local_media_profile_types import (
     AudioFormat,
     CodecFallback,
     CollectionLocalMediaProfileScope,
+    LocalMediaProfileFilenameMode,
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
     LocalMediaProfileSubtitleMode,
@@ -48,7 +49,6 @@ from backend.utils.output_template import (
     validate_output_template_path_requirements,
 )
 from backend.utils.output_template_formatting import normalize_output_template_expression_spacing
-from config.settings.submodels import FilenameRestrictionMode
 
 
 _LANGUAGE_CODE = re.compile(r"[a-z]{2,3}(-[A-Za-z0-9]{2,8})*")
@@ -102,8 +102,8 @@ class LocalMediaProfileInput(InputModel):
     metadata_mode: LocalMediaProfileMetadataMode = LocalMediaProfileMetadataMode.SYSTEM
     kodi_safe_nfo: bool = False
     """NFO files replace the characters Kodi cannot show, such as emoji."""
-    filename_restriction_mode: FilenameRestrictionMode | None = None
-    """How file and folder names are made safe; a new profile without one starts as Settings says."""
+    filename_restriction_mode: LocalMediaProfileFilenameMode = LocalMediaProfileFilenameMode.SYSTEM
+    """How file and folder names are made safe; System follows Settings."""
     file_date_from_publish_date: bool = False
     """Downloaded files get the date the media was published."""
     subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
@@ -216,7 +216,7 @@ class LocalMediaProfileInput(InputModel):
         kept = _KEPT_WHEN_UNSET - self.model_fields_set
         # Without Sites or the settings only some Sites show, an update keeps the profile's own.
         return kept | {
-            name for name in ("site_keys", "filename_restriction_mode", *_SITE_CHOICES) if getattr(self, name) is None
+            name for name in ("site_keys", *_SITE_CHOICES) if getattr(self, name) is None
         }
 
 

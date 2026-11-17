@@ -11,6 +11,7 @@ from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Collection, CollectionLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.custom_indexes import ensure_episode_custom_indexes_ready
+from backend.services.download_options import effective_filename_mode
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.output_template import resolve_episode_output_path
 from backend.services.download_relocation import (
@@ -127,7 +128,7 @@ def _plan_renames(
             episode=episode,
             local_media_profile=profile,
             media_download=download,
-            filename_mode=profile.filename_restriction_mode,
+            filename_mode=effective_filename_mode(profile),
             extension=extension,
         )
         planned.append((download, source, settle_no_ascii_name(download, destination, session=session)))

@@ -358,7 +358,7 @@ export default function DownloadsSettingsTab({
                 />
                 <SelectField
                     id="settings-filename-restriction-mode"
-                    label="Filename restrictions for new profiles"
+                    label="Default filename restrictions"
                     value={draft.downloadSettings.filenameRestrictionMode}
                     registry={FilenameRestrictionModeReg}
                     error={errorFor('downloadSettings.filenameRestrictionMode')}
@@ -367,11 +367,11 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.filenameRestrictionMode = value as FilenameRestrictionMode
                     })}
                     help={
-                        <ReadMore summary={<span>The filename mode a new Local Media Profile starts with, and the one quick downloads use.</span>}>
+                        <ReadMore summary={<span>The filename mode of Local Media Profiles set to System, and the one quick downloads use.</span>}>
                             <p>
-                                Each Local Media Profile has a filename mode of its own, so a Windows-compatible library
-                                can sit beside an ASCII-only copy for a car stereo. Changing this does not change the
-                                profiles you already have.
+                                A Local Media Profile can also have a filename mode of its own, so a Windows-compatible
+                                library can sit beside an ASCII-only copy for a car stereo. Files you already have keep
+                                their names until you rename a profile's files.
                             </p>
                             <p>
                                 <strong>Minimal restrictions</strong> preserves Unicode and punctuation,
