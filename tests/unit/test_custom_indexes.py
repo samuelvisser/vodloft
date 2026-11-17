@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
+from config.settings.submodels import FilenameRestrictionMode
 
 
 @pytest.fixture
@@ -334,15 +335,15 @@ def test_normal_render_requires_current_generation_and_never_allocates(db_sessio
     _define(profile, ("extras", "Extras"))
     state = _request(db_session, collection, profile)
     with pytest.raises(CustomIndexNotReadyError):
-        resolve_episode_output_path(profile.output_template, episode=episode, local_media_profile=profile)
+        resolve_episode_output_path(profile.output_template, episode=episode, local_media_profile=profile, filename_mode=FilenameRestrictionMode.WINDOWS)
     reconcile_collection_profile_custom_indexes(db_session, collection_id=collection.id, local_media_profile_id=profile.id)
     before = get_episode_index_assignments(episode, profile.id)
-    assert str(resolve_episode_output_path(profile.output_template, episode=episode, local_media_profile=profile)).endswith("1-first.ext")
+    assert str(resolve_episode_output_path(profile.output_template, episode=episode, local_media_profile=profile, filename_mode=FilenameRestrictionMode.WINDOWS)).endswith("1-first.ext")
     assert get_episode_index_assignments(episode, profile.id) == before
     state.requested_generation += 1
     db_session.flush()
     with pytest.raises(CustomIndexNotReadyError):
-        resolve_episode_output_path(profile.output_template, episode=episode, local_media_profile=profile)
+        resolve_episode_output_path(profile.output_template, episode=episode, local_media_profile=profile, filename_mode=FilenameRestrictionMode.WINDOWS)
 
 
 def test_undefined_index_renders_empty_without_sequence_state(db_session):
@@ -354,7 +355,7 @@ def test_undefined_index_renders_empty_without_sequence_state(db_session):
     episode = _make_episode(db_session, collection, season, index=1, slug="first", identifier="ep.1")
     profile = _make_profile(db_session, template="/downloads/{{ 'undefined' | custom_index }}-{{ episode }}.ext")
     assert str(resolve_episode_output_path(
-        profile.output_template, episode=episode, local_media_profile=profile,
+        profile.output_template, episode=episode, local_media_profile=profile, filename_mode=FilenameRestrictionMode.WINDOWS,
     )).endswith("-first.ext")
     assert db_session.query(CustomIndexState).count() == 0
     assert episode.meta_items == []
@@ -395,7 +396,7 @@ def test_draft_preview_simulates_without_persisting(db_session):
     first = _make_episode(db_session, collection, season, index=100, slug="first", identifier="ep.1")
     second = _make_episode(db_session, collection, season, index=200, slug="second", identifier="ep.2")
     profile = _make_profile(db_session, template="/downloads/{{ episode }}.ext")
-    body = LocalMediaProfileTemplatePreview(type="collection", output_template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext", preferred_format="format_1080p", values=episode_output_template_values(second), source_id=f"episode:{second.id}", local_media_profile_id=profile.id, indexing_values=[{"key": "extras", "name": "Extras"}])
+    body = LocalMediaProfileTemplatePreview(type="collection", output_template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext", preferred_format="format_1080p", values=episode_output_template_values(second), source_id=f"episode:{second.id}", local_media_profile_id=profile.id, indexing_values=[{"key": "extras", "name": "Extras"}], filename_restriction_mode="windows")
     preview = get_output_template_preview(db_session, body)
     assert preview.output_path.endswith("2-second.mp4")
     assert get_episode_index_assignments(first, profile.id) == {}
@@ -417,7 +418,7 @@ def test_historical_episode_only_queues_rename_for_synchronized_file(db_session,
     _request(db_session, collection, profile)
     reconcile_collection_profile_custom_indexes(db_session, collection_id=collection.id, local_media_profile_id=profile.id)
     expected = resolve_episode_output_path(
-        profile.output_template, episode=last, local_media_profile=profile, extension="mp4",
+        profile.output_template, episode=last, local_media_profile=profile, extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
     source = expected if was_synchronized else expected.with_name("kept-by-user.mp4")
     source.parent.mkdir(parents=True, exist_ok=True)
@@ -457,13 +458,13 @@ def test_batch_file_rename_rollback_restores_cycle_without_overwrite(db_session,
         profile.output_template,
         episode=first,
         local_media_profile=profile,
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
     second_expected = resolve_episode_output_path(
         profile.output_template,
         episode=second,
         local_media_profile=profile,
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
     first_expected.parent.mkdir(parents=True, exist_ok=True)
     second_expected.write_bytes(b"first episode")
@@ -523,13 +524,13 @@ def test_batch_file_rename_stages_source_destination_cycle(db_session):
         profile.output_template,
         episode=first,
         local_media_profile=profile,
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
     second_expected = resolve_episode_output_path(
         profile.output_template,
         episode=second,
         local_media_profile=profile,
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
     first_expected.parent.mkdir(parents=True, exist_ok=True)
     second_expected.write_bytes(b"first episode")
@@ -590,7 +591,7 @@ def test_preview_skips_custom_index_work_when_template_has_no_index(db_session, 
             values=episode_output_template_values(episode),
             source_id=f"episode:{episode.id}",
             local_media_profile_id=profile.id,
-            indexing_values=[],
+            indexing_values=[],filename_restriction_mode="windows",
         ),
     )
     assert preview.output_path.endswith("/renamed/first.mp4")
@@ -620,7 +621,7 @@ def test_preview_skips_simulation_when_referenced_index_is_undefined(db_session,
             values=episode_output_template_values(episode),
             source_id=f"episode:{episode.id}",
             local_media_profile_id=profile.id,
-            indexing_values=[],
+            indexing_values=[],filename_restriction_mode="windows",
         ),
     )
     assert preview.output_path.endswith("/-first.mp4")
@@ -674,7 +675,7 @@ def test_preview_reuses_saved_assignment_for_identical_template_without_analysis
             values=episode_output_template_values(episode),
             source_id=f"episode:{episode.id}",
             local_media_profile_id=profile.id,
-            indexing_values=[{"key": "extra", "name": "Extras"}],
+            indexing_values=[{"key": "extra", "name": "Extras"}],filename_restriction_mode="windows",
         ),
     )
     assert preview.output_path.endswith("/1-first.mp4")
@@ -715,7 +716,7 @@ def test_preview_reuses_saved_assignment_when_index_reachability_is_unchanged(db
             values=episode_output_template_values(second),
             source_id=f"episode:{second.id}",
             local_media_profile_id=profile.id,
-            indexing_values=[{"key": "extras", "name": "Extras"}],
+            indexing_values=[{"key": "extras", "name": "Extras"}],filename_restriction_mode="windows",
         ),
     )
     assert preview.output_path.endswith("/renamed/1-second.mp4")
@@ -756,7 +757,7 @@ def test_preview_simulates_when_index_reachability_changes(db_session):
             values=episode_output_template_values(second),
             source_id=f"episode:{second.id}",
             local_media_profile_id=profile.id,
-            indexing_values=[{"key": "extras", "name": "Extras"}],
+            indexing_values=[{"key": "extras", "name": "Extras"}],filename_restriction_mode="windows",
         ),
     )
     assert preview.output_path.endswith("/2-second.mp4")
@@ -793,7 +794,7 @@ def test_preview_simulates_when_index_dependency_test_value_changes(db_session):
             values=values,
             source_id=f"episode:{second.id}",
             local_media_profile_id=profile.id,
-            indexing_values=[{"key": "extras", "name": "Extras"}],
+            indexing_values=[{"key": "extras", "name": "Extras"}],filename_restriction_mode="windows",
         ),
     )
     assert preview.output_path.endswith("/-first.mp4")
@@ -1098,7 +1099,7 @@ def test_per_start_and_step_number_each_group_on_its_own(db_session):
     ]
     path = resolve_episode_output_path_with_index_values(
         template, episode=c, index_definitions=frozenset({"clips"}),
-        index_values=get_episode_index_assignments(c, profile.id),
+        index_values=get_episode_index_assignments(c, profile.id), filename_mode=FilenameRestrictionMode.WINDOWS,
     )
     assert path.name.startswith("10-")
 

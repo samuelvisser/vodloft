@@ -16,7 +16,7 @@ type Props = {
     onImported: (path?: string) => void
 }
 
-/** "Your media": start a library fresh, or move one over from Pinchflat or WireLoft. */
+/** "Your media": start a library fresh, or move one over from another program, such as Pinchflat or ytdl-sub. */
 export default function OnboardingMediaStep({importing, onBack, onImport, onStartFresh, onImported}: Props) {
     const importers = useImporters()
     const [chosen, setChosen] = useState<string | null>(null)
@@ -26,8 +26,8 @@ export default function OnboardingMediaStep({importing, onBack, onImport, onStar
 
     function onRunStatus(run: ImportRun) {
         setStarted(true)
-        // A Pinchflat import goes on to index each Collection, which the settings page shows as it happens.
-        if (run.status === 'waiting' && importer?.key === 'pinchflat') onImported(`/settings?tab=import&open=${importer.key}`)
+        // An import of files goes on to index each Collection, which the settings page shows as it happens.
+        if (run.status === 'waiting' && importer) onImported(`/settings?tab=import&open=${importer.key}`)
     }
 
     if (importing && importer) {

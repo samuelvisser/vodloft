@@ -33,6 +33,13 @@ class LocalMediaProfileMetadataMode(StrEnum):
     EMBED_AND_NFO = "embed_and_nfo"
 
 
+class LocalMediaProfileFilenameMode(StrEnum):
+    SYSTEM = "system"
+    UNRESTRICTED = "unrestricted"
+    WINDOWS = "windows"
+    RESTRICTED = "restricted"
+
+
 class LocalMediaProfileSubtitleMode(StrEnum):
     NO_SUBTITLES = "no_subtitles"
     EMBED = "embed"

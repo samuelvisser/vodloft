@@ -359,7 +359,7 @@ Titles are not unique, so include `{{ slug }}` in the filename. Sites do not alw
 
 ## Filename restrictions
 
-The global **Filename restrictions** setting controls how file and folder names are made safe. The three modes follow yt-dlp, so files are named like yt-dlp and Pinchflat name them. Each value a template fills in, such as a title, is cleaned the way yt-dlp cleans it. Text you type in the template itself is made safe too, and the editor says when typed text has a character the mode will replace. The preview shows the result.
+Each profile's **Filename restrictions** setting controls how file and folder names are made safe. **System**, the default, uses the mode in **Settings → Downloads**; choose a mode for one profile to name its files differently, such as an ASCII-only copy for a car stereo. Files you already have keep their names until you rename the profile's files. The three modes follow yt-dlp, so files are named like yt-dlp and Pinchflat name them. Each value a template fills in, such as a title, is cleaned the way yt-dlp cleans it. Text you type in the template itself is made safe too, and the editor says when typed text has a character the mode will replace. The preview shows the result.
 
 The examples show `Q&A: Is AI "conscious"? | Ep. 12/13` in each mode.
 

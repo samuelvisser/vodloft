@@ -224,7 +224,7 @@ def test_download_root_change_recomputes_unset_storage_defaults(tmp_path, monkey
     current = get_ui_settings()
     original_temporary_root = current.values.download_settings.temporary_download_root
     assert original_temporary_root.name == "vodloft-downloads"
-    assert current.values.download_settings.rss_cache_root.as_posix() == "/media-one/.vodloft-rss-cache"
+    assert current.values.download_settings.stream_cache_root.as_posix() == "/media-one/.vodloft-stream-cache"
 
     values = current.values.model_copy(deep=True)
     values.download_settings.download_root = Path("/media-two")
@@ -234,12 +234,12 @@ def test_download_root_change_recomputes_unset_storage_defaults(tmp_path, monkey
     ))
 
     assert result.values.download_settings.temporary_download_root == original_temporary_root
-    assert result.values.download_settings.rss_cache_root.as_posix() == "/media-two/.vodloft-rss-cache"
+    assert result.values.download_settings.stream_cache_root.as_posix() == "/media-two/.vodloft-stream-cache"
 
     document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     assert document["downloadSettings"]["downloadRoot"] == "/media-two"
     assert "temporaryDownloadRoot" not in document["downloadSettings"]
-    assert "rssCacheRoot" not in document["downloadSettings"]
+    assert "streamCacheRoot" not in document["downloadSettings"]
 
 
 def test_download_root_change_keeps_explicit_storage_paths(tmp_path, monkeypatch):
@@ -251,7 +251,7 @@ def test_download_root_change_keeps_explicit_storage_paths(tmp_path, monkeypatch
         "downloadSettings:\n"
         "  downloadRoot: /media-one\n"
         "  temporaryDownloadRoot: /staging\n"
-        "  rssCacheRoot: /rss-cache\n",
+        "  streamCacheRoot: /stream-cache\n",
         encoding="utf-8",
     )
     _point_settings_at(config_path, monkeypatch)
@@ -265,7 +265,7 @@ def test_download_root_change_keeps_explicit_storage_paths(tmp_path, monkeypatch
     ))
 
     assert result.values.download_settings.temporary_download_root.as_posix() == "/staging"
-    assert result.values.download_settings.rss_cache_root.as_posix() == "/rss-cache"
+    assert result.values.download_settings.stream_cache_root.as_posix() == "/stream-cache"
 
 
 def test_settings_service_updates_existing_scalar_without_removing_inline_comment(tmp_path, monkeypatch):

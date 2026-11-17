@@ -24,7 +24,7 @@ from backend.db.models.media_download import EpisodeMediaDownload, MediaDownload
 from backend.services.adoption import sidecar_assets
 from backend.services.custom_indexes import profile_offered_for_collection_type
 from backend.services.download_metadata import build_episode_metadata, select_thumbnail
-from backend.services.download_options import effective_metadata_mode, effective_thumbnail_mode
+from backend.services.download_options import effective_filename_mode, effective_metadata_mode, effective_thumbnail_mode
 from backend.services.local_media_profile_sites import profile_offered_for_site
 from backend.services.sites import collection_site_key
 from backend.services.download_relocation import (
@@ -202,7 +202,7 @@ def target_destination(
         raise ProfileMoveError(f"Cannot tell the extension of {source}")
     destination = resolve_episode_output_path(
         target.output_template, episode=download.media, local_media_profile=target,
-        media_download=download, extension=extension,
+        media_download=download, filename_mode=effective_filename_mode(target), extension=extension,
     )
     return settle_no_ascii_name(download, destination, session=session)
 
@@ -438,7 +438,7 @@ def fill_missing_sidecars(download_id: int) -> int:
         episode = download.media
         kinds = {asset.kind for asset in download.assets}
         wants_nfo = effective_metadata_mode(profile) in (MetadataMode.NFO, MetadataMode.EMBED_AND_NFO) and "nfo" not in kinds
-        nfo = render_nfo(build_episode_metadata(episode, episode.collection)) if wants_nfo else None
+        nfo = render_nfo(build_episode_metadata(episode, episode.collection), kodi_safe=profile.kodi_safe_nfo) if wants_nfo else None
         wants_thumbnail = (
             effective_thumbnail_mode(profile) in (ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR)
             and "thumbnail" not in kinds

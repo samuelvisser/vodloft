@@ -8,7 +8,14 @@ from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import inspect
 from sqlalchemy.orm.attributes import set_committed_value
 
-from backend.services.video_cache import VideoCacheError, get_cached_mp4_path, mark_used, prepare_cached_mp4
+from backend.services.video_cache import (
+    VideoCacheError,
+    get_cached_mp4_path,
+    joins_mp4,
+    mark_used,
+    prepare_cached_mp4,
+    stream_height,
+)
 from .source_stream import episode_stream, proxy_response
 from .source_live import live_audio_response, live_master_response, live_part_response, live_playlist_response
 from .source_tracks import (
@@ -16,33 +23,27 @@ from .source_tracks import (
     join_in_background,
     joined_mp4,
     joined_mp4_response,
-    joins_mp4,
     master_playlist_response,
     note_file_streamed,
-    stream_height,
     track_part_response,
     track_playlist_response,
     track_redirect_response,
 )
-from .service import (
+from .service import render_rss_feed
+from backend.services.stream_episodes import (
     can_stream_from_source,
-    get_source_stream_url,
-    get_episode_for_feed,
     get_local_download_for_episode,
     get_local_hls_master,
-    get_rss_stream_profile_by_token,
+    get_source_stream_url,
+    get_stream_episode,
+    get_stream_profile_by_token,
     remember_live_episode_handoff,
-    render_rss_feed,
 )
 from backend.app import db_session
 from backend.db.core import run_write_transaction
 from backend.types.episode_types import EpisodePublishStatus
-from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, PreferredFormat
-from backend.types.stream_profile_types import (
-    RSS_AUDIO_PRIMARY_OUTPUT_MODES,
-    RSS_HLS_OUTPUT_MODES,
-    RSS_MP4_OUTPUT_MODES,
-)
+from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS
+from backend.types.stream_profile_types import StreamMediaKind, StreamProfileType
 from backend.services.collection_cookies import uses_cookies
 from backend.services.sites import collection_site
 from downloader import hls_asset_root
@@ -91,6 +92,20 @@ def _cached_mp4_head_response(file_path: Path | None, *, filename: str) -> Respo
         # Response adds Content-Length: 0 for the empty body; an uncached file has no known size.
         del response.headers["content-length"]
     return response
+
+
+def _stream_profile(s, profile_type: str, token: str):
+    """The stream profile of this type whose media addresses carry this token."""
+    try:
+        kind = StreamProfileType(profile_type)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Feed not found") from None
+    return get_stream_profile_by_token(s, token, kind)
+
+
+def _require_media(profile, kind: StreamMediaKind, what: str) -> None:
+    if kind not in profile.media_kinds:
+        raise HTTPException(status_code=404, detail=f"{what} is not enabled for this feed")
 
 
 def _episode_ref(episode) -> EpisodeRef:
@@ -171,23 +186,20 @@ def _resolved_download_path(s, download) -> Path | None:
 @router.api_route("/rss/{token}/{collection_slug}.xml", methods=["GET", "HEAD"])
 def rss_feed(token: str, collection_slug: str, request: Request):
     with db_session() as s:
-        profile = get_rss_stream_profile_by_token(s, token)
+        profile = get_stream_profile_by_token(s, token, StreamProfileType.RSS)
         xml = render_rss_feed(s, request, profile)
         _save_feed_state(s)
     return _rss_response(xml, head_only=request.method == "HEAD")
 
 
-@router.api_route("/rss/{token}/episodes/{episode_slug}", methods=["GET", "HEAD"])
-def rss_feed_episode_media(token: str, episode_slug: str, request: Request):
+@router.api_route("/{profile_type}/{token}/episodes/{episode_slug}", methods=["GET", "HEAD"])
+def episode_media(profile_type: str, token: str, episode_slug: str, request: Request):
     """Keep previously published generic media URLs usable after the stable split."""
     with db_session() as s:
-        profile = get_rss_stream_profile_by_token(s, token)
-        get_episode_for_feed(s, profile, episode_slug)
+        profile = _stream_profile(s, profile_type, token)
+        get_stream_episode(s, profile, episode_slug)
         _save_feed_state(s)
-        audio_primary = (
-            profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
-            or profile.video_output_mode in RSS_AUDIO_PRIMARY_OUTPUT_MODES
-        )
+        audio_primary = profile.media_kinds[0] == "audio"
 
     suffix = "audio.m4a" if audio_primary else "video.mp4"
     target = f"{str(request.url).rstrip('/')}/{suffix}"
@@ -198,13 +210,13 @@ def rss_feed_episode_media(token: str, episode_slug: str, request: Request):
 
 
 @router.api_route(
-    "/rss/{token}/episodes/{episode_slug}/audio.m4a",
+    "/{profile_type}/{token}/episodes/{episode_slug}/audio.m4a",
     methods=["GET", "HEAD"],
 )
-def rss_feed_episode_audio(token: str, episode_slug: str, request: Request):
+def episode_audio(profile_type: str, token: str, episode_slug: str, request: Request):
     with db_session() as s:
-        profile = get_rss_stream_profile_by_token(s, token)
-        episode = get_episode_for_feed(s, profile, episode_slug)
+        profile = _stream_profile(s, profile_type, token)
+        episode = get_stream_episode(s, profile, episode_slug)
         _save_feed_state(s)
 
         download = get_local_download_for_episode(
@@ -246,19 +258,15 @@ def rss_feed_episode_audio(token: str, episode_slug: str, request: Request):
 
 
 @router.api_route(
-    "/rss/{token}/episodes/{episode_slug}/video.mp4",
+    "/{profile_type}/{token}/episodes/{episode_slug}/video.mp4",
     methods=["GET", "HEAD"],
 )
-def rss_feed_episode_video_mp4(token: str, episode_slug: str, request: Request):
+def episode_video_mp4(profile_type: str, token: str, episode_slug: str, request: Request):
     with db_session() as s:
-        profile = get_rss_stream_profile_by_token(s, token)
-        if (
-            profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
-            or profile.video_output_mode not in RSS_MP4_OUTPUT_MODES
-        ):
-            raise HTTPException(status_code=404, detail="MP4 video is not enabled for this feed")
+        profile = _stream_profile(s, profile_type, token)
+        _require_media(profile, "mp4", "MP4 video")
 
-        episode = get_episode_for_feed(s, profile, episode_slug)
+        episode = get_stream_episode(s, profile, episode_slug)
         _save_feed_state(s)
         if episode.publish_status == EpisodePublishStatus.LIVE.value:
             raise HTTPException(
@@ -319,19 +327,15 @@ def rss_feed_episode_video_mp4(token: str, episode_slug: str, request: Request):
 
 
 @router.api_route(
-    "/rss/{token}/episodes/{episode_slug}/video.m3u8",
+    "/{profile_type}/{token}/episodes/{episode_slug}/video.m3u8",
     methods=["GET", "HEAD"],
 )
-def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
+def episode_video_hls(profile_type: str, token: str, episode_slug: str, request: Request):
     with db_session() as s:
-        profile = get_rss_stream_profile_by_token(s, token)
-        if (
-            profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
-            or profile.video_output_mode not in RSS_HLS_OUTPUT_MODES
-        ):
-            raise HTTPException(status_code=404, detail="HLS video is not enabled for this feed")
+        profile = _stream_profile(s, profile_type, token)
+        _require_media(profile, "hls", "HLS video")
 
-        episode = get_episode_for_feed(s, profile, episode_slug)
+        episode = get_stream_episode(s, profile, episode_slug)
         _save_feed_state(s)
         download = get_local_download_for_episode(
             s,
@@ -385,20 +389,16 @@ def rss_feed_episode_video_hls(token: str, episode_slug: str, request: Request):
 
 
 @router.api_route(
-    "/rss/{token}/episodes/{episode_slug}/live/{name}",
+    "/{profile_type}/{token}/episodes/{episode_slug}/live/{name}",
     methods=["GET", "HEAD"],
 )
-def rss_feed_episode_live(token: str, episode_slug: str, name: str, request: Request, u: str | None = None, s: str | None = None):
+def episode_live(profile_type: str, token: str, episode_slug: str, name: str, request: Request, u: str | None = None, s: str | None = None):
     """One of the live playlists of an episode of a Site whose episodes are listed, or a part of it,
     passed on for a feed that proxies its Site's video."""
     with db_session() as session:
-        profile = get_rss_stream_profile_by_token(session, token)
-        if (
-            profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
-            or profile.video_output_mode not in RSS_HLS_OUTPUT_MODES
-        ):
-            raise HTTPException(status_code=404, detail="HLS video is not enabled for this feed")
-        episode = get_episode_for_feed(session, profile, episode_slug)
+        profile = _stream_profile(session, profile_type, token)
+        _require_media(profile, "hls", "HLS video")
+        episode = get_stream_episode(session, profile, episode_slug)
         _save_feed_state(session)
         if not can_stream_from_source(profile, episode):
             raise _not_streamed(profile, "live video")
@@ -418,21 +418,17 @@ def rss_feed_episode_live(token: str, episode_slug: str, name: str, request: Req
 
 
 @router.api_route(
-    "/rss/{token}/episodes/{episode_slug}/tracks/{name}",
+    "/{profile_type}/{token}/episodes/{episode_slug}/tracks/{name}",
     methods=["GET", "HEAD"],
 )
-def rss_feed_episode_track(token: str, episode_slug: str, name: str, request: Request):
+def episode_track(profile_type: str, token: str, episode_slug: str, name: str, request: Request):
     """A playlist of one of the video or audio tracks of a Site's HLS stream that VODLoft writes, or
     that track's bytes: passed on for a feed that proxies its Site's video, and otherwise a redirect
     to the Site with a fresh link."""
     with db_session() as s:
-        profile = get_rss_stream_profile_by_token(s, token)
-        if (
-            profile.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value
-            or profile.video_output_mode not in RSS_HLS_OUTPUT_MODES
-        ):
-            raise HTTPException(status_code=404, detail="HLS video is not enabled for this feed")
-        episode = get_episode_for_feed(s, profile, episode_slug)
+        profile = _stream_profile(s, profile_type, token)
+        _require_media(profile, "hls", "HLS video")
+        episode = get_stream_episode(s, profile, episode_slug)
         _save_feed_state(s)
         if not can_stream_from_source(profile, episode):
             raise _not_streamed(profile, "HLS video")
@@ -452,20 +448,20 @@ def rss_feed_episode_track(token: str, episode_slug: str, name: str, request: Re
 
 
 @router.api_route(
-    "/rss/{token}/episodes/{episode_slug}/hls/{asset_path:path}",
+    "/{profile_type}/{token}/episodes/{episode_slug}/hls/{asset_path:path}",
     methods=["GET", "HEAD"],
 )
-def rss_feed_episode_hls_asset(
+def episode_hls_asset(
+    profile_type: str,
     token: str,
     episode_slug: str,
     asset_path: str,
 ):
     with db_session() as s:
-        profile = get_rss_stream_profile_by_token(s, token)
-        if profile.video_output_mode not in RSS_HLS_OUTPUT_MODES:
-            raise HTTPException(status_code=404, detail="HLS video is not enabled for this feed")
+        profile = _stream_profile(s, profile_type, token)
+        _require_media(profile, "hls", "HLS video")
 
-        episode = get_episode_for_feed(s, profile, episode_slug)
+        episode = get_stream_episode(s, profile, episode_slug)
         _save_feed_state(s)
         master_path = get_local_hls_master(s, profile, episode)
         if master_path is None:

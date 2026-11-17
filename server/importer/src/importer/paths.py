@@ -32,21 +32,25 @@ def map_path(path: str | None, path_map: PathMap = DEFAULT_PATH_MAP) -> str | No
     return str(PurePosixPath(target) / relative)
 
 
-def path_map_candidates(samples: Sequence[str], folders: Iterable[str]) -> list[PathMap]:
+def path_map_candidates(
+    samples: Sequence[str], folders: Iterable[str], root: str = OTHER_DOWNLOADS,
+) -> list[PathMap]:
     """The ways the other program's folder can map onto VODLoft's, given sample paths and the folders VODLoft sees.
 
-    the other program's /downloads is VODLoft's /downloads or one of its folders; or
+    the other program's ``root`` is VODLoft's /downloads or one of its folders; or
     VODLoft's /downloads is one of the other program's folders.
     """
-    candidates: list[PathMap] = [DEFAULT_PATH_MAP]
-    candidates += [(OTHER_DOWNLOADS, folder.rstrip("/")) for folder in sorted(set(folders))
+    root = root.rstrip("/") or "/"
+    candidates: list[PathMap] = [(root, "/downloads")]
+    candidates += [(root, folder.rstrip("/")) for folder in sorted(set(folders))
                    if folder.startswith("/downloads/")]
+    root_parts = PurePosixPath(root).parts
     inner: set[str] = set()
     for sample in samples:
         parts = PurePosixPath(sample).parts
         for depth in (1, 2):
-            if len(parts) > 2 + depth and parts[:2] == ("/", "downloads"):
-                inner.add(str(PurePosixPath(*parts[:2 + depth])))
+            if len(parts) > len(root_parts) + depth and parts[:len(root_parts)] == root_parts:
+                inner.add(str(PurePosixPath(*parts[:len(root_parts) + depth])))
     candidates += [(folder, "/downloads") for folder in sorted(inner)]
     return candidates
 
@@ -61,3 +65,23 @@ def detect_path_map(
         if found > best_found:
             best, best_found = candidate, found
     return best, max(best_found, 0)
+
+
+def template_root(template: str, path_map: PathMap, root: str = OTHER_DOWNLOADS) -> tuple[str, str, str | None]:
+    """A template written from the other program's ``root``, relative to the VODLoft folder for it, and that folder.
+
+    The third value says why, when the template starts outside the mapped folder and so starts in /downloads/.
+    """
+    source, target = path_map
+    if source == root:
+        return template, target.rstrip("/") + "/", None
+    try:
+        inner = "/" + str(PurePosixPath(source).relative_to(root)) + "/"
+    except ValueError:
+        inner = None
+    stripped = "/" + template.lstrip("/")
+    if inner is not None and stripped.startswith(inner):
+        return stripped[len(inner) - 1:], target.rstrip("/") + "/", None
+    return template, "/downloads/", (
+        f"The template starts outside {source}, which VODLoft can't see; new downloads go under /downloads/ instead"
+    )

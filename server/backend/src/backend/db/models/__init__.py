@@ -40,4 +40,4 @@ from .media_item import Movie
 from .media_item import MovieExtraSource
 from .media_item import MovieExtra
 from .media_item import Video
-from .stream_profile import RssStreamProfile
+from .stream_profile import RssStreamProfile, IptvStreamProfile, WebdavStreamProfile

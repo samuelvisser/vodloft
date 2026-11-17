@@ -510,9 +510,10 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
                                 <div>
                                     <label htmlFor={`import-merge-${importer.key}`}>Attempt to merge custom output template overwrites</label>
                                     <div className="settings-field__help">
-                                        When collections overwrite the Pinchflat Media Profile output, attempt to use
-                                        custom collection metadata fields to merge the output template such that
-                                        the collections can still share the same profile as they did in Pinchflat.
+                                        When collections overwrite the output template of their {importer.name} profile,
+                                        attempt to use custom collection metadata fields to merge the output template
+                                        such that the collections can still share the same profile as they did in
+                                        {' '}{importer.name}.
                                     </div>
                                 </div>
                                 <Switch
@@ -867,7 +868,7 @@ function ProfilePreview({importerName, profile, collections, template, onTemplat
                     }}>Edit</button>
                 </div>
             )}
-            <PathProof proof={proof}/>
+            <PathProof proof={proof} importerName={importerName}/>
             {profile.warnings.length > 0 && (
                 <ul className="import-profile__warnings">
                     {profile.warnings.map((warning, index) => <li key={index}>{warning.message}</li>)}
@@ -917,7 +918,7 @@ function ReportLine({line}: {line: string}) {
 
 const FEW_DIFFERENCES = 3
 
-function PathProof({proof}: {proof: ImportProfile['pathProof']}) {
+function PathProof({proof, importerName}: {proof: ImportProfile['pathProof'], importerName: string}) {
     const [expanded, setExpanded] = useState(false)
     if (proof.error) return <p className="import-proof is-different" role="alert">{proof.error}</p>
     if (proof.total === 0) return <p className="import-proof">No files to compare yet.</p>
@@ -946,7 +947,7 @@ function PathProof({proof}: {proof: ImportProfile['pathProof']}) {
                     <PathChangeList
                         changes={(expanded ? proof.differences : proof.differences.slice(0, FEW_DIFFERENCES))
                             .map((item) => ({key: item.path, from: item.path, to: item.rendered}))}
-                        fromLabel="Pinchflat"
+                        fromLabel={importerName}
                         toLabel="VODLoft"
                         endless={expanded}
                     />

@@ -102,6 +102,21 @@ test('post-publication wait within 12 hours shows only its delay time inline',()
         Date.now=originalNow
     }
 })
+test('a site that throttled says so and when it tries again',()=>{
+    const originalNow=Date.now
+    const now=Date.UTC(2026,9,7,18,0)
+    Date.now=()=>now
+    try {
+        const until=(now+60*60*1000)/1000
+        const message='YouTube held back its better resolutions, so its downloads wait a while'
+        const view=presentDownloadProgress(undefined,operation({status:'WAITING',progressMeta:{wait_state:{reason:'site_throttled',message,until}}}))
+        assert.equal(view.mode,'waiting');assert.match(view.label,/^Waiting until /)
+        const deadline=view.label.replace(/^Waiting until /,'').replace(/\.\.\.$/,'')
+        assert.equal(view.detail,`${message}. Trying again at ${deadline}.`)
+    } finally {
+        Date.now=originalNow
+    }
+})
 test('post-publication wait at least 12 hours away includes the date',()=>{
     const originalNow=Date.now
     const now=Date.UTC(2026,9,7,18,0)

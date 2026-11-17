@@ -24,6 +24,7 @@ from backend.types.local_media_profile_types import (
     AudioFormat,
     CodecFallback,
     CollectionLocalMediaProfileScope,
+    LocalMediaProfileFilenameMode,
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
     LocalMediaProfileSubtitleMode,
@@ -99,6 +100,12 @@ class LocalMediaProfileInput(InputModel):
     download_mode: LocalMediaProfileStorageMode = LocalMediaProfileStorageMode.SYSTEM
     thumbnail_mode: LocalMediaProfileThumbnailMode = LocalMediaProfileThumbnailMode.SYSTEM
     metadata_mode: LocalMediaProfileMetadataMode = LocalMediaProfileMetadataMode.SYSTEM
+    kodi_safe_nfo: bool = False
+    """NFO files replace the characters Kodi cannot show, such as emoji."""
+    filename_restriction_mode: LocalMediaProfileFilenameMode = LocalMediaProfileFilenameMode.SYSTEM
+    """How file and folder names are made safe; System follows Settings."""
+    file_date_from_publish_date: bool = False
+    """Downloaded files get the date the media was published."""
     subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
     subtitle_languages: list[str] = Field(default_factory=lambda: ["en"], max_length=20)
     subtitle_language_mode: SubtitleLanguageMode = SubtitleLanguageMode.LISTED
@@ -208,13 +215,16 @@ class LocalMediaProfileInput(InputModel):
         """Choices an update leaves as they are when it does not send them, rather than resetting them to defaults."""
         kept = _KEPT_WHEN_UNSET - self.model_fields_set
         # Without Sites or the settings only some Sites show, an update keeps the profile's own.
-        return kept | {name for name in ("site_keys", *_SITE_CHOICES) if getattr(self, name) is None}
+        return kept | {
+            name for name in ("site_keys", *_SITE_CHOICES) if getattr(self, name) is None
+        }
 
 
 _SITE_CHOICES = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments")
 _KEPT_WHEN_UNSET = {
     "site_keys", "include_upcoming_sites", *_SITE_CHOICES, "subtitle_mode", "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs",
     "codec_fallback", "container", "audio_codec", "audio_format", "audio_language",
+    "kodi_safe_nfo", "file_date_from_publish_date", "show_nfo",
 }
 
 class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
@@ -223,6 +233,8 @@ class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
     type: Literal["collection"] = LocalMediaProfileType.COLLECTION.value
     collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH
     download_collection_assets: bool | None = None
+    show_nfo: bool = False
+    """Write tvshow.nfo in the collection's folder and season.nfo in each season's folder."""
     indexing_values: list[IndexingValueDefinition] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")

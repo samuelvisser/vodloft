@@ -131,6 +131,43 @@ actions**, added to the default rules, if you choose to bring it: like a sign-in
 You can run the import again. Anything you changed in VODLoft since the last run is kept, and settings a newer
 VODLoft can map, which it reported as unsupported before, are brought over.
 
+## Importing from ytdl-sub
+
+Administrators can import a ytdl-sub setup from **Settings → Import**. Upload your `subscriptions.yaml`, and
+`config.yaml` when you made presets of your own there. `cookies.txt` is optional and only brought over if you choose
+so. ytdl-sub keeps no database, so VODLoft reads your subscriptions the way ytdl-sub does: every preset a
+subscription uses, then `__preset__`, then the subscription's own values. ytdl-sub's own presets, such as
+*Jellyfin TV Show by Date* or *Max 1080p*, are known by name.
+
+Each subscription becomes a collection, and each combination of presets becomes a Local Media Profile, named after
+it, with the output template ytdl-sub would use. Subscriptions that use the same presets share one profile; one that
+changes the template with values of its own gets a profile of its own. The preview groups the collections by preset
+and shows each template, so you can check them before importing.
+
+ytdl-sub keeps a download archive next to the videos of each subscription. VODLoft finds your files through it, the
+same way as for Pinchflat: the preview shows which folder ytdl-sub saved to and where VODLoft sees it, and how many
+of the sampled files it found. When the TV show presets put the episode number in the file name, VODLoft keeps those
+numbers.
+
+What comes along:
+
+- **Quality**: *Max 1080p*, *Max 720p* and the other resolution presets, and the audio presets, become the Local
+  Media Profile's quality.
+- **Subtitles**, **SponsorBlock**, **NFO files** and **thumbnails** become the matching Local Media Profile settings.
+- **Only Recent**, `date_range` and `keep_max_files` become the Download Profile's date and "latest N" filters;
+  **Filter Keywords** and **Filter Duration** become **Only download** and **Skip** filters.
+- The **genre** and **content rating** you give with `= Documentaries` and `= TV-Y` become the collection's own genre
+  and content rating, which VODLoft writes into its NFO files.
+- ytdl-sub's file names use the same characters as VODLoft's Windows-compatible names, so the import sets that.
+
+What does not come along is listed in the report: scripts that compute values (VODLoft's templates are Jinja, see
+[[Local-Media-Profiles]]), throttle settings (VODLoft has a guard of its own, see
+[[Downloads-and-File-Integrity#when-youtube-only-offers-360p]]), chunked downloads, the music presets, and yt-dlp
+options VODLoft has no setting for. A subscription with more than one link gets the first one; add the others as
+collections of their own.
+
+Stop ytdl-sub's cron job before you turn on the imported Download Profiles, or both will download the same videos.
+
 ## Importing from WireLoft
 
 VODLoft grew out of WireLoft, and imports a WireLoft installation of any release from 1.0 on. Start VODLoft with

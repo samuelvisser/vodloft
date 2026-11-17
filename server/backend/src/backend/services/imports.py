@@ -35,6 +35,7 @@ from backend.services.sites import CollectionAlreadyAddedError, collection_site
 
 import importer.pinchflat  # noqa: F401  (registers the importer)
 import importer.wireloft  # noqa: F401  (registers the importer)
+import importer.ytdl_sub  # noqa: F401  (registers the importer)
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
 from importer.contract import CollectionPlan, FilePlan, Importer, ImportPlan, ImportWarning, ProfilePlan, SettingPlan
@@ -81,14 +82,14 @@ _PROFILE_FIELDS = (
     "output_template", "preferred_format", "subtitle_mode", "thumbnail_mode", "metadata_mode",
     "collection_scope", "download_collection_assets", "indexing_values",
     "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs", "container", "audio_codec",
-    "audio_language",
+    "audio_language", "audio_format", "show_nfo", "kodi_safe_nfo",
 )
 _DOWNLOAD_PROFILE_FIELDS = ("delete_older_episodes",)
 _SITE_CHOICE_FIELDS = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments")
 """What the other program had per Download Profile, which VODLoft keeps on the Local Media Profile per Site."""
 _OPTIONAL_DOWNLOAD_PROFILE_FIELDS = ("upgrade_check", "upgrade_after_days", "upgrade_repeat")
 """Download Profile fields an importer only sends when the other program had the setting."""
-_COLLECTION_FIELDS = ("cookies_mode", "check_frequency", "check_cron")
+_COLLECTION_FIELDS = ("cookies_mode", "check_frequency", "check_cron", "genre", "content_rating")
 _DEFAULT_SETTINGS = frozenset({
     "downloads.filename_restriction_mode", "ytdlp.youtube_api_key",
     "settings.download_settings.speed_limit_mode", "settings.download_settings.speed_limit_mbps",
@@ -255,11 +256,12 @@ def load_plan(importer: Importer, options: ImportOptions) -> LoadedPlan:
         if record.kind == "download" and record.values.get("original_path")
         and record.values.get("artifact_status") == MediaDownloadArtifactStatus.AVAILABLE.value
     ]
-    samples = _samples(original)
+    samples = _samples([*original, *plan.probes])
     if options.path_map is not None:
         chosen = options.path_map
     else:
-        chosen, _found = detect_path_map(samples, _exists, path_map_candidates(samples, _vodloft_folders()))
+        candidates = path_map_candidates(samples, _vodloft_folders(), root=plan.download_folder)
+        chosen, _found = detect_path_map(samples, _exists, candidates)
     if chosen != DEFAULT_PATH_MAP:
         with work_location(importer, chosen) as location:
             plan = importer.read(location)
@@ -370,6 +372,9 @@ def _profile_values(profile: CollectionLocalMediaProfile) -> dict[str, object]:
         "container": profile.container,
         "audio_codec": profile.audio_codec,
         "audio_language": profile.audio_language,
+        "audio_format": profile.audio_format,
+        "show_nfo": profile.show_nfo,
+        "kodi_safe_nfo": profile.kodi_safe_nfo,
         "indexing_values": [
             {"key": item.key, "name": item.name, "keep_numbers": item.keep_numbers}
             for item in get_indexing_value_definitions(profile)
@@ -902,7 +907,9 @@ def _unique_name(session: Session, name: str) -> str:
     return candidate
 
 
-def _upsert_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report) -> CollectionLocalMediaProfile | None:
+def _upsert_profile(
+    session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report, filename_mode: FilenameRestrictionMode,
+) -> CollectionLocalMediaProfile | None:
     if plan.output_template is None:
         report.add("failed", plan.name, "The output template could not be converted; its sources were not imported",
                    warnings=[_warning(warning) for warning in plan.warnings])
@@ -923,6 +930,8 @@ def _upsert_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, 
             profile = create_collection_local_media_profile(session, NewCollectionLocalMediaProfile.model_validate({
                 **{name: value for name, value in wanted.items() if value is not None},
                 "name": _unique_name(session, plan.name),
+                # The files were named in the other program's mode, as the path proof showed them.
+                "filename_restriction_mode": filename_mode,
             }))
             _write, hashes, _changes = _merge_fields(_profile_values(profile), wanted, None, unsupported)
             _remember(session, links, run.importer, "profile", plan.external_id, profile.id, hashes, unsupported, run.id)
@@ -1225,7 +1234,7 @@ def _apply_loaded_plan(
     for external_id in sorted(needed, key=lambda key: (key.count(":"), key)):
         if external_id in profile_plans:
             profile_plan = profile_plans[external_id]
-            profiles[external_id] = _upsert_profile(session, profile_plan, links, run, report)
+            profiles[external_id] = _upsert_profile(session, profile_plan, links, run, report, _filename_mode(plan))
             if profile_plan.merged_from:
                 report.add("merged", profile_plan.name, profile_plan.report[-1])
             elif profile_plan.kept_separate:
@@ -1319,7 +1328,7 @@ def _apply_record_plan(session: Session, plan: ImportPlan, options: ImportOption
         if profile_plan.settings.get("type") == "movie":
             profiles[profile_plan.external_id] = _upsert_movie_profile(session, profile_plan, links, run, report)
         else:
-            profiles[profile_plan.external_id] = _upsert_profile(session, profile_plan, links, run, report)
+            profiles[profile_plan.external_id] = _upsert_profile(session, profile_plan, links, run, report, _filename_mode(plan))
     session.flush()
     chosen = set(options.collections) if options.collections is not None else None
     skip = {record.external_id for record in plan.records

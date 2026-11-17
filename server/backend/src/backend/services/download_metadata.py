@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -47,8 +47,31 @@ def build_episode_metadata(episode: Episode, collection) -> MediaServerMetadata:
         duration_seconds=episode.duration,
         authors=_strings((collection.author_name,)),
         studios=_studios(episode.source_key),
+        genres=_strings((collection.genre,)),
+        content_rating=collection.content_rating,
         media_type="episode",
     )
+
+
+def build_show_metadata(collection) -> MediaServerMetadata:
+    """What tvshow.nfo says about a Collection, so a media server shows it without looking it up."""
+    return MediaServerMetadata(
+        kind="tvshow",
+        title=collection.title,
+        description=collection.description,
+        unique_id=collection.site_ref or collection.slug,
+        unique_id_type=collection.source_key,
+        source_url=collection.sharing_url,
+        authors=_strings((collection.author_name,)),
+        studios=_studios(collection.source_key),
+        genres=_strings((collection.genre,)),
+        content_rating=collection.content_rating,
+    )
+
+
+def build_season_metadata(season) -> MediaServerMetadata:
+    """What season.nfo says about a season: its name and number."""
+    return MediaServerMetadata(kind="season", title=season.name, season_number=season.season_number)
 
 
 def build_movie_metadata(movie, media) -> MediaServerMetadata:
@@ -101,6 +124,18 @@ def build_video_metadata(video, *, source_name: str) -> MediaServerMetadata:
         studios=_strings((video.author_name, source_name)),
         media_type="video",
     )
+
+
+def publish_time(media) -> datetime | None:
+    """When an episode, movie, extra or video was published, as precisely as VODLoft knows it."""
+    for name in ("published_date", "went_live_date", "release_date", "published_at"):
+        value = getattr(media, name, None)
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, date):
+            # Only the day is known: midday stays on that day in every time zone a player may show.
+            return datetime.combine(value, time(12), tzinfo=timezone.utc)
+    return None
 
 
 def _as_date(value) -> date | None:

@@ -2,6 +2,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query'
 import {z} from 'zod'
 import {
     DownloadModeSchema,
+    FilenameRestrictionModeSchema,
     MetadataModeSchema,
     ThumbnailModeSchema,
     SettingsFieldPath,
@@ -88,6 +89,7 @@ export const LibraryDefaultsSchema = z.object({
     downloadMode: DownloadModeSchema,
     thumbnailMode: ThumbnailModeSchema,
     metadataMode: MetadataModeSchema,
+    filenameRestrictionMode: FilenameRestrictionModeSchema,
     noUsableMediaDeleteAfterMinutes: z.number(),
 })
 export type LibraryDefaults = z.infer<typeof LibraryDefaultsSchema>

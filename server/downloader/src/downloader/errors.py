@@ -30,6 +30,15 @@ class FileTooLargeError(DownloadError):
     """The file is larger than the caller allows, so the download stopped."""
 
 
+class ThrottledError(DownloadError):
+    """The site served only a low resolution while it held back better versions, as YouTube does when it
+    throttles a downloader. Trying again later usually gets the resolution that was asked for."""
+
+    def __init__(self, message: str, height: int):
+        super().__init__(message)
+        self.height = height
+
+
 class DownloadCanceled(DownloadError):
     """The download was canceled through the should_cancel callback."""
 

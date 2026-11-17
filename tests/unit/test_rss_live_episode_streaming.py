@@ -219,20 +219,20 @@ def _available_file(session: Session, episode, local_profile, download_profile, 
 
 
 def test_live_hls_with_dailywire_enabled_is_included(db_session):
-    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.services.stream_episodes import get_stream_items
 
     collection = _collection(db_session)
     season = _season(db_session, collection)
     episode = _episode(db_session, collection, season)
     profile = _rss_profile(db_session, collection, use_source_stream=True)
 
-    assert get_feed_items(db_session, profile) == [(episode, None)]
+    assert get_stream_items(db_session, profile) == [(episode, None)]
 
 
 def test_live_hls_without_normal_dailywire_requires_matching_hls_download_profile(
         db_session,
 ):
-    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.services.stream_episodes import get_stream_items
 
     collection = _collection(db_session)
     season = _season(db_session, collection)
@@ -246,7 +246,7 @@ def test_live_hls_without_normal_dailywire_requires_matching_hls_download_profil
     )
     _download_profile(db_session, collection, normal_video)
 
-    assert get_feed_items(db_session, profile) == []
+    assert get_stream_items(db_session, profile) == []
 
     hls = _local_profile(
         db_session,
@@ -256,7 +256,7 @@ def test_live_hls_without_normal_dailywire_requires_matching_hls_download_profil
     _download_profile(db_session, collection, hls)
 
     # audio_hls also advertises an audio enclosure, which nothing downloads yet.
-    assert get_feed_items(db_session, profile) == []
+    assert get_stream_items(db_session, profile) == []
 
     audio = _local_profile(
         db_session,
@@ -265,7 +265,7 @@ def test_live_hls_without_normal_dailywire_requires_matching_hls_download_profil
     )
     _download_profile(db_session, collection, audio)
 
-    assert get_feed_items(db_session, profile) == [(episode, None)]
+    assert get_stream_items(db_session, profile) == [(episode, None)]
 
 
 @pytest.mark.parametrize(
@@ -277,7 +277,7 @@ def test_download_only_live_episode_needs_every_enclosure_to_download(
         mode,
         partner_format,
 ):
-    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.services.stream_episodes import get_stream_items
 
     collection = _collection(db_session)
     season = _season(db_session, collection)
@@ -289,16 +289,16 @@ def test_download_only_live_episode_needs_every_enclosure_to_download(
 
     # Only half of the feed's media would ever be downloaded, so the episode
     # could never stay in a download-only feed once it is published.
-    assert get_feed_items(db_session, profile) == []
+    assert get_stream_items(db_session, profile) == []
 
     partner = _local_profile(db_session, slug="partner", preferred_format=partner_format)
     _download_profile(db_session, collection, partner)
 
-    assert get_feed_items(db_session, profile) == [(episode, None)]
+    assert get_stream_items(db_session, profile) == [(episode, None)]
 
 
 def test_live_toggle_has_no_effect_for_non_hls_output_mode(db_session):
-    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.services.stream_episodes import get_stream_items
 
     collection = _collection(db_session)
     season = _season(db_session, collection)
@@ -311,16 +311,16 @@ def test_live_toggle_has_no_effect_for_non_hls_output_mode(db_session):
         live=True,
     )
 
-    assert get_feed_items(db_session, profile) == []
+    assert get_stream_items(db_session, profile) == []
 
 
 def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
         db_session,
         tmp_path,
 ):
-    from backend.api.endpoints.feeds.service import (
+    from backend.services.stream_episodes import (
         can_stream_from_source,
-        get_feed_items,
+        get_stream_items,
         remember_live_episode_handoff,
     )
 
@@ -348,7 +348,7 @@ def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
     episode.publish_status = "source_processing"
     db_session.flush()
 
-    assert get_feed_items(db_session, profile) == [(episode, None)]
+    assert get_stream_items(db_session, profile) == [(episode, None)]
     assert can_stream_from_source(profile, episode) is True
     assert profile.live_episode_handoff_ids == [episode.id]
 
@@ -367,7 +367,7 @@ def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
     audio_path.write_bytes(b"audio")
     audio = _available_file(db_session, episode, audio_profile, audio_download_profile, audio_path)
 
-    assert get_feed_items(db_session, profile) == [(episode, audio)]
+    assert get_stream_items(db_session, profile) == [(episode, audio)]
     assert profile.live_episode_handoff_ids == []
     assert can_stream_from_source(profile, episode) is False
     assert local.artifact_status == "available"
@@ -376,7 +376,7 @@ def test_live_handoff_keeps_same_remote_hls_url_usable_until_final_hls_exists(
 def test_live_handoff_is_not_dropped_just_because_episode_leaves_rss_window(
         db_session,
 ):
-    from backend.api.endpoints.feeds.service import get_feed_items, remember_live_episode_handoff
+    from backend.services.stream_episodes import get_stream_items, remember_live_episode_handoff
 
     collection = _collection(db_session)
     season = _season(db_session, collection)
@@ -409,7 +409,7 @@ def test_live_handoff_is_not_dropped_just_because_episode_leaves_rss_window(
     newer.went_live_date = datetime.now(timezone.utc)
     db_session.flush()
 
-    get_feed_items(db_session, profile)
+    get_stream_items(db_session, profile)
 
     assert live_episode.id in profile.live_episode_handoff_ids
 
@@ -425,7 +425,7 @@ def test_live_mp4_endpoint_never_waits_for_full_mp4_preparation(monkeypatch):
 
     profile = SimpleNamespace(
         preferred_format="format_1080p",
-        video_output_mode="mp4_hls",
+        media_kinds=("mp4", "hls"),
     )
     episode = SimpleNamespace(
         publish_status="live",
@@ -446,12 +446,12 @@ def test_live_mp4_endpoint_never_waits_for_full_mp4_preparation(monkeypatch):
     monkeypatch.setattr(feed_router, "db_session", fake_db_session)
     monkeypatch.setattr(
         feed_router,
-        "get_rss_stream_profile_by_token",
-        lambda _s, _token: profile,
+        "_stream_profile",
+        lambda _s, _profile_type, _token: profile,
     )
     monkeypatch.setattr(
         feed_router,
-        "get_episode_for_feed",
+        "get_stream_episode",
         lambda _s, _profile, _slug: episode,
     )
     monkeypatch.setattr(
@@ -463,7 +463,8 @@ def test_live_mp4_endpoint_never_waits_for_full_mp4_preparation(monkeypatch):
     )
 
     with pytest.raises(HTTPException, match="HLS enclosure only") as exc:
-        feed_router.rss_feed_episode_video_mp4(
+        feed_router.episode_video_mp4(
+            "rss",
             "token",
             "episode-1",
             SimpleNamespace(method="GET"),

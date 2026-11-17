@@ -28,6 +28,8 @@ from config import get_settings
 from importer.contract import Importer, ImportLocation
 from importer.uploads import UploadFile, normalise_upload_path
 
+from backend.services.adoption import AdoptionError, real_path
+
 CHUNK_LIMIT = 8 * 1024 * 1024
 FILE_LIMIT = 64 * 1024 * 1024 * 1024
 ARCHIVE_SUFFIXES = (".zip", ".tar.gz", ".tgz", ".tar")
@@ -298,6 +300,15 @@ def remove_secrets(importer: Importer) -> None:
     _write_json(directory / "upload.json", {**upload, "files": kept})
 
 
+def _download_file(virtual: str) -> Path | None:
+    """The file at a ``/downloads/…`` path, for an importer that reads files next to the downloads."""
+    try:
+        path = real_path(virtual)
+    except (AdoptionError, OSError):
+        return None
+    return path if path.is_file() else None
+
+
 @contextmanager
 def work_location(importer: Importer, path_map: tuple[str, str]) -> Iterator[ImportLocation]:
     """A private copy of the uploaded database for the importer to open, removed afterwards."""
@@ -315,6 +326,6 @@ def work_location(importer: Importer, path_map: tuple[str, str]) -> Iterator[Imp
             shutil.copyfile(wal, work / wal.name)
         extras = upload / PurePosixPath(importer.extras) if importer.extras else None
         yield ImportLocation(database=copy, extras=extras if extras is not None and extras.is_dir() else None,
-                             path_map=path_map, folder=upload)
+                             path_map=path_map, folder=upload, download_file=_download_file)
     finally:
         shutil.rmtree(work, ignore_errors=True)

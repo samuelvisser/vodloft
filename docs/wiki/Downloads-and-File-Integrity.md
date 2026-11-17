@@ -67,6 +67,17 @@ The concurrency limit applies to primary-media transfers. A completed transfer r
 
 Higher concurrency is not always faster. Your internet connection, Daily Wire, CPU, FFmpeg work, and storage can all become bottlenecks.
 
+### When YouTube only offers 360p
+
+Sometimes YouTube *throttles* a downloader: it then serves only 360p and holds back the better versions a video has.
+VODLoft notices this and does not keep the 360p file. Instead, the download waits an hour and tries again, and the
+download queue says so: **Waiting until 15:40…**. The other automatic downloads from that Site wait too, because
+they would get the same 360p. A download you start yourself from the Download button goes right away.
+
+After three tries VODLoft keeps the best file it got. When the upgrade check is on for the Download Profile, it
+downloads the better version later (see [[Download-Profiles#upgrade-check]]). A video that really only exists in
+360p is downloaded at once: VODLoft only waits when YouTube says it held better versions back.
+
 ## Direct and temporary download modes
 
 VODLoft supports two ways of handling incomplete downloads.

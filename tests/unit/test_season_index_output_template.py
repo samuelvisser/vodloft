@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from config.settings.submodels import FilenameRestrictionMode
 
 
 def test_collection_output_template_supports_season_index(tmp_path, monkeypatch):
@@ -60,7 +61,7 @@ def test_collection_output_template_supports_season_index(tmp_path, monkeypatch)
         "/downloads/Video/TV Shows/{{ collection_title }}/Season {{ season_index }}/"
         "{{ collection_title }} - {{ date }} - {{ title }}.ext",
         episode=episode,
-        extension="mp4",
+        extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS,
     )
 
     assert output_path == (

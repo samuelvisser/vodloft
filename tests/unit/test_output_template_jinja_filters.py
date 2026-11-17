@@ -105,7 +105,7 @@ def test_preview_returns_invalid_regex_as_output_error() -> None:
         type="collection",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ title | regex_search('(') }}.ext",
-        values={"title": "Example"},
+        values={"title": "Example"},filename_restriction_mode="windows",
     )
 
     engine = create_engine("sqlite+pysqlite:///:memory:")

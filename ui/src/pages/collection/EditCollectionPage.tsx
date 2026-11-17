@@ -44,6 +44,8 @@ type FormState = CollectionFormValue & {
   checkCron: string
   cookiesMode: CookiesMode
   episodeOrder: EpisodeOrderValue
+  genre: string
+  contentRating: string
 }
 
 export default function EditCollectionPage() {
@@ -64,6 +66,8 @@ export default function EditCollectionPage() {
     checkCron: '0 */6 * * *',
     cookiesMode: 'automatic',
     episodeOrder: 'newest_first',
+    genre: '',
+    contentRating: '',
     ...defaultCollectionFormValue,
   }))
 
@@ -81,6 +85,8 @@ export default function EditCollectionPage() {
       checkCron: collection.checkCron || prev.checkCron,
       cookiesMode: collection.cookiesMode,
       episodeOrder: collection.episodeOrder,
+      genre: collection.genre ?? '',
+      contentRating: collection.contentRating ?? '',
     }))
   }, [id, collection])
 
@@ -116,6 +122,8 @@ export default function EditCollectionPage() {
       thumbnailSquarePath: collection.thumbnailSquarePath ?? null,
       ...(usesYtdlp ? {ytdlpOptions: form.ytdlpOptions} : {}),
       episodeOrder: form.episodeOrder,
+      genre: form.genre,
+      contentRating: form.contentRating,
       checkFrequency: form.checkFrequency,
       ...(form.checkFrequency === 'own' ? {checkCron: form.checkCron} : {}),
       ...(optionalCookies ? {cookiesMode: form.cookiesMode} : {}),
@@ -278,6 +286,38 @@ export default function EditCollectionPage() {
           value={form}
           onChange={(v: CollectionFormValue) => setForm((prev) => ({ ...prev, ...v }))}
         />
+
+        <div className="form-row">
+          <label htmlFor="collection-genre">Genre</label>
+          <input
+            id="collection-genre"
+            className="input"
+            type="text"
+            placeholder="Documentaries"
+            value={form.genre}
+            onChange={(e) => setForm((prev) => ({...prev, genre: e.target.value}))}
+            aria-describedby="collection-genre-help"
+          />
+          <div className="help" id="collection-genre-help">
+            Written into the NFO files that a Local Media Profile saves, so Jellyfin, Emby and Kodi show it.
+          </div>
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="collection-content-rating">Content rating</label>
+          <input
+            id="collection-content-rating"
+            className="input"
+            type="text"
+            placeholder="TV-14"
+            value={form.contentRating}
+            onChange={(e) => setForm((prev) => ({...prev, contentRating: e.target.value}))}
+            aria-describedby="collection-content-rating-help"
+          />
+          <div className="help" id="collection-content-rating-help">
+            The rating media servers show for the show and its episodes, such as TV-14 or TV-Y.
+          </div>
+        </div>
 
         <div className="form-row">
           <label htmlFor="collection-type">Collection type</label>

@@ -12,6 +12,7 @@ from backend.types.local_media_profile_types import (
     AudioCodec,
     AudioFormat,
     CodecFallback,
+    LocalMediaProfileFilenameMode,
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
     LocalMediaProfileSubtitleMode,
@@ -71,6 +72,19 @@ class LocalMediaProfileBase(Base):
         default=LocalMediaProfileMetadataMode.SYSTEM.value,
         server_default=LocalMediaProfileMetadataMode.SYSTEM.value,
         nullable=False,
+    )
+    kodi_safe_nfo: Mapped[bool] = mapped_column(
+        default=False, server_default=false(), nullable=False,
+        comment="NFO files replace the characters Kodi cannot show, such as emoji",
+    )
+    filename_restriction_mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=LocalMediaProfileFilenameMode.SYSTEM.value,
+        server_default=LocalMediaProfileFilenameMode.SYSTEM.value,
+        comment="How file and folder names are made safe: system, unrestricted, windows or restricted (ASCII only)",
+    )
+    file_date_from_publish_date: Mapped[bool] = mapped_column(
+        default=False, server_default=false(), nullable=False,
+        comment="Downloaded files get the date the media was published, so players sort them by air date",
     )
 
     subtitle_mode: Mapped[str] = mapped_column(

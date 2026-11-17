@@ -14,7 +14,7 @@ import {PreferredFormatReg} from "../types/local_media_profile";
 import PageHeader from '../components/common/PageHeader'
 import PageSubtitle from "../components/common/PageSubtitle";
 import ProfileEnabledSwitch from '../components/common/ProfileEnabledSwitch'
-import {RssStreamProfileUpdateSchema} from '../types/schemas/rss_stream_profile'
+import {STREAM_PROFILE_TYPES, streamProfileUpdate} from '../components/StreamProfile/streamProfileTypes'
 import {faIcon} from '../icons/faIcon'
 import {apiUrl} from '../lib/api'
 import {useBulkSelection} from '../components/ProfileBulkEdit/useBulkSelection'
@@ -57,12 +57,8 @@ export default function StreamProfilesPage() {
 
     const setProfileEnabled = useCallback(async (profile: StreamProfileReadView, enableProfile: boolean) => {
         try {
-            const body = RssStreamProfileUpdateSchema.parse({
-                ...profile.streamProfileImpl,
-                title: profile.streamProfileImpl.effectiveTitle,
-                enableProfile,
-            })
-            const response = await fetch(`${apiUrl()}/rss-stream-profiles/${profile.id}`, {
+            const body = {...streamProfileUpdate(profile.streamProfileImpl), enableProfile}
+            const response = await fetch(`${apiUrl()}/${STREAM_PROFILE_TYPES[profile.type].endpoint}/${profile.id}`, {
                 method: 'PATCH',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',
@@ -93,7 +89,7 @@ export default function StreamProfilesPage() {
         },
         {
             header: 'Type',
-            accessor: (p) => p.type,
+            accessor: (p) => STREAM_PROFILE_TYPES[p.type].label,
         },
         {
             header: 'Stream Downloads',
@@ -167,7 +163,7 @@ export default function StreamProfilesPage() {
                             <span className="mobile-summary-meta">
                                 <span>{PreferredFormatReg.getLabelLoose(p.preferredFormat)}</span>
                                 <span aria-hidden="true">•</span>
-                                <span>{p.type}</span>
+                                <span>{STREAM_PROFILE_TYPES[p.type].label}</span>
                                 <span className={`mobile-summary-status ${p.enableProfile ? 'is-success' : ''}`}>
                                     {p.enableProfile ? 'Enabled' : 'Disabled'}
                                 </span>
@@ -208,10 +204,9 @@ export default function StreamProfilesPage() {
                 ref={confirmRef}
                 title="Delete stream profile"
                 subjectProp="collectionTitle"
-                deleteRequest={(p) => {
-                    const path = `${p.type === 'rss' ? 'rss-stream-profiles' : 'stream-profiles'}/${p.id}`
-                    return fetch(`${apiUrl()}/${path}`, {method: 'DELETE', credentials: 'include'})
-                }}
+                deleteRequest={(p: StreamProfileReadView) => (
+                    fetch(`${apiUrl()}/${STREAM_PROFILE_TYPES[p.type].endpoint}/${p.id}`, {method: 'DELETE', credentials: 'include'})
+                )}
                 invalidateQueries={[["streamProfilesView"]]}
                 inUseMessage="This stream profile is in use, it cannot be deleted"
             />

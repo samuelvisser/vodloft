@@ -1,0 +1,170 @@
+"""ytdl-sub's own presets, as far as the import needs to know them.
+
+Each of ytdl-sub's prebuilt presets is described here by what it sets, in ytdl-sub's own keys,
+so the reader can merge a subscription's presets the way ytdl-sub does without ytdl-sub itself.
+Values that ytdl-sub's presets compute with scripts, such as the season and episode numbers of
+an ordering, are left out: the mapping knows each ordering by its name.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Literal
+
+Kind = Literal["tv_show_by_date", "tv_show_collection", "music", "music_video"]
+Player = Literal["kodi", "jellyfin", "emby", "plex"]
+
+
+@dataclass(frozen=True)
+class Builtin:
+    parents: tuple[str, ...] = ()
+    config: dict = field(default_factory=dict)
+    """What the preset sets, in ytdl-sub's keys, apart from scripts."""
+    kind: Kind | None = None
+    player: Player | None = None
+
+
+_EPISODE_BASE = Builtin(config={
+    "output_options": {
+        "output_directory": "{tv_show_directory}/{tv_show_name_sanitized}",
+        "file_name": "{episode_file_path}.{ext}",
+        "thumbnail_name": "{thumbnail_file_name}",
+        "info_json_name": "{episode_file_path}.{info_json_ext}",
+        "maintain_download_archive": True,
+    },
+    "ytdl_options": {"break_on_existing": True},
+    "chapters": {"embed_chapters": True},
+    "overrides": {
+        "tv_show_genre_default": "ytdl-sub",
+        "tv_show_content_rating_default": "TV-14",
+        "subscription_indent_1": "{tv_show_genre_default}",
+        "subscription_indent_2": "{tv_show_content_rating_default}",
+        "tv_show_name": "{subscription_name}",
+        "tv_show_genre": "{subscription_indent_1}",
+        "tv_show_content_rating": "{subscription_indent_2}",
+        "season_directory_name": "Season {season_number_padded}",
+        "episode_file_name": "s{season_number_padded}.e{episode_number_padded} - {file_title}",
+        "episode_file_path": "{season_directory_name_sanitized}/{episode_file_name_sanitized}",
+        "thumbnail_file_name": "{episode_file_path}-thumb.jpg",
+        "file_title": "{title_sanitized}",
+        "file_uid": "{uid_sanitized}",
+        "tv_show_poster_file_name": "poster.jpg",
+        "tv_show_fanart_file_name": "fanart.jpg",
+        "enable_throttle_protection": True,
+        "enable_resolution_assert": True,
+    },
+})
+TV_SHOW_GENRE_DEFAULT = "ytdl-sub"
+TV_SHOW_CONTENT_RATING_DEFAULT = "TV-14"
+
+_PLEX_FORMAT = "(bv*[ext=mp4][vcodec~='^((he|a)vc|h26[45])']+ba[ext=m4a]) / (bv[ext=mp4]*+ba[ext=m4a]/b)"
+
+
+def _player(player: Player) -> Builtin:
+    if player == "plex":
+        return Builtin(("_episode_base",), {
+            "format": _PLEX_FORMAT,
+            "file_convert": {"convert_to": "mp4"},
+            "overrides": {"file_title": "{title_sanitized_plex}", "file_uid": "{uid_sanitized_plex}"},
+        }, player=player)
+    return Builtin(("_episode_base",), player=player)
+
+
+def _ordering(**overrides: str) -> Builtin:
+    return Builtin(config={"overrides": overrides})
+
+
+def _format(height: int | None) -> Builtin:
+    if height is None:
+        return Builtin(config={"format": "bestvideo+bestaudio/best", "ytdl_options": {"merge_output_format": "mp4"}})
+    return Builtin(config={
+        "format": f"(bv*[height<={height}]+bestaudio/best[height<={height}])",
+        "ytdl_options": {"merge_output_format": "mp4"},
+    })
+
+
+def _audio(codec: str, quality: int) -> Builtin:
+    return Builtin(config={"audio_extract": {"codec": codec, "quality": quality}})
+
+
+BY_DATE_ORDERINGS = {
+    "season_by_year__episode_by_month_day": ("upload-year", "upload-month-day"),
+    "season_by_year_month__episode_by_day": ("upload-year-month", "upload-day"),
+    "season_by_year__episode_by_month_day_reversed": ("upload-year", "upload-month-day-reversed"),
+    "season_by_year__episode_by_download_index": ("upload-year", "download-index"),
+}
+COLLECTION_ORDERINGS = {
+    "season_by_collection__episode_by_year_month_day": "upload-year-month-day",
+    "season_by_collection__episode_by_year_month_day_reversed": "upload-year-month-day-reversed",
+    "season_by_collection__episode_by_playlist_index": "playlist-index",
+    "season_by_collection__episode_by_playlist_index_reversed": "playlist-index-reversed",
+}
+
+BUILTINS: dict[str, Builtin] = {
+    "_episode_base": _EPISODE_BASE,
+    **{f"_{player}_tv_show": _player(player) for player in ("kodi", "jellyfin", "plex")},
+    **{f"{player}_tv_show_by_date": Builtin((f"_{player}_tv_show",), kind="tv_show_by_date")
+       for player in ("kodi", "jellyfin", "plex")},
+    **{f"{player.title()} TV Show by Date": Builtin((f"{player}_tv_show_by_date", "season_by_year__episode_by_month_day"))
+       for player in ("kodi", "jellyfin", "plex")},
+    "Emby TV Show by Date": Builtin(("Jellyfin TV Show by Date",), player="emby"),
+    **{f"{player}_tv_show_collection": Builtin((f"_{player}_tv_show",), kind="tv_show_collection")
+       for player in ("kodi", "jellyfin", "plex")},
+    **{f"{player.title()} TV Show Collection": Builtin(
+        (f"{player}_tv_show_collection", "season_by_collection__episode_by_year_month_day"))
+       for player in ("kodi", "jellyfin", "plex")},
+    "Emby TV Show Collection": Builtin(("Jellyfin TV Show Collection",), player="emby"),
+    **{name: _ordering(tv_show_by_date_season_ordering=season, tv_show_by_date_episode_ordering=episode)
+       for name, (season, episode) in BY_DATE_ORDERINGS.items()},
+    **{name: _ordering(tv_show_collection_episode_ordering=episode) for name, episode in COLLECTION_ORDERINGS.items()},
+    "best_video_quality": _format(None),
+    "Best Video Quality": Builtin(("best_video_quality",)),
+    "Max Video Quality": Builtin(("best_video_quality",)),
+    "Max 2160p": _format(2160),
+    "Max 1440p": _format(1440),
+    "max_1080p": _format(1080),
+    "Max 1080p": Builtin(("max_1080p",)),
+    "Max 720p": _format(720),
+    "Max 480p": _format(480),
+    "Max Audio Quality": _audio("best", 0),
+    "Max MP3 Quality": _audio("mp3", 0),
+    "Max Opus Quality": _audio("opus", 0),
+    "MP3 320k": _audio("mp3", 320),
+    "MP3 128k": _audio("mp3", 128),
+    "Only Recent Archive": Builtin(config={
+        "date_range": {"after": "today-{only_recent_date_range}"},
+        "overrides": {"only_recent_date_range": "2months"},
+    }),
+    "Only Recent": Builtin(("Only Recent Archive",), {
+        "output_options": {
+            "keep_files_after": "today-{only_recent_date_range}",
+            "keep_max_files": "{only_recent_max_files}",
+        },
+        "overrides": {"only_recent_max_files": 0, "only_recent_sort_by": "upload_date"},
+    }),
+    "chunk_initial_download": Builtin(config={
+        "ytdl_options": {"max_downloads": "{chunk_max_downloads}", "playlistreverse": True, "break_on_existing": False},
+        "overrides": {"chunk_max_downloads": 20},
+    }),
+    "Chunk Downloads": Builtin(("chunk_initial_download",)),
+    "Filter Keywords": Builtin(config={"overrides": {
+        "title_include_keywords": [], "title_exclude_keywords": [],
+        "description_include_keywords": [], "description_exclude_keywords": [],
+        "title_include_eval": "ANY", "title_exclude_eval": "ANY",
+        "description_include_eval": "ANY", "description_exclude_eval": "ANY",
+    }}),
+    "Filter Duration": Builtin(config={"overrides": {"filter_duration_min_s": 0, "filter_duration_max_s": 4294967296}}),
+    **{name: Builtin(kind="music") for name in (
+        "YouTube Releases", "YouTube Full Albums", "SoundCloud Discography", "Bandcamp", "Single",
+    )},
+    **{name: Builtin(kind="music_video") for name in (
+        "Jellyfin Music Videos", "Emby Music Videos", "Kodi Music Videos", "Plex Music Videos",
+        "Jellyfin Music Videos with Extras", "Kodi Music Videos with Extras", "Plex Music Videos with Extras",
+    )},
+}
+"""ytdl-sub's prebuilt presets by name."""
+
+DOWNLOAD_HELPERS = frozenset({
+    "Only Recent", "Only Recent Archive", "Chunk Downloads", "chunk_initial_download", "Filter Keywords",
+    "Filter Duration",
+})
+"""Presets that only change which videos are downloaded: VODLoft's Download Profile, not its Local Media Profile."""

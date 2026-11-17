@@ -1,6 +1,7 @@
 """Shared collection-directory resolution and artwork reconciliation requests."""
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
@@ -13,7 +14,10 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.db.models import DownloadProfile, Episode, EpisodeMediaDownload, Collection, CollectionLocalMediaProfile
 from backend.db.models.CollectionLocalAsset import CollectionLocalAsset
+from backend.services.download_metadata import build_season_metadata, build_show_metadata
 from backend.services.example_episodes import EXAMPLE_SOURCE_PREFIX
+from backend.services.download_options import effective_filename_mode
+from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_metadata import custom_metadata_template_values, get_custom_metadata
 from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS, COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
@@ -24,6 +28,7 @@ from backend.utils.output_template_jinja import create_output_template_environme
 from backend.utils.collection_media_directory import CollectionMediaDirectory, infer_collection_media_directory
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
+from downloader.metadata import render_nfo
 
 if TYPE_CHECKING:
     from sources.dailywire.api.records import DwShowRecord
@@ -133,7 +138,8 @@ def _inferred_directory(
 
 
 def resolve_collection_media_directory(
-    collection: Collection | None, output_template: str, *, values_overrides: Mapping[str, str] | None = None,
+    collection: Collection | None, output_template: str, *, filename_mode: FilenameRestrictionMode,
+    values_overrides: Mapping[str, str] | None = None,
 ) -> CollectionMediaDirectory:
     """Resolve with the production path policy and optional read-only preview edits.
 
@@ -155,7 +161,7 @@ def resolve_collection_media_directory(
     names += tuple(values[field] for field in ("season", "season_name", "season_index", "season_number") if values.get(field))
     resolution = _inferred_directory(
         output_template, tuple(sorted(values.items())), names,
-        FilenameRestrictionMode(settings.filename_restriction_mode),
+        FilenameRestrictionMode(filename_mode),
     )
     if resolution.path is None:
         return resolution
@@ -168,6 +174,7 @@ def resolve_collection_media_directory(
 
 def collection_profile_roots(
     session: Session, *, draft_profile_id: int | None = None, draft_template: str | None = None,
+    draft_filename_mode: FilenameRestrictionMode | None = None,
 ) -> dict[tuple[int, int], CollectionMediaDirectory]:
     pairs = managed_collection_profile_pairs(session)
     if not pairs:
@@ -184,9 +191,11 @@ def collection_profile_roots(
         collection, profile = collections.get(collection_id), profiles.get(profile_id)
         if collection is None or profile is None:
             continue
-        template = draft_template if profile_id == draft_profile_id and draft_template is not None else profile.output_template
+        template, mode = profile.output_template, effective_filename_mode(profile)
+        if profile_id == draft_profile_id and draft_template is not None:
+            template, mode = draft_template, draft_filename_mode or mode
         try:
-            roots[collection_id, profile_id] = resolve_collection_media_directory(collection, template)
+            roots[collection_id, profile_id] = resolve_collection_media_directory(collection, template, filename_mode=mode)
         except ValueError as exc:
             roots[collection_id, profile_id] = CollectionMediaDirectory(None, str(exc))
     return roots
@@ -211,8 +220,8 @@ def shared_root_conflict(roots: dict[tuple[int, int], CollectionMediaDirectory],
 
 
 def get_collection_asset_root_preview(
-    session: Session, *, source_id: str | None, output_template: str, local_media_profile_id: int | None,
-    values_overrides: Mapping[str, str] | None = None,
+    session: Session, *, source_id: str | None, output_template: str, filename_mode: FilenameRestrictionMode,
+    local_media_profile_id: int | None, values_overrides: Mapping[str, str] | None = None,
 ) -> CollectionAssetRootPreview:
     enabled = get_settings().download_settings.download_collection_assets
     collection = None
@@ -225,9 +234,14 @@ def get_collection_asset_root_preview(
         source_id not in {None, "example:collection"} and not source_id.startswith(EXAMPLE_SOURCE_PREFIX)
     ) or values_overrides is None:
         return CollectionAssetRootPreview(None, "Select an episode in the Jinja editor to resolve its collection's root.", None, enabled)
-    result = resolve_collection_media_directory(collection, output_template, values_overrides=values_overrides)
+    result = resolve_collection_media_directory(
+        collection, output_template, filename_mode=filename_mode, values_overrides=values_overrides,
+    )
     if result.path:
-        roots = collection_profile_roots(session, draft_profile_id=local_media_profile_id, draft_template=output_template)
+        roots = collection_profile_roots(
+            session, draft_profile_id=local_media_profile_id, draft_template=output_template,
+            draft_filename_mode=filename_mode,
+        )
         if shared_root_conflict(roots, collection.id if collection is not None else -1, result.path):
             result = CollectionMediaDirectory(None, "This directory is also used by another collection. Shared artwork would collide.")
     title = (values_overrides or {}).get("collection_title", collection.title if collection is not None else None)
@@ -250,6 +264,59 @@ def collection_asset_sources(collection: Collection) -> tuple[CollectionAssetSou
         if url is not None:
             sources.append(CollectionAssetSource(kind, url, forced_format))
     return tuple(sources)
+
+
+@dataclass(frozen=True)
+class CollectionNfoFile:
+    """A show or season NFO file VODLoft writes for a collection, with what it holds."""
+
+    kind: str
+    """The CollectionLocalAsset type: ``tvshow``, or ``season-<id>`` for a season."""
+    path: Path
+    content: bytes
+
+
+def is_nfo_asset(asset_type: str) -> bool:
+    return asset_type == "tvshow" or asset_type.startswith("season-")
+
+
+def collection_nfo_files(
+    session: Session, collection: Collection, profile: CollectionLocalMediaProfile, root: Path,
+) -> tuple[CollectionNfoFile, ...]:
+    """tvshow.nfo in the collection's folder, and season.nfo in each folder that holds one season's episodes.
+
+    A season gets no season.nfo when its episodes are spread over folders, share one with another season,
+    or sit in the collection's folder itself: media servers read season.nfo from a season's own folder.
+    """
+    if not profile.show_nfo:
+        return ()
+    kodi_safe = profile.kodi_safe_nfo
+    files = [CollectionNfoFile("tvshow", root / "tvshow.nfo", render_nfo(build_show_metadata(collection), kodi_safe=kodi_safe))]
+    folders: dict[int, set[Path]] = defaultdict(set)
+    for season_id, file_path in session.execute(
+        select(Episode.season_id, EpisodeMediaDownload.file_path)
+        .join(EpisodeMediaDownload, EpisodeMediaDownload.media_item_id == Episode.id)
+        .where(
+            Episode.collection_id == collection.id,
+            EpisodeMediaDownload.local_media_profile_id == profile.id,
+            EpisodeMediaDownload.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value,
+        )
+    ):
+        if file_path:
+            folders[season_id].add(Path(file_path).parent)
+    seasons_in = Counter(folder for season_folders in folders.values() for folder in season_folders)
+    for season in sorted(collection.seasons, key=lambda season: season.id):
+        season_folders = folders.get(season.id, set())
+        if len(season_folders) != 1:
+            continue
+        folder = next(iter(season_folders))
+        if folder == root or not folder.is_relative_to(root) or seasons_in[folder] > 1:
+            continue
+        files.append(CollectionNfoFile(
+            f"season-{season.id}", folder / "season.nfo",
+            render_nfo(build_season_metadata(season), kodi_safe=kodi_safe),
+        ))
+    return tuple(files)
 
 
 def request_collection_asset_reconciliation(session: Session, collection_id: int = 0) -> None:

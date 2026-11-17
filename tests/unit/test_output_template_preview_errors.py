@@ -23,7 +23,7 @@ def test_template_preview_reports_unknown_jinja_filter_as_output_error(db_sessio
         type="collection",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ title | not_a_filter('x', 'y') }}.ext",
-        values={"title": "Example"},
+        values={"title": "Example"},filename_restriction_mode="windows",
     )
 
     result = get_local_media_profile_preview(db_session, body)
@@ -44,7 +44,7 @@ def test_preview_plan_treats_incomplete_jinja_as_expected_editor_state(db_sessio
             "{% set plex_year = ' (' ~ meta_collection_year ~ ')' if meta_collection_year e%}"
             "/downloads/{{ title }}.ext"
         ),
-        indexing_values=[{"key": "extra", "name": "Extra"}],
+        indexing_values=[{"key": "extra", "name": "Extra"}],filename_restriction_mode="windows",
     )
 
     plan = get_local_media_profile_preview_plan(db_session, body)

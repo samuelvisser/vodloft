@@ -286,6 +286,10 @@ FAKE_YTDLP = textwrap.dedent('''
             {"category": "poi_highlight", "start_time": 300.0, "end_time": 301.0, "title": "Highlight", "type": "poi"},
         ]
         print("[vodloft-sponsorblock] " + json.dumps(found if "segments" in url else None))
+    if "360p" in url:
+        if "throttled" in url:
+            print("WARNING: [youtube] x: n challenge solving failed: Some formats may be missing.")
+        print("[vodloft-video] 640 360 avc1.42001E")
     print("[vodloft-file] " + str(work / "media.mp4"))
 ''')
 
@@ -319,6 +323,28 @@ def test_ytdlp_errors_say_what_went_wrong(fake_ytdlp, tmp_path):
     with pytest.raises(FileTooLargeError, match="larger than the largest file allowed"):
         download_ytdlp("https://x/huge", str(tmp_path / "c.mp4"), command=fake_ytdlp)
     assert list(tmp_path.glob("*.mp4*")) == []
+
+
+def test_a_throttled_360p_video_is_refused_but_a_video_that_only_has_360p_is_kept(fake_ytdlp, tmp_path):
+    from downloader.errors import ThrottledError
+    from downloader.ytdlp import download_ytdlp, resolve_ytdlp_source
+
+    with pytest.raises(ThrottledError) as refused:
+        download_ytdlp("https://x/360p-throttled", str(tmp_path / "a.mp4"), command=fake_ytdlp, throttle_guard=True)
+    assert refused.value.height == 360
+    assert list(tmp_path.glob("a.mp4*")) == []
+    # Nothing held back: the video has nothing better.
+    assert download_ytdlp("https://x/360p", str(tmp_path / "b.mp4"), command=fake_ytdlp, throttle_guard=True).video.height == 360
+    # The try that keeps what it gets.
+    assert download_ytdlp("https://x/360p-throttled", str(tmp_path / "c.mp4"), command=fake_ytdlp).video.height == 360
+
+    def guard(preferred_format, *, audio_only=False):
+        return resolve_ytdlp_source(
+            "https://x", command=("yt-dlp",), preferred_format=preferred_format, audio_only=audio_only, throttle_guard=True,
+        ).ytdlp_throttle_guard
+
+    assert guard("format_1080p") and guard("format_4k")
+    assert not guard("format_360p") and not guard("format_audio_only", audio_only=True) and not guard("format_hls")
 
 
 def test_a_canceled_ytdlp_download_stops_it(fake_ytdlp, tmp_path):

@@ -7,7 +7,7 @@ video has no sound, so a feed plays it in one of two ways:
   that index and writes an HLS playlist that lists every fragment as a byte range of the Site's own
   file, with one variant per resolution and the audio as its own rendition. Nothing is joined or
   stored, so it plays at once.
-* MP4: VODLoft joins video and audio into one MP4 file in the RSS cache, without re-encoding. Until it
+* MP4: VODLoft joins video and audio into one MP4 file in the Stream Video Cache, without re-encoding. Until it
   is ready, the episode plays the Site's MP4 file with sound. The newest episodes of a feed are joined
   as soon as the feed is fetched, so they are usually ready before anyone plays them.
 
@@ -38,7 +38,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response, Streamin
 from config import get_settings
 from sources import MediaStream, MediaTracks, Site, Source
 
-from backend.services.video_cache import get_cached_mp4_path, mark_used, mp4_cache_path
+from backend.services.video_cache import get_cached_mp4_path, joined_key, joins_mp4, mark_used, mp4_cache_path, stream_height
 from .upstream import NO_CACHE_HEADERS, LinkCache, first_range, look_up_at_site, seconds_until_expiry, stream_bytes
 
 
@@ -64,21 +64,6 @@ class EpisodeRef:
     uuid: str
     url: str
     use_cookies: bool
-
-
-def stream_height(site: Site, preferred_format_height: int | None) -> int | None:
-    """The resolution a feed streams the Site's video at: the highest it has up to the feed's format."""
-    heights = sorted(site.stream_video_heights)
-    if not heights:
-        return None
-    if preferred_format_height is None:
-        return heights[-1]
-    return max((height for height in heights if height <= preferred_format_height), default=heights[0])
-
-
-def joins_mp4(site: Site, height: int | None) -> bool:
-    """Whether a feed's MP4 at this resolution is joined from the Site's tracks."""
-    return site.stream_file_height is not None and height is not None and height != site.stream_file_height
 
 
 # --- Looking tracks up -----------------------------------------------------------------------------
@@ -318,10 +303,6 @@ def track_playlist_response(source: Source, episode: EpisodeRef, name: str, *, h
 _joining: set[str] = set()
 _joins = threading.Semaphore(2)
 _file_streamed: dict[str, float] = {}
-
-
-def joined_key(episode_uuid: str, height: int) -> str:
-    return f"{episode_uuid}-{height}p"
 
 
 def joined_mp4(episode_uuid: str, height: int) -> Path | None:

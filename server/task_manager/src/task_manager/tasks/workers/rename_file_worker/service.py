@@ -9,6 +9,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.episode_download_scope import EpisodeDownloadScope
 from backend.utils.output_template import output_template_fields, resolve_episode_output_path
 from backend.services.download_relocation import plan_download_relocation, relocate_downloads
+from backend.services.download_options import effective_filename_mode
 from task_manager.scheduler.results import TaskResult
 from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
@@ -119,6 +120,7 @@ async def run_rename_file_worker(
                 episode=episode,
                 local_media_profile=download.local_media_profile,
                 media_download=download,
+                filename_mode=effective_filename_mode(download.local_media_profile),
                 extension=extension,
             )
             destination = settle_no_ascii_name(download, destination, session=s)

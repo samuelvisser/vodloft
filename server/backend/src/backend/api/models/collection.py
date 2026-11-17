@@ -62,6 +62,10 @@ class CollectionAPIUpdate(_CollectionAPIBaseIn):
 
     cookies_mode: Optional[CookiesMode] = None
     episode_order: Optional[EpisodeOrder] = None
+    genre: Optional[str] = Field(default=None, max_length=200)
+    """The show's genre in its NFO files; left out, it stays as it is, and empty removes it."""
+    content_rating: Optional[str] = Field(default=None, max_length=50)
+    """The show's content rating in its NFO files, such as TV-14; left out, it stays as it is."""
     check_frequency: Optional[CheckFrequency] = None
     check_cron: Optional[str] = Field(default=None, validate_default=True)
     """The Collection's own schedule, with ``check_frequency`` own."""
@@ -70,6 +74,11 @@ class CollectionAPIUpdate(_CollectionAPIBaseIn):
     @classmethod
     def _validate_ytdlp_options(cls, value: Optional[str]) -> Optional[str]:
         return None if value is None else checked_ytdlp_options(value)
+
+    @field_validator("genre", "content_rating")
+    @classmethod
+    def _strip_metadata(cls, value: Optional[str]) -> Optional[str]:
+        return (value or "").strip() or None
 
     @field_validator("check_cron")
     @classmethod
@@ -187,6 +196,8 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
     ytdlp_options: str = ""
+    genre: Optional[str] = None
+    content_rating: Optional[str] = None
     cookies_mode: CookiesMode = CookiesMode.AUTOMATIC
     cookies_needed_until: Optional[datetime] = None
     check_frequency: CheckFrequency = CheckFrequency.DEFAULT

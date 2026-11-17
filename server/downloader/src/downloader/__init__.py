@@ -14,6 +14,7 @@ from .errors import (
     AccessRequiredError,
     FfmpegNotFoundError,
     MediaUnavailableError,
+    ThrottledError,
 )
 from .ffmpeg import convert_video_to_m4a, embed_metadata, embed_thumbnail, ffmpeg_available, media_duration, remux_to_mp4
 from .hls_bundle import (
@@ -57,6 +58,7 @@ __all__ = [
     "EncryptedMediaError",
     "FileTooLargeError",
     "AccessRequiredError",
+    "ThrottledError",
     "DownloadCanceled",
     "FfmpegNotFoundError",
     "__version__",

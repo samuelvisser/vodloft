@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from backend.types.local_media_profile_types import (
+    LocalMediaProfileFilenameMode,
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
     LocalMediaProfileThumbnailMode,
 )
 from config import get_settings
-from config.settings.submodels import DownloadMode, MetadataMode, ThumbnailMode
+from config.settings.submodels import DownloadMode, FilenameRestrictionMode, MetadataMode, ThumbnailMode
 
 
 def effective_download_mode(local_media_profile) -> DownloadMode:
@@ -52,3 +53,17 @@ def effective_thumbnail_mode(local_media_profile) -> ThumbnailMode:
     if profile_mode is LocalMediaProfileThumbnailMode.SYSTEM:
         return system_mode
     return ThumbnailMode(profile_mode.value)
+
+
+def effective_filename_mode(local_media_profile) -> FilenameRestrictionMode:
+    """Resolve a Local Media Profile filename mode against the system default."""
+    profile_mode = LocalMediaProfileFilenameMode(
+        getattr(
+            local_media_profile,
+            "filename_restriction_mode",
+            LocalMediaProfileFilenameMode.SYSTEM.value,
+        )
+    )
+    if profile_mode is LocalMediaProfileFilenameMode.SYSTEM:
+        return FilenameRestrictionMode(get_settings().download_settings.filename_restriction_mode)
+    return FilenameRestrictionMode(profile_mode.value)

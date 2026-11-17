@@ -17,6 +17,7 @@ from backend.services.custom_indexes import (
     profile_uses_custom_indexes,
     request_custom_index_reconciliation,
 )
+from backend.services.download_options import effective_filename_mode
 from backend.services.errors import NotFoundError, ServiceError
 from backend.services.profile_file_renames import request_collection_local_media_profile_file_rename
 from backend.services.local_media_profile_inputs import (
@@ -26,11 +27,12 @@ from jinja_analysis import CustomIndexReachabilityStatus
 from jinja_analysis.comparison import OutputOverlap
 from backend.utils.custom_index import indexing_value_definition_keys, kept_index_keys, replace_indexing_value_definitions
 from backend.utils.output_template import (
-    _sanitize_emitted_output_value, finalize_output_path, output_template_custom_index_keys,
+    _sanitize_emitted_output_value, finalize_output_path, output_template_custom_index_keys, rendering_with_filename_mode,
 )
 from backend.utils.output_template_analysis import analyze_profile_outputs, compare_profile_outputs
 from backend.utils.output_template_jinja import create_output_template_environment
 
+from config.settings.submodels import FilenameRestrictionMode
 from task_manager.scheduler.operations import OperationTargetSpec, create_operation, queue_operation_target_dispatch
 from task_manager.scheduler.types import OperationSource
 
@@ -67,8 +69,15 @@ def ensure_unique_profile_settings(
     if exclude_id is not None:
         query = query.filter(profile_model.id != exclude_id)
 
+    # Both sides are named as the profile being saved names its files.
+    mode = effective_filename_mode(body)
     environment = create_output_template_environment()
     environment.finalize = _sanitize_emitted_output_value
+    with rendering_with_filename_mode(mode):
+        _ensure_unique_outputs(query, body, environment, mode)
+
+
+def _ensure_unique_outputs(query, body: LocalMediaProfileInput, environment, mode: FilenameRestrictionMode) -> None:
     candidate = analyze_profile_outputs(
         body.output_template, body.type, body.preferred_format,
         environment=environment, namespace="candidate",
@@ -81,7 +90,8 @@ def ensure_unique_profile_settings(
             environment=environment, namespace=f"profile:{existing.id}",
         )
         comparison = compare_profile_outputs(
-            candidate, previous, environment=environment, finalize_path=finalize_output_path,
+            candidate, previous, environment=environment,
+            finalize_path=lambda path, extension: finalize_output_path(path, extension, mode=mode),
         )
         if comparison.status == OutputOverlap.OVERLAP:
             raise ServiceError(
@@ -173,6 +183,7 @@ def update_collection_local_media_profile(
     item = _profile_by_slug(s, CollectionLocalMediaProfile, local_media_profile_slug, "Collection Local Media Profile")
 
     previous_template = item.output_template
+    previous_mode = effective_filename_mode(item)
     previous_index_keys = output_template_custom_index_keys(previous_template)
     previous_definition_keys = indexing_value_definition_keys(item)
     previous_kept_keys = kept_index_keys(item)
@@ -190,7 +201,8 @@ def update_collection_local_media_profile(
     current_index_keys = output_template_custom_index_keys(item.output_template)
     current_definition_keys = indexing_value_definition_keys(item)
     definition_keys_changed = previous_definition_keys != current_definition_keys
-    template_changed = previous_template != item.output_template
+    # A new filename mode names the files differently, just like a new template.
+    template_changed = (previous_template, previous_mode) != (item.output_template, effective_filename_mode(item))
     scope_changed = previous_scope != (item.collection_scope, set(item.site_keys))
 
     assignment_change = compare_custom_index_assignments(

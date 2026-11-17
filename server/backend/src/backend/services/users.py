@@ -70,7 +70,7 @@ class AccessList:
 # Settings -------------------------------------------------------------------
 
 
-def _settings_row(session: Session) -> Settings:
+def settings_row(session: Session) -> Settings:
     row = session.scalars(select(Settings).order_by(Settings.id).limit(1)).first()
     if row is None:
         row = Settings()
@@ -365,7 +365,7 @@ def set_accounts_enabled(
     ``first_administrator`` (username, password hash) creates one, and it is
     returned so the caller can sign it in.
     """
-    row = _settings_row(session)
+    row = settings_row(session)
     created: Optional[User] = None
     if enabled and not row.user_accounts_enabled:
         if not enabled_administrators(session):

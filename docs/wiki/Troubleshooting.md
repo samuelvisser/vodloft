@@ -126,7 +126,7 @@ Check the actual file and storage health. If the storage is healthy and you want
 
 ## Output paths contain unexpected characters
 
-Check **Settings → Downloads → Filename restrictions**:
+Check the profile's **Filename restrictions**, or **Settings → Downloads → Default filename restrictions** when the profile uses System:
 
 - **Minimal restrictions** preserves most punctuation and Unicode;
 - **Windows-compatible filenames** turns characters Windows cannot use into look-alikes, such as `：` for `:`, as yt-dlp does;

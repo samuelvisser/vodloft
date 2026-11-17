@@ -1,7 +1,7 @@
 """Rename the files and keyring entries that VODLoft kept under WireLoft names.
 
 The download folders hold hidden ``.wireloft-*`` files and folders: lock
-folders, the RSS cache, local HLS bundle markers, and what an unclean shutdown
+folders, the video cache, local HLS bundle markers, and what an unclean shutdown
 left of a download in progress. The leftovers also start with a WireLoft
 marker. They are renamed and their markers rewritten, and then the startup
 recovery runs again so it finishes those downloads under their new names.
@@ -232,7 +232,7 @@ async def migrate(context) -> None:
     await asyncio.to_thread(_rename_default_temporary_root)
     download_settings = get_settings().download_settings
     roots = {Path(download_settings.download_root), Path(download_settings.temporary_download_root)}
-    configured = roots | {Path(download_settings.rss_cache_root)}
+    configured = roots | {Path(download_settings.stream_cache_root)}
     for root in sorted(roots):
         context.raise_if_canceled()
         if root.is_dir():

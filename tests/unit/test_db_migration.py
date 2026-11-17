@@ -27,7 +27,8 @@ VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
 VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
-HEAD_REVISION = "bb0e7c5e17cc"
+VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
+HEAD_REVISION = "2f7a91c4d8e3"
 
 
 @pytest.fixture
@@ -772,7 +773,7 @@ def test_youtube_feeds_stream_at_its_own_resolutions_through_vodloft(migration_d
                 "INSERT INTO stream_profiles_rss (id, feed_url, max_items) VALUES (:id, :url, 0)"
             ), {"id": stream_id, "url": f"https://example.test/{stream_id}"})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_8_0_REVISION)
 
     with engine.connect() as connection:
         # Only feeds that stream from YouTube move; feeds of downloads keep any resolution.
@@ -873,7 +874,7 @@ def test_feeds_proxy_their_sites_video_by_default(migration_database):
         ))
         connection.execute(text("INSERT INTO stream_profiles_rss (id, feed_url, max_items) VALUES (20, 'https://example.test/20', 0)"))
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_8_0_REVISION)
 
     with engine.begin() as connection:
         assert connection.execute(text("SELECT proxy_source_stream FROM stream_profiles_rss")).scalar_one() == 1
@@ -1143,3 +1144,69 @@ def test_the_database_unlinks_downloads_from_a_deleted_download_profile(migratio
     assert ondelete() is None
     command.upgrade(config, HEAD_REVISION)
     assert ondelete() == "SET NULL"
+
+
+def test_stream_profiles_keep_their_feed_settings_when_every_type_shares_them(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_8_0_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key, episode_order) VALUES (1, 'c1', 'c1', 'C', "
+            "'https://www.dailywire.com/show/c', 'free', 'series', 'numbered', 'Host', 'host', 'dailywire', 'newest_first')"
+        ))
+        for profile_id, max_items, live, proxy, handoffs in ((20, 25, 1, 0, "[7, 9]"), (21, 0, 0, 1, "[]")):
+            connection.execute(text(
+                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, "
+                "use_source_stream, preferred_format, prefer_exact_match) "
+                "VALUES (:id, 'rss', 1, 1, :token, 1, 1, 'format_720p', 0)"
+            ), {"id": profile_id, "token": f"t{profile_id}"})
+            connection.execute(text(
+                "INSERT INTO stream_profiles_rss (id, feed_url, max_items, stream_live_episodes, proxy_source_stream, "
+                "live_episode_handoff_ids) VALUES (:id, 'https://example.test/feed', :max_items, :live, :proxy, :handoffs)"
+            ), {"id": profile_id, "max_items": max_items, "live": live, "proxy": proxy, "handoffs": handoffs})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.begin() as connection:
+        rows = connection.execute(text(
+            "SELECT id, max_items, stream_live_episodes, proxy_source_stream, live_episode_handoff_ids "
+            "FROM stream_profiles ORDER BY id"
+        )).all()
+        rss_columns = {column["name"] for column in inspect(connection).get_columns("stream_profiles_rss")}
+    assert [(row[0], row[1], bool(row[2]), bool(row[3]), json.loads(row[4])) for row in rows] == [
+        (20, 25, True, False, [7, 9]),
+        (21, 0, False, True, []),
+    ]
+    assert rss_columns == {"id", "feed_url", "video_output_mode"}
+
+    command.downgrade(config, VODLOFT_0_8_0_REVISION)
+    with engine.begin() as connection:
+        assert connection.execute(text(
+            "SELECT max_items, proxy_source_stream FROM stream_profiles_rss WHERE id = 20"
+        )).one() == (25, 0)
+
+
+def test_iptv_migration_gives_each_user_and_the_install_a_stream_token(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "555cdd9ad18a")
+    with engine.begin() as connection:
+        for name in ("ann", "bob"):
+            connection.execute(text(
+                "INSERT INTO users (username, password_hash, session_version, library_collection_sort) "
+                "VALUES (:name, 'x', 0, 'name')"
+            ), {"name": name})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        tokens = connection.execute(text("SELECT stream_token FROM users")).scalars().all()
+        install = connection.execute(text("SELECT stream_token FROM settings")).scalar_one()
+    assert len(set(tokens)) == 2 and all(len(token) >= 32 for token in tokens)
+    assert install and install not in tokens

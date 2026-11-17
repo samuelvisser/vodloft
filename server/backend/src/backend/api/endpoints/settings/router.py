@@ -44,6 +44,7 @@ def library_defaults():
         download_mode=settings.download_settings.download_mode,
         thumbnail_mode=settings.download_settings.thumbnail_mode,
         metadata_mode=settings.download_settings.metadata_mode,
+        filename_restriction_mode=settings.download_settings.filename_restriction_mode,
         no_usable_media_delete_after_minutes=settings.episode_status_timing.no_usable_media_delete_after_minutes,
     )
 

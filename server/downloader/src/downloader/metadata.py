@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -113,15 +114,19 @@ def write_nfo(media_path: str, metadata: MediaServerMetadata) -> str:
         raise
 
 
+# The root element of each kind of NFO file; movies, their extras and videos are all a "movie".
+_NFO_ROOTS = {"episode": "episodedetails", "tvshow": "tvshow", "season": "season"}
+
+
 def _nfo_root(metadata: MediaServerMetadata) -> ET.Element:
-    root = ET.Element("episodedetails" if metadata.kind == "episode" else "movie")
+    root = ET.Element(_NFO_ROOTS.get(metadata.kind, "movie"))
     _text(root, "title", metadata.title)
     _text(root, "plot", metadata.description)
     if metadata.unique_id and metadata.unique_id_type:
         unique = ET.SubElement(root, "uniqueid", {"type": metadata.unique_id_type, "default": "true"})
         unique.text = metadata.unique_id
     _text(root, "showtitle", metadata.collection_title)
-    _text(root, "season", metadata.season_number)
+    _text(root, "seasonnumber" if metadata.kind == "season" else "season", metadata.season_number)
     _text(root, "episode", metadata.episode_number)
     _text(root, "aired", metadata.aired)
     _text(root, "premiered", metadata.release_date)
@@ -159,6 +164,26 @@ def _text(parent: ET.Element, name: str, value) -> None:
     element.text = str(value)
 
 
-def render_nfo(metadata: MediaServerMetadata) -> bytes:
-    """Generate the exact sidecar payload before filesystem work is planned."""
-    return ET.tostring(_nfo_root(metadata), encoding="utf-8", xml_declaration=True)
+def render_nfo(metadata: MediaServerMetadata, *, kodi_safe: bool = False) -> bytes:
+    """Generate the exact sidecar payload before filesystem work is planned.
+
+    ``kodi_safe`` replaces what Kodi's fonts cannot show, such as emoji, so Kodi does not show empty boxes
+    or cut the text short.
+    """
+    root = _nfo_root(metadata)
+    if kodi_safe:
+        for element in root.iter():
+            if element.text:
+                element.text = _kodi_safe_text(element.text)
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+# The joiners and variation selectors that build an emoji out of others, and the tags of flag emoji.
+_EMOJI_JOINERS = re.compile("[\u200d\ufe0e\ufe0f\U000e0020-\U000e007f]")
+# Emoji and other characters outside the Basic Multilingual Plane, and the symbol blocks emoji live in.
+_KODI_UNREADABLE = re.compile("[\U00010000-\U0010ffff\u2600-\u27bf\u2b00-\u2bff]+")
+
+
+def _kodi_safe_text(text: str) -> str:
+    """Replace each run of emoji with one □, which Kodi can show."""
+    return _KODI_UNREADABLE.sub("\u25a1", _EMOJI_JOINERS.sub("", text))

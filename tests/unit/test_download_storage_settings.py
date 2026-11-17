@@ -31,10 +31,10 @@ def test_system_download_storage_defaults_to_local_temporary_mode():
         settings.download_settings.download_root / ".vodloft-temp"
     )
     assert (
-        settings.download_settings.rss_cache_root
-        == settings.download_settings.download_root / ".vodloft-rss-cache"
+        settings.download_settings.stream_cache_root
+        == settings.download_settings.download_root / ".vodloft-stream-cache"
     )
-    assert settings.download_settings.rss_cache_retention_seconds == 7 * 24 * 60 * 60
+    assert settings.download_settings.stream_cache_retention_seconds == 7 * 24 * 60 * 60
 
     values = SettingsValues.from_app_settings(settings).model_dump(
         by_alias=True,
@@ -47,10 +47,10 @@ def test_system_download_storage_defaults_to_local_temporary_mode():
     assert values["downloadSettings"]["temporaryDownloadRoot"] == str(
         settings.download_settings.temporary_download_root
     )
-    assert values["downloadSettings"]["rssCacheRoot"] == str(
-        settings.download_settings.download_root / ".vodloft-rss-cache"
+    assert values["downloadSettings"]["streamCacheRoot"] == str(
+        settings.download_settings.download_root / ".vodloft-stream-cache"
     )
-    assert values["downloadSettings"]["rssCacheRetentionSeconds"] == 7 * 24 * 60 * 60
+    assert values["downloadSettings"]["streamCacheRetentionSeconds"] == 7 * 24 * 60 * 60
 
 
 def test_cache_default_follows_download_root_but_temporary_storage_does_not():
@@ -60,7 +60,7 @@ def test_cache_default_follows_download_root_but_temporary_storage_does_not():
 
     assert settings.temporary_download_root.name == "vodloft-downloads"
     assert settings.temporary_download_root.as_posix() != "/media/.vodloft-temp"
-    assert settings.rss_cache_root.as_posix() == "/media/.vodloft-rss-cache"
+    assert settings.stream_cache_root.as_posix() == "/media/.vodloft-stream-cache"
     # Ready quick downloads stay on the download volume, so they survive a container update.
     assert settings.quick_download_root.as_posix() == "/media/.vodloft-quick-downloads"
 
@@ -71,11 +71,11 @@ def test_explicit_download_storage_paths_override_default_factories():
     settings = DownloadSettings(
         download_root="/media",
         temporary_download_root="/tmp/vodloft-downloads",
-        rss_cache_root="/tmp/vodloft-rss-cache",
+        stream_cache_root="/tmp/vodloft-stream-cache",
     )
 
     assert settings.temporary_download_root.as_posix() == "/tmp/vodloft-downloads"
-    assert settings.rss_cache_root.as_posix() == "/tmp/vodloft-rss-cache"
+    assert settings.stream_cache_root.as_posix() == "/tmp/vodloft-stream-cache"
 
 
 def test_local_media_profile_defaults_to_system_storage_thumbnail_and_metadata_modes():

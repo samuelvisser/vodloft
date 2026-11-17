@@ -189,14 +189,14 @@ def recover_abandoned_download_replacements(download_root: str | Path) -> int:
 class DownloadFilesystemRecovery:
     reservations: int
     temporary_workspaces: int
-    rss_cache_files: int
+    stream_cache_files: int
     quick_downloads: int = 0
     replacements: int = 0
 
 
 def recover_download_filesystem(download_settings) -> DownloadFilesystemRecovery:
     """Clean up what an unclean shutdown left in the download folders. Run it while no download runs."""
-    from backend.services.video_cache import cleanup_expired_rss_cache
+    from backend.services.video_cache import cleanup_expired_stream_cache
     from backend.services.quick_downloads import sweep_quick_downloads
 
     # Unfinished quick downloads cannot resume, so their folders go; ready
@@ -216,6 +216,6 @@ def recover_download_filesystem(download_settings) -> DownloadFilesystemRecovery
             download_settings.quick_download_root, download_settings.download_root,
             is_committed=_is_committed_download_artifact,
         ),
-        rss_cache_files=cleanup_expired_rss_cache(),
+        stream_cache_files=cleanup_expired_stream_cache(),
         quick_downloads=len(quick.unfinished) + len(quick.expired),
     )

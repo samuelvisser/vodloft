@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
@@ -39,6 +40,9 @@ class ImportLocation:
     """The uploaded config folder itself, for files the importer reads where they are, such as saved metadata."""
     path_map: tuple[str, str] = ("/downloads", "/downloads")
     """A folder as the other program sees it, and the ``/downloads/…`` folder that is the same folder in VODLoft."""
+    download_file: Callable[[str], Path | None] | None = None
+    """The file VODLoft sees at a ``/downloads/…`` path, or None when there is none, for an importer that reads
+    files in the download folders, such as ytdl-sub's download archives."""
 
 
 @dataclass(frozen=True)
@@ -191,6 +195,11 @@ class ImportPlan:
     warnings: tuple[ImportWarning, ...] = ()
     version: str | None = None
     """The other program's database version."""
+    download_folder: str = "/downloads"
+    """The other program's own download folder, which the path map pairs with a VODLoft folder."""
+    probes: tuple[str, ...] = ()
+    """Files the importer reads in the download folders, as the other program names them. They find the path
+    map before the plan can list any files, such as ytdl-sub's download archives that list them."""
 
 
 @runtime_checkable

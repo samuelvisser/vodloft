@@ -99,11 +99,11 @@ const DownloadSettingsSchema = z.object({
     downloadCollectionAssets: z.boolean(),
     collectionArtworkFallbackFormat: CollectionArtworkFallbackFormatSchema,
     temporaryDownloadRoot: z.string(),
-    rssCacheRoot: z.string(),
+    streamCacheRoot: z.string(),
     quickDownloadRoot: z.string(),
     thumbnailRoot: z.string(),
     lockRoot: z.string(),
-    rssCacheRetentionSeconds: z.number(),
+    streamCacheRetentionSeconds: z.number(),
     filenameRestrictionMode: FilenameRestrictionModeSchema,
     remuxVideoToMp4: z.boolean(),
     ffmpegPath: z.string(),
@@ -193,6 +193,7 @@ const SiteSettingValuesSchema = z.object({
     upcomingAndLive: orDefault(z.boolean()),
     lookupMinutes: orDefault(LookupMinutesSchema),
     downloadWithCountdown: z.boolean().nullish(),
+    downloadDelayMinutes: orDefault(z.number()),
     upgradeCheck: orDefault(z.boolean()),
     upgradeAfterDays: orDefault(z.number()),
     upgradeRepeat: orDefault(z.enum(UpgradeRepeatValues)),
@@ -274,6 +275,7 @@ const wholeNumber = (min: number, max: number, unit: string) => requiredNumber()
     .max(max, `Must be at most ${max} ${unit}.`)
 const upgradeAfterDays = wholeNumber(1, 365, 'days')
 const upgradeLengthMinutes = wholeNumber(1, 600, 'minutes')
+const downloadDelayMinutes = wholeNumber(0, 7 * 24 * 60, 'minutes')
 
 const SiteSettingValuesFormSchema = SiteSettingValuesSchema.extend({
     metadataRefresh: z.string().nullish().refine(
@@ -286,6 +288,7 @@ const SiteSettingValuesFormSchema = SiteSettingValuesSchema.extend({
         starting: pendingMinutes(60),
         live: pendingMinutes(60),
     })),
+    downloadDelayMinutes: orDefault(downloadDelayMinutes),
     upgradeAfterDays: orDefault(upgradeAfterDays),
     upgradeLengthMinutes: orDefault(upgradeLengthMinutes),
 })
@@ -334,11 +337,11 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         downloadTimeoutSeconds: requiredNumber().int().min(1, 'Must be at least 1 second.'),
         downloadRoot: z.string().trim().min(1, 'A download root is required.'),
         temporaryDownloadRoot: z.string().trim().min(1, 'A temporary download folder is required.'),
-        rssCacheRoot: z.string().trim().min(1, 'An RSS cache folder is required.'),
+        streamCacheRoot: z.string().trim().min(1, 'A Stream Video Cache folder is required.'),
         quickDownloadRoot: z.string().trim().min(1, 'A quick download folder is required.'),
         thumbnailRoot: z.string().trim().min(1, 'A thumbnail folder is required.'),
         lockRoot: z.string().trim().min(1, 'A lock folder is required.'),
-        rssCacheRetentionSeconds: requiredNumber().int().min(1, 'Must be at least 1 second.'),
+        streamCacheRetentionSeconds: requiredNumber().int().min(1, 'Must be at least 1 second.'),
         speedLimitMbps: requiredNumber().gt(0, 'Must be more than 0 MB/s.').max(10000, 'Must be 10000 MB/s or less.'),
         pauseStart: z.string().regex(TIME_OF_DAY, 'Use a time like 01:00.'),
         pauseEnd: z.string().regex(TIME_OF_DAY, 'Use a time like 07:00.'),
@@ -444,11 +447,11 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.downloadCollectionAssets',
     'downloadSettings.collectionArtworkFallbackFormat',
     'downloadSettings.temporaryDownloadRoot',
-    'downloadSettings.rssCacheRoot',
+    'downloadSettings.streamCacheRoot',
     'downloadSettings.quickDownloadRoot',
     'downloadSettings.thumbnailRoot',
     'downloadSettings.lockRoot',
-    'downloadSettings.rssCacheRetentionSeconds',
+    'downloadSettings.streamCacheRetentionSeconds',
     'downloadSettings.filenameRestrictionMode',
     'downloadSettings.remuxVideoToMp4',
     'downloadSettings.ffmpegPath',

@@ -1,9 +1,11 @@
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db import Base
+from backend.db.datetime_types import UTCDateTime
 
 
 class Site(Base):
@@ -16,4 +18,7 @@ class Site(Base):
     domains: Mapped[list[str]] = mapped_column(JSON, default=list, comment="The domains of the Site VODLoft has seen")
     preferred_source_key: Mapped[Optional[str]] = mapped_column(
         comment="The Source asked first for links on this Site, when several Sources handle it",
+    )
+    downloads_paused_until: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(), comment="Automatic downloads from the Site wait until then, because it throttled a download",
     )

@@ -158,6 +158,13 @@ const DEFINITIONS: Record<SiteSettingKey, Definition> = {
         kind: 'toggle',
         summary: onOff,
     },
+    downloadDelayMinutes: {
+        label: 'Download delay',
+        kind: 'value',
+        system: (draft) => draft.downloadSettings.episodeDownloadDelayMinutes,
+        summary: (value: number) => value === 0 ? 'None' : `${value} ${value === 1 ? 'minute' : 'minutes'}`,
+        control: (props) => <NumberControl {...props} min={0} max={7 * 24 * 60} unit="minutes"/>,
+    },
     upgradeCheck: {
         label: 'Upgrade check',
         kind: 'toggle',

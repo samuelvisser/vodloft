@@ -6,13 +6,16 @@ import ReadMore from '../../utils/ReadMore'
 import {episodeTagLabel, SourceFeature, sourceHas} from '../../types/schemas/source'
 import {FORMAT_HEIGHTS, PreferredFormatReg} from '../../types/local_media_profile'
 import RssStreamProfileForm from './RssStreamProfileForm'
+import IptvStreamProfileForm from './IptvStreamProfileForm'
+import WebdavStreamProfileForm from './WebdavStreamProfileForm'
+import type {StreamProfileReadView} from '../../types/schemas/stream_profile_base'
 import StreamProfileAdvisory, {type StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 import SegmentedOptions from '../SegmentedOptions/SegmentedOptions'
 import {MediaTypeReg} from "../../types/stream_profile";
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {useCollectionEpisodeTags, useCollections, useSiteOptions, useSourceLookup} from '../../lib/queries'
 
-export type StreamProfileMode = 'rss' | 'base'
+export type StreamProfileMode = 'rss' | 'iptv' | 'webdav' | 'base'
 
 export type {StreamDownloadProfileDefault} from './StreamProfileAdvisory'
 
@@ -48,6 +51,8 @@ type Props = {
     /** The link of a collection that is not saved yet. */
     collectionUrl?: string
     canOpenDownloadProfiles?: boolean
+    /** The profile as it is saved, for the addresses an app subscribes to. */
+    saved?: StreamProfileReadView['streamProfileImpl']
 }
 
 export default function StreamProfileForm({
@@ -65,6 +70,7 @@ export default function StreamProfileForm({
     sourceKey,
     collectionUrl,
     canOpenDownloadProfiles = true,
+    saved,
 }: Props) {
     const {control, formState: {errors}, getValues, register, setValue, watch} = form
     collectionRoot ??= true
@@ -528,6 +534,28 @@ export default function StreamProfileForm({
                 </div>
             )}
 
+            {mode === 'iptv' && (
+                <IptvStreamProfileForm
+                    form={form}
+                    isCreating={isCreating}
+                    addresses={saved?.type === 'iptv' ? saved : undefined}
+                    onRegenerateToken={onRegenerateToken}
+                    regeneratingToken={regeneratingToken}
+                    liveEpisodes={canStreamLiveEpisodes}
+                    proxyChoice={canStreamFromSource && !!site?.streamProxyChoice}
+                    siteName={streamSourceName}
+                />
+            )}
+            {mode === 'webdav' && (
+                <WebdavStreamProfileForm
+                    form={form}
+                    isCreating={isCreating}
+                    sharePath={saved?.type === 'webdav' ? saved.sharePath : undefined}
+                    onRegenerateToken={onRegenerateToken}
+                    regeneratingToken={regeneratingToken}
+                    siteName={streamSourceName}
+                />
+            )}
             {mode === 'rss' ? (
                 <RssStreamProfileForm
                     form={form}

@@ -25,7 +25,8 @@ import {
 } from '../../types/schemas/video_local_media_profile'
 import {WithRoot} from '../../types/form'
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
-import {LocalMediaProfileTypeReg, localMediaProfileEndpoint} from '../../types/local_media_profile'
+import {effectiveFilenameMode, LocalMediaProfileTypeReg, localMediaProfileEndpoint} from '../../types/local_media_profile'
+import {useLibraryDefaults} from '../../lib/settings'
 import {
     clearLocalMediaProfileDraft,
     editLocalMediaProfileDraftKey,
@@ -45,6 +46,7 @@ export default function EditLocalMediaProfilePage() {
     const navigate = useNavigate()
     const {slug} = useParams<{ slug: string }>()
     const qc = useQueryClient()
+    const systemFilenameMode = useLibraryDefaults().data?.filenameRestrictionMode
     const initializedSlug = useRef<string | undefined>(undefined)
     const renameDecisionRef = useRef<boolean | null>(null)
     const [draftReady, setDraftReady] = useState(false)
@@ -190,9 +192,13 @@ export default function EditLocalMediaProfilePage() {
     })
 
     const onFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+        // A new filename mode names the files differently, just like a new template.
         const outputTemplateChanged = (
-            profile.type === 'collection'
-            && form.getValues('outputTemplate') !== profile.outputTemplate
+            profile.type === 'collection' && (
+                form.getValues('outputTemplate') !== profile.outputTemplate
+                || effectiveFilenameMode(form.getValues('filenameRestrictionMode'), systemFilenameMode)
+                    !== effectiveFilenameMode(profile.filenameRestrictionMode, systemFilenameMode)
+            )
         )
         const indexKeysChanged = profile.type === 'collection' &&
             JSON.stringify((form.getValues('indexingValues') ?? []).map((value: {key: string, keepNumbers?: boolean}) => `${value.key}:${!!value.keepNumbers}`).sort()) !==

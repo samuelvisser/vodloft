@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+
+from backend.services.errors import ServiceError
 
 
 def test_rss_stream_profile_defaults_to_episode_and_auxiliary():
@@ -110,7 +111,7 @@ def db_session():
 
 
 def test_feed_items_respect_stream_profile_episode_types(db_session):
-    from backend.api.endpoints.feeds.service import get_feed_items, get_media_for_episode
+    from backend.services.stream_episodes import get_media_for_episode, get_stream_items
     from backend.db.models import Episode, RssStreamProfile, Season, Collection
     from backend.types.collection_types import EpisodeIdentifier, CollectionType
 
@@ -175,8 +176,8 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
     db_session.add_all([collection, season, normal, auxiliary, profile])
     db_session.flush()
 
-    assert [episode.slug for episode, _ in get_feed_items(db_session, profile)] == ["normal"]
+    assert [episode.slug for episode, _ in get_stream_items(db_session, profile)] == ["normal"]
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ServiceError) as exc_info:
         get_media_for_episode(db_session, profile, auxiliary.slug)
     assert exc_info.value.status_code == 404

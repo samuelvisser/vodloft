@@ -10,22 +10,41 @@ real one when a title or template changed since.
 from __future__ import annotations
 
 import re
-
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
+from ..choices import sponsorblock, sponsorblock_all, video_quality
 from ..contract import (
-    CollectionPlan, CustomIndexPlan, FilePlan, ImportLocation, ImportPlan, ImportWarning, ProfilePlan, SettingPlan,
+    CollectionPlan,
+    CustomIndexPlan,
+    FilePlan,
+    ImportLocation,
+    ImportPlan,
+    ImportWarning,
+    ProfilePlan,
+    SettingPlan,
 )
-from ..paths import DEFAULT_PATH_MAP, PathMap, map_path
+from ..paths import DEFAULT_PATH_MAP, PathMap, map_path, template_root
 from ..uploads import UploadFile
 from ..ytdlp_templates import (
-    OptionError, OptionSet, convert_pinchflat, expand, load_options, options_from, pinchflat_option_files,
+    OptionError,
+    OptionSet,
+    convert_pinchflat,
+    expand,
+    load_options,
+    options_from,
+    pinchflat_option_files,
 )
 from ..ytdlp_templates.options import PINCHFLAT_META_DATE
 from .metadata import saved_values
-from .reader import PinchflatData, PinchflatItem, PinchflatProfile, PinchflatSource, read_pinchflat
+from .reader import (
+    PinchflatData,
+    PinchflatItem,
+    PinchflatProfile,
+    PinchflatSource,
+    read_pinchflat,
+)
 
 PINCHFLAT_DOWNLOADS = "/downloads"
 """Pinchflat's download folder inside its container."""
@@ -40,12 +59,6 @@ _RESOLUTIONS = {
     "360p": ("format_360p", "exact", None),
     "audio": ("format_audio_only", "exact", None),
 }
-# Pinchflat prefers H.264 but takes any codec, which in VODLoft is Your own
-# with H.264 first and every codec allowed.
-_PREFER_H264 = [
-    {"codec": "h264", "allowed": True}, {"codec": "vp9", "allowed": True},
-    {"codec": "av1", "allowed": True}, {"codec": "h265", "allowed": True},
-]
 _LANGUAGE = re.compile(r"[a-z]{2,3}(-[A-Za-z0-9]{2,8})*")
 _INDEX_FIELDS = {"playlist": "playlist_index", "day": "upload_date_index"}
 
@@ -150,6 +163,10 @@ def _profile_warnings(profile: PinchflatProfile) -> list[ImportWarning]:
     return warnings
 
 
+def _preferred_format(profile: PinchflatProfile) -> str:
+    return (_RESOLUTIONS.get(profile.preferred_resolution or "1080p") or ("format_1080p",))[0]
+
+
 def _subtitle_languages(sub_langs: str | None) -> tuple[list[str], list[str]]:
     """Pinchflat's yt-dlp --sub-langs as language codes, and the parts that are no language code.
 
@@ -185,26 +202,9 @@ def _quality_settings(profile: PinchflatProfile) -> dict[str, object]:
         "audio_language": _audio_language(profile.audio_track),
     }
     container = profile.media_container if profile.media_container in ("mp4", "mkv") else "mkv" if profile.media_container else "mp4"
-    # Above 1080p there is rarely H.264, so only a lower resolution in MP4 is Compatibility.
-    if container == "mp4" and profile.preferred_resolution not in ("1440p", "2160p", "4320p"):
-        settings["quality_goal"] = "compatibility"
-    else:
-        settings.update(quality_goal="custom", video_codecs=_PREFER_H264, container=container, audio_codec="aac")
+    # Pinchflat prefers H.264 but takes any codec.
+    settings.update(video_quality(container, profile.preferred_resolution in ("1440p", "2160p", "4320p")))
     return settings
-
-
-def _template_root(template: str, path_map: PathMap) -> tuple[str, str, str | None]:
-    """The template relative to VODLoft's folder for Pinchflat's /downloads, and that folder."""
-    source, target = path_map
-    if source == PINCHFLAT_DOWNLOADS:
-        return template, target.rstrip("/") + "/", None
-    inner = "/" + str(PurePosixPath(source).relative_to(PINCHFLAT_DOWNLOADS)) + "/"
-    stripped = "/" + template.lstrip("/")
-    if stripped.startswith(inner):
-        return stripped[len(inner) - 1:], target.rstrip("/") + "/", None
-    return template, "/downloads/", (
-        f"The template starts outside {source}, which VODLoft can't see; new downloads go under /downloads/ instead"
-    )
 
 
 # Options the converter explains better than a yt-dlp option could: the template and links.
@@ -221,7 +221,7 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
         option_set = None
         warnings.append(ImportWarning("option files", f"yt-dlp refuses the option files: {exc}"))
     types = {source.collection_type for source in variant.sources}
-    template, root, problem = _template_root(variant.template, path_map)
+    template, root, problem = template_root(variant.template, path_map, PINCHFLAT_DOWNLOADS)
     if problem:
         warnings.append(ImportWarning("output template", problem, "close"))
     options = options_from(
@@ -232,7 +232,7 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
 
     custom: list[str] = []
     settings: dict[str, object] = {
-        "preferred_format": (_RESOLUTIONS.get(profile.preferred_resolution or "1080p") or ("format_1080p",))[0],
+        "preferred_format": _preferred_format(profile),
         "collection_scope": "both",
         **_quality_settings(profile),
     }
@@ -289,25 +289,12 @@ def _episode_types(profile: PinchflatProfile) -> list[str]:
     return types
 
 
-SPONSORBLOCK_CATEGORIES = (
-    "sponsor", "selfpromo", "interaction", "intro", "outro", "preview", "filler", "hook", "music_offtopic",
-)
-
-
 def _sponsorblock(profile: PinchflatProfile) -> dict[str, object]:
     """Pinchflat's SponsorBlock setting: remove or mark the chosen categories, keep the others."""
-    on = profile.sponsorblock_behaviour in ("remove", "mark") and bool(profile.sponsorblock_categories)
-    action = "cut" if profile.sponsorblock_behaviour == "remove" else "chapter"
-    chosen = set(profile.sponsorblock_categories)
-    return {
-        "sponsorblock_enabled": on,
-        "sponsorblock_segments": {
-            **{category: action if on and category in chosen else "keep" for category in SPONSORBLOCK_CATEGORIES},
-            # Pinchflat has no choice for these. VODLoft always marked the highlight; viewer chapters stay out.
-            "poi_highlight": "chapter" if on else "keep",
-            "chapter": "keep",
-        },
-    }
+    if profile.sponsorblock_behaviour not in ("remove", "mark"):
+        return sponsorblock({})
+    return sponsorblock_all("cut" if profile.sponsorblock_behaviour == "remove" else "chapter",
+                            profile.sponsorblock_categories or ())
 
 
 _COOKIES = {"disabled": "never", "when_needed": "automatic", "all_operations": "always"}

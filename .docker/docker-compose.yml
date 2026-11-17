@@ -20,5 +20,10 @@ services:
       - ./downloads:/downloads
     environment:
       - TZ=UTC
+      # Uncomment to run as your own user, so downloads belong to it (`id` shows the numbers),
+      # and to choose the permissions of new files (002 lets the group change them too):
+      # - PUID=1000
+      # - PGID=1000
+      # - UMASK=002
       # Uncomment to require a login (recommended when running behind a reverse proxy):
       # - VL_ADMIN_AUTH__PASSWORD=change-me

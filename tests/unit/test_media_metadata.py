@@ -12,6 +12,8 @@ def _episode(*, identifier: str = "numbered"):
         title="The Example Show",
         author_name="Example Host",
         episode_identifier=identifier,
+        genre="Documentaries",
+        content_rating="TV-PG",
     )
     season = SimpleNamespace(season_number=3)
     episode = SimpleNamespace(
@@ -46,6 +48,8 @@ def test_episode_metadata_keeps_real_season_and_episode_numbers():
     assert metadata.ffmpeg_tags()["episode_sort"] == "7"
     # Media servers match the episode by its id at the Source.
     assert metadata.ffmpeg_tags()["dailywire_id"] == "an-episode"
+    # The Collection's genre and rating, as ytdl-sub's TV show presets write them into every episode.
+    assert (metadata.genres, metadata.content_rating) == (("Documentaries",), "TV-PG")
 
 
 def test_date_based_episode_metadata_does_not_invent_numbers():

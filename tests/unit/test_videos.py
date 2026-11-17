@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from sources import Feature, LinkKind, Playback, ResolvedLink, Source, VideoDetails, registry
 from conftest import use_database
+from config.settings.submodels import FilenameRestrictionMode
 
 
 VIDEO_TEMPLATE = (
@@ -177,12 +178,12 @@ def test_video_output_paths_use_the_channel_date_and_id(video_sources, session):
     values = video_output_template_values(video)
     assert values["source"] == "Clips"
     assert values["duration_seconds"] == "61"
-    path = resolve_video_output_path(VIDEO_TEMPLATE, video=video, extension="mp4")
+    path = resolve_video_output_path(VIDEO_TEMPLATE, video=video, extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS)
     assert path.as_posix().endswith("/videos/A Channel/2026-03-04 - Clip abc [abc].mp4")
 
     video.author_name = None
     video.published_at = None
-    path = resolve_video_output_path(VIDEO_TEMPLATE, video=video, extension="mp4")
+    path = resolve_video_output_path(VIDEO_TEMPLATE, video=video, extension="mp4", filename_mode=FilenameRestrictionMode.WINDOWS)
     assert path.as_posix().endswith("/videos/Clips/Clip abc [abc].mp4")
 
 

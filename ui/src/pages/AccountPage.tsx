@@ -1,7 +1,8 @@
 import ChangePasswordForm from '../components/Account/ChangePasswordForm'
 import PageSubtitle from '../components/common/PageSubtitle'
 import { Link } from 'react-router-dom'
-import { getAccess } from '../lib/access'
+import { allows, getAccess } from '../lib/access'
+import StreamAccessCard from '../components/Account/StreamAccessCard'
 
 /** The signed-in user's own account: who they are, and changing their password. */
 export default function AccountPage() {
@@ -18,6 +19,7 @@ export default function AccountPage() {
         <h2>Notifications</h2>
         <p>Get a push message on your phone or computer when your Quick downloads finish or new episodes arrive. <Link to="/account/notifications">Set up notifications</Link></p>
       </div>
+      {allows(access, 'stream_profiles') && <StreamAccessCard />}
       {user ? (
         <div className="account-card">
           <h2>Password</h2>

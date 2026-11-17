@@ -1,6 +1,7 @@
 import {z} from 'zod'
 import {ApiDateTimeSchema} from "./datetime";
 import {DownloadOptionsSchema} from "./source";
+import {FilenameRestrictionModeSchema} from "./settings";
 
 
 export const LocalMediaProfileStorageModeSchema = z.enum(['system', 'direct', 'temporary'])
@@ -21,6 +22,8 @@ export const LocalMediaProfileMetadataModeSchema = z.enum([
     'embed_and_nfo',
 ])
 export type LocalMediaProfileMetadataMode = z.infer<typeof LocalMediaProfileMetadataModeSchema>
+export const LocalMediaProfileFilenameModeSchema = z.enum(['system', ...FilenameRestrictionModeSchema.options])
+export type LocalMediaProfileFilenameMode = z.infer<typeof LocalMediaProfileFilenameModeSchema>
 export const LocalMediaProfileSubtitleModeSchema = z.enum([
     'no_subtitles', 'embed', 'sidecar', 'embed_and_sidecar',
 ])
@@ -64,6 +67,9 @@ export const LocalMediaProfileSchemaRequest = z.object({
     downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
+    kodiSafeNfo: z.boolean().default(false),
+    filenameRestrictionMode: LocalMediaProfileFilenameModeSchema.default('system'),
+    fileDateFromPublishDate: z.boolean().default(false),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     /** The Sites the profile is offered for; null until the form fills in every Site VODLoft knows. */
     siteKeys: z.array(z.string()).nullable().default(null),
@@ -108,6 +114,9 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
+    kodiSafeNfo: z.boolean().default(false),
+    filenameRestrictionMode: LocalMediaProfileFilenameModeSchema.default('system'),
+    fileDateFromPublishDate: z.boolean().default(false),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     ...QualityAndLanguageFields,
     siteKeys: z.array(z.string()).default([]),

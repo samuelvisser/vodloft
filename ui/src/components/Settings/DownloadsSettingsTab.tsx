@@ -7,6 +7,7 @@ import type {
 } from '../../types/schemas/settings'
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import {FilenameRestrictionModeReg} from '../../types/local_media_profile'
 import {AutoSubtitlesReg} from '../../types/quality'
 import {UpgradeImprovementSchema} from '../../types/schemas/download_profile'
 import {UpgradeRepeatReg} from '../../types/schemas/siteSettings'
@@ -24,12 +25,6 @@ import {
     TextField,
     ToggleField,
 } from './SettingsControls'
-
-const FilenameRestrictionModeReg = createSelectRegistry('FilenameRestrictionMode', {
-    unrestricted: {label: 'Minimal restrictions'},
-    windows: {label: 'Windows-compatible filenames'},
-    restricted: {label: 'Restricted filenames'},
-})
 
 const DownloadModeReg = createSelectRegistry('DownloadMode', {
     direct: {label: 'Save directly to downloads'},
@@ -117,12 +112,12 @@ export default function DownloadsSettingsTab({
                                                  downloadStorage,
                                              }: SettingsTabProps) {
     const temporaryDownloadRoot = draft.downloadSettings.temporaryDownloadRoot
-    const rssCacheRoot = (
-        !isFieldExplicit('downloadSettings.rssCacheRoot')
-        && !isFieldDirty('downloadSettings.rssCacheRoot')
+    const streamCacheRoot = (
+        !isFieldExplicit('downloadSettings.streamCacheRoot')
+        && !isFieldDirty('downloadSettings.streamCacheRoot')
     )
-        ? childPath(draft.downloadSettings.downloadRoot, '.vodloft-rss-cache')
-        : draft.downloadSettings.rssCacheRoot
+        ? childPath(draft.downloadSettings.downloadRoot, '.vodloft-stream-cache')
+        : draft.downloadSettings.streamCacheRoot
     const quickDownloadRoot = (
         !isFieldExplicit('downloadSettings.quickDownloadRoot')
         && !isFieldDirty('downloadSettings.quickDownloadRoot')
@@ -192,22 +187,22 @@ export default function DownloadsSettingsTab({
                     </div>
                 ) : null}
                 <TextField
-                    id="settings-rss-cache-root"
-                    label="RSS cache folder"
-                    value={rssCacheRoot}
-                    error={errorFor('downloadSettings.rssCacheRoot')}
-                    environmentVariable={environmentVariableFor('downloadSettings.rssCacheRoot')}
+                    id="settings-stream-cache-root"
+                    label="Stream Video Cache folder"
+                    value={streamCacheRoot}
+                    error={errorFor('downloadSettings.streamCacheRoot')}
+                    environmentVariable={environmentVariableFor('downloadSettings.streamCacheRoot')}
                     onChange={(value) => updateDraft((next) => {
-                        next.downloadSettings.rssCacheRoot = value
+                        next.downloadSettings.streamCacheRoot = value
                     })}
                     help={
-                        <ReadMore summary="Stores media VODLoft prepares or caches while fulfilling RSS requests.">
+                        <ReadMore summary="Stores the video VODLoft prepares while it streams episodes to your apps.">
                             <p>
-                                By default, the cache lives in <code>.vodloft-rss-cache</code> inside the download root.
+                                By default, the cache lives in <code>.vodloft-stream-cache</code> inside the download root.
                             </p>
                             <p>
                                 You may explicitly place it anywhere VODLoft can write, including container-local storage such
-                                as <code>/tmp/vodloft-rss-cache</code>. A container-local cache does not need a host volume, but is lost when the
+                                as <code>/tmp/vodloft-stream-cache</code>. A container-local cache does not need a host volume, but is lost when the
                                 container is recreated.
                             </p>
                         </ReadMore>
@@ -251,16 +246,16 @@ export default function DownloadsSettingsTab({
                     wide
                 />
                 <DurationField
-                    id="settings-rss-cache-retention"
-                    label="RSS cache retention period"
-                    value={draft.downloadSettings.rssCacheRetentionSeconds}
+                    id="settings-stream-cache-retention"
+                    label="Stream Video Cache retention period"
+                    value={draft.downloadSettings.streamCacheRetentionSeconds}
                     backendUnit="seconds"
-                    error={errorFor('downloadSettings.rssCacheRetentionSeconds')}
-                    environmentVariable={environmentVariableFor('downloadSettings.rssCacheRetentionSeconds')}
+                    error={errorFor('downloadSettings.streamCacheRetentionSeconds')}
+                    environmentVariable={environmentVariableFor('downloadSettings.streamCacheRetentionSeconds')}
                     onChange={(value) => updateDraft((next) => {
-                        next.downloadSettings.rssCacheRetentionSeconds = value
+                        next.downloadSettings.streamCacheRetentionSeconds = value
                     })}
-                    help="Cached RSS media expires after this much time without being served. Serving a cached MP4 refreshes its retention period."
+                    help="Cached video expires after this much time without being served. Serving a cached MP4 refreshes its retention period."
                 />
                 <SelectField
                     id="settings-download-mode"
@@ -363,7 +358,7 @@ export default function DownloadsSettingsTab({
                 />
                 <SelectField
                     id="settings-filename-restriction-mode"
-                    label="Filename restrictions"
+                    label="Default filename restrictions"
                     value={draft.downloadSettings.filenameRestrictionMode}
                     registry={FilenameRestrictionModeReg}
                     error={errorFor('downloadSettings.filenameRestrictionMode')}
@@ -372,23 +367,16 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.filenameRestrictionMode = value as FilenameRestrictionMode
                     })}
                     help={
-                        <ReadMore summary={<span>Choose filename restriction mode to ensure filesystem compatibility.</span>}>
+                        <ReadMore summary={<span>The filename mode of Local Media Profiles set to System, and the one quick downloads use.</span>}>
                             <p>
-                                The modes follow yt-dlp, so new files are named as yt-dlp and Pinchflat name them.
-                                Files you already have keep their names until you rename a profile's files.
+                                A Local Media Profile can also have a filename mode of its own, so a Windows-compatible
+                                library can sit beside an ASCII-only copy for a car stereo. Files you already have keep
+                                their names until you rename a profile's files.
                             </p>
                             <p>
-                                <strong>Minimal restrictions</strong> preserves Unicode and punctuation. Only a <code>/</code> in
-                                a value changes, to <code>⧸</code>.
-                            </p>
-                            <p>
-                                <strong>Windows-compatible</strong> turns characters Windows does not allow into look-alikes,
-                                such as <code>：</code> for <code>:</code>, and keeps reserved names from being used.
-                                Unicode is preserved.
-                            </p>
-                            <p>
-                                <strong>Restricted</strong> uses ASCII-only names without spaces or ampersands. A name with
-                                nothing ASCII left becomes <code>no_ascii_file_name</code>.
+                                <strong>Minimal restrictions</strong> preserves Unicode and punctuation,
+                                <strong> Windows-compatible</strong> replaces what Windows does not allow, and
+                                <strong> Restricted</strong> uses ASCII-only names without spaces or ampersands.
                             </p>
                         </ReadMore>
                     }
@@ -418,7 +406,7 @@ export default function DownloadsSettingsTab({
                             </p>
                             <p>
                                 This delay applies to automatic downloads. For manual downloads, you can choose to wait until the delay expires or download immediately.
-                                Set the delay to 0 to disable it.
+                                Set the delay to 0 to disable it. Each Site can have a delay of its own, or none, under Sites below.
                             </p>
                         </ReadMore>
                     }

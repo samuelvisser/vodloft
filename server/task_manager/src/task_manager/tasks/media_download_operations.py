@@ -18,6 +18,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.media_types import MediaType
 from backend.services.episode_download_delay import episode_download_delay_ready_at
+from backend.services.throttle_guard import last_throttled, site_paused
 from backend.services.media_download_history import (
     record_media_download_history,
     record_media_download_operation_history_once,
@@ -67,6 +68,7 @@ MEDIA_DOWNLOAD_PUBLICATION_DELAY_REASON = "publication_delay"
 MEDIA_DOWNLOAD_PUBLICATION_DELAY_MESSAGE = "Waiting for the post-publication download delay"
 MEDIA_DOWNLOAD_COUNTDOWN_WAIT_REASON = "publication_countdown"
 MEDIA_DOWNLOAD_COUNTDOWN_WAIT_MESSAGE = "Waiting for the episode countdown to finish"
+MEDIA_DOWNLOAD_SITE_THROTTLED_REASON = "site_throttled"
 _PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY = "publication_delay_bypassed"
 _DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
 # Quick downloads share the transfer slots without being media downloads.
@@ -1329,18 +1331,54 @@ def dispatch_queued_media_download_operations(
 
     # Reservation/link filters are part of the SQL candidate query, so the
     # dispatcher only materializes operations that can actually claim a slot.
-    operations = _ordered_queued_media_download_operations(
-        session,
-        limit=effective_budget,
-    )
-
     dispatched = 0
-    for operation in operations:
-        if _reserve_target_dispatch(session, operation):
-            dispatched += 1
-            if dispatched >= effective_budget:
-                break
+    now = datetime.now(timezone.utc)
+    while dispatched < effective_budget:
+        operations = _ordered_queued_media_download_operations(
+            session,
+            limit=effective_budget - dispatched,
+        )
+        progressed = False
+        for operation in operations:
+            # An operation that starts waiting leaves the queue, so the next round takes another one.
+            if _wait_for_throttled_site(session, operation, now):
+                progressed = True
+            elif _reserve_target_dispatch(session, operation):
+                dispatched += 1
+                progressed = True
+        if not progressed:
+            break
     return quick + dispatched
+
+
+def _wait_for_throttled_site(session: Session, operation: TaskOperation, now: datetime) -> bool:
+    """Hold an automatic download back while its Site throttles downloads; a download asked for in the
+    UI starts anyway."""
+    if operation.source != OperationSource.SYSTEM.value or not isinstance(operation.resource_id, int):
+        return False
+    site = site_paused(session, operation.resource_id, now)
+    if site is None:
+        return False
+    set_operation_admission_wait(
+        operation,
+        reason=MEDIA_DOWNLOAD_SITE_THROTTLED_REASON,
+        message=f"{site.name} held back its better resolutions, so its downloads wait a while",
+        until=site.downloads_paused_until,
+    )
+    refresh_operation(session, operation.id)
+    _schedule_delayed_media_download_dispatch(operation.id, run_at=site.downloads_paused_until)
+    return True
+
+
+def queue_throttled_download_again(session: Session, media_download_id: int) -> None:
+    """Queue a download again after its Site throttled it; it waits until the Site's pause ends."""
+    if get_active_media_download_operation(session, media_download_id) is not None:
+        return
+    download = session.get(MediaDownloadBase, media_download_id)
+    if download is None or download.automatic_retry_suppressed or not last_throttled(session, media_download_id):
+        return
+    kept = download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value
+    create_media_download_operation(session, download, is_redownload=kept, prepare_existing_artifact=kept)
 
 
 def on_media_download_task_terminal(
@@ -1353,6 +1391,7 @@ def on_media_download_task_terminal(
     def work(session):
         if resource_type == ResourceType.MEDIA_DOWNLOAD.value and resource_id is not None:
             queue_episode_redownload_if_ready(session, resource_id)
+            queue_throttled_download_again(session, resource_id)
         dispatch_queued_media_download_operations(session)
 
     try:

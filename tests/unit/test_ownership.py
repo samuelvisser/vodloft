@@ -153,7 +153,9 @@ def test_stream_profiles_belong_to_whoever_made_them(session, monkeypatch):
     from backend.api.endpoints.rss_stream_profiles import service as rss
     from backend.api.endpoints.stream_profiles.service import get_stream_profiles_list
 
-    monkeypatch.setattr(rss, "ensure_site_can_stream", lambda collection, **_: None)
+    from backend.api.endpoints.stream_profiles import service as stream_profiles
+
+    monkeypatch.setattr(stream_profiles, "ensure_site_can_stream", lambda collection, **_: None)
     _add_users(session, 1, 2)
     collection = _collection(session)
     mine = _profile(session, _user(1, "viewer"), collection)
@@ -170,18 +172,22 @@ def test_stream_profiles_belong_to_whoever_made_them(session, monkeypatch):
 
 
 def test_a_disabled_users_feeds_stop_answering(session, monkeypatch):
-    from backend.api.endpoints.feeds.service import get_rss_stream_profile_by_token
+    from backend.services.errors import ServiceError
+    from backend.services.stream_episodes import get_stream_profile_by_token
+    from backend.types.stream_profile_types import StreamProfileType
     from backend.api.endpoints.rss_stream_profiles import service as rss
     from backend.db.models import RssStreamProfile, User
 
-    monkeypatch.setattr(rss, "ensure_site_can_stream", lambda collection, **_: None)
+    from backend.api.endpoints.stream_profiles import service as stream_profiles
+
+    monkeypatch.setattr(stream_profiles, "ensure_site_can_stream", lambda collection, **_: None)
     _add_users(session, 1)
     profile = session.get(RssStreamProfile, _profile(session, _user(1, "viewer"), _collection(session)).id)
-    assert get_rss_stream_profile_by_token(session, profile.token).id == profile.id
+    assert get_stream_profile_by_token(session, profile.token, StreamProfileType.RSS).id == profile.id
     session.get(User, 1).is_enabled = False
     session.flush()
-    with pytest.raises(HTTPException) as gone:
-        get_rss_stream_profile_by_token(session, profile.token)
+    with pytest.raises(ServiceError) as gone:
+        get_stream_profile_by_token(session, profile.token, StreamProfileType.RSS)
     assert gone.value.status_code == 404
 
 
@@ -190,7 +196,9 @@ def test_profiles_from_before_accounts_go_to_the_first_administrator(session, mo
     from backend.db.models import RssStreamProfile, Settings
     from backend.services import users
 
-    monkeypatch.setattr(rss, "ensure_site_can_stream", lambda collection, **_: None)
+    from backend.api.endpoints.stream_profiles import service as stream_profiles
+
+    monkeypatch.setattr(stream_profiles, "ensure_site_can_stream", lambda collection, **_: None)
     session.add(Settings())
     profile = _profile(session, Access.full(), _collection(session))
     admin = users.set_accounts_enabled(session, True, first_administrator=("sam", "hash"))
@@ -203,7 +211,9 @@ def test_deleting_a_user_transfers_or_deletes_their_profiles(session, monkeypatc
     from backend.db.models import RssStreamProfile, User
     from backend.services import users
 
-    monkeypatch.setattr(rss, "ensure_site_can_stream", lambda collection, **_: None)
+    from backend.api.endpoints.stream_profiles import service as stream_profiles
+
+    monkeypatch.setattr(stream_profiles, "ensure_site_can_stream", lambda collection, **_: None)
     _add_users(session, 1, 2)
     profile_id = _profile(session, _user(2, "viewer"), _collection(session)).id
     users.delete_user(session, session.get(User, 2), stream_profiles=choice, heir_id=1)
@@ -237,11 +247,13 @@ def test_collections_remember_who_added_them(session):
 
 
 def test_a_feed_streams_only_what_its_owner_may_use(session, monkeypatch):
-    from backend.api.endpoints.feeds import service as feeds
+    from backend.services import stream_episodes as feeds
     from backend.api.endpoints.rss_stream_profiles import service as rss
     from backend.db.models import RssStreamProfile, User
 
-    monkeypatch.setattr(rss, "ensure_site_can_stream", lambda collection, **_: None)
+    from backend.api.endpoints.stream_profiles import service as stream_profiles
+
+    monkeypatch.setattr(stream_profiles, "ensure_site_can_stream", lambda collection, **_: None)
     _add_users(session, 1)
     profile = session.get(RssStreamProfile, _profile(session, _user(1, "viewer"), _collection(session)).id)
     profile.collection.membership_level = "PREMIUM"

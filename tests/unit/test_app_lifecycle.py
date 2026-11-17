@@ -36,7 +36,7 @@ assert 'refresh_movie_extras' in {definition.key for definition in all_definitio
     assert result.returncode == 0, result.stderr
 
 
-def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_path):
+def test_download_filesystem_recovery_cleans_expired_stream_cache(monkeypatch, tmp_path):
     import backend.services.video_cache as cached_video
     import backend.app as backend_app
     import backend.services.download_recovery as download_recovery
@@ -61,8 +61,8 @@ def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_
     )
     monkeypatch.setattr(
         cached_video,
-        "cleanup_expired_rss_cache",
-        lambda: calls.append("rss-cache") or 3,
+        "cleanup_expired_stream_cache",
+        lambda: calls.append("stream-cache") or 3,
     )
 
     monkeypatch.setattr(
@@ -80,7 +80,7 @@ def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_
 
     backend_app._recover_download_filesystem(download_settings, pause)
 
-    assert calls == ["retired-folders", "replacements", "reservations", "temporary", "rss-cache", "release"]
+    assert calls == ["retired-folders", "replacements", "reservations", "temporary", "stream-cache", "release"]
 
 
 def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatch):

@@ -16,6 +16,7 @@ from backend.types.local_media_profile_types import (
     AudioCodec,
     AudioFormat,
     CodecFallback,
+    LocalMediaProfileFilenameMode,
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
     LocalMediaProfileSubtitleMode,
@@ -62,6 +63,9 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     download_mode: Union[LocalMediaProfileStorageMode, str] = LocalMediaProfileStorageMode.SYSTEM
     thumbnail_mode: Union[LocalMediaProfileThumbnailMode, str] = LocalMediaProfileThumbnailMode.SYSTEM
     metadata_mode: Union[LocalMediaProfileMetadataMode, str] = LocalMediaProfileMetadataMode.SYSTEM
+    kodi_safe_nfo: bool
+    filename_restriction_mode: LocalMediaProfileFilenameMode
+    file_date_from_publish_date: bool
     subtitle_mode: Union[LocalMediaProfileSubtitleMode, str] = LocalMediaProfileSubtitleMode.SIDECAR
     subtitle_languages: list[str]
     subtitle_language_mode: Union[SubtitleLanguageMode, str]
@@ -128,6 +132,7 @@ class LocalMediaProfileTemplatePreview(RequestBase):
     type: LocalMediaProfileType
     output_template: str = Field(min_length=1, max_length=4096)
     preferred_format: PreferredFormat
+    filename_restriction_mode: LocalMediaProfileFilenameMode
     values: dict[str, str] = Field(default_factory=dict)
     source_id: str | None = None
     local_media_profile_id: int | None = None

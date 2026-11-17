@@ -76,7 +76,7 @@ def test_each_site_downloads_the_nearest_it_has():
 
 
 def test_a_feed_only_prefers_resolutions_its_site_has():
-    from backend.api.endpoints.rss_stream_profiles.service import ensure_site_can_stream
+    from backend.api.endpoints.stream_profiles.service import ensure_site_can_stream
 
     dailywire = SimpleNamespace(sharing_url="https://www.dailywire.com/show/heights", source_key="dailywire")
     with pytest.raises(HTTPException, match="has no 4k video"):

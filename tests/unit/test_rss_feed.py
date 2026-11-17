@@ -209,7 +209,7 @@ def test_download_only_feed_excludes_episodes_without_relevant_local_media(
         db_session,
         tmp_path,
 ):
-    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.services.stream_episodes import get_stream_items
 
     collection = _make_collection(db_session)
     season = _make_season(db_session, collection)
@@ -240,7 +240,7 @@ def test_download_only_feed_excludes_episodes_without_relevant_local_media(
         use_source_stream=False,
     )
 
-    items = get_feed_items(db_session, profile)
+    items = get_stream_items(db_session, profile)
 
     assert items == [(newest, local)]
     assert older not in [episode for episode, _ in items]
@@ -249,7 +249,8 @@ def test_download_only_feed_excludes_episodes_without_relevant_local_media(
 def test_dailywire_enabled_feed_keeps_undownloaded_episode_with_stable_url(
         db_session,
 ):
-    from backend.api.endpoints.feeds.service import get_feed_items, render_rss_feed
+    from backend.api.endpoints.feeds.service import render_rss_feed
+    from backend.services.stream_episodes import get_stream_items
 
     collection = _make_collection(db_session)
     season = _make_season(db_session, collection)
@@ -262,7 +263,7 @@ def test_dailywire_enabled_feed_keeps_undownloaded_episode_with_stable_url(
         use_source_stream=True,
     )
 
-    assert get_feed_items(db_session, profile) == [(episode, None)]
+    assert get_stream_items(db_session, profile) == [(episode, None)]
 
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
     assert (
@@ -381,7 +382,7 @@ def test_rss_media_urls_do_not_change_when_download_appears(
 
 
 def test_max_items_keeps_newest_feed_entries(db_session):
-    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.services.stream_episodes import get_stream_items
 
     collection = _make_collection(db_session)
     season = _make_season(db_session, collection)
@@ -410,7 +411,7 @@ def test_max_items_keeps_newest_feed_entries(db_session):
         max_items=2,
     )
 
-    assert [episode for episode, _ in get_feed_items(db_session, profile)] == [
+    assert [episode for episode, _ in get_stream_items(db_session, profile)] == [
         newest,
         second,
     ]
@@ -633,7 +634,7 @@ def test_get_source_stream_url_selects_requested_media(
         db_session,
         monkeypatch,
 ):
-    import backend.api.endpoints.feeds.service as service
+    import backend.services.stream_episodes as service
 
     collection = _make_collection(db_session)
     season = _make_season(db_session, collection)
@@ -867,7 +868,7 @@ def test_download_only_audio_hls_requires_both_advertised_local_sources(
         db_session,
         tmp_path,
 ):
-    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.services.stream_episodes import get_stream_items
 
     collection = _make_collection(db_session)
     season = _make_season(db_session, collection)
@@ -900,7 +901,7 @@ def test_download_only_audio_hls_requires_both_advertised_local_sources(
     )
     db_session.flush()
 
-    assert get_feed_items(db_session, profile) == []
+    assert get_stream_items(db_session, profile) == []
 
     audio_profile = _make_local_media_profile(
         db_session,
@@ -914,14 +915,14 @@ def test_download_only_audio_hls_requires_both_advertised_local_sources(
         tmp_path / "episode.m4a",
     )
 
-    assert get_feed_items(db_session, profile) == [(episode, audio_download)]
+    assert get_stream_items(db_session, profile) == [(episode, audio_download)]
 
 
 def test_download_only_mp4_hls_requires_both_advertised_video_sources(
         db_session,
         tmp_path,
 ):
-    from backend.api.endpoints.feeds.service import get_feed_items
+    from backend.services.stream_episodes import get_stream_items
 
     collection = _make_collection(db_session)
     season = _make_season(db_session, collection)
@@ -946,7 +947,7 @@ def test_download_only_mp4_hls_requires_both_advertised_video_sources(
         tmp_path / "episode.mp4",
     )
 
-    assert get_feed_items(db_session, profile) == []
+    assert get_stream_items(db_session, profile) == []
 
     hls_profile = _make_local_media_profile(
         db_session,
@@ -962,7 +963,7 @@ def test_download_only_mp4_hls_requires_both_advertised_video_sources(
     )
     _make_hls_bundle(hls_path)
 
-    assert get_feed_items(db_session, profile) == [(episode, mp4_download)]
+    assert get_stream_items(db_session, profile) == [(episode, mp4_download)]
 
 
 def test_a_downloaded_audio_enclosure_gives_the_file_size(db_session, tmp_path):

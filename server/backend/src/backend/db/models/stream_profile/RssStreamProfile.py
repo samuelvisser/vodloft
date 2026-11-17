@@ -1,9 +1,9 @@
-from sqlalchemy import ForeignKey, JSON
-from sqlalchemy.ext.mutable import MutableList
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .StreamProfileBase import StreamProfileBase
-from backend.types.stream_profile_types import StreamProfileType
+from backend.types.local_media_profile_types import PreferredFormat
+from backend.types.stream_profile_types import RSS_OUTPUT_MODE_MEDIA_KINDS, StreamMediaKind, StreamProfileType
 
 
 class RssStreamProfile(StreamProfileBase):
@@ -16,23 +16,12 @@ class RssStreamProfile(StreamProfileBase):
     )
     feed_url: Mapped[str]
     video_output_mode: Mapped[str | None] = mapped_column(nullable=True)
-    max_items: Mapped[int] = mapped_column(default=0)
-    stream_live_episodes: Mapped[bool] = mapped_column(
-        default=False,
-        server_default="0",
-        nullable=False,
-    )
-    proxy_source_stream: Mapped[bool] = mapped_column(
-        default=True,
-        server_default="1",
-        nullable=False,
-    )
-    live_episode_handoff_ids: Mapped[list[int]] = mapped_column(
-        MutableList.as_mutable(JSON),
-        default=list,
-        server_default="[]",
-        nullable=False,
-    )
+
+    @property
+    def media_kinds(self) -> tuple[StreamMediaKind, ...]:
+        if self.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value:
+            return ("audio",)
+        return RSS_OUTPUT_MODE_MEDIA_KINDS.get(self.video_output_mode, ("mp4",))
 
     def __repr__(self) -> str:
         return (

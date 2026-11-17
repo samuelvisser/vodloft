@@ -161,7 +161,8 @@ def test_an_example_renders_a_custom_index_by_name():
 
     result = get_output_template_preview(None, LocalMediaProfileTemplatePreview.model_validate({
         "type": "collection", "outputTemplate": "/downloads/{{ episode_title }} {{ 'part' | custom_index }}.ext",
-        "preferredFormat": "format_1080p", "values": {"episode_title": "Pilot"}, "sourceId": "new-episode:pilot",
+        "preferredFormat": "format_1080p", "filenameRestrictionMode": "windows",
+        "values": {"episode_title": "Pilot"}, "sourceId": "new-episode:pilot",
         "indexingValues": [{"key": "part", "name": "Part"}],
     }))
 

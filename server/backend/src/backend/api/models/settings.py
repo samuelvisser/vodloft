@@ -101,11 +101,11 @@ SettingFieldPath = Literal[
     "downloadSettings.downloadCollectionAssets",
     "downloadSettings.collectionArtworkFallbackFormat",
     "downloadSettings.temporaryDownloadRoot",
-    "downloadSettings.rssCacheRoot",
+    "downloadSettings.streamCacheRoot",
     "downloadSettings.quickDownloadRoot",
     "downloadSettings.thumbnailRoot",
     "downloadSettings.lockRoot",
-    "downloadSettings.rssCacheRetentionSeconds",
+    "downloadSettings.streamCacheRetentionSeconds",
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
@@ -208,11 +208,11 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.metadataMode",
     "downloadSettings.downloadCollectionAssets",
     "downloadSettings.temporaryDownloadRoot",
-    "downloadSettings.rssCacheRoot",
+    "downloadSettings.streamCacheRoot",
     "downloadSettings.quickDownloadRoot",
     "downloadSettings.thumbnailRoot",
     "downloadSettings.lockRoot",
-    "downloadSettings.rssCacheRetentionSeconds",
+    "downloadSettings.streamCacheRetentionSeconds",
     "downloadSettings.filenameRestrictionMode",
     "downloadSettings.remuxVideoToMp4",
     "downloadSettings.ffmpegPath",
@@ -391,11 +391,11 @@ class DownloadSettingsValue(_SettingsValueModel):
     download_collection_assets: bool
     collection_artwork_fallback_format: CollectionArtworkFallbackFormat
     temporary_download_root: Path
-    rss_cache_root: Path
+    stream_cache_root: Path
     quick_download_root: Path
     thumbnail_root: Path
     lock_root: Path
-    rss_cache_retention_seconds: int = Field(ge=1)
+    stream_cache_retention_seconds: int = Field(ge=1)
     filename_restriction_mode: FilenameRestrictionMode
     remux_video_to_mp4: bool
     ffmpeg_path: str = Field(min_length=1)
@@ -411,8 +411,8 @@ class DownloadSettingsValue(_SettingsValueModel):
     _validate_temporary_download_root = field_validator(
         "temporary_download_root", mode="before"
     )(_validate_non_empty_path)
-    _validate_rss_cache_root = field_validator(
-        "rss_cache_root", mode="before"
+    _validate_stream_cache_root = field_validator(
+        "stream_cache_root", mode="before"
     )(_validate_non_empty_path)
     _validate_quick_download_root = field_validator(
         "quick_download_root", mode="before"
@@ -696,6 +696,8 @@ class LibraryDefaultsAPIRead(ResponseBase):
     download_mode: DownloadMode
     thumbnail_mode: ThumbnailMode
     metadata_mode: MetadataMode
+    filename_restriction_mode: FilenameRestrictionMode
+    """The filename mode a new Local Media Profile starts with."""
     no_usable_media_delete_after_minutes: int
 
 

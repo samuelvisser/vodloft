@@ -9,14 +9,14 @@ import {StreamProfileReadView} from '../../types/schemas/stream_profile_base'
 import StreamProfileForm from '../../components/StreamProfile/StreamProfileForm'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
-import {RssStreamProfileUpdateIn, RssStreamProfileUpdateSchema} from '../../types/schemas/rss_stream_profile'
+import {isStreamProfileType, STREAM_PROFILE_TYPES} from '../../components/StreamProfile/streamProfileTypes'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {faIcon} from '../../icons/faIcon'
 import {downloadedEpisodeTypes} from '../../components/DownloadProfile/episodeFilters'
 import {apiUrl} from '../../lib/api'
 
 
-type RouteParams = { type?: 'rss'; id?: string }
+type RouteParams = { type?: string; id?: string }
 
 export default function EditStreamProfilePage() {
     const navigate = useNavigate()
@@ -51,8 +51,10 @@ export default function EditStreamProfilePage() {
             }))
     }, [downloadProfiles, streamProfile?.collectionSlug])
 
-    const form = useForm<RssStreamProfileUpdateIn>({
-        resolver: zodResolver(RssStreamProfileUpdateSchema),
+    const profileType = isStreamProfileType(type) ? STREAM_PROFILE_TYPES[type] : undefined
+    const updateSchema = (profileType ?? STREAM_PROFILE_TYPES.rss).updateSchema
+    const form = useForm<any>({
+        resolver: (values, context, options) => zodResolver(updateSchema as any)(values, context, options),
         mode: 'onBlur',
         shouldFocusError: true,
     })
@@ -63,11 +65,11 @@ export default function EditStreamProfilePage() {
     useEffect(() => {
         if (!isFetchedAfterMount || !streamProfile || initializedId.current === id) return
         initializedId.current = id
-        form.reset(RssStreamProfileUpdateSchema.parse({
+        form.reset(updateSchema.parse({
             ...streamProfile.streamProfileImpl,
             title: streamProfile.streamProfileImpl.effectiveTitle,
         }))
-    }, [isFetchedAfterMount, streamProfile, id, form])
+    }, [isFetchedAfterMount, streamProfile, id, form, updateSchema])
 
     const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
@@ -80,24 +82,24 @@ export default function EditStreamProfilePage() {
         setRegenerateConfirmOpen(false)
         setRegenerating(true)
         try {
-            const res = await fetch(`${apiUrl()}/rss-stream-profiles/${profileId}/regenerate-token`, {
+            const res = await fetch(`${apiUrl()}/${profileType?.endpoint}/${profileId}/regenerate-token`, {
                 method: 'POST',
                 credentials: 'include',
             })
             if (res.ok) {
                 const updated = await res.json()
-                form.setValue('feedUrl', updated.feedUrl, {shouldDirty: false})
+                if (type === 'rss') form.setValue('feedUrl', updated.feedUrl, {shouldDirty: false})
                 await qc.invalidateQueries({queryKey: ['streamProfile', id]})
                 await qc.invalidateQueries({queryKey: ['streamProfilesView']})
             }
         } finally {
             setRegenerating(false)
         }
-    }, [profileId, regenerating, id, qc, form])
+    }, [profileId, regenerating, id, qc, form, profileType, type])
 
-    const submitFn = async (data: RssStreamProfileUpdateIn) => {
-        if (!profileId) return undefined as any
-        return fetch(`${apiUrl()}/rss-stream-profiles/${profileId}`, {
+    const submitFn = async (data: unknown) => {
+        if (!profileId || !profileType) return undefined as any
+        return fetch(`${apiUrl()}/${profileType.endpoint}/${profileId}`, {
             method: 'PATCH',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',
@@ -111,13 +113,13 @@ export default function EditStreamProfilePage() {
         navigate('/stream-profiles')
     }
 
-    const onSubmit = buildServerAwareSubmit(form as any, async (dataOut: RssStreamProfileUpdateIn) => {
+    const onSubmit = buildServerAwareSubmit(form as any, async (dataOut: unknown) => {
         const res = await submitFn(dataOut)
         if (res?.ok) await onSuccess()
         return res
     })
 
-    if (type !== 'rss' || !profileId) {
+    if (!profileType || !profileId || (streamProfile && streamProfile.type !== type)) {
         return (
             <section className="view" aria-labelledby="edit-stream-profile-title">
                 <div className="view-header">
@@ -145,7 +147,7 @@ export default function EditStreamProfilePage() {
                 <form className="form" onSubmit={onSubmit} noValidate>
                     <div className="form-row">
                         <label>Profile type</label>
-                        <div style={{padding: '6px 0'}}>RSS</div>
+                        <div style={{padding: '6px 0'}}>{profileType.label}</div>
                     </div>
 
                     <div className="form-row">
@@ -163,8 +165,9 @@ export default function EditStreamProfilePage() {
 
                     <StreamProfileForm
                         form={form as any}
-                        mode="rss"
+                        mode={isStreamProfileType(type) ? type : 'rss'}
                         collectionRoot={false}
+                        saved={streamProfile?.streamProfileImpl}
                         onRegenerateToken={onRegenerateToken}
                         regeneratingToken={regenerating}
                         downloadProfileDefaults={downloadProfileDefaults}
@@ -192,7 +195,7 @@ export default function EditStreamProfilePage() {
                 ref={confirmRef}
                 title="Delete stream profile"
                 subjectProp="collectionTitle"
-                deleteRequest={() => fetch(`${apiUrl()}/rss-stream-profiles/${profileId}`, {method: 'DELETE', credentials: 'include'})}
+                deleteRequest={() => fetch(`${apiUrl()}/${profileType?.endpoint}/${profileId}`, {method: 'DELETE', credentials: 'include'})}
                 invalidateQueries={[['streamProfilesView']]}
                 inUseMessage="This stream profile is in use, it cannot be deleted"
                 onDeleted={onCancel}
@@ -200,19 +203,28 @@ export default function EditStreamProfilePage() {
 
             <ConfirmDialog
                 open={regenerateConfirmOpen}
-                title="Regenerate RSS feed URL"
+                title={type === 'rss' ? 'Regenerate RSS feed URL' : 'Regenerate channel addresses'}
                 onDismiss={() => setRegenerateConfirmOpen(false)}
                 icon={faIcon('fass', 'rotate')}
                 iconTone="danger"
                 confirmButton={{
-                    label: 'Regenerate URL',
+                    label: type === 'rss' ? 'Regenerate URL' : 'Regenerate addresses',
                     onClick: regenerateToken,
                     icon: faIcon('fass', 'rotate'),
                     className: 'btn btn-danger',
                 }}
             >
-                <p>Regenerating will immediately invalidate the current feed URL.</p>
-                <p>Any podcast app already subscribed to it will need the new URL.</p>
+                {type === 'rss' ? (
+                    <>
+                        <p>Regenerating will immediately invalidate the current feed URL.</p>
+                        <p>Any podcast app already subscribed to it will need the new URL.</p>
+                    </>
+                ) : (
+                    <>
+                        <p>Regenerating will immediately invalidate the channel&apos;s current playlist, guide and channel addresses.</p>
+                        <p>Any TV app that uses the channel&apos;s own playlist will need the new one. Your account&apos;s playlist with all your channels keeps working.</p>
+                    </>
+                )}
             </ConfirmDialog>
         </section>
     )

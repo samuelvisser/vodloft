@@ -145,7 +145,7 @@ def relocate_downloads(
 
 # Folders VODLoft uses for itself. They stay, also when they are empty.
 _OWN_FOLDER_SETTINGS = (
-    "temporary_download_root", "rss_cache_root", "quick_download_root", "thumbnail_root", "lock_root",
+    "temporary_download_root", "stream_cache_root", "quick_download_root", "thumbnail_root", "lock_root",
 )
 
 
