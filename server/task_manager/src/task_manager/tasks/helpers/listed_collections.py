@@ -17,6 +17,10 @@ where its videos go: the Source's seasons or a season per year, one season named
 after the link, or Specials. A video several links list is kept once, by the
 link highest in the collection's order, and moves there while it has no files.
 
+The collections of one channel share that order: a video one of them keeps is
+not added to another, and moves to the collection whose link is higher in the
+channel's order while it has no files.
+
 A new episode is numbered after the episodes VODLoft already has, so existing
 file names never change. Numbering follows upload order, so the episodes are
 saved together once the Source has listed them all.
@@ -317,6 +321,61 @@ class _Placer:
             self.identifiers.add(episode.episode_identifier)
 
 
+def _move_to(s: Session, placer: _Placer, episode: Episode, link: CollectionLink) -> None:
+    """Move an episode without files from another collection of the channel to ``link``'s collection."""
+    collection = link.collection
+    season = placer.season(link, None, episode.published_date)
+    tag, _dot, _number = episode.episode_identifier.partition(".")
+    episode.collection_id = collection.id
+    episode.collection_link_id = link.id
+    episode.season_id = season.id
+    episode.index = (s.scalar(select(func.max(Episode.index)).where(Episode.collection_id == collection.id)) or 0) + 1
+    if tag not in ("ep", "aux"):
+        # A Short or a livestream counts on its own in its new collection too.
+        identifier = _next(placer.identifiers, tag)
+    else:
+        identifier = placer.identifier(link, season, VideoDetails(
+            slug=episode.source_slug, url=episode.sharing_url or "", title=episode.title,
+            published_at=episode.published_date,
+        ))
+    placer.identifiers.add(identifier)
+    episode.episode_identifier = identifier
+    s.flush()
+
+
+def _channel_holders(s: Session, link: CollectionLink, slugs: set[str]) -> tuple[dict[str, Episode], set[str]]:
+    """For a collection of a channel: the episodes the channel's other collections already have of ``slugs``, and the
+    slugs a link of theirs that is higher in the channel's order lists, which they will keep once indexed."""
+    collection = link.collection
+    if collection.channel_id is None or not slugs:
+        return {}, set()
+    others = select(Collection.id).where(Collection.channel_id == collection.channel_id, Collection.id != collection.id)
+    held = {
+        episode.source_slug: episode
+        for episode in s.scalars(select(Episode).where(Episode.collection_id.in_(others), Episode.source_slug.in_(slugs)))
+    }
+    higher = set(s.scalars(
+        select(CollectionLinkItem.source_slug).join(CollectionLink, CollectionLink.id == CollectionLinkItem.link_id)
+        .where(CollectionLink.collection_id.in_(others), CollectionLink.position < link.position, CollectionLinkItem.source_slug.in_(slugs))
+    ))
+    return held, higher
+
+
+def _claim_from_channel(s: Session, placer: _Placer, link: CollectionLink, slugs: set[str]) -> set[str]:
+    """Take the episodes this link keeps from the channel's other collections. Returns the slugs another collection
+    of the channel keeps, which this collection does not add."""
+    held, higher = _channel_holders(s, link, slugs)
+    kept_elsewhere = set(higher)
+    for slug, episode in held.items():
+        holder = s.get(CollectionLink, episode.collection_link_id) if episode.collection_link_id is not None else None
+        holder_position = holder.position if holder is not None else 0
+        if slug in higher or holder_position <= link.position or _has_files(s, episode):
+            kept_elsewhere.add(slug)
+            continue
+        _move_to(s, placer, episode, link)
+    return kept_elsewhere
+
+
 def _claim(s: Session, placer: _Placer, link: CollectionLink, episodes: list[Episode]) -> None:
     """A link lists episodes the collection already has: the one highest in the order keeps each of them."""
     positions = {other.id: other.position for other in link.collection.links}
@@ -360,6 +419,9 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
     existing = list(s.scalars(select(Episode).where(Episode.collection_id == collection.id, Episode.source_slug.in_(listed))))
     _claim(s, placer, link, existing)
     known = {episode.source_slug for episode in existing}
+    known |= _claim_from_channel(s, placer, link, set(listed) - known)
+    # A video taken from another collection of the channel is this collection's now.
+    known |= set(s.scalars(select(Episode.source_slug).where(Episode.collection_id == collection.id, Episode.source_slug.in_(listed))))
     ordered = sorted((details for slug, details in listed.items() if slug not in known), key=lambda details: _order_key(details, now))
 
     next_index = (s.scalar(select(func.max(Episode.index)).where(Episode.collection_id == collection.id)) or 0) + 1
@@ -419,7 +481,9 @@ def claim_listed_items(s: Session, *, collection_id: int, link_id: int, slugs: s
     known_items = link_item_slugs(s, link.id)
     s.add_all(CollectionLinkItem(link_id=link.id, source_slug=slug) for slug in slugs if slug not in known_items)
     existing = list(s.scalars(select(Episode).where(Episode.collection_id == collection_id, Episode.source_slug.in_(slugs))))
-    _claim(s, _Placer(s, link.collection, datetime.now(timezone.utc)), link, existing)
+    placer = _Placer(s, link.collection, datetime.now(timezone.utc))
+    _claim(s, placer, link, existing)
+    _claim_from_channel(s, placer, link, slugs - {episode.source_slug for episode in existing})
     s.flush()
     _order_seasons(s, link.collection)
 
