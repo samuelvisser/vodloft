@@ -93,6 +93,26 @@ environment:
 
 The timezone affects scheduled jobs and how VODLoft displays and interprets time-based behavior.
 
+## Run as your own user
+
+By default VODLoft runs as `root` inside the container, so the files it downloads belong to root. To have them belong
+to the same user as the rest of your media, set `PUID` and `PGID` to that user's and group's numbers. `id` on the
+host shows them:
+
+```yaml
+environment:
+  - PUID=1000
+  - PGID=1000
+  - UMASK=002
+```
+
+On start, VODLoft gives that user everything in `/config`, and the `/downloads` folder itself. Files already in
+`/downloads` keep their owner, so make sure that user may write in the folders VODLoft saves to.
+
+`UMASK` sets the permissions of the files and folders VODLoft creates. `022` (the default) lets only the owner change
+them; `002` lets the group change them too, which helps when other programs, such as a media server, share the
+folder.
+
 ## Protect the web interface
 
 On a trusted LAN you can run VODLoft without its own administrator password. If other people can reach the service, or if you expose it through a reverse proxy, configure one:

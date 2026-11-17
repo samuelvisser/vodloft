@@ -125,7 +125,8 @@ never changes a profile you already have.
 Below the system defaults, each Site has a row of its own, the same way as [Per-Site scheduling](#per-site-scheduling):
 **Default** follows the system default, and a Site with a preset starts on its own value. The Daily Wire checks after
 3 days for a different length; YouTube checks for a higher resolution and new SponsorBlock segments, and counts
-3 minutes as a different length. Some settings only
+3 minutes as a different length. A Site can also have a **Download delay** of its own: the
+**Episode download delay** for its episodes only, or 0 for none. Some settings only
 exist on the Sites they are made for, so they have no Default: downloading with the countdown on The Daily Wire, and
 SponsorBlock and its segments on YouTube. The Daily Wire makes no subtitles, so it has no auto-generated subtitles.
 
@@ -238,6 +239,7 @@ siteSettings:
       starting: 2
       live: 5
     upgradeAfterDays: default     # use the system default instead of The Daily Wire's 3 days
+    downloadDelayMinutes: 30      # wait 30 minutes after publishing; 0 waits not at all
 ```
 
 ### Episode lifecycle safeguards

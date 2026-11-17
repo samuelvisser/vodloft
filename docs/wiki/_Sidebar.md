@@ -5,6 +5,7 @@
 **Getting started**
 - [[Installation]]
 - [[First-Run-Setup]]
+- [[Coming-from-ytdl-sub-or-Pinchflat]]
 
 **Using VODLoft**
 - [[Sources]]
@@ -15,6 +16,8 @@
 - [[Existing-Files-and-Imports]]
 - [[Quick-Download]]
 - [[Podcast-RSS-Feeds]]
+- [[IPTV-Channels]]
+- [[WebDAV-Shares]]
 - [[Messages-and-Actions]]
 
 **How VODLoft stays current**

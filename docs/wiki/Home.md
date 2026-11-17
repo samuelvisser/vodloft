@@ -44,7 +44,7 @@ VODLoft separates three decisions so they can be changed independently:
 
 1. A **Local Media Profile** defines the format, download behavior, and output path for a local file.
 2. A **Download Profile** decides which collection episodes should be downloaded automatically with a Local Media Profile.
-3. An **RSS Stream Profile** decides which episodes appear in a private feed and whether media should come from local downloads, The Daily Wire's streams, or both.
+3. A **Stream Profile** shares a collection with other apps: as a private podcast feed (RSS), a TV channel with a guide (IPTV), or a folder a media player opens (WebDAV). It decides which episodes appear and whether media comes from local downloads, the site's own streams, or both.
 
 This makes it possible, for example, to keep every episode as audio, retain only the latest five episodes as 1080p video, and expose both through one RSS feed.
 
@@ -64,6 +64,9 @@ The Settings page covers normal application, download, automation, Sources, and 
 - [[Existing-Files-and-Imports]] — adopt files you already have, so VODLoft does not download them again.
 - [[Quick-Download]] — download one file from a link, without adding it to your library.
 - [[Podcast-RSS-Feeds]] — create private podcast/video feeds.
+- [[IPTV-Channels]] — watch your collections as TV channels with a guide.
+- [[WebDAV-Shares]] — open your collections as a TV show folder in Infuse, Kodi or VLC.
+- [[Coming-from-ytdl-sub-or-Pinchflat]] — what changes when you move over, and how the import works.
 - [[Automation-and-Background-Tasks]] — understand what VODLoft keeps updated automatically.
 - [[Settings]] — complete user-facing settings reference.
 - [[Security-and-Remote-Access]] — protect the UI and private feeds.
