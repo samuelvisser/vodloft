@@ -7,7 +7,7 @@ import threading
 import time
 
 import requests
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import replace
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit, urlunsplit
@@ -621,12 +621,13 @@ class YtDlpSource(Source):
             access=_access(info),
         )
 
-    def channel_details(self, ref: str) -> ChannelDetails:
+    def channel_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> ChannelDetails:
         """A YouTube channel through yt-dlp, which costs no API quota: its details, the Videos, Live and Shorts tabs
         it has, and its playlists. ``ref`` is the channel's link or its ID."""
         root = channel_root(ref) if ref.startswith("http") else mapping.channel_url(ref)
         if root is None:
             raise runner.YtDlpError("This link is not a YouTube channel")
+        progress("Reading the channel and its videos")
         info = self._info(f"{root}/videos")
         channel_id = str(info.get("channel_id") or "")
         if not channel_id:
@@ -638,6 +639,8 @@ class YtDlpSource(Source):
         sections: list[SectionRef] = []
         for tab, title, role in _CHANNEL_FEEDS:
             url = f"{root}/{tab}"
+            if tab != "videos":
+                progress("Looking for livestreams" if role == SectionRole.LIVE else f"Looking for {title}")
             try:
                 listing = info if tab == "videos" else self._info(url)
             except runner.YtDlpError as exc:
@@ -647,6 +650,7 @@ class YtDlpSource(Source):
             if not listing.get("entries") and tab != "videos":
                 continue
             sections.append(SectionRef(ref=tab, url=url, title=title, kind=SectionKind.FEED, role=role, kind_label="Feed"))
+        progress("Listing the playlists")
         try:
             # A page YouTube refuses part way still leaves the playlists of the pages before it.
             playlists = runner.run_json("--flat-playlist", "--ignore-errors", f"{root}/playlists", cookies=sites.cookies_for(root))

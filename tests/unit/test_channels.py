@@ -1,6 +1,8 @@
 """Channels: looking one up, what each preset does with its sections, and adding it with its collections."""
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -32,7 +34,8 @@ class ChannelSource(ListedSource):
         channel_presets=(ChannelPreset.ONE_SHOW, ChannelPreset.PER_LIST, ChannelPreset.PICK),
     ),)
 
-    def channel_details(self, ref):
+    def channel_details(self, ref, progress=lambda step: None):
+        progress("Reading the channel")
         return ChannelDetails(
             ref="UCworkshop", url=ROOT, title="Northwind Workshop", handle="@workshop", facts=("1.2M subscribers",),
             sections=SECTIONS,
@@ -60,14 +63,22 @@ def client(tube, session):
         yield test_client
 
 
+def _lookup(client):
+    """The channel lookup's steps, and the channel it found."""
+    response = client.post("/api/channels/lookup", json={"sourceKey": "tube", "url": ROOT})
+    lines = [json.loads(line) for line in response.text.splitlines()]
+    return [line["step"] for line in lines[:-1]], lines[-1]["channel"]
+
+
 def _plan(body, preset):
     plan = next(item["plan"] for item in body["presets"] if item["key"] == preset)
     return {item["ref"]: (item["target"], item["placement"]) for item in plan}
 
 
 def test_one_show_folds_feeds_and_playlists_into_one_collection_and_keeps_shorts_apart(client):
-    body = client.post("/api/channels/lookup", json={"sourceKey": "tube", "url": ROOT}).json()
+    steps, body = _lookup(client)
 
+    assert steps == ["Reading the channel", "Checking what is in your library already"]
     assert (body["title"], body["channelLabel"], body["facts"]) == ("Northwind Workshop", "channel", ["1.2M subscribers"])
     assert _plan(body, "one_show") == {
         "videos": ("main", "site_seasons"),
@@ -125,7 +136,7 @@ def test_a_section_already_in_the_library_stays_where_it_is(client, session):
     ))
     session.commit()
 
-    body = client.post("/api/channels/lookup", json={"sourceKey": "tube", "url": ROOT}).json()
+    _steps, body = _lookup(client)
     assert next(s for s in body["sections"] if s["ref"] == "PLtools")["collectionSlug"] == "tools"
 
     client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": [{"ref": "PLtools", "target": "own"}]})
@@ -178,4 +189,18 @@ def test_a_youtube_channel_is_read_from_its_tabs_and_playlists_under_the_link_pe
     assert [(section.ref, section.kind, section.url) for section in details.sections] == [
         ("videos", SectionKind.FEED, "https://www.youtube.com/@workshop/videos"),
         ("PLcabin", SectionKind.LIST, "https://www.youtube.com/playlist?list=PLcabin"),
+    ]
+
+
+def test_a_failed_lookup_ends_with_what_went_wrong(client, tube, monkeypatch):
+    def refuse(ref, progress=lambda step: None):
+        progress("Reading the channel")
+        raise ValueError("This channel does not exist")
+
+    monkeypatch.setattr(tube, "channel_details", refuse)
+    response = client.post("/api/channels/lookup", json={"sourceKey": "tube", "url": ROOT})
+
+    assert [json.loads(line) for line in response.text.splitlines()] == [
+        {"step": "Reading the channel"},
+        {"error": "Could not look up this channel: This channel does not exist"},
     ]

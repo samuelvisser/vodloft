@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
 
 import requests
@@ -185,10 +185,11 @@ class DailyWireSource(Source):
         found.sort(key=lambda item: item[0].published_date, reverse=True)
         return [_video(record, refs.get(season_slug)) for record, season_slug in found]
 
-    def channel_details(self, ref: str) -> ChannelDetails:
+    def channel_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> ChannelDetails:
         """A host, by the slug The Daily Wire gives them: their shows and movies from the Browse page.
 
         The Daily Wire has no page of its own for a host, so a host has no link."""
+        progress("Reading The Daily Wire's shows and movies")
         catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
         shows = [show for show in catalog.collections if show.author_slug == ref]
         movies = [movie for movie in catalog.movies if movie.author_slug == ref]

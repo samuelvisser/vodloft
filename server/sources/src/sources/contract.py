@@ -7,7 +7,7 @@ caller today; methods are added together with the feature that needs them.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -933,9 +933,12 @@ class Source(ABC):
         """Look up a collection. Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
         raise NotImplementedError(f"{self.name} does not list episodes")
 
-    def channel_details(self, ref: str) -> ChannelDetails:
+    def channel_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> ChannelDetails:
         """Look up a channel by its link, or by the ``ref`` it had before. Only Sources with ``Feature.CHANNELS``
-        implement it."""
+        implement it.
+
+        A lookup can take a while, so it tells ``progress`` what it is doing, as a short sentence such as
+        "Listing the playlists"."""
         raise NotImplementedError(f"{self.name} has no channels")
 
     def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:

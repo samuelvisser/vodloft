@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sqlalchemy import func, select
@@ -22,14 +23,16 @@ class ChannelNotFoundError(LookupError):
     pass
 
 
-def look_up_channel(source_key: str, url: str | None, ref: str | None) -> ChannelDetails:
-    """Ask the Source for the channel. Slow: call it outside a transaction."""
+def look_up_channel(
+    source_key: str, url: str | None, ref: str | None, progress: Callable[[str], None] = lambda step: None,
+) -> ChannelDetails:
+    """Ask the Source for the channel, telling ``progress`` what it is doing. Slow: call it outside a transaction."""
     if url:
         channels.channel_site(source_key, url)
-        return get_source(source_key).channel_details(url)
+        return get_source(source_key).channel_details(url, progress)
     if not ref:
         raise ServiceError("Give the channel's link", field="url")
-    return get_source(source_key).channel_details(ref)
+    return get_source(source_key).channel_details(ref, progress)
 
 
 @dataclass(frozen=True)

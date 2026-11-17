@@ -64,3 +64,36 @@
 }
 .channel-membership { max-width: 360px; }
 .channel-setup .actions .btn { white-space: nowrap; }
+
+/* While a channel is looked up: what the lookup is doing, over pulsing blocks in the shape of the page. */
+.channel-skeleton { display: flex; flex-direction: column; gap: 1.25rem; }
+.channel-lookup-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+.channel-lookup-steps li { display: flex; align-items: center; gap: .5rem; }
+.channel-lookup-steps li.is-done { opacity: .6; }
+.channel-lookup-steps li.is-done svg { color: #16a34a; }
+.channel-skeleton .skeleton-block {
+    display: block; background: #e5e7eb; animation: channel-skeleton-pulse 1.5s ease-in-out infinite;
+}
+.channel-skeleton .channel-banner.skeleton-block { border-radius: 0; }
+.channel-skeleton-copy { flex: 1 1 auto; display: flex; flex-direction: column; gap: .5rem; }
+.channel-skeleton-line { height: 14px; width: min(90%, 520px); border-radius: 5px; }
+.channel-skeleton-line--kind { width: 120px; height: 11px; }
+.channel-skeleton-line--title { width: min(60%, 320px); height: 28px; border-radius: 7px; }
+.channel-skeleton-line--title-small { width: min(50%, 240px); height: 16px; }
+.channel-skeleton-line--short { width: min(40%, 200px); }
+.channel-skeleton-line--heading { width: 110px; height: 16px; margin-bottom: .5rem; }
+.channel-skeleton-preset { height: 84px; border-radius: 12px; }
+.channel-skeleton-choice { height: 38px; border-radius: 6px; }
+
+@keyframes channel-skeleton-pulse {
+    0%, 100% { opacity: .55; }
+    50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .channel-skeleton .skeleton-block { animation: none; }
+}
+
+@media (prefers-color-scheme: dark) {
+    .channel-skeleton .skeleton-block { background: rgba(148, 163, 184, 0.22); }
+}

@@ -75,6 +75,55 @@ function sectionFacts(section: ChannelSectionRead): string {
     ].filter(Boolean).join(' · ')
 }
 
+/** What the lookup has done so far, over the shape of the page it is filling in. */
+function AddChannelSkeleton({steps}: {steps: string[]}) {
+    return (
+        <div className="channel-skeleton" aria-busy="true">
+            <ol className="channel-lookup-steps" aria-live="polite">
+                {(steps.length ? steps : ['Looking the channel up']).map((step, index, all) => {
+                    const current = index === all.length - 1
+                    return (
+                        <li key={step} className={current ? 'is-current' : 'is-done'}>
+                            <FontAwesomeIcon icon={current ? faIcon('fass', 'spinner') : faIcon('fass', 'check')} spin={current} fixedWidth/>
+                            <span>{step}{current ? '…' : ''}</span>
+                        </li>
+                    )
+                })}
+            </ol>
+            <div className="channel-header" aria-hidden="true">
+                <div className="channel-banner skeleton-block"/>
+                <div className="channel-identity">
+                    <span className="channel-avatar skeleton-block"/>
+                    <div className="channel-identity-copy channel-skeleton-copy">
+                        <span className="skeleton-block channel-skeleton-line channel-skeleton-line--kind"/>
+                        <span className="skeleton-block channel-skeleton-line channel-skeleton-line--title"/>
+                        <span className="skeleton-block channel-skeleton-line"/>
+                        <span className="skeleton-block channel-skeleton-line channel-skeleton-line--short"/>
+                    </div>
+                </div>
+            </div>
+            <div className="channel-presets" aria-hidden="true">
+                {[0, 1, 2].map((key) => <div key={key} className="skeleton-block channel-skeleton-preset"/>)}
+            </div>
+            <div className="channel-section-group" aria-hidden="true">
+                <span className="skeleton-block channel-skeleton-line channel-skeleton-line--heading"/>
+                <div className="channel-section-list">
+                    {[0, 1, 2, 3].map((key) => (
+                        <div key={key} className="channel-section-row">
+                            <span className="channel-section-art skeleton-block"/>
+                            <div className="channel-section-copy channel-skeleton-copy">
+                                <span className="skeleton-block channel-skeleton-line channel-skeleton-line--title-small"/>
+                                <span className="skeleton-block channel-skeleton-line channel-skeleton-line--short"/>
+                            </div>
+                            <span className="channel-section-choice skeleton-block channel-skeleton-choice"/>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    )
+}
+
 export default function AddChannelPage() {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
@@ -84,6 +133,7 @@ export default function AddChannelPage() {
     const ref = params.get('ref')
     const [channel, setChannel] = useState<ChannelLookupRead | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [steps, setSteps] = useState<string[]>([])
 
     const form = useForm<ChannelCreateIn, unknown, ChannelCreateOut>({
         resolver: zodResolver(ChannelCreateSchema),
@@ -93,7 +143,8 @@ export default function AddChannelPage() {
 
     useEffect(() => {
         const controller = new AbortController()
-        lookUpChannel({sourceKey, url, ref}, controller.signal)
+        setSteps([])
+        lookUpChannel({sourceKey, url, ref}, (step) => setSteps((done) => [...done, step]), controller.signal)
             .then((found) => {
                 setChannel(found)
                 const preset = found.presets[0]
@@ -154,9 +205,9 @@ export default function AddChannelPage() {
     }
     if (!channel) {
         return (
-            <section className="view" aria-labelledby="add-channel-title">
+            <section className="view channel-view" aria-labelledby="add-channel-title">
                 <div className="view-header"><h1 id="add-channel-title">Add channel</h1></div>
-                <p>Looking the channel up…</p>
+                <AddChannelSkeleton steps={steps}/>
             </section>
         )
     }

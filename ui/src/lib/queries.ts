@@ -82,7 +82,7 @@ import {
     DailywireMovieRead,
     DailywireMovieReadSchema,
 } from "../types/schemas/dailywire_catalog";
-import {apiJson, apiUrl, responseError} from './api'
+import {ApiError, apiJson, apiUrl, responseError} from './api'
 import {z} from 'zod'
 import {profilePageSchema} from '../types/schemas/profile_page'
 import {KeepQuestionReadSchema, type KeepQuestionRead} from '../types/schemas/media_download'
@@ -759,8 +759,11 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
 }
 
 /** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
+/** Look a channel up at its Site. It can take a minute: ``onStep`` hears what the lookup is doing as it goes. */
 export async function lookUpChannel(
-    body: {sourceKey: string, url?: string | null, ref?: string | null}, signal?: AbortSignal,
+    body: {sourceKey: string, url?: string | null, ref?: string | null},
+    onStep: (step: string) => void,
+    signal?: AbortSignal,
 ): Promise<ChannelLookupRead> {
     const response = await fetch(`${apiUrl()}/channels/lookup`, {
         method: 'POST',
@@ -769,8 +772,23 @@ export async function lookUpChannel(
         body: JSON.stringify(body),
         signal,
     })
-    if (!response.ok) throw await responseError(response)
-    return ChannelLookupReadSchema.parse(await response.json())
+    if (!response.ok || !response.body) throw await responseError(response)
+    // One line of JSON per step, and then the channel or what went wrong.
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+    let buffered = ''
+    for (;;) {
+        const {value, done} = await reader.read()
+        buffered += value ?? ''
+        const lines = buffered.split('\n')
+        buffered = done ? '' : lines.pop() ?? ''
+        for (const line of lines.filter((item) => item.trim())) {
+            const message = JSON.parse(line) as {step?: string, channel?: unknown, error?: string}
+            if (message.step) onStep(message.step)
+            else if (message.error) throw new ApiError(message.error, 502)
+            else return ChannelLookupReadSchema.parse(message.channel)
+        }
+        if (done) throw new ApiError('The channel lookup stopped before it was done', 502)
+    }
 }
 
 export function useChannels() {
