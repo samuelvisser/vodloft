@@ -1,43 +1,22 @@
 import {useEffect} from 'react'
-import {Controller, UseFormReturn} from 'react-hook-form'
+import {UseFormReturn} from 'react-hook-form'
 
 import {type LocalMediaProfileType} from '../../types/local_media_profile'
+import {type CollectionLocalMediaProfileScope} from '../../types/local_media_profile'
+import {useLocalMediaProfileSites} from '../../lib/queries'
 import CollectionLocalMediaProfileScopeField from './CollectionLocalMediaProfileScopeField'
 import LocalMediaProfileSitesField from './LocalMediaProfileSitesField'
-import MediaServerFileFields from './MediaServerFileFields'
-import QualityField from './QualityField'
-import SubtitleFields from './SubtitleFields'
-import SponsorBlockSection from './SponsorBlockSection'
-import {useSubtitleModeDefaults} from './useSubtitleModeDefaults'
 
-import {useLocalMediaProfileSites} from '../../lib/queries'
-import {useLibraryDefaults} from '../../lib/settings'
-import ReadMore from '../../utils/ReadMore'
-import {createSelectRegistry} from '../../utils/selectRegistry'
-import SimpleSelect from '../common/SimpleSelect'
-
-const THUMBNAIL_MODE_LABELS = {
-    no_thumbnail: 'No thumbnail',
-    embed: 'Embed in media',
-    sidecar: 'Download besides media',
-    embed_and_sidecar: 'Both embed and download',
-} as const
-
-const METADATA_MODE_LABELS = {
-    no_metadata: 'No metadata',
-    embed: 'Embed in media',
-    nfo: 'Download as NFO',
-    embed_and_nfo: 'Both embed and download',
-} as const
-
+/** The Profile section: name, where the profile is offered and for which Sites. */
 export default function LocalMediaProfileCommonFields({
-    form, mode, isCreating,
+    form, mode, isCreating, onScopeChange,
 }: {
     form: UseFormReturn<any>
     mode: LocalMediaProfileType
     isCreating: boolean
+    onScopeChange: (scope: CollectionLocalMediaProfileScope) => void
 }) {
-    const {control, register, getValues, setValue, formState: {errors}} = form
+    const {register, getValues, setValue, formState: {errors}} = form
     // A new profile starts the settings only some Sites show as Settings says.
     const {data: sites} = useLocalMediaProfileSites()
     useEffect(() => {
@@ -46,53 +25,9 @@ export default function LocalMediaProfileCommonFields({
             if (getValues(name) === undefined) setValue(name, value, {shouldDirty: false})
         }
     }, [sites, getValues, setValue])
-    const {onSubtitleModeChange, onScopeChange} = useSubtitleModeDefaults(form, mode, isCreating)
-    const {data: defaults} = useLibraryDefaults()
-    const systemDownloadModeLabel = !defaults
-        ? 'Loading system setting…'
-        : defaults.downloadMode === 'temporary'
-            ? 'Save to temporary folder first'
-            : 'Save directly to downloads'
-    const systemThumbnailModeLabel = !defaults
-        ? 'Loading system setting…'
-        : THUMBNAIL_MODE_LABELS[defaults.thumbnailMode]
-    const systemMetadataModeLabel = !defaults
-        ? 'Loading system setting…'
-        : METADATA_MODE_LABELS[defaults.metadataMode]
-
-    const downloadModeReg = createSelectRegistry('LocalMediaProfileDownloadMode', {
-        system: {label: `System (${systemDownloadModeLabel})`},
-        direct: {label: 'Save directly to downloads'},
-        temporary: {label: 'Save to temporary folder first'},
-    })
-    const thumbnailModeReg = createSelectRegistry('LocalMediaProfileThumbnailMode', {
-        system: {label: `System (${systemThumbnailModeLabel})`},
-        no_thumbnail: {label: 'No thumbnail'},
-        embed: {label: 'Embed in media'},
-        sidecar: {label: 'Download besides media'},
-        embed_and_sidecar: {label: 'Both embed and download'},
-    })
-    const metadataModeReg = createSelectRegistry('LocalMediaProfileMetadataMode', {
-        system: {label: `System (${systemMetadataModeLabel})`},
-        no_metadata: {label: 'No metadata'},
-        embed: {label: 'Embed in media'},
-        nfo: {label: 'Download as NFO'},
-        embed_and_nfo: {label: 'Both embed and download'},
-    })
 
     return (
         <>
-            {errors.root && (
-                <div className="form-error-card" role="alert" aria-live="polite">
-                    {String(errors.root.message)}
-                </div>
-            )}
-
-            {/* Hidden fields for id and slug to include them in submit when present */}
-            <input type="hidden" {...register('id', {setValueAs: (v) => (v === '' || v == null ? undefined : Number(v))})} />
-            <input type="hidden" {...register('slug')} />
-            <input type="hidden" {...register('type')} />
-
             <div className="form-row">
                 <label htmlFor="mp-name">Name</label>
                 <input
@@ -111,138 +46,14 @@ export default function LocalMediaProfileCommonFields({
                 )}
             </div>
 
-            {mode === 'collection' && (
-                <CollectionLocalMediaProfileScopeField
-                    form={form}
-                    onScopeChange={onScopeChange}
-                    isCreating={isCreating}
-                />
+            {mode === 'collection' ? (
+                <div className="local-media-profile-pair">
+                    <CollectionLocalMediaProfileScopeField form={form} onScopeChange={onScopeChange} isCreating={isCreating}/>
+                    <LocalMediaProfileSitesField form={form} mode={mode}/>
+                </div>
+            ) : (
+                <LocalMediaProfileSitesField form={form} mode={mode}/>
             )}
-
-            <LocalMediaProfileSitesField form={form} mode={mode}/>
-
-            <hr className="form-section-divider" aria-hidden="true"/>
-
-            <QualityField form={form} mode={mode}/>
-
-            <hr className="form-section-divider" aria-hidden="true"/>
-
-            <div className="form-row">
-                <label htmlFor="local-media-download-mode">Download behavior</label>
-                <Controller
-                    control={control}
-                    name="downloadMode"
-                    render={({field}) => (
-                        <SimpleSelect
-                            inputId="local-media-download-mode"
-                            registry={downloadModeReg}
-                            value={field.value ?? 'system'}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                            aria-invalid={!!errors.downloadMode}
-                            aria-describedby={errors.downloadMode ? 'local-media-download-mode-errors' : 'local-media-download-mode-help'}
-                        />
-                    )}
-                />
-                {errors.downloadMode && (
-                    <div id="local-media-download-mode-errors" className="error" role="alert" aria-live="polite">
-                        {errors.downloadMode.message as string}
-                    </div>
-                )}
-                <div className="help" id="local-media-download-mode-help">
-                    <ReadMore summary="Choose whether incomplete downloads are written in their destination or staged elsewhere first.">
-                        <p>
-                            <strong>System</strong> follows the current system-wide default.
-                        </p>
-                        <p>
-                            <strong>Save directly to downloads</strong> writes download temporary files beside the final media destination and reserves the final filename while downloading.
-                        </p>
-                        <p>
-                            <strong>Save to temporary folder first</strong> keeps download and processing files in the configured temporary folder and only publishes the completed media file at the end.
-                        </p>
-                        <p>
-                            Temporary mode is particularly useful when the destination is watched by a media server and you do not want it to pick up partly downloaded or empty media files.
-                            Save directly to downloads, due to its simple nature, is a little faster and less prone to errors. Though if errors do happen in either mode, VODLoft will
-                            automatically restore from them.
-                        </p>
-                    </ReadMore>
-                </div>
-            </div>
-
-            <div className="form-row">
-                <label htmlFor="local-media-thumbnail-mode">Episode thumbnail behavior</label>
-                <Controller
-                    control={control}
-                    name="thumbnailMode"
-                    render={({field}) => (
-                        <SimpleSelect
-                            inputId="local-media-thumbnail-mode"
-                            registry={thumbnailModeReg}
-                            value={field.value ?? 'system'}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                            aria-invalid={!!errors.thumbnailMode}
-                            aria-describedby={errors.thumbnailMode ? 'local-media-thumbnail-mode-errors' : 'local-media-thumbnail-mode-help'}
-                        />
-                    )}
-                />
-                {errors.thumbnailMode && (
-                    <div id="local-media-thumbnail-mode-errors" className="error" role="alert" aria-live="polite">
-                        {errors.thumbnailMode.message as string}
-                    </div>
-                )}
-                <div className="help" id="local-media-thumbnail-mode-help">
-                    <ReadMore summary="Choose how this profile stores the source's thumbnail for downloaded media.">
-                        <p><strong>System</strong> follows the current system-wide default.</p>
-                        <p><strong>No thumbnail</strong> keeps downloads media-only.</p>
-                        <p><strong>Embed in media</strong> stores the thumbnail as cover artwork inside the downloaded media file.</p>
-                        <p><strong>Download besides media</strong> saves the thumbnail as an image alongside the media file.</p>
-                        <p><strong>Both embed and download</strong> does both.</p>
-                    </ReadMore>
-                </div>
-            </div>
-
-            <div className="form-row">
-                <label htmlFor="local-media-metadata-mode">Media metadata behavior</label>
-                <Controller
-                    control={control}
-                    name="metadataMode"
-                    render={({field}) => (
-                        <SimpleSelect
-                            inputId="local-media-metadata-mode"
-                            registry={metadataModeReg}
-                            value={field.value ?? 'system'}
-                            onChange={field.onChange}
-                            onBlur={field.onBlur}
-                            aria-invalid={!!errors.metadataMode}
-                            aria-describedby={errors.metadataMode ? 'local-media-metadata-mode-errors' : 'local-media-metadata-mode-help'}
-                        />
-                    )}
-                />
-                {errors.metadataMode && (
-                    <div id="local-media-metadata-mode-errors" className="error" role="alert" aria-live="polite">
-                        {String(errors.metadataMode.message)}
-                    </div>
-                )}
-                <div className="help" id="local-media-metadata-mode-help">
-                    <ReadMore summary="Choose how this profile stores metadata for downloaded media.">
-                        <p><strong>System</strong> follows the current system-wide default.</p>
-                        <p><strong>No metadata</strong> leaves the downloaded media without VODLoft-generated metadata.</p>
-                        <p><strong>Embed in media</strong> writes useful media-server metadata directly into supported media containers.</p>
-                        <p><strong>Download as NFO</strong> writes the same metadata in a same-basename NFO file beside the media.</p>
-                        <p><strong>Both embed and download</strong> does both.</p>
-                        <p>HLS bundles cannot contain embedded file metadata, so only the NFO part applies when selected.</p>
-                    </ReadMore>
-                </div>
-            </div>
-
-            <MediaServerFileFields form={form} mode={mode}/>
-
-            <hr className="form-section-divider" aria-hidden="true"/>
-
-            <SubtitleFields form={form} mode={mode} onSubtitleModeChange={onSubtitleModeChange}/>
-
-            <SponsorBlockSection form={form} mode={mode}/>
         </>
     )
 }

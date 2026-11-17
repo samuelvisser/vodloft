@@ -184,7 +184,7 @@ function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) 
                 {mode === 'collection' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
-            <form className="form" onSubmit={onCreate} noValidate>
+            <form className="form local-media-profile-form" onSubmit={onCreate} noValidate>
                 <div className="form-row">
                     <label>Profile type</label>
                     {source ? (

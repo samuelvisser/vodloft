@@ -15,6 +15,7 @@ export function SettingsSection({
     className,
     bodyClassName = 'settings-grid',
     defaultOpen = true,
+    open,
     onToggle,
 }: {
     title: string
@@ -25,10 +26,12 @@ export function SettingsSection({
     className?: string
     bodyClassName?: string
     defaultOpen?: boolean
+    /** Opens or closes the section from outside, together with onToggle. */
+    open?: boolean
     onToggle?: (open: boolean) => void
 }) {
     return (
-        <details className={`settings-disclosure${className ? ` ${className}` : ''}`} open={defaultOpen}
+        <details className={`settings-disclosure${className ? ` ${className}` : ''}`} open={open ?? defaultOpen}
                  onToggle={onToggle ? (event) => onToggle(event.currentTarget.open) : undefined}>
             <summary>
                 <span>

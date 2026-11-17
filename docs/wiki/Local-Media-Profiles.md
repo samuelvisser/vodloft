@@ -4,6 +4,31 @@ A Local Media Profile describes **the local file VODLoft should create**. It con
 
 Download Profiles use Local Media Profiles for automatic collection downloads. Movies and single videos also use Local Media Profiles, but their downloads are started manually.
 
+## The profile form
+
+The form is split into sections: **Profile**, **Quality**, **Files and metadata**, **Subtitles**, **SponsorBlock** and
+**Output path**. Click a section to open or fold it. A folded section shows its current choices in one line, so you can
+check a profile without opening everything. A new profile opens Profile, Quality and Output path; the other sections
+start from good defaults. When saving fails, the sections with a problem open by themselves. Subtitles and SponsorBlock
+only show when one of the profile's sites has them.
+
+### Following Settings
+
+Some choices can follow **Settings → Downloads**: the thumbnail, metadata, poster and background, how a download is
+written, and filename restrictions. While a choice follows Settings, it has a blue **Follows Settings** badge, and its
+checkboxes have a dashed blue border that shows the value from Settings. Changing Settings later changes these
+profiles too. Click a box, or **Change**, to choose for this profile only. The badge then turns into **Use Settings**,
+which makes the choice follow Settings again.
+
+### Files and metadata
+
+The grid at the top chooses where the **thumbnail** and the **metadata** (title, date and description) are saved:
+**inside the media**, **beside the media** (an image file, or an NFO file next to the media), both, or neither. With an
+NFO file, **Kodi-safe NFO text** replaces emoji and other characters Kodi cannot show with □. Collection profiles also
+have **show and season NFO files** (`tvshow.nfo` and `season.nfo`, for Jellyfin, Emby and Kodi) and the **poster and
+background**, which are saved in the collection root shown under the output template's example. **Date files by
+publish date** gives files the date the episode came out instead of the date it was downloaded.
+
 ## Collection, Movie and Video profiles
 
 ### Collection profiles
@@ -33,7 +58,7 @@ New profiles start with every site VODLoft knows, plus **Include upcoming sites*
 
 ## Download behavior
 
-Each Local Media Profile can choose how downloads using it are written:
+**While downloading**, under Files and metadata, chooses how downloads using the profile are written:
 
 - **System** — follow the current system-wide default from **Settings → Downloads**.
 - **Save directly to downloads** — perform the download and processing in the destination area. This avoids a final publication copy, but can be much slower when the destination is network storage.
@@ -47,7 +72,7 @@ The temporary folder may be on different storage from the final library. Configu
 
 Local Media Profiles can save the subtitles a video has, from The Daily Wire and from every site yt-dlp downloads from, such as YouTube.
 
-**Subtitles** chooses where they are stored: not at all, inside the media, beside the media, or both.
+**Save subtitles** has two boxes, **Inside the media** and **Beside the media**. Tick one, both, or neither to save no subtitles.
 
 - **Inside the media** adds them as tracks you can pick in your player, in MP4 and MKV files.
 - **Beside the media** saves SRT files next to the media, such as `Episode.en.srt`. Subtitles beside the media are always SRT.
@@ -84,7 +109,7 @@ Profile takes what most of its Download Profiles had.
 
 ## SponsorBlock
 
-[SponsorBlock](https://sponsor.ajay.app) is a community database of parts of YouTube videos: sponsor reads, "like and subscribe" reminders, intros and so on. It only applies to YouTube, so it only shows when the profile is offered for YouTube. Switch it on, then choose for each type of part:
+[SponsorBlock](https://sponsor.ajay.app) is a community database of parts of YouTube videos: sponsor reads, "like and subscribe" reminders, intros and so on. It only applies to YouTube, so it only shows when the profile is offered for YouTube. Switch it on, and the profile shows in one sentence what happens to each type of part. **Edit segments** opens the choices for each type of part:
 
 - **Keep**: left as it is.
 - **Chapter**: becomes a named chapter that your player can skip. Nothing is removed, so this is the safe choice.
