@@ -126,6 +126,11 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
 
     return (
         <>
+            <div className="media-files-legend" aria-hidden="true">
+                <span className="follow-check is-following"><input type="checkbox" checked readOnly tabIndex={-1}/>Follows Settings: click to choose your own</span>
+                <span className="follow-check"><input type="checkbox" checked readOnly tabIndex={-1}/>Chosen for this profile</span>
+            </div>
+
             <div className="media-files-grid" role="group" aria-label="Saved with each download">
                 <div className="media-files-grid__head">Saved with each {mode === 'collection' ? 'episode' : mode}</div>
                 <div className="media-files-grid__head">Inside the media</div>
@@ -195,11 +200,6 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
             {fieldErrors.map((message) => (
                 <div key={String(message)} className="error" role="alert" aria-live="polite">{String(message)}</div>
             ))}
-
-            <div className="media-files-legend" aria-hidden="true">
-                <span className="follow-check is-following"><input type="checkbox" checked readOnly tabIndex={-1}/>Follows Settings: click to choose your own</span>
-                <span className="follow-check"><input type="checkbox" checked readOnly tabIndex={-1}/>Chosen for this profile</span>
-            </div>
 
             <FollowsSettingsSelect
                 form={form}

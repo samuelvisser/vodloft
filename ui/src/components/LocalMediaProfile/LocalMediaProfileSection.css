@@ -91,9 +91,8 @@ button.follows-settings-badge:focus-visible {
 
 .follows-settings-line {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 8px 12px;
+    gap: 12px;
     padding: 10px 12px;
     border: 1px dashed rgba(100, 116, 139, 0.4);
     border-radius: 8px;
@@ -101,7 +100,7 @@ button.follows-settings-badge:focus-visible {
 
 .follows-settings-line__text {
     display: flex;
-    flex: 1 1 260px;
+    flex: 1 1 0;
     flex-wrap: wrap;
     align-items: center;
     gap: 4px 10px;
@@ -113,7 +112,7 @@ button.follows-settings-badge:focus-visible {
 }
 
 .follows-settings-line .btn {
-    margin-left: auto;
+    flex: none;
 }
 
 /* A checkbox that shows the Settings value until it is clicked. */
