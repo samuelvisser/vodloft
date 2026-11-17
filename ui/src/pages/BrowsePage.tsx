@@ -174,7 +174,15 @@ export default function BrowsePage({onboarding = false, onCollectionSelect, onMo
                 <div className="catalog-groups">
                     {groupedCollections.map(([label, items], groupIndex) => (
                         <section className="catalog-group" key={label} aria-labelledby={`catalog-${grouping}-${groupIndex}`}>
-                            <h2 id={`catalog-${grouping}-${groupIndex}`}>{label}</h2>
+                            <div className="catalog-group-header">
+                                <h2 id={`catalog-${grouping}-${groupIndex}`}>{label}</h2>
+                                {grouping === 'host' && !onboarding && items[0]?.authorSlug && (
+                                    <Link className="btn btn-link" to={`/add-channel?source=${encodeURIComponent(DAILYWIRE_SOURCE_KEY)}&ref=${encodeURIComponent(items[0].authorSlug)}`}>
+                                        All of {label}'s shows and movies
+                                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
+                                    </Link>
+                                )}
+                            </div>
                             <div className="catalog-collection-grid">
                                 {items.map((collection) => {
                                     const image = toImageUrl(collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.backgroundImagePath)

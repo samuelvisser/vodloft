@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
     from backend.db.models import Season, DownloadProfile, Site
-    from backend.db.models import CustomIndexState, CollectionLink
+    from backend.db.models import Channel, CustomIndexState, CollectionLink
 
 
 def _default_episode_order(context) -> str:
@@ -37,6 +37,9 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         ForeignKey("sites.key"), index=True, comment="The Site the collection is on; filled in the background for older collections",
     )
     site_ref: Mapped[Optional[str]] = mapped_column(comment="The Site's own id for the collection")
+    channel_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("channels.id", ondelete="SET NULL"), index=True, comment="The channel it was added through",
+    )
     title: Mapped[str]
     description: Mapped[Optional[str]]
     sharing_url: Mapped[str] = mapped_column(unique=True)
@@ -94,6 +97,7 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
 
     # Relationships
     site: Mapped[Optional["Site"]] = relationship(lazy="joined")
+    channel: Mapped[Optional["Channel"]] = relationship(back_populates="collections")
     episodes: Mapped[list["Episode"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan", order_by="desc(Episode.index)"
     )

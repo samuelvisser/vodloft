@@ -140,6 +140,24 @@ With a YouTube Data API key this costs 1 unit per 50 episodes a day. Without a k
 
 With a YouTube Data API key, a search goes through the API and collections subscriber and video counts, durations and upload dates. It costs about 102 units from the search share, and the line above the results says how many API searches are left today. Without a key, when the search share is used up or set to 0, or when the API fails, VODLoft searches with yt-dlp instead. That takes a few seconds longer and collections fewer details, and the line above the results says why yt-dlp answered. The same search within an hour is answered again without asking YouTube.
 
+## Channels
+
+A channel is everything one creator publishes on a site: a YouTube channel, or a host on The Daily Wire. Adding the channel, instead of one of its links, lets you decide in one go what happens with its videos, livestreams, Shorts and playlists, and the channel gets a page of its own in your Library.
+
+Paste a link to a YouTube channel in **Add media** and choose **Add the channel**; **Only its videos** adds its uploads as one collection, as described above. For The Daily Wire, open **Browse**, group the shows by host and choose the link next to a host's name.
+
+The Add channel page lists the channel's feeds (Videos, Live and Shorts on YouTube) and its playlists or shows. For each one you choose where it goes:
+
+- **Main collection**: one collection named after the channel. Feeds become a season per year, a playlist becomes one season named after it, and a Daily Wire show keeps its own seasons. A playlist can also go in as specials (season 0).
+- **A collection of its own**: the part becomes a separate collection, for example Shorts that you want to keep apart from the rest.
+- **Skip**: nothing is added. The part stays listed on the channel's page, so you can add it later.
+
+Three starting points fill these choices in for you: **One show** (YouTube only) puts the videos, livestreams and playlists in the main collection and gives Shorts their own; **A show per playlist** gives every playlist or show its own collection; **Only what I pick** starts with everything skipped. A playlist or show that is already in your Library stays where it is.
+
+A video that appears in more than one place is kept once. It goes to the first place in this order: playlists or shows first, then Live, then Shorts, and Videos last, since the Videos feed lists all of a channel's uploads. Once a video has been downloaded it stays where it is, so its file never moves.
+
+Collections made from a channel start without Download Profiles; add them on each collection as usual. In the Library, channels show with a round picture next to your collections; the **Kind** filter shows only channels or only collections.
+
 ## NPO Start
 
 Series and programmes from NPO Start (npo.nl) can be added without an NPO account. **Search NPO Start** on the Add media page finds series and programmes by name, or paste a link to a series, season or episode. A series is added as a collection with NPO's own seasons. By default it is a Series identified by season, with NPO's episode numbers, such as S02E05; the Add Collection wizard lets you identify episodes by date or number instead. A programme outside a series is added as a single video.

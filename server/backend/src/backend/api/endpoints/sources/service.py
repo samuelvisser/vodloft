@@ -145,6 +145,7 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         access_description=found.description if found is not None else None,
         access_locked=access_locked(source.id, link.access, None),
         preview=ResolvedLinkPreviewAPIRead.model_validate(link),
+        channel_url=link.channel_url,
         candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],
     )
 

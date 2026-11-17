@@ -341,6 +341,8 @@ class ResolvedLinkAPIRead(ResponseBase):
     access_locked: bool = False
     """VODLoft does not have that access, so it cannot download the video."""
     preview: ResolvedLinkPreviewAPIRead
+    channel_url: Optional[str] = None
+    """The creator's channel this link is, on a Site with channels, so it can be added as a channel instead."""
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
 

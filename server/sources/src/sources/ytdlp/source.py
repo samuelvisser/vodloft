@@ -16,7 +16,7 @@ from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, ChannelDetails, SectionKind, SectionRef, SectionRole, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
@@ -72,6 +72,21 @@ def collection_url(url: str) -> str:
     if on_domain(link_host(url), "youtube.com") and _YOUTUBE_CHANNEL.match(parts.path):
         return urlunsplit(parts._replace(path=parts.path.rstrip("/") + "/videos"))
     return url
+
+
+# A YouTube channel's feeds, by the tab that lists them: (tab, title, role).
+_CHANNEL_FEEDS = (("videos", "Videos", SectionRole.MAIN), ("streams", "Live", SectionRole.LIVE), ("shorts", "Shorts", SectionRole.SHORT))
+
+
+def channel_root(url: str) -> str | None:
+    """A YouTube channel's own link, without a tab, or None when the link is not a channel."""
+    parts = urlsplit(url)
+    if not on_domain(link_host(url), "youtube.com"):
+        return None
+    match = re.match(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)(?:/(?:videos|shorts|streams|playlists|featured))?/?$", parts.path)
+    if not match:
+        return None
+    return urlunsplit(("https", "www.youtube.com", f"/{match.group(1)}", "", ""))
 
 
 def _listing_urls(url: str) -> list[str]:
@@ -390,6 +405,14 @@ def _lookup(*args: str) -> dict:
     return {**info, "_has_drm": True}
 
 
+def _count(number: int) -> str:
+    """A large count the way YouTube shows it, such as 1.2M."""
+    for size, suffix in ((1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")):
+        if number >= size:
+            return f"{number / size:.1f}".rstrip("0").rstrip(".") + suffix
+    return str(number)
+
+
 def _thumbnail(info: dict) -> str | None:
     if info.get("thumbnail"):
         return thumbnails.widest_still(info["thumbnail"])
@@ -437,7 +460,7 @@ class YtDlpSource(Source):
         Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
         Feature.FORMAT_CHOICES, Feature.YTDLP_OPTIONS, Feature.METADATA_REFRESH,
-        Feature.PENDING_CHECKS,
+        Feature.PENDING_CHECKS, Feature.CHANNELS,
     })
     episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.
@@ -562,11 +585,14 @@ class YtDlpSource(Source):
 
     def resolve(self, url: str) -> ResolvedLink | None:
         url = collection_url(url)
+        youtube = mapping.youtube_ref(url)
+        # A channel's Videos tab is the whole channel too, which can be added as a channel instead.
+        channel = channel_root(url) if youtube is not None and youtube.kind != "playlist" and youtube.tab == "videos" else None
         if collection := self._api_collection(url):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site="YouTube",
+                site="YouTube", channel_url=channel,
             )
         try:
             info = self._info(url)
@@ -580,7 +606,7 @@ class YtDlpSource(Source):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site=site,
+                site=site, channel_url=channel,
             )
         return ResolvedLink(
             kind=LinkKind.VIDEO,
@@ -593,6 +619,56 @@ class YtDlpSource(Source):
             site=site,
             drm_protected=_drm_protected(info),
             access=_access(info),
+        )
+
+    def channel_details(self, ref: str) -> ChannelDetails:
+        """A YouTube channel through yt-dlp, which costs no API quota: its details, the Videos, Live and Shorts tabs
+        it has, and its playlists. ``ref`` is the channel's link or its ID."""
+        root = channel_root(ref) if ref.startswith("http") else mapping.channel_url(ref)
+        if root is None:
+            raise runner.YtDlpError("This link is not a YouTube channel")
+        info = self._info(f"{root}/videos")
+        channel_id = str(info.get("channel_id") or "")
+        if not channel_id:
+            raise runner.YtDlpError("YouTube did not say which channel this is")
+        handle = info.get("uploader_id") if str(info.get("uploader_id") or "").startswith("@") else None
+        # The handle's link is the one people paste, so a collection added from it before is recognised.
+        root = f"https://www.youtube.com/{handle}" if handle else mapping.channel_url(channel_id)
+        pictures = {str(item.get("id")): item.get("url") for item in info.get("thumbnails") or [] if isinstance(item, dict)}
+        sections: list[SectionRef] = []
+        for tab, title, role in _CHANNEL_FEEDS:
+            url = f"{root}/{tab}"
+            try:
+                listing = info if tab == "videos" else self._info(url)
+            except runner.YtDlpError as exc:
+                # A channel without Shorts or livestreams has no such tab.
+                logger.debug("%s has no %s tab: %s", root, tab, exc)
+                continue
+            if not listing.get("entries") and tab != "videos":
+                continue
+            sections.append(SectionRef(ref=tab, url=url, title=title, kind=SectionKind.FEED, role=role, kind_label="Feed"))
+        try:
+            # A page YouTube refuses part way still leaves the playlists of the pages before it.
+            playlists = runner.run_json("--flat-playlist", "--ignore-errors", f"{root}/playlists", cookies=sites.cookies_for(root))
+        except runner.YtDlpError as exc:
+            logger.info("Not listing the playlists of %s: %s", root, exc)
+            playlists = {}
+        for entry in playlists.get("entries") or []:
+            if not isinstance(entry, dict) or not entry.get("id") or not entry.get("title"):
+                continue
+            count = entry.get("playlist_count")
+            sections.append(SectionRef(
+                ref=str(entry["id"]), url=f"https://www.youtube.com/playlist?list={entry['id']}", title=str(entry["title"]),
+                kind=SectionKind.LIST, kind_label="Playlist", item_count=count if isinstance(count, int) else None,
+                image_url=_thumbnail(entry), description=entry.get("description") or None,
+            ))
+        followers = info.get("channel_follower_count")
+        return ChannelDetails(
+            ref=channel_id, url=root, title=str(info.get("channel") or info.get("uploader") or channel_id),
+            handle=handle, description=info.get("description") or None,
+            avatar_url=pictures.get("avatar_uncropped"), banner_url=pictures.get("banner_uncropped"),
+            facts=(f"{_count(followers)} subscribers",) if isinstance(followers, int) else (),
+            sections=tuple(sections),
         )
 
     def video_details(self, url: str) -> VideoDetails:

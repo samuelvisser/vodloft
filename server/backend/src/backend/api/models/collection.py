@@ -202,6 +202,13 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     cookies_needed_until: Optional[datetime] = None
     check_frequency: CheckFrequency = CheckFrequency.DEFAULT
     check_cron: Optional[str] = None
+    channel_slug: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices(AliasPath("channel", "slug"), AliasPath("collection", "channel", "slug")),
+    )
+    """The channel the collection belongs to, when it was added with one."""
+    channel_title: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices(AliasPath("channel", "title"), AliasPath("collection", "channel", "title")),
+    )
 
 
 class CollectionAPIRead(_CollectionAPIBaseOut):

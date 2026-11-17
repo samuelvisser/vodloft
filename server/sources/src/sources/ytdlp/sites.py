@@ -17,7 +17,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from ..contract import (
-    Access, DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
+    Access, ChannelPreset, DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
 )
 from ..cookies import site_cookies
 from ..registry import named_site_for
@@ -50,6 +50,9 @@ _VIDEO_OUTPUT_HELP = {
 # resolutions.
 _HLS_DOWNLOADS = {"youtube": (360, 720, 1080)}
 _API_KEY_SITES = {"youtube"}
+# What each Site calls a creator's channel, for the Sites whose channels VODLoft can look up.
+_CHANNEL_LABELS = {"youtube": "channel"}
+_CHANNEL_PRESETS = (ChannelPreset.ONE_SHOW, ChannelPreset.PER_LIST, ChannelPreset.PICK)
 # A channel's members-only videos sit among its open ones, so its collections start without them.
 _HIDES_LOCKED = {"youtube"}
 """The Sites yt-dlp's API key is for: the YouTube Data API key."""
@@ -141,6 +144,7 @@ def site_of(key: str, host: str | None = None) -> Site:
         downloads=_downloads(key), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
         settings=_SITE_SETTINGS.get(key, SiteSettings()), accesses=_accesses(key),
         takes_api_key=key in _API_KEY_SITES, shows_locked=key not in _HIDES_LOCKED,
+        channel_label=_CHANNEL_LABELS.get(key), channel_presets=_CHANNEL_PRESETS if key in _CHANNEL_LABELS else (),
     )
 
 

@@ -34,3 +34,27 @@
     .library-header .media-type-tabs button[aria-selected="true"] { background: none; border-bottom-color: #3b82f6; }
     .library-header .media-type-tabs button span { font-size: 13px; font-weight: 600; }
 }
+
+/* A channel: its banner behind a round picture, so it reads apart from the square collection art. */
+.library-tile--channel .library-tile-art {
+    display: grid;
+    place-items: center;
+    background-color: rgba(100, 116, 139, 0.15);
+    background-size: cover;
+    background-position: center;
+}
+.library-channel-avatar {
+    width: 56%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 0 0 3px var(--bg), 0 6px 18px rgba(15, 23, 42, 0.25);
+}
+.library-channel-avatar--empty {
+    display: grid;
+    place-items: center;
+    font-size: 1.75rem;
+    font-weight: 700;
+    background: #334155;
+    color: #fff;
+}

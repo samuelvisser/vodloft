@@ -616,7 +616,11 @@ export default function CollectionPage() {
       <article className="collection-details" aria-label="Show details">
         <header className="collection-page-header">
           <div className="collection-page-heading">
-            <div className="collection-author">{collection.authorName}</div>
+            <div className="collection-author">
+              {collection.channelSlug
+                ? <Link to={`/channel/${collection.channelSlug}`}>{collection.channelTitle ?? collection.authorName}</Link>
+                : collection.authorName}
+            </div>
             <div className="collection-meta">{[`${total} episodes`, collection.years, addedByLabel(collection.addedBy)].filter(Boolean).join(' • ')}</div>
           </div>
 
