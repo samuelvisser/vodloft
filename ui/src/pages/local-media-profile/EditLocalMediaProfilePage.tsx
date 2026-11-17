@@ -1,6 +1,6 @@
 import {type FormEvent, useCallback, useEffect, useRef, useState} from 'react'
 import {useNavigate, useParams} from 'react-router-dom'
-import LocalMediaProfileForm from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import LocalMediaProfileForm, {profileMode} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import IndexingValuesEditorButton from '../../components/LocalMediaProfile/IndexingValuesEditorButton'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
@@ -229,7 +229,7 @@ export default function EditLocalMediaProfilePage() {
                     <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(profile.type)}</div>
                 </div>
 
-                <LocalMediaProfileForm form={form} mode={profile.type} isCreating={false}/>
+                <LocalMediaProfileForm form={form} mode={profileMode(profile.type)} isCreating={false}/>
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>

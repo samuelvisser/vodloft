@@ -20,7 +20,7 @@ from backend.db.core import run_write_transaction
 from backend.db.models import Episode, Movie, MovieExtra, Video
 from backend.services.site_settings import local_media_profile_site_choices
 from backend.db.models.media_download import MediaDownloadBase
-from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, build_video_metadata, publish_time, select_thumbnail
+from backend.services.download_metadata import build_episode_metadata, build_track_metadata, build_movie_metadata, build_video_metadata, publish_time, select_thumbnail
 from backend.services.download_options import effective_download_mode, effective_filename_mode, effective_metadata_mode, effective_thumbnail_mode
 from backend.services.download_quality import (
     chosen_subtitle_tracks, custom_ytdlp_options, default_subtitle_languages, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
@@ -40,7 +40,7 @@ from downloader import (
 )
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import render_nfo
-from downloader.plan import DownloadPlan, SidecarSpec, YtdlpSponsorBlock, build_download_plan
+from downloader.plan import EMBEDS_ARTWORK, EMBEDS_METADATA, DownloadPlan, SidecarSpec, YtdlpSponsorBlock, build_download_plan
 from downloader.source import resolve_download_source
 from downloader.ytdlp import resolve_ytdlp_source
 from sources import Feature, PlaybackKind, Source, get_source
@@ -60,8 +60,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     is_extra = isinstance(media, MovieExtra)
     if episode is None and movie is None and video is None:
         raise DownloadError("Unsupported media type")
-    expected_type = LocalMediaProfileType.COLLECTION.value if episode is not None else LocalMediaProfileType.VIDEO.value
-    if profile.type != expected_type:
+    if LocalMediaProfileType(profile.type).for_collections != (episode is not None):
         raise DownloadError("The Local Media Profile does not match the media type")
     preferred = profile.preferred_format
     media_site = None
@@ -93,6 +92,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     default_languages = default_subtitle_languages(profile)
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
     output_template, filename_mode = profile.output_template, effective_filename_mode(profile)
+    music = profile.type == LocalMediaProfileType.MUSIC.value
     file_date_from_publish_date = profile.file_date_from_publish_date
     title, slug, media_id = media.title, media.slug, media.id
     thumbnail = select_thumbnail(media)
@@ -209,7 +209,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     media = download.media
     if isinstance(media, Episode):
         destination = resolve_episode_output_path(output_template, episode=media, local_media_profile=download.local_media_profile, media_download=download, filename_mode=filename_mode, extension=source.extension)
-        metadata = build_episode_metadata(media, media.collection)
+        metadata = (build_track_metadata if music else build_episode_metadata)(media, media.collection)
     elif isinstance(media, Video):
         destination = resolve_video_output_path(output_template, video=media, filename_mode=filename_mode, extension=source.extension)
         metadata = build_video_metadata(media, source_name=media_source.name)
@@ -223,8 +223,9 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
 
     assets: list[SidecarSpec] = []
     artwork_id = None
-    # VODLoft embeds into MP4, M4A, MP3 and MKV; an Opus file only gets sidecars.
-    embeddable = not source.hls_bundle and source.extension != "opus"
+    # VODLoft embeds into MP4, M4A, MP3, MKV and FLAC; an Opus file takes tags, but artwork only as a sidecar.
+    embeddable = not source.hls_bundle and source.extension in EMBEDS_ARTWORK
+    takes_tags = not source.hls_bundle and source.extension in EMBEDS_METADATA
     if thumbnail is not None and thumbnail_mode is not ThumbnailMode.NO_THUMBNAIL:
         publish_artwork = thumbnail_mode in (ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR)
         embed_artwork = thumbnail_mode in (ThumbnailMode.EMBED, ThumbnailMode.EMBED_AND_SIDECAR) and embeddable
@@ -237,7 +238,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         if embed_artwork:
             artwork_id = "artwork"
     tags = ()
-    if metadata_mode in (MetadataMode.EMBED, MetadataMode.EMBED_AND_NFO) and embeddable:
+    if metadata_mode in (MetadataMode.EMBED, MetadataMode.EMBED_AND_NFO) and takes_tags:
         tags = tuple(metadata.ffmpeg_tags().items())
     if metadata_mode in (MetadataMode.NFO, MetadataMode.EMBED_AND_NFO):
         assets.append(SidecarSpec("nfo", "nfo", content=render_nfo(metadata, kodi_safe=kodi_safe_nfo), extension="nfo", target_suffix=".nfo"))
@@ -279,7 +280,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         subtitle_asset_ids=tuple(embedded_subtitle_ids),
         default_subtitle_languages=default_languages,
         attempt_id=tracker.attempt_id,
-        file_date=file_date,
+        file_date=file_date, square_artwork=music,
         media_lane=(f"source:{media_source.id}", streams) if (streams := media_source.download_streams) else None,
     )
 

@@ -48,7 +48,7 @@ def create_season_record(
     s.add(season)
     s.flush()
 
-    if update_collection_profiles and season.collection.type == CollectionType.SERIES.value:
+    if update_collection_profiles and CollectionType(season.collection.type).by_season:
         for profile in season.collection.download_profiles:
             add_upcoming_season(profile, season.slug)
         s.flush()

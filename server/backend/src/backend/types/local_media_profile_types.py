@@ -4,11 +4,22 @@ from typing import NamedTuple
 
 class LocalMediaProfileType(StrEnum):
     COLLECTION = "collection"
+    MUSIC = "music"
+    """A collection's episodes as music: audio tracks with the tags music players read."""
     VIDEO = "video"
     """Single videos, and movies with their extras."""
 
     # Only used by the polymorphic parent mapper.
     BASE = "base"
+
+    @property
+    def for_collections(self) -> bool:
+        """Whether profiles of this type keep collections' episodes: a Collection or a Music profile."""
+        return self in (LocalMediaProfileType.COLLECTION, LocalMediaProfileType.MUSIC)
+
+    @property
+    def label(self) -> str:
+        return self.value.title()
 
 
 class LocalMediaProfileStorageMode(StrEnum):
@@ -49,8 +60,17 @@ class LocalMediaProfileSubtitleMode(StrEnum):
 
 class CollectionLocalMediaProfileScope(StrEnum):
     BOTH = "both"
+    """Podcasts and series."""
     PODCAST = "podcast"
     SERIES = "series"
+    MUSIC = "music"
+    """Music collections, which only Music profiles keep."""
+
+    def collection_types(self) -> tuple[str, ...]:
+        """The collection types a profile with this scope keeps."""
+        if self is CollectionLocalMediaProfileScope.BOTH:
+            return (CollectionLocalMediaProfileScope.PODCAST.value, CollectionLocalMediaProfileScope.SERIES.value)
+        return (self.value,)
 
 
 class PreferredFormat(StrEnum):
@@ -113,6 +133,8 @@ class AudioFormat(StrEnum):
     M4A = "m4a"
     OPUS = "opus"
     MP3 = "mp3"
+    FLAC = "flac"
+    """Lossless. It keeps what the site sends without losing more, but it is no better than the site's own audio."""
 
 
 class SubtitleLanguageMode(StrEnum):

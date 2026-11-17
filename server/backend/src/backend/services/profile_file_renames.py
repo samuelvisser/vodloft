@@ -155,7 +155,7 @@ def request_local_media_profile_file_rename(
     if profile is None:
         raise NotFoundError("Media profile")
 
-    if profile.type == LocalMediaProfileType.COLLECTION.value:
+    if LocalMediaProfileType(profile.type).for_collections:
         return request_collection_local_media_profile_file_rename(
             s,
             local_media_profile_slug,

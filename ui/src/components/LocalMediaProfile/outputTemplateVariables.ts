@@ -108,6 +108,18 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'channel_kind', description: 'What the site calls the channel, such as YouTube channel'},
     {name: 'section_title', description: 'The part of the channel that listed the episode, such as Videos or a playlist'},
     {name: 'section_kind', description: 'feed, list or item'},
+    {
+        name: 'artist',
+        description: 'Who the music is by: the channel, else the collection\'s author',
+        readMore: {
+            paragraphs: [
+                'Meant for Music profiles, such as {{ artist }}/{{ year }} - {{ album }}/{{ track_number_padded }} - {{ title }}.',
+            ],
+        },
+    },
+    {name: 'album', description: 'The episode\'s season when it holds one playlist or album, else the collection\'s title'},
+    {name: 'track_number', description: 'The episode\'s number on its album, such as 3'},
+    {name: 'track_number_padded', description: 'The track number with two digits, such as 03'},
     ...DATE_VARIABLES,
 ]
 

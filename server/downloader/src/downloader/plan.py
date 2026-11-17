@@ -155,6 +155,12 @@ class StageSpec:
             raise ValueError("Stage deadlines must be finite and positive")
 
 
+EMBEDS_ARTWORK = frozenset({"mp4", "m4a", "m4v", "mp3", "mkv", "flac"})
+"""The file types VODLoft embeds artwork in."""
+EMBEDS_METADATA = EMBEDS_ARTWORK | {"opus"}
+"""The file types VODLoft embeds tags in. An Opus file takes tags, but VODLoft cannot give it artwork."""
+
+
 @dataclass(frozen=True)
 class DownloadPlan:
     attempt_id: str
@@ -176,6 +182,8 @@ class DownloadPlan:
     """The first of these languages that a subtitle has becomes the track players pick by default; none marks no track."""
     file_date: datetime | None = None
     """The date the published files get, such as when the media was published; None keeps when they were written."""
+    square_artwork: bool = False
+    """Embedded artwork is cut to a square from its middle, as music players show album covers."""
 
     def __post_init__(self) -> None:
         stages = {stage.id: stage for stage in self.stages}
@@ -255,6 +263,7 @@ def build_download_plan(
     media_lane: tuple[str, int] | None = None,
     default_subtitle_languages: tuple[str, ...] = (),
     file_date: datetime | None = None,
+    square_artwork: bool = False,
 ) -> DownloadPlan:
     """Resolve optional work once; the coordinator executes this plan verbatim."""
     if download_mode not in ("direct", "temporary"):
@@ -280,8 +289,10 @@ def build_download_plan(
         raise DownloadError("A source cannot be remuxed to MP4 and converted to M4A")
     if source.convert_video_to_m4a and (not source.audio_only or source.extension != "m4a"):
         raise DownloadError("Video-to-M4A conversion requires an audio-only M4A output")
-    if (metadata_tags or artwork_asset_id) and source.extension not in {"mp4", "m4a", "m4v", "mp3", "mkv"}:
+    if (metadata_tags or artwork_asset_id) and source.extension not in EMBEDS_METADATA:
         raise DownloadError(f"Cannot embed artwork or metadata in .{source.extension}; select sidecars or an MP4 output")
+    if artwork_asset_id and source.extension not in EMBEDS_ARTWORK:
+        raise DownloadError(f"Cannot embed artwork in .{source.extension}; select a sidecar thumbnail")
     suffixes = [a.target_suffix for a in assets if a.publish and a.target_suffix]
     if len(set(suffixes)) != len(suffixes):
         raise ValueError("Two assets cannot publish the same sidecar suffix")
@@ -369,5 +380,5 @@ def build_download_plan(
         artwork_asset_id, tuple(stages), copying, media_lane=media_lane,
         subtitle_asset_ids=tuple(subtitle_asset_ids),
         default_subtitle_languages=tuple(default_subtitle_languages),
-        file_date=file_date,
+        file_date=file_date, square_artwork=square_artwork,
     )

@@ -34,6 +34,7 @@ export const COLLECTION_OUTPUT_TEMPLATE_FIELDS = [
     'episode_published_time', 'episode_published_datetime', 'episode_index',
     'collection_author', 'collection_site_id', 'episode_site_id', 'episode_uploader', 'duration_seconds',
     'channel_title', 'channel_handle', 'channel_kind', 'section_title', 'section_kind',
+    'artist', 'album', 'track_number', 'track_number_padded',
     ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 

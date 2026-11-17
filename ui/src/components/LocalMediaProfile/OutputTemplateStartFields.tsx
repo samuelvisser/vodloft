@@ -10,7 +10,7 @@ import ReadMore from '../../utils/ReadMore'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import {FollowsSettingsSelect} from './FollowsSettings'
 import {parseOutputTemplate, renderCompactOutputTemplate} from './outputTemplateFormatting'
-import {outputTemplatePreset, outputTemplatePresetRegistry, templateBaseFolder} from './outputTemplatePresets'
+import {outputTemplatePreset, outputTemplatePresetLabel, outputTemplatePresetRegistry, templateBaseFolder} from './outputTemplatePresets'
 
 /** Which characters file and folder names may hold: the mode in Settings, or the profile's own. */
 export function FilenameModeField({form}: {form: UseFormReturn<any>}) {
@@ -63,13 +63,14 @@ export default function OutputTemplateStartFields({form, mode}: { form: UseFormR
     const {control, getValues, setValue} = form
     const preferredFormat = useWatch({control, name: 'preferredFormat'})
     const [pendingPreset, setPendingPreset] = useState<string | null>(null)
+    const music = useWatch({control, name: 'type'}) === 'music'
     const audioOnly = preferredFormat === 'format_audio_only'
 
     const applyPreset = (key: string) => {
         const preset = outputTemplatePreset(key)
         if (!preset) return
         const options = {shouldDirty: true, shouldTouch: true, shouldValidate: true}
-        const base = templateBaseFolder(getValues('outputTemplate') ?? '', audioOnly ? '/downloads/podcasts' : '/downloads/shows')
+        const base = templateBaseFolder(getValues('outputTemplate') ?? '', music ? '/downloads/music' : audioOnly ? '/downloads/podcasts' : '/downloads/shows')
         // The presets are written as the editor shows them; the form keeps the compact template.
         setValue('outputTemplate', renderCompactOutputTemplate(parseOutputTemplate(preset.template(base), 'editor')), options)
         for (const [name, value] of Object.entries(preset.choices)) setValue(name, value, options)
@@ -87,14 +88,19 @@ export default function OutputTemplateStartFields({form, mode}: { form: UseFormR
                     <label htmlFor="mp-output-template-preset">Start from a preset</label>
                     <SimpleSelect
                         inputId="mp-output-template-preset"
-                        registry={outputTemplatePresetRegistry(audioOnly)}
+                        registry={outputTemplatePresetRegistry(audioOnly, music)}
                         value={null}
-                        placeholder="Choose a media server…"
+                        placeholder={music ? 'Choose a layout…' : 'Choose a media server…'}
                         onChange={setPendingPreset}
                         aria-describedby="mp-output-template-preset-help"
                     />
                     <div className="help" id="mp-output-template-preset-help">
-                        <ReadMore summary="Fill in an output template and NFO settings that a media server reads well. You can change any of it afterwards.">
+                        {music ? (
+                            <p>
+                                <strong>Music library</strong>: <code>Artist/Album/01 - Title</code>, which Plex,
+                                Jellyfin, Navidrome and most music players read. You can change any of it afterwards.
+                            </p>
+                        ) : <ReadMore summary="Fill in an output template and NFO settings that a media server reads well. You can change any of it afterwards.">
                             <p>
                                 <strong>Plex</strong>: <code>Show/Season 01/Show - S01E01 [Title]</code>. Numbers in a
                                 title, such as 4x4, are written so Plex does not read them as the episode.
@@ -111,7 +117,7 @@ export default function OutputTemplateStartFields({form, mode}: { form: UseFormR
                                 The template starts in the folder your current template uses. Extras are numbered with
                                 an Indexing Value called <code>extra</code>, which the preset adds when the profile has none.
                             </p>
-                        </ReadMore>
+                        </ReadMore>}
                     </div>
                 </div>
             )}
@@ -130,7 +136,7 @@ export default function OutputTemplateStartFields({form, mode}: { form: UseFormR
                 }}
             >
                 <p>
-                    The {pendingPreset ? outputTemplatePresetRegistry(true).getLabelLoose(pendingPreset) : ''} preset
+                    The {pendingPreset ? outputTemplatePresetLabel(pendingPreset) : ''} preset
                     replaces the output template, and sets the metadata, NFO and file date choices of this profile.
                 </p>
             </ConfirmDialog>

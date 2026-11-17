@@ -286,8 +286,8 @@ def execute_download_plan(
                         thumbnail_path=str(artwork.path) if artwork is not None else None,
                         subtitles=subtitle_assets,
                         default_subtitle=next((index for index, asset in enumerate(embedded) if asset is default), None),
-                        audio_only=plan.source.audio_only, ffmpeg_path=plan.ffmpeg_path,
-                        should_cancel=tracker.is_canceled,
+                        audio_only=plan.source.audio_only, square_artwork=plan.square_artwork,
+                        ffmpeg_path=plan.ffmpeg_path, should_cancel=tracker.is_canceled,
                     )
             owned_media = inspect_artifact(media_path)
         acquired: list[AcquiredSidecar] = []

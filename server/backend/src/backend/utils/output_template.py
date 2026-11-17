@@ -54,6 +54,7 @@ COLLECTION_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "episode_published_time", "episode_published_datetime", "episode_index",
     "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
     "channel_title", "channel_handle", "channel_kind", "section_title", "section_kind",
+    "artist", "album", "track_number", "track_number_padded",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 # A Video profile keeps single videos and movies with their extras. The movie_* values are empty for a
@@ -401,6 +402,7 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "episode_published_datetime": published_at.strftime("%Y-%m-%d %H:%M:%S") if published_at else "",
         **_date_substitutions(published_at),
         **_channel_values(episode),
+        **_music_values(episode),
     }
     values.update(custom_metadata_template_values(
         "collection",
@@ -493,6 +495,20 @@ def _channel_values(episode: "Episode") -> dict[str, str]:
         **channel_output_template_values(episode.collection.channel),
         "section_title": section.title if section else "",
         "section_kind": section.kind if section else "",
+    }
+
+
+def _music_values(episode: "Episode") -> dict[str, str]:
+    """The episode as a track of an album, for a Music profile."""
+    from backend.utils.music import music_track
+
+    track = music_track(episode)
+    number = track.track_number
+    return {
+        "artist": track.artist,
+        "album": track.album,
+        "track_number": str(number) if number is not None else "",
+        "track_number_padded": f"{number:02d}" if number is not None else "",
     }
 
 

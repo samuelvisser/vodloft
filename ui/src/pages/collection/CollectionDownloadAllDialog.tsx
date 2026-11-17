@@ -10,7 +10,12 @@ import SimpleSelect from '../../components/common/SimpleSelect'
 import {faIcon} from '../../icons/faIcon'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {useCollectionEpisodeTags} from '../../lib/queries'
-import {buildLocalMediaProfileSelectRegistry, isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
+import {
+  buildLocalMediaProfileSelectRegistry,
+  type CollectionLocalMediaProfileContext,
+  isCollectionLocalMediaProfileAvailableFor,
+  isLocalMediaProfileAvailableForSite,
+} from '../../types/local_media_profile'
 import type {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import type {SeasonRead} from '../../types/schemas/season'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -39,7 +44,7 @@ type DownloadAllForm = z.infer<typeof downloadAllFormSchema>
 type Props = {
   collectionSlug: string
   collectionTitle: string
-  collectionType: 'podcast' | 'series'
+  collectionType: CollectionLocalMediaProfileContext
   siteKey: string | null | undefined
   seasons: readonly SeasonRead[]
   localMediaProfiles: readonly LocalMediaProfileRead[]
@@ -60,12 +65,13 @@ export default function CollectionDownloadAllDialog({
 }: Props) {
   const selectId = useId()
   const startOperation = useStartOperation()
+  // Series and Music collections are downloaded by season; a podcast by date or number of episodes.
+  const bySeason = collectionType !== 'podcast'
   const [starting, setStarting] = useState(false)
 
   const compatibleProfiles = useMemo(
     () => localMediaProfiles.filter((profile) => (
-      profile.type === 'collection'
-      && (profile.collectionScope === 'both' || profile.collectionScope === collectionType)
+      isCollectionLocalMediaProfileAvailableFor(profile, collectionType)
       && isLocalMediaProfileAvailableForSite(profile, siteKey)
     )),
     [localMediaProfiles, collectionType, siteKey],
@@ -87,7 +93,7 @@ export default function CollectionDownloadAllDialog({
 
   const schema = useMemo(
     () => downloadAllFormSchema.superRefine((data, context) => {
-      if (collectionType === 'series' && data.seasonIds.length === 0) {
+      if (bySeason && data.seasonIds.length === 0) {
         context.addIssue({
           code: 'custom',
           path: ['seasonIds'],
@@ -170,7 +176,7 @@ export default function CollectionDownloadAllDialog({
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           localMediaProfileId: values.localMediaProfileId,
-          seasonIds: collectionType === 'series' ? values.seasonIds : [],
+          seasonIds: bySeason ? values.seasonIds : [],
           episodeTypes: values.episodeTypes,
           downloadDaysInPast: collectionType === 'podcast' && values.limitBy === 'date' ? values.downloadDaysInPast : 0,
           downloadEpisodeCount: collectionType === 'podcast' && values.limitBy === 'episodes' ? values.downloadEpisodeCount : 0,
@@ -205,7 +211,7 @@ export default function CollectionDownloadAllDialog({
       }}
     >
       <p>Download the selected episodes from "{collectionTitle}". Existing downloaded files will not be replaced.</p>
-      {collectionType === 'series' ? (
+      {bySeason ? (
         <div className="form-row">
           <div className="collection-download-all-label-row">
             <label htmlFor={`${selectId}-season`}>Seasons to download</label>

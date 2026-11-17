@@ -57,6 +57,8 @@ class CollectionAPIUpdate(_CollectionAPIBaseIn):
     """
 
     membership_level: Optional[str] = None
+    type: Optional[CollectionType] = None
+    """Podcast, Series or Music; left out, it stays as it is."""
     ytdlp_options: Optional[str] = Field(default=None, max_length=MAX_OPTIONS_LENGTH)
     """Your own yt-dlp options for this Collection; left out, they stay as they are."""
 

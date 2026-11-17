@@ -29,7 +29,7 @@ have **show and season NFO files** (`tvshow.nfo` and `season.nfo`, for Jellyfin,
 background**, which are saved in the collection root shown under the output template's example. **Date files by
 publish date** gives files the date the episode came out instead of the date it was downloaded.
 
-## Collection and Video profiles
+## Collection, Music and Video profiles
 
 ### Collection profiles
 
@@ -40,7 +40,19 @@ Collection profiles can use:
 - 720p video;
 - audio only.
 
-A Collection profile also has an **Available for** setting. This controls where VODLoft offers the profile in the interface.
+A Collection profile also has an **Available for** setting. This controls where VODLoft offers the profile in the interface: for Podcasts, for Series, or for both.
+
+### Music profiles
+
+Music profiles store the tracks of **Music** collections, and Music collections take no other kind of profile. A Music profile downloads audio only, as M4A, Opus, MP3 or FLAC, and tags every file the way music players expect:
+
+- the **album** is the episode's season, such as a playlist or album the collection holds, or else the collection's title;
+- the **artist** and **album artist** are the channel the collection belongs to, or else its author;
+- the **track number** is the episode's number in its season.
+
+The thumbnail goes inside the file as its cover art, cut to a square from the middle. Opus files take tags but no cover art. A new Music profile starts with the **Music library** layout, `Artist/Album/01 - Title`, which Plex, Jellyfin, Navidrome and most music players read; the `artist`, `album`, `track_number` and `track_number_padded` variables let you build your own.
+
+FLAC keeps exactly what the site sends. Sites such as YouTube send compressed audio, so a FLAC file is larger but sounds no better than M4A or Opus.
 
 ### Video profiles
 
@@ -137,7 +149,7 @@ Each site offers its own choices, and a profile shows what its sites offer toget
 
 Changing a codec, the container or the audio codec while a goal is chosen turns it into **Your own**. Choosing a goal again replaces your order with that goal's.
 
-**Audio format**, for Audio only: **M4A** (plays everywhere, including podcast apps), **Opus** (smallest, not every podcast app plays it) or **MP3** (for very old players). Opus files get their thumbnail and metadata beside them, not inside.
+**Audio format**, for Audio only: **M4A** (plays everywhere, including podcast apps), **Opus** (smallest, not every podcast app plays it) or **MP3** (for very old players). Music profiles can also choose **FLAC**. Opus files get their metadata inside, and their thumbnail beside them.
 
 **Audio language** picks a dubbed audio track when a video has one. **Original** keeps the language the video was made in.
 
@@ -240,6 +252,10 @@ For example, to keep only the part of a title before ` | `, and leave the title 
 | `channel_kind` | What the site calls a channel, such as `YouTube channel` or `The Daily Wire host` |
 | `section_title` | The playlist or show of the channel that the episode came from, such as `Shorts`; empty otherwise |
 | `section_kind` | `feed` for Videos, Live or Shorts, `list` for a playlist or show, `item` for a single movie; empty otherwise |
+| `artist` | Who the music is by: the channel's name, else the collection's author |
+| `album` | The episode's season when it holds one playlist or album, else the collection's title |
+| `track_number` | The episode's number on its album, such as `3` |
+| `track_number_padded` | The track number with two digits, such as `03` |
 | `season` | Season slug, or empty when unavailable |
 | `season_name` | Season name, or empty when unavailable |
 | `season_index` | VODLoft's internal persistent season index |

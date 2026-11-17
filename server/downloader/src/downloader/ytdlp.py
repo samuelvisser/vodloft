@@ -52,7 +52,7 @@ VIDEO_CODECS = ("av1", "vp9", "h264", "h265")
 _SORT_NAMES = {"av1": "av01", "vp9": "vp9", "h264": "h264", "h265": "h265"}
 _CODEC_PATTERNS = {"av1": "av0?1", "vp9": "vp0?9", "h264": "avc|h264", "h265": "hev|hvc|h265"}
 _AUDIO_SORT_NAMES = {"aac": "aac", "opus": "opus"}
-AUDIO_FORMATS = ("m4a", "opus", "mp3")
+AUDIO_FORMATS = ("m4a", "opus", "mp3", "flac")
 
 THROTTLED_HEIGHT = 360
 """The resolution a throttled YouTube still serves: a download that asked for more and got this or less while
@@ -117,7 +117,8 @@ def ytdlp_format_options(
     """
     language = quality.audio_language
     if audio_only:
-        preferred = {"m4a": "ba[ext=m4a]", "opus": "ba[acodec=opus]", "mp3": "ba"}[quality.audio_format]
+        # MP3 and FLAC are made from the best audio there is.
+        preferred = {"m4a": "ba[ext=m4a]", "opus": "ba[acodec=opus]", "mp3": "ba", "flac": "ba"}[quality.audio_format]
         choices = [*_with_language(preferred, language), *_with_language("ba", language), "b"]
         return ("-f", "/".join(dict.fromkeys(choices)), "-x", "--audio-format", quality.audio_format)
     height = FORMAT_HEIGHTS.get(preferred_format)

@@ -186,7 +186,7 @@ def test_an_episode_of_a_channels_collection_knows_its_channel_and_section() -> 
     episode.collection.channel = SimpleNamespace(
         title="Northwind Workshop", handle="@northwindworkshop", source_key="ytdlp", site_key="youtube",
     )
-    episode.collection_link = SimpleNamespace(section=SimpleNamespace(title="Tool Reviews", kind="list"))
+    episode.collection_link = SimpleNamespace(section=SimpleNamespace(title="Tool Reviews", kind="list"), placement="one_season")
 
     values = episode_output_template_values(episode)
 

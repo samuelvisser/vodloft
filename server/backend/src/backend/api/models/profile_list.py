@@ -25,6 +25,7 @@ class UsedFor(StrEnum):
     PODCAST = "podcast"
     SERIES = "series"
     VIDEO = "video"
+    MUSIC = "music"
 
 
 class StorageUse(StrEnum):

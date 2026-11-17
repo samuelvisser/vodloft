@@ -4,6 +4,14 @@ from enum import Enum, StrEnum
 class CollectionType(Enum):
     PODCAST = "podcast"
     SERIES = "series"
+    MUSIC = "music"
+    """An artist's music: each season an album, each episode a track. Only Music profiles keep it."""
+
+    @property
+    def by_season(self) -> bool:
+        """Whether downloads pick the collection's seasons, as for a series or an artist's albums, rather than
+        a podcast's newest episodes."""
+        return self is not CollectionType.PODCAST
 
 class EpisodeIdentifier(Enum):
     DATE_BASED = "date_based"

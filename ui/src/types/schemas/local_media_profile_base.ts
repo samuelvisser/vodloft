@@ -48,7 +48,7 @@ const QualityAndLanguageFields = {
     codecFallback: z.enum(['best', 'skip']).default('best'),
     container: z.enum(['mp4', 'mkv']).default('mp4'),
     audioCodec: z.enum(['aac', 'opus']).default('aac'),
-    audioFormat: z.enum(['m4a', 'opus', 'mp3']).default('m4a'),
+    audioFormat: z.enum(['m4a', 'opus', 'mp3', 'flac']).default('m4a'),
     audioLanguage: LanguageCodeSchema.nullable().default(null),
 }
 

@@ -17,7 +17,7 @@ import {toast} from 'react-hot-toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
-import {CollectionTypeReg, EpisodeIdentifierReg, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
+import {CollectionTypeReg, CollectionTypeValue, EpisodeIdentifierReg, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
 import {apiUrl} from '../../lib/api'
 
 const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
@@ -46,6 +46,7 @@ type FormState = CollectionFormValue & {
   episodeOrder: EpisodeOrderValue
   genre: string
   contentRating: string
+  type: CollectionTypeValue
 }
 
 export default function EditCollectionPage() {
@@ -68,6 +69,7 @@ export default function EditCollectionPage() {
     episodeOrder: 'newest_first',
     genre: '',
     contentRating: '',
+    type: 'series',
     ...defaultCollectionFormValue,
   }))
 
@@ -87,12 +89,14 @@ export default function EditCollectionPage() {
       episodeOrder: collection.episodeOrder,
       genre: collection.genre ?? '',
       contentRating: collection.contentRating ?? '',
+      type: CollectionTypeReg.normalize(collection.type) ?? prev.type,
     }))
   }, [id, collection])
 
   const usesYtdlp = hasSourceFeature(collection, SourceFeature.YTDLP_OPTIONS)
   const optionalCookies = hasSourceFeature(collection, SourceFeature.OPTIONAL_COOKIES)
   const [cronError, setCronError] = useState<string | null>(null)
+  const [typeError, setTypeError] = useState<string | null>(null)
   const {data: suggestion} = useQuery({
     queryKey: ['collection', id, 'checkSuggestion'],
     enabled: !!id,
@@ -121,6 +125,7 @@ export default function EditCollectionPage() {
       thumbnailPortraitPath: collection.thumbnailPortraitPath ?? null,
       thumbnailSquarePath: collection.thumbnailSquarePath ?? null,
       ...(usesYtdlp ? {ytdlpOptions: form.ytdlpOptions} : {}),
+      type: form.type,
       episodeOrder: form.episodeOrder,
       genre: form.genre,
       contentRating: form.contentRating,
@@ -142,6 +147,11 @@ export default function EditCollectionPage() {
       const problem = problemAt('ytdlpOptions')
       if (problem) {
         setOptionsError(String(problem.msg).replace(/^Value error, /, ''))
+        return
+      }
+      const typeProblem = problemAt('type')
+      if (typeProblem) {
+        setTypeError(String(typeProblem.msg).replace(/^Value error, /, ''))
         return
       }
       const cronProblem = problemAt('checkCron', 'check_cron')
@@ -321,15 +331,22 @@ export default function EditCollectionPage() {
 
         <div className="form-row">
           <label htmlFor="collection-type">Collection type</label>
-          <input
-            id="collection-type"
-            className="input"
-            type="text"
-            value={collection ? CollectionTypeReg.getLabelLoose(collection.type) : ''}
-            disabled
-            aria-describedby="collection-type-help"
+          <SimpleSelect
+            inputId="collection-type"
+            registry={CollectionTypeReg}
+            value={form.type}
+            onChange={(value) => {
+              setTypeError(null)
+              setForm((prev) => ({...prev, type: value as CollectionTypeValue}))
+            }}
+            aria-invalid={!!typeError}
+            aria-describedby={typeError ? 'collection-type-error' : 'collection-type-help'}
           />
-          <div className="help" id="collection-type-help">Chosen when the Collection was added, and cannot be changed.</div>
+          {typeError && <div id="collection-type-error" className="error" role="alert">{typeError}</div>}
+          <div className="help" id="collection-type-help">
+            {CollectionTypeReg.getHelp(form.type) ?? ''} The Local Media Profiles offered for this collection depend on
+            its type: Music collections take Music profiles only.
+          </div>
         </div>
 
         <div className="form-row">

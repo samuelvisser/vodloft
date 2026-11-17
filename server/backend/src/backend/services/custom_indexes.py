@@ -57,7 +57,7 @@ class CustomIndexReconciliationResult:
 
 
 def profile_offered_for_collection_type(profile: CollectionLocalMediaProfile, collection: Collection) -> bool:
-    return profile.collection_scope in (CollectionLocalMediaProfileScope.BOTH, collection.type)
+    return collection.type in CollectionLocalMediaProfileScope(profile.collection_scope).collection_types()
 
 
 def profile_applies_to_collection(s: Session, profile: CollectionLocalMediaProfile, collection: Collection) -> bool:
@@ -69,15 +69,13 @@ def profile_applies_to_collection(s: Session, profile: CollectionLocalMediaProfi
 
 def profile_collection_scope_filter_for_collection_type(collection_type: str):
     """SQL predicate for Collection Local Media Profiles that apply to one collection type."""
-    return or_(
-        CollectionLocalMediaProfile.collection_scope == CollectionLocalMediaProfileScope.BOTH,
-        CollectionLocalMediaProfile.collection_scope == collection_type,
-    )
+    scopes = [scope.value for scope in CollectionLocalMediaProfileScope if collection_type in scope.collection_types()]
+    return CollectionLocalMediaProfile.collection_scope.in_(scopes)
 
 
 def profile_collection_scope_filter(profile: CollectionLocalMediaProfile):
     """SQL predicate for Collections that are in one Local Media Profile's scope."""
-    scope = true() if profile.collection_scope == CollectionLocalMediaProfileScope.BOTH else Collection.type == profile.collection_scope
+    scope = Collection.type.in_(CollectionLocalMediaProfileScope(profile.collection_scope).collection_types())
     # A collection whose Site VODLoft has not stored yet is in every profile's scope.
     return and_(scope, or_(Collection.site_key.in_(profile.site_keys), Collection.site_key.is_(None)))
 

@@ -1,6 +1,6 @@
-import {Controller, type UseFormReturn} from 'react-hook-form'
+import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
-import {CollectionLocalMediaProfileScopeReg, type CollectionLocalMediaProfileScope} from '../../types/local_media_profile'
+import {CollectionProfileScopeChoiceReg, type CollectionLocalMediaProfileScope} from '../../types/local_media_profile'
 import ReadMore from '../../utils/ReadMore'
 import SimpleSelect from '../common/SimpleSelect'
 
@@ -14,6 +14,17 @@ export default function CollectionLocalMediaProfileScopeField({
     isCreating: boolean
 }) {
     const {control, formState: {errors}} = form
+    const music = useWatch({control, name: 'type'}) === 'music'
+
+    if (music) {
+        return (
+            <div className="form-row">
+                <label>Available for</label>
+                <div style={{padding: '6px 0'}}>Music collections</div>
+                <div className="help">A Music profile is offered for Music collections only, and they take no other profile.</div>
+            </div>
+        )
+    }
 
     return (
         <div className="form-row">
@@ -24,7 +35,7 @@ export default function CollectionLocalMediaProfileScopeField({
                 render={({field}) => (
                     <SimpleSelect
                         inputId="mp-collection-scope"
-                        registry={CollectionLocalMediaProfileScopeReg}
+                        registry={CollectionProfileScopeChoiceReg}
                         value={field.value ?? 'both'}
                         onChange={(value) => {
                             const nextScope = value as CollectionLocalMediaProfileScope

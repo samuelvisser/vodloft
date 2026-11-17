@@ -155,7 +155,7 @@ export default function CollectionPage() {
     data: seasonsData,
     isLoading: seasonsLoading,
     isPlaceholderData: seasonsPlaceholder,
-  } = useCollectionSeasons(isSeasonal || collection?.type === 'series' ? id : undefined)
+  } = useCollectionSeasons(isSeasonal || collection?.type === 'series' || collection?.type === 'music' ? id : undefined)
   const seasons = useMemo(
     () => [...(seasonsData ?? [])].sort((a, b) => b.index - a.index),
     [seasonsData],
@@ -871,7 +871,7 @@ export default function CollectionPage() {
         <CollectionDownloadAllDialog
           collectionSlug={id}
           collectionTitle={collection.title}
-          collectionType={collection.type === 'series' ? 'series' : 'podcast'}
+          collectionType={collection.type === 'series' || collection.type === 'music' ? collection.type : 'podcast'}
           siteKey={collection.site?.key}
           seasons={seasons}
           localMediaProfiles={localMediaProfiles ?? []}

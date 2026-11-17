@@ -40,7 +40,18 @@ ${base}
 /{{ season_folder }}
 /{{ collection_title }} {{ episode_id }} {{ title }}.ext`
 
+/** Where a new Music profile puts its tracks: a folder per artist and per album, which music players read. */
+export const MUSIC_OUTPUT_TEMPLATE = '/downloads/music/{{ artist }}/{{ album }}/{{ track_number_padded }} - {{ title }}.ext'
+
 const PRESETS: Record<string, Preset> = {
+    music: {
+        template: (base) => `{# Path #}
+${base}
+/{{ artist }}
+/{{ album }}
+/{{ track_number_padded }} - {{ title }}.ext`,
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true},
+    },
     plex: {
         template: (base) => `{# Variables #}
 ${NUMBERS}
@@ -87,16 +98,28 @@ const PRESET_NAMES = {
     jellyfin: {label: 'Jellyfin and Emby'},
     kodi: {label: 'Kodi'},
     audiobookshelf: {label: 'Audiobookshelf'},
+    music: {label: 'Music library'},
 } as const
 
 const VideoPresetReg = createSelectRegistry('OutputTemplatePreset', {
     plex: PRESET_NAMES.plex, jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi,
 })
-const AudioPresetReg = createSelectRegistry('OutputTemplatePreset', PRESET_NAMES)
+const AudioPresetReg = createSelectRegistry('OutputTemplatePreset', {
+    plex: PRESET_NAMES.plex, jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi,
+    audiobookshelf: PRESET_NAMES.audiobookshelf,
+})
+const MusicPresetReg = createSelectRegistry('OutputTemplatePreset', {music: PRESET_NAMES.music})
+const AllPresetReg = createSelectRegistry('OutputTemplatePreset', PRESET_NAMES)
 
-/** The presets a profile can start from: Audiobookshelf only keeps audio. */
-export function outputTemplatePresetRegistry(audioOnly: boolean) {
+/** The presets a profile can start from: Audiobookshelf only keeps audio, and a Music profile files tracks by
+ *  artist and album. */
+export function outputTemplatePresetRegistry(audioOnly: boolean, music = false) {
+    if (music) return MusicPresetReg
     return audioOnly ? AudioPresetReg : VideoPresetReg
+}
+
+export function outputTemplatePresetLabel(key: string): string {
+    return AllPresetReg.getLabelLoose(key)
 }
 
 /** The folder a template keeps its files under, before the first part that changes per episode. */

@@ -1,6 +1,7 @@
 import {type FieldValues, UseFormReturn} from 'react-hook-form'
 
 import {LocalMediaProfileServerErrors} from '../../types/schemas/local_media_profile'
+import type {LocalMediaProfileType} from '../../types/local_media_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import LocalMediaProfileCommonFields from './LocalMediaProfileCommonFields'
 import LocalMediaProfileSection from './LocalMediaProfileSection'
@@ -20,6 +21,11 @@ type Props = {
 }
 
 export type LocalMediaProfileMode = 'collection' | 'video'
+
+/** Which form a profile type uses: a Music profile is a Collection profile that keeps audio only. */
+export function profileMode(type: LocalMediaProfileType): LocalMediaProfileMode {
+    return type === 'video' ? 'video' : 'collection'
+}
 
 // The form fields in each section, so a section with an error opens.
 const PROFILE_FIELDS = ['name', 'slug', 'collectionScope', 'siteKeys', 'includeUpcomingSites'] as const

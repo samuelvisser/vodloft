@@ -230,12 +230,27 @@ _KEPT_WHEN_UNSET = {
 class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
     """A Collection Local Media Profile's fields; an update leaves the kept fields it does not send."""
 
-    type: Literal["collection"] = LocalMediaProfileType.COLLECTION.value
+    type: Literal["collection", "music"] = LocalMediaProfileType.COLLECTION.value
+    """A Music profile keeps the episodes as audio tracks with music tags. The type stays what it was created as."""
     collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH
     download_collection_assets: bool | None = None
     show_nfo: bool = False
     """Write tvshow.nfo in the collection's folder and season.nfo in each season's folder."""
     indexing_values: list[IndexingValueDefinition] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def _music_is_audio(self):
+        if self.type == LocalMediaProfileType.MUSIC:
+            # A Music profile keeps music collections, and only those.
+            self.collection_scope = CollectionLocalMediaProfileScope.MUSIC
+            if self.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY:
+                raise FieldValueError("preferred_format", "A Music profile downloads audio only")
+        else:
+            if self.collection_scope == CollectionLocalMediaProfileScope.MUSIC:
+                raise FieldValueError("collection_scope", "Music collections take Music profiles")
+            if self.audio_format == AudioFormat.FLAC:
+                raise FieldValueError("audio_format", "FLAC is for Music profiles")
+        return self
 
     @model_validator(mode="after")
     def _unique_index_keys(self):
@@ -265,7 +280,7 @@ class NewCollectionLocalMediaProfile(CollectionLocalMediaProfileInput):
         if "subtitle_mode" not in self.model_fields_set:
             self.subtitle_mode = (
                 LocalMediaProfileSubtitleMode.NO_SUBTITLES
-                if self.collection_scope == CollectionLocalMediaProfileScope.PODCAST
+                if self.collection_scope == CollectionLocalMediaProfileScope.PODCAST or self.type == LocalMediaProfileType.MUSIC
                 else LocalMediaProfileSubtitleMode.SIDECAR
             )
         return self
@@ -280,6 +295,13 @@ class VideoLocalMediaProfileInput(LocalMediaProfileInput):
     """A Video Local Media Profile's fields. It keeps single videos, and movies with their extras."""
 
     type: Literal["video"] = LocalMediaProfileType.VIDEO.value
+
+    @field_validator("audio_format")
+    @classmethod
+    def _no_flac(cls, value: AudioFormat) -> AudioFormat:
+        if value == AudioFormat.FLAC:
+            raise ValueError("FLAC is for Music profiles")
+        return value
 
     @field_validator("preferred_format")
     @classmethod

@@ -6,6 +6,7 @@ import {useMemo} from "react";
 export const CollectionTypeReg = createSelectRegistry("CollectionType", {
     podcast: {label: "Podcast", help: "Episodes identified by date or number"},
     series: {label: "Series", help: "Episodic series without podcast semantics"},
+    music: {label: "Music", help: "An artist's music: each season an album, each episode a track"},
 });
 export type CollectionTypeValue = (typeof CollectionTypeReg)["values"][number];
 

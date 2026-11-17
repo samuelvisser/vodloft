@@ -1,9 +1,9 @@
 import type {Versioned} from '../../types/data'
 import {getCurrentAppVersion} from '../../utils/helpers'
-import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
+import type {LocalMediaProfileType} from '../../types/local_media_profile'
 
 export type LocalMediaProfileDraft<T> = {
-    mode: LocalMediaProfileMode
+    mode: LocalMediaProfileType
     values: Partial<T>
 }
 
@@ -30,7 +30,7 @@ export function loadLocalMediaProfileDraft<T>(key: string): LocalMediaProfileDra
             localStorage.removeItem(key)
             return null
         }
-        if (!['collection', 'video'].includes(parsed.data.mode)) {
+        if (!['collection', 'music', 'video'].includes(parsed.data.mode)) {
             localStorage.removeItem(key)
             return null
         }

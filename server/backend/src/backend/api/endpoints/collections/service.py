@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from backend.db.models import Episode, Season, Collection, CollectionLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
+from backend.services.errors import ServiceError
 from backend.services.access_checks import ask_for_check, refused_media
 from backend.services.media_access import locked_clause
 from backend.services.local_media_profile_sites import profile_offered_for_site
@@ -269,8 +270,10 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
 
+    if body.type is not None and body.type != collection.type:
+        _check_profiles_suit_type(collection, CollectionType(body.type))
     left_out = {
-        name for name in ("membership_level", "ytdlp_options", "cookies_mode", "episode_order", "check_frequency", "check_cron")
+        name for name in ("membership_level", "type", "ytdlp_options", "cookies_mode", "episode_order", "check_frequency", "check_cron")
         if getattr(body, name) is None
     } | {name for name in ("genre", "content_rating") if name not in body.model_fields_set}
     update_database_fields(collection, body, exclude_fields=left_out or None)
@@ -284,6 +287,22 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
     })
 
     return CollectionAPIRead.model_validate(collection)
+
+
+def _check_profiles_suit_type(collection: Collection, collection_type: CollectionType) -> None:
+    """A collection's Download Profiles keep its episodes with Local Media Profiles offered for its type, so a new
+    type has to suit all of them."""
+    unsuited = [
+        profile.local_media_profile.name for profile in collection.download_profiles
+        if collection_type.value not in CollectionLocalMediaProfileScope(profile.local_media_profile.collection_scope).collection_types()
+    ]
+    if unsuited:
+        names = ", ".join(sorted(set(unsuited)))
+        raise ServiceError(
+            f"{collection.title} has Download Profiles that use {names}, which is not offered for "
+            f"{collection_type.value} collections. Remove those Download Profiles first.",
+            field="type",
+        )
 
 
 def collection_check_suggestion(s: Session, collection_slug: str) -> Optional[str]:
@@ -391,7 +410,7 @@ def request_collection_download_all(
     profile = s.get(CollectionLocalMediaProfile, body.local_media_profile_id)
     if profile is None:
         raise HTTPException(status_code=422, detail="Select a Collection Local Media Profile")
-    if profile.collection_scope not in (CollectionLocalMediaProfileScope.BOTH, collection.type):
+    if collection.type not in CollectionLocalMediaProfileScope(profile.collection_scope).collection_types():
         raise HTTPException(status_code=422, detail="Local Media Profile is not available for this collection type")
     if not profile_offered_for_site(s, profile, collection_site_key(collection)):
         raise HTTPException(status_code=422, detail="Local Media Profile is not available for this Site")
@@ -412,7 +431,7 @@ def request_collection_download_all(
         # Nor can media locked behind an access VODLoft does not have, such as a channel membership.
         ~locked_clause(Episode),
     )
-    if collection.type == CollectionType.SERIES.value:
+    if CollectionType(collection.type).by_season:
         if not body.season_ids:
             raise HTTPException(status_code=422, detail="Select at least one season")
         if body.download_days_in_past or body.download_episode_count or body.download_starting_from:
