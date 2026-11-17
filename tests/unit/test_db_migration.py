@@ -22,6 +22,7 @@ RELEASE_REVISIONS = (
     ("0.6.0", "d0f28c7f863e"),
     ("0.7.0", "c89f1a5ea2ba"),
     ("0.8.0", "bb0e7c5e17cc"),
+    ("0.9.0", "2f7a91c4d8e3"),
 )
 VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
@@ -1195,7 +1196,7 @@ def test_iptv_migration_gives_each_user_and_the_install_a_stream_token(migration
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, "555cdd9ad18a")
+    command.upgrade(config, VODLOFT_0_8_0_REVISION)
     with engine.begin() as connection:
         for name in ("ann", "bob"):
             connection.execute(text(
