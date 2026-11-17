@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from backend.api.models.channel import (
-    ChannelAPICreate, ChannelAPIRead, ChannelLookupAPIRead, ChannelLookupAPIRequest, ChannelPageAPIRead,
+    ChannelAPICreate, ChannelAPIRead, ChannelAPIUpdate, ChannelLookupAPIRead, ChannelLookupAPIRequest, ChannelPageAPIRead,
+    ChannelSectionsAPIAdd,
 )
 from backend.app import db_session
 from backend.db.core import run_write_transaction
@@ -18,7 +19,10 @@ from backend.services.errors import ServiceError
 from backend.services.source_requests import SourceRequestError, asking_source
 from config.network import NO_INTERNET_CONNECTION_MESSAGE, is_no_internet_error
 
-from .service import ChannelNotFoundError, add_channel, channel_lookup, channel_page, list_channels, look_up_channel
+from .service import (
+    ChannelNotFoundError, add_channel, add_sections, channel_lookup, channel_page, check_channel, list_channels, look_up_channel,
+    update_channel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,3 +95,29 @@ def channel_get(slug: str):
             return channel_page(s, slug)
         except ChannelNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def _found(work):
+    try:
+        return work()
+    except ChannelNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.patch("/{slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ChannelPageAPIRead)
+def channel_update(slug: str, body: ChannelAPIUpdate):
+    """Change what happens with the channel's new sections, the genre and rating of its collections, and its order."""
+    return _found(lambda: run_write_transaction(lambda s: update_channel(s, slug, body)))
+
+
+@router.post("/{slug}/sections", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=ChannelPageAPIRead)
+def channel_add_sections(slug: str, body: ChannelSectionsAPIAdd, access: Access = signed_in()):
+    """Add sections of the channel to its collections, or ignore them."""
+    return _found(lambda: run_write_transaction(lambda s: add_sections(s, slug, body, added_by_id=access.user_id)))
+
+
+@router.post("/{slug}/check", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], status_code=status.HTTP_202_ACCEPTED)
+def channel_check(slug: str):
+    """Look for the channel's new sections now."""
+    _found(lambda: run_write_transaction(lambda s: check_channel(s, slug), concurrent=True))
+    return {"queued": True}

@@ -12,6 +12,7 @@ import {
     type SectionPlan,
 } from '../../types/schemas/channel'
 import {DwMembershipLevelReg} from '../../types/dailywire_user_info'
+import {NewSectionActionReg} from '../../types/channel'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -160,6 +161,7 @@ export default function AddChannelPage() {
     const plans = watch('sections') ?? []
     const preset = watch('preset')
     const membershipLevel = watch('membershipLevel')
+    const newSections = watch('newSections') ?? 'ask'
     const byRef = useMemo(() => new Map(plans.map((plan) => [plan.ref, plan])), [plans])
     const registries = useMemo(
         () => new Map((channel?.sections ?? []).map((section) => [section.ref, choicesFor(channel!, section)])),
@@ -182,7 +184,7 @@ export default function AddChannelPage() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             sourceKey: data.sourceKey, url: data.url, ref: data.ref, sections: data.sections,
-            membershipLevel: data.membershipLevel,
+            membershipLevel: data.membershipLevel, newSections: data.newSections,
         }),
     }), {
         fallbackField: 'sections',
@@ -323,6 +325,15 @@ export default function AddChannelPage() {
                     </p>
                 )}
 
+                <div className="form-row channel-membership">
+                    <label htmlFor="channel-new-sections">When the {channel.channelLabel} adds a {lists.replace(/s$/, '')}</label>
+                    <SimpleSelect
+                        inputId="channel-new-sections" registry={NewSectionActionReg} value={newSections}
+                        onChange={(value) => setValue('newSections', value as ChannelCreateIn['newSections'])}
+                    />
+                    <div className="help">{NewSectionActionReg.meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
+                </div>
+
                 {sourceKey === 'dailywire' && (
                     <div className="form-row channel-membership">
                         <label htmlFor="channel-membership">Membership level</label>
@@ -330,8 +341,8 @@ export default function AddChannelPage() {
                             inputId="channel-membership" registry={DwMembershipLevelReg} value={membershipLevel}
                             onChange={(value) => setValue('membershipLevel', value as ChannelCreateIn['membershipLevel'])}
                         />
-                        <p className="help">{DwMembershipLevelReg.meta(membershipLevel as never)?.help}</p>
-                        {errors.membershipLevel && <p className="field-error">{errors.membershipLevel.message}</p>}
+                        <div className="help">{DwMembershipLevelReg.meta(membershipLevel as never)?.help}</div>
+                        {errors.membershipLevel && <div className="error" role="alert">{errors.membershipLevel.message}</div>}
                     </div>
                 )}
 

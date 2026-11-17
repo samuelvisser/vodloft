@@ -19,6 +19,7 @@ export const ChannelSectionReadSchema = z.object({
     hasSeasons: z.boolean(),
     collectionSlug: z.string().nullable(),
     collectionTitle: z.string().nullable(),
+    status: z.enum(['known', 'new', 'ignored']).default('known'),
 })
 export type ChannelSectionRead = z.infer<typeof ChannelSectionReadSchema>
 
@@ -50,6 +51,20 @@ export const ChannelLookupReadSchema = z.object({
 })
 export type ChannelLookupRead = z.infer<typeof ChannelLookupReadSchema>
 
+export const NewSectionActionValues = ['ask', 'main', 'own', 'ignore'] as const
+
+export const ChannelOrderEntrySchema = z.object({
+    ref: z.string(),
+    title: z.string(),
+    kind: z.enum(['feed', 'list', 'item']),
+    kindLabel: z.string().nullable(),
+    collectionSlug: z.string(),
+    collectionTitle: z.string(),
+    placement: z.enum(LinkPlacementValues),
+    videoCount: z.number(),
+})
+export type ChannelOrderEntry = z.infer<typeof ChannelOrderEntrySchema>
+
 export const ChannelReadSchema = z.object({
     id: z.number(),
     slug: z.string(),
@@ -68,6 +83,10 @@ export const ChannelReadSchema = z.object({
     createdAt: z.string(),
     collectionCount: z.number(),
     episodeCount: z.number(),
+    newSections: z.enum(NewSectionActionValues),
+    genre: z.string().nullable(),
+    contentRating: z.string().nullable(),
+    checkedAt: z.string().nullable(),
 })
 export type ChannelRead = z.infer<typeof ChannelReadSchema>
 
@@ -81,6 +100,8 @@ export const ChannelPageReadSchema = ChannelReadSchema.extend({
         links: z.array(z.string()),
     })),
     sections: z.array(ChannelSectionReadSchema),
+    order: z.array(ChannelOrderEntrySchema),
+    mainCollectionSlug: z.string().nullable(),
 })
 export type ChannelPageRead = z.infer<typeof ChannelPageReadSchema>
 
@@ -92,9 +113,20 @@ export const ChannelCreateSchema = z.object({
     preset: z.enum(ChannelPresetValues).default('one_show'),
     sections: z.array(SectionPlanSchema).default([]),
     membershipLevel: z.enum(DwMembershipLevelReg.Enum).default(DwMembershipLevelReg.Enum.HIGHEST_ALLOWED),
+    newSections: z.enum(NewSectionActionValues).default('ask'),
 }).refine((value) => value.sections.some((section) => section.target !== 'skip'), {
     message: 'Pick at least one section to keep',
     path: ['sections'],
 })
 export type ChannelCreateIn = z.input<typeof ChannelCreateSchema>
 export type ChannelCreateOut = z.output<typeof ChannelCreateSchema>
+
+/** The form that changes how VODLoft follows a channel. */
+export const ChannelUpdateSchema = z.object({
+    newSections: z.enum(NewSectionActionValues).default('ask'),
+    genre: z.string().trim().max(200).default(''),
+    contentRating: z.string().trim().max(50).default(''),
+    order: z.array(z.string()).default([]),
+})
+export type ChannelUpdateIn = z.input<typeof ChannelUpdateSchema>
+export type ChannelUpdateOut = z.output<typeof ChannelUpdateSchema>

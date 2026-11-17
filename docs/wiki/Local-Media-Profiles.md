@@ -235,6 +235,11 @@ For example, to keep only the part of a title before ` | `, and leave the title 
 | `collection_title` | Collection title |
 | `collection_author` | Collection author, host or channel name |
 | `collection_site_id` | The id the site gives the collection, such as a YouTube channel or playlist id |
+| `channel_title` | Name of the channel the collection belongs to, or empty when it belongs to none |
+| `channel_handle` | The channel's handle, such as `@kurzgesagt`, when the site has one |
+| `channel_kind` | What the site calls a channel, such as `YouTube channel` or `The Daily Wire host` |
+| `section_title` | The playlist or show of the channel that the episode came from, such as `Shorts`; empty otherwise |
+| `section_kind` | `feed` for Videos, Live or Shorts, `list` for a playlist or show, `item` for a single movie; empty otherwise |
 | `season` | Season slug, or empty when unavailable |
 | `season_name` | Season name, or empty when unavailable |
 | `season_index` | VODLoft's internal persistent season index |

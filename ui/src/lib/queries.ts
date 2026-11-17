@@ -22,7 +22,10 @@ import {
 } from './lazyCollection'
 import {useFrontendPuller} from './puller'
 import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/siteSettings'
-import {ChannelLookupReadSchema, ChannelPageReadSchema, ChannelReadSchema, type ChannelLookupRead, type ChannelPageRead, type ChannelRead} from '../types/schemas/channel'
+import {
+    ChannelLookupReadSchema, ChannelPageReadSchema, ChannelReadSchema, type ChannelLookupRead, type ChannelPageRead, type ChannelRead,
+    type SectionPlan,
+} from '../types/schemas/channel'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -805,6 +808,24 @@ export function useChannel(slug: string | undefined) {
         enabled: !!slug && can('library'),
         queryFn: ({signal}) => fetchParsed(`${apiUrl()}/channels/${encodeURIComponent(slug ?? '')}`, ChannelPageReadSchema, signal),
     })
+}
+
+/** Add sections of a channel to its collections, or ignore them. Answers with the channel's page. */
+export async function addChannelSections(slug: string, sections: SectionPlan[]): Promise<ChannelPageRead> {
+    const response = await fetch(`${apiUrl()}/channels/${encodeURIComponent(slug)}/sections`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({sections}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return ChannelPageReadSchema.parse(await response.json())
+}
+
+/** Look for the channel's new playlists and shows now. */
+export async function checkChannel(slug: string): Promise<void> {
+    const response = await fetch(`${apiUrl()}/channels/${encodeURIComponent(slug)}/check`, {method: 'POST', credentials: 'include'})
+    if (!response.ok) throw await responseError(response)
 }
 
 export async function resolveLink(url: string, signal?: AbortSignal, sourceKey?: string): Promise<ResolvedLinkRead> {

@@ -1,3 +1,4 @@
+import type {ReactNode} from 'react'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 
 type ChannelHeaderProps = {
@@ -12,10 +13,11 @@ type ChannelHeaderProps = {
     url?: string | null
     /** The id of the title, when it is the page's own heading. */
     titleId?: string
+    actions?: ReactNode
 }
 
 /** A channel's banner, picture, name and facts, as its Site shows them. */
-export default function ChannelHeader({title, label, handle, avatarUrl, bannerUrl, facts = [], description, url, titleId}: ChannelHeaderProps) {
+export default function ChannelHeader({title, label, handle, avatarUrl, bannerUrl, facts = [], description, url, titleId, actions}: ChannelHeaderProps) {
     const Heading = titleId ? 'h1' : 'h2'
     const banner = toImageUrl(bannerUrl)
     const avatar = toImageUrl(avatarUrl)
@@ -35,6 +37,7 @@ export default function ChannelHeader({title, label, handle, avatarUrl, bannerUr
                     </p>
                     {description && <p className="channel-description">{description}</p>}
                 </div>
+                {actions && <div className="channel-actions">{actions}</div>}
             </div>
         </header>
     )

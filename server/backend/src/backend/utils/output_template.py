@@ -53,6 +53,7 @@ COLLECTION_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "episode_number", "episode_sub_number", "episode_label", "episode_identifier", "episode_published_date",
     "episode_published_time", "episode_published_datetime", "episode_index",
     "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
+    "channel_title", "channel_handle", "channel_kind", "section_title", "section_kind",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 # A Video profile keeps single videos and movies with their extras. The movie_* values are empty for a
@@ -399,6 +400,7 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "episode_published_time": published_at.strftime("%H:%M:%S") if published_at else "",
         "episode_published_datetime": published_at.strftime("%Y-%m-%d %H:%M:%S") if published_at else "",
         **_date_substitutions(published_at),
+        **_channel_values(episode),
     }
     values.update(custom_metadata_template_values(
         "collection",
@@ -465,6 +467,46 @@ def movie_output_template_values(
         get_custom_metadata(movie),
     ))
     return values
+
+
+CHANNEL_OUTPUT_TEMPLATE_FIELDS = frozenset({"channel_title", "channel_handle", "channel_kind"})
+"""The channel values, which are the same for every episode of a collection, so a collection's folder may use them."""
+
+
+def channel_output_template_values(channel) -> dict[str, str]:
+    """Who made a collection added through a channel. Empty without a channel, so a template that uses them stays
+    valid for every collection."""
+    if channel is None:
+        return {field: "" for field in CHANNEL_OUTPUT_TEMPLATE_FIELDS}
+    return {
+        "channel_title": channel.title,
+        "channel_handle": (channel.handle or "").lstrip("@"),
+        "channel_kind": _channel_kind(channel),
+    }
+
+
+def _channel_values(episode: "Episode") -> dict[str, str]:
+    """The episode's channel, and which of the channel's sections listed it."""
+    link = episode.collection_link
+    section = link.section if link is not None else None
+    return {
+        **channel_output_template_values(episode.collection.channel),
+        "section_title": section.title if section else "",
+        "section_kind": section.kind if section else "",
+    }
+
+
+def _channel_kind(channel) -> str:
+    """What the Site calls the channel, such as "YouTube channel" or "The Daily Wire host"."""
+    from sources import UnknownSourceError, get_source
+
+    try:
+        site = get_source(channel.source_key).site_of(channel.site_key)
+    except UnknownSourceError:
+        site = None
+    if site is None:
+        return "channel"
+    return f"{site.name} {site.channel_label or 'channel'}"
 
 
 def _source_name(source_key: str) -> str:

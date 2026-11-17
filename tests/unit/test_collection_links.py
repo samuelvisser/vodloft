@@ -233,3 +233,20 @@ def test_a_video_moves_to_the_collection_higher_in_the_channels_order_until_it_h
     _index(session, shorts, links_source)
 
     assert _held(session) == {"v1": ("a-channel", "ep.S2024E01"), "s1": ("a-channel-shorts", "ep.S2024E01")}
+
+
+def test_changing_the_channels_order_moves_videos_to_the_link_that_keeps_them_now(links_source, session, monkeypatch):
+    from backend.db.models import CollectionLink
+    from task_manager.tasks.workers.follow_channels.service import run_reclaim_channel_videos
+
+    main, shorts = _channel_collections(session)
+    links_source.links = {SHORTS: [_video("s1", 2024)], CHANNEL: [_video("v1", 2024), _video("s1", 2024)]}
+    _index(session, shorts, links_source)
+    _index(session, main, links_source)
+
+    # Videos goes above Shorts.
+    session.execute(CollectionLink.__table__.update().where(CollectionLink.url == CHANNEL).values(position=1))
+    session.commit()
+    run_reclaim_channel_videos(session, channel_id=main.channel_id)
+
+    assert _held(session) == {"s1": ("a-channel", "ep.S2024E02"), "v1": ("a-channel", "ep.S2024E01")}

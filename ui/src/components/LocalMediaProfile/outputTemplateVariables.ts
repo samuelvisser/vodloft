@@ -94,6 +94,20 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'episode_published_date', description: 'Published date as YYYY-MM-DD'},
     {name: 'episode_published_time', description: 'Published time as HH:MM:SS'},
     {name: 'episode_published_datetime', description: 'Published date and time'},
+    {
+        name: 'channel_title',
+        description: 'Name of the channel or host the collection was added with',
+        readMore: {
+            paragraphs: [
+                'Empty for a collection that was not added with a channel. ' +
+                'Put it in the path, such as {{ channel_title }}/{{ collection_title }}, to file shows by their creator.',
+            ],
+        },
+    },
+    {name: 'channel_handle', description: 'The channel\'s handle without the @, such as northwindworkshop'},
+    {name: 'channel_kind', description: 'What the site calls the channel, such as YouTube channel'},
+    {name: 'section_title', description: 'The part of the channel that listed the episode, such as Videos or a playlist'},
+    {name: 'section_kind', description: 'feed, list or item'},
     ...DATE_VARIABLES,
 ]
 

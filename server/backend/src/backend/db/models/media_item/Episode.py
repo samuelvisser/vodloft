@@ -24,7 +24,7 @@ from backend.utils.episode_publication_timing import (
 from backend.utils.episode_slug import is_no_show_today_slug
 
 if TYPE_CHECKING:
-    from backend.db.models import Collection, Season
+    from backend.db.models import Collection, CollectionLink, Season
 
 # A Download Profile does not recreate a download record the user deleted.
 DOWNLOAD_DISMISSED_META_PREFIX = "download_dismissed.local_media_profile."
@@ -106,6 +106,7 @@ class Episode(
     # Relationships
     collection: Mapped["Collection"] = relationship(back_populates="episodes")
     season: Mapped["Season"] = relationship(back_populates="episodes")
+    collection_link: Mapped[Optional["CollectionLink"]] = relationship()
 
     @property
     def safe_live_ended(self) -> datetime | None:

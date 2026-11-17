@@ -20,7 +20,7 @@ from backend.services.download_options import effective_filename_mode
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_metadata import custom_metadata_template_values, get_custom_metadata
 from backend.utils.output_template import (
-    COLLECTION_OUTPUT_TEMPLATE_FIELDS, COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
+    COLLECTION_OUTPUT_TEMPLATE_FIELDS, COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES, channel_output_template_values,
     _sanitize_emitted_output_value, output_template_fields, rendering_with_filename_mode, sanitize_path_component,
     validate_output_template_path_requirements,
 )
@@ -150,6 +150,7 @@ def resolve_collection_media_directory(
     values = {}
     if collection is not None:
         values.update(collection=collection.slug, collection_title=collection.title)
+        values.update(channel_output_template_values(collection.channel))
         values.update(custom_metadata_template_values("collection", get_custom_metadata(collection)))
     values.update(values_overrides or {})
     settings = get_settings().download_settings

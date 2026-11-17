@@ -37,6 +37,15 @@ class Channel(Base):
     links: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", comment="The creator's own links")
     facts: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", comment='Short facts, such as "1.2M subscribers"')
     added_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    new_sections: Mapped[str] = mapped_column(
+        default="ask", server_default="ask", comment="What happens when the channel adds a section: ask, main, own or ignore",
+    )
+    genre: Mapped[Optional[str]] = mapped_column(comment="Given to the channel's collections, for their NFO files")
+    content_rating: Mapped[Optional[str]] = mapped_column(comment="Given to the channel's collections, for their NFO files")
+    main_collection_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("collections.id", ondelete="SET NULL", use_alter=True), comment="The collection named after the channel",
+    )
+    checked_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), comment="When VODLoft last looked for new sections")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now(), onupdate=func.now())
 
@@ -44,7 +53,8 @@ class Channel(Base):
     sections: Mapped[list["ChannelSection"]] = relationship(
         back_populates="channel", cascade="all, delete-orphan", order_by="ChannelSection.site_position",
     )
-    collections: Mapped[list["Collection"]] = relationship(back_populates="channel")
+    collections: Mapped[list["Collection"]] = relationship(back_populates="channel", foreign_keys="Collection.channel_id")
+    main_collection: Mapped[Optional["Collection"]] = relationship(foreign_keys=[main_collection_id], post_update=True)
 
     def __repr__(self) -> str:
         return f"<Channel(id={self.id}, slug={self.slug}, site_key={self.site_key}, title={self.title!r})>"
@@ -72,6 +82,10 @@ class ChannelSection(Base):
     access: Mapped[Optional[str]] = mapped_column(comment="The key of the access the section needs")
     has_seasons: Mapped[bool] = mapped_column(default=False, server_default="0")
     site_position: Mapped[int] = mapped_column(default=0, server_default="0", comment="Where the Site lists it")
+    status: Mapped[str] = mapped_column(
+        default="known", server_default="known",
+        comment="known; new, found by the daily look and waiting for a choice; or ignored",
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
     channel: Mapped["Channel"] = relationship(back_populates="sections")

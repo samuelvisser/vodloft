@@ -30,7 +30,7 @@ VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
-HEAD_REVISION = "22986fb7a6b8"
+HEAD_REVISION = "4737d5b6dd34"
 
 
 @pytest.fixture
@@ -416,7 +416,11 @@ def test_0_7_0_migration_keeps_what_existing_profiles_and_episodes_did(migration
         assert all(codec["allowed"] for codec in json.loads(profiles[6].video_codecs))
         assert [key for (key,) in connection.execute(text(
             "SELECT default_key FROM notification_rules ORDER BY position"
-        ))] == ["download_failed", "sign_in_needed", "disk_almost_full", "task_failing", "update_available", "daily_summary"]
+        ))] == [
+            "download_failed", "sign_in_needed", "disk_almost_full", "task_failing", "update_available", "daily_summary",
+            # Added for channels in 0.10.0.
+            "channel_sections_found",
+        ]
 
 
 def test_canceled_history_actions_are_spelled_like_the_rest_of_vodloft(migration_database):
@@ -1298,3 +1302,31 @@ def test_every_collection_gets_its_own_link_and_its_episodes_belong_to_it(migrat
         assert [tuple(row) for row in episodes] == [(10, link_of[1]), (11, link_of[1]), (12, link_of[2])]
         items = connection.execute(text("SELECT link_id, source_slug FROM collection_link_items ORDER BY source_slug")).all()
         assert [tuple(row) for row in items] == [(link_of[1], "e10"), (link_of[1], "e11"), (link_of[2], "e12")]
+
+
+def test_a_channel_knows_its_own_collection_and_installations_get_the_new_sections_rule(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "22986fb7a6b8")
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('youtube', 'YouTube', '[\"youtube.com\"]')"))
+        connection.execute(text(
+            "INSERT INTO channels (id, uuid, slug, source_key, site_key, site_ref, title) "
+            "VALUES (1, 'ch', 'workshop', 'ytdlp', 'youtube', 'UCw', 'Northwind Workshop')"
+        ))
+        for collection_id, title in ((1, "Northwind Workshop Shorts"), (2, "Northwind Workshop")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order, channel_id) VALUES (:id, :uuid, :slug, :title, :url, "
+                "'free', 'series', 'seasonal', 'Host', 'host', 'ytdlp', 'newest_first', 1)"
+            ), {"id": collection_id, "uuid": f"u{collection_id}", "slug": f"c{collection_id}", "title": title,
+                "url": f"https://example.test/{collection_id}"})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT main_collection_id, new_sections FROM channels")).one() == (2, "ask")
+        rules = connection.execute(text("SELECT default_key, position FROM notification_rules ORDER BY position")).all()
+        assert rules[-1] == ("channel_sections_found", rules[-2].position + 1)

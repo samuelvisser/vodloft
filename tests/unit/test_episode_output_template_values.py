@@ -3,7 +3,8 @@ from types import SimpleNamespace
 
 def _episode(identifier: str, *, dw_episode_number: str | None = None):
     return SimpleNamespace(
-        collection=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", author_name="Daily Wire", meta_items=[]),
+        collection=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", author_name="Daily Wire", meta_items=[], channel=None),
+        collection_link=None,
         season=SimpleNamespace(
             slug="season-1",
             name="Season 1",
@@ -176,3 +177,22 @@ def test_site_ids_uploader_author_and_duration_are_template_values() -> None:
         "duration_seconds": "1290",
     }
     assert {"episode_site_id", "episode_uploader", "collection_author", "collection_site_id", "duration_seconds"} <= COLLECTION_OUTPUT_TEMPLATE_FIELDS
+
+
+def test_an_episode_of_a_channels_collection_knows_its_channel_and_section() -> None:
+    from backend.utils.output_template import episode_output_template_values
+
+    episode = _episode("ep.S2024E03")
+    episode.collection.channel = SimpleNamespace(
+        title="Northwind Workshop", handle="@northwindworkshop", source_key="ytdlp", site_key="youtube",
+    )
+    episode.collection_link = SimpleNamespace(section=SimpleNamespace(title="Tool Reviews", kind="list"))
+
+    values = episode_output_template_values(episode)
+
+    assert {key: values[key] for key in ("channel_title", "channel_handle", "channel_kind", "section_title", "section_kind")} == {
+        "channel_title": "Northwind Workshop", "channel_handle": "northwindworkshop", "channel_kind": "YouTube channel",
+        "section_title": "Tool Reviews", "section_kind": "list",
+    }
+    # A collection without a channel leaves them empty.
+    assert episode_output_template_values(_episode("ep.1"))["channel_title"] == ""
