@@ -58,7 +58,10 @@ export default function ProgressExplanation({detail, buttonClassName = 'icon-btn
             setOpen(false)
         }
         const closeOnEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') setOpen(false)
+            if (event.key !== 'Escape') return
+            // Handled here, so a modal around it stays open.
+            event.preventDefault()
+            setOpen(false)
         }
 
         document.addEventListener('pointerdown', closeOnOutsidePointer)
