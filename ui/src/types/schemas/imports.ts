@@ -170,6 +170,8 @@ export type ImportOptions = {
     enableDownloadProfiles: boolean
     matchExistingFiles: boolean
     renameExistingFiles: boolean
+    /** Add each new collection to the channel behind its links, instead of on its own. */
+    asChannels: boolean
     /** Leave out to do what the last import did. */
     mergeProfiles?: boolean | null
     templates: Record<string, string>

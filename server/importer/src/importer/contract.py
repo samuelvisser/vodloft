@@ -89,6 +89,21 @@ class ProfilePlan:
     """Why this variant was not merged with the profile it is a variant of."""
 
 
+LinkPlacement = Literal["site_seasons", "one_season", "specials"]
+
+
+@dataclass(frozen=True)
+class LinkPlan:
+    """One of the links a Collection is indexed from, and where its videos go."""
+
+    url: str
+    title: str | None = None
+    """The link's own name, the name of its season when it gets one."""
+    placement: LinkPlacement = "site_seasons"
+    season_number: int | None = None
+    """The number of a ``one_season`` link's season, as the other program numbered it; None lets VODLoft number it."""
+
+
 @dataclass(frozen=True)
 class CollectionPlan:
     external_id: str
@@ -105,6 +120,12 @@ class CollectionPlan:
     """Collection artwork and NFO files as (kind, path), such as ("poster", "/downloads/…/poster.jpg")."""
     added_at: datetime | None = None
     """When the other program added the collection, in UTC; None when it doesn't say."""
+    links: tuple[LinkPlan, ...] = ()
+    """Every link, in the order that decides which one keeps a video several of them list; empty when ``url`` is
+    the only one."""
+    channel: bool = False
+    """``url`` is a creator's own page, such as a Bandcamp artist: VODLoft adds the creator as a channel, with
+    everything on the page in this one collection."""
 
 
 FileKind = Literal["file", "suppressed", "missing"]

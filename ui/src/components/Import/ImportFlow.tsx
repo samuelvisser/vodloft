@@ -5,6 +5,8 @@ import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
 import FolderField from '../ExistingFiles/FolderField'
+import SimpleSelect from '../common/SimpleSelect'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 import {watchImportMatches} from '../ExistingFiles/ImportMatchesWatcher'
 import PathChangeList from '../common/PathChangeList'
 import ProgressBar from '../common/ProgressBar'
@@ -44,8 +46,13 @@ const SUPPORT_LABELS: Record<ImportSupport, string> = {
 }
 
 const DEFAULT_OPTIONS: ImportOptions = {
-    enableDownloadProfiles: false, matchExistingFiles: false, renameExistingFiles: false, templates: {},
+    enableDownloadProfiles: false, matchExistingFiles: false, renameExistingFiles: false, asChannels: true, templates: {},
 }
+
+const AddAsReg = createSelectRegistry('ImportAddAs', {
+    channel: {label: 'As channels', help: 'Each collection joins the channel behind its links, such as a YouTube channel or a Bandcamp artist, which is added to your Library when it is not there yet. An artist\'s albums become the seasons of one collection.'},
+    collection: {label: 'As collections', help: 'Each collection is added on its own, with all of its links. You can still add one to its channel later from its Actions menu.'},
+})
 
 function settingLabel(key: string): string {
     const last = key.split('.').slice(-2).join(' › ')
@@ -595,6 +602,17 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
                     />
                 </div>
             </div>
+
+            {!preview.records && collections.length > 0 && (
+                <div className="settings-field settings-field--wide">
+                    <label htmlFor={`import-add-as-${importer.key}`}>Add the collections</label>
+                    <SimpleSelect
+                        inputId={`import-add-as-${importer.key}`} registry={AddAsReg} value={options.asChannels ? 'channel' : 'collection'}
+                        onChange={(value) => setOptions({...options, asChannels: value === 'channel'})}
+                    />
+                    <div className="settings-field__help">{AddAsReg.meta(options.asChannels ? 'channel' : 'collection')?.help}</div>
+                </div>
+            )}
 
             {!preview.records && (
                 <div className="settings-field settings-toggle-field settings-field--wide">

@@ -75,6 +75,9 @@ class ImportOptionsAPIRequest(RequestBase):
         default=None, description="Merge profiles that differ only by a folder or name; leave out to do what the last run did",
     )
     templates: dict[str, str] = Field(default_factory=dict, description="Edited output templates by profile")
+    as_channels: bool = Field(
+        default=True, description="Add each new collection to the channel behind its links, instead of on its own",
+    )
 
 
 class ImportWarningAPIRead(ResponseBase):
