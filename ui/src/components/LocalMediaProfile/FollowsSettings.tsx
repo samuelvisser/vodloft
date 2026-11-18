@@ -128,7 +128,11 @@ export function FollowsSettingsSelect({form, name, id, label, registry, systemLa
                             onBlur={field.onBlur}
                             autoFocus={changing && following}
                             openMenuOnFocus={openOnFocus}
-                            onMenuClose={() => setOpenOnFocus(false)}
+                            onMenuClose={() => {
+                                setOpenOnFocus(false)
+                                // Still on System when the choices close: back to the line that follows Settings.
+                                if ((form.getValues(name) ?? 'system') === 'system') setChanging(false)
+                            }}
                             aria-invalid={!!error}
                             aria-describedby={error ? `${id}-error` : `${id}-help`}
                         />
