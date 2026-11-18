@@ -1,7 +1,7 @@
 import {zodResolver} from '@hookform/resolvers/zod'
 import {can, type Area} from '../lib/access'
 import {useQueryClient} from '@tanstack/react-query'
-import {useCallback, useEffect, useMemo, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {useSearchParams} from 'react-router-dom'
 import {type FieldErrors, type FieldPath, useForm} from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -28,6 +28,8 @@ import {
     type SettingsValues,
 } from '../types/schemas/settings'
 import {buildServerAwareSubmit} from '../utils/buildServerAwareSubmit'
+import {clearFormDraft, loadFormDraft, saveFormDraft} from '../components/FormDraft/formDraft'
+import UnsavedChangesBar from '../components/FormDraft/UnsavedChangesBar'
 import './SettingsPage.css'
 import './SettingsEnvironmentOverrides.css'
 
@@ -57,6 +59,23 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
 const SETTINGS_SERVER_FIELD_ALIASES: Record<string, string> = Object.fromEntries(
     SETTINGS_FIELD_PATHS.map((path) => [`values.${path}`, path]),
 )
+
+// Unsaved settings are kept in this browser, setting by setting, so a reload does not lose them.
+const DRAFT_KEY = 'settingsDraft'
+const DRAFT_SCHEMA_VERSION = 'settings-v1'
+// A secret is never written to browser storage.
+const NOT_KEPT_IN_DRAFT: ReadonlySet<SettingsFieldPath> = new Set<SettingsFieldPath>(['movieMetadata.tmdbReadAccessToken'])
+type SettingsDraft = Partial<Record<SettingsFieldPath, unknown>>
+
+function withValueAtPath(values: SettingsValues, path: SettingsFieldPath, value: unknown): void {
+    const segments = path.split('.')
+    let current = values as unknown as Record<string, unknown>
+    for (const segment of segments.slice(0, -1)) {
+        if (current[segment] === null || typeof current[segment] !== 'object') current[segment] = {}
+        current = current[segment] as Record<string, unknown>
+    }
+    current[segments[segments.length - 1]] = value
+}
 
 function cloneSettings(values: SettingsValues): SettingsValues {
     return structuredClone(values)
@@ -127,12 +146,28 @@ export default function SettingsPage() {
         watch,
     } = form
     const draft = watch()
+    // Only the first load says the changes were restored; a later load keeps them without saying so again.
+    const draftChecked = useRef(false)
+    const [restoredDraft, setRestoredDraft] = useState(false)
 
     useEffect(() => {
         if (!settingsQuery.data) return
         const values = cloneSettings(settingsQuery.data.values)
-        reset(values)
+        const kept = loadFormDraft<SettingsDraft>(DRAFT_KEY, DRAFT_SCHEMA_VERSION) ?? {}
+        const restored = cloneSettings(values)
+        let restoredAny = false
+        for (const path of SETTINGS_FIELD_PATHS) {
+            if (!(path in kept) || NOT_KEPT_IN_DRAFT.has(path)) continue
+            if (sameSetting(kept[path], valueAtPath(values, path))) continue
+            withValueAtPath(restored, path, kept[path])
+            restoredAny = true
+        }
+        reset(restored)
         setBaseline(cloneSettings(values))
+        if (!draftChecked.current) {
+            draftChecked.current = true
+            setRestoredDraft(restoredAny)
+        }
     }, [reset, settingsQuery.data])
 
     const updateDraft = useCallback((mutator: (next: SettingsValues) => void) => {
@@ -159,6 +194,16 @@ export default function SettingsPage() {
         )
     }, [draft, baseline])
     const isDirty = dirtyFields.length > 0
+
+    useEffect(() => {
+        if (!baseline) return
+        const kept = Object.fromEntries(dirtyFields
+            .filter((path) => !NOT_KEPT_IN_DRAFT.has(path))
+            .map((path) => [path, valueAtPath(draft, path)]))
+        if (Object.keys(kept).length) saveFormDraft<SettingsDraft>(DRAFT_KEY, DRAFT_SCHEMA_VERSION, kept)
+        else clearFormDraft(DRAFT_KEY)
+        if (!isDirty) setRestoredDraft(false)
+    }, [baseline, dirtyFields, draft, isDirty])
 
     useEffect(() => {
         if (!isDirty) return
@@ -319,32 +364,19 @@ export default function SettingsPage() {
                 </div>
 
                 {isDirty ? (
-                    <div className="settings-actions is-dirty">
-                        <div>
-                            <strong>Unsaved changes</strong>
-                            <span>
-                                {dirtyFields.length} {dirtyFields.length === 1 ? 'setting' : 'settings'} will be written to config.yml.
-                            </span>
-                        </div>
-                        <div className="settings-actions__buttons">
-                            <button
-                                className="btn"
-                                type="button"
-                                disabled={isSubmitting}
-                                onClick={discardChanges}
-                            >
-                                Discard
-                            </button>
-                            <button
-                                className="btn btn-primary"
-                                type="button"
-                                disabled={isSubmitting}
-                                onClick={() => void submit()}
-                            >
-                                {isSubmitting ? 'Saving…' : 'Save settings'}
-                            </button>
-                        </div>
-                    </div>
+                    <UnsavedChangesBar
+                        title={restoredDraft ? 'Unsaved changes restored' : 'Unsaved changes'}
+                        message={restoredDraft
+                            ? `${dirtyFields.length} ${dirtyFields.length === 1 ? 'setting was' : 'settings were'} restored from changes saved in this browser. They have not been written to config.yml yet.`
+                            : `${dirtyFields.length} ${dirtyFields.length === 1 ? 'setting' : 'settings'} will be written to config.yml.`}
+                    >
+                        <button className="btn" type="button" disabled={isSubmitting} onClick={discardChanges}>
+                            Discard
+                        </button>
+                        <button className="btn btn-primary" type="button" disabled={isSubmitting} onClick={() => void submit()}>
+                            {isSubmitting ? 'Saving…' : 'Save settings'}
+                        </button>
+                    </UnsavedChangesBar>
                 ) : null}
             </div>
         </section>
