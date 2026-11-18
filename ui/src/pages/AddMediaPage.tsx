@@ -13,6 +13,7 @@ import {ResolvedLinkRead, SourceFeature, SourceRead, kindName, searchName, sourc
 import {DrmNotice} from '../components/common/DrmProtected'
 import {AccessNotice} from '../components/common/AccessLocked'
 import {ClearInputButton} from '../components/common/ClearInputButton'
+import AddEmptyCollectionDialog from '../components/AddEmptyCollection/AddEmptyCollectionDialog'
 
 type AddMediaPageProps = {
     onboarding?: boolean
@@ -157,6 +158,11 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         else if (!sourceHas(source, SourceFeature.BROWSE)) navigate(`/browse/${encodeURIComponent(source.id)}`)
         else navigate('/browse')
     }
+
+    // A collection can start empty and hold only what the links added to it have, at a Source that allows it.
+    const [emptyOpen, setEmptyOpen] = useState(false)
+    const emptyCollections = !onboarding && !onCollection
+        && (sources ?? []).some((source) => canUseSource(source.id) && sourceHas(source, SourceFeature.LINK_COLLECTIONS))
 
     // Hand the link to the Quick download page: one video, episode or movie that can be downloaded.
     const quickDownloadable = !!link && link.kind !== 'collection' && !link.drmProtected && !link.accessLocked
@@ -308,6 +314,22 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                     </div>
                 </div>
             )}
+
+            {emptyCollections && (
+                <div className="add-media-browse">
+                    <h2>Or start empty</h2>
+                    <p className="view-description">
+                        Make a collection of your own from playlists, channels and videos on any site.
+                    </p>
+                    <div className="add-media-browse-list">
+                        <button className="btn" type="button" onClick={() => setEmptyOpen(true)}>
+                            <FontAwesomeIcon icon={faIcon('fass', 'folder-plus')}/>
+                            Add empty collection
+                        </button>
+                    </div>
+                </div>
+            )}
+            {emptyOpen && <AddEmptyCollectionDialog onDismiss={() => setEmptyOpen(false)}/>}
         </section>
     )
 }

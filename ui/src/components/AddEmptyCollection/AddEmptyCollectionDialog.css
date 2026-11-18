@@ -1,0 +1,5 @@
+.empty-collection-fields {
+    display: grid;
+    gap: 12px;
+    margin: 16px 0;
+}

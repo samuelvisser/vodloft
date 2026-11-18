@@ -14,9 +14,8 @@ if TYPE_CHECKING:
 
 class LinkSeason(Base):
     """A link season: a list of the channel a collection is made from, such as a YouTube playlist or an artist's
-    album, which can be a season of the collection.
-
-    It only ever holds videos the collection itself lists: a video from another channel stays out.
+    album, which can be a season of the collection. A collection that only holds its link seasons' videos can also
+    have links the user added, from any Site its Source fetches.
     """
 
     __tablename__ = "link_seasons"
@@ -38,6 +37,10 @@ class LinkSeason(Base):
     status: Mapped[str] = mapped_column(
         default=LinkSeasonStatus.KNOWN.value, server_default=LinkSeasonStatus.KNOWN.value,
         comment="known, or new while it waits for the user's choice",
+    )
+    added_by_user: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="The user added the link, rather than it being one of the playlists of the collection's channel",
     )
     season_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("seasons.id", ondelete="SET NULL"), comment="The playlist's season, once it has one",

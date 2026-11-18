@@ -164,6 +164,8 @@ What comes along:
   [[Collections-and-Library#playlists-and-albums-as-seasons]]). The collection is set to add the videos the channel
   doesn't list itself, so nothing you had in ytdl-sub is left out. A **TV Show Collection** keeps each season's
   number and name; a video that is in more than one season stays in the one that comes first.
+- A **TV Show Collection** made only of playlists becomes a collection of only those playlists (see
+  [[Collections-and-Library#collections-of-only-playlists]]), so the channel's other videos are not added.
 - **Add the collections** in the preview chooses how they arrive. *As channels*, the default, adds each collection to
   the channel behind its links, such as a YouTube channel, and adds the channel when it is not in your Library yet.
   *As collections* adds each one on its own; you can still add it to its channel later. Pinchflat imports always

@@ -12,6 +12,8 @@ Use Home when you want to know whether VODLoft is operating normally or somethin
 
 **Add media** in the Library takes a link to a collection, an episode, a movie or a single video. VODLoft asks each Source that claims the link's website whether it recognises it, and shows a preview from the first one that does. Continuing opens the normal Add Collection wizard, or the movie page, already filled in. A single video is added straight away and opens its video page. A link to an episode opens the collection it belongs to. If no Source recognises the link, VODLoft says so instead of guessing.
 
+**Add empty collection** starts a collection of your own, without a link: give it a name, choose Series or Music, and the Seasons window opens so you can add its links. See [Collections of only playlists](#collections-of-only-playlists).
+
 ## Browse
 
 Browse shows The Daily Wire's content that can be added to VODLoft. Collections and movies are kept separate so it is easier to find the kind of media you want.
@@ -90,7 +92,7 @@ A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundClo
 - **Which playlists**: every playlist, also the ones to come, or only those you switch on in the list. **Look for new playlists** asks the site for the list again.
 - **When the channel adds a playlist**: ask you, make it a season right away, or leave it off.
 - **Videos in no playlist**: one season called **Videos** (**Singles** for music), or a season per year.
-- **Videos of other channels in these playlists**: leave them out (the default), or add them to the collection, in their playlist's season.
+- **What the collection holds**, for videos of other channels in these playlists: **Leave them out** (the default), **Add them to the collection** in their playlist's season, or **Only what the playlists have** (see [Collections of only playlists](#collections-of-only-playlists)).
 
 Each playlist season is named after its playlist, and its videos keep the order of the playlist, as do their episode numbers. An album's tracks keep the album's track order. Playlist seasons go in the order of their first video, so with a season per year a 2025 playlist comes after the 2025 season. An artist's albums come after Singles, in the order the artist lists them; you can still reorder them, and **Automatic order** brings back the artist's order. A video that is in more than one playlist goes to the season that comes first. Files you already downloaded keep their numbers.
 
@@ -103,6 +105,12 @@ A downloaded video stays where it is when it belongs in another season now, for 
 Episodes can also have different Daily Wire types, such as regular episodes and auxiliary items. Profiles can choose which types they apply to.
 
 An episode can appear in VODLoft before final downloadable media exists. You may therefore see an episode that is scheduled, live, processing, still using a countdown version, final, or temporarily unavailable. VODLoft continues monitoring recent non-final episodes automatically.
+
+### Collections of only playlists
+
+A collection set to **Only what the playlists have** holds nothing but its playlist seasons. There is no Videos season, and videos of the channel that are in none of its playlists are left out. Choosing this for an existing collection removes the videos no playlist has; the Seasons window tells you how many, and how many of them have files, before you save.
+
+Such a collection doesn't need a link of its own. You can add links to it yourself in the Seasons window: a playlist, a channel or a single video, from any site yt-dlp supports, so one collection can hold playlists from YouTube and Vimeo side by side. Each link becomes a season. **Remove** takes a link you added out again, together with the videos only it had. When the collection does have a channel link, set or change it on its **Edit** page, its playlists are offered as before, and VODLoft keeps looking for new ones.
 
 ## Sync now and sync history
 

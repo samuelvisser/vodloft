@@ -21,7 +21,7 @@ from backend.services.errors import ServiceError
 from backend.services.access_checks import ask_for_check, refused_media
 from backend.services.media_access import locked_clause
 from backend.services.local_media_profile_sites import profile_offered_for_site
-from backend.services.sites import collection_site_key
+from backend.services.sites import collection_site_key, place_collection
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.types.collection_types import CollectionType
 from backend.api.endpoints.media_downloads.service import create_new_episode_download
@@ -44,7 +44,8 @@ from task_manager.tasks.helpers.download_profiles import (
 from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 from task_manager.scheduler.types import OperationSource
 
-from backend.services.collections import add_collection, index_new_collection
+from backend.services.collections import add_collection, add_links_only_collection, index_new_collection
+from backend.services.link_seasons import holds_only_link_seasons, lists_playlists
 from backend.operations.collections import (
     CollectionDeleteDownloadsOperation,
     CollectionDownloadAllOperation,
@@ -253,6 +254,18 @@ def get_collection_episode_tags(s: Session, collection_slug: str) -> list[Episod
     ]
 
 
+def create_links_only_collection(
+    s: Session, body: CollectionLinksOnlyAPICreate, *, added_by_id: int | None = None,
+) -> CollectionAPIRead:
+    """A new collection without a link, which holds only what the links the user adds to it have.
+
+    ``s`` is a write transaction's session."""
+    collection = add_links_only_collection(
+        s, title=body.title, collection_type=CollectionType(body.type), added_by_id=added_by_id,
+    )
+    return CollectionAPIRead.model_validate(collection)
+
+
 def create_collection(s: Session, body: CollectionAPICreate, *, added_by_id: int | None = None) -> CollectionAPIRead:
     collection = create_database_fields(Collection, body)
     add_collection(s, collection, added_by_id=added_by_id)
@@ -279,7 +292,23 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
         )
         if getattr(body, name) is None
     } | {name for name in ("genre", "content_rating") if name not in body.model_fields_set}
-    update_database_fields(collection, body, exclude_fields=left_out or None)
+    link = (body.sharing_url or "").strip() or None
+    if link is None and not holds_only_link_seasons(collection):
+        raise ServiceError(
+            "Give the collection its link: only a collection that holds what its playlists have can go without",
+            field="sharing_url",
+        )
+    moved = link != collection.sharing_url
+    update_database_fields(collection, body, exclude_fields=(left_out | {"sharing_url"}))
+    if moved:
+        collection.sharing_url = link
+        # The link of a collection that holds only its playlists is there to offer a channel's playlists.
+        if link is not None and holds_only_link_seasons(collection) and not lists_playlists(collection):
+            raise ServiceError(
+                "Give the link of a whole channel whose playlists VODLoft can list, or leave it empty",
+                field="sharing_url",
+            )
+        place_collection(s, collection)
     s.flush()
     request_collection_custom_index_reconciliation(s, collection.id)
 

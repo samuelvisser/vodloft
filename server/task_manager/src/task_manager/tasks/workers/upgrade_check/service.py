@@ -10,7 +10,7 @@ from backend.db.core import run_write_transaction
 from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.media_download_history import record_media_download_history
-from backend.services.sites import collection_site
+from backend.services.sites import episode_site
 from backend.services.upgrade_check import (
     checks_profile, kept_length, next_upgrade_check_at, sponsorblock_categories, upgrade_findings,
 )
@@ -67,7 +67,7 @@ def _site(download: EpisodeMediaDownload):
     profile = download.download_profile
     episode = download.media
     source = get_source(episode.source_key) if isinstance(episode, Episode) else None
-    site = collection_site(episode.collection) if source is not None else None
+    site = episode_site(episode) if source is not None else None
     if (
         profile is None or site is None or not profile.enable_profile or not checks_profile(site, profile)
         or download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value
@@ -102,7 +102,7 @@ def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
 
     episode = download.media
     source = get_source(episode.source_key)
-    url, categories = episode.sharing_url, sponsorblock_categories(download, collection_site(episode.collection))
+    url, categories = episode.sharing_url, sponsorblock_categories(download, episode_site(episode))
     s.rollback()
     try:
         offer = source.upgrade_offer(url, sponsorblock_categories=categories)

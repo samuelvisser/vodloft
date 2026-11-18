@@ -13,7 +13,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Collection, Movie, Site, Video
+from backend.db.models import Collection, Episode, Movie, Site, Video
+from backend.types.link_season_types import OutsideVideos
 from backend.services.local_media_profile_sites import add_upcoming_site
 from sources import Site as SourceSite, collection_on_site, site_for, source_site, sources_for
 
@@ -52,6 +53,10 @@ def place_collection(s: Session, collection: Collection) -> None:
     Raises CollectionAlreadyAddedError when the Site's collection is already in VODLoft,
     whichever Source it came through. The database refuses it too.
     """
+    if collection.sharing_url is None:
+        # A collection of the links the user picks is on no Site of its own, and can't be added twice.
+        collection.site_key, collection.site_ref = None, None
+        return
     site, ref = collection_on_site(collection.sharing_url, collection.source_key, collection.slug)
     record = site_record(s, site)
     existing = collection_on_site_taken(s, record.key, ref, other_than=collection.id)
@@ -60,18 +65,44 @@ def place_collection(s: Session, collection: Collection) -> None:
     collection.site_key, collection.site_ref = record.key, ref
 
 
+NO_SITE = SourceSite("", "Several sites")
+"""What a collection without a link of its own is on before it has any links."""
+
+
 def collection_site(collection: Collection) -> SourceSite:
-    """The Site a collection is on, with what the collection's own Source offers there."""
-    return _site_of(collection.sharing_url, collection.source_key)
+    """The Site a collection is on, with what the collection's own Source offers there. A collection without a link of
+    its own, which holds what its link seasons have, is on the Site of the first link it got; what each of its
+    episodes does on its own Site, such as a download, follows the episode's Site (``episode_site``)."""
+    url = collection.sharing_url or next(
+        (link.url for link in sorted(collection.season_links, key=lambda link: link.id or 0)), None,
+    )
+    return _site_of(url, collection.source_key) if url else NO_SITE
+
+
+def episode_site(episode: Episode) -> SourceSite:
+    """The Site an episode's video is on. Only a collection that holds what its link seasons have can hold links of
+    several Sites, so there each episode is on its own Site; everywhere else it is on the collection's."""
+    collection = episode.collection
+    if collection.outside_videos == OutsideVideos.ONLY and episode.sharing_url:
+        return _site_of(episode.sharing_url, episode.source_key)
+    return collection_site(collection)
+
+
+def episode_site_key(episode: Episode) -> Optional[str]:
+    """The key of the Site an episode is on, as ``episode_site`` tells it, from the stored key where it can."""
+    if episode.collection.outside_videos == OutsideVideos.ONLY:
+        return episode_site(episode).key or None
+    return episode.collection.site_key
 
 
 def video_site(video: Video) -> SourceSite:
     return _site_of(video.sharing_url, video.source_key)
 
 
-def collection_site_key(collection: Collection) -> str:
-    """The key of the Site a collection is on, told from its link while VODLoft has not stored it yet."""
-    return collection.site_key or collection_site(collection).key
+def collection_site_key(collection: Collection) -> Optional[str]:
+    """The key of the Site a collection is on, told from its link while VODLoft has not stored it yet; None for a
+    collection without a link of its own or any link seasons yet."""
+    return collection.site_key or collection_site(collection).key or None
 
 
 def video_site_key(video: Video) -> str:

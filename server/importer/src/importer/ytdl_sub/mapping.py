@@ -179,6 +179,8 @@ class _Links:
     left_out: list[str]
     channel_season: PlaylistSeasonPlan | None = None
     """The TV Show Collection's season of the channel itself, which keeps its videos in none of the playlists."""
+    links_only: bool = False
+    """The subscription has only playlists and single videos, of no one channel: the Collection holds only them."""
 
 
 _CHANNEL_TABS = frozenset({"videos", "streams", "shorts", "live", "featured", "playlists"})
@@ -214,9 +216,10 @@ def _links(sub: Subscription, kind: str | None) -> _Links | None:
     by_number = sorted(seasons, key=lambda season: (season[0] == 0, season[0]))
     channel = next((season for season in by_number if not _is_playlist(season[2]) and not _is_video(season[2])), None)
     if channel is None:
-        # Only playlists: the Collection is the first season's, as VODLoft can't tell they share a channel.
-        first = by_number[0]
-        return _Links(first[2], [], [url for _number, _name, url in seasons if url != first[2]])
+        # Only playlists and videos: the Collection holds only what they have, each one a season, without a link of
+        # its own.
+        playlists = [PlaylistSeasonPlan(url, name, number) for number, name, url in seasons]
+        return _Links(by_number[0][2], playlists, [], links_only=True)
     # Every other link, a playlist, another channel or one video, is a link season, which adds its videos the
     # channel does not have, so the Collection keeps everything the subscription had.
     playlists = [PlaylistSeasonPlan(url, name, number) for number, name, url in seasons if url != channel[2]]
@@ -601,6 +604,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         assets=tuple(assets),
         link_seasons=tuple(links.playlists),
         loose_season=links.channel_season if links.playlists else None,
+        links_only=links.links_only,
         channel=music and not full_albums,
     )
     signature = (report.output_template, report.original, repr(sorted(settings.items())))

@@ -246,6 +246,8 @@ def collection_link(s: Session, collection_slug: str) -> CollectionLink:
     collection = _collection(s, collection_slug)
     if collection.channel_id is not None:
         raise ServiceError(f"{collection.title} is already in {collection.channel.title}")
+    if collection.sharing_url is None:
+        raise ServiceError(f"{collection.title} has no link of its own, so it belongs to no channel")
     return CollectionLink(collection.source_key, collection.title, collection.sharing_url)
 
 

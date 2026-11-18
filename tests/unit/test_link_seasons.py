@@ -641,3 +641,158 @@ def test_a_kept_video_stays_and_is_back_when_the_playlist_lists_it_again(source,
     session.expire_all()
     assert not session.get(Episode, guest_id).removed_from_source
     assert _seasons(session) == [("Videos", 1, ["a"]), ("Collabs", 2, ["guest"])]
+
+
+class LinksSource(ChannelSource):
+    """A Source that can hold a collection of only the links the user picks."""
+
+    features = ChannelSource.features | {Feature.LINK_COLLECTIONS}
+
+    def list_items(self, url):
+        return tuple(ItemRef(slug, f"https://seasons.example/watch?v={slug}") for slug in self.items[url.rsplit("=", 1)[1]])
+
+
+@pytest.fixture
+def links_source(monkeypatch):
+    from backend.services import sites
+    from sources import registry
+
+    # The only Source that can hold such a collection, so a new one is made with it.
+    monkeypatch.setattr(registry, "_sources", {})
+    sites._site_of.cache_clear()
+    yield registry.register(LinksSource())
+    sites._site_of.cache_clear()
+
+
+def _update(session, slug="creator", **changes):
+    from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+
+    view = seasons_view(session, slug)
+    session.rollback()
+    body = {
+        "seasons": [{"id": season.id, "name": season.name} for season in view.seasons],
+        "custom_season_order": view.custom_season_order, "link_seasons": view.link_seasons,
+        "new_link_seasons": view.new_link_seasons, "loose_videos": view.loose_videos,
+        "outside_videos": view.outside_videos,
+        "playlists": [{"id": playlist.id, "enabled": playlist.enabled} for playlist in view.playlists],
+        **changes,
+    }
+    return run_write_transaction(lambda s: update_seasons(s, slug, CollectionSeasonsAPIUpdate(**body)))
+
+
+def test_a_collection_that_holds_only_its_playlists_leaves_the_channels_other_videos_out(links_source, session):
+    from backend.db.models import Episode
+
+    source = links_source
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLbest", "Best Of")]
+    source.items = {"PLbest": ("a", "guest")}
+    source.outside = {"a": _video("a", 2024), "guest": _video("guest", 2023)}
+    collection = _collection(session, mode="all")
+    collection.outside_videos = "only"
+    session.commit()
+
+    _index(session, collection, source)
+
+    # No season of videos in no playlist: only what the playlist has, also another channel's video.
+    assert _seasons(session) == [("Best Of", 1, ["a", "guest"])]
+    assert all(session.scalars(select(Episode.from_link_season)).all())
+
+
+def test_switching_to_only_the_playlists_removes_the_videos_none_of_them_has(links_source, session, monkeypatch):
+    from backend.db.models import Episode
+
+    queued = []
+    monkeypatch.setattr(
+        "task_manager.scheduler.transactional.queue_task_after_commit", lambda s, **kwargs: queued.append(kwargs),
+    )
+    source = links_source
+    source.videos = [_video("a", 2024), _video("b", 2025), _video("c", 2025)]
+    source.lists = [_list("PLbest", "Best Of")]
+    source.items = {"PLbest": ("a",)}
+    source.outside = {"a": _video("a", 2024)}
+    collection = _collection(session)
+    _index(session, collection, source)
+    _give_files(session, "b", "a")
+
+    view = _update(session, outside_videos="only")
+    # Nothing leaves before the playlists are listed again.
+    assert (view.outside_videos, view.only_leaving_count) == ("only", 0)
+    assert sorted(session.scalars(select(Episode.source_slug)).all()) == ["a", "b", "c"]
+
+    _index(session, collection, source)
+    # The one without files leaves; the downloaded one stays until the user answers the Home page.
+    session.expire_all()
+    assert sorted(session.scalars(select(Episode.source_slug)).all()) == ["a", "b"]
+    assert session.scalar(select(Episode.removed_from_source).where(Episode.source_slug == "b"))
+    assert _seasons(session)[-1] == ("Best Of", 2, ["a"])
+
+
+def test_an_empty_collection_takes_links_the_user_adds(links_source, session):
+    from backend.api.endpoints.collections.seasons.service import AddedLink, save_added_link, seasons_view
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection
+    from backend.services.collections import add_links_only_collection
+    from backend.types.collection_types import CollectionType
+
+    source = links_source
+    source.items = {"PLmix": ("x", "y"), "PLmore": ("y", "z")}
+    source.outside = {slug: _video(slug, 2024, month) for month, slug in enumerate(("x", "y", "z"), start=1)}
+    slug = run_write_transaction(
+        lambda s: add_links_only_collection(s, title="My Mix", collection_type=CollectionType.SERIES).slug,
+    )
+    session.expire_all()
+    collection = session.scalar(select(Collection).where(Collection.slug == slug))
+    assert (collection.sharing_url, collection.site_key, collection.source_key) == (None, None, "seasons")
+
+    for ref, title in (("PLmix", "The Mix"), ("PLmore", "More")):
+        link = AddedLink(ref, f"https://seasons.example/playlist?list={ref}", title, None)
+        run_write_transaction(lambda s, link=link: save_added_link(s, slug, link))
+    view = seasons_view(session, slug)
+    session.rollback()
+    assert [(link.title, link.added_by_user) for link in view.playlists] == [("The Mix", True), ("More", True)]
+    assert (view.has_own_link, view.lists_playlists, view.link_seasons_offered) == (False, False, True)
+
+    _index(session, session.scalar(select(Collection).where(Collection.slug == slug)), source)
+    # A video in both goes to the first.
+    assert _seasons(session) == [("The Mix", 1, ["x", "y"]), ("More", 2, ["z"])]
+
+    # Removing a link removes its videos with it.
+    more = next(link for link in view.playlists if link.title == "More")
+    _update(session, slug, removed_links=[more.id], playlists=[{"id": more.id, "enabled": True}])
+    assert _seasons(session) == [("The Mix", 1, ["x", "y"])]
+
+
+def test_a_collection_without_a_link_can_only_hold_its_playlists(links_source, session):
+    from backend.db.core import run_write_transaction
+    from backend.services.collections import add_links_only_collection
+    from backend.services.errors import ServiceError
+    from backend.types.collection_types import CollectionType
+
+    run_write_transaction(lambda s: add_links_only_collection(s, title="Mix", collection_type=CollectionType.MUSIC))
+    with pytest.raises(ServiceError) as refused:
+        _update(session, "mix", outside_videos="add")
+    assert refused.value.field == "outside_videos"
+
+
+def test_an_imported_show_of_only_playlists_holds_them_in_the_other_programs_seasons(links_source, session):
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection
+    from backend.services import imports
+    from importer.contract import CollectionPlan, PlaylistSeasonPlan
+
+    first = "https://seasons.example/playlist?list=PLfirst"
+    plan = CollectionPlan(
+        external_id="subscription:Mixed", url=first, title="Mixed", settings={"type": "series", "episode_identifier": "seasonal"},
+        link_seasons=(PlaylistSeasonPlan(first, "Firsts", 1), PlaylistSeasonPlan("https://seasons.example/playlist?list=PLsecond", "Seconds", 2)),
+        links_only=True,
+    )
+    slug = run_write_transaction(lambda s: imports._create_links_only_collection(s, plan).slug)
+
+    collection = session.scalar(select(Collection).where(Collection.slug == slug))
+    assert (collection.sharing_url, collection.outside_videos, collection.custom_season_order) == (None, "only", True)
+    assert [(link.title, link.season.season_number) for link in sorted(collection.season_links, key=lambda x: x.id)] == [
+        ("Firsts", 1), ("Seconds", 2),
+    ]

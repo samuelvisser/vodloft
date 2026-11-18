@@ -13,6 +13,7 @@ from backend.api.models.channel import CollectionChannelLeaveAPIRead, Collection
 from .service import (
     get_collections_list,
     create_collection,
+    create_links_only_collection,
     get_collection,
     get_collection_episode_tags,
     update_collection,
@@ -40,6 +41,7 @@ from ...models.collection import (
     CollectionAPIRead,
     CollectionAPICreate,
     CollectionAPIUpdate,
+    CollectionLinksOnlyAPICreate,
     CollectionCheckSuggestionAPIRead,
     CollectionLockedAPIRead,
     CollectionSyncLogAPIRead,
@@ -87,6 +89,17 @@ def collection_create(body: CollectionAPICreate, access: Access = signed_in()) -
         return result
 
     return run_write_transaction(work)
+
+
+@router.post(
+    "/links-only", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CollectionAPIRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def collection_links_only_create(body: CollectionLinksOnlyAPICreate, access: Access = signed_in()) -> CollectionAPIRead:
+    """Create an empty collection without a link of its own, which holds only what the links added to it have."""
+    return run_write_transaction(
+        lambda s: create_links_only_collection(s, body, added_by_id=access.user_id),
+    )
 
 
 @router.post(

@@ -36,6 +36,10 @@ class OutsideVideos(StrEnum):
     ADD = "add"
     """Add them to the collection, in their link season. They leave again, files and all, once no link season that is
     on lists them."""
+    ONLY = "only"
+    """Hold nothing but the videos of the link seasons that are on: the link seasons say what the collection holds.
+    Its own link, which it may go without, only offers its playlists; a video leaves, files and all, once no link
+    season that is on lists it."""
 
 
 class LooseVideos(StrEnum):

@@ -19,7 +19,7 @@ from backend.services.collection_cookies import note_failed_download
 from backend.services.download_plans import prepare_download_plan
 from backend.services.download_relocation import remove_folders_left_empty
 from backend.services.media_access import lock_refused, media_access, media_site_key, site_access
-from backend.services.sites import collection_site
+from backend.services.sites import episode_site
 from backend.services.throttle_guard import record_throttled
 from backend.services.upgrade_check import schedule_first_upgrade_check
 from backend.services.notifications.emitters import episode_downloaded
@@ -218,7 +218,7 @@ def _record_download(
     download.downloaded_at = finished
     if isinstance(download.media, Episode):
         download.downloaded_publish_status = publish_status
-        schedule_first_upgrade_check(download, collection_site(download.media.collection), finished)
+        schedule_first_upgrade_check(download, episode_site(download.media), finished)
         episode_downloaded(session, download.media, path=execution.result.path, replaced=is_redownload)
     result_data = {
         "media_download_id": media_download_id, "is_redownload": is_redownload,

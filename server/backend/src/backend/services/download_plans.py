@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from backend.services.collection_cookies import uses_cookies
 from backend.services.playback import resolve_playback
 from backend.services.local_media_profile_sites import format_for_site
-from backend.services.sites import collection_site, video_site
+from backend.services.sites import episode_site, video_site
 from backend.services.no_ascii_names import settle_no_ascii_name
 from backend.services.media_access import link_access
 from backend.db.core import run_write_transaction
@@ -65,7 +65,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     preferred = profile.preferred_format
     media_site = None
     if episode is not None or video is not None:
-        media_site = collection_site(episode.collection) if episode is not None else video_site(video)
+        media_site = episode_site(episode) if episode is not None else video_site(video)
         # The profile may be offered for Sites that cannot give what it chose, such as an HLS bundle.
         preferred = format_for_site(media_site, preferred)
     audio_only = preferred == PreferredFormat.FORMAT_AUDIO_ONLY.value

@@ -43,7 +43,9 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     )
     title: Mapped[str]
     description: Mapped[Optional[str]]
-    sharing_url: Mapped[str] = mapped_column(unique=True)
+    sharing_url: Mapped[Optional[str]] = mapped_column(
+        unique=True, comment="The collection's own link; a collection that only holds its link seasons may go without",
+    )
     ytdlp_options: Mapped[str] = mapped_column(
         Text, default="", server_default="",
         comment="Your own yt-dlp options for this Collection, added after the yt-dlp Source's",
@@ -62,7 +64,10 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     )
     outside_videos: Mapped[str] = mapped_column(
         default=OutsideVideos.LEAVE_OUT.value, server_default=OutsideVideos.LEAVE_OUT.value,
-        comment="What happens with the videos of the playlists that are seasons that the collection's own link does not list: leave_out or add",
+        comment=(
+            "What happens with the videos of the playlists that are seasons that the collection's own link does "
+            "not list: leave_out, add, or only, which holds nothing but the videos of those playlists"
+        ),
     )
     custom_season_order: Mapped[bool] = mapped_column(
         default=False, server_default="0",

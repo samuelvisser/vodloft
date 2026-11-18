@@ -55,7 +55,8 @@ from backend.services.media_access import lock_refused
 from backend.services.notifications.emitters import link_seasons_found
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
-    SeasonFinder, SeasonNumbers, list_season_links, place_in_link_seasons, link_seasons_on, save_season_links,
+    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_season_links, place_in_link_seasons, link_seasons_on,
+    save_season_links,
 )
 from backend.services.metadata_refresh import new_item_metadata_is_final
 from backend.services.pending_episodes import site_follows_pending
@@ -64,7 +65,7 @@ from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, Episod
 from backend.types.media_types import MediaType
 from backend.types.collection_types import EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
-from sources import MAIN_TAG, Chapter, Feature, ItemRef, SeasonRef, Source, VideoDetails, get_source
+from sources import MAIN_TAG, Chapter, Feature, ItemRef, SeasonRef, Source, VideoDetails, get_source, site_for
 from .episodes.events import queue_episode_status_events
 from .general import datetime_to_string
 from .progress import update_progress
@@ -167,6 +168,9 @@ def with_chapters(source: Source, details: VideoDetails) -> VideoDetails:
 
 def _list_new_episodes(s: Session, collection: Collection, source: Source, progress) -> list[VideoDetails]:
     title, url = collection.title, collection.sharing_url
+    if url is None or holds_only_link_seasons(collection):
+        # Its link seasons say what it holds, so its own link is not listed.
+        return []
     split = splits_chapters(collection)
     known = known_episode_slugs(s, collection)
     # No transaction stays open while the Source looks videos up.
@@ -286,7 +290,11 @@ def _new_episode(
         # A part keeps the title and length of its chapter, so a refresh of the whole video has nothing for it.
         metadata_is_final=chapter is not None or (
             details.publish_status not in PENDING_EPISODE_PUBLISH_STATUSES and new_item_metadata_is_final(
-                source_key=collection.source_key, site_key=collection.site_key, published_at=details.published_at,
+                # A collection of links from several Sites follows each video's own Site.
+                source_key=collection.source_key,
+                site_key=site_for(details.url, collection.source_key).key if holds_only_link_seasons(collection)
+                else collection.site_key,
+                published_at=details.published_at,
             )
         ),
         scheduled_date=details.scheduled_at,
@@ -380,6 +388,8 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
     if collection is None:
         return RefreshCounts()
     title, url = collection.title, collection.sharing_url
+    # A collection that only holds its link seasons has no listing of its own to read its videos from.
+    one_by_one = url is None or holds_only_link_seasons(collection)
     # The parts of a split video are asked about once, as their video.
     items = list({
         slug: ItemRef(slug, item_url or "")
@@ -392,7 +402,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
     s.rollback()
     if not items:
         return RefreshCounts()
-    refresh = source.refresh_items(url, items)
+    refresh = source.refresh_metadata(items) if one_by_one else source.refresh_items(url, items)
     slugs = frozenset(item.slug for item in items)
     counts = run_write_transaction(lambda w: _apply_refresh(w, collection_id, refresh, slugs))
     if counts.removed or counts.returned:

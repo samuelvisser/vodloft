@@ -345,7 +345,7 @@ def test_a_refresh_that_finds_a_change_starts_the_upgrade_check(db_session, monk
     from task_manager.tasks.helpers import refreshed_metadata
 
     queued = []
-    monkeypatch.setattr(refreshed_metadata, "collection_site", lambda collection: DAILY_WIRE)
+    monkeypatch.setattr(refreshed_metadata, "episode_site", lambda episode: DAILY_WIRE)
     monkeypatch.setattr(refreshed_metadata, "queue_task_after_commit", lambda s, **kwargs: queued.append(kwargs))
     download = _download(db_session, profile_values={"upgrade_improvements": ["length"]}, download_values={
         # The refresh compares with the real clock, so the next check has to be ahead of it rather than of NOW.
