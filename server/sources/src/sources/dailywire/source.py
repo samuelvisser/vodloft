@@ -110,6 +110,7 @@ class DailyWireSource(Source):
         ),
         accesses=MEMBERSHIP_ACCESSES,
         # A host has no feed to fold into one show: each of their shows keeps its own seasons.
+        channels=True,
         channel_label="host",
         channel_presets=(ChannelPreset.PER_LIST, ChannelPreset.PICK),
     ),)

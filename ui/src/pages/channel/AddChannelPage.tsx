@@ -12,7 +12,7 @@ import {
     type SectionPlan,
 } from '../../types/schemas/channel'
 import {DwMembershipLevelReg} from '../../types/dailywire_user_info'
-import {NewSectionActionReg} from '../../types/channel'
+import {newSectionActionReg} from '../../types/channel'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -77,11 +77,11 @@ function sectionFacts(section: ChannelSectionRead): string {
 }
 
 /** What the lookup has done so far, over the shape of the page it is filling in. */
-function AddChannelSkeleton({steps}: {steps: string[]}) {
+function AddChannelSkeleton({steps, label}: {steps: string[], label: string}) {
     return (
         <div className="channel-skeleton" aria-busy="true">
             <ol className="channel-lookup-steps" aria-live="polite">
-                {(steps.length ? steps : ['Looking the channel up']).map((step, index, all) => {
+                {(steps.length ? steps : [`Looking the ${label} up`]).map((step, index, all) => {
                     const current = index === all.length - 1
                     return (
                         <li key={step} className={current ? 'is-current' : 'is-done'}>
@@ -135,6 +135,7 @@ export default function AddChannelPage() {
     const [channel, setChannel] = useState<ChannelLookupRead | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [steps, setSteps] = useState<string[]>([])
+    const [label, setLabel] = useState('channel')
 
     const form = useForm<ChannelCreateIn, unknown, ChannelCreateOut>({
         resolver: zodResolver(ChannelCreateSchema),
@@ -145,9 +146,13 @@ export default function AddChannelPage() {
     useEffect(() => {
         const controller = new AbortController()
         setSteps([])
-        lookUpChannel({sourceKey, url, ref}, (step) => setSteps((done) => [...done, step]), controller.signal)
+        lookUpChannel({sourceKey, url, ref}, (step, channelLabel) => {
+            if (channelLabel) setLabel(channelLabel)
+            setSteps((done) => [...done, step])
+        }, controller.signal)
             .then((found) => {
                 setChannel(found)
+                setLabel(found.channelLabel)
                 const preset = found.presets[0]
                 if (preset) {
                     setValue('preset', preset.key)
@@ -199,7 +204,7 @@ export default function AddChannelPage() {
     if (error) {
         return (
             <section className="view" aria-labelledby="add-channel-title">
-                <div className="view-header"><h1 id="add-channel-title">Add channel</h1></div>
+                <div className="view-header"><h1 id="add-channel-title">Add {label}</h1></div>
                 <div className="form-error-card" role="alert">{error}</div>
                 <div className="actions"><button type="button" className="btn" onClick={() => navigate(-1)}>Back</button></div>
             </section>
@@ -208,15 +213,15 @@ export default function AddChannelPage() {
     if (!channel) {
         return (
             <section className="view channel-view" aria-labelledby="add-channel-title">
-                <div className="view-header"><h1 id="add-channel-title">Add channel</h1></div>
-                <AddChannelSkeleton steps={steps}/>
+                <div className="view-header"><h1 id="add-channel-title">Add {label}</h1></div>
+                <AddChannelSkeleton steps={steps} label={label}/>
             </section>
         )
     }
     if (channel.channelSlug) {
         return (
             <section className="view" aria-labelledby="add-channel-title">
-                <div className="view-header"><h1 id="add-channel-title">Add channel</h1></div>
+                <div className="view-header"><h1 id="add-channel-title">Add {label}</h1></div>
                 <p>{channel.title} is already in your library.</p>
                 <div className="actions">
                     <button type="button" className="btn btn-primary" onClick={() => navigate(`/channel/${channel.channelSlug}`)}>
@@ -328,10 +333,10 @@ export default function AddChannelPage() {
                 <div className="form-row channel-membership">
                     <label htmlFor="channel-new-sections">When the {channel.channelLabel} adds a {lists.replace(/s$/, '')}</label>
                     <SimpleSelect
-                        inputId="channel-new-sections" registry={NewSectionActionReg} value={newSections}
+                        inputId="channel-new-sections" registry={newSectionActionReg(channel.channelLabel)} value={newSections}
                         onChange={(value) => setValue('newSections', value as ChannelCreateIn['newSections'])}
                     />
-                    <div className="help">{NewSectionActionReg.meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
+                    <div className="help">{newSectionActionReg(channel.channelLabel).meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
                 </div>
 
                 {sourceKey === 'dailywire' && (

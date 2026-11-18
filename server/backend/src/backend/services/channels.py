@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Channel, ChannelSection, Collection, CollectionLink, CollectionLinkItem, Episode
 from backend.services.collections import add_collection, index_new_collection, reindex_collection
 from backend.services.errors import ServiceError
-from backend.services.sites import site_record
+from backend.services.sites import collection_site, site_record
 from backend.types.channel_types import NewSectionAction, SectionStatus, SectionTarget
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_link_types import LinkPlacement
@@ -49,7 +49,7 @@ def channel_site(source_key: str, url_or_site_key: str) -> Site:
     except UnknownSourceError as exc:
         raise ServiceError(str(exc)) from exc
     site = source.site_for(url_or_site_key) if url_or_site_key.startswith("http") else source.site_of(url_or_site_key)
-    if not source.has(Feature.CHANNELS) or site is None or not site.channel_label:
+    if not source.has(Feature.CHANNELS) or site is None or not site.channels:
         raise ServiceError(f"{site.name if site else source.name} has no channels VODLoft can add")
     return site
 
@@ -527,7 +527,7 @@ def leave_channel(s: Session, collection: Collection) -> None:
     ``s`` is a write transaction's session."""
     channel = collection.channel
     if channel is None:
-        raise ServiceError(f"{collection.title} is not in a channel")
+        raise ServiceError(f"{collection.title} is not in a {collection_site(collection).channel_label}")
     for link in collection.links:
         link.section = None
     if channel.main_collection_id == collection.id:

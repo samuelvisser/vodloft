@@ -11,7 +11,7 @@ import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import PageHeader from '../../components/common/PageHeader'
-import {NewSectionActionReg} from '../../types/channel'
+import {newSectionActionReg} from '../../types/channel'
 import {
     ChannelPageReadSchema, ChannelUpdateSchema, type ChannelOrderEntry, type ChannelUpdateIn, type ChannelUpdateOut,
 } from '../../types/schemas/channel'
@@ -141,12 +141,12 @@ export default function EditChannelPage() {
                 <div className="form-row channel-membership">
                     <label htmlFor="channel-new-sections">When the {channel.channelLabel} adds a playlist or show</label>
                     <SimpleSelect
-                        inputId="channel-new-sections" registry={NewSectionActionReg} value={newSections}
+                        inputId="channel-new-sections" registry={newSectionActionReg(channel.channelLabel)} value={newSections}
                         onChange={(value) => setValue('newSections', value as ChannelUpdateIn['newSections'], {shouldDirty: true})}
                     />
                     {errors.newSections && <div className="error" role="alert">{errors.newSections.message}</div>}
                     <div className="help">
-                        {NewSectionActionReg.meta(newSections as never)?.help} VODLoft looks for new ones once a day.
+                        {newSectionActionReg(channel.channelLabel).meta(newSections as never)?.help} VODLoft looks for new ones once a day.
                     </div>
                 </div>
 

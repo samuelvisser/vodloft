@@ -142,7 +142,7 @@ With a YouTube Data API key, a search goes through the API and collections subsc
 
 ## Channels
 
-A channel is everything one creator publishes on a site: a YouTube channel, or a host on The Daily Wire. Adding the channel, instead of one of its links, lets you decide in one go what happens with its videos, livestreams, Shorts and playlists, and the channel gets a page of its own in your Library.
+A channel is everything one creator publishes on a site: a YouTube channel, or a host on The Daily Wire. Adding the channel, instead of one of its links, lets you decide in one go what happens with its videos, livestreams, Shorts and playlists, and the channel gets a page of its own in your Library. VODLoft calls a channel what its site calls it, so on The Daily Wire every button and page says host instead.
 
 Paste a link to a YouTube channel in **Add media** and choose **Add the channel**; **Only its videos** adds its uploads as one collection, as described above. For The Daily Wire, open **Browse**, group the shows by host and choose the link next to a host's name.
 
@@ -179,7 +179,7 @@ The channel's **Edit** page holds:
 
 ### Adding a collection to a channel, and removing it
 
-A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its channel later. Choose **Add to channel** in the collection's **Actions** menu. VODLoft finds the channel or host behind the collection's links, adds the channel to your Library if it is not there yet, and shows which of the channel's playlists or shows each link becomes. The collection keeps its seasons, episode numbers, profiles and files; nothing is indexed again. A playlist goes first in the channel's order, and a feed such as Shorts goes to its usual place. When a video is also in another of the channel's collections, it goes to the one higher in that order, unless it is already downloaded.
+A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its channel later. Choose **Add to channel** (**Add to host** for a Daily Wire show) in the collection's **Actions** menu. VODLoft finds the channel or host behind the collection's links, adds the channel to your Library if it is not there yet, and shows which of the channel's playlists or shows each link becomes. The collection keeps its seasons, episode numbers, profiles and files; nothing is indexed again. A playlist goes first in the channel's order, and a feed such as Shorts goes to its usual place. When a video is also in another of the channel's collections, it goes to the one higher in that order, unless it is already downloaded.
 
 **Remove from channel** in the same menu makes it a plain collection again. It keeps its episodes, profiles, files, genre and content rating. Because it no longer follows the channel's order, videos that another of the channel's collections has may be listed in it too after its next sync.
 

@@ -10,6 +10,8 @@ type DialogProps = {
     open: boolean
     collectionSlug: string
     collectionTitle: string
+    /** What the collection's Site calls a channel, such as host on The Daily Wire. */
+    channelLabel: string
     onDismiss: () => void
 }
 
@@ -27,17 +29,17 @@ function useRefresh(collectionSlug: string) {
     }
 }
 
-function linkNote(link: ChannelLinkMatch): string {
+function linkNote(link: ChannelLinkMatch, label: string): string {
     if (link.sectionTitle) {
         const kind = link.sectionKindLabel ? `${link.sectionKindLabel} · ` : ''
-        return `${kind}becomes the channel's ${link.sectionTitle} section`
+        return `${kind}becomes the ${label}'s ${link.sectionTitle} section`
     }
-    if (link.keptBy) return `The channel's ${link.keptBy} has this already, so it stays a link of this collection only`
-    return 'Not part of this channel, so it stays a link of this collection only'
+    if (link.keptBy) return `The ${label}'s ${link.keptBy} has this already, so it stays a link of this collection only`
+    return `Not part of this ${label}, so it stays a link of this collection only`
 }
 
-/** "Add to channel": find the channel behind the collection's links, show what each link becomes, and add it. */
-export function AddToChannelDialog({open, collectionSlug, collectionTitle, onDismiss}: DialogProps) {
+/** "Add to channel", in the words of the Site: find the channel behind the collection's links, show what each link becomes, and add it. */
+export function AddToChannelDialog({open, collectionSlug, collectionTitle, channelLabel, onDismiss}: DialogProps) {
     const match = useCollectionChannelMatch(collectionSlug, open)
     const refresh = useRefresh(collectionSlug)
     const channel = match.data
@@ -51,23 +53,23 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, onDis
             toast.success(`${collectionTitle} is now part of ${channel.title}`)
             onDismiss()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Could not add the collection to the channel')
+            toast.error(error instanceof Error ? error.message : `Could not add the collection to the ${channelLabel}`)
         }
     }
 
     return (
         <ConfirmDialog
             open={open}
-            title={`Add ${collectionTitle} to a channel`}
+            title={`Add ${collectionTitle} to a ${channelLabel}`}
             icon={faIcon('fass', 'circle-user')}
             onDismiss={onDismiss}
             confirmButton={{
-                label: channel ? `Add to ${channel.title}` : 'Add to channel',
+                label: channel ? `Add to ${channel.title}` : `Add to ${channelLabel}`,
                 onClick: add,
                 disabled: !channel || matched === 0,
             }}
         >
-            {match.isLoading && <p>Looking up the channel behind this collection's links…</p>}
+            {match.isLoading && <p>Looking up the {channelLabel} behind this collection's links…</p>}
             {match.error && <p className="text-danger">{match.error.message}</p>}
             {channel && (
                 <div className="channel-join">
@@ -88,7 +90,7 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, onDis
                             <div key={link.url} className="channel-section-row">
                                 <div className="channel-section-copy">
                                     <strong>{link.title || (channel.links.length === 1 ? collectionTitle : link.url)}</strong>
-                                    <span>{linkNote(link)}</span>
+                                    <span>{linkNote(link, channelLabel)}</span>
                                 </div>
                             </div>
                         ))}
@@ -98,10 +100,10 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, onDis
                         : (
                             <ul className="channel-order-note">
                                 <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
-                                {!channel.channelSlug && <li>The channel's other playlists and shows start as not in your library, so you can add them from its page.</li>}
+                                {!channel.channelSlug && <li>The {channelLabel}'s other playlists and shows start as not in your library, so you can add them from its page.</li>}
                                 <li>
-                                    A video that is also in another of the channel's collections goes to the one higher in the
-                                    channel's order. Videos that are already downloaded stay where they are.
+                                    A video that is also in another of the {channelLabel}'s collections goes to the one higher in the
+                                    {channelLabel}'s order. Videos that are already downloaded stay where they are.
                                 </li>
                             </ul>
                         )}
@@ -111,8 +113,8 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, onDis
     )
 }
 
-/** "Remove from channel": the collection becomes a plain one again. */
-export function RemoveFromChannelDialog({open, collectionSlug, collectionTitle, onDismiss}: DialogProps) {
+/** "Remove from channel", in the words of the Site: the collection becomes a plain one again. */
+export function RemoveFromChannelDialog({open, collectionSlug, collectionTitle, channelLabel, onDismiss}: DialogProps) {
     const leave = useCollectionChannelLeave(collectionSlug, open)
     const refresh = useRefresh(collectionSlug)
     const info = leave.data
@@ -125,18 +127,18 @@ export function RemoveFromChannelDialog({open, collectionSlug, collectionTitle, 
             toast.success(`${collectionTitle} is a plain collection now`)
             onDismiss()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Could not remove the collection from its channel')
+            toast.error(error instanceof Error ? error.message : `Could not remove the collection from its ${channelLabel}`)
         }
     }
 
     return (
         <ConfirmDialog
             open={open}
-            title={info ? `Remove from ${info.channelTitle}?` : 'Remove from channel?'}
+            title={info ? `Remove from ${info.channelTitle}?` : `Remove from ${channelLabel}?`}
             icon={faIcon('fass', 'link-slash')}
             iconTone="danger"
             onDismiss={onDismiss}
-            confirmButton={{label: 'Remove from channel', onClick: remove, className: 'btn btn-danger', disabled: !info}}
+            confirmButton={{label: `Remove from ${channelLabel}`, onClick: remove, className: 'btn btn-danger', disabled: !info}}
         >
             {leave.error && <p className="text-danger">{leave.error.message}</p>}
             <p>
@@ -145,8 +147,8 @@ export function RemoveFromChannelDialog({open, collectionSlug, collectionTitle, 
             </p>
             {shared > 0 && (
                 <p>
-                    It no longer follows the channel's order, so {shared === 1 ? '1 video' : `${shared} videos`} that another
-                    of the channel's collections has may be listed here too.
+                    It no longer follows the {channelLabel}'s order, so {shared === 1 ? '1 video' : `${shared} videos`} that another
+                    of the {channelLabel}'s collections has may be listed here too.
                 </p>
             )}
         </ConfirmDialog>

@@ -15,6 +15,7 @@ from backend.db.models import Channel, Collection, CollectionLink, CollectionLin
 from backend.services import channels
 from backend.services.channels import NewCollectionSettings, SectionPlan
 from backend.services.errors import ServiceError
+from backend.services.sites import collection_site
 from backend.types.channel_types import NewSectionAction, SectionTarget
 from task_manager.scheduler.transactional import queue_task_after_commit
 from backend.types.collection_link_types import LinkPlacement
@@ -25,6 +26,14 @@ from backend.services.source_requests import asking_source
 
 class ChannelNotFoundError(LookupError):
     pass
+
+
+def lookup_channel_label(source_key: str, url: str | None) -> str:
+    """What the Site of a channel about to be looked up calls it, told without a network request."""
+    if url:
+        return channels.channel_site(source_key, url).channel_label
+    source = get_source(source_key)
+    return next((site.channel_label for site in source.sites if site.channels), "channel")
 
 
 def look_up_channel(
@@ -80,7 +89,7 @@ def channel_lookup(s: Session, source_key: str, details: ChannelDetails) -> Chan
     existing = channels.channel_in_library(s, site.key, details.ref)
     return ChannelLookupAPIRead.model_validate(_Lookup(
         details=details, source_key=source_key, site_key=site.key, site_name=site.name,
-        channel_label=site.channel_label or "channel",
+        channel_label=site.channel_label,
         sections=[
             _Section(section, kept.get(section.ref), titles.get(kept.get(section.ref)))
             for section in details.sections
@@ -130,7 +139,7 @@ class _ChannelRead:
 
 def _label(channel: Channel) -> str:
     site = get_source(channel.source_key).site_of(channel.site_key)
-    return (site.channel_label if site is not None else None) or "channel"
+    return site.channel_label if site is not None else "channel"
 
 
 def list_channels(s: Session) -> list[ChannelAPIRead]:
@@ -306,11 +315,13 @@ def look_up_collection_channel(links: CollectionLinks) -> ChannelDetails:
     source = get_source(links.source_key)
     if not source.has(Feature.CHANNELS):
         raise ServiceError(f"{source.name} has no channels")
-    with asking_source("Could not look up the channel"):
+    site = source.site_for(links.urls[0]) if links.urls else None
+    label = site.channel_label if site is not None else "channel"
+    with asking_source(f"Could not look up the {label}"):
         ref = next((found for found in map(source.channel_of, links.urls) if found), None)
     if ref is None:
-        raise ServiceError(f"VODLoft found no channel behind the links of {links.title}")
-    with asking_source("Could not look up the channel"):
+        raise ServiceError(f"VODLoft found no {label} behind the links of {links.title}")
+    with asking_source(f"Could not look up the {label}"):
         return source.channel_details(ref)
 
 
@@ -331,7 +342,7 @@ def collection_channel_match(s: Session, collection_slug: str, source_key: str, 
     site = channels.channel_site(source_key, details.url or collection.site_key or get_source(source_key).sites[0].key)
     existing = channels.channel_in_library(s, site.key, details.ref)
     return CollectionChannelMatchAPIRead.model_validate(_Match(
-        details, site.name, site.channel_label or "channel",
+        details, site.name, site.channel_label,
         channels.match_links(s, collection, source_key, details, existing),
         existing.slug if existing is not None else None,
     ))
@@ -350,7 +361,7 @@ def join_collection_channel(
 def collection_channel_leave(s: Session, collection_slug: str) -> CollectionChannelLeaveAPIRead:
     collection = _collection(s, collection_slug)
     if collection.channel is None:
-        raise ServiceError(f"{collection.title} is not in a channel")
+        raise ServiceError(f"{collection.title} is not in a {collection_site(collection).channel_label}")
     return CollectionChannelLeaveAPIRead(
         channel_title=collection.channel.title, videos_kept_elsewhere=channels.videos_kept_elsewhere(s, collection),
     )

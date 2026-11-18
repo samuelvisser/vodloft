@@ -389,6 +389,12 @@ class SiteAPIRead(ResponseBase):
         """A collection on the Site shows what VODLoft has no access to until the user hides it."""
         return site_of(self.key).shows_locked
 
+    @computed_field
+    @property
+    def channel_label(self) -> str:
+        """What the Site calls a creator's channel, in lower case, such as host on The Daily Wire."""
+        return site_of(self.key).channel_label
+
 
 class SourceSiteAPIRead(ResponseBase):
     key: str

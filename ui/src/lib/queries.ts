@@ -766,7 +766,7 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
 /** Look a channel up at its Site. It can take a minute: ``onStep`` hears what the lookup is doing as it goes. */
 export async function lookUpChannel(
     body: {sourceKey: string, url?: string | null, ref?: string | null},
-    onStep: (step: string) => void,
+    onStep: (step: string, channelLabel?: string) => void,
     signal?: AbortSignal,
 ): Promise<ChannelLookupRead> {
     const response = await fetch(`${apiUrl()}/channels/lookup`, {
@@ -786,8 +786,8 @@ export async function lookUpChannel(
         const lines = buffered.split('\n')
         buffered = done ? '' : lines.pop() ?? ''
         for (const line of lines.filter((item) => item.trim())) {
-            const message = JSON.parse(line) as {step?: string, channel?: unknown, error?: string}
-            if (message.step) onStep(message.step)
+            const message = JSON.parse(line) as {step?: string, channelLabel?: string, channel?: unknown, error?: string}
+            if (message.step) onStep(message.step, message.channelLabel)
             else if (message.error) throw new ApiError(message.error, 502)
             else return ChannelLookupReadSchema.parse(message.channel)
         }

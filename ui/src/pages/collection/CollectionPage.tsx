@@ -225,6 +225,7 @@ export default function CollectionPage() {
   // YouTube channel's members-only videos. Episodes the account can watch are never hidden.
   const [storedShowLocked, setShowLocked] = useShowLocked(id)
   const showLocked = storedShowLocked ?? collection?.site?.showsLocked ?? true
+  const channelLabel = collection?.site?.channelLabel ?? 'channel'
   const {
     data: episodePagesData,
     isLoading: episodesLoading,
@@ -546,11 +547,11 @@ export default function CollectionPage() {
       onSelect: () => void checkLockedAgain(),
     }] : []),
     ...(collection.channelSlug ? [{
-      label: 'Remove from channel',
+      label: `Remove from ${channelLabel}`,
       icon: faIcon('fass', 'link-slash') as [string, string],
       onSelect: () => setChannelDialog('remove'),
     }] : hasSourceFeature(collection, SourceFeature.CHANNELS) ? [{
-      label: 'Add to channel',
+      label: `Add to ${channelLabel}`,
       icon: faIcon('fass', 'circle-user') as [string, string],
       onSelect: () => setChannelDialog('add'),
     }] : []),
@@ -883,12 +884,14 @@ export default function CollectionPage() {
         open={channelDialog === 'add'}
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
+        channelLabel={channelLabel}
         onDismiss={() => setChannelDialog(null)}
       />
       <RemoveFromChannelDialog
         open={channelDialog === 'remove'}
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
+        channelLabel={channelLabel}
         onDismiss={() => setChannelDialog(null)}
       />
 

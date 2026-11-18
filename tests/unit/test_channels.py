@@ -30,7 +30,7 @@ class ChannelSource(ListedSource):
     domains = ("tube.example",)
     features = ListedSource.features | {Feature.CHANNELS}
     sites = (Site(
-        "tube", "Tube", ("tube.example",), channel_label="channel",
+        "tube", "Tube", ("tube.example",), channels=True,
         channel_presets=(ChannelPreset.ONE_SHOW, ChannelPreset.PER_LIST, ChannelPreset.PICK),
     ),)
 
@@ -84,7 +84,7 @@ def _plan(body, preset):
 def test_one_show_folds_feeds_and_playlists_into_one_collection_and_keeps_shorts_apart(client):
     steps, body = _lookup(client)
 
-    assert steps == ["Reading the channel", "Checking what is in your library already"]
+    assert steps == ["Looking the channel up", "Reading the channel", "Checking what is in your library already"]
     assert (body["title"], body["channelLabel"], body["facts"]) == ("Northwind Workshop", "channel", ["1.2M subscribers"])
     assert _plan(body, "one_show") == {
         "videos": ("main", "site_seasons"),
@@ -430,6 +430,18 @@ def test_a_failed_lookup_ends_with_what_went_wrong(client, tube, monkeypatch):
     response = client.post("/api/channels/lookup", json={"sourceKey": "tube", "url": ROOT})
 
     assert [json.loads(line) for line in response.text.splitlines()] == [
+        {"step": "Looking the channel up", "channelLabel": "channel"},
         {"step": "Reading the channel"},
         {"error": "Could not look up this channel: This channel does not exist"},
     ]
+
+
+def test_a_site_names_its_channels_in_its_own_words(client, tube, monkeypatch):
+    from dataclasses import replace
+
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], channel_label="host"),))
+    response = client.post("/api/channels/lookup", json={"sourceKey": "tube", "url": ROOT})
+    lines = [json.loads(line) for line in response.text.splitlines()]
+
+    assert lines[0] == {"step": "Looking the host up", "channelLabel": "host"}
+    assert lines[-1]["channel"]["channelLabel"] == "host"
