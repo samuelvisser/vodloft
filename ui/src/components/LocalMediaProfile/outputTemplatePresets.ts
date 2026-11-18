@@ -5,9 +5,13 @@ type PresetChoices = {
     metadataMode: 'embed' | 'embed_and_nfo'
     showNfo: boolean
     kodiSafeNfo: boolean
-    fileDateFromPublishDate: boolean
+    fileDateFromPublishDate: true
+    downloadMode: 'temporary'
     episodeNfo: 'episode' | 'music_video'
 }
+
+/** The fields a preset sets besides the output template. */
+export const PRESET_CHOICE_FIELDS = ['metadataMode', 'showNfo', 'kodiSafeNfo', 'fileDateFromPublishDate', 'downloadMode', 'episodeNfo'] as const satisfies readonly (keyof PresetChoices)[]
 
 type Preset = {
     template: (base: string) => string
@@ -51,7 +55,7 @@ ${base}
 /{{ artist }}
 /{{ album }}
 /{{ track_number_padded }} - {{ title }}.ext`,
-        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, episodeNfo: 'episode'},
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'episode'},
     },
     plex: {
         template: (base) => `{# Variables #}
@@ -64,7 +68,7 @@ ${NUMBERS}
 		S{{ season_num }}E{{ ep_num }}
 	{% endif %}
 {% endset %}
-{# Plex reads a number such as 4x4 in a title as the episode, and the title sits in brackets. #}
+{# Plex reads a number such as 4x4 in a title as the season/episode #}
 {% set plex_title = title | replace('[', '(') | replace(']', ')') | regex_replace('(?<=\\d)[xX](?=\\d)', '-by-') %}
 
 {# Path #}
@@ -72,17 +76,17 @@ ${base}
 /{{ collection_title }}
 /{{ plex_season }}
 /{{ collection_title }} - {{ plex_ep_id }} [{{ plex_title }}].ext`,
-        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, episodeNfo: 'episode'},
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'episode'},
         indexingValue: EXTRAS,
     },
     jellyfin: {
         template: nfoServerTemplate,
-        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: false, fileDateFromPublishDate: true, episodeNfo: 'episode'},
+        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'episode'},
         indexingValue: EXTRAS,
     },
     kodi: {
         template: nfoServerTemplate,
-        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: true, fileDateFromPublishDate: true, episodeNfo: 'episode'},
+        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: true, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'episode'},
         indexingValue: EXTRAS,
     },
     music_videos: {
@@ -90,33 +94,32 @@ ${base}
 ${base}
 /{{ artist }}
 /{{ title }}.ext`,
-        choices: {metadataMode: 'embed_and_nfo', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, episodeNfo: 'music_video'},
+        choices: {metadataMode: 'embed_and_nfo', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'music_video'},
     },
     audiobookshelf: {
-        template: (base) => `{# Path #}
-${base}
+        template: (base) => `${base}
 /{{ collection_title }}
 /{% if episode_published_date %}{{ episode_published_date }} - {% endif %}{{ title }}.ext`,
-        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, episodeNfo: 'episode'},
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'episode'},
     },
 }
 
 const PRESET_NAMES = {
-    plex: {label: 'Plex'},
     jellyfin: {label: 'Jellyfin and Emby'},
     kodi: {label: 'Kodi'},
     audiobookshelf: {label: 'Audiobookshelf'},
+    plex: {label: 'Plex'},
     music: {label: 'Music library'},
     music_videos: {label: 'Music videos'},
 } as const
 
 const VideoPresetReg = createSelectRegistry('OutputTemplatePreset', {
-    plex: PRESET_NAMES.plex, jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi,
+    jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi, plex: PRESET_NAMES.plex,
     music_videos: PRESET_NAMES.music_videos,
 })
 const AudioPresetReg = createSelectRegistry('OutputTemplatePreset', {
-    plex: PRESET_NAMES.plex, jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi,
-    audiobookshelf: PRESET_NAMES.audiobookshelf,
+    audiobookshelf: PRESET_NAMES.audiobookshelf, jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi,
+    plex: PRESET_NAMES.plex,
 })
 const MusicPresetReg = createSelectRegistry('OutputTemplatePreset', {music: PRESET_NAMES.music})
 const AllPresetReg = createSelectRegistry('OutputTemplatePreset', PRESET_NAMES)
