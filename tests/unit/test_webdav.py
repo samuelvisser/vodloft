@@ -140,7 +140,7 @@ def test_a_show_by_year_names_episodes_by_date_and_can_leave_out_metadata(db_ses
     collection = _collection(db_session)
     _download(db_session, _episode(db_session, collection, 1, at=datetime(2025, 12, 31, tzinfo=timezone.utc)), tmp_path)
     _download(db_session, _episode(db_session, collection, 2, at=datetime(2026, 1, 2, tzinfo=timezone.utc)), tmp_path)
-    profile = _share(db_session, collection, folder_name="News", season_folders="year", metadata_files="none")
+    profile = _share(db_session, collection, overwrite_collection_title="News", season_folders="year", metadata_files="none")
 
     assert _tree(show_folder(db_session, profile)) == [
         "Season 2025/",
@@ -191,8 +191,8 @@ def test_a_user_token_opens_all_their_shows_and_names_that_clash_are_numbered(db
     owner = User(username="owner", password_hash="x", stream_token="owner-token")
     db_session.add(owner)
     db_session.flush()
-    first = _share(db_session, _collection(db_session, "first"), owner_user_id=owner.id, folder_name="Show")
-    second = _share(db_session, _collection(db_session, "second"), owner_user_id=owner.id, folder_name="Show")
+    first = _share(db_session, _collection(db_session, "first"), owner_user_id=owner.id, overwrite_collection_title="Show")
+    second = _share(db_session, _collection(db_session, "second"), owner_user_id=owner.id, overwrite_collection_title="Show")
     _download(db_session, _episode(db_session, second.collection, 1, at=datetime(2026, 3, 1, tzinfo=timezone.utc)), tmp_path)
 
     shows = shows_for_token(db_session, "owner-token")

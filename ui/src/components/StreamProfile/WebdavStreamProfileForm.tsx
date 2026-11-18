@@ -26,32 +26,10 @@ export default function WebdavStreamProfileForm({
     regeneratingToken,
     siteName = 'its site',
 }: Props) {
-    const {control, formState: {errors}, register, watch} = form
-    const title: string | undefined = watch('title')
+    const {control, formState: {errors}} = form
 
     return (
         <>
-            <div className="form-row">
-                <label htmlFor="webdav-folder-name">Folder name</label>
-                <input
-                    id="webdav-folder-name"
-                    className="input"
-                    type="text"
-                    placeholder={title || undefined}
-                    {...register('folderName', {setValueAs: (value) => (value?.trim() ? value.trim() : null)})}
-                    aria-invalid={!!errors.folderName}
-                    aria-describedby={errors.folderName ? 'webdav-folder-name-error' : 'webdav-folder-name-help'}
-                />
-                {errors.folderName && (
-                    <div id="webdav-folder-name-error" className="error" role="alert" aria-live="polite">
-                        {String(errors.folderName.message)}
-                    </div>
-                )}
-                <div className="help" id="webdav-folder-name-help">
-                    The show&apos;s folder in the share, and the name in front of each episode. Leave it empty to use the title.
-                </div>
-            </div>
-
             {([
                 ['seasonFolders', 'webdav-season-folders', 'Season folders', WebdavSeasonFoldersReg,
                     'How the episodes are sorted into folders.'],

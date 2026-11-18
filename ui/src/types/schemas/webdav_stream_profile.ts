@@ -4,8 +4,6 @@ import {WebdavMetadataFilesReg, WebdavSeasonFoldersReg} from '../stream_profile'
 
 // ---------- Strict request (create/update) ----------
 const WebdavStreamProfileBaseSchema = StreamProfileFieldsSchema.extend({
-    // Empty uses the profile's title.
-    folderName: z.string().trim().nullable().default(null),
     seasonFolders: z.enum(WebdavSeasonFoldersReg.values).default('season'),
     metadataFiles: z.enum(WebdavMetadataFilesReg.values).default('nfo_and_artwork'),
     // A share lists whole files, so it never has live episodes.
@@ -24,7 +22,6 @@ export type WebdavStreamProfileUpdateOut = z.output<typeof WebdavStreamProfileUp
 
 export const WebdavStreamProfileReadSchema = StreamProfileFieldsReadSchema.extend({
     type: z.literal('webdav'),
-    folderName: z.string().nullable(),
     seasonFolders: z.enum(WebdavSeasonFoldersReg.values),
     metadataFiles: z.enum(WebdavMetadataFilesReg.values),
     sharePath: z.string(),
