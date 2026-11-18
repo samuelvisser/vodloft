@@ -60,10 +60,12 @@ def _offers(profile: StreamProfileBase, name: str) -> bool:
     """Whether the profile has the setting, as its edit page shows it."""
     site = collection_site(profile.collection)
     video = profile.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY.value
+    if name == "use_downloads":
+        return profile.streams_from_site
     if name == "use_source_stream":
-        return site.streams
+        return profile.streams_from_site and site.streams
     if name == "proxy_source_stream":
-        return profile.passes_site_streams and video and site.streams and site.stream_proxy_choice
+        return profile.streams_from_site and video and site.streams and site.stream_proxy_choice
     if name == "stream_live_episodes":
         return "hls" in profile.media_kinds and StreamMethod.LIVE in site.stream_methods
     return True

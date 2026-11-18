@@ -104,10 +104,6 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
         const template = renderCompactOutputTemplate(parseOutputTemplate(preset.template(base), 'editor'))
         setValue('outputTemplate', template, options)
         for (const [name, value] of Object.entries(preset.choices)) setValue(name, value, options)
-        const indexingValues: {key: string}[] = getValues('indexingValues') ?? []
-        if (preset.indexingValue && !indexingValues.some(({key}) => key === preset.indexingValue?.key)) {
-            setValue('indexingValues', [...indexingValues, preset.indexingValue], options)
-        }
         form.clearErrors('outputTemplate')
         // Many of the Files and metadata choices just changed, so that section opens to show them.
         revealFields(PRESET_CHOICE_FIELDS)
