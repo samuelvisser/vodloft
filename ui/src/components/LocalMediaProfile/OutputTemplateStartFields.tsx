@@ -137,10 +137,6 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
                             <div className="help" id="mp-output-template-preset-help">
                                 <ReadMore summary="Fill in an output template and NFO settings that a media server reads well. You can change any of it afterwards.">
                                     <p>
-                                        <strong>Plex</strong>: <code>Show/Season 01/Show - S01E01 [Title]</code>. Numbers in a
-                                        title, such as 4x4, are written so Plex does not read them as the episode.
-                                    </p>
-                                    <p>
                                         <strong>Jellyfin and Emby</strong>: <code>Show/Season 01/Show S01E01 Title</code>, with
                                         show and season NFO files.
                                     </p>
@@ -148,6 +144,10 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
                                     {audioOnly && (
                                         <p><strong>Audiobookshelf</strong>: <code>Podcast/Date - Title</code>.</p>
                                     )}
+                                    <p>
+                                        <strong>Plex</strong>: <code>Show/Season 01/Show - S01E01 [Title]</code>. Numbers in a
+                                        title, such as 4x4, are written so Plex does not read them as the episode.
+                                    </p>
                                     <p>
                                         The template starts in the folder your current template uses. Extras are numbered with
                                         an Indexing Value called <code>extra</code>, which the preset adds when the profile has none.

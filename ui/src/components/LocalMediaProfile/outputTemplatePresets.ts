@@ -83,14 +83,14 @@ ${base}
 }
 
 const PRESET_NAMES = {
-    plex: {label: 'Plex'},
     jellyfin: {label: 'Jellyfin and Emby'},
     kodi: {label: 'Kodi'},
     audiobookshelf: {label: 'Audiobookshelf'},
+    plex: {label: 'Plex'},
 } as const
 
 const VideoPresetReg = createSelectRegistry('OutputTemplatePreset', {
-    plex: PRESET_NAMES.plex, jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi,
+    jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi, plex: PRESET_NAMES.plex,
 })
 const AudioPresetReg = createSelectRegistry('OutputTemplatePreset', PRESET_NAMES)
 
