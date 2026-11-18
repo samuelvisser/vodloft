@@ -15,7 +15,7 @@ import {
     LocalMediaProfileCreateUnionSchema,
 } from '../../types/schemas/collection_as_bundle'
 import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
-import ExistingFilesFields, {type ExistingFilesChoice} from './ExistingFilesFields'
+import ExistingFilesFields, {defaultExistingFilesFolder, type ExistingFilesChoice} from './ExistingFilesFields'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
@@ -115,6 +115,15 @@ export default function LocalMediaProfileStep({
     const watchedOp = watch('op')
     const watchedSlug = watch('slug')
     const chosenProfile = watchedOp === 'use_existing' ? profiles?.find((profile) => profile.slug === watchedSlug) : undefined
+
+    // Until an example of this collection shows its root, the folder starts where the template's fixed folders end.
+    const watchedTemplate = watch('outputTemplate') as string | undefined
+    const outputTemplate = watchedOp === 'use_existing' ? chosenProfile?.outputTemplate : watchedTemplate
+    useEffect(() => {
+        const current = existingFilesRef.current
+        if (current.folderChosen || current.folder || !outputTemplate) return
+        onExistingFilesChange({...current, folder: defaultExistingFilesFolder(outputTemplate)})
+    }, [outputTemplate, existingFiles.folder, onExistingFilesChange])
 
     const handleSelect = (profile: CollectionLocalMediaProfileRead) => {
         if (watchedOp === 'use_existing' && watchedSlug === profile.slug) {

@@ -50,7 +50,7 @@ type Props = {
     readOnly?: boolean
     /** A new profile, which starts with the presets open. */
     isCreating?: boolean
-    /** Hears the collection root of the example once the preview has worked it out. */
+    /** Hears the collection root once an example of the collection being added has shown it. */
     onCollectionRoot?: (path: string) => void
     /** Buttons beside the template's heading, such as the Indexing values editor. */
     headerActions?: ReactNode
@@ -843,7 +843,8 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
         indexingValues: mode === 'collection' ? indexingValues : null,
     } : null)
     const previewPath = preview.result?.output.outputPath ?? ''
-    const collectionRootPath = preview.result?.collectionRoot?.path
+    // Only an example of the collection being added tells its root: an episode of another collection has its own.
+    const collectionRootPath = isExampleSource(selectedSource) ? preview.result?.collectionRoot?.path : null
     useEffect(() => {
         if (collectionRootPath) onCollectionRoot?.(collectionRootPath)
     }, [collectionRootPath, onCollectionRoot])
