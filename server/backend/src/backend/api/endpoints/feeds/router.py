@@ -461,9 +461,7 @@ def episode_hls_asset(
         profile = _stream_profile(s, profile_type, token)
         _require_media(profile, "hls", "HLS video")
 
-        episode = get_stream_episode(s, profile, episode_slug)
-        _save_feed_state(s)
-        master_path = get_local_hls_master(s, profile, episode)
+        master_path = get_local_hls_master(s, profile, episode_slug)
         if master_path is None:
             raise HTTPException(status_code=404, detail="Local HLS video is not available")
 

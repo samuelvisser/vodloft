@@ -328,11 +328,11 @@ def test_hls_parts_are_served_without_checking_the_whole_download_again(monkeypa
         raise AssertionError("a part does not check the whole download")
 
     monkeypatch.setattr(service, "resolve_media_download_file", reconcile)
+    monkeypatch.setattr(service, "_offered_episode", lambda s, profile, slug: SimpleNamespace(id=1))
 
-    episode = SimpleNamespace(id=1)
-    assert service.get_local_hls_master(None, _profile("audio_hls"), episode) == Path("/c/episode.m3u8")
+    assert service.get_local_hls_master(None, _profile("audio_hls"), "episode-1") == Path("/c/episode.m3u8")
     downloads.pop()
-    assert service.get_local_hls_master(None, _profile("audio_hls"), episode) is None
+    assert service.get_local_hls_master(None, _profile("audio_hls"), "episode-1") is None
 
 
 def test_a_part_of_a_downloaded_hls_episode_is_served_for_the_profile_type_in_its_address(monkeypatch, tmp_path):
@@ -351,9 +351,11 @@ def test_a_part_of_a_downloaded_hls_episode_is_served_for_the_profile_type_in_it
 
     monkeypatch.setattr(feeds, "db_session", lambda: nullcontext(None))
     monkeypatch.setattr(feeds, "_stream_profile", stream_profile)
-    monkeypatch.setattr(feeds, "get_stream_episode", lambda s, profile, slug: SimpleNamespace(slug=slug))
-    monkeypatch.setattr(feeds, "_save_feed_state", lambda s: None)
-    monkeypatch.setattr(feeds, "get_local_hls_master", lambda s, profile, episode: bundle / "video.m3u8")
+    def checks_the_episode_media(*args):
+        raise AssertionError("a part does not check the episode's media again")
+
+    monkeypatch.setattr(feeds, "get_stream_episode", checks_the_episode_media)
+    monkeypatch.setattr(feeds, "get_local_hls_master", lambda s, profile, slug: bundle / "video.m3u8")
     monkeypatch.setattr(feeds, "hls_asset_root", lambda master: bundle)
 
     response = feeds.episode_hls_asset("rss", "token", "episode", "part-1.ts")

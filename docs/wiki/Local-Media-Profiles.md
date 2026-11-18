@@ -17,7 +17,7 @@ only show when one of the profile's sites has them.
 Some choices can follow **Settings → Downloads**: the thumbnail, metadata, poster and background, how a download is
 written, and filename restrictions. While a choice follows Settings, it has a blue **Follows Settings** badge, and its
 checkboxes have a dashed blue border that shows the value from Settings. Changing Settings later changes these
-profiles too. Click a box, or **Change**, to choose for this profile only. The badge then turns into **Use Settings**,
+profiles too. Click the badge, a box or **Change** to choose for this profile only. The badge then turns into **Use Settings**,
 which makes the choice follow Settings again.
 
 ### Files and metadata
