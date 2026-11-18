@@ -23,6 +23,7 @@ RELEASE_REVISIONS = (
     ("0.7.0", "c89f1a5ea2ba"),
     ("0.8.0", "bb0e7c5e17cc"),
     ("0.9.0", "2f7a91c4d8e3"),
+    ("0.9.1", "5b8e2d4c9a17"),
 )
 VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
@@ -30,10 +31,8 @@ VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
-WEBDAV_TITLE_IS_FOLDER_NAME_REVISION = "940039d2712d"
-WEBDAV_DOWNLOADS_ONLY_REVISION = "fbd592943ccc"
-WEBDAV_EPISODE_EXTRAS_REVISION = "12c4ec47817e"
-HEAD_REVISION = "5b8e2d4c9a17"
+VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
+HEAD_REVISION = VODLOFT_0_9_1_REVISION
 
 
 @pytest.fixture
@@ -1257,7 +1256,7 @@ def test_webdav_shares_become_downloads_only(migration_database):
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, WEBDAV_TITLE_IS_FOLDER_NAME_REVISION)
+    command.upgrade(config, VODLOFT_0_9_0_REVISION)
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys = OFF"))
         connection.execute(text(
@@ -1292,7 +1291,7 @@ def test_every_collection_numbers_its_extras_in_episode_index_order(migration_da
     from backend.db.migrations import get_alembic_config
 
     config = get_alembic_config()
-    command.upgrade(config, WEBDAV_EPISODE_EXTRAS_REVISION)
+    command.upgrade(config, VODLOFT_0_9_0_REVISION)
     with engine.begin() as connection:
         for collection_id in (1, 2):
             connection.execute(text(
