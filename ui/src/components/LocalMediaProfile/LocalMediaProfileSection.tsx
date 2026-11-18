@@ -1,4 +1,4 @@
-import {type ReactNode, useEffect, useState} from 'react'
+import {createContext, type ReactNode, useContext, useEffect, useState} from 'react'
 import {type UseFormReturn} from 'react-hook-form'
 
 import {SettingsSection} from '../Settings/SettingsControls'
@@ -18,6 +18,26 @@ type Props = {
     children: ReactNode
 }
 
+/** Fields that just changed for the user, such as by a preset, so the sections holding them open. */
+export type RevealedFields = {fields: readonly string[]} | null
+
+const RevealedFieldsContext = createContext<{
+    revealed: RevealedFields
+    reveal: (fields: readonly string[]) => void
+}>({revealed: null, reveal: () => undefined})
+
+/** Lets a part of the form open the sections of the fields it changed. */
+export function RevealFieldsProvider({children}: {children: ReactNode}) {
+    const [revealed, setRevealed] = useState<RevealedFields>(null)
+    // A new object every time, so revealing the same fields again opens a section the user folded since.
+    const reveal = (fields: readonly string[]) => setRevealed({fields})
+    return <RevealedFieldsContext.Provider value={{revealed, reveal}}>{children}</RevealedFieldsContext.Provider>
+}
+
+export function useRevealFields() {
+    return useContext(RevealedFieldsContext).reveal
+}
+
 /** One folding part of the Local Media Profile form, like the sections in Settings. */
 export default function LocalMediaProfileSection({form, title, description, summary, fields, defaultOpen = false, children}: Props) {
     const [open, setOpen] = useState(defaultOpen)
@@ -27,6 +47,10 @@ export default function LocalMediaProfileSection({form, title, description, summ
     useEffect(() => {
         if (hasError) setOpen(true)
     }, [hasError, submitCount])
+    const {revealed} = useContext(RevealedFieldsContext)
+    useEffect(() => {
+        if (revealed?.fields.some((name) => fields.includes(name))) setOpen(true)
+    }, [revealed, fields])
 
     return (
         <SettingsSection
