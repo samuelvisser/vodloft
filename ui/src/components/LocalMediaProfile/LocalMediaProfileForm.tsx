@@ -71,7 +71,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
 
             <LocalMediaProfileSection
                 form={form} title="Profile" description="Name, where it is offered and for which Sites"
-                summary={summaries.profile} fields={PROFILE_FIELDS} defaultOpen={isCreating}
+                summary={summaries.profile} fields={PROFILE_FIELDS} defaultOpen
             >
                 <LocalMediaProfileCommonFields form={form} mode={mode} isCreating={isCreating} onScopeChange={onScopeChange}/>
             </LocalMediaProfileSection>
