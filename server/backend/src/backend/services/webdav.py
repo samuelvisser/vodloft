@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Union
@@ -31,7 +31,9 @@ from config import get_settings
 from backend.types.stream_profile_types import WebdavMetadataFiles, WebdavSeasonFolders
 from backend.utils.output_template import sanitize_path_component
 from config.settings.submodels import FilenameRestrictionMode
-from downloader.metadata import render_nfo
+from backend.types.download_profile_types import EpIdType
+from backend.types.season_types import SeasonType
+from downloader.metadata import MediaServerMetadata, render_nfo
 
 _EXTENSIONS = {"mp4": ".mp4", "audio": ".m4a"}
 _CONTENT_TYPES = {".mp4": "video/mp4", ".m4a": "audio/mp4", ".nfo": "text/xml", ".jpg": "image/jpeg", ".png": "image/png"}
@@ -128,8 +130,29 @@ def _aired(episode: Episode) -> Optional[datetime]:
     return utc_datetime(moment) if moment is not None else None
 
 
-def _episode_base_name(show: str, episode: Episode, by_number: bool) -> str:
+# Media players keep a show's specials in season 0, in a folder of their own.
+_SPECIALS = "Specials"
+_SPECIALS_SEASON = MediaServerMetadata(kind="season", title=_SPECIALS, season_number=0)
+
+
+def _is_special(episode: Episode) -> bool:
+    """Whether the episode is a special, as the Media Server output templates tell: an episode of an extra season,
+    an auxiliary episode or a trailer."""
+    season = episode.season
+    return (
+        (season is not None and season.season_type == SeasonType.EXTRA.value)
+        or episode.episode_type in (EpIdType.AUX, EpIdType.TRAILER)
+    )
+
+
+def _episode_metadata(episode: Episode, by_number: bool) -> MediaServerMetadata:
+    """What the episode's NFO file and name say about it. A show numbered by season keeps its specials in
+    season 0, as their numbers count on their own."""
     metadata = build_episode_metadata(episode, episode.collection)
+    return replace(metadata, season_number=0) if by_number and _is_special(episode) else metadata
+
+
+def _episode_base_name(show: str, episode: Episode, metadata: MediaServerMetadata, by_number: bool) -> str:
     if by_number and metadata.season_number is not None and metadata.episode_number is not None:
         label = f"S{metadata.season_number:02d}E{metadata.episode_number:02d}"
     else:
@@ -138,13 +161,18 @@ def _episode_base_name(show: str, episode: Episode, by_number: bool) -> str:
     return f"{show} - {label} - {_name(episode.title)}"
 
 
-def _season_folder(parent: ShareFolder, profile: WebdavStreamProfile, episode: Episode, modified: datetime) -> ShareFolder:
+def _season_folder(
+    parent: ShareFolder, profile: WebdavStreamProfile, episode: Episode, metadata: MediaServerMetadata,
+    modified: datetime,
+) -> ShareFolder:
     layout = WebdavSeasonFolders(profile.season_folders)
     if layout is WebdavSeasonFolders.SEASON:
+        if metadata.season_number == 0:
+            return parent.folder(_SPECIALS, modified)
         return parent.folder(f"Season {episode.season.season_number:02d}", modified)
     if layout is WebdavSeasonFolders.YEAR:
         aired = _aired(episode)
-        return parent.folder(f"Season {aired.year}" if aired else "Specials", modified)
+        return parent.folder(f"Season {aired.year}" if aired else _SPECIALS, modified)
     return parent
 
 
@@ -177,22 +205,24 @@ def show_folder(s: Session, profile: WebdavStreamProfile) -> ShareFolder:
     folder = ShareFolder(name, changed)
     by_number = profile.season_folders == WebdavSeasonFolders.SEASON.value
 
-    seasons: dict[int, ShareFolder] = {}
+    seasons: dict[Optional[int], ShareFolder] = {}
     for episode, download in get_stream_items(s, profile):
         if download is None or not (path := Path(download.file_path)).is_file():
             continue
         modified = _modified(path)
-        parent = _season_folder(folder, profile, episode, modified)
+        episode_metadata = _episode_metadata(episode, by_number)
+        parent = _season_folder(folder, profile, episode, episode_metadata, modified)
         if parent is not folder and nfo and by_number:
-            seasons.setdefault(episode.season_id, parent)
-        base = _episode_base_name(name, episode, by_number)
+            # Specials have no season of their own: None stands for them.
+            seasons.setdefault(None if episode_metadata.season_number == 0 else episode.season_id, parent)
+        base = _episode_base_name(name, episode, episode_metadata, by_number)
         media = ShareFile(f"{base}{_EXTENSIONS[profile.media_kinds[0]]}", modified, path=path)
         parent.add(media)
         base = Path(media.name).stem
         if nfo:
             parent.add(ShareFile(
                 f"{base}.nfo", utc_datetime(episode.updated_at),
-                content=render_nfo(build_episode_metadata(episode, collection)),
+                content=render_nfo(episode_metadata),
             ))
         if artwork and (picture := _episode_artwork(episode)) is not None:
             parent.add(ShareFile(f"{base}-thumb.jpg", utc_datetime(episode.updated_at), artwork=picture))
@@ -201,9 +231,8 @@ def show_folder(s: Session, profile: WebdavStreamProfile) -> ShareFolder:
         folder.add(ShareFile("tvshow.nfo", changed, content=render_nfo(build_show_metadata(collection))))
         episodes_seasons = {season.id: season for season in collection.seasons}
         for season_id, season_folder in seasons.items():
-            season_folder.add(ShareFile(
-                "season.nfo", changed, content=render_nfo(build_season_metadata(episodes_seasons[season_id])),
-            ))
+            season = _SPECIALS_SEASON if season_id is None else build_season_metadata(episodes_seasons[season_id])
+            season_folder.add(ShareFile("season.nfo", changed, content=render_nfo(season)))
     if artwork:
         for file_name, picture in _collection_artwork(collection):
             folder.add(ShareFile(file_name, changed, artwork=picture))
