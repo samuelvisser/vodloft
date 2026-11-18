@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.types.link_season_types import LooseVideos, NewLinkSeasonAction, LinkSeasons, LinkSeasonStatus, OutsideVideos
+from backend.types.link_season_types import LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 
 
 class CollectionSeasonAPIRead(ResponseBase):
@@ -20,11 +20,11 @@ class CollectionSeasonAPIRead(ResponseBase):
     loose: bool
     """Holds the videos in none of the playlists that are seasons."""
     episode_count: int = 0
-    link_title: Optional[str] = None
-    """The playlist the season is, when it is one."""
+    list_titles: list[str] = Field(default_factory=list)
+    """The lists the season holds, when it is a season of lists, in the order their videos go."""
 
 
-class LinkSeasonAPIRead(ResponseBase):
+class CollectionListAPIRead(ResponseBase):
     id: int
     ref: str
     url: str
@@ -32,8 +32,10 @@ class LinkSeasonAPIRead(ResponseBase):
     image_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("image_path", "image_url"))
     item_count: Optional[int] = None
     enabled: bool
-    status: LinkSeasonStatus
+    status: ListStatus
     """new while it waits for the user's choice."""
+    season_id: Optional[int] = None
+    """The list's season, which other lists may share."""
     season_name: Optional[str] = Field(default=None, validation_alias=AliasPath("season", "name"))
     first_video_at: Optional[datetime] = None
     """When the first of the collection's videos the playlist has came out, which orders the playlists."""
@@ -47,7 +49,7 @@ class LinkSeasonAPIRead(ResponseBase):
     channel."""
 
 
-class LinkSeasonNamesAPIRead(ResponseBase):
+class ListNamesAPIRead(ResponseBase):
     one: str
     many: str
     loose_season: str
@@ -78,11 +80,11 @@ class CollectionSeasonsAPIRead(ResponseBase):
     """The videos that no playlist that is a season has now, which leave, files and all, when the collection is set
     to hold only what its playlists have."""
     only_leaving_with_files: int = 0
-    names: LinkSeasonNamesAPIRead
+    names: ListNamesAPIRead
     """What the collection's Site calls its link seasons, such as playlists or albums."""
     music: bool = False
     """A Music collection, of an artist's tracks rather than a channel's videos."""
-    playlists: list[LinkSeasonAPIRead]
+    playlists: list[CollectionListAPIRead]
 
 
 class MovedEpisodesAPIRead(ResponseBase):
@@ -95,9 +97,12 @@ class SeasonChangeAPIIn(RequestBase):
     name: str = Field(min_length=1, max_length=200)
 
 
-class LinkSeasonChangeAPIIn(RequestBase):
+class CollectionListChangeAPIIn(RequestBase):
     id: int
     enabled: bool
+    season_id: Optional[int] = None
+    """The season the list is in: its own, or that of another of the collection's lists, which it then shares. None
+    gives it a season of its own."""
 
 
 class CollectionSeasonsAPIUpdate(RequestBase):
@@ -111,12 +116,12 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     new_link_seasons: NewLinkSeasonAction = NewLinkSeasonAction.ASK
     loose_videos: LooseVideos = LooseVideos.ONE_SEASON
     outside_videos: OutsideVideos = OutsideVideos.LEAVE_OUT
-    playlists: list[LinkSeasonChangeAPIIn] = Field(default_factory=list, max_length=5000)
+    playlists: list[CollectionListChangeAPIIn] = Field(default_factory=list, max_length=5000)
     removed_links: list[int] = Field(default_factory=list, max_length=5000)
     """Links the user added that they remove again, by id."""
 
 
-class LinkSeasonAddAPIIn(RequestBase):
+class CollectionListAddAPIIn(RequestBase):
     """A link the user adds to a collection that holds only its link seasons: a playlist, channel or video."""
 
     url: str = Field(min_length=1, max_length=2000, pattern=r"^https?://")

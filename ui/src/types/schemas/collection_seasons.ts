@@ -15,12 +15,12 @@ export const CollectionSeasonReadSchema = z.object({
     /** Holds the videos in none of the link seasons. */
     loose: z.boolean(),
     episodeCount: z.number(),
-    /** The playlist or album the season is, when it is one. */
-    linkTitle: z.string().nullable(),
+    /** The playlists or albums the season holds, when it is a season of lists, in the order their videos go. */
+    listTitles: z.array(z.string()).default([]),
 })
 export type CollectionSeasonRead = z.infer<typeof CollectionSeasonReadSchema>
 
-export const LinkSeasonReadSchema = z.object({
+export const CollectionListReadSchema = z.object({
     id: z.number(),
     ref: z.string(),
     url: z.string(),
@@ -29,6 +29,8 @@ export const LinkSeasonReadSchema = z.object({
     itemCount: z.number().nullable(),
     enabled: z.boolean(),
     status: z.enum(['known', 'new']),
+    /** The list's season, which other lists may share. */
+    seasonId: z.number().nullable().default(null),
     seasonName: z.string().nullable(),
     firstVideoAt: z.string().nullable(),
     /** Videos from outside the collection's own link that only this one lists, which leave with it, files and all. */
@@ -37,7 +39,7 @@ export const LinkSeasonReadSchema = z.object({
     /** A link the user added, which they can remove again, rather than one of the playlists of the channel. */
     addedByUser: z.boolean().default(false),
 })
-export type LinkSeasonRead = z.infer<typeof LinkSeasonReadSchema>
+export type CollectionListRead = z.infer<typeof CollectionListReadSchema>
 
 export const CollectionSeasonsReadSchema = z.object({
     seasons: z.array(CollectionSeasonReadSchema),
@@ -62,7 +64,7 @@ export const CollectionSeasonsReadSchema = z.object({
     names: z.object({one: z.string(), many: z.string(), looseSeason: z.string()}),
     /** A Music collection, of an artist's tracks rather than a channel's videos. */
     music: z.boolean().default(false),
-    playlists: z.array(LinkSeasonReadSchema),
+    playlists: z.array(CollectionListReadSchema),
 })
 export type CollectionSeasonsRead = z.infer<typeof CollectionSeasonsReadSchema>
 
@@ -78,7 +80,8 @@ export const CollectionSeasonsFormSchema = z.object({
     newLinkSeasons: z.enum(NewLinkSeasonValues).default('ask'),
     looseVideos: z.enum(LooseVideosValues).default('one_season'),
     outsideVideos: z.enum(OutsideVideosValues).default('leave_out'),
-    playlists: z.array(z.object({id: z.number(), enabled: z.boolean()})).default([]),
+    /** Each list, whether it is a season, and the season it is in: its own, or another list's that it shares. */
+    playlists: z.array(z.object({id: z.number(), enabled: z.boolean(), seasonId: z.number().nullable()})).default([]),
     /** Links you added that go when you save. */
     removedLinks: z.array(z.number()).default([]),
 })
@@ -101,7 +104,7 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         newLinkSeasons: view.newLinkSeasons,
         looseVideos: view.looseVideos,
         outsideVideos: view.outsideVideos,
-        playlists: view.playlists.map((playlist) => ({id: playlist.id, enabled: playlist.enabled})),
+        playlists: view.playlists.map((playlist) => ({id: playlist.id, enabled: playlist.enabled, seasonId: playlist.seasonId})),
         removedLinks: [],
     }
 }

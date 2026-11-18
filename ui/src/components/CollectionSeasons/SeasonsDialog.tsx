@@ -11,12 +11,12 @@ import {faIcon} from '../../icons/faIcon'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
-import {createSelectRegistry} from '../../utils/selectRegistry'
+import {createSelectRegistry, type SelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {
     CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, seasonsFormValues,
-    type CollectionSeasonsFormIn, type CollectionSeasonsFormOut, type CollectionSeasonsRead,
+    type CollectionListRead, type CollectionSeasonsFormIn, type CollectionSeasonsFormOut, type CollectionSeasonsRead,
     type LinkSeasonAddFormIn, type LinkSeasonAddFormOut,
 } from '../../types/schemas/collection_seasons'
 import './SeasonsDialog.css'
@@ -192,12 +192,13 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         setRefreshing(true)
         try {
             const fresh = await fetch(`${endpoint}/links`, {method: 'POST', credentials: 'include'}).then(readSeasons)
-            const choices = new Map((form.getValues('playlists') ?? []).map((choice) => [choice.id, choice.enabled]))
+            const choices = new Map((form.getValues('playlists') ?? []).map((choice) => [choice.id, choice]))
             queryClient.setQueryData(queryKey, fresh)
             loadedFor.current = fresh
-            // What the user already switched on or off stays.
+            // What the user already switched on or off, or put together, stays.
             setValue('playlists', fresh.playlists.map((playlist) => ({
-                id: playlist.id, enabled: choices.get(playlist.id) ?? playlist.enabled,
+                id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
+                seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
             })), {shouldDirty: true})
         } catch (exc) {
             toast.error(exc instanceof Error ? exc.message : 'Could not list the playlists')
@@ -220,12 +221,13 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         fallbackField: 'url',
         genericMessage: 'Could not add the link',
         onSuccess: (fresh) => {
-            const choices = new Map((form.getValues('playlists') ?? []).map((choice) => [choice.id, choice.enabled]))
+            const choices = new Map((form.getValues('playlists') ?? []).map((choice) => [choice.id, choice]))
             queryClient.setQueryData(queryKey, fresh)
             loadedFor.current = fresh
             // The new link is saved already; what the user changed in the dialog stays.
             setValue('playlists', fresh.playlists.map((playlist) => ({
-                id: playlist.id, enabled: choices.get(playlist.id) ?? playlist.enabled,
+                id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
+                seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
             })))
             setValue('seasons', fresh.seasons.map((season) => form.getValues('seasons')?.find((x) => x.id === season.id) ?? {id: season.id, name: season.name}))
             linkForm.reset({url: ''})
@@ -252,6 +254,32 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const toggleRemoved = (id: number) => setValue(
         'removedLinks', removedLinks.includes(id) ? removedLinks.filter((x) => x !== id) : [...removedLinks, id], {shouldDirty: true},
     )
+    // The lists in each season as the dialog has them now, and the seasons that hold lists, which others can join.
+    const listsIn = (seasonId: number) => playlistChoices.filter((choice) => choice.seasonId === seasonId)
+    const listSeasonIds = [...new Set((view?.playlists ?? []).map((playlist) => playlist.seasonId).filter((id): id is number => id !== null))]
+    const joinRegistry = (seasonId: number) => createSelectRegistry(
+        `JoinSeason-${seasonId}-${listSeasonIds.join('-')}`,
+        Object.fromEntries([
+            ['own', {label: 'On its own'}],
+            ...listSeasonIds.filter((id) => id !== seasonId && listsIn(id).length > 0).map((id) => [
+                String(id), {label: form.getValues('seasons')?.find((x) => x.id === id)?.name ?? seasonsById.get(id)?.name ?? 'Season'},
+            ]),
+        ]) as Record<string, {label: string}>,
+    )
+    // Where the lists of a season go when every one of them left it.
+    const joinsName = (seasonId: number) => {
+        const first = (view?.playlists ?? []).find((playlist) => playlist.seasonId === seasonId)
+        const target = first ? playlistChoices.find((choice) => choice.id === first.id)?.seasonId : null
+        if (!target) return 'a season of its own'
+        return form.getValues('seasons')?.find((x) => x.id === target)?.name ?? 'another season'
+    }
+    const joinSeason = (from: number, to: number) => setValue('playlists', playlistChoices.map((choice) => (
+        choice.seasonId === from ? {...choice, seasonId: to} : choice
+    )), {shouldDirty: true})
+    const ownSeason = (listId: number) => setValue('playlists', playlistChoices.map((choice) => (
+        // A list that leaves a season it shared gets a season of its own when you save.
+        choice.id === listId ? {...choice, seasonId: null} : choice
+    )), {shouldDirty: true})
 
     return (
         <>
@@ -501,9 +529,16 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                             />
                                                             <span>
                                                                 {plural(season?.episodeCount ?? 0, 'episode', 'episodes')}
-                                                                {season?.linkTitle ? ` · ${capitalized(names.one)} ${season.linkTitle}` : null}
                                                                 {season?.loose ? ` · ${capitalized(words.videos)} in no ${names.one}` : null}
                                                             </span>
+                                                            {season && listSeasonIds.includes(season.id) && (
+                                                                <SeasonLists
+                                                                    season={field.id} names={names} lists={listsIn(field.id)}
+                                                                    titles={playlistsById} joinRegistry={joinRegistry(field.id)}
+                                                                    onJoin={(to) => joinSeason(field.id, to)} onOwn={ownSeason}
+                                                                    joinsName={joinsName(field.id)}
+                                                                />
+                                                            )}
                                                             {errors.seasons?.[index]?.name && <span className="error" role="alert">{errors.seasons[index]?.name?.message}</span>}
                                                         </span>
                                                         <span className="seasons-dialog-arrows">
@@ -583,5 +618,50 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 )}
             </ConfirmDialog>
         </>
+    )
+}
+
+
+/** The lists of one season in the Seasons dialog: which playlists it holds, and putting it together with another. */
+function SeasonLists({season, names, lists, titles, joinRegistry, onJoin, onOwn, joinsName}: {
+    season: number
+    names: CollectionSeasonsRead['names']
+    lists: {id: number, seasonId: number | null}[]
+    titles: Map<number, CollectionListRead>
+    joinRegistry: SelectRegistry
+    onJoin: (to: number) => void
+    onOwn: (listId: number) => void
+    joinsName: string | null
+}) {
+    if (lists.length === 0) {
+        return <span className="seasons-dialog-joins">Its {names.many} move to {joinsName ?? 'another season'} when you save.</span>
+    }
+    return (
+        <span className="seasons-dialog-season-lists">
+            <span className="seasons-dialog-list-names">
+                {lists.map((list) => (
+                    <span key={list.id} className="seasons-dialog-list-name">
+                        <span>{capitalized(names.one)} {titles.get(list.id)?.title ?? ''}</span>
+                        {lists.length > 1 && (
+                            <button type="button" className="btn btn-small" onClick={() => onOwn(list.id)}
+                                    aria-label={`Give ${titles.get(list.id)?.title ?? `this ${names.one}`} a season of its own`}>
+                                Own season
+                            </button>
+                        )}
+                    </span>
+                ))}
+            </span>
+            {joinRegistry.options.length > 1 && (
+                <span className="seasons-dialog-join">
+                    <label htmlFor={`seasons-join-${season}`}>Together with</label>
+                    <SimpleSelect
+                        inputId={`seasons-join-${season}`} registry={joinRegistry} value="own"
+                        menuPortalTarget={document.body} menuPlacement="auto"
+                        styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                        onChange={(value) => { if (value && value !== 'own') onJoin(Number(value)) }}
+                    />
+                </span>
+            )}
+        </span>
     )
 }

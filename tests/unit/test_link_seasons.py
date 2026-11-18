@@ -184,7 +184,7 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
 
 
 def test_a_new_playlist_waits_for_the_users_choice_when_only_selected_ones_are_seasons(source, session):
-    from backend.db.models import LinkSeason, NotificationEvent
+    from backend.db.models import CollectionList, NotificationEvent
 
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
@@ -196,7 +196,7 @@ def test_a_new_playlist_waits_for_the_users_choice_when_only_selected_ones_are_s
     _index(session, collection, source)
 
     session.expire_all()
-    assert {link.ref: (link.enabled, link.status) for link in session.scalars(select(LinkSeason))} == {
+    assert {link.ref: (link.enabled, link.status) for link in session.scalars(select(CollectionList))} == {
         "PLone": (True, "known"), "PLtwo": (False, "new"),
     }
     event = session.scalar(select(NotificationEvent))
@@ -322,17 +322,17 @@ def test_renaming_files_with_season_folders_moves_downloaded_videos_to_their_pla
 
 
 def test_a_site_can_name_its_link_seasons_itself(source, monkeypatch, session):
-    from backend.services.link_seasons import link_season_names
-    from sources import LinkSeasonNames
+    from backend.services.link_seasons import list_names
+    from sources import ListNames
 
-    monkeypatch.setattr(type(source), "sites", (replace(source.sites[0], link_season_names=LinkSeasonNames("set", "sets", "Loose")),))
+    monkeypatch.setattr(type(source), "sites", (replace(source.sites[0], list_names=ListNames("set", "sets", "Loose")),))
     from backend.services import sites
 
     sites._site_of.cache_clear()
     collection = _collection(session)
-    assert link_season_names(collection) == LinkSeasonNames("set", "sets", "Loose")
+    assert list_names(collection) == ListNames("set", "sets", "Loose")
     collection.type = "music"
-    assert link_season_names(collection) == LinkSeasonNames("album", "albums", "Singles")
+    assert list_names(collection) == ListNames("album", "albums", "Singles")
 
 
 def test_a_link_season_keeps_its_sites_order(source, session):
@@ -440,7 +440,7 @@ def test_a_video_from_outside_with_files_leaves_with_its_files(source, session, 
     from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
     from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
     from backend.db.core import run_write_transaction
-    from backend.db.models import Episode, LinkSeason, Season
+    from backend.db.models import Episode, CollectionList, Season
     from task_manager.tasks.workers.remove_left_episodes import service as worker
 
     queued = []
@@ -470,7 +470,7 @@ def test_a_video_from_outside_with_files_leaves_with_its_files(source, session, 
 
     # Turning the playlist off: the guest's video leaves, the channel's own one goes where a new video would.
     seasons = session.scalars(select(Season).order_by(Season.index)).all()
-    link_id = session.scalar(select(LinkSeason.id))
+    link_id = session.scalar(select(CollectionList.id))
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in seasons], custom_season_order=False,
         link_seasons="selected", outside_videos="add", playlists=[{"id": link_id, "enabled": False}],
@@ -490,7 +490,7 @@ def test_the_downloaded_videos_of_a_playlist_turned_off_move_where_new_videos_wo
     from backend.api.endpoints.collections.seasons import service
     from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
     from backend.db.core import run_write_transaction
-    from backend.db.models import Episode, LinkSeason, Season
+    from backend.db.models import Episode, CollectionList, Season
 
     moved = []
     monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: moved.append(ids))
@@ -503,7 +503,7 @@ def test_the_downloaded_videos_of_a_playlist_turned_off_move_where_new_videos_wo
     assert _seasons(session) == [("One", 1, ["a"]), ("2025", 2, ["b"])]
 
     seasons = session.scalars(select(Season).order_by(Season.index)).all()
-    link_id = session.scalar(select(LinkSeason.id))
+    link_id = session.scalar(select(CollectionList.id))
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": x.id, "name": x.name} for x in seasons], custom_season_order=False,
         link_seasons="selected", loose_videos="by_year", playlists=[{"id": link_id, "enabled": False}],
@@ -793,6 +793,96 @@ def test_an_imported_show_of_only_playlists_holds_them_in_the_other_programs_sea
 
     collection = session.scalar(select(Collection).where(Collection.slug == slug))
     assert (collection.sharing_url, collection.outside_videos, collection.custom_season_order) == (None, "only", True)
-    assert [(link.title, link.season.season_number) for link in sorted(collection.season_links, key=lambda x: x.id)] == [
+    assert [(link.title, link.season.season_number) for link in sorted(collection.lists, key=lambda x: x.id)] == [
         ("Firsts", 1), ("Seconds", 2),
     ]
+
+
+def _put_together(session, lists: dict[str, int | None]):
+    """Save the Seasons dialog with each list, by ref, in the season of the list it names, or a season of its own."""
+    from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+
+    view = seasons_view(session, "creator")
+    session.rollback()
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": season.id, "name": season.name} for season in view.seasons],
+        custom_season_order=view.custom_season_order, link_seasons=view.link_seasons, loose_videos=view.loose_videos,
+        playlists=[
+            {"id": playlist.id, "enabled": playlist.enabled, "season_id": lists.get(playlist.ref, playlist.season_id)}
+            for playlist in view.playlists
+        ],
+    )
+    return run_write_transaction(lambda s: update_seasons(s, "creator", body))
+
+
+def _season_of(session, ref: str) -> int:
+    from backend.db.models import CollectionList
+
+    session.expire_all()
+    return session.scalar(select(CollectionList.season_id).where(CollectionList.ref == ref))
+
+
+def test_two_lists_share_one_season_with_the_first_lists_videos_first(source, session):
+    from backend.db.models import Episode
+
+    source.videos = [_video("a", 2023), _video("b", 2023, 6), _video("c", 2024), _video("d", 2024, 6), _video("e", 2025)]
+    source.lists = [_list("PLtwo", "Cabin, Part 2"), _list("PLone", "Cabin, Part 1")]
+    # Each playlist lists its videos newest first.
+    source.items = {"PLone": ("b", "a"), "PLtwo": ("d", "c")}
+    collection = _collection(session)
+    _index(session, collection, source)
+    assert _seasons(session) == [("Videos", 1, ["e"]), ("Cabin, Part 1", 2, ["a", "b"]), ("Cabin, Part 2", 3, ["c", "d"])]
+
+    view = _put_together(session, {"PLtwo": _season_of(session, "PLone")})
+
+    # The season keeps its name, and holds the videos of Part 1 in its order, then those of Part 2.
+    assert _seasons(session) == [("Videos", 1, ["e"]), ("Cabin, Part 1", 2, ["a", "b", "c", "d"])]
+    numbers = dict(session.execute(select(Episode.source_slug, Episode.episode_identifier)).all())
+    assert [numbers[slug] for slug in ("b", "a", "d", "c")] == ["ep.S02E01", "ep.S02E02", "ep.S02E03", "ep.S02E04"]
+    assert [season.list_titles for season in view.seasons] == [[], ["Cabin, Part 1", "Cabin, Part 2"]]
+
+    # A new video of Part 2 goes to the season it shares.
+    source.videos.append(_video("f", 2026))
+    source.items["PLtwo"] = ("f", "d", "c")
+    _index(session, collection, source)
+    assert _seasons(session) == [("Videos", 1, ["e"]), ("Cabin, Part 1", 2, ["a", "b", "c", "d", "f"])]
+
+    # A list given a season of its own again takes its videos along.
+    _put_together(session, {"PLtwo": None})
+    assert _seasons(session) == [("Videos", 1, ["e"]), ("Cabin, Part 1", 2, ["a", "b"]), ("Cabin, Part 2", 3, ["c", "d", "f"])]
+
+
+def test_the_downloaded_videos_of_a_list_that_joins_another_season_move_with_their_files(source, session, monkeypatch):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.db.models import Episode
+
+    moved = []
+    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: moved.append(ids))
+    source.videos = [_video("a", 2023), _video("c", 2024)]
+    source.lists = [_list("PLtwo", "Part 2"), _list("PLone", "Part 1")]
+    source.items = {"PLone": ("a",), "PLtwo": ("c",)}
+    collection = _collection(session)
+    _index(session, collection, source)
+    _give_files(session, "c")
+
+    _put_together(session, {"PLtwo": _season_of(session, "PLone")})
+
+    assert moved == [[session.scalar(select(Episode.id).where(Episode.source_slug == "c"))]]
+    assert _seasons(session) == [("Part 1", 1, ["a", "c"])]
+
+
+def test_a_list_only_joins_a_season_of_the_collections_lists(source, session):
+    from backend.db.models import Season
+    from backend.services.errors import ServiceError
+
+    source.videos = [_video("a", 2023), _video("b", 2024)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session)
+    _index(session, collection, source)
+    videos = session.scalar(select(Season.id).where(Season.loose))
+
+    with pytest.raises(ServiceError, match="can only join a season that holds one of the collection's lists"):
+        _put_together(session, {"PLone": videos})

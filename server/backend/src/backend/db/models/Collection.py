@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
     from backend.db.models import Season, DownloadProfile, Site
-    from backend.db.models import Channel, CustomIndexState, LinkSeason
+    from backend.db.models import Channel, CustomIndexState, CollectionList
 
 
 def _default_episode_order(context) -> str:
@@ -143,8 +143,8 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     custom_index_states: Mapped[list["CustomIndexState"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan"
     )
-    season_links: Mapped[list["LinkSeason"]] = relationship(
-        back_populates="collection", cascade="all, delete-orphan", order_by="LinkSeason.site_position",
+    lists: Mapped[list["CollectionList"]] = relationship(
+        back_populates="collection", cascade="all, delete-orphan", order_by="CollectionList.site_position",
     )
 
     def __repr__(self) -> str:

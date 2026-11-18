@@ -74,7 +74,7 @@ def collection_site(collection: Collection) -> SourceSite:
     its own, which holds what its link seasons have, is on the Site of the first link it got; what each of its
     episodes does on its own Site, such as a download, follows the episode's Site (``episode_site``)."""
     url = collection.sharing_url or next(
-        (link.url for link in sorted(collection.season_links, key=lambda link: link.id or 0)), None,
+        (link.url for link in sorted(collection.lists, key=lambda link: link.id or 0)), None,
     )
     return _site_of(url, collection.source_key) if url else NO_SITE
 

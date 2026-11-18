@@ -1174,15 +1174,15 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
     program gave it, and keep the seasons in the other program's numbering. Returns how many it added."""
     from urllib.parse import parse_qs, urlsplit
 
-    from backend.db.models import LinkSeason
+    from backend.db.models import CollectionList
     from backend.services.seasons import create_season_record
-    from backend.types.link_season_types import LinkSeasons, LinkSeasonStatus, OutsideVideos
+    from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
     from backend.utils.helpers import slugify
 
     if not plan.link_seasons:
         return 0
     session.flush()
-    have = {playlist.ref for playlist in collection.season_links}
+    have = {playlist.ref for playlist in collection.lists}
     seasons = {season.season_number: season for season in collection.seasons}
 
     def season_of(number: int | None, title: str | None):
@@ -1211,9 +1211,9 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
         ref = next(iter(parse_qs(urlsplit(wanted.url).query).get("list") or []), None) or wanted.url
         if ref in have:
             continue
-        collection.season_links.append(LinkSeason(
+        collection.lists.append(CollectionList(
             ref=ref, url=wanted.url, title=wanted.title or ref, site_position=position, enabled=True,
-            status=LinkSeasonStatus.KNOWN.value, season=season_of(wanted.season_number, wanted.title),
+            status=ListStatus.KNOWN.value, season=season_of(wanted.season_number, wanted.title),
         ))
         have.add(ref)
         added += 1

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from sources import site_of
 
-from backend.db.models import Channel, ChannelSection, Collection, LinkSeason, DownloadProfile, Episode, User
+from backend.db.models import Channel, ChannelSection, Collection, CollectionList, DownloadProfile, Episode, User
 
 from .events import Event, emit
 
@@ -95,7 +95,7 @@ def channel_sections_found(session: Session, channel: Channel, sections: list[Ch
     )
 
 
-def link_seasons_found(session: Session, collection: Collection, playlists: list[LinkSeason]) -> None:
+def link_seasons_found(session: Session, collection: Collection, playlists: list[CollectionList]) -> None:
     """A collection whose selected playlists are seasons found playlists that wait for the user's choice."""
     if not playlists:
         return

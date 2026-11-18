@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from backend.app import db_session
 from backend.api.models.collection_seasons import (
-    CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, LinkSeasonAddAPIIn, MovedEpisodesAPIRead,
+    CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, CollectionListAddAPIIn, MovedEpisodesAPIRead,
 )
 from backend.db.core import run_write_transaction
 from backend.security.access import Area, Level
@@ -74,7 +74,7 @@ def link_seasons_refresh(collection_slug: str):
     "/{collection_slug}/season-settings/added-links", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
     response_model=CollectionSeasonsAPIRead,
 )
-def link_season_add(collection_slug: str, body: LinkSeasonAddAPIIn):
+def link_season_add(collection_slug: str, body: CollectionListAddAPIIn):
     """Add a playlist, channel or video as a link season of a collection that holds only what those have."""
     with db_session() as s:
         lookup = _found(lambda: link_to_add(s, collection_slug, body.url))

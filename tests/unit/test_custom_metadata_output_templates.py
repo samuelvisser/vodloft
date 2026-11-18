@@ -21,7 +21,7 @@ def _episode(*, collection_metadata=None):
             author_name="Host",
             meta_items=_metadata_items(collection_metadata),
             channel=None,
-            season_links=[],
+            lists=[],
             sharing_url="",
         ),
         season=None,

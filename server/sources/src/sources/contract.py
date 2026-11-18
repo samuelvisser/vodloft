@@ -115,7 +115,7 @@ class UpgradeChecks:
 
 
 @dataclass(frozen=True)
-class LinkSeasonNames:
+class ListNames:
     """What a Site calls its link seasons, and the one season of a collection's videos in none of them."""
 
     one: str = "playlist"
@@ -788,9 +788,9 @@ class Site:
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_channel_page``, ``season_lists`` and ``list_items``."""
-    link_season_names: LinkSeasonNames = field(default_factory=lambda: LinkSeasonNames())
+    list_names: ListNames = field(default_factory=lambda: ListNames())
     """What link seasons are called in a collection on the Site, other than a Music collection."""
-    music_link_season_names: LinkSeasonNames = field(default_factory=lambda: LinkSeasonNames("album", "albums", "Singles"))
+    music_link_season_names: ListNames = field(default_factory=lambda: ListNames("album", "albums", "Singles"))
     """What link seasons are called in a Music collection on the Site."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site

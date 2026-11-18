@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Collection, LinkSeason, LinkSeasonItem, Episode, MediaDownloadBase, Season
+from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, MediaDownloadBase, Season
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.season_types import SeasonType
 
@@ -35,11 +35,11 @@ def link_first_videos(s: Session, collection: Collection) -> dict[int, datetime]
     """When the first video of the collection that each playlist has came out, by playlist id. YouTube does not say
     when a playlist was made, so this stands in for it."""
     rows = s.execute(
-        select(LinkSeasonItem.link_season_id, func.min(Episode.published_date))
-        .join(LinkSeason, LinkSeason.id == LinkSeasonItem.link_season_id)
-        .join(Episode, (Episode.collection_id == collection.id) & (Episode.source_slug == LinkSeasonItem.source_slug))
-        .where(LinkSeason.collection_id == collection.id)
-        .group_by(LinkSeasonItem.link_season_id)
+        select(CollectionListItem.list_id, func.min(Episode.published_date))
+        .join(CollectionList, CollectionList.id == CollectionListItem.list_id)
+        .join(Episode, (Episode.collection_id == collection.id) & (Episode.source_slug == CollectionListItem.source_slug))
+        .where(CollectionList.collection_id == collection.id)
+        .group_by(CollectionListItem.list_id)
     )
     return {playlist_id: _aware(first) for playlist_id, first in rows if first is not None}
 
@@ -52,10 +52,12 @@ def _dated_order(s: Session, collection: Collection) -> list[Season]:
     """Seasons per year by their year, every other season right after the year it started in. In a Music collection
     the albums come after those, in the artist's order."""
     by_playlist = link_first_videos(s, collection)
-    playlist_starts = {
-        playlist.season_id: by_playlist[playlist.id]
-        for playlist in collection.season_links if playlist.season_id is not None and playlist.id in by_playlist
-    }
+    # A season of several lists starts with the first of them.
+    playlist_starts: dict[int, datetime] = {}
+    for playlist in collection.lists:
+        if playlist.season_id is not None and playlist.id in by_playlist:
+            start = by_playlist[playlist.id]
+            playlist_starts[playlist.season_id] = min(start, playlist_starts.get(playlist.season_id, start))
     firsts = dict(s.execute(
         select(Episode.season_id, func.min(Episode.published_date))
         .where(Episode.collection_id == collection.id).group_by(Episode.season_id)
@@ -63,9 +65,10 @@ def _dated_order(s: Session, collection: Collection) -> list[Season]:
 
     # An artist's albums follow the order the artist gives them at the Site, after the singles.
     site_order = collection.type == CollectionType.MUSIC.value
-    album_places = {
-        link.season_id: link.site_position for link in collection.season_links if link.season_id is not None
-    } if site_order else {}
+    album_places: dict[int, int] = {}
+    for link in collection.lists if site_order else ():
+        if link.season_id is not None:
+            album_places[link.season_id] = min(link.site_position, album_places.get(link.season_id, link.site_position))
 
     def key(season: Season):
         if season.season_type == SeasonType.EXTRA.value:
@@ -96,22 +99,36 @@ def arrange_seasons(s: Session, collection: Collection) -> None:
     if collection.custom_season_order:
         # A new season was made last, with the next number, so the user's order and numbers stay.
         _set_indices(s, sorted(seasons, key=lambda season: season.index))
-    elif any(playlist.season_id is not None for playlist in collection.season_links) or any(season.loose for season in seasons):
+    elif any(playlist.season_id is not None for playlist in collection.lists) or any(season.loose for season in seasons):
         renumber_seasons(s, collection, _dated_order(s, collection))
     else:
         _set_indices(s, sorted(seasons, key=lambda season: season.season_number))
     number_in_link_order(s, collection)
 
 
+def lists_by_season(s: Session, collection: Collection) -> dict[int, list[CollectionList]]:
+    """The lists of each season that has some, in the order its videos go: the list whose first video came out first
+    comes first, so a "Part 1" playlist comes before "Part 2"."""
+    firsts = link_first_videos(s, collection)
+    by_season: dict[int, list[CollectionList]] = {}
+    for link in collection.lists:
+        if link.season_id is not None:
+            by_season.setdefault(link.season_id, []).append(link)
+    for links in by_season.values():
+        links.sort(key=lambda link: (firsts.get(link.id, _LAST), link.site_position, link.id))
+    return by_season
+
+
 def number_in_link_order(s: Session, collection: Collection) -> None:
-    """Number the episodes of each link season in the order its Site lists them, as a playlist or an album's tracks
-    are, so S03E01 is the playlist's first video. An episode with files keeps its number, and the others go around it.
+    """Number the episodes of each season of lists in the order its Site lists them, as a playlist or an album's
+    tracks are, so S03E01 is the playlist's first video. A season of several lists has the videos of its first list
+    first, then those of the next. An episode with files keeps its number, and the others go around it.
 
     ``s`` is a write transaction's session."""
     if collection.episode_identifier != EpisodeIdentifier.SEASONAL.value:
         return
     with_files = _with_files(s, collection)
-    link_season_ids = {link.season_id for link in collection.season_links if link.season_id is not None}
+    link_season_ids = {link.season_id for link in collection.lists if link.season_id is not None}
     # The identifiers that stay: of episodes with files, and of episodes in no link season.
     taken = set(s.scalars(select(Episode.episode_identifier).where(
         Episode.collection_id == collection.id,
@@ -119,19 +136,24 @@ def number_in_link_order(s: Session, collection: Collection) -> None:
     )))
     wanted: dict[int, str] = {}
     episodes: list[Episode] = []
-    for link in collection.season_links:
-        season = link.season
+    seasons = {season.id: season for season in collection.seasons}
+    for season_id, links in lists_by_season(s, collection).items():
+        season = seasons.get(season_id)
         if season is None:
             continue
-        rows = s.execute(
-            select(Episode, LinkSeasonItem.position)
-            .outerjoin(LinkSeasonItem, (LinkSeasonItem.link_season_id == link.id)
-                       & (LinkSeasonItem.source_slug == Episode.source_slug))
-            .where(Episode.season_id == season.id, Episode.part_of.is_(None))
-            .order_by(LinkSeasonItem.position.is_(None), LinkSeasonItem.position, Episode.index)
-        ).all()
+        places: dict[str, tuple[int, int]] = {}
+        for order, link in enumerate(links):
+            for slug, position in s.execute(
+                select(CollectionListItem.source_slug, CollectionListItem.position).where(CollectionListItem.list_id == link.id)
+            ):
+                places.setdefault(slug, (order, position))
+        unplaced = (len(links), 0)
+        rows = sorted(
+            s.scalars(select(Episode).where(Episode.season_id == season.id, Episode.part_of.is_(None))),
+            key=lambda episode: (places.get(episode.source_slug, unplaced), episode.index),
+        )
         number = 0
-        for episode, _position in rows:
+        for episode in rows:
             if episode.id in with_files or not _SEASONAL.match(episode.episode_identifier or ""):
                 continue
             number += 1

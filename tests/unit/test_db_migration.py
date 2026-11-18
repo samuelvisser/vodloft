@@ -30,7 +30,7 @@ VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
-HEAD_REVISION = "841a4439c020"
+HEAD_REVISION = "9b3e61d07a4f"
 
 
 @pytest.fixture
@@ -1338,12 +1338,12 @@ def test_playlist_and_album_links_become_link_seasons_and_an_artist_takes_their_
 
     with engine.connect() as connection:
         seasons = connection.execute(text(
-            "SELECT collection_id, ref, title, season_id, enabled FROM link_seasons ORDER BY id"
+            "SELECT collection_id, ref, title, season_id, enabled FROM collection_lists ORDER BY id"
         )).all()
         assert [tuple(row) for row in seasons] == [
             (1, "PLcabin", "Building the Cabin", 5, True), (2, "album/one", "One", None, True), (2, "album/two", "Two", None, True),
         ]
-        items = connection.execute(text("SELECT source_slug FROM link_season_items ORDER BY source_slug")).scalars().all()
+        items = connection.execute(text("SELECT source_slug FROM collection_list_items ORDER BY source_slug")).scalars().all()
         assert items == ["t1", "v1", "v2"]
         collections = connection.execute(text("SELECT id, sharing_url, link_seasons FROM collections ORDER BY id")).all()
         # The artist's collection is their whole page now, so new albums come in too.
