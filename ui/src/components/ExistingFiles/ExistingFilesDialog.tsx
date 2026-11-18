@@ -4,6 +4,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import toast from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 import SimpleSelect from '../common/SimpleSelect'
+import Modal from '../Modal/Modal'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import type {ExistingFile, ExistingFileEpisode, ExistingFilesScan} from '../../types/schemas/existing_files'
 import ExistingFilesSetup, {ExistingFilesSetupValue, layoutTemplate} from './ExistingFilesSetup'
@@ -71,6 +72,7 @@ export default function ExistingFilesDialog({collectionSlug, collectionTitle, pr
     const [filter, setFilter] = useState<Filter>('certain')
     const [picks, setPicks] = useState<Record<string, number>>({})
     const [shown, setShown] = useState(SHOWN)
+    const [setupChanged, setSetupChanged] = useState(false)
 
     useEffect(() => {
         if (!scan) return
@@ -81,6 +83,7 @@ export default function ExistingFilesDialog({collectionSlug, collectionTitle, pr
         setSetup(null)
         setEditing(false)
         setPicks({})
+        setSetupChanged(false)
     }, [profileId])
 
     const profileRegistry = useMemo(() => createSelectRegistry(
@@ -163,104 +166,109 @@ export default function ExistingFilesDialog({collectionSlug, collectionTitle, pr
     const working = scan?.status === 'waiting' || scan?.status === 'scanning'
 
     return (
-        <div className="modal-overlay" role="presentation">
-            <div className="modal existing-files-dialog" role="dialog" aria-modal="true" aria-labelledby={`${profileSelectId}-title`}>
-                <div className="modal-header">
-                    <div className="modal-icon" aria-hidden><FontAwesomeIcon icon={faIcon('fass', 'file-import')}/></div>
-                    <h2 id={`${profileSelectId}-title`} className="modal-title">Match existing files</h2>
-                </div>
-                <div className="existing-files-body">
-                    <p className="existing-files-intro">
-                        VODLoft adopts the files it recognises for "{collectionTitle}" and won't download those
-                        episodes again.
-                    </p>
-                    {profiles.length > 1 && (
-                        <div className="form-row">
-                            <label htmlFor={profileSelectId}>Local Media Profile</label>
-                            <SimpleSelect
-                                inputId={profileSelectId}
-                                registry={profileRegistry}
-                                value={profileId ? String(profileId) : null}
-                                onChange={(value) => setProfileId(Number(value))}
-                                isDisabled={busy !== null}
-                            />
-                        </div>
-                    )}
-
-                    {setup && (editing || scan?.status === 'failed') && (
-                        <>
-                            {scan?.status === 'failed' && <div className="form-error-card" role="alert">{scan.error}</div>}
-                            <ExistingFilesSetup value={setup} onChange={setSetup} disabled={busy !== null}/>
-                            <div className="existing-files-actions">
-                                <button type="button" className="btn btn-primary" disabled={busy !== null || !setup.folder}
-                                        onClick={() => void scanNow()}>
-                                    <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
-                                    <span>Scan</span>
-                                </button>
-                            </div>
-                        </>
-                    )}
-
-                    {working && (
-                        <div className="form-info-card" role="status" aria-live="polite">
-                            {scan?.status === 'waiting'
-                                ? 'Waiting for the episodes to be indexed. The scan starts by itself.'
-                                : `Reading ${scan?.folder}…`}
-                        </div>
-                    )}
-
-                    {scan && counts && !editing && (scan.status === 'ready' || scan.status === 'finished') && (
-                        <Results
-                            scan={scan}
-                            files={files}
-                            filter={filter}
-                            setFilter={(value) => { setFilter(value); setShown(SHOWN) }}
-                            visible={visible.slice(0, shown)}
-                            more={visible.length - shown}
-                            onMore={() => setShown((current) => current + SHOWN)}
-                            picks={picks}
-                            setPick={(path, episodeId) => setPicks((current) => {
-                                const next = {...current}
-                                if (episodeId) next[path] = episodeId
-                                else delete next[path]
-                                return next
-                            })}
-                        />
-                    )}
-                </div>
-
-                <div className="modal-actions existing-files-footer">
-                    <button type="button" className="btn" onClick={onClose} disabled={busy !== null}>Close</button>
-                    {scan && !editing && scan.status !== 'none' && (
-                        <button type="button" className="btn" disabled={busy !== null} onClick={() => setEditing(true)}>
-                            Scan again
-                        </button>
-                    )}
-                    {scan?.status === 'ready' && picked.length > 0 && (
-                        <button type="button" className="btn" disabled={busy !== null} onClick={() => void adopt(picked)}>
-                            Adopt {picked.length} checked
-                        </button>
-                    )}
-                    {scan?.status === 'ready' && toAdopt.length > 0 && (
-                        <button type="button" className="btn btn-primary" disabled={busy !== null}
-                                onClick={() => void adopt(toAdopt.map((file) => ({path: file.path, episodeId: file.episode!.id})))}>
-                            {busy === 'adopt' ? 'Adopting…' : `Adopt ${toAdopt.length}`}
-                        </button>
-                    )}
-                    {scan && (counts?.adopted ?? 0) > 0 && onRename && profileId && (
-                        <button type="button" className="btn" disabled={busy !== null} onClick={() => onRename(profileId)}>
-                            Rename to this profile's template
-                        </button>
-                    )}
-                    {scan?.status === 'ready' && (
-                        <button type="button" className={toAdopt.length ? 'btn' : 'btn btn-primary'} disabled={busy !== null}
-                                onClick={() => void finish()}>
-                            {scan.heldDownloadProfiles > 0 ? 'Done, download the rest' : 'Done'}
-                        </button>
-                    )}
-                </div>
+        <Modal
+            onDismiss={onClose}
+            dismissOnOverlayClick={false}
+            // Escape closes, as Close does, but not while it would lose checked files or a changed scan setup.
+            dismissOnEscape={busy === null && picked.length === 0 && !setupChanged}
+            className="modal existing-files-dialog"
+            labelledBy={`${profileSelectId}-title`}
+        >
+            <div className="modal-header">
+                <div className="modal-icon" aria-hidden><FontAwesomeIcon icon={faIcon('fass', 'file-import')}/></div>
+                <h2 id={`${profileSelectId}-title`} className="modal-title">Match existing files</h2>
             </div>
-        </div>
+            <div className="existing-files-body">
+                <p className="existing-files-intro">
+                    VODLoft adopts the files it recognises for "{collectionTitle}" and won't download those
+                    episodes again.
+                </p>
+                {profiles.length > 1 && (
+                    <div className="form-row">
+                        <label htmlFor={profileSelectId}>Local Media Profile</label>
+                        <SimpleSelect
+                            inputId={profileSelectId}
+                            registry={profileRegistry}
+                            value={profileId ? String(profileId) : null}
+                            onChange={(value) => setProfileId(Number(value))}
+                            isDisabled={busy !== null}
+                        />
+                    </div>
+                )}
+
+                {setup && (editing || scan?.status === 'failed') && (
+                    <>
+                        {scan?.status === 'failed' && <div className="form-error-card" role="alert">{scan.error}</div>}
+                        <ExistingFilesSetup value={setup} onChange={(value) => { setSetup(value); setSetupChanged(true) }} disabled={busy !== null}/>
+                        <div className="existing-files-actions">
+                            <button type="button" className="btn btn-primary" disabled={busy !== null || !setup.folder}
+                                    onClick={() => void scanNow()}>
+                                <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
+                                <span>Scan</span>
+                            </button>
+                        </div>
+                    </>
+                )}
+
+                {working && (
+                    <div className="form-info-card" role="status" aria-live="polite">
+                        {scan?.status === 'waiting'
+                            ? 'Waiting for the episodes to be indexed. The scan starts by itself.'
+                            : `Reading ${scan?.folder}…`}
+                    </div>
+                )}
+
+                {scan && counts && !editing && (scan.status === 'ready' || scan.status === 'finished') && (
+                    <Results
+                        scan={scan}
+                        files={files}
+                        filter={filter}
+                        setFilter={(value) => { setFilter(value); setShown(SHOWN) }}
+                        visible={visible.slice(0, shown)}
+                        more={visible.length - shown}
+                        onMore={() => setShown((current) => current + SHOWN)}
+                        picks={picks}
+                        setPick={(path, episodeId) => setPicks((current) => {
+                            const next = {...current}
+                            if (episodeId) next[path] = episodeId
+                            else delete next[path]
+                            return next
+                        })}
+                    />
+                )}
+            </div>
+
+            <div className="modal-actions existing-files-footer">
+                <button type="button" className="btn" onClick={onClose} disabled={busy !== null}>Close</button>
+                {scan && !editing && scan.status !== 'none' && (
+                    <button type="button" className="btn" disabled={busy !== null} onClick={() => setEditing(true)}>
+                        Scan again
+                    </button>
+                )}
+                {scan?.status === 'ready' && picked.length > 0 && (
+                    <button type="button" className="btn" disabled={busy !== null} onClick={() => void adopt(picked)}>
+                        Adopt {picked.length} checked
+                    </button>
+                )}
+                {scan?.status === 'ready' && toAdopt.length > 0 && (
+                    <button type="button" className="btn btn-primary" disabled={busy !== null}
+                            onClick={() => void adopt(toAdopt.map((file) => ({path: file.path, episodeId: file.episode!.id})))}>
+                        {busy === 'adopt' ? 'Adopting…' : `Adopt ${toAdopt.length}`}
+                    </button>
+                )}
+                {scan && (counts?.adopted ?? 0) > 0 && onRename && profileId && (
+                    <button type="button" className="btn" disabled={busy !== null} onClick={() => onRename(profileId)}>
+                        Rename to this profile's template
+                    </button>
+                )}
+                {scan?.status === 'ready' && (
+                    <button type="button" className={toAdopt.length ? 'btn' : 'btn btn-primary'} disabled={busy !== null}
+                            onClick={() => void finish()}>
+                        {scan.heldDownloadProfiles > 0 ? 'Done, download the rest' : 'Done'}
+                    </button>
+                )}
+            </div>
+        </Modal>
     )
 }
 

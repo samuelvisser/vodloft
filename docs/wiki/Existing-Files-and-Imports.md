@@ -8,12 +8,12 @@ artwork, `.nfo` and subtitle sidecars, and from then on treats it like any file 
 
 ## While adding a collection
 
-When you add a collection that VODLoft downloads, the **Existing files** step comes after the Media Profile:
+When you add a collection that VODLoft downloads, the Media Profile step ends with the existing files:
 
 1. Turn on **I already have files for this collection**.
-2. Pick the **Folder with the existing files**. It starts at the deepest folder of the Local Media Profile's
-   output template that has no variable in it. **Browse** lists the folders VODLoft can see under
-   `/downloads/`. Subfolders are searched too.
+2. Pick the **Folder with the existing files**. It starts at the collection root that the output path example
+   shows, and follows the media profile you choose until you pick a folder yourself. **Browse** lists the folders
+   VODLoft can see under `/downloads/`. Subfolders are searched too.
 3. If the files are named in another way than the profile's template, fill in the old layout (see below).
 
 VODLoft creates the Download Profile, but holds it until you are done: nothing is downloaded yet. Once the

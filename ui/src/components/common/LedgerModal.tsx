@@ -3,6 +3,7 @@ import {useId} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
+import Modal from '../Modal/Modal'
 import './LedgerModal.css'
 
 /** A page of a log that loads more while it is scrolled, such as an infinite query's. */
@@ -57,72 +58,68 @@ export default function LedgerModal<T>({
 
     const rowClass = (column: Column<T>) => [column.className, column.wideOnly ? 'is-wide-only' : undefined].filter(Boolean).join(' ') || undefined
     return (
-        <div className="modal-overlay" role="presentation" onClick={onClose}>
-            <div
-                className={`modal ledger-modal${className ? ` ${className}` : ''}`}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby={titleId}
-                onClick={(event) => event.stopPropagation()}
-                style={{'--ledger-columns': gridColumns} as CSSProperties}
-            >
-                <div className="modal-header ledger-modal__header">
-                    <div className="modal-icon" aria-hidden>
-                        <FontAwesomeIcon icon={icon as never}/>
-                    </div>
-                    <div>
-                        <h2 id={titleId} className="modal-title">{title}</h2>
-                        <div className="ledger-modal__subtitle">{subtitle}</div>
-                    </div>
+        <Modal
+            onDismiss={onClose}
+            className={`modal ledger-modal${className ? ` ${className}` : ''}`}
+            labelledBy={titleId}
+            style={{'--ledger-columns': gridColumns} as CSSProperties}
+        >
+            <div className="modal-header ledger-modal__header">
+                <div className="modal-icon" aria-hidden>
+                    <FontAwesomeIcon icon={icon as never}/>
                 </div>
-
-                <div className="ledger-modal__content" ref={rootRef}>
-                    {pages.isLoading ? (
-                        <p className="modal-text">Loading the history...</p>
-                    ) : pages.isError && items.length === 0 ? (
-                        <p className="modal-text">Could not load the history.</p>
-                    ) : items.length === 0 ? (
-                        <p className="modal-text">No {noun} have been recorded yet.</p>
-                    ) : (
-                        <div className="ledger-modal__table" role="table" aria-label={tableLabel}>
-                            <div className="ledger-modal__row ledger-modal__row--header" role="row">
-                                {columns.map((column) => (
-                                    <span role="columnheader" key={column.header} className={column.wideOnly ? 'is-wide-only' : undefined}>
-                                        {column.header}
-                                    </span>
-                                ))}
-                            </div>
-                            {items.map((entry) => (
-                                <div className="ledger-modal__row" role="row" key={rowKey(entry)}>
-                                    {columns.map((column) => (
-                                        <span role="cell" key={column.header} className={rowClass(column)}>{column.cell(entry)}</span>
-                                    ))}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    {items.length > 0 && (
-                        <div className="ledger-modal__more" ref={endRef} aria-live="polite">
-                            {moreFailed ? (
-                                <>
-                                    Could not load more {noun}.
-                                    <button type="button" className="btn" onClick={() => void pages.fetchNextPage()}>
-                                        Try again
-                                    </button>
-                                </>
-                            ) : loadingMore ? `Loading more ${noun}…` : null}
-                        </div>
-                    )}
-                </div>
-
-                <div className="ledger-modal__footer">
-                    <div className="modal-actions ledger-modal__actions">
-                        <button type="button" className="btn" onClick={onClose}>Close</button>
-                        {actions}
-                    </div>
+                <div>
+                    <h2 id={titleId} className="modal-title">{title}</h2>
+                    <div className="ledger-modal__subtitle">{subtitle}</div>
                 </div>
             </div>
-        </div>
+
+            <div className="ledger-modal__content" ref={rootRef}>
+                {pages.isLoading ? (
+                    <p className="modal-text">Loading the history...</p>
+                ) : pages.isError && items.length === 0 ? (
+                    <p className="modal-text">Could not load the history.</p>
+                ) : items.length === 0 ? (
+                    <p className="modal-text">No {noun} have been recorded yet.</p>
+                ) : (
+                    <div className="ledger-modal__table" role="table" aria-label={tableLabel}>
+                        <div className="ledger-modal__row ledger-modal__row--header" role="row">
+                            {columns.map((column) => (
+                                <span role="columnheader" key={column.header} className={column.wideOnly ? 'is-wide-only' : undefined}>
+                                    {column.header}
+                                </span>
+                            ))}
+                        </div>
+                        {items.map((entry) => (
+                            <div className="ledger-modal__row" role="row" key={rowKey(entry)}>
+                                {columns.map((column) => (
+                                    <span role="cell" key={column.header} className={rowClass(column)}>{column.cell(entry)}</span>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                )}
+                {items.length > 0 && (
+                    <div className="ledger-modal__more" ref={endRef} aria-live="polite">
+                        {moreFailed ? (
+                            <>
+                                Could not load more {noun}.
+                                <button type="button" className="btn" onClick={() => void pages.fetchNextPage()}>
+                                    Try again
+                                </button>
+                            </>
+                        ) : loadingMore ? `Loading more ${noun}…` : null}
+                    </div>
+                )}
+            </div>
+
+            <div className="ledger-modal__footer">
+                <div className="modal-actions ledger-modal__actions">
+                    <button type="button" className="btn" onClick={onClose}>Close</button>
+                    {actions}
+                </div>
+            </div>
+        </Modal>
     )
 }
 
