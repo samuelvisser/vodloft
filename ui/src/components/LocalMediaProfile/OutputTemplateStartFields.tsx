@@ -172,7 +172,7 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
             >
                 <p>
                     The {pendingPreset ? outputTemplatePresetRegistry(true).getLabelLoose(pendingPreset) : ''} preset
-                    replaces the output template, and sets the metadata, NFO and While downloading choices of this profile.
+                    replaces the output template, and sets the metadata, NFO, file date and While downloading choices of this profile.
                 </p>
             </ConfirmDialog>
         </>
