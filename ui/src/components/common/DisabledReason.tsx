@@ -41,7 +41,10 @@ export default function DisabledReason({reason, placement, as: Host = 'span', cl
             setShown(false)
         }
         const hideOnEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') setShown(false)
+            if (event.key !== 'Escape') return
+            // Handled here, so a modal around it stays open.
+            event.preventDefault()
+            setShown(false)
         }
 
         document.addEventListener('pointerdown', hideOnOutsidePointer)
