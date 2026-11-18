@@ -26,10 +26,13 @@ Profile matches the share's format, its settings page says so and offers to crea
   collection's title, and is also the share's name in the list of Stream Profiles.
 - **Season folders**:
   - **One per season** (the default) puts each season's episodes in a *Season 01* folder, and names them *S01E05*.
-    Specials (auxiliary episodes, trailers and the episodes of extra seasons) go in a *Specials* folder as season 0
-    (*S00E207*), where media players look for a show's specials, the same way the Media Server output templates do.
+    Specials (auxiliary episodes and the episodes of extra seasons) go in a *Specials* folder as season 0
+    (*S00E207*), where media players look for a show's specials.
   - **One per year** puts each year's episodes in a *Season 2026* folder, and names them by date.
   - **All in one folder** puts every episode in the show's folder, named by date.
+
+  Trailers always go in a *Trailers* folder in the show's folder, named by their title: Plex and Jellyfin show them as
+  the show's trailers, and Infuse as its extras.
 - **Files for media players**:
   - **NFO files and artwork** (the default) lists `tvshow.nfo`, `season.nfo` and an NFO file per episode, with the
     show's poster and each episode's picture.

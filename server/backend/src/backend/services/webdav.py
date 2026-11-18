@@ -130,19 +130,17 @@ def _aired(episode: Episode) -> Optional[datetime]:
     return utc_datetime(moment) if moment is not None else None
 
 
-# Media players keep a show's specials in season 0, in a folder of their own.
+# Media players keep a show's specials in season 0, in a folder of their own, and its trailers in a Trailers folder.
 _SPECIALS = "Specials"
+_TRAILERS = "Trailers"
 _SPECIALS_SEASON = MediaServerMetadata(kind="season", title=_SPECIALS, season_number=0)
 
 
 def _is_special(episode: Episode) -> bool:
-    """Whether the episode is a special, as the Media Server output templates tell: an episode of an extra season,
-    an auxiliary episode or a trailer."""
+    """Whether the episode is a special, as the Media Server output templates tell: an episode of an extra season
+    or an auxiliary episode. A trailer is listed as one of the show's trailers instead."""
     season = episode.season
-    return (
-        (season is not None and season.season_type == SeasonType.EXTRA.value)
-        or episode.episode_type in (EpIdType.AUX, EpIdType.TRAILER)
-    )
+    return (season is not None and season.season_type == SeasonType.EXTRA.value) or episode.episode_type == EpIdType.AUX
 
 
 def _episode_metadata(episode: Episode, by_number: bool) -> MediaServerMetadata:
@@ -210,13 +208,18 @@ def show_folder(s: Session, profile: WebdavStreamProfile) -> ShareFolder:
         if download is None or not (path := Path(download.file_path)).is_file():
             continue
         modified = _modified(path)
+        extension = _EXTENSIONS[profile.media_kinds[0]]
+        if episode.episode_type == EpIdType.TRAILER:
+            # Plex and Jellyfin play the files in a show's Trailers folder as its trailers, named by their title.
+            folder.folder(_TRAILERS, modified).add(ShareFile(f"{_name(episode.title)}{extension}", modified, path=path))
+            continue
         episode_metadata = _episode_metadata(episode, by_number)
         parent = _season_folder(folder, profile, episode, episode_metadata, modified)
         if parent is not folder and nfo and by_number:
             # Specials have no season of their own: None stands for them.
             seasons.setdefault(None if episode_metadata.season_number == 0 else episode.season_id, parent)
         base = _episode_base_name(name, episode, episode_metadata, by_number)
-        media = ShareFile(f"{base}{_EXTENSIONS[profile.media_kinds[0]]}", modified, path=path)
+        media = ShareFile(f"{base}{extension}", modified, path=path)
         parent.add(media)
         base = Path(media.name).stem
         if nfo:

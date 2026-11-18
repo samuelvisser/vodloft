@@ -168,7 +168,7 @@ def test_an_audio_share_lists_audio_files_in_one_folder_with_artwork_only(db_ses
     ]
 
 
-def test_a_show_by_season_keeps_auxiliary_episodes_in_a_specials_season(db_session, tmp_path):
+def test_a_show_by_season_keeps_specials_in_season_0_and_trailers_in_a_trailers_folder(db_session, tmp_path):
     from backend.services.webdav import show_folder
 
     collection = _collection(db_session)
@@ -176,8 +176,11 @@ def test_a_show_by_season_keeps_auxiliary_episodes_in_a_specials_season(db_sessi
     aux = _episode(db_session, collection, 207, at=datetime(2026, 3, 2, tzinfo=timezone.utc))
     aux.episode_identifier = "aux.207"
     _download(db_session, aux, tmp_path)
+    trailer = _episode(db_session, collection, 3, at=datetime(2026, 3, 3, tzinfo=timezone.utc))
+    trailer.episode_identifier = "trailer.3"
+    _download(db_session, trailer, tmp_path)
     profile = _share(db_session, collection)
-    profile.ep_id_type_list = ["ep", "aux"]
+    profile.ep_id_type_list = ["ep", "aux", "trailer"]
 
     folder = show_folder(db_session, profile)
 
@@ -185,7 +188,8 @@ def test_a_show_by_season_keeps_auxiliary_episodes_in_a_specials_season(db_sessi
         "Season 01/", "Season 01/The Show - S01E01 - Episode 1： A⧸B.mp4",
         "Season 01/The Show - S01E01 - Episode 1： A⧸B.nfo", "Season 01/season.nfo",
         "Specials/", "Specials/The Show - S00E207 - Episode 207： A⧸B.mp4",
-        "Specials/The Show - S00E207 - Episode 207： A⧸B.nfo", "Specials/season.nfo", "tvshow.nfo",
+        "Specials/The Show - S00E207 - Episode 207： A⧸B.nfo", "Specials/season.nfo",
+        "Trailers/", "Trailers/Episode 3： A⧸B.mp4", "tvshow.nfo",
     ]
     specials = folder.children["Specials"].children
     episode_nfo = specials["The Show - S00E207 - Episode 207： A⧸B.nfo"].content
