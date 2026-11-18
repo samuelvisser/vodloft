@@ -57,7 +57,7 @@ variables or formatting into an existing conditional string assignment, the
 editor can instead suggest a native Jinja set block. For example:
 
 ```jinja
-{% set is_extra = season_type == 'extra' or episode_type == 'aux' %}
+{% set is_extra = season_type == 'extra' or episode_type != 'ep' %}
 {% set extra_num = 'extra' | custom_index %}
 {% set episode_id = 'other' ~ extra_num if is_extra else 'S' ~ season_num ~ 'E' ~ ep_num %}
 ```

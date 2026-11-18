@@ -371,9 +371,22 @@
 }
 
 .output-template-help h4,
+.output-template-help h5,
 .output-template-help p,
 .output-template-variable-reference {
     margin: 0;
+}
+
+.output-template-help h5 {
+    font-size: inherit;
+    color: var(--muted);
+}
+
+.output-template-help-divider {
+    width: 100%;
+    margin: 4px 0;
+    border: 0;
+    border-top: 1px solid var(--select-menu-border);
 }
 
 .output-template-guidance {

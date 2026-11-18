@@ -23,6 +23,7 @@ RELEASE_REVISIONS = (
     ("0.7.0", "c89f1a5ea2ba"),
     ("0.8.0", "bb0e7c5e17cc"),
     ("0.9.0", "2f7a91c4d8e3"),
+    ("0.9.1", "5b8e2d4c9a17"),
 )
 VODLOFT_0_1_0_REVISION = "f4abb559e3ab"
 VODLOFT_0_5_0_REVISION = "817515eb8209"
@@ -30,6 +31,7 @@ VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
+VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
 HEAD_REVISION = "3564f2e6fe1c"
 
 
@@ -1441,3 +1443,113 @@ def test_episodes_without_usable_media_leave_or_stay_removed_from_their_source(m
         assert connection.execute(text(
             "SELECT count(*) FROM metadata WHERE parent_table = 'media_items_episode'"
         )).scalar_one() == 0
+
+
+def test_a_webdav_folder_name_becomes_the_profiles_title(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_9_0_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key, episode_order) VALUES (1, 'c1', 'c1', 'The Show', "
+            "'https://www.youtube.com/@host', 'free', 'series', 'date_based', 'Host', 'host', 'ytdlp', 'newest_first')"
+        ))
+        # A folder name of its own, one that is the collection's title, and none beside a title of its own.
+        for profile_id, title, folder_name in ((1, "Listed", "Folder"), (2, "Listed", "The Show"), (3, "Listed", None)):
+            connection.execute(text(
+                "INSERT INTO stream_profiles (id, type, collection_id, overwrite_collection_title, enable_profile, "
+                "token, use_downloads, use_source_stream, preferred_format, prefer_exact_match, ep_id_type_list, "
+                "max_items, stream_live_episodes, proxy_source_stream, live_episode_handoff_ids) "
+                "VALUES (:id, 'webdav', 1, :title, 1, :token, 1, 0, 'best', 0, '[]', 0, 0, 1, '[]')"
+            ), {"id": profile_id, "title": title, "token": f"t{profile_id}"})
+            connection.execute(text(
+                "INSERT INTO stream_profiles_webdav (id, folder_name, season_folders, metadata_files) "
+                "VALUES (:id, :folder_name, 'season', 'none')"
+            ), {"id": profile_id, "folder_name": folder_name})
+
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
+
+    with engine.connect() as connection:
+        titles = dict(connection.execute(text("SELECT id, overwrite_collection_title FROM stream_profiles")).all())
+        columns = [row[1] for row in connection.execute(text("PRAGMA table_info(stream_profiles_webdav)"))]
+    assert titles == {1: "Folder", 2: None, 3: "Listed"}
+    assert "folder_name" not in columns
+
+
+def test_webdav_shares_become_downloads_only(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_9_0_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key, episode_order) VALUES (1, 'c1', 'c1', 'The Show', "
+            "'https://www.dailywire.com/show/c1', 'free', 'series', 'date_based', 'Host', 'host', 'dailywire', "
+            "'newest_first')"
+        ))
+        # A share that streamed from the Site only, one that did both, and an RSS feed that streams.
+        for profile_id, profile_type, use_downloads, use_source_stream in (
+            (1, "webdav", 0, 1), (2, "webdav", 1, 1), (3, "rss", 0, 1),
+        ):
+            connection.execute(text(
+                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, "
+                "use_source_stream, preferred_format, prefer_exact_match, ep_id_type_list, max_items, "
+                "stream_live_episodes, proxy_source_stream, live_episode_handoff_ids) "
+                "VALUES (:id, :type, 1, 1, :token, :downloads, :stream, 'format_1080p', 0, '[]', 0, 0, 1, '[]')"
+            ), {"id": profile_id, "type": profile_type, "token": f"t{profile_id}", "downloads": use_downloads,
+                "stream": use_source_stream})
+
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
+
+    with engine.connect() as connection:
+        sources = connection.execute(text(
+            "SELECT id, use_downloads, use_source_stream FROM stream_profiles ORDER BY id"
+        )).all()
+    assert [tuple(row) for row in sources] == [(1, 1, 0), (2, 1, 0), (3, 0, 1)]
+
+
+def test_every_collection_numbers_its_extras_in_episode_index_order(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_9_0_REVISION)
+    with engine.begin() as connection:
+        for collection_id in (1, 2):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order) VALUES (:id, :slug, :slug, 'Show', "
+                "'https://example.test/' || :slug, 'free', 'series', 'numbered', 'Host', 'host', 'dailywire', 'newest_first')"
+            ), {"id": collection_id, "slug": f"c{collection_id}"})
+        for season_id, collection_id, season_type in ((1, 1, "normal"), (2, 1, "extra"), (3, 2, "normal")):
+            connection.execute(text(
+                "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+                "VALUES (:id, :collection, :id, :slug, :slug, :type, :id)"
+            ), {"id": season_id, "collection": collection_id, "slug": f"s{season_id}", "type": season_type})
+        # Listed out of index order: the numbers follow the index, and each collection counts on its own.
+        for episode_id, collection_id, season_id, index, identifier in (
+            (10, 1, 1, 4, "aux.1"), (11, 1, 1, 1, "ep.1"), (12, 1, 2, 2, "ep.2"), (13, 1, 1, 3, "ep-extra.trailer.1.1"),
+            (14, 1, 1, 5, "ep.3"), (15, 2, 3, 1, "short.1"),
+        ):
+            connection.execute(text(
+                "INSERT INTO media_items (id, uuid, type, source_key) VALUES (:id, :uuid, 'episode', 'dailywire')"
+            ), {"id": episode_id, "uuid": f"episode-{episode_id}"})
+            connection.execute(text(
+                "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
+                "publish_status, sharing_url, source_slug) VALUES (:id, :collection, :season, :index, :identifier, "
+                ":slug, 'published_final', 'https://example.test', :slug)"
+            ), {"id": episode_id, "collection": collection_id, "season": season_id, "index": index,
+                "identifier": identifier, "slug": f"e{episode_id}"})
+
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
+
+    with engine.connect() as connection:
+        numbers = dict(connection.execute(text("SELECT id, extra_index FROM media_items_episode")).all())
+    assert numbers == {10: 3, 11: None, 12: 1, 13: 2, 14: None, 15: 1}
