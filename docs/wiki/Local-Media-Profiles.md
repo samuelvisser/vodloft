@@ -31,7 +31,8 @@ poster for each season a playlist fills (see [[Collection-Artwork]]). **Date fil
 date the episode came out instead of the date it was downloaded.
 
 **Save the site's info file** keeps everything yt-dlp knows about a video as an `.info.json` file beside the media,
-for other programs that read it. It only does something for sites VODLoft downloads with yt-dlp, such as YouTube.
+for other programs that read it. The form only offers it when the profile is for a site VODLoft downloads with yt-dlp,
+such as YouTube or NPO Start.
 
 A Collection profile that writes NFO files also chooses what **each episode is**: an **episode of a show**, or a
 **music video**. A music video gets a `musicvideo` NFO with its artist and title instead of a show, season and episode
@@ -45,7 +46,8 @@ A Collection profile can give every episode a **title** and **description** of i
 metadata inside the media. Both are templates with the same variables as the output path, plus `description` for the
 site's own description. `{{ date }} - {{ title }}` puts the date in front of every title, for example. Leave them empty to
 keep what the site gives. They change the metadata only, not the file name, and a template that comes out empty keeps
-the site's text.
+the site's text. They are written in the same editor as the output path, which suggests variables as you type, and each
+shows what it gives the example episode picked under **Output path**.
 
 ## Collection, Music and Video profiles
 

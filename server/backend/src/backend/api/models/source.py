@@ -88,6 +88,7 @@ class DownloadOptionsAPIRead(ResponseBase):
     hls_heights: list[int]
     subtitles: bool
     quality_choices: bool
+    info_file: bool
 
 
 class UpgradeChecksAPIRead(ResponseBase):

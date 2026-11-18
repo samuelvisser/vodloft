@@ -132,7 +132,7 @@ class NpoSource(Source):
         # Its programme pages only tell the length, which is all the upgrade check can compare.
         upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,)),
         # Its streams download with yt-dlp, which chooses among their versions. They have no subtitles.
-        downloads=DownloadOptions(quality_choices=True),
+        downloads=DownloadOptions(quality_choices=True, info_file=True),
         settings=SiteSettings(hides=frozenset({SiteSetting.AUTO_SUBTITLES})),
         cookies_help=(
             "Sign in with your NPO account to download programmes that need NPO Plus. Sign in on npo.nl in a "

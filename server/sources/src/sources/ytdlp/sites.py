@@ -170,7 +170,7 @@ def _accesses(key: str) -> tuple[Access, ...]:
 def _downloads(key: str) -> DownloadOptions:
     # yt-dlp chooses among every version a site has, so each one has the quality choices, and it gets the
     # subtitles of any site.
-    return DownloadOptions(hls_heights=_HLS_DOWNLOADS.get(key, ()), subtitles=True, quality_choices=True)
+    return DownloadOptions(hls_heights=_HLS_DOWNLOADS.get(key, ()), subtitles=True, quality_choices=True, info_file=True)
 
 
 def download_options() -> DownloadOptions:

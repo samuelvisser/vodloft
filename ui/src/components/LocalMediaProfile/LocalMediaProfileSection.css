@@ -347,9 +347,23 @@
     margin-top: 12px;
 }
 
-/* An episode's own title and description: Jinja, so monospace. */
-.media-files-template {
-    width: 100%;
-    max-width: 640px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+/* An episode's own title and description: Jinja, in the output path's editor, each with its example. */
+.output-template-code-editor.metadata-template-editor .cm-scroller {
+    min-height: 0;
+}
+
+.output-template-code-editor.metadata-template-editor--multiline .cm-scroller {
+    min-height: 72px;
+}
+
+.metadata-template-example {
+    margin-top: 8px;
+}
+
+.metadata-template-example__text--multiline {
+    white-space: pre-line;
+}
+
+.metadata-template-example-source {
+    margin: 0 0 4px;
 }

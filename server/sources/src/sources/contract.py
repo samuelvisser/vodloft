@@ -159,6 +159,9 @@ class DownloadOptions:
     """Codecs, container, quality goal, audio format and audio language pick the version that is
     downloaded. Only a Site downloaded with a program that chooses among versions, such as yt-dlp, turns it
     on; a Site with fixed versions, such as The Daily Wire, has nothing to choose."""
+    info_file: bool = False
+    """The program that downloads the Site's media writes an info file about each video, as yt-dlp does, which a
+    profile can save beside the media."""
 
     @property
     def hls_bundle(self) -> bool:
@@ -177,6 +180,7 @@ class DownloadOptions:
             hls_heights=tuple(sorted({height for option in options for height in option.hls_heights})),
             subtitles=any(option.subtitles for option in options),
             quality_choices=any(option.quality_choices for option in options),
+            info_file=any(option.info_file for option in options),
         )
 
 

@@ -80,6 +80,8 @@ export const DownloadOptionsSchema = z.object({
     subtitles: z.boolean(),
     /** Codecs, container, quality goal, audio format and audio language pick the version that is downloaded. */
     qualityChoices: z.boolean(),
+    /** The Site's downloader writes an info file about each video, which a profile can save. */
+    infoFile: z.boolean(),
 })
 export type DownloadOptions = z.infer<typeof DownloadOptionsSchema>
 

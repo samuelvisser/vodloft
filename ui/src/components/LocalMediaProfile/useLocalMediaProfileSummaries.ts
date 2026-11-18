@@ -11,6 +11,7 @@ import {AudioFormatReg, AudioLanguageReg, QualityDownloadReg, QualityGoalReg, la
 import type {SponsorBlockSegments} from '../../types/schemas/local_media_profile_base'
 import {sponsorBlockSummary} from './SponsorBlockSection'
 import {chaptersSummary} from './ChaptersSection'
+import {useOffersInfoFile} from './MediaFilesFields'
 
 function where(value: string | undefined, inside: string, beside: string): string {
     if (!value) return 'not saved'
@@ -54,6 +55,7 @@ export function useLocalMediaProfileSummaries(form: UseFormReturn<any>, mode: Lo
     ] = values
     const {data: sites} = useLocalMediaProfileSites()
     const {data: defaults} = useLibraryDefaults()
+    const offersInfoFile = useOffersInfoFile(form, mode)
     const follows = (value: string | undefined) => (value ?? 'system') === 'system'
 
     const siteNames = (siteKeys ?? []).map((key) => sites?.sites.find((site) => site.key === key)?.name ?? key)
@@ -81,7 +83,7 @@ export function useLocalMediaProfileSummaries(form: UseFormReturn<any>, mode: Lo
         mode === 'collection' && showNfo ? 'show NFO' : '',
         mode === 'collection' && (collectionAssets ?? defaults?.downloadCollectionAssets) ? 'poster and background' : '',
         publishDates ? 'dated by publish date' : '',
-        saveInfoJson ? 'info file' : '',
+        saveInfoJson && offersInfoFile ? 'info file' : '',
     ].filter(Boolean).join(' · ')
 
     const subtitles = !subtitleMode || subtitleMode === 'no_subtitles'
