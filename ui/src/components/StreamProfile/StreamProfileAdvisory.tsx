@@ -356,8 +356,8 @@ export default function StreamProfileAdvisory({
             >
                 <p>
                     {partial
-                        ? 'The existing Download Profiles do not cover every episode this share is set up to include, so those episodes are left out.'
-                        : 'No enabled Download Profile of this collection downloads the files this share lists, so it stays empty.'}
+                        ? 'The existing Download Profiles do not cover every episode this share is set up to include, so only those you download yourself are listed.'
+                        : 'No enabled Download Profile of this collection downloads the files this share lists, so it only lists episodes you download yourself.'}
                 </p>
                 <div className="stream-profile-advisory-requirements">
                     <CoverageRequirement
