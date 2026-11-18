@@ -104,26 +104,6 @@ export default function StreamProfileForm({
             : site.downloads.videoHeights)
         : undefined
     const preferredFormat = watch('preferredFormat')
-    // A WebDAV share only lists downloaded files, so it offers the formats the collection's Download Profiles
-    // download as one file, and the one it has, so a share that lost its downloads still shows why. Without
-    // any, every format is offered, for the advisory to create a Download Profile of the chosen one.
-    const downloadedFormats = useMemo(() => {
-        if (mode !== 'webdav' || !collectionSlug || !downloadProfileDefaults) return undefined
-        const formats = new Set(downloadProfileDefaults.map((profile) => profile.preferredFormat).filter((format) => format !== 'format_hls'))
-        return formats.size > 0 ? formats : undefined
-    }, [collectionSlug, downloadProfileDefaults, mode])
-    const preferredFormatOptions = StreamPreferredFormatReg.options.filter((option) => (
-        downloadedFormats
-            ? downloadedFormats.has(option.value) || option.value === preferredFormat
-            : !videoHeights || !(option.value in FORMAT_HEIGHTS) || videoHeights.includes(FORMAT_HEIGHTS[option.value])
-    ))
-    const firstDownloadedFormat = StreamPreferredFormatReg.options.find((option) => downloadedFormats?.has(option.value))?.value
-
-    // A new share starts at a format the collection downloads.
-    useEffect(() => {
-        if (!isCreating || !firstDownloadedFormat || downloadedFormats?.has(getValues('preferredFormat'))) return
-        setValue('preferredFormat', firstDownloadedFormat, {shouldDirty: false, shouldValidate: true})
-    }, [isCreating, firstDownloadedFormat, downloadedFormats, getValues, setValue])
     const videoOutputMode = watch('videoOutputMode')
     const streamLiveEpisodes = watch('streamLiveEpisodes')
     const selectedEpisodeTypes: string[] = watch('epIdTypeList') || []
@@ -423,7 +403,9 @@ export default function StreamProfileForm({
                             <Select
                                 inputId="sp-preferred-format"
                                 classNamePrefix="select"
-                                options={preferredFormatOptions}
+                                options={StreamPreferredFormatReg.options.filter((option) => (
+                                    !videoHeights || !(option.value in FORMAT_HEIGHTS) || videoHeights.includes(FORMAT_HEIGHTS[option.value])
+                                ))}
                                 value={StreamPreferredFormatReg.options.find(o => o.value === field.value) ?? null}
                                 onChange={(opt) => field.onChange((opt as any)?.value ?? null)}
                                 onBlur={field.onBlur}
@@ -441,8 +423,8 @@ export default function StreamProfileForm({
                     <div className="help" id="sp-pref-format-help">
                         {mode === 'webdav' ? (
                             <ReadMore summary={<span>The format of the downloads the share lists.</span>}>
-                                <p>Only the formats this collection&apos;s Download Profiles download are offered. HLS downloads cannot be listed in a share.</p>
-                                <p>A video share lists the downloaded video nearest to this format; set it to 'Audio Only' for a share of audio files.</p>
+                                <p>A video share lists the downloaded MP4 video nearest to this format, whether a Download Profile or a manual download made it. Set it to 'Audio Only' for a share of audio files.</p>
+                                <p>HLS downloads are kept as many small parts instead of one file, so a share cannot list them.</p>
                             </ReadMore>
                         ) : (
                             <ReadMore summary={<span>Content type to prefer while streaming.</span>}>
