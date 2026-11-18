@@ -128,6 +128,14 @@
     gap: 4px;
 }
 
+.template-editor-heading > .template-editor-heading__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
 .template-editor-heading label {
     font-weight: 600;
 }
@@ -576,4 +584,29 @@
         background: #223047;
         color: #9ec3ff;
     }
+}
+
+/* "Start from a preset" folds open like a section, with the chevron beside its label. */
+.output-template-preset-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    justify-self: start;
+    width: fit-content;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.output-template-preset-toggle svg {
+    font-size: 0.75em;
+    color: var(--muted);
+}
+
+.output-template-preset-body {
+    display: grid;
+    gap: inherit;
 }

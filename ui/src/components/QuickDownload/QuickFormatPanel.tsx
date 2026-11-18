@@ -1,6 +1,7 @@
-import {useEffect, useId} from 'react'
+import {useId} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
+import {useDismissOnEscape} from '../Modal/useDismissOnEscape'
 import {CODEC_NAMES, CODEC_NOTES, type QuickRules, qualityLabel, sizeLabel, videoOption} from '../../lib/quickDownloads'
 import {
     MP3_BITRATES,
@@ -54,12 +55,8 @@ export default function QuickFormatPanel({
 }: QuickFormatPanelProps) {
     const titleId = useId()
 
-    useEffect(() => {
-        if (!open) return
-        const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
-        window.addEventListener('keydown', onKey)
-        return () => window.removeEventListener('keydown', onKey)
-    }, [open, onClose])
+    // Changes apply as they are made, so Escape can always close it.
+    useDismissOnEscape(onClose, true, open)
 
     if (!open) return null
     const video = choice.kind === 'video' ? videoOption(options, choice.quality) : undefined
