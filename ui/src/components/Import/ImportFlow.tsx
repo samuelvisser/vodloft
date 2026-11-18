@@ -603,7 +603,7 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
                 </div>
             </div>
 
-            {!preview.records && collections.length > 0 && (
+            {preview.channels && collections.length > 0 && (
                 <div className="settings-field settings-field--wide">
                     <label htmlFor={`import-add-as-${importer.key}`}>Add the collections</label>
                     <SimpleSelect

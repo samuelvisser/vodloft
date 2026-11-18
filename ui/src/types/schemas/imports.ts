@@ -130,6 +130,7 @@ export const ImportPreviewSchema = z.looseObject({
         })),
     }).nullish(),
     lastRun: ImportRunSummarySchema.nullish(),
+    channels: z.boolean().default(false),
     mergeProfiles: z.boolean().default(false),
     counts: z.looseObject({collections: z.int(), files: z.int()}),
 })

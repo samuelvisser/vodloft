@@ -163,7 +163,8 @@ What comes along:
   each season's number and name, and a video that is in more than one season stays in the highest, as in ytdl-sub.
 - **Add the collections** in the preview chooses how they arrive. *As channels*, the default, adds each collection to
   the channel behind its links, such as a YouTube channel, and adds the channel when it is not in your Library yet.
-  *As collections* adds each one on its own; you can still add it to its channel later.
+  *As collections* adds each one on its own; you can still add it to its channel later. Pinchflat imports always
+  arrive as collections.
 - A **Bandcamp** or **SoundCloud Discography** subscription adds the artist. All of the artist's albums go
   into one Music collection, each album a season, with a Music Local Media Profile that keeps ytdl-sub's folder per
   artist and per album. The genre you give with `= Lofi` becomes the artist's genre, which new albums get too.

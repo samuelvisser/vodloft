@@ -218,6 +218,9 @@ class ImportPlan:
     """The other program's database version."""
     download_folder: str = "/downloads"
     """The other program's own download folder, which the path map pairs with a VODLoft folder."""
+    channels: bool = False
+    """The other program's collections can join the channels behind their links, as the person chooses. An importer
+    of a program that has nothing like channels or several links per collection leaves it off."""
     probes: tuple[str, ...] = ()
     """Files the importer reads in the download folders, as the other program names them. They find the path
     map before the plan can list any files, such as ytdl-sub's download archives that list them."""

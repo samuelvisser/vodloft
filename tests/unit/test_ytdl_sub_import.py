@@ -519,3 +519,11 @@ def test_an_imported_collection_joins_the_channel_behind_its_links(installation,
         "https://www.youtube.com/c/BeyondTheGuitar": True,
         "https://www.youtube.com/playlist?list=PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W": False,
     }
+
+
+def test_only_an_import_that_knows_channels_offers_them(tmp_path):
+    from importer.pinchflat import IMPORTER as PINCHFLAT  # noqa: F401  (registers it)
+    from importer.contract import ImportPlan
+
+    assert _plan(_write(tmp_path, EXAMPLE)).channels is True
+    assert ImportPlan(importer="pinchflat").channels is False

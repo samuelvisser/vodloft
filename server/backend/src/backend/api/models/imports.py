@@ -216,6 +216,7 @@ class ImportPreviewAPIRead(ResponseBase):
     warnings: list[ImportWarningAPIRead]
     records: Optional[ImportRecordsAPIRead] = None
     last_run: Optional[ImportRunSummaryAPIRead] = None
+    channels: bool = Field(default=False, description="Whether the person chooses to add the collections to their channels")
     merge_profiles: bool = False
     counts: ImportCountsAPIRead
 

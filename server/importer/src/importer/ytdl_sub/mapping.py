@@ -659,6 +659,7 @@ def plan_import(data: YtdlSubData, location: ImportLocation) -> ImportPlan:
         warnings=tuple(warnings),
         download_folder=folder,
         probes=probes,
+        channels=True,
     )
 
 

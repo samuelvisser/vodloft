@@ -611,6 +611,8 @@ class ImportPreview:
     last_run: ImportRun | None
     merge_profiles: bool
     counts: ImportCounts
+    channels: bool = False
+    """Whether the person chooses to add the collections to their channels."""
 
 
 def last_run(session: Session, importer: Importer) -> ImportRun | None:
@@ -700,6 +702,7 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> Imp
         warnings=plan.warnings,
         records=records,
         last_run=last_run(session, importer),
+        channels=plan.channels,
         merge_profiles=bool(options.merge_profiles),
         counts=ImportCounts(
             collections=len(records["collections"]) if records else len(plan.collections),
@@ -1398,7 +1401,9 @@ def _apply_loaded_plan(
         profile = profiles.get(collection_plan.profile_external_id or "")
         if profile is None:
             continue
-        collection, created = _upsert_collection(session, collection_plan, library, links, run, report, options.as_channels)
+        collection, created = _upsert_collection(
+            session, collection_plan, library, links, run, report, plan.channels and options.as_channels,
+        )
         if collection is None:
             continue
         download_profile = _upsert_download_profile(session, collection_plan, collection, profile, links, run, report)
