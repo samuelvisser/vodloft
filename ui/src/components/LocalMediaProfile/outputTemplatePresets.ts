@@ -22,7 +22,7 @@ type Preset = {
 // Season and episode as two digits, and whether an episode belongs with the specials.
 const NUMBERS = `{% set season_num = "%02d"|format(season_number|int) %}
 {% set ep_num = "%02d"|format(episode_number|int) %}
-{% set is_extra = season_type == 'extra' or episode_type == 'aux' or episode_type == 'trailer' %}`
+{% set is_extra = season_type == 'extra' or episode_type != 'ep' %}`
 
 const EXTRAS = {key: 'extra', name: 'Extras', keepNumbers: true}
 
