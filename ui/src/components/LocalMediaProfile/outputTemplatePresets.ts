@@ -74,8 +74,7 @@ ${base}
         indexingValue: EXTRAS,
     },
     audiobookshelf: {
-        template: (base) => `{# Path #}
-${base}
+        template: (base) => `${base}
 /{{ collection_title }}
 /{% if episode_published_date %}{{ episode_published_date }} - {% endif %}{{ title }}.ext`,
         choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true},
@@ -92,7 +91,10 @@ const PRESET_NAMES = {
 const VideoPresetReg = createSelectRegistry('OutputTemplatePreset', {
     jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi, plex: PRESET_NAMES.plex,
 })
-const AudioPresetReg = createSelectRegistry('OutputTemplatePreset', PRESET_NAMES)
+const AudioPresetReg = createSelectRegistry('OutputTemplatePreset', {
+    audiobookshelf: PRESET_NAMES.audiobookshelf, jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi,
+    plex: PRESET_NAMES.plex,
+})
 
 /** The presets a profile can start from: Audiobookshelf only keeps audio. */
 export function outputTemplatePresetRegistry(audioOnly: boolean) {

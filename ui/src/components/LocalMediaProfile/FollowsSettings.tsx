@@ -77,6 +77,13 @@ export function FollowsSettingsSelect({form, name, id, label, registry, systemLa
 }) {
     const {control, formState: {errors}} = form
     const [changing, setChanging] = useState(false)
+    // Change opens the choices once; after that, as for any other select, only a click on the select itself opens
+    // them, not a click on its label.
+    const [openOnFocus, setOpenOnFocus] = useState(false)
+    const startChanging = () => {
+        setChanging(true)
+        setOpenOnFocus(true)
+    }
     const error = errors[name]
 
     return (
@@ -92,13 +99,13 @@ export function FollowsSettingsSelect({form, name, id, label, registry, systemLa
                                 <span className="follows-settings-line__text">
                                     <span>{label}</span>
                                     <span className="follows-settings-line__value">{systemLabel}</span>
-                                    <FollowsSettingsBadge following onChoose={() => setChanging(true)} onUseSettings={() => undefined}/>
+                                    <FollowsSettingsBadge following onChoose={startChanging} onUseSettings={() => undefined}/>
                                 </span>
                                 <button
                                     type="button"
                                     className="btn btn-small"
                                     aria-label={`Change ${label.toLowerCase()}`}
-                                    onClick={() => setChanging(true)}
+                                    onClick={startChanging}
                                 >
                                     Change
                                 </button>
@@ -120,7 +127,8 @@ export function FollowsSettingsSelect({form, name, id, label, registry, systemLa
                             }}
                             onBlur={field.onBlur}
                             autoFocus={changing && following}
-                            openMenuOnFocus={changing && following}
+                            openMenuOnFocus={openOnFocus}
+                            onMenuClose={() => setOpenOnFocus(false)}
                             aria-invalid={!!error}
                             aria-describedby={error ? `${id}-error` : `${id}-help`}
                         />
