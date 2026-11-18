@@ -31,7 +31,7 @@ Profile matches the share's format, its settings page says so and offers to crea
   - **One per year** puts each year's episodes in a *Season 2026* folder, and names them by date.
   - **All in one folder** puts every episode in the show's folder, named by date.
 
-  Trailers always go in a *Trailers* folder in the show's folder, named by their title: Plex and Jellyfin show them as
+  Trailers always go in a *Trailers* folder in the show's folder, named *Trailer 3 - <title>*: Plex and Jellyfin show them as
   the show's trailers, and Infuse as its extras.
 - **Files for media players**:
   - **NFO files and artwork** (the default) lists `tvshow.nfo`, `season.nfo` and an NFO file per episode, with the
