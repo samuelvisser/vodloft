@@ -112,6 +112,8 @@ export const CollectionReadSchema = z.looseObject({
     genre: z.string().nullable().optional(),
     contentRating: z.string().nullable().optional(),
     cookiesMode: z.enum(['automatic', 'never', 'always']).default('automatic'),
+    /** Each new video with chapters becomes a season of its own, with an episode per chapter. */
+    splitChapters: z.boolean().default(false),
     cookiesNeededUntil: ApiDateTimeSchema.nullable().optional(),
     checkFrequency: z.enum(['default', 'less_often', 'own']).default('default'),
     checkCron: z.string().nullable().optional(),

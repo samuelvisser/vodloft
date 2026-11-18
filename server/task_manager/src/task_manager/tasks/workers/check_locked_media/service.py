@@ -57,7 +57,7 @@ def _check(s: Session, media_id: int, now: datetime) -> bool | None:
         s.rollback()
         _check_later(media_id, None)
         return None
-    slug = media.source_slug if isinstance(media, Episode) else media.slug
+    slug = media.video_slug if isinstance(media, Episode) else media.slug
     url, source_key = media.sharing_url, media.source_key
     s.rollback()
     try:

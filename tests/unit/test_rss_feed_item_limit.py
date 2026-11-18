@@ -53,6 +53,7 @@ def _episode(index: int, published: datetime):
         published_date=published,
         went_live_date=None,
         created_at=published,
+        part_of=None,
     )
 
 

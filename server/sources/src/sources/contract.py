@@ -82,6 +82,9 @@ class Feature(StrEnum):
     """Listing upcoming and live videos with their publish status, and looking them up again
     with ``check_pending`` until they are published. VODLoft shows them, but never records one
     while it is live."""
+    CHAPTERS = "chapters"
+    """A video's chapters come with its details (``VideoDetails.chapters``), and a download can keep one
+    stretch of a video, so a collection can split each video into a part per chapter."""
 
 
 class StreamMethod(StrEnum):
@@ -534,6 +537,15 @@ class UpgradeOffer:
 
 
 @dataclass(frozen=True)
+class Chapter:
+    """A stretch of a video the uploader named, in seconds from its start."""
+
+    title: str
+    start: float
+    end: float
+
+
+@dataclass(frozen=True)
 class VideoDetails:
     """Everything VODLoft stores about a single video.
 
@@ -569,6 +581,9 @@ class VideoDetails:
     live video has nothing to download yet."""
     scheduled_at: datetime | None = None
     """When an upcoming video is due to start."""
+    chapters: tuple[Chapter, ...] | None = None
+    """The video's chapters, for a Source with ``Feature.CHAPTERS``: empty when it has none, and None when the
+    listing did not say, so ``video_details`` has to be asked."""
 
 
 @dataclass(frozen=True)

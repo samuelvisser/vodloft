@@ -26,6 +26,11 @@ const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
   own: {label: 'On its own schedule'},
 })
 
+const SplitChaptersReg = createSelectRegistry('CollectionSplitChapters', {
+  whole: {label: 'Keep each video whole'},
+  split: {label: 'A part per chapter'},
+})
+
 const CookiesModeReg = createSelectRegistry('CollectionCookiesMode', {
   automatic: {label: 'Only when needed'},
   never: {label: 'Never'},
@@ -43,6 +48,7 @@ type FormState = CollectionFormValue & {
   checkFrequency: CheckFrequency
   checkCron: string
   cookiesMode: CookiesMode
+  splitChapters: boolean
   episodeOrder: EpisodeOrderValue
   genre: string
   contentRating: string
@@ -66,6 +72,7 @@ export default function EditCollectionPage() {
     checkFrequency: 'default',
     checkCron: '0 */6 * * *',
     cookiesMode: 'automatic',
+    splitChapters: false,
     episodeOrder: 'newest_first',
     genre: '',
     contentRating: '',
@@ -86,6 +93,7 @@ export default function EditCollectionPage() {
       checkFrequency: collection.checkFrequency,
       checkCron: collection.checkCron || prev.checkCron,
       cookiesMode: collection.cookiesMode,
+      splitChapters: collection.splitChapters,
       episodeOrder: collection.episodeOrder,
       genre: collection.genre ?? '',
       contentRating: collection.contentRating ?? '',
@@ -95,6 +103,7 @@ export default function EditCollectionPage() {
 
   const usesYtdlp = hasSourceFeature(collection, SourceFeature.YTDLP_OPTIONS)
   const optionalCookies = hasSourceFeature(collection, SourceFeature.OPTIONAL_COOKIES)
+  const chapters = hasSourceFeature(collection, SourceFeature.CHAPTERS)
   const [cronError, setCronError] = useState<string | null>(null)
   const [typeError, setTypeError] = useState<string | null>(null)
   const {data: suggestion} = useQuery({
@@ -132,6 +141,7 @@ export default function EditCollectionPage() {
       checkFrequency: form.checkFrequency,
       ...(form.checkFrequency === 'own' ? {checkCron: form.checkCron} : {}),
       ...(optionalCookies ? {cookiesMode: form.cookiesMode} : {}),
+      ...(chapters ? {splitChapters: form.splitChapters} : {}),
     }
     const r = await fetch(`${apiUrl()}/collections/${id}`, {
       method: 'PATCH',
@@ -439,6 +449,31 @@ export default function EditCollectionPage() {
                 setForm((prev) => ({...prev, checkCron: value}))
               }}
             />
+          </div>
+        )}
+
+        {chapters && (
+          <div className="form-row">
+            <label htmlFor="collection-split-chapters">Videos with chapters</label>
+            <SimpleSelect
+              inputId="collection-split-chapters"
+              registry={SplitChaptersReg}
+              value={form.splitChapters ? 'split' : 'whole'}
+              onChange={(value) => setForm((prev) => ({...prev, splitChapters: value === 'split'}))}
+            />
+            <div className="help">
+              <ReadMore summary={
+                form.splitChapters
+                  ? 'Each new video with chapters becomes a season of its own, named after the video, with an episode per chapter.'
+                  : 'Each video is one episode, chapters and all.'
+              }>
+                <p>Splitting suits full albums uploaded as one video: in a Music Collection each video becomes an album and
+                  each chapter a track. Each part downloads only its own stretch of the video and has its own file, so a
+                  podcast app or music player plays it like any other episode. A feed can't stream a part straight from
+                  the site, because the site only has the whole video.</p>
+                <p>This only changes videos found from now on. Videos already in the Collection stay as they are.</p>
+              </ReadMore>
+            </div>
           </div>
         )}
 

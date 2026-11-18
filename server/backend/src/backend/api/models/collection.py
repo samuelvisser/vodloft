@@ -63,6 +63,8 @@ class CollectionAPIUpdate(_CollectionAPIBaseIn):
     """Your own yt-dlp options for this Collection; left out, they stay as they are."""
 
     cookies_mode: Optional[CookiesMode] = None
+    split_chapters: Optional[bool] = None
+    """Whether each new video with chapters becomes a season with an episode per chapter; left out, it stays."""
     episode_order: Optional[EpisodeOrder] = None
     genre: Optional[str] = Field(default=None, max_length=200)
     """The show's genre in its NFO files; left out, it stays as it is, and empty removes it."""
@@ -201,6 +203,7 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     genre: Optional[str] = None
     content_rating: Optional[str] = None
     cookies_mode: CookiesMode = CookiesMode.AUTOMATIC
+    split_chapters: bool = False
     cookies_needed_until: Optional[datetime] = None
     check_frequency: CheckFrequency = CheckFrequency.DEFAULT
     check_cron: Optional[str] = None

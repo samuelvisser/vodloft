@@ -1062,7 +1062,7 @@ def _create_collection(session: Session, plan: CollectionPlan, as_channels: bool
         membership_level="FREE", type=CollectionType(plan.settings.get("type", "series")).value,
         episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
         author_name=author, author_slug=slugify(author) or details.slug,
-        thumbnail_landscape_path=details.image_url,
+        thumbnail_landscape_path=details.image_url, split_chapters=bool(plan.settings.get("split_chapters", False)),
     )
     add_collection(session, collection)
     _add_links(session, collection, plan)
@@ -1426,7 +1426,7 @@ def _apply_loaded_plan(
         steps.append(step)
         session.flush()
         if not created:
-            known = set(session.scalars(select(Episode.source_slug).where(Episode.collection_id == collection.id)))
+            known = set(session.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id)))
             missing = {file["media_site_id"] for file in step.files} - known
             if missing and not _index_running(session, collection.id):
                 from backend.operations.collections import CollectionSyncOperation
@@ -1529,7 +1529,7 @@ def _seed_indexes(session: Session, step: ImportStep, profile: CollectionLocalMe
     seeded = 0
     numbered: dict[int, dict[str, int]] = {}
     for file in step.files:
-        episode = episodes.get(file["media_site_id"])
+        episode = episodes.get(_file_key(file))
         values = {key: value for key, value in (file.get("custom_index_values") or {}).items() if key in keys}
         if episode is not None and values:
             numbered[episode.id] = values
@@ -1577,17 +1577,35 @@ class _StepFiles:
     numbers: int
 
 
+def _file_key(file: Mapping[str, Any]) -> str:
+    """Which episode a recorded file is: its video, or the numbered part of its video."""
+    part = file.get("part")
+    return file["media_site_id"] if part is None else f"{file['media_site_id']}#{part}"
+
+
+def _episodes_by_file_key(session: Session, collection_id: int) -> dict[str, Episode]:
+    """The Collection's episodes by the key ``_file_key`` gives their files. The parts of a split video are numbered
+    from 1 in the order they play in."""
+    episodes: dict[str, Episode] = {}
+    parts: dict[str, list[Episode]] = {}
+    for episode in session.scalars(select(Episode).where(Episode.collection_id == collection_id)):
+        if episode.part_of is not None:
+            parts.setdefault(episode.part_of, []).append(episode)
+        elif episode.source_slug:
+            episodes[episode.source_slug] = episode
+    for video, of_video in parts.items():
+        for number, episode in enumerate(sorted(of_video, key=lambda part: part.part_start or 0.0), start=1):
+            episodes[f"{video}#{number}"] = episode
+    return episodes
+
+
 def _start_step(session: Session, step_id: int) -> _StepFiles | None:
     step = session.get(ImportStep, step_id)
     if step is None or step.status != STEP_WAITING:
         return None
     profile = session.get(CollectionLocalMediaProfile, step.local_media_profile_id)
     run = session.get(ImportRun, step.run_id)
-    episodes = {
-        episode.source_slug: episode
-        for episode in session.scalars(select(Episode).where(Episode.collection_id == step.collection_id))
-        if episode.source_slug
-    }
+    episodes = _episodes_by_file_key(session, step.collection_id)
     return _StepFiles(
         local_media_profile_id=profile.id,
         episode_ids={slug: episode.id for slug, episode in episodes.items()},
@@ -1663,7 +1681,7 @@ def run_step(step_id: int) -> dict[str, int]:
             problems.append({"path": path, "error": error})
 
     for file in started.files:
-        episode_id = started.episode_ids.get(file["media_site_id"])
+        episode_id = started.episode_ids.get(_file_key(file))
         if episode_id is None:
             if file["kind"] == "file":
                 counts["not_indexed"] += 1

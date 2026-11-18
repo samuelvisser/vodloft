@@ -47,6 +47,10 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         Text, default="", server_default="",
         comment="Your own yt-dlp options for this Collection, added after the yt-dlp Source's",
     )
+    split_chapters: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="Each new video with chapters becomes a season of its own, with an episode per chapter",
+    )
     cookies_mode: Mapped[str] = mapped_column(
         default="automatic", server_default="automatic",
         comment="When downloads use the Source's cookies file: automatic, never or always",

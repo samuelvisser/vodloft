@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, Optional
 
-from sqlalchemy import and_, exists, false, func, or_, select, true
+from sqlalchemy import and_, exists, false, func, or_, select
 from sqlalchemy.orm import object_session, Session, joinedload
 
 from backend.db.models import DownloadProfile, Episode, LocalMediaProfileBase
@@ -354,7 +354,10 @@ def can_stream_from_source(
         profile: StreamProfileBase,
         episode: Episode,
 ) -> bool:
-    """Whether the profile may stream the episode straight from its Source, when it is not downloaded."""
+    """Whether the profile may stream the episode straight from its Source, when it is not downloaded. The Site only
+    has the whole video, so never a part of a split video."""
+    if episode.part_of is not None:
+        return False
     if profile.use_source_stream:
         return collection_site(profile.collection).streams
     if not keeps_live_episode_handoff(profile):
@@ -430,7 +433,7 @@ def get_stream_items(
         else false()
     )
     non_live_delivery_candidate = (
-        true()
+        or_(Episode.part_of.is_(None), local_download_exists)
         if profile.use_source_stream
         else local_download_exists
         if profile.use_downloads
@@ -526,7 +529,9 @@ def get_stream_items(
         if episode.publish_status in _UNAVAILABLE_PUBLISH_STATUSES:
             return
 
-        if collect and (profile.use_source_stream or _has_required_local_media(profile, local)):
+        # The Site only has the whole video, so a part of a split video is only served from its own file.
+        streams = profile.use_source_stream and episode.part_of is None
+        if collect and (streams or _has_required_local_media(profile, local)):
             items.append((episode, relevant_local))
 
     if profile.max_items > 0:

@@ -79,12 +79,17 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     thumbnail_mode = effective_thumbnail_mode(profile)
     metadata_mode, kodi_safe_nfo = effective_metadata_mode(profile), profile.kodi_safe_nfo
     subtitle_mode = LocalMediaProfileSubtitleMode(profile.subtitle_mode)
+    # A part of a split video is just its stretch of the video, which the video's subtitles and SponsorBlock
+    # segments do not line up with.
+    section = (episode.part_start, episode.part_end) if episode is not None and episode.part_start is not None else None
+    if section is not None:
+        subtitle_mode = LocalMediaProfileSubtitleMode.NO_SUBTITLES
     quality = ytdlp_quality(profile)
     site_choices = local_media_profile_site_choices(profile, media_site) if media_site is not None else None
     auto_subtitles = AutoSubtitles(site_choices["auto_subtitles"]) if site_choices else AutoSubtitles.NEVER
     sponsorblock = ytdlp_sponsorblock(
         site_choices["sponsorblock_enabled"], dict(site_choices["sponsorblock_segments"]),
-    ) if site_choices else YtdlpSponsorBlock()
+    ) if site_choices and section is None else YtdlpSponsorBlock()
     option_texts = [("the yt-dlp Source", ytdlp_source_options(session))]
     if episode is not None:
         option_texts.append((f"the Collection '{episode.collection.title}'", episode.collection.ytdlp_options))
@@ -116,8 +121,10 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                 quality=quality, subtitles=subtitle_request,
                 sponsorblock=sponsorblock,
                 custom_options=custom_ytdlp_options(*option_texts) if media_source.has(Feature.YTDLP_OPTIONS) else (),
-                ffmpeg_path=ffmpeg_path, throttle_guard=throttle_guard,
+                ffmpeg_path=ffmpeg_path, throttle_guard=throttle_guard, section=section,
             )
+        elif section is not None:
+            raise DownloadError(f"{media_source.name} can only download '{title}' whole, not as a part of its video")
         else:
             tracker.preparing("inspect_stream")
             source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)

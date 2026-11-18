@@ -436,10 +436,11 @@ _MUSIC_SETTINGS: dict[str, object] = {
 
 
 def _music_refusal(sub: Subscription) -> str | None:
-    """Why a music subscription is not imported, or None for an artist VODLoft adds as a channel."""
+    """Why a music subscription is not imported, or None for an artist VODLoft adds as a channel, or for full albums,
+    which VODLoft splits into tracks by their chapters."""
     applied = set(sub.applied)
     if "YouTube Full Albums" in applied:
-        return "VODLoft can't split a video into tracks yet"
+        return None
     if "YouTube Releases" in applied:
         return "yt-dlp can't list YouTube's Releases tab yet, so VODLoft can't follow it"
     if not {"Bandcamp", "SoundCloud Discography"} & applied:
@@ -480,6 +481,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
     profile_warnings: list[ImportWarning] = []
     settings, audio, auto_subtitles = _profile_settings(sub, player, profile_warnings)
     music = kind == "music"
+    full_albums = music and "YouTube Full Albums" in set(sub.applied)
     if music:
         if len(links) > 1:
             warnings.append(ImportWarning("links", f"VODLoft adds the artist at {links[0].url}; the other links are left out", "close"))
@@ -503,6 +505,9 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
     directory = _render(sub, output["output_directory"])
     title = _render(sub, sub.overrides.get("tv_show_name", "{subscription_name}")) or sub.name
     custom: dict[str, object] = {"type": "music" if music else "podcast" if audio else "series", "episode_identifier": "date_based"}
+    if full_albums:
+        # Each video is an album, and each of its chapters a track.
+        custom["split_chapters"] = True
     metadata = ((("genre", "track_genre", MUSIC_GENRE_DEFAULT),) if music else
                 (("genre", "tv_show_genre", TV_SHOW_GENRE_DEFAULT),
                  ("content_rating", "tv_show_content_rating", TV_SHOW_CONTENT_RATING_DEFAULT)))
@@ -528,7 +533,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         warnings=tuple(warnings),
         assets=tuple(assets),
         links=tuple(links) if len(links) > 1 or kind == "tv_show_collection" else (),
-        channel=music,
+        channel=music and not full_albums,
     )
     signature = (report.output_template, report.original, repr(sorted(settings.items())))
     return _Planned(sub, chain, profile, signature, collection, directory, layout.index), []
@@ -578,18 +583,19 @@ def _files(planned: _Planned, location: ImportLocation) -> tuple[list[FilePlan],
         if path is not None:
             entries = read_archive(path)
             break
+    split = bool(planned.collection.settings.get("split_chapters"))
     files, outside = [], 0
     for entry in entries:
-        media = entry.media_file
-        if media is None:
-            continue
-        mapped = map_path(posixpath.join(planned.folder, media), location.path_map)
-        if mapped is None:
-            outside += 1
-            continue
-        index = _index_value(entry, planned.index, media)
-        files.append(FilePlan(planned.collection.external_id, entry.uid, mapped, "file", index,
-                              title=_title(media), published=entry.upload_date))
+        # A full album wrote a file per track, numbered in its name, so their names sort in the album's order.
+        media_files = sorted(entry.media_files) if split else entry.media_files[:1]
+        for part, media in enumerate(media_files, start=1):
+            mapped = map_path(posixpath.join(planned.folder, media), location.path_map)
+            if mapped is None:
+                outside += 1
+                continue
+            index = _index_value(entry, planned.index, media)
+            files.append(FilePlan(planned.collection.external_id, entry.uid, mapped, "file", index,
+                                  title=_title(media), published=entry.upload_date, part=part if split else None))
     return files, outside
 
 
