@@ -458,13 +458,27 @@ def test_a_collection_bundle_can_use_an_existing_profile(listed, session):
         "membershipLevel": "FREE", "type": "series", "episodeIdentifier": "seasonal",
         "authorName": "A Channel", "authorSlug": "a-channel",
     }
-    profile = {
-        "op": "update_by_slug", "slug": "collections", "name": "Collections", "preferredFormat": "format_1080p",
-        "outputTemplate": template, "indexingValues": [],
-    }
+    # Fields other than the slug are not the wizard's to change, so they are left out of the request.
+    profile = {"op": "use_existing", "slug": "collections", "name": "Renamed", "outputTemplate": "/elsewhere.ext"}
     created = create_collection_bundle(session, None, CollectionAPICreateBundle.model_validate({"collection": collection, "seasons": [], "localMediaProfile": profile}))
     assert session.get(Collection, created.id) is not None
-    assert session.query(CollectionLocalMediaProfile).count() == 1
+    kept = session.query(CollectionLocalMediaProfile).one()
+    assert (kept.name, kept.output_template) == ("Collections", template)
+
+
+def test_a_collection_bundle_refuses_a_profile_that_does_not_exist(listed, session):
+    from backend.api.endpoints.collections.as_bundle.service import create_collection_bundle
+    from backend.api.models.collection_as_bundle import CollectionAPICreateBundle
+    from backend.services.errors import NotFoundError
+
+    collection = {
+        "slug": "PL1", "sourceKey": "listed", "title": "A playlist", "sharingUrl": "https://listed.example/PL1",
+        "membershipLevel": "FREE", "type": "series", "episodeIdentifier": "seasonal",
+        "authorName": "A Channel", "authorSlug": "a-channel",
+    }
+    payload = {"collection": collection, "seasons": [], "localMediaProfile": {"op": "use_existing", "slug": "missing"}}
+    with pytest.raises(NotFoundError):
+        create_collection_bundle(session, None, CollectionAPICreateBundle.model_validate(payload))
 
 
 def test_a_bundle_that_matches_existing_files_holds_its_download_profile(listed, session, tmp_path, monkeypatch):

@@ -29,7 +29,7 @@ import {
     loadLocalMediaProfileDraft,
     saveLocalMediaProfileDraft,
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
-import './EditLocalMediaProfilePage.css'
+import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
 import {apiUrl} from '../../lib/api'
 
 function canonicalProfileValues(profile: LocalMediaProfileRead): LocalMediaProfileUpdateIn {
@@ -238,32 +238,17 @@ export default function EditLocalMediaProfilePage() {
             </form>
 
             {restoredDraft ? (
-                <div className="local-media-profile-restored-draft" role="status" aria-live="polite">
-                    <div>
-                        <strong>Unsaved changes restored</strong>
-                        <span>
-                            This form was restored from changes saved in this browser. They have not been saved to VODLoft yet.
-                        </span>
-                    </div>
-                    <div className="local-media-profile-restored-draft__buttons">
-                        <button
-                            className="btn"
-                            type="button"
-                            disabled={isSubmitting}
-                            onClick={discardRestoredDraft}
-                        >
-                            Discard
-                        </button>
-                        <button
-                            className="btn btn-primary"
-                            type="submit"
-                            form={formId}
-                            disabled={isSubmitting}
-                        >
-                            {isSubmitting ? 'Saving…' : 'Save changes'}
-                        </button>
-                    </div>
-                </div>
+                <UnsavedChangesBar
+                    title="Unsaved changes restored"
+                    message="This form was restored from changes saved in this browser. They have not been saved to VODLoft yet."
+                >
+                    <button className="btn" type="button" disabled={isSubmitting} onClick={discardRestoredDraft}>
+                        Discard
+                    </button>
+                    <button className="btn btn-primary" type="submit" form={formId} disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving…' : 'Save changes'}
+                    </button>
+                </UnsavedChangesBar>
             ) : null}
 
             <ConfirmDialog
