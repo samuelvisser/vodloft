@@ -142,7 +142,7 @@ With a YouTube Data API key, a search goes through the API and collections subsc
 
 ## Channels
 
-A channel is everything one creator publishes on a site: a YouTube channel, or a host on The Daily Wire. Adding the channel, instead of one of its links, lets you decide in one go what happens with its videos, livestreams, Shorts and playlists, and the channel gets a page of its own in your Library. VODLoft calls a channel what its site calls it, so on The Daily Wire every button and page says host instead.
+A channel is everything one creator publishes on a site: a YouTube channel, or a host on The Daily Wire. Adding the channel, instead of one of its links, lets you decide in one go what happens with its videos, livestreams, Shorts and playlists, and the channel gets a card and a page of its own in your Library. Its collections are on that page rather than next to it in the Library, though a search still finds them. VODLoft calls a channel what its site calls it, so on The Daily Wire every button and page says host instead.
 
 Paste a link to a YouTube channel in **Add media** and choose **Add the channel**; **Only its videos** adds its uploads as one collection, as described above. For The Daily Wire, open **Browse**, group the shows by host and choose the link next to a host's name.
 

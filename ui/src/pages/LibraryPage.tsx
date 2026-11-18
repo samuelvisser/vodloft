@@ -217,8 +217,11 @@ export default function LibraryPage() {
     ), [channels, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords])
     const filteredCollections = useMemo(() => {
         if (!matchesChipFilter('collection', activeKindFilter)) return []
+        // A channel's collections are behind its card, unless a search looks for them or the card is filtered out.
+        const behindCard = new Set(searchWords.length > 0 ? [] : filteredChannels.map((channel) => channel.slug))
         const shown = collections?.filter((collection) => (
-            matchesChipFilter(collection.type, activeCollectionTypeFilter) && matchesSiteFilter(collection, activeSiteFilter)
+            !(collection.channelSlug && behindCard.has(collection.channelSlug))
+            && matchesChipFilter(collection.type, activeCollectionTypeFilter) && matchesSiteFilter(collection, activeSiteFilter)
             && matchesLibrarySearch(collection, searchWords)
         )) ?? []
         // While searching, the best matches come first; the chosen order only settles equal matches.
@@ -226,7 +229,7 @@ export default function LibraryPage() {
         return shown.sort((a, b) => (
             (ranks.get(a.slug) ?? 0) - (ranks.get(b.slug) ?? 0) || compareCollections(a, b, collectionSort)
         ))
-    }, [collections, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords, collectionSort])
+    }, [collections, filteredChannels, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords, collectionSort])
     const filteredMovies = useMemo(
         () => movies?.filter((movie) => (
             matchesSiteFilter(movie, activeSiteFilter) && matchesLibrarySearch(movie, searchWords)
