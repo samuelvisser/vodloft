@@ -3,6 +3,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import toast from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
+import Modal from '../Modal/Modal'
 import type {ExistingFile} from '../../types/schemas/existing_files'
 import {Filter, filterOf, Results, SHOWN} from './ExistingFilesDialog'
 import {adoptFiles, finishScan, useProfileExistingFiles} from './api'
@@ -95,64 +96,69 @@ export default function ProfileExistingFilesDialog({localMediaProfileId, localMe
     }
 
     return (
-        <div className="modal-overlay" role="presentation">
-            <div className="modal existing-files-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-existing-files-title">
-                <div className="modal-header">
-                    <div className="modal-icon" aria-hidden><FontAwesomeIcon icon={faIcon('fass', 'file-import')}/></div>
-                    <h2 id="profile-existing-files-title" className="modal-title">Match existing files</h2>
-                </div>
-                <div className="existing-files-body">
-                    <p className="existing-files-intro">
-                        Every file VODLoft found in {review?.folder ?? 'the folder'} of "{localMediaProfileName}", for
-                        the {review?.collections.length ?? 0} collection{review?.collections.length === 1 ? '' : 's'} that
-                        still have files to review. Adopted episodes are not downloaded again.
-                    </p>
-                    {working > 0 && (
-                        <div className="form-info-card" role="status" aria-live="polite">
-                            Still looking for files of {working} collection{working === 1 ? '' : 's'}.
-                        </div>
-                    )}
-                    {review && (
-                        <Results
-                            scan={review}
-                            files={files}
-                            showCollection
-                            filter={filter}
-                            setFilter={(value) => { setFilter(value); setShown(SHOWN) }}
-                            visible={visible.slice(0, shown)}
-                            more={visible.length - shown}
-                            onMore={() => setShown((current) => current + SHOWN)}
-                            picks={picks}
-                            setPick={(path, episodeId) => setPicks((current) => {
-                                const next = {...current}
-                                if (episodeId) next[path] = episodeId
-                                else delete next[path]
-                                return next
-                            })}
-                        />
-                    )}
-                </div>
-
-                <div className="modal-actions existing-files-footer">
-                    <button type="button" className="btn" onClick={onClose} disabled={busy !== null}>Close</button>
-                    {ready.length > 0 && picked.length > 0 && (
-                        <button type="button" className="btn" disabled={busy !== null} onClick={() => void adopt(picked)}>
-                            Adopt {picked.length} checked
-                        </button>
-                    )}
-                    {ready.length > 0 && toAdopt.length > 0 && (
-                        <button type="button" className="btn btn-primary" disabled={busy !== null} onClick={() => void adopt(toAdopt)}>
-                            {busy === 'adopt' ? 'Adopting…' : `Adopt ${toAdopt.length}`}
-                        </button>
-                    )}
-                    {ready.length > 0 && (
-                        <button type="button" className={toAdopt.length ? 'btn' : 'btn btn-primary'} disabled={busy !== null}
-                                onClick={() => void finish()}>
-                            {(review?.heldDownloadProfiles ?? 0) > 0 ? 'Done, download the rest' : 'Done'}
-                        </button>
-                    )}
-                </div>
+        <Modal
+            onDismiss={onClose}
+            dismissOnOverlayClick={false}
+            // Escape closes, as Close does, but not while it would lose checked files.
+            dismissOnEscape={busy === null && picked.length === 0}
+            className="modal existing-files-dialog"
+            labelledBy="profile-existing-files-title"
+        >
+            <div className="modal-header">
+                <div className="modal-icon" aria-hidden><FontAwesomeIcon icon={faIcon('fass', 'file-import')}/></div>
+                <h2 id="profile-existing-files-title" className="modal-title">Match existing files</h2>
             </div>
-        </div>
+            <div className="existing-files-body">
+                <p className="existing-files-intro">
+                    Every file VODLoft found in {review?.folder ?? 'the folder'} of "{localMediaProfileName}", for
+                    the {review?.collections.length ?? 0} collection{review?.collections.length === 1 ? '' : 's'} that
+                    still have files to review. Adopted episodes are not downloaded again.
+                </p>
+                {working > 0 && (
+                    <div className="form-info-card" role="status" aria-live="polite">
+                        Still looking for files of {working} collection{working === 1 ? '' : 's'}.
+                    </div>
+                )}
+                {review && (
+                    <Results
+                        scan={review}
+                        files={files}
+                        showCollection
+                        filter={filter}
+                        setFilter={(value) => { setFilter(value); setShown(SHOWN) }}
+                        visible={visible.slice(0, shown)}
+                        more={visible.length - shown}
+                        onMore={() => setShown((current) => current + SHOWN)}
+                        picks={picks}
+                        setPick={(path, episodeId) => setPicks((current) => {
+                            const next = {...current}
+                            if (episodeId) next[path] = episodeId
+                            else delete next[path]
+                            return next
+                        })}
+                    />
+                )}
+            </div>
+
+            <div className="modal-actions existing-files-footer">
+                <button type="button" className="btn" onClick={onClose} disabled={busy !== null}>Close</button>
+                {ready.length > 0 && picked.length > 0 && (
+                    <button type="button" className="btn" disabled={busy !== null} onClick={() => void adopt(picked)}>
+                        Adopt {picked.length} checked
+                    </button>
+                )}
+                {ready.length > 0 && toAdopt.length > 0 && (
+                    <button type="button" className="btn btn-primary" disabled={busy !== null} onClick={() => void adopt(toAdopt)}>
+                        {busy === 'adopt' ? 'Adopting…' : `Adopt ${toAdopt.length}`}
+                    </button>
+                )}
+                {ready.length > 0 && (
+                    <button type="button" className={toAdopt.length ? 'btn' : 'btn btn-primary'} disabled={busy !== null}
+                            onClick={() => void finish()}>
+                        {(review?.heldDownloadProfiles ?? 0) > 0 ? 'Done, download the rest' : 'Done'}
+                    </button>
+                )}
+            </div>
+        </Modal>
     )
 }

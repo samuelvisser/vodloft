@@ -3,6 +3,7 @@ import {useEffect, useId, useRef, useState} from 'react'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
+import Modal from '../Modal/Modal'
 
 import './ConfirmDialog.css'
 
@@ -31,6 +32,8 @@ type ConfirmDialogProps = {
     showCancelButton?: boolean
     cancelButton?: ConfirmDialogCancelButton
     dismissOnOverlayClick?: boolean
+    /** Escape cancels, so turn it off while that would throw away what the person filled in. */
+    dismissOnEscape?: boolean
     className?: string
 }
 
@@ -46,6 +49,7 @@ export default function ConfirmDialog({
     showCancelButton = true,
     cancelButton,
     dismissOnOverlayClick = true,
+    dismissOnEscape = true,
     className,
 }: ConfirmDialogProps) {
     const autoId = useId()
@@ -76,94 +80,92 @@ export default function ConfirmDialog({
     }
 
     const busy = pending !== null
-    const onOverlayClick = () => {
-        if (dismissOnOverlayClick && !busy) onDismiss()
+    const dismiss = () => {
+        if (!busy) onDismiss()
     }
     const onCancel = cancelButton?.onClick ?? onDismiss
     const spinnerIcon = faIcon('fass', 'spinner')
 
     return (
-        <div className="modal-overlay" role="presentation" onClick={onOverlayClick}>
-            <div
-                className={['modal', className].filter(Boolean).join(' ')}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby={titleId}
-                aria-describedby={descriptionId}
-                onClick={(event) => event.stopPropagation()}
-            >
-                <div className="modal-header">
-                    {icon && (
-                        <div className={`modal-icon${iconTone === 'danger' ? ' danger' : ''}`} aria-hidden>
-                            <FontAwesomeIcon icon={icon}/>
-                        </div>
-                    )}
-                    <h2 id={titleId} className="modal-title">{title}</h2>
-                </div>
+        <Modal
+            onDismiss={dismiss}
+            dismissOnOverlayClick={dismissOnOverlayClick}
+            dismissOnEscape={dismissOnEscape}
+            className={['modal', className].filter(Boolean).join(' ')}
+            labelledBy={titleId}
+            describedBy={descriptionId}
+        >
+            <div className="modal-header">
+                {icon && (
+                    <div className={`modal-icon${iconTone === 'danger' ? ' danger' : ''}`} aria-hidden>
+                        <FontAwesomeIcon icon={icon}/>
+                    </div>
+                )}
+                <h2 id={titleId} className="modal-title">{title}</h2>
+            </div>
 
-                <div id={descriptionId} className="confirm-dialog-content">
-                    {children}
-                </div>
+            <div id={descriptionId} className="confirm-dialog-content">
+                {children}
+            </div>
 
-                <div className="modal-actions">
-                    {showCancelButton && (
-                        <button
-                            type="button"
-                            className={cancelButton?.className ?? 'btn'}
-                            disabled={cancelButton?.disabled || busy}
-                            onClick={() => run('cancel', onCancel)}
-                        >
-                            {pending === 'cancel' ? (
-                                <FontAwesomeIcon icon={spinnerIcon} spin aria-hidden="true"/>
-                            ) : cancelButton?.icon && (
-                                <FontAwesomeIcon
-                                    icon={cancelButton.icon}
-                                    spin={cancelButton.iconSpin}
-                                    aria-hidden="true"
-                                />
-                            )}
-                            {cancelButton?.label ?? 'Cancel'}
-                        </button>
-                    )}
-                    {secondaryButton && (
-                        <button
-                            type="button"
-                            className={secondaryButton.className ?? 'btn'}
-                            disabled={secondaryButton.disabled || busy}
-                            onClick={() => run('secondary', secondaryButton.onClick)}
-                        >
-                            {pending === 'secondary' ? (
-                                <FontAwesomeIcon icon={spinnerIcon} spin aria-hidden="true"/>
-                            ) : secondaryButton.icon && (
-                                <FontAwesomeIcon
-                                    icon={secondaryButton.icon}
-                                    spin={secondaryButton.iconSpin}
-                                    aria-hidden="true"
-                                />
-                            )}
-                            {secondaryButton.label}
-                        </button>
-                    )}
+            <div className="modal-actions">
+                {showCancelButton && (
                     <button
                         type="button"
-                        className={confirmButton.className ?? 'btn btn-primary'}
-                        disabled={confirmButton.disabled || busy}
-                        aria-busy={pending === 'confirm' || undefined}
-                        onClick={() => run('confirm', confirmButton.onClick)}
+                        className={cancelButton?.className ?? 'btn'}
+                        disabled={cancelButton?.disabled || busy}
+                        onClick={() => run('cancel', onCancel)}
                     >
-                        {pending === 'confirm' ? (
+                        {pending === 'cancel' ? (
                             <FontAwesomeIcon icon={spinnerIcon} spin aria-hidden="true"/>
-                        ) : confirmButton.icon && (
+                        ) : cancelButton?.icon && (
                             <FontAwesomeIcon
-                                icon={confirmButton.icon}
-                                spin={confirmButton.iconSpin}
+                                icon={cancelButton.icon}
+                                spin={cancelButton.iconSpin}
                                 aria-hidden="true"
                             />
                         )}
-                        {confirmButton.label}
+                        {cancelButton?.label ?? 'Cancel'}
                     </button>
-                </div>
+                )}
+                {secondaryButton && (
+                    <button
+                        type="button"
+                        className={secondaryButton.className ?? 'btn'}
+                        disabled={secondaryButton.disabled || busy}
+                        onClick={() => run('secondary', secondaryButton.onClick)}
+                    >
+                        {pending === 'secondary' ? (
+                            <FontAwesomeIcon icon={spinnerIcon} spin aria-hidden="true"/>
+                        ) : secondaryButton.icon && (
+                            <FontAwesomeIcon
+                                icon={secondaryButton.icon}
+                                spin={secondaryButton.iconSpin}
+                                aria-hidden="true"
+                            />
+                        )}
+                        {secondaryButton.label}
+                    </button>
+                )}
+                <button
+                    type="button"
+                    className={confirmButton.className ?? 'btn btn-primary'}
+                    disabled={confirmButton.disabled || busy}
+                    aria-busy={pending === 'confirm' || undefined}
+                    onClick={() => run('confirm', confirmButton.onClick)}
+                >
+                    {pending === 'confirm' ? (
+                        <FontAwesomeIcon icon={spinnerIcon} spin aria-hidden="true"/>
+                    ) : confirmButton.icon && (
+                        <FontAwesomeIcon
+                            icon={confirmButton.icon}
+                            spin={confirmButton.iconSpin}
+                            aria-hidden="true"
+                        />
+                    )}
+                    {confirmButton.label}
+                </button>
             </div>
-        </div>
+        </Modal>
     )
 }

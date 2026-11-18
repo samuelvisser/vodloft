@@ -3,14 +3,10 @@ import Switch from 'react-switch'
 import ExistingFilesSetup, {type ExistingFilesSetupValue} from '../ExistingFiles/ExistingFilesSetup'
 import '../ExistingFiles/ExistingFiles.css'
 
-export type ExistingFilesChoice = ExistingFilesSetupValue & {enabled: boolean}
-
-type Props = {
-    value: ExistingFilesChoice
-    onChange: (value: ExistingFilesChoice) => void
-    onBack: () => void
-    onContinue: () => void
-    onCancel: () => void
+export type ExistingFilesChoice = ExistingFilesSetupValue & {
+    enabled: boolean
+    /** The user typed or browsed to the folder, so it no longer follows the collection root. */
+    folderChosen?: boolean
 }
 
 /** The deepest folder of an output template that has no variable in it, like the server's default. */
@@ -25,10 +21,14 @@ export function defaultExistingFilesFolder(outputTemplate: string | undefined): 
     return folder.startsWith('/downloads') ? folder : '/downloads'
 }
 
-export default function ExistingFilesStep({value, onChange, onBack, onContinue, onCancel}: Props) {
+/** Files the user already has for the collection, which VODLoft adopts before it downloads the rest. */
+export default function ExistingFilesFields({value, onChange}: {
+    value: ExistingFilesChoice
+    onChange: (value: ExistingFilesChoice) => void
+}) {
     const toggleId = useId()
     return (
-        <form onSubmit={(event) => { event.preventDefault(); onContinue() }}>
+        <>
             <div className="form-row">
                 <label htmlFor={toggleId}>I already have files for this collection</label>
                 <Switch
@@ -48,13 +48,15 @@ export default function ExistingFilesStep({value, onChange, onBack, onContinue, 
                 </div>
             </div>
             {value.enabled && (
-                <ExistingFilesSetup value={value} onChange={(setup) => onChange({...value, ...setup})}/>
+                <ExistingFilesSetup
+                    value={value}
+                    onChange={(setup) => onChange({
+                        ...value,
+                        ...setup,
+                        folderChosen: value.folderChosen || setup.folder !== value.folder,
+                    })}
+                />
             )}
-            <div className="actions">
-                <button type="button" className="btn" onClick={onBack}>Back</button>
-                <input type="submit" className="btn btn-primary" value="Continue" disabled={value.enabled && !value.folder.trim()}/>
-                <button type="button" className="btn" onClick={onCancel}>Cancel</button>
-            </div>
-        </form>
+        </>
     )
 }
