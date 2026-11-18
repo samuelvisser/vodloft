@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .StreamProfileBase import StreamProfileBase
@@ -17,8 +17,8 @@ class WebdavStreamProfile(StreamProfileBase):
     __tablename__ = "stream_profiles_webdav"
     __mapper_args__ = {"polymorphic_identity": StreamProfileType.WEBDAV.value}
 
-    # A share lists whole files, never the Site's stream.
-    passes_site_streams = False
+    # A share lists whole files, so only downloads: never the Site's stream.
+    streams_from_site = False
 
     id: Mapped[int] = mapped_column(
         ForeignKey("stream_profiles.id", ondelete="CASCADE"),
@@ -27,6 +27,10 @@ class WebdavStreamProfile(StreamProfileBase):
     season_folders: Mapped[str] = mapped_column(
         String(16), default=WebdavSeasonFolders.SEASON.value,
         comment="How the episodes are sorted into folders: a WebdavSeasonFolders value",
+    )
+    episode_extras: Mapped[bool] = mapped_column(
+        default=False, server_default=false(),
+        comment="List the extras of an episode beside it, named after its file; otherwise in the show's Trailers and Other folders",
     )
     metadata_files: Mapped[str] = mapped_column(
         String(32), default=WebdavMetadataFiles.NFO_AND_ARTWORK.value,

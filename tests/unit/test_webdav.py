@@ -168,20 +168,94 @@ def test_an_audio_share_lists_audio_files_in_one_folder_with_artwork_only(db_ses
     ]
 
 
-def test_a_share_that_streams_from_the_site_lists_episodes_in_the_stream_video_cache(db_session, tmp_path, monkeypatch):
+def test_a_show_by_season_numbers_specials_by_their_extra_index_and_keeps_trailers_in_a_trailers_folder(
+    db_session, tmp_path,
+):
+    from backend.services.extra_indexes import number_extras
+    from backend.services.webdav import show_folder
+
+    collection = _collection(db_session)
+    _download(db_session, _episode(db_session, collection, 1, at=datetime(2026, 3, 1, tzinfo=timezone.utc)), tmp_path)
+    aux = _episode(db_session, collection, 207, at=datetime(2026, 3, 2, tzinfo=timezone.utc))
+    aux.episode_identifier = "aux.207"
+    _download(db_session, aux, tmp_path)
+    trailer = _episode(db_session, collection, 3, at=datetime(2026, 3, 3, tzinfo=timezone.utc))
+    trailer.episode_identifier = "trailer.3"
+    _download(db_session, trailer, tmp_path)
+    short = _episode(db_session, collection, 4, at=datetime(2026, 3, 4, tzinfo=timezone.utc))
+    short.episode_identifier = "short.4"
+    _download(db_session, short, tmp_path)
+    profile = _share(db_session, collection)
+    profile.ep_id_type_list = ["ep", "aux", "trailer", "short"]
+    number_extras(db_session, collection.id)
+    db_session.expire_all()
+
+    folder = show_folder(db_session, profile)
+
+    assert [line for line in _tree(folder) if not line.endswith(".jpg")] == [
+        "Season 01/", "Season 01/The Show - S01E01 - Episode 1： A⧸B.mp4",
+        "Season 01/The Show - S01E01 - Episode 1： A⧸B.nfo", "Season 01/season.nfo",
+        "Specials/", "Specials/The Show - S00E02 - Episode 4： A⧸B.mp4",
+        "Specials/The Show - S00E02 - Episode 4： A⧸B.nfo", "Specials/The Show - S00E03 - Episode 207： A⧸B.mp4",
+        "Specials/The Show - S00E03 - Episode 207： A⧸B.nfo", "Specials/season.nfo",
+        "Trailers/", "Trailers/Trailer 3 - Episode 3： A⧸B.mp4", "tvshow.nfo",
+    ]
+    specials = folder.children["Specials"].children
+    # The trailer took extra number 1, so the short and the auxiliary episode follow it.
+    episode_nfo = specials["The Show - S00E03 - Episode 207： A⧸B.nfo"].content
+    assert b"<season>0</season>" in episode_nfo and b"<episode>3</episode>" in episode_nfo
+    assert b"<seasonnumber>0</seasonnumber>" in specials["season.nfo"].content
+
+
+@pytest.mark.parametrize("episode_extras, expected", [
+    (False, [
+        "Other/", "Other/Extra 1.2 - Episode 3： A⧸B.mp4",
+        "Season 01/", "Season 01/The Show - S01E01 - Episode 1： A⧸B.mp4",
+        "Trailers/", "Trailers/Trailer 1.1 - Episode 2： A⧸B.mp4",
+    ]),
+    (True, [
+        "Season 01/", "Season 01/The Show - S01E01 - Episode 1： A⧸B-other2.mp4",
+        "Season 01/The Show - S01E01 - Episode 1： A⧸B-trailer1.mp4", "Season 01/The Show - S01E01 - Episode 1： A⧸B.mp4",
+    ]),
+])
+def test_the_extras_of_an_episode_are_listed_in_the_shows_folders_or_beside_it(
+    db_session, tmp_path, episode_extras, expected,
+):
+    from backend.services.webdav import show_folder
+
+    collection = _collection(db_session)
+    _download(db_session, _episode(db_session, collection, 1, at=datetime(2026, 3, 1, tzinfo=timezone.utc)), tmp_path)
+    for number, identifier in ((2, "ep-extra.trailer.1.1"), (3, "ep-extra.other.1.2")):
+        extra = _episode(db_session, collection, number, at=datetime(2026, 3, number, tzinfo=timezone.utc))
+        extra.episode_identifier = identifier
+        _download(db_session, extra, tmp_path)
+    profile = _share(db_session, collection, metadata_files="none", episode_extras=episode_extras)
+    profile.ep_id_type_list = ["ep", "ep-extra"]
+
+    assert _tree(show_folder(db_session, profile)) == expected
+
+
+def test_a_share_only_lists_downloads_and_cannot_stream_from_the_site(db_session, tmp_path):
+    from pydantic import ValidationError
+
+    from backend.api.models.webdav_stream_profile import WebdavStreamProfileAPIUpdate
     from backend.services import webdav
 
     collection = _collection(db_session)
-    _episode(db_session, collection, 1, at=datetime(2026, 3, 1, tzinfo=timezone.utc))
+    _download(db_session, _episode(db_session, collection, 1, at=datetime(2026, 3, 1, tzinfo=timezone.utc)), tmp_path)
     _episode(db_session, collection, 2, at=datetime(2026, 3, 2, tzinfo=timezone.utc))
-    cached = tmp_path / "cached.mp4"
-    cached.write_bytes(b"cached")
-    monkeypatch.setattr(webdav, "get_cached_mp4_path", lambda key: cached if key == "show-2" else None)
-    profile = _share(db_session, collection, use_downloads=False, use_source_stream=True, metadata_files="none")
+    profile = _share(db_session, collection, metadata_files="none")
 
     assert _tree(webdav.show_folder(db_session, profile)) == [
-        "Season 01/", "Season 01/The Show - S01E02 - Episode 2： A⧸B.mp4",
+        "Season 01/", "Season 01/The Show - S01E01 - Episode 1： A⧸B.mp4",
     ]
+    fields = {
+        "title": "The Show", "enableProfile": True, "preferredFormat": "format_1080p", "preferExactMatch": False,
+    }
+    saved = WebdavStreamProfileAPIUpdate.model_validate(fields)
+    assert (saved.use_downloads, saved.use_source_stream) == (True, False)
+    with pytest.raises(ValidationError):
+        WebdavStreamProfileAPIUpdate.model_validate({**fields, "useSourceStream": True})
 
 
 def test_a_user_token_opens_all_their_shows_and_names_that_clash_are_numbered(db_session, tmp_path):

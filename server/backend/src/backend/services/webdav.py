@@ -1,8 +1,8 @@
 """What a WebDAV stream profile's share holds: a folder per show, laid out the way media players read a TV show.
 
 A show's folder holds its episodes, sorted into a folder per season, per year or none, each named
-``<Show> - S01E05 - <Title>`` or ``<Show> - 2026-03-15 - <Title>``. An episode is listed only once VODLoft
-has a whole file of it, downloaded or in the Stream Video Cache, as a player seeks in a file. Beside them,
+``<Show> - S01E05 - <Title>`` or ``<Show> - 2026-03-15 - <Title>``. Only downloaded episodes are listed, as a
+player seeks in a whole file; a share never streams from the Site. Beside them,
 as the profile chooses, are NFO files and artwork, made when they are asked for: nothing is written next
 to the downloads.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Union
@@ -18,21 +18,23 @@ from typing import Optional, Union
 from sqlalchemy.orm import Session
 
 from backend.db.datetime_types import utc_datetime
-from backend.db.models import Collection, Episode, EpisodeMediaDownload
+from backend.db.models import Collection, Episode
 from backend.db.models.stream_profile import WebdavStreamProfile
 from backend.services.collection_assets import collection_asset_sources
+from backend.services.extra_indexes import is_extra
 from backend.services.download_metadata import build_episode_metadata, build_season_metadata, build_show_metadata
-from backend.services.sites import collection_site
 from backend.services.stream_episodes import get_stream_items
 from backend.services.stream_tokens import profiles_for_token
 from backend.services.thumbnails import own_thumbnail_file
-from backend.services.video_cache import artwork_cache_path, episode_mp4_key, get_cached_mp4_path, mark_used
+from backend.services.video_cache import artwork_cache_path, mark_used
 from backend.utils.collection_asset_files import download_collection_asset
 from config import get_settings
 from backend.types.stream_profile_types import WebdavMetadataFiles, WebdavSeasonFolders
 from backend.utils.output_template import sanitize_path_component
 from config.settings.submodels import FilenameRestrictionMode
-from downloader.metadata import render_nfo
+from backend.types.download_profile_types import EpIdType
+from backend.types.episode_types import EpisodeExtraType
+from downloader.metadata import MediaServerMetadata, render_nfo
 
 _EXTENSIONS = {"mp4": ".mp4", "audio": ".m4a"}
 _CONTENT_TYPES = {".mp4": "video/mp4", ".m4a": "audio/mp4", ".nfo": "text/xml", ".jpg": "image/jpeg", ".png": "image/png"}
@@ -120,18 +122,6 @@ def show_name(profile: WebdavStreamProfile) -> str:
     return _name(profile.overwrite_collection_title or profile.collection.title)
 
 
-def _episode_file(
-    profile: WebdavStreamProfile, episode: Episode, download: Optional[EpisodeMediaDownload],
-) -> Optional[Path]:
-    """The whole file the share lists for the episode: its download, or else its video in the Stream Video Cache."""
-    if download is not None:
-        return Path(download.file_path)
-    if profile.media_kinds[0] != "mp4" or not profile.use_source_stream:
-        return None
-    site = collection_site(profile.collection)
-    return get_cached_mp4_path(episode_mp4_key(site, profile.preferred_format, episode.uuid))
-
-
 def _modified(path: Path) -> datetime:
     return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
 
@@ -141,8 +131,33 @@ def _aired(episode: Episode) -> Optional[datetime]:
     return utc_datetime(moment) if moment is not None else None
 
 
-def _episode_base_name(show: str, episode: Episode, by_number: bool) -> str:
+# Media players keep a show's specials in season 0, in a folder of their own, and its trailers in a Trailers folder.
+_SPECIALS = "Specials"
+_TRAILERS = "Trailers"
+_OTHER = "Other"
+_SPECIALS_SEASON = MediaServerMetadata(kind="season", title=_SPECIALS, season_number=0)
+
+
+def _is_special(episode: Episode) -> bool:
+    """Whether the episode is a special: an extra, as the Media Server output templates tell, other than a
+    trailer or an episode extra, which are listed in folders of their own."""
+    season = episode.season
+    return (
+        is_extra(season.season_type if season else None, episode.episode_identifier)
+        and episode.episode_type not in (EpIdType.TRAILER, EpIdType.EP_EXTRA)
+    )
+
+
+def _episode_metadata(episode: Episode, by_number: bool) -> MediaServerMetadata:
+    """What the episode's NFO file and name say about it. A show numbered by season keeps its specials in
+    season 0, numbered by their extra index so that no two share a number."""
     metadata = build_episode_metadata(episode, episode.collection)
+    if not (by_number and _is_special(episode)):
+        return metadata
+    return replace(metadata, season_number=0, episode_number=episode.extra_index)
+
+
+def _episode_base_name(show: str, episode: Episode, metadata: MediaServerMetadata, by_number: bool) -> str:
     if by_number and metadata.season_number is not None and metadata.episode_number is not None:
         label = f"S{metadata.season_number:02d}E{metadata.episode_number:02d}"
     else:
@@ -151,13 +166,18 @@ def _episode_base_name(show: str, episode: Episode, by_number: bool) -> str:
     return f"{show} - {label} - {_name(episode.title)}"
 
 
-def _season_folder(parent: ShareFolder, profile: WebdavStreamProfile, episode: Episode, modified: datetime) -> ShareFolder:
+def _season_folder(
+    parent: ShareFolder, profile: WebdavStreamProfile, episode: Episode, metadata: MediaServerMetadata,
+    modified: datetime,
+) -> ShareFolder:
     layout = WebdavSeasonFolders(profile.season_folders)
     if layout is WebdavSeasonFolders.SEASON:
+        if metadata.season_number == 0:
+            return parent.folder(_SPECIALS, modified)
         return parent.folder(f"Season {episode.season.season_number:02d}", modified)
     if layout is WebdavSeasonFolders.YEAR:
         aired = _aired(episode)
-        return parent.folder(f"Season {aired.year}" if aired else "Specials", modified)
+        return parent.folder(f"Season {aired.year}" if aired else _SPECIALS, modified)
     return parent
 
 
@@ -179,9 +199,30 @@ def _episode_artwork(episode: Episode) -> Optional[Artwork]:
     return Artwork(picture)
 
 
+def _add_episode_extra(
+    folder: ShareFolder, profile: WebdavStreamProfile, episode: Episode, path: Path, modified: datetime,
+    listed: dict[tuple[Optional[int], Optional[str]], tuple[ShareFolder, str]],
+) -> None:
+    """List an extra of an episode, such as its trailer: beside its episode, named after the episode's file with a
+    suffix such as ``-trailer1`` as Plex reads an episode's extras, when the profile supports episode extras and
+    the episode is listed; otherwise in the show's Trailers or Other folder, which most media players read."""
+    info = episode.episode_identifier_info
+    trailer = info.extra_type == EpisodeExtraType.TRAILER
+    extension = _EXTENSIONS[profile.media_kinds[0]]
+    episode_file = listed.get((info.season_number, info.episode_number)) if profile.episode_extras else None
+    if episode_file is not None:
+        parent, base = episode_file
+        parent.add(ShareFile(
+            f"{base}-{'trailer' if trailer else 'other'}{info.sub_episode_number}{extension}", modified, path=path,
+        ))
+        return
+    folder.folder(_TRAILERS if trailer else _OTHER, modified).add(ShareFile(
+        f"{'Trailer' if trailer else 'Extra'} {info.label} - {_name(episode.title)}{extension}", modified, path=path,
+    ))
+
+
 def show_folder(s: Session, profile: WebdavStreamProfile) -> ShareFolder:
-    """The show's folder, with every episode VODLoft has a whole file of and, as the profile chooses, its
-    NFO files and artwork."""
+    """The show's folder, with every downloaded episode and, as the profile chooses, its NFO files and artwork."""
     collection = profile.collection
     name = show_name(profile)
     metadata = WebdavMetadataFiles(profile.metadata_files)
@@ -191,34 +232,54 @@ def show_folder(s: Session, profile: WebdavStreamProfile) -> ShareFolder:
     folder = ShareFolder(name, changed)
     by_number = profile.season_folders == WebdavSeasonFolders.SEASON.value
 
-    seasons: dict[int, ShareFolder] = {}
+    seasons: dict[Optional[int], ShareFolder] = {}
+    # The folder and file name of each listed episode by its season and number, for the extras listed beside it.
+    listed: dict[tuple[Optional[int], Optional[str]], tuple[ShareFolder, str]] = {}
+    extras: list[tuple[Episode, Path, datetime]] = []
     for episode, download in get_stream_items(s, profile):
-        path = _episode_file(profile, episode, download)
-        if path is None or not path.is_file():
+        if download is None or not (path := Path(download.file_path)).is_file():
             continue
         modified = _modified(path)
-        parent = _season_folder(folder, profile, episode, modified)
+        extension = _EXTENSIONS[profile.media_kinds[0]]
+        if episode.episode_type == EpIdType.TRAILER:
+            # Plex and Jellyfin play the files in a show's Trailers folder as its trailers, by the name of the file.
+            # The trailer's own number keeps the names apart and in order.
+            folder.folder(_TRAILERS, modified).add(ShareFile(
+                f"Trailer {episode.episode_number} - {_name(episode.title)}{extension}", modified, path=path,
+            ))
+            continue
+        if episode.episode_type == EpIdType.EP_EXTRA:
+            extras.append((episode, path, modified))
+            continue
+        episode_metadata = _episode_metadata(episode, by_number)
+        parent = _season_folder(folder, profile, episode, episode_metadata, modified)
         if parent is not folder and nfo and by_number:
-            seasons.setdefault(episode.season_id, parent)
-        base = _episode_base_name(name, episode, by_number)
-        media = ShareFile(f"{base}{_EXTENSIONS[profile.media_kinds[0]]}", modified, path=path)
+            # Specials have no season of their own: None stands for them.
+            seasons.setdefault(None if episode_metadata.season_number == 0 else episode.season_id, parent)
+        base = _episode_base_name(name, episode, episode_metadata, by_number)
+        media = ShareFile(f"{base}{extension}", modified, path=path)
         parent.add(media)
         base = Path(media.name).stem
+        if episode.episode_type == EpIdType.EP:
+            info = episode.episode_identifier_info
+            listed[(info.season_number, info.episode_number)] = (parent, base)
         if nfo:
             parent.add(ShareFile(
                 f"{base}.nfo", utc_datetime(episode.updated_at),
-                content=render_nfo(build_episode_metadata(episode, collection)),
+                content=render_nfo(episode_metadata),
             ))
         if artwork and (picture := _episode_artwork(episode)) is not None:
             parent.add(ShareFile(f"{base}-thumb.jpg", utc_datetime(episode.updated_at), artwork=picture))
+
+    for episode, path, modified in extras:
+        _add_episode_extra(folder, profile, episode, path, modified, listed)
 
     if nfo:
         folder.add(ShareFile("tvshow.nfo", changed, content=render_nfo(build_show_metadata(collection))))
         episodes_seasons = {season.id: season for season in collection.seasons}
         for season_id, season_folder in seasons.items():
-            season_folder.add(ShareFile(
-                "season.nfo", changed, content=render_nfo(build_season_metadata(episodes_seasons[season_id])),
-            ))
+            season = _SPECIALS_SEASON if season_id is None else build_season_metadata(episodes_seasons[season_id])
+            season_folder.add(ShareFile("season.nfo", changed, content=render_nfo(season)))
     if artwork:
         for file_name, picture in _collection_artwork(collection):
             folder.add(ShareFile(file_name, changed, artwork=picture))
