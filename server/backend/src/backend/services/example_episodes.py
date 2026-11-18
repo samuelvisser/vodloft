@@ -31,6 +31,7 @@ from backend.types.download_profile_types import EpIdType
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.season_types import SeasonType
+from backend.services.extra_indexes import is_extra
 from backend.utils.helpers import generate_uuid
 from backend.utils.output_template import episode_output_template_values
 from backend.utils.season_ordering import number_initial_seasons
@@ -167,6 +168,8 @@ def _add(s: Session, form: ExampleCollection, videos: list[VideoDetails]) -> tup
             counters[video.tag] = counters.get(video.tag, 0) + 1
             identifier = _provisional_identifier(video.tag, counters[video.tag])
             pending |= _IDENTIFIER_VALUES
+        if is_extra(season.season_type, identifier):
+            pending.add("extra_index")
         episode = Episode(
             uuid=generate_uuid(), type=MediaType.EPISODE.value, source_key=form.source_key, collection=collection, season=season,
             index=position, episode_identifier=identifier, dw_episode_number=video.number_text,
