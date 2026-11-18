@@ -85,7 +85,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
 
             <LocalMediaProfileSection
                 form={form} title="Files and metadata" description="What VODLoft saves besides the media"
-                summary={summaries.files} fields={FILES_FIELDS} defaultOpen={isCreating}
+                summary={summaries.files} fields={FILES_FIELDS}
             >
                 <MediaFilesFields form={form} mode={mode}/>
             </LocalMediaProfileSection>
@@ -93,7 +93,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
             {offersSubtitles && (
                 <LocalMediaProfileSection
                     form={form} title="Subtitles" description="Which subtitles are saved, and where"
-                    summary={summaries.subtitles} fields={SUBTITLE_FIELDS} defaultOpen={isCreating}
+                    summary={summaries.subtitles} fields={SUBTITLE_FIELDS}
                 >
                     <SubtitleFields form={form} mode={mode} onSubtitleModeChange={onSubtitleModeChange}/>
                 </LocalMediaProfileSection>
@@ -102,7 +102,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
             {offersSponsorBlock && (
                 <LocalMediaProfileSection
                     form={form} title="SponsorBlock" description="Sponsor reads and other parts of a video"
-                    summary={summaries.sponsorblock} fields={SPONSORBLOCK_FIELDS} defaultOpen={isCreating}
+                    summary={summaries.sponsorblock} fields={SPONSORBLOCK_FIELDS}
                 >
                     <SponsorBlockSection form={form} mode={mode}/>
                 </LocalMediaProfileSection>
