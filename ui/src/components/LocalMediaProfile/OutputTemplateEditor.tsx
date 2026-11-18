@@ -45,6 +45,8 @@ type Props = {
     mode: LocalMediaProfileMode
     placeholder: string
     help: ReactNode
+    /** Shows a saved profile's template and its examples without letting it be changed here. */
+    readOnly?: boolean
 }
 
 type TemplateCodeEditorProps = {
@@ -58,6 +60,7 @@ type TemplateCodeEditorProps = {
     ariaLabel?: string
     /** The help and error text, when they are not the profile form's own. */
     describedBy?: string
+    readOnly?: boolean
 }
 
 type JinjaStatement = {
@@ -417,6 +420,7 @@ export function TemplateCodeEditor({
                                 id = 'mp-path',
                                 ariaLabel = 'Output path template',
                                 describedBy,
+                                readOnly = false,
                             }: TemplateCodeEditorProps) {
     const canonicalValue = value ?? ''
     const [editorValue, setEditorValue] = useState(() => (
@@ -438,6 +442,8 @@ export function TemplateCodeEditor({
             minHeight="96px"
             placeholder={placeholder}
             extensions={extensions}
+            editable={!readOnly}
+            readOnly={readOnly}
             basicSetup={{
                 lineNumbers: false,
                 foldGutter: false,
@@ -530,7 +536,7 @@ function describeTypedCharacter(char: string): string {
     return char
 }
 
-export default function OutputTemplateEditor({form, mode, placeholder, help}: Props) {
+export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
@@ -871,13 +877,15 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
 
     return (
         <>
-            <OutputTemplateStartFields form={form} mode={mode}/>
+            {!readOnly && <OutputTemplateStartFields form={form} mode={mode}/>}
             <div className="form-row output-template-field">
                 <section className="template-workbench" aria-labelledby="template-editor-heading">
                     <div className="template-editor-heading">
                         <div>
                             <label id="template-editor-heading" htmlFor="mp-path">Output path template</label>
-                            <p>Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>
+                            {readOnly
+                                ? <p>Read only. Edit the media profile to change it.</p>
+                                : <p>Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>}
                         </div>
                         <span className="template-language-badge">Jinja</span>
                     </div>
@@ -895,6 +903,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                                     form.clearErrors('outputTemplate')
                                 }}
                                 onBlur={field.onBlur}
+                                readOnly={readOnly}
                             />
                         )}
                     />
@@ -903,7 +912,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                             {String(errors.outputTemplate.message)}
                         </div>
                     )}
-                    <FilenameModeField form={form}/>
+                    {!readOnly && <FilenameModeField form={form}/>}
                     {variableQuery.isError && (
                         <div className="error" role="alert">
                             Custom metadata fields could not be loaded. Try refreshing the page.
@@ -920,7 +929,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                             {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
                         </div>
                     )}
-                    {mode === 'collection' && (
+                    {mode === 'collection' && !readOnly && (
                         <CustomIndexAdvisories
                             template={template}
                             indexingValues={indexingValues}
@@ -976,7 +985,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                         <div className="template-playground-heading">
                             <div>
                                 <h3 id="template-preview-heading">Example output</h3>
-                                <p>Try different values here. Your profile is not changed.</p>
+                                <p>{readOnly ? 'Pick an episode to see where its file would go.' : 'Try different values here. Your profile is not changed.'}</p>
                             </div>
                             <label className="template-source-label" htmlFor="template-example-source">
                                 <span>Example episode</span>

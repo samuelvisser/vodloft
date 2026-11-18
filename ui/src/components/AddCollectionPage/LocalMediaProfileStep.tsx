@@ -4,33 +4,55 @@ import {zodResolver} from '@hookform/resolvers/zod'
 import {ChosenCollectionCard} from './CollectionPreviewCard'
 import type {CollectionCreatePayloadOut} from '../../types/schemas/collection'
 import LocalMediaProfileForm from '../LocalMediaProfile/LocalMediaProfileForm'
+import CollectionLocalMediaProfileOutputTemplate from '../LocalMediaProfile/CollectionLocalMediaProfileOutputTemplate'
 import IndexingValuesEditorButton from '../LocalMediaProfile/IndexingValuesEditorButton'
 import {useLocalMediaProfileSites, useLocalMediaProfiles} from '../../lib/queries'
 import {CollectionLocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {
-    LocalMediaProfileCreateUnionIn,
+    LocalMediaProfileChoiceIn,
+    LocalMediaProfileChoiceOut,
+    LocalMediaProfileChoiceSchema,
     LocalMediaProfileCreateUnionSchema,
-    LocalMediaProfileUpdateUnionSchema,
-    LocalMediaProfileUpsertIn,
-    LocalMediaProfileUpsertOut,
-    LocalMediaProfileUpsertSchema,
 } from '../../types/schemas/collection_as_bundle'
 import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
-/** Quality and subtitle language choices an existing profile keeps when this step picks it. */
-const PROFILE_CHOICE_FIELDS = [
-    'subtitleLanguages', 'subtitleLanguageMode', 'qualityGoal', 'videoCodecs', 'codecFallback',
-    'container', 'audioCodec', 'audioFormat', 'audioLanguage', 'siteKeys', 'includeUpcomingSites',
-    'autoSubtitles', 'sponsorblockEnabled', 'sponsorblockSegments',
-] as const
 
+
+/** The picked profile's output path and its examples, shown as they are: the profile is edited on its own page. */
+function ChosenProfileOutputPath({profile}: {profile: CollectionLocalMediaProfileRead}) {
+    const display = useForm<CollectionLocalMediaProfileRead>({defaultValues: profile})
+    return (
+        <>
+            <div className="form-row">
+                <p className="help">
+                    This collection will use <strong>{profile.name}</strong> as it is. Other collections can use the
+                    same profile, so changing it changes them too. To give this collection settings of its own,
+                    unselect the profile and create a new one.
+                </p>
+                <div>
+                    <a
+                        className="btn"
+                        href={`/edit-local-media-profile/${encodeURIComponent(profile.slug)}`}
+                        target="_blank"
+                        rel="noopener"
+                    >
+                        Edit media profile
+                    </a>
+                </div>
+            </div>
+            <div className="chosen-profile-output-path">
+                <CollectionLocalMediaProfileOutputTemplate form={display} readOnly/>
+            </div>
+        </>
+    )
+}
 
 type Props = {
-    value: Partial<LocalMediaProfileUpsertIn>
-    onChange: (v: Partial<LocalMediaProfileUpsertIn>) => void
-    onSubmit: (v: LocalMediaProfileUpsertOut) => void
+    value: Partial<LocalMediaProfileChoiceIn>
+    onChange: (v: Partial<LocalMediaProfileChoiceIn>) => void
+    onSubmit: (v: LocalMediaProfileChoiceOut) => void
     onBack: () => void
     onContinue: () => void
     onCancel: () => void
@@ -53,10 +75,9 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
     )
     const profilesError = profilesQuery.isError ? ((profilesQuery.error)?.message ?? 'Failed to load media profiles') : null
     const createDefaults = getZodDefaults(LocalMediaProfileCreateUnionSchema)
-    const updateDefaults = getZodDefaults(LocalMediaProfileUpdateUnionSchema)
 
-    const form = useForm<LocalMediaProfileUpsertIn>({
-        resolver: zodResolver(LocalMediaProfileUpsertSchema),
+    const form = useForm<LocalMediaProfileChoiceIn>({
+        resolver: zodResolver(LocalMediaProfileChoiceSchema),
         mode: 'onBlur',
         shouldFocusError: true,
         defaultValues: {...createDefaults, ...value},
@@ -70,50 +91,25 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
         return () => subscription.unsubscribe()
     }, [watch, getValues, onChange])
 
-    const snapshotRef = useRef<Partial<LocalMediaProfileCreateUnionIn> | null>(null)
+    // What the user typed for a new profile, kept while an existing profile is picked.
+    const newProfileRef = useRef<Partial<LocalMediaProfileChoiceIn> | null>(null)
 
     const watchedOp = watch('op')
     const watchedSlug = watch('slug')
+    const chosenProfile = watchedOp === 'use_existing' ? profiles?.find((profile) => profile.slug === watchedSlug) : undefined
 
     const handleSelect = (profile: CollectionLocalMediaProfileRead) => {
-        const selected = watchedOp === 'update_by_slug' && watchedSlug === profile.slug
-        if (selected) {
-            form.reset({
-                ...createDefaults,
-                ...(snapshotRef.current ?? {}),
-            } as LocalMediaProfileUpsertIn)
-            snapshotRef.current = null
+        if (watchedOp === 'use_existing' && watchedSlug === profile.slug) {
+            form.reset({...createDefaults, ...(newProfileRef.current ?? {})} as LocalMediaProfileChoiceIn)
+            newProfileRef.current = null
             return
         }
-
-        if (watchedOp !== 'update_by_slug') {
-            snapshotRef.current = {
-                name: watch('name'),
-                collectionScope: watch('collectionScope'),
-                subtitleMode: watch('subtitleMode'),
-                outputTemplate: watch('outputTemplate'),
-                preferredFormat: watch('preferredFormat'),
-                indexingValues: watch('indexingValues'),
-                ...Object.fromEntries(PROFILE_CHOICE_FIELDS.map((name) => [name, watch(name)])),
-            }
-        }
-
-        form.reset({
-            ...updateDefaults,
-            id: profile.id,
-            slug: profile.slug,
-            name: profile.name,
-            collectionScope: profile.collectionScope,
-            subtitleMode: profile.subtitleMode,
-            outputTemplate: profile.outputTemplate,
-            preferredFormat: profile.preferredFormat,
-            indexingValues: profile.indexingValues,
-            ...Object.fromEntries(PROFILE_CHOICE_FIELDS.map((name) => [name, profile[name]])),
-        } as LocalMediaProfileUpsertIn)
+        if (watchedOp !== 'use_existing') newProfileRef.current = getValues()
+        form.reset({op: 'use_existing', slug: profile.slug})
     }
 
-    const onSubmit = buildServerAwareSubmit(form, async (dataIn: LocalMediaProfileUpsertIn) => {
-        const dataOut = LocalMediaProfileUpsertSchema.parse(dataIn)
+    const onSubmit = buildServerAwareSubmit(form, async (dataIn: LocalMediaProfileChoiceIn) => {
+        const dataOut = LocalMediaProfileChoiceSchema.parse(dataIn)
         onSubmitParent(dataOut)
         onContinue()
     }, {
@@ -134,7 +130,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                                 <div role="listitem" className="card">{profilesError ?? 'No profiles found'}</div>
                             ) : (
                                 profiles.map((profile) => {
-                                    const selected = watchedOp === 'update_by_slug' && watchedSlug === profile.slug
+                                    const selected = watchedOp === 'use_existing' && watchedSlug === profile.slug
                                     return (
                                         <LocalMediaProfileCard
                                             key={profile.slug}
@@ -148,24 +144,23 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                         </div>
                     </div>
 
-                    <hr className="divider" aria-hidden="true"/>
-                    <div className="divider-label" aria-hidden="true">
-                        {watchedOp === 'update_by_slug' ? 'Update current profile' : 'Or create a new profile'}
-                    </div>
+                    {watchedOp === 'use_existing' ? (
+                        chosenProfile ? <ChosenProfileOutputPath key={chosenProfile.slug} profile={chosenProfile}/> : null
+                    ) : (
+                        <>
+                            <hr className="divider" aria-hidden="true"/>
+                            <div className="divider-label" aria-hidden="true">Or create a new profile</div>
 
-                    <LocalMediaProfileForm
-                        key={watchedOp === 'update_by_slug' ? watchedSlug : 'create_new'}
-                        form={form}
-                        mode="collection"
-                        isCreating={watchedOp !== 'update_by_slug'}
-                    />
-                    <div className="form-row">
-                        <label>Indexing values</label>
-                        <IndexingValuesEditorButton form={form}/>
-                        <div className="help">
-                            Configure optional named number sequences for use with <code>custom_index</code> in the output template.
-                        </div>
-                    </div>
+                            <LocalMediaProfileForm form={form} mode="collection" isCreating/>
+                            <div className="form-row">
+                                <label>Indexing values</label>
+                                <IndexingValuesEditorButton form={form}/>
+                                <div className="help">
+                                    Configure optional named number sequences for use with <code>custom_index</code> in the output template.
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {collection ? (

@@ -1,5 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
-import {getCurrentAppVersion, getErrorMessageFromResponse} from '../../utils/helpers'
+import {getErrorMessageFromResponse} from '../../utils/helpers'
+import {clearFormDraft, loadFormDraft, saveFormDraft} from '../FormDraft/formDraft'
+import UnsavedChangesBar from '../FormDraft/UnsavedChangesBar'
 import ChooseCollectionStep from './ChooseCollectionStep'
 import CollectionActionStep, {CollectionAction} from './CollectionActionStep'
 import LocalMediaProfileStep from './LocalMediaProfileStep'
@@ -8,14 +10,13 @@ import StreamProfileStep from './StreamProfileStep'
 import ExistingFilesStep, {defaultExistingFilesFolder, type ExistingFilesChoice} from './ExistingFilesStep'
 import {layoutTemplate} from '../ExistingFiles/ExistingFilesSetup'
 
-import type {Versioned} from '../../types/data'
 import {CollectionCreatePayloadOut, CollectionRead, CollectionCreatePayloadIn, CollectionCreatePayloadSchema} from "../../types/schemas/collection";
 import {getZodDefaults} from "../../utils/defaultZod";
 import {
     DownloadProfileBundleSchema, DownloadProfileBundleIn, DownloadProfileBundleOut,
+    LocalMediaProfileChoiceIn,
+    LocalMediaProfileChoiceOut,
     LocalMediaProfileCreateUnionSchema,
-    LocalMediaProfileUpsertIn,
-    LocalMediaProfileUpsertOut,
     RssStreamProfileBundleIn,
     RssStreamProfileBundleOut,
     RssStreamProfileBundleSchema,
@@ -24,7 +25,9 @@ import {defaultEpisodeFilters} from "../../types/schemas/download_profile";
 import {downloadedEpisodeTypes} from "../DownloadProfile/episodeFilters";
 import {useQueryClient} from "@tanstack/react-query";
 import {SeasonDetachedOut} from "../../types/schemas/season";
-import {useEpisodeTags, useSiteOptions} from "../../lib/queries";
+import {LocalMediaProfileRead} from "../../types/schemas/local_media_profile";
+import {PreferredFormatReg} from "../../types/local_media_profile";
+import {useEpisodeTags, useLocalMediaProfiles, useSiteOptions} from "../../lib/queries";
 import {EpisodeTagRead} from "../../types/schemas/source";
 import {CollectionExamplesContext, useCollectionExamplesQuery} from "../../lib/collectionExamples";
 import {apiUrl} from '../../lib/api'
@@ -50,8 +53,8 @@ type WizardState = {
         submit: CollectionCreatePayloadOut | undefined,
     },
     localMediaProfile: {
-        input: Partial<LocalMediaProfileUpsertIn>,
-        submit: LocalMediaProfileUpsertOut | undefined,
+        input: Partial<LocalMediaProfileChoiceIn>,
+        submit: LocalMediaProfileChoiceOut | undefined,
     },
     downloadProfile: {
         input: Partial<DownloadProfileBundleIn>,
@@ -67,44 +70,23 @@ type WizardState = {
     globalMessage?: WizardMessage | null
 }
 
-function loadWizardState(): WizardState | null {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        if (!raw) return null
-        const parsed = JSON.parse(raw) as any
-        const current = getCurrentAppVersion()
-        if (parsed && typeof parsed === 'object' && 'version' in parsed && 'data' in parsed) {
-            if (typeof current === 'string') {
-                if (parsed.version === current) return parsed.data as WizardState
-                localStorage.removeItem(STORAGE_KEY)
-                return null
-            }
-            return null
-        }
-        if (typeof current === 'string') localStorage.removeItem(STORAGE_KEY)
-        return null
-    } catch {
-        return null
-    }
-}
+// The wizard keeps where the user is in this browser, so a reload or a look elsewhere does not lose it.
+const DRAFT_SCHEMA_VERSION = 'add-collection-wizard-v11'
 
-function saveWizardState(state: WizardState) {
-    try {
-        const ver = getCurrentAppVersion()
-        if (!ver) return
-        const payload: Versioned<WizardState> = {version: ver, data: state}
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
-    } catch {
-        // ignore write errors
-    }
-}
+const loadWizardState = () => loadFormDraft<WizardState>(STORAGE_KEY, DRAFT_SCHEMA_VERSION)
+const saveWizardState = (state: WizardState) => saveFormDraft(STORAGE_KEY, DRAFT_SCHEMA_VERSION, state)
+const clearWizardState = () => clearFormDraft(STORAGE_KEY)
 
-function clearWizardState() {
-    try {
-        localStorage.removeItem(STORAGE_KEY)
-    } catch {
-        // ignore
-    }
+/** Whether the saved wizard holds anything the user did, rather than only the empty first step. */
+const hasWizardProgress = (state: WizardState | null) => !!state && (state.step > 1 || !!state.collection.input.url?.trim())
+
+/** The settings of the profile the collection gets: the new one, or the existing one it picked. */
+function chosenProfileSettings(
+    choice: LocalMediaProfileChoiceOut | undefined,
+    profiles: LocalMediaProfileRead[] | undefined,
+): Pick<LocalMediaProfileRead, 'preferredFormat' | 'outputTemplate'> | undefined {
+    if (choice?.op === 'use_existing') return profiles?.find((profile) => profile.slug === choice.slug)
+    return choice
 }
 
 /** The seasons come oldest first; a new profile starts with the latest one. */
@@ -127,8 +109,25 @@ const defaultStreamProfile = (action?: CollectionAction): Partial<RssStreamProfi
     preferredFormat: 'format_1080p',
 })
 
-export default function AddCollectionPage({onCancel, onCreated, initialUrl}: Props) {
-    const persisted = initialUrl ? null : loadWizardState()
+export default function AddCollectionPage(props: Props) {
+    // Starting over mounts a fresh wizard, so every step begins from its defaults again.
+    const [generation, setGeneration] = useState(0)
+    return (
+        <AddCollectionWizard
+            key={generation}
+            {...props}
+            initialUrl={generation === 0 ? props.initialUrl : undefined}
+            onStartOver={() => {
+                clearWizardState()
+                setGeneration((current) => current + 1)
+            }}
+        />
+    )
+}
+
+function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Props & {onStartOver: () => void}) {
+    const [persisted] = useState(() => initialUrl ? null : loadWizardState())
+    const [showRestored, setShowRestored] = useState(() => hasWizardProgress(persisted))
     const [globalMessage, setGlobalMessage] = useState<WizardMessage | null>(() => persisted?.globalMessage ?? null)
     const [isFinishing, setIsFinishing] = useState(false)
     const setWizardMessage = (message: string, type: WizardType) => setGlobalMessage({text: message, type})
@@ -146,9 +145,9 @@ export default function AddCollectionPage({onCancel, onCreated, initialUrl}: Pro
         }))
     const [collectionSubmit, setCollectionSubmit] = useState<CollectionCreatePayloadOut | undefined>(() => persisted?.collection.submit)
 
-    const [localMediaProfileInput, setLocalMediaProfileInput] = useState<Partial<LocalMediaProfileUpsertIn>>(
+    const [localMediaProfileInput, setLocalMediaProfileInput] = useState<Partial<LocalMediaProfileChoiceIn>>(
         () => persisted?.localMediaProfile.input ?? getZodDefaults(LocalMediaProfileCreateUnionSchema))
-    const [localMediaProfileSubmit, setLocalMediaProfileSubmit] = useState<LocalMediaProfileUpsertOut | undefined>(() => persisted?.localMediaProfile.submit)
+    const [localMediaProfileSubmit, setLocalMediaProfileSubmit] = useState<LocalMediaProfileChoiceOut | undefined>(() => persisted?.localMediaProfile.submit)
 
     const [downloadProfileInput, setDownloadProfileInput] = useState<Partial<DownloadProfileBundleIn>>(
         () => persisted?.downloadProfile.input ?? defaultDownloadProfile(persisted?.collection.submit?.episodeIdentifier))
@@ -183,18 +182,23 @@ export default function AddCollectionPage({onCancel, onCreated, initialUrl}: Pro
     const downloadProfileSubmitRef = useRef(downloadProfileSubmit)
     const streamProfileSubmitRef = useRef(streamProfileSubmit)
 
+    const {data: localMediaProfiles} = useLocalMediaProfiles()
+    const chosenProfile = chosenProfileSettings(localMediaProfileSubmit, localMediaProfiles)
+
     const wizardDownloadProfileDefaults = useMemo(() => {
-        if (!localMediaProfileSubmit || !downloadProfileSubmit) return []
+        if (!chosenProfile || !downloadProfileSubmit) return []
         return [{
-            preferredFormat: localMediaProfileSubmit.preferredFormat,
+            preferredFormat: chosenProfile.preferredFormat,
             episodeTypes: downloadedEpisodeTypes(downloadProfileSubmit.filters),
             enabled: downloadProfileSubmit.enableProfile,
         }]
-    }, [localMediaProfileSubmit, downloadProfileSubmit])
+    }, [chosenProfile, downloadProfileSubmit])
 
     useEffect(() => {
         const previousStep = previousStepRef.current
         previousStepRef.current = step
+        // Moving to another step answers the restored notice: the user carries on.
+        if (step !== previousStep) setShowRestored(false)
         if (step <= previousStep) return
 
         // Scroll to the top of the page rather than the wizard itself, so the sticky mobile header
@@ -237,7 +241,7 @@ export default function AddCollectionPage({onCancel, onCreated, initialUrl}: Pro
             return
         }
 
-        let localMediaProfile: LocalMediaProfileUpsertOut | undefined
+        let localMediaProfile: LocalMediaProfileChoiceOut | undefined
         let downloadProfile: DownloadProfileBundleOut | undefined
         let streamProfile: RssStreamProfileBundleOut | undefined
 
@@ -425,21 +429,18 @@ export default function AddCollectionPage({onCancel, onCreated, initialUrl}: Pro
                     onChange={setLocalMediaProfileInput}
                     onSubmit={(value) => {
                         setLocalMediaProfileSubmit(value)
-                        if (collectionAction === 'download-stream') {
-                            setStreamProfileInput((current) => ({
-                                ...current,
-                                preferredFormat: value.preferredFormat,
-                            }))
+                        const settings = chosenProfileSettings(value, localMediaProfiles)
+                        setExistingFiles((current) => current.folder ? current : {
+                            ...current,
+                            folder: defaultExistingFilesFolder(settings?.outputTemplate),
+                        })
+                        const preferredFormat = settings?.preferredFormat
+                        if (collectionAction === 'download-stream' && PreferredFormatReg.is(preferredFormat)) {
+                            setStreamProfileInput((current) => ({...current, preferredFormat}))
                         }
                     }}
                     onBack={() => setStep(2)}
-                    onContinue={() => {
-                        setExistingFiles((current) => current.folder ? current : {
-                            ...current,
-                            folder: defaultExistingFilesFolder((localMediaProfileSubmit as {outputTemplate?: string} | undefined)?.outputTemplate),
-                        })
-                        setStep(4)
-                    }}
+                    onContinue={() => setStep(4)}
                     onCancel={handleCancel}
                     collectionSlug={collectionSubmit.slug}
                     collection={collectionSubmit}
@@ -499,6 +500,19 @@ export default function AddCollectionPage({onCancel, onCreated, initialUrl}: Pro
                     episodeTypesManuallyChanged={streamEpisodeTypesManuallyChanged}
                     onEpisodeTypesManuallyChanged={() => setStreamEpisodeTypesManuallyChanged(true)}
                 />
+            )}
+            {showRestored && (
+                <UnsavedChangesBar
+                    title="Unsaved collection restored"
+                    message="The wizard was restored to where you left off in this browser. The collection has not been added yet."
+                >
+                    <button className="btn" type="button" disabled={isFinishing} onClick={onStartOver}>
+                        Start over
+                    </button>
+                    <button className="btn btn-primary" type="button" onClick={() => setShowRestored(false)}>
+                        Dismiss
+                    </button>
+                </UnsavedChangesBar>
             )}
         </div>
         </CollectionExamplesContext.Provider>
