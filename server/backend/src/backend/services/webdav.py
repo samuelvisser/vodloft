@@ -139,10 +139,13 @@ _SPECIALS_SEASON = MediaServerMetadata(kind="season", title=_SPECIALS, season_nu
 
 
 def _is_special(episode: Episode) -> bool:
-    """Whether the episode is a special, as the Media Server output templates tell: an episode of an extra season
-    or an auxiliary episode. A trailer is listed as one of the show's trailers instead."""
+    """Whether the episode is a special, as the Media Server output templates tell: an episode of an extra season,
+    or one of a type other than a normal episode, such as an auxiliary episode or a YouTube Short. Trailers and
+    episode extras are listed in folders of their own instead."""
     season = episode.season
-    return (season is not None and season.season_type == SeasonType.EXTRA.value) or episode.episode_type == EpIdType.AUX
+    if season is not None and season.season_type == SeasonType.EXTRA.value:
+        return True
+    return episode.episode_type not in (EpIdType.EP, EpIdType.TRAILER, EpIdType.EP_EXTRA)
 
 
 def _episode_metadata(episode: Episode, by_number: bool) -> MediaServerMetadata:

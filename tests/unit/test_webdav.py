@@ -168,7 +168,7 @@ def test_an_audio_share_lists_audio_files_in_one_folder_with_artwork_only(db_ses
     ]
 
 
-def test_a_show_by_season_keeps_specials_in_season_0_and_trailers_in_a_trailers_folder(db_session, tmp_path):
+def test_a_show_by_season_keeps_other_types_in_specials_and_trailers_in_a_trailers_folder(db_session, tmp_path):
     from backend.services.webdav import show_folder
 
     collection = _collection(db_session)
@@ -179,15 +179,19 @@ def test_a_show_by_season_keeps_specials_in_season_0_and_trailers_in_a_trailers_
     trailer = _episode(db_session, collection, 3, at=datetime(2026, 3, 3, tzinfo=timezone.utc))
     trailer.episode_identifier = "trailer.3"
     _download(db_session, trailer, tmp_path)
+    short = _episode(db_session, collection, 4, at=datetime(2026, 3, 4, tzinfo=timezone.utc))
+    short.episode_identifier = "short.4"
+    _download(db_session, short, tmp_path)
     profile = _share(db_session, collection)
-    profile.ep_id_type_list = ["ep", "aux", "trailer"]
+    profile.ep_id_type_list = ["ep", "aux", "trailer", "short"]
 
     folder = show_folder(db_session, profile)
 
     assert [line for line in _tree(folder) if not line.endswith(".jpg")] == [
         "Season 01/", "Season 01/The Show - S01E01 - Episode 1： A⧸B.mp4",
         "Season 01/The Show - S01E01 - Episode 1： A⧸B.nfo", "Season 01/season.nfo",
-        "Specials/", "Specials/The Show - S00E207 - Episode 207： A⧸B.mp4",
+        "Specials/", "Specials/The Show - S00E04 - Episode 4： A⧸B.mp4",
+        "Specials/The Show - S00E04 - Episode 4： A⧸B.nfo", "Specials/The Show - S00E207 - Episode 207： A⧸B.mp4",
         "Specials/The Show - S00E207 - Episode 207： A⧸B.nfo", "Specials/season.nfo",
         "Trailers/", "Trailers/Trailer 3 - Episode 3： A⧸B.mp4", "tvshow.nfo",
     ]
