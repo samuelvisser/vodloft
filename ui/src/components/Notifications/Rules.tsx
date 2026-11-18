@@ -180,7 +180,7 @@ function RuleDialog({rule, events, destinations, collections, personal, onDismis
             push: rule.push, destinationIds: rule.destinationIds, delivery: rule.delivery, summaryTime: rule.summaryTime,
         } : {...getZodDefaults(RuleFormSchema), event: events[0]?.event ?? 'episode_downloaded'},
     })
-    const {control, register, watch, setValue, formState: {errors, isSubmitting}} = form
+    const {control, register, watch, setValue, formState: {errors, isSubmitting, isDirty}} = form
     const eventKey = watch('event')
     const scope = watch('collectionScope')
     const delivery = watch('delivery')
@@ -227,6 +227,7 @@ function RuleDialog({rule, events, destinations, collections, personal, onDismis
             icon={faIcon('fass', 'bolt')}
             onDismiss={onDismiss}
             dismissOnOverlayClick={false}
+            dismissOnEscape={!isDirty}
             confirmButton={{
                 label: rule ? 'Save rule' : 'Add rule',
                 icon: faIcon('fass', isSubmitting ? 'spinner' : 'check'),

@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
+import Modal from '../Modal/Modal'
 import {useCustomMetadataFields} from '../../lib/customMetadataFields'
 import {
     CustomMetadataFormSchema,
@@ -149,127 +150,125 @@ export default function CustomMetadataEditor({
 
     return (
         <>
-            <div className="modal-overlay" role="presentation" onClick={() => !isSubmitting && onDismiss()}>
-                <div
-                    className="modal custom-metadata-modal"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby={titleId}
-                    aria-describedby={descriptionId}
-                    onClick={(event) => event.stopPropagation()}
-                >
-                    <div className="modal-header">
-                        <h2 id={titleId} className="modal-title">{title}</h2>
+            <Modal
+                onDismiss={() => !isSubmitting && onDismiss()}
+                // Escape cancels, so it only closes while there are no edits to lose.
+                dismissOnEscape={!isDirty && pendingRemovedFields.size === 0}
+                className="modal custom-metadata-modal"
+                labelledBy={titleId}
+                describedBy={descriptionId}
+            >
+                <div className="modal-header">
+                    <h2 id={titleId} className="modal-title">{title}</h2>
+                </div>
+
+                <form onSubmit={submit} noValidate>
+                    <div className="custom-metadata-content">
+                        <p className="custom-metadata-intro">
+                            Add custom metadata fields to a {scopeLabel.singular} here.
+                        </p>
+                        <p id={descriptionId} className="custom-metadata-description">
+                            Metadata fields can be used in output templates as <code>{`{{ ${variablePrefix}field_name }}`}</code>.
+                            This can therefore be a very powerful way to add any arbitrary metadata to the output path of downloaded files for this {scopeLabel.singular}.
+                        </p>
+                        <p className="custom-metadata-note">
+                            Adding a field here makes it available to every {scopeLabel.singular}; leave its value empty where it does not apply. Field names use lowercase letters, numbers, and underscores. Existing downloaded files are not moved automatically when metadata changes.
+                        </p>
+
+                        {errors.root && (
+                            <div className="form-error-card" role="alert" aria-live="polite">
+                                {String(errors.root.message)}
+                            </div>
+                        )}
+                        {fieldsFailed && (
+                            <div className="form-error-card" role="alert">
+                                VODLoft could not load metadata fields used by other {scopeLabel.plural}. Existing values can still be edited.
+                            </div>
+                        )}
+
+                        {fieldsLoading ? (
+                            <p className="custom-metadata-empty">Loading metadata fields…</p>
+                        ) : (
+                            <div className="custom-metadata-rows">
+                                {fields.length === 0 && (
+                                    <p className="custom-metadata-empty">No custom metadata fields have been added to any {scopeLabel.plural} yet.</p>
+                                )}
+                                {fields.map((field, index) => {
+                                    const key = form.watch(`entries.${index}.key`)
+                                    const isPersistedField = persistedFields.has(key) && !pendingRemovedFields.has(key)
+                                    return (
+                                        <div className="custom-metadata-row" key={field.id}>
+                                            <div className="custom-metadata-field">
+                                                <label htmlFor={`custom-metadata-key-${field.id}`}>Field</label>
+                                                <input
+                                                    id={`custom-metadata-key-${field.id}`}
+                                                    className="input"
+                                                    placeholder="name"
+                                                    autoComplete="off"
+                                                    readOnly={isPersistedField}
+                                                    title={isPersistedField ? `This field is shared by all ${scopeLabel.plural}` : undefined}
+                                                    aria-invalid={!!errors.entries?.[index]?.key}
+                                                    {...form.register(`entries.${index}.key`)}
+                                                />
+                                                {errors.entries?.[index]?.key && (
+                                                    <div className="error">{String(errors.entries[index]?.key?.message)}</div>
+                                                )}
+                                            </div>
+                                            <div className="custom-metadata-field custom-metadata-value">
+                                                <label htmlFor={`custom-metadata-value-${field.id}`}>Value</label>
+                                                <input
+                                                    id={`custom-metadata-value-${field.id}`}
+                                                    className="input"
+                                                    placeholder="data"
+                                                    aria-invalid={!!errors.entries?.[index]?.value}
+                                                    {...form.register(`entries.${index}.value`)}
+                                                />
+                                                {errors.entries?.[index]?.value && (
+                                                    <div className="error">{String(errors.entries[index]?.value?.message)}</div>
+                                                )}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="btn custom-metadata-remove"
+                                                onClick={() => {
+                                                    if (isPersistedField) {
+                                                        setConfirmRemoval({fieldId: field.id, key})
+                                                    } else {
+                                                        remove(index)
+                                                    }
+                                                }}
+                                                disabled={isSubmitting}
+                                            >
+                                                Remove
+                                            </button>
+                                            <code className="custom-metadata-variable">
+                                                {`{{ ${variablePrefix}${key || '<field>'} }}`}
+                                            </code>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+
+                        <button
+                            type="button"
+                            className="btn custom-metadata-add"
+                            onClick={() => append({key: '', value: ''})}
+                            disabled={isSubmitting || fieldsLoading || fields.length >= 100}
+                        >
+                            Add field
+                        </button>
+
                     </div>
 
-                    <form onSubmit={submit} noValidate>
-                        <div className="custom-metadata-content">
-                            <p className="custom-metadata-intro">
-                                Add custom metadata fields to a {scopeLabel.singular} here.
-                            </p>
-                            <p id={descriptionId} className="custom-metadata-description">
-                                Metadata fields can be used in output templates as <code>{`{{ ${variablePrefix}field_name }}`}</code>.
-                                This can therefore be a very powerful way to add any arbitrary metadata to the output path of downloaded files for this {scopeLabel.singular}.
-                            </p>
-                            <p className="custom-metadata-note">
-                                Adding a field here makes it available to every {scopeLabel.singular}; leave its value empty where it does not apply. Field names use lowercase letters, numbers, and underscores. Existing downloaded files are not moved automatically when metadata changes.
-                            </p>
-
-                            {errors.root && (
-                                <div className="form-error-card" role="alert" aria-live="polite">
-                                    {String(errors.root.message)}
-                                </div>
-                            )}
-                            {fieldsFailed && (
-                                <div className="form-error-card" role="alert">
-                                    VODLoft could not load metadata fields used by other {scopeLabel.plural}. Existing values can still be edited.
-                                </div>
-                            )}
-
-                            {fieldsLoading ? (
-                                <p className="custom-metadata-empty">Loading metadata fields…</p>
-                            ) : (
-                                <div className="custom-metadata-rows">
-                                    {fields.length === 0 && (
-                                        <p className="custom-metadata-empty">No custom metadata fields have been added to any {scopeLabel.plural} yet.</p>
-                                    )}
-                                    {fields.map((field, index) => {
-                                        const key = form.watch(`entries.${index}.key`)
-                                        const isPersistedField = persistedFields.has(key) && !pendingRemovedFields.has(key)
-                                        return (
-                                            <div className="custom-metadata-row" key={field.id}>
-                                                <div className="custom-metadata-field">
-                                                    <label htmlFor={`custom-metadata-key-${field.id}`}>Field</label>
-                                                    <input
-                                                        id={`custom-metadata-key-${field.id}`}
-                                                        className="input"
-                                                        placeholder="name"
-                                                        autoComplete="off"
-                                                        readOnly={isPersistedField}
-                                                        title={isPersistedField ? `This field is shared by all ${scopeLabel.plural}` : undefined}
-                                                        aria-invalid={!!errors.entries?.[index]?.key}
-                                                        {...form.register(`entries.${index}.key`)}
-                                                    />
-                                                    {errors.entries?.[index]?.key && (
-                                                        <div className="error">{String(errors.entries[index]?.key?.message)}</div>
-                                                    )}
-                                                </div>
-                                                <div className="custom-metadata-field custom-metadata-value">
-                                                    <label htmlFor={`custom-metadata-value-${field.id}`}>Value</label>
-                                                    <input
-                                                        id={`custom-metadata-value-${field.id}`}
-                                                        className="input"
-                                                        placeholder="data"
-                                                        aria-invalid={!!errors.entries?.[index]?.value}
-                                                        {...form.register(`entries.${index}.value`)}
-                                                    />
-                                                    {errors.entries?.[index]?.value && (
-                                                        <div className="error">{String(errors.entries[index]?.value?.message)}</div>
-                                                    )}
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    className="btn custom-metadata-remove"
-                                                    onClick={() => {
-                                                        if (isPersistedField) {
-                                                            setConfirmRemoval({fieldId: field.id, key})
-                                                        } else {
-                                                            remove(index)
-                                                        }
-                                                    }}
-                                                    disabled={isSubmitting}
-                                                >
-                                                    Remove
-                                                </button>
-                                                <code className="custom-metadata-variable">
-                                                    {`{{ ${variablePrefix}${key || '<field>'} }}`}
-                                                </code>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            )}
-
-                            <button
-                                type="button"
-                                className="btn custom-metadata-add"
-                                onClick={() => append({key: '', value: ''})}
-                                disabled={isSubmitting || fieldsLoading || fields.length >= 100}
-                            >
-                                Add field
-                            </button>
-
-                        </div>
-
-                        <div className="modal-actions">
-                            <button type="button" className="btn" onClick={onDismiss} disabled={isSubmitting}>Cancel</button>
-                            <button type="submit" className="btn btn-primary" disabled={isSubmitting || fieldsLoading}>
-                                {isSubmitting ? 'Saving…' : 'Save metadata'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+                    <div className="modal-actions">
+                        <button type="button" className="btn" onClick={onDismiss} disabled={isSubmitting}>Cancel</button>
+                        <button type="submit" className="btn btn-primary" disabled={isSubmitting || fieldsLoading}>
+                            {isSubmitting ? 'Saving…' : 'Save metadata'}
+                        </button>
+                    </div>
+                </form>
+            </Modal>
 
             <ConfirmDialog
                 open={confirmRemoval !== null}
