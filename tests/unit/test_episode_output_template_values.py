@@ -21,6 +21,7 @@ def _episode(identifier: str, *, dw_episode_number: str | None = None):
         dw_episode_number=dw_episode_number,
         published_date=None,
         index=42,
+        extra_index=None,
         meta_items=[],
     )
 
