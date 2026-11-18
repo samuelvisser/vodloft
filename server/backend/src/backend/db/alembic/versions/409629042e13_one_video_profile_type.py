@@ -6,7 +6,7 @@ profile that has the same template and format as a Video profile gets a Jinja co
 which names no file differently, so the two stay apart.
 
 Revision ID: 409629042e13
-Revises: 2f7a91c4d8e3
+Revises: 5b8e2d4c9a17
 Create Date: 2026-11-17
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from alembic import op
 
 
 revision = "409629042e13"
-down_revision = "2f7a91c4d8e3"
+down_revision = "5b8e2d4c9a17"
 branch_labels = None
 depends_on = None
 
