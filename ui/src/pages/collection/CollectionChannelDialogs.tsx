@@ -1,9 +1,12 @@
+import {useMemo, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'
 import {setCollectionChannel, useCollectionChannelLeave, useCollectionChannelMatch} from '../../lib/queries'
 import type {CollectionChannelMatch} from '../../types/schemas/channel'
+import SimpleSelect from '../../components/common/SimpleSelect'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 import '../channel/ChannelPages.css'
 
 type DialogProps = {
@@ -44,11 +47,15 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, chann
     const refresh = useRefresh(collectionSlug)
     const channel = match.data
     const matched = !!channel?.sectionTitle
+    /** The overlapping playlists the user moves here; the rest stay where they are. */
+    const [moveHere, setMoveHere] = useState<Set<string>>(new Set())
 
     const add = async () => {
         if (!channel) return
         try {
-            await setCollectionChannel(collectionSlug, true)
+            await setCollectionChannel(collectionSlug, true, [...moveHere].filter((ref) => (
+                channel.overlaps.some((overlap) => overlap.ref === ref && overlap.canMoveHere)
+            )))
             await refresh()
             toast.success(`${collectionTitle} is now part of ${channel.title}`)
             onDismiss()
@@ -93,6 +100,27 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, chann
                             </div>
                         </div>
                     </div>
+                    {matched && channel.overlaps.length > 0 && (
+                        <div className="channel-join-overlaps">
+                            <p>
+                                These playlists of {collectionTitle} are also somewhere else in
+                                the {channelLabel}. Once it joins, each is in one place only.
+                            </p>
+                            {channel.overlaps.map((overlap) => (
+                                <OverlapChoice
+                                    key={overlap.ref} title={overlap.title} keptBy={overlap.keptBy}
+                                    collectionTitle={collectionTitle} canMoveHere={overlap.canMoveHere}
+                                    movesHere={moveHere.has(overlap.ref)}
+                                    onChange={(here) => setMoveHere((current) => {
+                                        const next = new Set(current)
+                                        if (here) next.add(overlap.ref)
+                                        else next.delete(overlap.ref)
+                                        return next
+                                    })}
+                                />
+                            ))}
+                        </div>
+                    )}
                     {!matched
                         ? null
                         : (
@@ -104,6 +132,37 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, chann
                 </div>
             )}
         </ConfirmDialog>
+    )
+}
+
+/** Where one playlist that is in two places goes once the collection joins its channel. */
+function OverlapChoice({title, keptBy, collectionTitle, canMoveHere, movesHere, onChange}: {
+    title: string, keptBy: string, collectionTitle: string, canMoveHere: boolean, movesHere: boolean,
+    onChange: (here: boolean) => void,
+}) {
+    const registry = useMemo(() => createSelectRegistry(`JoinOverlap-${keptBy}-${collectionTitle}`, {
+        stays: {label: `Stays in ${keptBy}`},
+        here: {label: `Moves to ${collectionTitle}`},
+    }), [keptBy, collectionTitle])
+    const inputId = `join-overlap-${title}`
+    return (
+        <div className="channel-section-row">
+            <div className="channel-section-copy">
+                <strong>{title}</strong>
+                {!canMoveHere && <span>Stays in {keptBy}, a collection of its own. It leaves {collectionTitle}.</span>}
+            </div>
+            {canMoveHere && (
+                <div className="channel-join-overlap-select">
+                    <label className="sr-only" htmlFor={inputId}>Where {title} goes</label>
+                    <SimpleSelect
+                        inputId={inputId} registry={registry} value={movesHere ? 'here' : 'stays'}
+                        menuPortalTarget={document.body} menuPlacement="auto"
+                        styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                        onChange={(value) => onChange(value === 'here')}
+                    />
+                </div>
+            )}
+        </div>
     )
 }
 

@@ -13,7 +13,7 @@ from backend.db.models import MediaDownloadBase
 from backend.services.collections import reindex_collection
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import (
-    LinkListing, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists,
+    LinkListing, follows_channel, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists,
     offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists, active_lists,
 )
 from backend.services.season_moves import queue_season_folder_moves
@@ -75,6 +75,8 @@ class _View:
     links_only_offered: bool
     only_leaving_count: int
     only_leaving_with_files: int
+    channel_slug: str | None
+    channel_title: str | None
 
     def __getattr__(self, name):
         return getattr(self.collection, name)
@@ -125,6 +127,8 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         has_own_link=collection.sharing_url is not None, lists_playlists=lists_playlists(collection),
         links_only_offered=get_source(collection.source_key).has(Feature.LINK_COLLECTIONS),
         only_leaving_count=len(only_leaving), only_leaving_with_files=len(only_with_files),
+        channel_slug=collection.channel.slug if follows_channel(collection) else None,
+        channel_title=collection.channel.title if follows_channel(collection) else None,
     ))
 
 
@@ -177,6 +181,11 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
             "Remove the links you added first: only a collection that holds what its playlists have can keep them",
             field="outside_videos",
         )
+    if follows_channel(collection) and body.link_seasons == LinkSeasons.ALL:
+        raise ServiceError(
+            f"{collection.channel.title} decides which of its playlists come in; switch them on or off here",
+            field="link_seasons",
+        )
     if body.link_seasons != LinkSeasons.OFF and not only and not lists_playlists(collection):
         raise ServiceError(
             "Only a collection of a whole channel, on a site whose playlists can be seasons, can make them seasons",
@@ -206,7 +215,9 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         s.delete(playlists.pop(link_id))
     collection.link_seasons = body.link_seasons
     collection.outside_videos = body.outside_videos
-    collection.new_link_seasons = body.new_link_seasons
+    if not follows_channel(collection):
+        # A channel's own collection follows what the channel does with a new playlist.
+        collection.new_link_seasons = body.new_link_seasons
     collection.loose_videos = body.loose_videos
     collection.list_layout = body.list_layout
     regrouped = _regroup(playlists, seasons, body)
@@ -290,6 +301,8 @@ def links_lookup(s: Session, collection_slug: str) -> _Lookup:
     collection = _collection(s, collection_slug)
     if not lists_playlists(collection):
         raise ServiceError("This collection's link is not a channel with playlists", field="link_seasons")
+    if follows_channel(collection):
+        raise ServiceError(f"{collection.channel.title} looks for new playlists itself: check the channel", field="link_seasons")
     return _Lookup(collection.source_key, collection.sharing_url)
 
 

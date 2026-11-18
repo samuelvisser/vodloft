@@ -30,7 +30,7 @@ function choices(channel: ChannelPageRead, section: ChannelSectionRead): {label:
     const options: {label: string, plan: SectionPlan}[] = []
     if (section.kind === 'feed') {
         options.push({label: `Add to ${mainTitle}`, plan: {ref: section.ref, target: 'main'}})
-    } else if (channel.site.linkSeasons) {
+    } else if (section.kind === 'list' && channel.site.linkSeasons) {
         options.push({label: `As a season of ${mainTitle}`, plan: {ref: section.ref, target: 'main'}})
     }
     options.push({label: 'As its own collection', plan: {ref: section.ref, target: 'own'}})

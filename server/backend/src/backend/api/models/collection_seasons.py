@@ -82,6 +82,9 @@ class CollectionSeasonsAPIRead(ResponseBase):
     to hold only what its playlists have."""
     only_leaving_with_files: int = 0
     names: ListNamesAPIRead
+    channel_slug: Optional[str] = None
+    """For a channel's own collection: the channel, which finds its new lists and decides what happens with them."""
+    channel_title: Optional[str] = None
     """What the collection's Site calls its link seasons, such as playlists or albums."""
     music: bool = False
     """A Music collection, of an artist's tracks rather than a channel's videos."""

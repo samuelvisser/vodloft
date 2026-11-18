@@ -4,6 +4,7 @@ import {zodResolver} from '@hookform/resolvers/zod'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import Switch from 'react-switch'
+import {Link} from 'react-router-dom'
 import toast from 'react-hot-toast'
 
 import {apiUrl} from '../../lib/api'
@@ -326,7 +327,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
                                             {(linkSeasonsOn || only) && (
                                                 <>
-                                                    {view.listsPlaylists && <div className="form-row">
+                                                    {view.listsPlaylists && !view.channelSlug && <div className="form-row">
                                                         <label htmlFor="seasons-link-mode">Which {names.many}</label>
                                                         <SimpleSelect
                                                             inputId="seasons-link-mode" registry={regs.mode} value={mode}
@@ -347,10 +348,12 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                     />
                                                                     <span>{allEnabled ? 'Deselect all' : 'Select all'}</span>
                                                                 </label>
-                                                                <button type="button" className="btn btn-small" onClick={() => void refreshPlaylists()} disabled={refreshing || !view.listsPlaylists}>
-                                                                    <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} spin={refreshing} aria-hidden="true"/>
-                                                                    <span>{refreshing ? 'Looking…' : `Look for new ${names.many}`}</span>
-                                                                </button>
+                                                                {!view.channelSlug && (
+                                                                    <button type="button" className="btn btn-small" onClick={() => void refreshPlaylists()} disabled={refreshing || !view.listsPlaylists}>
+                                                                        <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} spin={refreshing} aria-hidden="true"/>
+                                                                        <span>{refreshing ? 'Looking…' : `Look for new ${names.many}`}</span>
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                             {playlistChoices.length === 0 ? (
                                                                 <p className="seasons-dialog-muted">
@@ -388,7 +391,15 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         </div>
                                                     )}
 
-                                                    {mode === 'selected' && view.listsPlaylists && (
+                                                    {view.channelSlug && (
+                                                        <p className="seasons-dialog-muted">
+                                                            <Link to={`/channel/${view.channelSlug}`}>{view.channelTitle}</Link> looks for
+                                                            new {names.many} once a day and decides what happens with them. Change that
+                                                            on its <Link to={`/edit-channel/${view.channelSlug}`}>Edit</Link> page.
+                                                        </p>
+                                                    )}
+
+                                                    {mode === 'selected' && view.listsPlaylists && !view.channelSlug && (
                                                         <div className="form-row">
                                                             <label htmlFor="seasons-new-links">When the {words.creator} adds {/^[aeiou]/.test(names.one) ? 'an' : 'a'} {names.one}</label>
                                                             <SimpleSelect

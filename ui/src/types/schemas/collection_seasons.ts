@@ -64,6 +64,9 @@ export const CollectionSeasonsReadSchema = z.object({
     onlyLeavingWithFiles: z.number().default(0),
     /** What the collection's Site calls them: playlist and Videos, or album and Singles in a Music collection. */
     names: z.object({one: z.string(), many: z.string(), looseSeason: z.string()}),
+    /** For a channel's own collection: the channel, which finds its new playlists and decides what happens with them. */
+    channelSlug: z.string().nullable().default(null),
+    channelTitle: z.string().nullable().default(null),
     /** A Music collection, of an artist's tracks rather than a channel's videos. */
     music: z.boolean().default(false),
     playlists: z.array(CollectionListReadSchema),

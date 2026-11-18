@@ -71,6 +71,13 @@ def lists_playlists(collection: Collection) -> bool:
     return site.link_seasons and get_source(collection.source_key).is_channel_page(collection.sharing_url)
 
 
+def follows_channel(collection: Collection) -> bool:
+    """Whether the collection is its channel's own collection, whose lists the channel finds and places: the
+    collection does not look for new lists itself, and takes the ones the channel gives it."""
+    channel = collection.channel
+    return channel is not None and channel.main_collection_id == collection.id
+
+
 def offers_link_seasons(collection: Collection) -> bool:
     """Whether the collection's playlists could be its seasons: its Site offers it, and its link is a whole channel.
     A collection that only holds its link seasons can have them whenever its Source lists the links it is given."""
@@ -148,7 +155,8 @@ def list_lists(s: Session, collection: Collection, source: Source, also: frozens
     """Ask the Source for the channel's playlists and the videos of those that are seasons, and for a collection
     that adds them, look up the videos it has not got that are neither in ``also``, the ones its own link just
     listed. Slow, so no transaction stays open."""
-    url = collection.sharing_url if lists_playlists(collection) else None
+    # The channel's daily look finds the lists of its own collection; the collection only lists their videos.
+    url = collection.sharing_url if lists_playlists(collection) and not follows_channel(collection) else None
     every = collection.link_seasons == LinkSeasons.ALL.value
     adds_new = every or collection.new_link_seasons == NewLinkSeasonAction.ADD.value or not collection.lists
     known = {playlist.ref: (playlist.url, playlist.enabled and playlist.status == ListStatus.KNOWN.value)

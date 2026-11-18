@@ -274,6 +274,7 @@ class _Match:
     section: object | None
     kept_by: str | None
     channel_slug: str | None = None
+    overlaps: list = field(default_factory=list)
 
     def __getattr__(self, name):
         return getattr(self.details, name)
@@ -283,17 +284,24 @@ def collection_channel_match(s: Session, collection_slug: str, source_key: str, 
     collection = _collection(s, collection_slug)
     site = channels.channel_site(source_key, details.url or collection.site_key or get_source(source_key).sites[0].key)
     existing = channels.channel_in_library(s, site.key, details.ref)
-    section, kept_by = channels.collection_section(s, collection, source_key, details, existing)
+    section, keeper = channels.collection_section(s, collection, source_key, details, existing)
+    overlaps = channels.join_overlaps(s, collection, source_key, details, existing)
+    movable = keeper is not None and any(overlap.ref == section.ref and overlap.can_move_here for overlap in overlaps)
     return CollectionChannelMatchAPIRead.model_validate(_Match(
-        details, site.name, site.channel_label, section, kept_by, existing.slug if existing is not None else None,
+        details, site.name, site.channel_label, section if keeper is None or movable else None,
+        keeper.title if keeper is not None and not movable else None, existing.slug if existing is not None else None,
+        overlaps,
     ))
 
 
 def join_collection_channel(
     s: Session, collection_slug: str, source_key: str, details: ChannelDetails, *, added_by_id: int | None,
+    move_here: frozenset[str] = frozenset(),
 ) -> CollectionAPIRead:
     collection = _collection(s, collection_slug)
-    channels.join_channel(s, collection, source_key=source_key, details=details, added_by_id=added_by_id)
+    channels.join_channel(
+        s, collection, source_key=source_key, details=details, added_by_id=added_by_id, move_here=move_here,
+    )
     s.flush()
     s.refresh(collection)
     return CollectionAPIRead.model_validate(collection)

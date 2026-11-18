@@ -17,8 +17,8 @@ class NewSectionAction(StrEnum):
 
     ASK = "ask"
     """Send a message, and show the section on the channel page with the choices."""
-    MAIN = "main"
-    """Add it to the channel's own collection, as a season of its own."""
+    SEASON = "season"
+    """Add it to the channel's own collection, as a season of its own. A show still gets a collection of its own."""
     OWN = "own"
     """Add it as a collection of its own."""
     IGNORE = "ignore"

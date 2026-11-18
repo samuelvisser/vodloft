@@ -9,7 +9,9 @@ from backend.api.endpoints.channels.service import (
     CollectionNotFoundError, collection_channel_leave, collection_channel_match, collection_link, join_collection_channel,
     leave_collection_channel, look_up_collection_channel,
 )
-from backend.api.models.channel import CollectionChannelLeaveAPIRead, CollectionChannelMatchAPIRead
+from backend.api.models.channel import (
+    CollectionChannelJoinAPIIn, CollectionChannelLeaveAPIRead, CollectionChannelMatchAPIRead,
+)
 from .service import (
     get_collections_list,
     create_collection,
@@ -343,11 +345,17 @@ def collection_channel_match_get(collection_slug: str):
     dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
     response_model=CollectionAPIRead,
 )
-def collection_channel_join(collection_slug: str, access: Access = signed_in()):
-    """Add the collection to the channel behind its links, adding the channel when it is not in the Library."""
+def collection_channel_join(
+    collection_slug: str, body: CollectionChannelJoinAPIIn | None = None, access: Access = signed_in(),
+):
+    """Add the collection to the channel behind its links, adding the channel when it is not in the Library. A list
+    that would be in two places stays in one: the ones in ``move_here`` move to this collection."""
     source_key, details = _channel_behind(collection_slug)
+    move_here = frozenset(body.move_here if body is not None else ())
     return _collection_found(lambda: run_write_transaction(
-        lambda s: join_collection_channel(s, collection_slug, source_key, details, added_by_id=access.user_id)
+        lambda s: join_collection_channel(
+            s, collection_slug, source_key, details, added_by_id=access.user_id, move_here=move_here,
+        )
     ))
 
 

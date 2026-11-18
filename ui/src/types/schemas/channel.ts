@@ -8,14 +8,13 @@ export const ChannelSectionReadSchema = z.object({
     ref: z.string(),
     url: z.string(),
     title: z.string(),
-    kind: z.enum(['feed', 'list', 'item']),
+    kind: z.enum(['feed', 'list', 'show', 'item']),
     role: z.string(),
     kindLabel: z.string().nullable(),
     itemCount: z.number().nullable(),
     imageUrl: z.string().nullable(),
     description: z.string().nullable(),
     access: z.string().nullable(),
-    hasSeasons: z.boolean(),
     year: z.string().nullable().optional(),
     collectionSlug: z.string().nullable(),
     collectionTitle: z.string().nullable(),
@@ -52,7 +51,7 @@ export const ChannelLookupReadSchema = z.object({
 })
 export type ChannelLookupRead = z.infer<typeof ChannelLookupReadSchema>
 
-export const NewSectionActionValues = ['ask', 'main', 'own', 'ignore'] as const
+export const NewSectionActionValues = ['ask', 'season', 'own', 'ignore'] as const
 
 export const ChannelReadSchema = z.object({
     id: z.number(),
@@ -131,8 +130,16 @@ export const CollectionChannelMatchSchema = z.object({
     /** The channel's section the collection is, when it is one. */
     sectionTitle: z.string().nullable().optional(),
     sectionKindLabel: z.string().nullable().optional(),
-    /** Another of the channel's collections that keeps this section already. */
+    /** Another of the channel's collections that keeps this section already, and can't let it go. */
     keptBy: z.string().nullable().optional(),
+    /** The playlists that would be in two places once the collection joins; each stays in one, as you choose. */
+    overlaps: z.array(z.object({
+        ref: z.string(),
+        title: z.string(),
+        keptBy: z.string(),
+        /** The channel's own collection keeps it and can let it go; a collection of its own keeps what it has. */
+        canMoveHere: z.boolean(),
+    })).default([]),
 })
 export type CollectionChannelMatch = z.infer<typeof CollectionChannelMatchSchema>
 

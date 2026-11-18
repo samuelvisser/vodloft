@@ -25,14 +25,13 @@ class ChannelSectionAPIRead(ResponseBase):
     ref: str
     url: str
     title: str
-    kind: Literal["feed", "list", "item"]
+    kind: Literal["feed", "list", "show", "item"]
     role: str
     kind_label: Optional[str] = None
     item_count: Optional[int] = None
     image_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("image_path", "image_url"))
     description: Optional[str] = None
     access: Optional[str] = None
-    has_seasons: bool = False
     year: Optional[str] = None
     """The year an album came out."""
     collection_slug: Optional[str] = None
@@ -171,7 +170,22 @@ class CollectionChannelMatchAPIRead(ResponseBase):
     """The channel's section the collection is, when it is one."""
     section_kind_label: Optional[str] = Field(default=None, validation_alias=AliasPath("section", "kind_label"))
     kept_by: Optional[str] = None
-    """The title of another of the channel's collections that keeps this section already."""
+    """The title of another of the channel's collections that keeps this section already, which can't let it go."""
+    overlaps: list["JoinOverlapAPIRead"] = Field(default_factory=list)
+    """The lists that would be in two places once the collection joins: each stays in one, as the user chooses."""
+
+
+class JoinOverlapAPIRead(ResponseBase):
+    ref: str
+    title: str
+    kept_by: str = Field(validation_alias=AliasPath("kept_by", "title"))
+    can_move_here: bool
+    """The channel's own collection keeps it, and can let it go; a collection of its own keeps what it has."""
+
+
+class CollectionChannelJoinAPIIn(RequestBase):
+    move_here: list[str] = Field(default_factory=list, max_length=5000)
+    """The lists, by ref, that leave the channel's own collection for the joining one."""
 
 
 class CollectionChannelLeaveAPIRead(ResponseBase):
