@@ -21,6 +21,7 @@ from backend.db.datetime_types import utc_datetime
 from backend.db.models import Collection, Episode
 from backend.db.models.stream_profile import WebdavStreamProfile
 from backend.services.collection_assets import collection_asset_sources
+from backend.services.extra_indexes import is_extra
 from backend.services.download_metadata import build_episode_metadata, build_season_metadata, build_show_metadata
 from backend.services.stream_episodes import get_stream_items
 from backend.services.stream_tokens import profiles_for_token
@@ -33,7 +34,6 @@ from backend.utils.output_template import sanitize_path_component
 from config.settings.submodels import FilenameRestrictionMode
 from backend.types.download_profile_types import EpIdType
 from backend.types.episode_types import EpisodeExtraType
-from backend.types.season_types import SeasonType
 from downloader.metadata import MediaServerMetadata, render_nfo
 
 _EXTENSIONS = {"mp4": ".mp4", "audio": ".m4a"}
@@ -139,20 +139,22 @@ _SPECIALS_SEASON = MediaServerMetadata(kind="season", title=_SPECIALS, season_nu
 
 
 def _is_special(episode: Episode) -> bool:
-    """Whether the episode is a special, as the Media Server output templates tell: an episode of an extra season,
-    or one of a type other than a normal episode, such as an auxiliary episode or a YouTube Short. Trailers and
-    episode extras are listed in folders of their own instead."""
+    """Whether the episode is a special: an extra, as the Media Server output templates tell, other than a
+    trailer or an episode extra, which are listed in folders of their own."""
     season = episode.season
-    if season is not None and season.season_type == SeasonType.EXTRA.value:
-        return True
-    return episode.episode_type not in (EpIdType.EP, EpIdType.TRAILER, EpIdType.EP_EXTRA)
+    return (
+        is_extra(season.season_type if season else None, episode.episode_identifier)
+        and episode.episode_type not in (EpIdType.TRAILER, EpIdType.EP_EXTRA)
+    )
 
 
 def _episode_metadata(episode: Episode, by_number: bool) -> MediaServerMetadata:
     """What the episode's NFO file and name say about it. A show numbered by season keeps its specials in
-    season 0, as their numbers count on their own."""
+    season 0, numbered by their extra index so that no two share a number."""
     metadata = build_episode_metadata(episode, episode.collection)
-    return replace(metadata, season_number=0) if by_number and _is_special(episode) else metadata
+    if not (by_number and _is_special(episode)):
+        return metadata
+    return replace(metadata, season_number=0, episode_number=episode.extra_index)
 
 
 def _episode_base_name(show: str, episode: Episode, metadata: MediaServerMetadata, by_number: bool) -> str:

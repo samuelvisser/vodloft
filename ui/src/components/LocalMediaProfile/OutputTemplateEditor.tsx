@@ -36,7 +36,12 @@ import {
     renderEditorOutputTemplate,
     type JinjaBlockNode,
 } from './outputTemplateFormatting'
-import {getOutputTemplateVariables, type OutputTemplateVariable} from './outputTemplateVariables'
+import {
+    BUILT_IN_INDEXING_VALUES,
+    getOutputTemplateVariables,
+    type OutputTemplateVariable,
+} from './outputTemplateVariables'
+import type {IndexingValueEntry} from '../../types/schemas/custom_metadata'
 import {isExampleSource, useCollectionExamples} from '../../lib/collectionExamples'
 import './OutputTemplateEditor.css'
 import './OutputTemplateEditorIde.css'
@@ -539,6 +544,38 @@ function describeTypedCharacter(char: string): string {
     return char
 }
 
+type ReferenceEntry = {
+    code: string
+    description: string
+    readMore?: OutputTemplateVariable['readMore']
+}
+
+function variableEntry(variable: OutputTemplateVariable): ReferenceEntry {
+    return {code: `{{ ${variable.name} }}`, description: variable.description, readMore: variable.readMore}
+}
+
+/** A list of what a template can use, each with what it is. */
+function VariableReference({entries}: {entries: readonly ReferenceEntry[]}) {
+    return (
+        <dl className="output-template-variable-reference">
+            {entries.map((entry) => (
+                <div key={entry.code}>
+                    <dt><code>{entry.code}</code></dt>
+                    <dd>
+                        {entry.readMore ? (
+                            <ReadMore summary={entry.readMore.summary ?? entry.description}>
+                                {entry.readMore.paragraphs.map((paragraph) => (
+                                    <p key={paragraph} dangerouslySetInnerHTML={{__html: paragraph}} />
+                                ))}
+                            </ReadMore>
+                        ) : entry.description}
+                    </dd>
+                </div>
+            ))}
+        </dl>
+    )
+}
+
 export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false, isCreating = false, onCollectionRoot, headerActions}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
@@ -597,6 +634,25 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     const variables = useMemo(
         () => getOutputTemplateVariables(mode, customVariables),
         [customVariables, mode],
+    )
+    const metadataNames = useMemo(() => new Set(customVariables.map(({name}) => name)), [customVariables])
+    const variableEntries = useMemo(
+        () => variables
+            .filter(({name}) => !metadataNames.has(name) && (mode !== 'collection' || !BUILT_IN_INDEXING_VALUES.has(name)))
+            .map(variableEntry),
+        [metadataNames, mode, variables],
+    )
+    const builtInIndexEntries = useMemo(
+        () => variables.filter(({name}) => BUILT_IN_INDEXING_VALUES.has(name)).map(variableEntry),
+        [variables],
+    )
+    const customIndexEntries: ReferenceEntry[] = (indexingValues as IndexingValueEntry[]).map(({key, name, keepNumbers}) => ({
+        code: `{{ '${key}' | custom_index }}`,
+        description: keepNumbers ? `${name}. Keeps the numbers it gave out.` : name,
+    }))
+    const metadataEntries = useMemo(
+        () => variables.filter(({name}) => metadataNames.has(name)).map(variableEntry),
+        [metadataNames, variables],
     )
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
     const [provisionalIndexingValueNames, setProvisionalIndexingValueNames] = useState<string[]>([])
@@ -1123,25 +1179,29 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                     <ReadMore summary="Jinja syntax and all available variables.">
                         <div className="output-template-guidance">{help}</div>
                         <h4>Available variables</h4>
-                        <dl className="output-template-variable-reference">
-                            {variables.map((variable) => (
-                                <div key={variable.name}>
-                                    <dt><code>{`{{ ${variable.name} }}`}</code></dt>
-                                    <dd>
-                                        {variable.readMore ? (
-                                            <ReadMore summary={variable.readMore.summary ?? variable.description}>
-                                                {variable.readMore.paragraphs.map((paragraph) => (
-                                                    <p
-                                                        key={paragraph}
-                                                        dangerouslySetInnerHTML={{__html: paragraph}}
-                                                    />
-                                                ))}
-                                            </ReadMore>
-                                        ) : variable.description}
-                                    </dd>
-                                </div>
-                            ))}
-                        </dl>
+                        <VariableReference entries={variableEntries} />
+                        {mode === 'collection' && (
+                            <>
+                                <hr className="output-template-help-divider" />
+                                <h4>Indexing values</h4>
+                                <p>Numbers for episodes. VODLoft keeps the built-in ones for every collection.</p>
+                                <h5>Built-in</h5>
+                                <VariableReference entries={builtInIndexEntries} />
+                                <h5>Custom</h5>
+                                {customIndexEntries.length > 0 ? (
+                                    <VariableReference entries={customIndexEntries} />
+                                ) : (
+                                    <p>This profile has no custom Indexing values yet. Add them with the Indexing values button.</p>
+                                )}
+                            </>
+                        )}
+                        {metadataEntries.length > 0 && (
+                            <>
+                                <hr className="output-template-help-divider" />
+                                <h4>{mode === 'movie' ? 'Movie metadata' : 'Collection metadata'}</h4>
+                                <VariableReference entries={metadataEntries} />
+                            </>
+                        )}
                     </ReadMore>
                 </div>
             </div>

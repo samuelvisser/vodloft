@@ -26,8 +26,9 @@ Profile matches the share's format, its settings page says so and offers to crea
   collection's title, and is also the share's name in the list of Stream Profiles.
 - **Season folders**:
   - **One per season** (the default) puts each season's episodes in a *Season 01* folder, and names them *S01E05*.
-    Specials (auxiliary episodes and the episodes of extra seasons) go in a *Specials* folder as season 0
-    (*S00E207*), where media players look for a show's specials.
+    Specials (the episodes of extra seasons, and other types than normal episodes, such as auxiliary episodes or
+    YouTube Shorts) go in a *Specials* folder as season 0, where media players look for a show's specials. They are
+    numbered by their extra index (*S00E03*), so no two share a number.
   - **One per year** puts each year's episodes in a *Season 2026* folder, and names them by date.
   - **All in one folder** puts every episode in the show's folder, named by date.
 

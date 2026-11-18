@@ -32,7 +32,8 @@ VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 WEBDAV_TITLE_IS_FOLDER_NAME_REVISION = "940039d2712d"
 WEBDAV_DOWNLOADS_ONLY_REVISION = "fbd592943ccc"
-HEAD_REVISION = "12c4ec47817e"
+WEBDAV_EPISODE_EXTRAS_REVISION = "12c4ec47817e"
+HEAD_REVISION = "5b8e2d4c9a17"
 
 
 @pytest.fixture
@@ -1284,3 +1285,43 @@ def test_webdav_shares_become_downloads_only(migration_database):
             "SELECT id, use_downloads, use_source_stream FROM stream_profiles ORDER BY id"
         )).all()
     assert [tuple(row) for row in sources] == [(1, 1, 0), (2, 1, 0), (3, 0, 1)]
+
+
+def test_every_collection_numbers_its_extras_in_episode_index_order(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, WEBDAV_EPISODE_EXTRAS_REVISION)
+    with engine.begin() as connection:
+        for collection_id in (1, 2):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order) VALUES (:id, :slug, :slug, 'Show', "
+                "'https://example.test/' || :slug, 'free', 'series', 'numbered', 'Host', 'host', 'dailywire', 'newest_first')"
+            ), {"id": collection_id, "slug": f"c{collection_id}"})
+        for season_id, collection_id, season_type in ((1, 1, "normal"), (2, 1, "extra"), (3, 2, "normal")):
+            connection.execute(text(
+                "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+                "VALUES (:id, :collection, :id, :slug, :slug, :type, :id)"
+            ), {"id": season_id, "collection": collection_id, "slug": f"s{season_id}", "type": season_type})
+        # Listed out of index order: the numbers follow the index, and each collection counts on its own.
+        for episode_id, collection_id, season_id, index, identifier in (
+            (10, 1, 1, 4, "aux.1"), (11, 1, 1, 1, "ep.1"), (12, 1, 2, 2, "ep.2"), (13, 1, 1, 3, "ep-extra.trailer.1.1"),
+            (14, 1, 1, 5, "ep.3"), (15, 2, 3, 1, "short.1"),
+        ):
+            connection.execute(text(
+                "INSERT INTO media_items (id, uuid, type, source_key) VALUES (:id, :uuid, 'episode', 'dailywire')"
+            ), {"id": episode_id, "uuid": f"episode-{episode_id}"})
+            connection.execute(text(
+                "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
+                "publish_status, sharing_url, source_slug) VALUES (:id, :collection, :season, :index, :identifier, "
+                ":slug, 'published_final', 'https://example.test', :slug)"
+            ), {"id": episode_id, "collection": collection_id, "season": season_id, "index": index,
+                "identifier": identifier, "slug": f"e{episode_id}"})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        numbers = dict(connection.execute(text("SELECT id, extra_index FROM media_items_episode")).all())
+    assert numbers == {10: 3, 11: None, 12: 1, 13: 2, 14: None, 15: 1}

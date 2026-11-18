@@ -74,6 +74,10 @@ class Episode(
     collection_id: Mapped[int] = mapped_column(ForeignKey("collections.id"),primary_key=True,)
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
     index: Mapped[int]
+    extra_index: Mapped[Optional[int]] = mapped_column(
+        comment="VODLoft's number for an extra: an episode of an Extras season or of a type other than ep. "
+                "Extras are numbered in the order of their index, and an extra keeps its number",
+    )
     episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the collection")
     dw_episode_number: Mapped[Optional[str]] = mapped_column(comment="Episode number exactly as returned by The Daily Wire")
     slug: Mapped[str] = mapped_column(index=True, unique=True)
