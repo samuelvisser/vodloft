@@ -877,7 +877,7 @@ export async function setCollectionCreator(slug: string, inCreator: boolean, mov
 }
 
 /** Add a collection to a creator in the Library that its link is not on, such as an artist whose music videos are
- * on their label's creator. */
+ * on their label's channel. */
 export async function addCollectionToCreator(slug: string, creatorSlug: string): Promise<void> {
     const response = await fetch(collectionCreatorPath(slug), {
         method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},

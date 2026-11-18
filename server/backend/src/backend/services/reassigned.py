@@ -1,6 +1,6 @@
 """Reassigned: a video that the creator now places in another of its collections.
 
-A creator keeps each of its creator's videos in one of its collections. A list, such as a playlist, beats a feed:
+A creator keeps each of its videos in one of its collections. A list, such as a playlist, beats a feed:
 a video is in the collection whose lists hold it, which is the creator's own collection for the playlists that are its
 seasons and a collection of its own for a playlist that is one. A video that a list of another collection holds, and
 no list of its own collection, belongs there. One that is not downloaded simply moves: the collection it is in leaves

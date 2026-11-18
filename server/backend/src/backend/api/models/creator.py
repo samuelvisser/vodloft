@@ -196,7 +196,7 @@ class CollectionCreatorJoinAPIIn(RequestBase):
     """The lists, by ref, that leave the creator's own collection for the joining one."""
     creator_slug: Optional[str] = Field(default=None, max_length=255)
     """A creator in the Library to join instead of the one behind the collection's link, such as an artist whose
-    music videos are on their label's creator."""
+    music videos are on their label's channel."""
 
 
 class CollectionCreatorLeaveAPIRead(ResponseBase):

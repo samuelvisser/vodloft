@@ -112,7 +112,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
             )}
             {chosen && (
                 <ul className="creator-order-note">
-                    <li>{collectionTitle} keeps its own link, so its videos can come from another {creatorLabel} or playlist, such as an artist's music videos on their label's creator.</li>
+                    <li>{collectionTitle} keeps its own link, so its videos can come from another {creatorLabel} or playlist, such as an artist's music videos on their label's channel.</li>
                     <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                 </ul>
             )}
