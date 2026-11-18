@@ -102,8 +102,8 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, chann
                                 <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                                 {!channel.channelSlug && <li>The {channelLabel}'s other playlists and shows start as not in your library, so you can add them from its page.</li>}
                                 <li>
-                                    A video that is also in another of the {channelLabel}'s collections goes to the one higher in the
-                                    {channelLabel}'s order. Videos that are already downloaded stay where they are.
+                                    A video that is also in another of the {channelLabel}'s collections goes to the one higher in
+                                    the {channelLabel}'s order. Videos that are already downloaded stay where they are.
                                 </li>
                             </ul>
                         )}
