@@ -18,6 +18,12 @@ export const LocalMediaProfilePreviewSchema = z.object({
         collectionTitle: z.string().nullable(),
         systemEnabled: z.boolean(),
     }).nullable(),
+    metadata: z.object({
+        title: z.string(),
+        titleError: z.string().nullable(),
+        description: z.string(),
+        descriptionError: z.string().nullable(),
+    }).nullable().default(null),
 })
 export type LocalMediaProfilePreview = z.infer<typeof LocalMediaProfilePreviewSchema>
 

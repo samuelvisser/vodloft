@@ -169,6 +169,7 @@ export function combinedDownloadOptions(options: readonly DownloadOptions[]): Do
         hlsHeights: [...new Set(options.flatMap((option) => option.hlsHeights))].sort((a, b) => a - b),
         subtitles: options.some((option) => option.subtitles),
         qualityChoices: options.some((option) => option.qualityChoices),
+        infoFile: options.some((option) => option.infoFile),
     }
 }
 

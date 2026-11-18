@@ -132,8 +132,8 @@ def example_session(collection: ExampleCollection) -> Iterator[tuple[Session, Co
 
 
 def example_template_values(example: Example) -> dict[str, str]:
-    """The output template values of an example, with the ones it cannot know shown by name."""
-    values = episode_output_template_values(example.episode)
+    """The template values of an example and its description, with the ones it cannot know shown by name."""
+    values = {**episode_output_template_values(example.episode), "description": example.episode.description or ""}
     values.update({name: f"[{name}]" for name in example.pending})
     return values
 
