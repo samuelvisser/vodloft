@@ -15,7 +15,7 @@ from task_manager.tasks.media_download_operations import (
 )
 from backend.security.access import Area, Level
 from backend.types.download_profile_types import EpisodeTagKey
-from backend.security.deps import may_delete_files, requires
+from backend.security.deps import requires
 from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/episodes", tags=["Episodes"])
@@ -131,20 +131,6 @@ def episode_metadata_refresh(episode_slug: str):
     """Queue an immediate metadata refresh for one episode."""
     def work(s):
         return request_episode_metadata_refresh(s, episode_slug)
-
-    return run_write_transaction(work)
-
-
-@router.post(
-    "/{episode_slug}/early-delete",
-    dependencies=[requires(Area.LIBRARY, Level.MANAGE), may_delete_files()],
-    response_model=TaskOperationAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-def episode_early_delete(episode_slug: str):
-    """Immediately remove one episode that is currently stuck in source_processing."""
-    def work(s):
-        return request_episode_early_delete(s, episode_slug)
 
     return run_write_transaction(work)
 

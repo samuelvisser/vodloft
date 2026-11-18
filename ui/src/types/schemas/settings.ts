@@ -54,8 +54,6 @@ const TrackNewEpisodeScheduleSchema = z.object({
     quickCheckCron: z.string(),
     fullRescanCronEnabled: z.boolean(),
     fullRescanCron: z.string(),
-    monitorNoUsableMediaEpisodeCronEnabled: z.boolean(),
-    monitorNoUsableMediaEpisodeCron: z.string(),
     metadataRefreshIntervals: z.string(),
     upcomingAndLive: z.boolean(),
     pendingUpcomingMinutes: z.number(),
@@ -66,7 +64,6 @@ const TrackNewEpisodeScheduleSchema = z.object({
 const EpisodeStatusTimingSchema = z.object({
     publishedFinalAfterMinutes: z.number(),
     dwProcessingMaxMinutes: z.number(),
-    noUsableMediaDeleteAfterMinutes: z.number(),
 })
 
 export const FilenameRestrictionModeSchema = z.enum(['unrestricted', 'windows', 'restricted'])
@@ -316,7 +313,6 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         findEpisodesCron: cronExpression,
         quickCheckCron: cronExpression,
         fullRescanCron: cronExpression,
-        monitorNoUsableMediaEpisodeCron: cronExpression,
         metadataRefreshIntervals,
         pendingUpcomingMinutes: pendingMinutes(24 * 60),
         pendingStartingMinutes: pendingMinutes(60),
@@ -327,7 +323,6 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
     episodeStatusTiming: EpisodeStatusTimingSchema.extend({
         publishedFinalAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
         dwProcessingMaxMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
-        noUsableMediaDeleteAfterMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
     }),
     downloadSettings: DownloadSettingsSchema.extend({
         verifyDownloadsCron: cronExpression,
@@ -380,7 +375,6 @@ export const SettingsServerErrors = createServerErrorMapper({
     'values.newEpisodeSchedule.findEpisodesCron': CRON_SERVER_ERRORS,
     'values.newEpisodeSchedule.quickCheckCron': CRON_SERVER_ERRORS,
     'values.newEpisodeSchedule.fullRescanCron': CRON_SERVER_ERRORS,
-    'values.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron': CRON_SERVER_ERRORS,
     'values.downloadSettings.verifyDownloadsCron': CRON_SERVER_ERRORS,
     'values.fileWatcher.scanCron': CRON_SERVER_ERRORS,
 })
@@ -416,8 +410,6 @@ export const SETTINGS_FIELD_PATHS = [
     'newEpisodeSchedule.quickCheckCron',
     'newEpisodeSchedule.fullRescanCronEnabled',
     'newEpisodeSchedule.fullRescanCron',
-    'newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled',
-    'newEpisodeSchedule.monitorNoUsableMediaEpisodeCron',
     'newEpisodeSchedule.metadataRefreshIntervals',
     'newEpisodeSchedule.upcomingAndLive',
     'newEpisodeSchedule.pendingUpcomingMinutes',
@@ -432,7 +424,6 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadProfileDefaults.autoSubtitles',
     'episodeStatusTiming.publishedFinalAfterMinutes',
     'episodeStatusTiming.dwProcessingMaxMinutes',
-    'episodeStatusTiming.noUsableMediaDeleteAfterMinutes',
     'downloadSettings.verifyDownloadsCronEnabled',
     'downloadSettings.verifyDownloadsCron',
     'downloadSettings.maxConcurrentDownloads',

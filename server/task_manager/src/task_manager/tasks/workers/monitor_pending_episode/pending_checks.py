@@ -13,13 +13,14 @@ Every Source follows the same rhythm, which each Site can change:
 Episodes of Sources with ``Feature.PENDING_CHECKS``, such as yt-dlp, are looked up
 together through ``Source.check_pending``. In a date-based collection a published
 one moves to the date it was actually published. One the Source no longer has,
-such as a cancelled stream, has no usable media, like a Daily Wire episode that is
-gone. It is looked up every hour in case it comes back, and deleted after the same
-grace period. A lookup that fails for another reason is just tried again later.
+such as a cancelled stream, is marked removed from its Source, like any video its
+Source no longer has. Without files it is still looked up for a few hours in case
+it comes back, and then deleted. A lookup that fails for another reason is just
+tried again later.
 
 Episodes of a Source that has live episodes but no pending checks, which is The
 Daily Wire, are looked up one by one by its own monitor, which also hands an
-episode over to the metadata refresh or to the no-usable-media checks.
+episode over to the metadata refresh.
 
 Nothing is stored per episode: the sweep remembers when it last looked each one
 up, so after a restart every one of them is looked up once.
@@ -32,28 +33,20 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.datetime_types import utc_datetime
 from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode
+from backend.services.removed_downloads import back_at_source, left_source
 from backend.services.pending_episodes import (
     PendingMinutes, checks_pending, monitors_pending, site_follows_pending, site_pending_minutes,
 )
 from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, EpisodePublishStatus
-from config import get_settings
 from sources import ItemRef, VideoDetails, all_sources, get_source
 from ...helpers.episodes.events import queue_episode_status_events
-from ...helpers.episodes.quarantine import restore_quarantined_identifier
 from ...helpers.episodes.trusted_publication_timing import track_monitor_publication_timing
-from ...helpers.episodes.unusable_media import (
-    NoUsableMediaReason,
-    clear_episode_no_usable_media_tracking,
-    delete_no_usable_media_episode,
-    mark_episode_no_usable_media,
-    no_usable_media_incident_expired,
-)
 from ...helpers.listed_collections import date_based_identifier
 from ...helpers.refreshed_metadata import apply_refreshed_details
 from .service import run_monitor_pending_episode
@@ -64,7 +57,6 @@ SOON = timedelta(minutes=15)
 LATE = timedelta(hours=1)
 
 _PENDING = [status.value for status in PENDING_EPISODE_PUBLISH_STATUSES]
-_FOLLOWED = _PENDING + [EpisodePublishStatus.NO_USABLE_MEDIA.value]
 _WHILE_LIVE = {
     EpisodePublishStatus.LIVE.value,
     EpisodePublishStatus.SOURCE_PROCESSING.value,
@@ -157,11 +149,7 @@ def _due(s: Session, now: datetime) -> list[_Pending]:
         select(Episode.id, Episode.source_key, Episode.source_slug, Episode.sharing_url, Episode.publish_status,
                Episode.scheduled_date, Collection.site_key)
         .join(Collection, Episode.collection_id == Collection.id)
-        .where(or_(
-            and_(Episode.source_key.in_(checked), Episode.publish_status.in_(_FOLLOWED)),
-            # The Daily Wire's no-usable-media checks follow those episodes.
-            and_(Episode.source_key.in_(monitored), Episode.publish_status.in_(_PENDING)),
-        ))
+        .where(Episode.source_key.in_(checked + monitored), Episode.publish_status.in_(_PENDING))
         .order_by(Episode.id)
     ).all()
     # A Site with upcoming and live videos off is not followed.
@@ -201,10 +189,7 @@ def _apply(s: Session, episode: Episode, details: VideoDetails, result: PendingC
     old_status = episode.publish_status
     new_status = details.publish_status
     apply_refreshed_details(episode, details, now=now)
-    episode.removed_from_source = False
-    if old_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
-        clear_episode_no_usable_media_tracking(episode)
-        restore_quarantined_identifier(s, episode)
+    if back_at_source(episode):
         result.recovered += 1
     if details.scheduled_at is not None:
         episode.scheduled_date = details.scheduled_at
@@ -229,20 +214,10 @@ def _apply(s: Session, episode: Episode, details: VideoDetails, result: PendingC
 
 
 def _gone(s: Session, episode: Episode, result: PendingCheckResult, now: datetime) -> None:
-    old_status = episode.publish_status
-    episode.removed_from_source = True
-    if old_status != EpisodePublishStatus.NO_USABLE_MEDIA.value:
-        mark_episode_no_usable_media(s, episode, reason=NoUsableMediaReason.NOT_FOUND, now=now)
+    if not episode.removed_from_source:
         result.gone += 1
-        queue_episode_status_events(
-            s, episode=episode, collection=episode.collection, old_status=old_status,
-            new_status=EpisodePublishStatus.NO_USABLE_MEDIA, was_created=False,
-        )
-        return
-    minutes = get_settings().episode_status_timing.no_usable_media_delete_after_minutes
-    if no_usable_media_incident_expired(episode, now=now, minutes=minutes):
-        if delete_no_usable_media_episode(s, episode):
-            result.deleted += 1
+    if left_source(s, episode, now=now):
+        result.deleted += 1
 
 
 def _monitor(s: Session, item: _Pending, result: PendingCheckResult) -> None:
@@ -257,11 +232,12 @@ def _monitor(s: Session, item: _Pending, result: PendingCheckResult) -> None:
         logger.warning("Could not check pending episode %s", item.id, exc_info=True)
         result.failed += 1
         return
+    if new_status is None:
+        result.gone += 1
+        return
     if new_status.value != old_status:
         result.changed += 1
-    if new_status is EpisodePublishStatus.NO_USABLE_MEDIA:
-        result.gone += 1
-    elif new_status not in PENDING_EPISODE_PUBLISH_STATUSES:
+    if new_status not in PENDING_EPISODE_PUBLISH_STATUSES:
         result.published += 1
 
 

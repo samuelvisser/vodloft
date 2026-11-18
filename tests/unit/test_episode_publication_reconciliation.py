@@ -76,7 +76,7 @@ def test_no_show_today_is_inferred_from_slug_not_title(monkeypatch):
         title="A completely ordinary title",
         published_at=datetime.now(timezone.utc) - timedelta(days=1),
     )
-    assert status.get_publish_status_from_dw_detail(detail) is EpisodePublishStatus.NO_USABLE_MEDIA
+    assert status.get_publish_status_from_dw_detail(detail) is None
     assert status.is_published_final(detail) is False
 
 
@@ -148,7 +148,7 @@ def test_dw_processing_uses_short_metadata_long_hls_and_times_out(monkeypatch):
     assert status.resolve_episode_status(
         stale,
         publication_timing_reference=stale.published_date,
-    ).status is EpisodePublishStatus.NO_USABLE_MEDIA
+    ).status is None
 
 
 def test_transition_policy_reuses_the_single_hls_observation(monkeypatch):
@@ -178,7 +178,6 @@ def test_incremental_detail_404_overrides_age_fallback(monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from sources.dailywire.api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.helpers.episodes import save, status
-    from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
     monkeypatch.setattr(status, "get_settings", _timing_settings)
     record = _episode_record("missing-detail", published_at=datetime.now(timezone.utc) - timedelta(hours=10))
 
@@ -190,8 +189,7 @@ def test_incremental_detail_404_overrides_age_fallback(monkeypatch):
         episodes=[("ep.2500", record)], client=FakeClient(),
         require_member_exclusive=False, always_resolve_details=True,
     )
-    assert resolved.status is EpisodePublishStatus.NO_USABLE_MEDIA
-    assert resolved.unusable_media_reason is NoUsableMediaReason.NOT_FOUND
+    assert resolved.status is None
     assert resolved.detail_resolved is True
 
 
@@ -207,57 +205,6 @@ def test_initial_back_catalog_can_shortcut_old_final_without_detail(monkeypatch)
     assert resolved.status is EpisodePublishStatus.PUBLISHED_FINAL
     assert resolved.detail_resolved is False
     client.get_episode_details.assert_not_called()
-
-
-def test_incremental_mapper_reclaims_vacated_identifier_before_final_cursor():
-    from sources.dailywire.api.dw_api.client import EpisodesPaginatedResult
-    from task_manager.tasks.helpers.episodes.mapper import get_dw_episodes_since_ep
-    from task_manager.tasks.types.general import RecordOrder
-
-    published = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
-    replacement = _episode_record(
-        "replacement-2500",
-        episode_number="2500.00",
-        published_at=published,
-    )
-    cursor = _episode_record(
-        "episode-2501",
-        episode_number="2501.00",
-        published_at=published + timedelta(hours=1),
-    )
-
-    class FakeClient:
-        def get_episodes_paginated(self, collection_slug, selector):
-            return EpisodesPaginatedResult([cursor, replacement], None, False)
-
-    season = SimpleNamespace(
-        id=11,
-        index=1,
-        slug="season-1",
-        name="One",
-        season_type="normal",
-        season_number=1,
-    )
-    collection = SimpleNamespace(slug="test-collection", episode_identifier="numbered")
-    since_episode = SimpleNamespace(slug=cursor.slug, season=season)
-
-    episode_map, max_values = get_dw_episodes_since_ep(
-        FakeClient(),
-        collection=collection,
-        membership_plan="FREE",
-        seasons=[season],
-        dw_id_by_slug={season.slug: "remote-season"},
-        since_episode=since_episode,
-        prev_max_values={},
-        known_episode_slugs={cursor.slug},
-        vacated_identifiers={"ep.2500"},
-        order=RecordOrder.ASC,
-    )
-
-    assert [(identifier, record.slug) for identifier, record in episode_map[season.id]] == [
-        ("ep.2500", replacement.slug),
-    ]
-    assert "ep_id.latest_ep_num" not in max_values
 
 
 def _make_collection_and_episode(session, *, identifier: str):
@@ -359,8 +306,7 @@ def test_identifier_reconciliation_uses_dailywire_segment_10_directly():
     engine.dispose()
 
 
-def test_no_usable_media_monitor_defaults_to_twenty_minutes():
+def test_dw_processing_safeguard_defaults_to_an_hour():
     from config.settings.settings import AppSettings
     settings = AppSettings(timezone="UTC")
-    assert settings.new_episode_schedule.monitor_no_usable_media_episode_cron == "*/20 * * * *"
     assert settings.episode_status_timing.dw_processing_max_minutes == 60

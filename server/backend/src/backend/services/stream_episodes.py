@@ -42,7 +42,6 @@ _RECONCILABLE_ARTIFACT_STATUSES = (
 _UNAVAILABLE_PUBLISH_STATUSES = {
     EpisodePublishStatus.SCHEDULED.value,
     EpisodePublishStatus.DELAYED.value,
-    EpisodePublishStatus.NO_USABLE_MEDIA.value,
     EpisodePublishStatus.SOURCE_PROCESSING.value,
 }
 _VIDEO_HEIGHTS = {fmt.value: height for fmt, height in PREFERRED_FORMAT_HEIGHTS.items()}
@@ -632,8 +631,6 @@ def get_stream_episode(
         else:
             return episode
 
-    if episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
-        raise ServiceError("Episode has no usable media", status_code=404)
     if episode.publish_status == EpisodePublishStatus.SOURCE_PROCESSING.value:
         raise ServiceError("Episode media is still processing", status_code=404)
 

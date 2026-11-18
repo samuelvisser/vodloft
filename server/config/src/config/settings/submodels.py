@@ -327,15 +327,6 @@ class TrackNewEpisodeSchedule(SubmodelBase):
         min_length=1,
         description="Cron schedule for the full re-scan of collections whose Source has quick checks",
     )
-    monitor_no_usable_media_episode_cron_enabled: bool = Field(
-        default=True,
-        description="Enable the cron schedule for rechecking episodes quarantined without usable media",
-    )
-    monitor_no_usable_media_episode_cron: str = Field(
-        ...,
-        min_length=1,
-        description="Cron schedule for rechecking episodes quarantined without usable media",
-    )
     metadata_refresh_intervals: str = Field(
         ...,
         min_length=1,
@@ -378,11 +369,6 @@ class EpisodeStatusTiming(SubmodelBase):
         default=60,
         ge=0,
         description="Maximum minutes after publishedAt an episode may remain in the Daily Wire processing signature",
-    )
-    no_usable_media_delete_after_minutes: int = Field(
-        default=4 * 60,
-        ge=0,
-        description="Minutes an episode may remain in no_usable_media before a current Daily Wire 404 may be deleted",
     )
 
 

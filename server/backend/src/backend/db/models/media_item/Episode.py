@@ -6,7 +6,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Boolean, ForeignKey, Index, PrimaryKeyConstraint, UniqueConstraint, func, text
 from sqlalchemy.ext.hybrid import hybrid_property
 
-from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
@@ -22,7 +21,6 @@ from backend.utils.episode_publication_timing import (
     safe_live_ended_from_meta,
     safe_published_final_from_meta,
 )
-from backend.utils.episode_slug import is_no_show_today_slug
 
 if TYPE_CHECKING:
     from backend.db.models import Collection, Season
@@ -174,19 +172,6 @@ class Episode(
     @property
     def episode_label(self) -> str:
         return self.episode_identifier_info.label
-
-    @property
-    def is_no_show_today(self) -> bool:
-        """Whether the stable Daily Wire slug marks this as a No Show Today placeholder."""
-        return is_no_show_today_slug(self.slug)
-
-    @property
-    def early_delete_available(self) -> bool:
-        """Whether the latest Daily Wire verification reported this episode missing."""
-        return (
-            self.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value
-            and self.get_meta("no_usable_media.reason") == "not_found"
-        )
 
     def download_dismissed(self, local_media_profile_id: int) -> bool:
         """Whether the user deleted this episode's download record for the Local Media Profile."""

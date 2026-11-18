@@ -38,7 +38,7 @@ def settings_get():
     response_model=LibraryDefaultsAPIRead,
 )
 def library_defaults():
-    """What Local Media Profiles fall back to, and when episodes without media are deleted."""
+    """What Local Media Profiles fall back to."""
     settings = get_settings()
     return LibraryDefaultsAPIRead(
         download_mode=settings.download_settings.download_mode,
@@ -46,7 +46,6 @@ def library_defaults():
         metadata_mode=settings.download_settings.metadata_mode,
         download_collection_assets=settings.download_settings.download_collection_assets,
         filename_restriction_mode=settings.download_settings.filename_restriction_mode,
-        no_usable_media_delete_after_minutes=settings.episode_status_timing.no_usable_media_delete_after_minutes,
     )
 
 

@@ -220,13 +220,9 @@ Open **Settings → Sources** and confirm VODLoft is still signed in to The Dail
 
 If you changed advanced endpoints, OAuth settings, or request pacing, restore their defaults before continuing diagnosis.
 
-## VODLoft says an episode has no usable media
+## An episode disappeared or shows Removed
 
-Daily Wire can temporarily list an episode before usable media is available, or an old placeholder can remain in the catalog.
-
-VODLoft rechecks these episodes every **20 minutes** by default. It normally waits **4 hours** before an episode that remains unavailable can be cleaned up.
-
-If you are certain the entry should be removed immediately, use **Early Delete** from the episode actions. VODLoft checks its current Daily Wire state again before removal.
+When a site no longer has an episode, or has nothing usable for it, VODLoft removes it if it has no downloaded files, and keeps it with a **Removed** tag if it does. An episode that just went live gets 4 hours to be published first. See [[Automation-and-Background-Tasks#episodes-their-site-no-longer-has]].
 
 ## Database errors or `database disk image is malformed`
 

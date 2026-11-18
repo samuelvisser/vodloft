@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from config.settings.settings import AppSettings
 from config.settings.submodels import (
-    EpisodeStatusTiming,
     SchedulerSettings,
     SessionSettings,
     TimeoutSettings,
@@ -38,22 +37,6 @@ def test_runtime_settings_reject_unsafe_scheduler_limits():
             max_workers=0,
             default_max_retries=-1,
             retry_backoff_seconds=-1,
-        )
-
-
-def test_runtime_settings_default_no_usable_media_delete_delay_is_four_hours():
-    timing = EpisodeStatusTiming(
-        published_final_after_minutes=180,
-    )
-
-    assert timing.no_usable_media_delete_after_minutes == 240
-
-
-def test_runtime_settings_reject_negative_no_usable_media_delete_delay():
-    with pytest.raises(ValidationError):
-        EpisodeStatusTiming(
-            published_final_after_minutes=180,
-            no_usable_media_delete_after_minutes=-1,
         )
 
 

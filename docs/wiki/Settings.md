@@ -202,8 +202,6 @@ These settings are available under **Settings → Automation**.
 | `newEpisodeSchedule.quickCheckCron` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON` | `*/5 * * * *` | Wakes the quick check. Each collection is checked as often as the YouTube API quota allows, and never more often than `youtubeApi.minCheckIntervalMinutes`. |
 | `newEpisodeSchedule.fullRescanCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON_ENABLED` | `true` | Enables the full re-scan of collections with quick checks. |
 | `newEpisodeSchedule.fullRescanCron` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON` | `0 4 * * *` | Lists collections with quick checks in full once a day, to catch anything a quick check missed, and refreshes their episodes (see [[Collections-and-Library#renamed-and-removed-videos]]). |
-| `newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON_ENABLED` | `true` | Enables recurring checks for episodes without usable media. |
-| `newEpisodeSchedule.monitorNoUsableMediaEpisodeCron` | `VL_NEW_EPISODE_SCHEDULE__MONITOR_NO_USABLE_MEDIA_EPISODE_CRON` | `*/20 * * * *` | Rechecks episodes that temporarily have no usable Daily Wire media. |
 | `newEpisodeSchedule.metadataRefreshIntervals` | `VL_NEW_EPISODE_SCHEDULE__METADATA_REFRESH_INTERVALS` | `1h,6h,24h,3d` | The system schedule: follow-up metadata refreshes after publication, for every Site without a schedule of its own. |
 | `newEpisodeSchedule.upcomingAndLive` | `VL_NEW_EPISODE_SCHEDULE__UPCOMING_AND_LIVE` | `true` | Adds streams and premieres as soon as they are announced, and follows them until they are published. |
 | `newEpisodeSchedule.pendingUpcomingMinutes` | `VL_NEW_EPISODE_SCHEDULE__PENDING_UPCOMING_MINUTES` | `60` | How often an upcoming episode is looked up, until 15 minutes before it starts. |
@@ -247,8 +245,7 @@ siteSettings:
 | Setting | Environment variable | Default | What it does |
 | --- | --- | --- | --- |
 | `episodeStatusTiming.publishedFinalAfterMinutes` | `VL_EPISODE_STATUS_TIMING__PUBLISHED_FINAL_AFTER_MINUTES` | `180` | Safety threshold for an episode that remains stuck on a countdown-style published version. |
-| `episodeStatusTiming.dwProcessingMaxMinutes` | `VL_EPISODE_STATUS_TIMING__DW_PROCESSING_MAX_MINUTES` | `60` | Maximum time an episode may remain in Daily Wire processing before VODLoft treats its media as unavailable. |
-| `episodeStatusTiming.noUsableMediaDeleteAfterMinutes` | `VL_EPISODE_STATUS_TIMING__NO_USABLE_MEDIA_DELETE_AFTER_MINUTES` | `240` | Waiting period before a persistently unavailable episode may be cleaned up. |
+| `episodeStatusTiming.dwProcessingMaxMinutes` | `VL_EPISODE_STATUS_TIMING__DW_PROCESSING_MAX_MINUTES` | `60` | Maximum time an episode may remain in Daily Wire processing before VODLoft treats it as an episode The Daily Wire no longer has. |
 
 These are safeguards for unusual Daily Wire publication states. Most users should leave them at their defaults. See [[Automation-and-Background-Tasks]].
 

@@ -168,7 +168,8 @@ def test_the_refresh_updates_marks_and_unmarks_episodes(refreshing, session):
     assert episodes["v1"].thumbnail_landscape_path == "https://i.example/v1.jpg"
     # File names follow the identifier, which never changes.
     assert episodes["v1"].episode_identifier == "ep.1"
-    assert episodes["v2"].removed_from_source and episodes["v2"].title == "v2"
+    # Without files it is deleted.
+    assert "v2" not in episodes
     assert not episodes["v3"].removed_from_source
 
     # A second run with the same answer changes nothing.

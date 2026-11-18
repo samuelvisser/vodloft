@@ -1,4 +1,9 @@
-"""Downloads whose episode the Source no longer has: VODLoft asks whether to keep them.
+"""Episodes the Source no longer has, and their downloads: VODLoft asks whether to keep them.
+
+An episode the Source no longer has, or has nothing usable for, such as a Daily Wire episode that was taken down
+or a cancelled stream, goes when it has no files. One that went live and was not published yet first gets a few
+hours, on every Site: right after a stream, the Source may not show it for a while. A downloaded episode stays,
+marked removed from its Source.
 
 When an episode VODLoft downloaded disappears from its Source, the file on disk may be the
 only copy left. The Home page then asks whether to keep the download. Until the person
@@ -11,14 +16,71 @@ playlist, is asked about the same way. Don't keep then removes it from the colle
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import EpisodeMediaDownload, Episode
+from backend.db.datetime_types import utc_datetime
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, EpisodePublishStatus
+
+AFTER_LIVE_WAIT = timedelta(hours=4)
+"""How long an episode that went live, and is gone before it was published, stays without files."""
+_GONE_SINCE = "removed_from_source.since"
+_AFTER_LIVE = {
+    status.value for status in PENDING_EPISODE_PUBLISH_STATUSES
+    if status not in {EpisodePublishStatus.SCHEDULED, EpisodePublishStatus.DELAYED}
+}
+
+
+def left_source(s: Session, episode: Episode, *, now: datetime | None = None) -> bool:
+    """The Source no longer has this episode. Returns whether it was deleted.
+
+    ``s`` is a write transaction's session."""
+    episode.removed_from_source = True
+    has_files = s.scalar(
+        select(EpisodeMediaDownload.id).where(EpisodeMediaDownload.media_item_id == episode.id).limit(1)
+    ) is not None
+    if has_files:
+        return False
+    if episode.publish_status in _AFTER_LIVE:
+        now = utc_datetime(now or datetime.now(timezone.utc))
+        since = episode.get_meta(_GONE_SINCE)
+        if since is None:
+            episode.set_meta(_GONE_SINCE, now.isoformat())
+            return False
+        if now - utc_datetime(datetime.fromisoformat(since)) < AFTER_LIVE_WAIT:
+            return False
+    delete_episode(s, episode)
+    return True
+
+
+def back_at_source(episode: Episode) -> bool:
+    """The Source has this episode again. Returns whether it was marked removed."""
+    for item in list(episode.meta_items):
+        if item.key == _GONE_SINCE:
+            episode.meta_items.remove(item)
+    was_removed = episode.removed_from_source
+    episode.removed_from_source = False
+    return was_removed
+
+
+def delete_episode(s: Session, episode: Episode) -> None:
+    """Delete an episode, with its download records.
+
+    ``s`` is a write transaction's session."""
+    from backend.services.custom_indexes import request_collection_custom_index_reconciliation
+    from task_manager.events.transactional import queue_event
+
+    queue_event(s, "episode.deleted", {
+        "resource_id": episode.id, "id": episode.id, "slug": episode.slug, "collection_id": episode.collection_id,
+    })
+    request_collection_custom_index_reconciliation(s, episode.collection_id)
+    s.delete(episode)
+    s.flush()
 
 
 def _open(download) -> bool:

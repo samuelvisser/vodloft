@@ -91,7 +91,6 @@ export const LibraryDefaultsSchema = z.object({
     metadataMode: MetadataModeSchema,
     downloadCollectionAssets: z.boolean(),
     filenameRestrictionMode: FilenameRestrictionModeSchema,
-    noUsableMediaDeleteAfterMinutes: z.number(),
 })
 export type LibraryDefaults = z.infer<typeof LibraryDefaultsSchema>
 

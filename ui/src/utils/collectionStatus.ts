@@ -13,8 +13,6 @@ export function statusIcon(status: string) {
             return faIcon('fass', 'clock-rotate-left')
         case 'live':
             return faIcon('fass', 'circle-video')
-        case 'no_usable_media':
-            return faIcon('fass', 'circle-exclamation')
         case 'source_processing':
         case 'local_processing':
             return faIcon('fass', 'spinner')
@@ -59,8 +57,6 @@ export function statusLabel(status: string) {
             return 'Queued'
         case 'downloading':
             return 'Downloading'
-        case 'no_usable_media':
-            return 'No usable media'
         case 'source_processing':
             return 'The source is still processing the episode'
         case 'local_processing':

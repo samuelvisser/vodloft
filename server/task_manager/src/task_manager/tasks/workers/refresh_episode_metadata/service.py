@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode
 from backend.db.core import run_write_transaction
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
+from backend.services.removed_downloads import back_at_source, left_source
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import (
@@ -19,11 +20,9 @@ from sources.dailywire.api.records import DwEpisodeDetailRecord
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.episodes.metadata import update_episode_from_dailywire
-from ...helpers.episodes.no_show import is_no_show_today_slug
 from ...helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
 from ...helpers.refreshed_metadata import check_upgrades_after_refresh
-from ...helpers.episodes.unusable_media import NoUsableMediaReason, mark_episode_no_usable_media
 
 
 logger = logging.getLogger(__name__)
@@ -32,9 +31,10 @@ logger = logging.getLogger(__name__)
 def refresh_dailywire_episode(s: Session, episode_id: int, *, now: Optional[datetime] = None) -> Optional[bool]:
     """Look one published Daily Wire episode up again, as the metadata refresh sweep asks.
 
-    True when it was updated as usual, False when it changed hands because it is
-    pending again or has no usable media, and None when it was no longer there or
-    no longer published by the time The Daily Wire answered. A failed lookup raises.
+    True when it was updated as usual, False when it is pending again or The Daily
+    Wire no longer has it or has nothing usable for it, and None when it was no
+    longer there or no longer published by the time The Daily Wire answered. A
+    failed lookup raises.
     """
     episode = s.get(Episode, episode_id)
     if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
@@ -57,21 +57,17 @@ def refresh_dailywire_episode(s: Session, episode_id: int, *, now: Optional[date
         episode = w.get(Episode, episode_id)
         if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
             return None
+        collection_id = episode.collection_id
         refreshed_normally = _refresh_episode_from_dailywire(w, episode, detail, now=now)
-        request_collection_custom_index_reconciliation(w, episode.collection_id)
+        if refreshed_normally is None:
+            # It left The Daily Wire without files, and is gone.
+            return False
+        request_collection_custom_index_reconciliation(w, collection_id)
         if not refreshed_normally:
             episode.metadata_is_final = False
         return refreshed_normally
 
     return run_write_transaction(store)
-
-
-def _no_usable_reason(detail, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:
-    if is_no_show_today_slug(detail.slug):
-        return NoUsableMediaReason.NO_SHOW_TODAY
-    if observed_status is EpisodePublishStatus.SOURCE_PROCESSING:
-        return NoUsableMediaReason.PROCESSING_TIMEOUT
-    return NoUsableMediaReason.MEDIA_UNUSABLE
 
 
 def _fetch_episode_from_dailywire(
@@ -98,27 +94,13 @@ def _refresh_episode_from_dailywire(
     detail: DwEpisodeDetailRecord | None,
     *,
     now: Optional[datetime] = None,
-) -> bool:
-    """Apply one fetched snapshot; return False when lifecycle ownership transfers."""
+) -> bool | None:
+    """Apply one fetched snapshot. False when it is pending again or left The Daily Wire with its files, and None
+    when it left without files and was deleted."""
     collection = episode.collection
     old_status = episode.publish_status
     if detail is None:
-        new_status = EpisodePublishStatus.NO_USABLE_MEDIA
-        mark_episode_no_usable_media(s, episode, reason=NoUsableMediaReason.NOT_FOUND)
-        invalidate_safe_publication_timing(
-            episode,
-            published_final=True,
-        )
-        queue_episode_status_events(
-            s,
-            episode=episode,
-            collection=collection,
-            old_status=old_status,
-            new_status=new_status,
-            was_created=False,
-        )
-        s.flush()
-        return False
+        return _left(s, episode)
 
     # Observe before mutating the row. A transient HLS/network failure therefore
     # raises and leaves the final episode untouched for normal task retry.
@@ -136,26 +118,10 @@ def _refresh_episode_from_dailywire(
 
     update_episode_from_dailywire(episode, detail, now=now)
 
-    if new_status is EpisodePublishStatus.NO_USABLE_MEDIA:
-        mark_episode_no_usable_media(
-            s,
-            episode,
-            reason=_no_usable_reason(detail, observed.status),
-        )
-        invalidate_safe_publication_timing(
-            episode,
-            published_final=True,
-        )
-        queue_episode_status_events(
-            s,
-            episode=episode,
-            collection=collection,
-            old_status=old_status,
-            new_status=new_status,
-            was_created=False,
-        )
-        return False
+    if new_status is None:
+        return _left(s, episode)
 
+    back_at_source(episode)
     if new_status in PENDING_EPISODE_PUBLISH_STATUSES:
         # Explicit scheduled/delayed/live evidence is authoritative even after a
         # row previously reached final. The status event helper owns lifecycle
@@ -186,3 +152,11 @@ def _refresh_episode_from_dailywire(
     check_upgrades_after_refresh(s, episode)
     s.flush()
     return True
+
+
+def _left(s: Session, episode: Episode) -> bool | None:
+    """The Daily Wire no longer has the episode, or has nothing usable for it."""
+    if left_source(s, episode):
+        return None
+    s.flush()
+    return False

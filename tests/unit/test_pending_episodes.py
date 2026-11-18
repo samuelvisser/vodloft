@@ -132,7 +132,6 @@ def test_an_upcoming_episode_is_checked_hourly_then_often_from_15_minutes_before
     assert interval("scheduled", None, NOW, usual) == usual.starting
     assert interval("live", None, NOW, usual) == usual.live == timedelta(minutes=5)
     assert interval("published_preliminary", None, NOW, usual) == usual.live
-    assert interval("no_usable_media", None, NOW, usual) == usual.upcoming
 
     assert is_due("scheduled", starts, None, NOW, usual)
     assert not is_due("scheduled", starts, NOW, NOW + timedelta(minutes=30), usual)
@@ -301,8 +300,7 @@ def test_an_upcoming_video_is_followed_until_it_is_published(pending, session, e
     assert run_pending_checks(session, now=starts + timedelta(hours=5)).checked == 0
 
 
-def test_a_cancelled_stream_has_no_usable_media_and_is_deleted_after_the_grace_period(pending, session, monkeypatch):
-    from config import get_settings
+def test_a_cancelled_stream_without_files_is_deleted(pending, session):
     from task_manager.tasks.workers.monitor_pending_episode.pending_checks import run_pending_checks
 
     collection = _pending_collection(session)
@@ -310,33 +308,48 @@ def test_a_cancelled_stream_has_no_usable_media_and_is_deleted_after_the_grace_p
 
     pending.gone.add("cancelled")
     result = run_pending_checks(session, now=NOW)
-    assert (result.gone, result.failed) == (1, 1)
-    assert _episode(session, "cancelled").publish_status == "no_usable_media"
+    assert (result.gone, result.deleted, result.failed) == (1, 1, 1)
+    assert _episode(session, "cancelled") is None
     # A lookup that failed for another reason changes nothing.
     assert _episode(session, "flaky").publish_status == "scheduled"
 
-    grace = get_settings().episode_status_timing.no_usable_media_delete_after_minutes
-    run_pending_checks(session, now=NOW + timedelta(minutes=grace + 61))
-    assert _episode(session, "cancelled") is None
+
+def test_a_stream_that_went_live_and_is_gone_waits_four_hours(pending, session):
+    from task_manager.tasks.workers.monitor_pending_episode.pending_checks import run_pending_checks
+
+    collection = _pending_collection(session)
+    _add(session, collection, _upcoming("ended", NOW - timedelta(hours=1), status=EpisodePublishStatus.LIVE))
+
+    pending.gone.add("ended")
+    run_pending_checks(session, now=NOW)
+    episode = _episode(session, "ended")
+    assert episode.removed_from_source and episode.publish_status == "live"
+
+    run_pending_checks(session, now=NOW + timedelta(hours=3))
+    assert _episode(session, "ended") is not None
+    run_pending_checks(session, now=NOW + timedelta(hours=4, minutes=5))
+    assert _episode(session, "ended") is None
 
 
 def test_a_stream_that_comes_back_is_followed_again(pending, session):
     from task_manager.tasks.workers.monitor_pending_episode.pending_checks import run_pending_checks
 
     collection = _pending_collection(session)
-    starts = NOW + timedelta(hours=2)
-    _add(session, collection, _upcoming("back", starts))
+    started = NOW - timedelta(hours=1)
+    _add(session, collection, _upcoming("back", started, status=EpisodePublishStatus.LIVE))
     identifier = _episode(session, "back").episode_identifier
 
     pending.gone.add("back")
     run_pending_checks(session, now=NOW)
+    assert _episode(session, "back").removed_from_source
     pending.gone.clear()
-    pending.now["back"] = _upcoming("back", starts)
+    pending.now["back"] = _upcoming("back", started, status=EpisodePublishStatus.LIVE)
     result = run_pending_checks(session, now=NOW + timedelta(hours=1))
 
     episode = _episode(session, "back")
     assert result.recovered == 1
-    assert (episode.publish_status, episode.episode_identifier) == ("scheduled", identifier)
+    assert not episode.removed_from_source
+    assert (episode.publish_status, episode.episode_identifier) == ("live", identifier)
 
 
 # --- The Daily Wire's pending episodes -----------------------------------------------------------
@@ -359,6 +372,11 @@ def monitored(monkeypatch):
         answer = answers.get(episode_id, EpisodePublishStatus.LIVE)
         if isinstance(answer, Exception):
             raise answer
+        if answer is None:
+            # Gone from The Daily Wire: one without files that never went live is deleted.
+            s.delete(s.get(Episode, episode_id))
+            s.commit()
+            return None
         s.get(Episode, episode_id).publish_status = answer.value
         s.commit()
         return answer
@@ -411,13 +429,13 @@ def test_a_failed_daily_wire_lookup_is_tried_again_on_the_next_round(monitored, 
     flaky = _dailywire_episode(session, "flaky")
     gone = _dailywire_episode(session, "gone", status="scheduled")
     monitored.answers[flaky] = RuntimeError("HTTP error 503")
-    monitored.answers[gone] = EpisodePublishStatus.NO_USABLE_MEDIA
+    monitored.answers[gone] = None
 
     result = _sweep(session, NOW)
     assert (result.checked, result.failed, result.gone) == (2, 1, 1)
 
     del monitored.answers[flaky]
-    # The episode without usable media is left to the no-usable-media checks.
+    # The episode The Daily Wire no longer has is gone.
     assert _sweep(session, NOW + timedelta(minutes=5)).checked == 1
     assert monitored.checked == [flaky, gone, flaky]
 

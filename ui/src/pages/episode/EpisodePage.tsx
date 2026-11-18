@@ -1,12 +1,10 @@
 import {sourceControls} from '../../lib/sourceControls'
 import {useState} from 'react'
 import {Link, useParams} from 'react-router-dom'
-import {useQueryClient} from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, usePublishStatusLabels, useSkippedByFilter, useSourceLookup, useWaitingForCountdown} from '../../lib/queries'
-import {useLibraryDefaults} from '../../lib/settings'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
 import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
@@ -15,9 +13,8 @@ import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import DisabledReason from '../../components/common/DisabledReason'
 import {siteName} from '../../lib/siteName'
 import {EpisodeDownloadRow} from '../../components/Episode/EpisodeDownloadRow'
-import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
-import {formatDate, formatDurationMinutes} from "../../utils/formatting";
+import {formatDate} from "../../utils/formatting";
 import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
@@ -90,11 +87,8 @@ function EpisodePageSkeleton() {
 
 export default function EpisodePage() {
     const {id: collectionId, episodeId} = useParams()
-    const qc = useQueryClient()
     const startOperation = useStartOperation()
     const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
-    const [earlyDeleteConfirm, setEarlyDeleteConfirm] = useState(false)
-    const [earlyDeleteStarting, setEarlyDeleteStarting] = useState(false)
 
     const {data: collection, isPending: isCollectionPending, isFetching: isCollectionFetching, error} = useCollection(collectionId)
     const {data: skipped} = useSkippedByFilter(collection?.id)
@@ -118,7 +112,6 @@ export default function EpisodePage() {
         error: downloadsError,
         hasDomainData: hasDownloadState,
     } = useEpisodeDownloads(episodeId)
-    const settingsQuery = useLibraryDefaults()
     // Its collection's playlists put it in another season, where it waits for the user to move it.
     const {data: seasonPlace} = useSeasonPlace(episodeId)
     const moved = !!seasonPlace?.belongsElsewhere
@@ -134,13 +127,7 @@ export default function EpisodePage() {
         'episode',
         episode?.id ?? null,
     )
-    const earlyDeleteOperation = useActiveOperation(
-        'episode.early_delete',
-        'episode',
-        episode?.id ?? null,
-    )
     const metadataRefreshBusy = metadataRefreshStarting || metadataRefreshOperation !== undefined
-    const earlyDeleteBusy = earlyDeleteStarting || earlyDeleteOperation !== undefined
 
     if (!collectionId) {
         return (
@@ -189,7 +176,6 @@ export default function EpisodePage() {
     const isUpcoming = publishStatus === 'scheduled' || publishStatus === 'delayed'
     // An upcoming episode shows when it is due to start instead of when it was released.
     const startsAt = isUpcoming ? episode.scheduledDate : null
-    const earlyDeleteAvailable = episode.earlyDeleteAvailable
     const containsCountdown = (
         publishStatus === 'published_preliminary'
         || publishStatus === EpisodePublishStatus.publishedPreliminary
@@ -203,17 +189,6 @@ export default function EpisodePage() {
     const locked = episode.drmProtected || episode.accessLocked
     const downloadStateError = (profiles === undefined ? profilesError : null)
         ?? (!hasDownloadState ? downloadsError : null)
-
-    const earlyDeleteAfterMinutes = settingsQuery.data?.noUsableMediaDeleteAfterMinutes
-    const earlyDeleteDisabledReason = earlyDeleteStarting
-        ? OPERATION_STARTING_MESSAGE
-        : earlyDeleteOperation
-            ? 'An early delete is running for this episode.'
-            : settingsQuery.error
-                ? 'VODLoft could not load the automatic deletion delay.'
-                : earlyDeleteAfterMinutes === undefined
-                    ? 'VODLoft is loading the automatic deletion delay.'
-                    : undefined
 
     const coverUrl: string = episode.thumbnailLandscapePath
         || episode.backgroundImagePath
@@ -250,28 +225,6 @@ export default function EpisodePage() {
             toast.error(detail || 'Could not start metadata refresh')
         } finally {
             setMetadataRefreshStarting(false)
-        }
-    }
-
-    const earlyDelete = async () => {
-        if (earlyDeleteBusy) return
-
-        setEarlyDeleteStarting(true)
-        try {
-            const base = apiUrl()
-            await startOperation(
-                `${base}/episodes/${encodeURIComponent(episode.slug)}/early-delete`,
-                {method: 'POST'},
-            )
-
-            setEarlyDeleteConfirm(false)
-            await qc.invalidateQueries({queryKey: ['episode', episode.slug]})
-            toast.success('Early delete started')
-        } catch (error) {
-            const detail = error instanceof OperationStartError ? error.message : undefined
-            toast.error(detail || 'Could not start early delete')
-        } finally {
-            setEarlyDeleteStarting(false)
         }
     }
 
@@ -320,16 +273,6 @@ export default function EpisodePage() {
                                     icon: faIcon('fass', 'arrow-right-arrow-left'),
                                     disabled: movingToSeason,
                                     onSelect: () => void moveToSeason(),
-                                }] : []),
-                                ...(earlyDeleteAvailable ? [{
-                                    label: 'Early Delete',
-                                    icon: faIcon('fass', 'trash') as [string, string],
-                                    tone: 'danger' as const,
-                                    separatorBefore: true,
-                                    disabled: earlyDeleteDisabledReason !== undefined,
-                                    disabledReason: earlyDeleteDisabledReason,
-                                    operation: earlyDeleteOperation,
-                                    onSelect: () => setEarlyDeleteConfirm(true),
                                 }] : []),
                             ]}
                             note={sourceControls(collection).metadataRefresh ? undefined : detailsChecked}
@@ -464,36 +407,6 @@ export default function EpisodePage() {
                 )}
             </article>
 
-            {earlyDeleteAvailable && earlyDeleteAfterMinutes !== undefined && (
-                <ConfirmDialog
-                    open={earlyDeleteConfirm}
-                    title="Early Delete"
-                    onDismiss={() => {
-                        if (!earlyDeleteBusy) setEarlyDeleteConfirm(false)
-                    }}
-                    icon={faIcon('fass', 'trash')}
-                    iconTone="danger"
-                    dismissOnOverlayClick={!earlyDeleteBusy}
-                    cancelButton={{disabled: earlyDeleteBusy}}
-                    confirmButton={{
-                        label: earlyDeleteBusy ? 'Deleting…' : 'Delete now',
-                        onClick: earlyDelete,
-                        className: 'btn btn-danger',
-                        disabled: earlyDeleteBusy,
-                    }}>
-                    <p>
-                        {sourceName} currently returns 404 for this episode, so VODLoft cannot recover media from its current slug.
-                    </p>
-                    <p>
-                        VODLoft will normally keep checking it and only delete it automatically after
-                        {' '}<strong>{formatDurationMinutes(earlyDeleteAfterMinutes)}</strong> in the continuous <code>no_usable_media</code> state.
-                    </p>
-                    <p>
-                        Deleting early skips that waiting period. However, if it turns out this episode slug returned to {sourceName}, VODLoft
-                        will refuse to delete it.
-                    </p>
-                </ConfirmDialog>
-            )}
 
         </section>
     )

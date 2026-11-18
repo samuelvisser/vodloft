@@ -450,16 +450,10 @@ def remove_left_episode(s: Session, episode: Episode) -> None:
     """Remove an episode that left its collection, with its download records. Its files are gone already.
 
     ``s`` is a write transaction's session."""
-    from backend.services.custom_indexes import request_collection_custom_index_reconciliation
-    from task_manager.events.transactional import queue_event
+    from backend.services.removed_downloads import delete_episode
 
-    queue_event(s, "episode.deleted", {
-        "resource_id": episode.id, "id": episode.id, "slug": episode.slug, "collection_id": episode.collection_id,
-    })
     collection, season_id = episode.collection, episode.season_id
-    request_collection_custom_index_reconciliation(s, collection.id)
-    s.delete(episode)
-    s.flush()
+    delete_episode(s, episode)
     _drop_emptied(s, collection, {season_id})
 
 

@@ -129,14 +129,11 @@ class AppSettings(SettingsBase):
         quick_check_cron="*/5 * * * *",
         full_rescan_cron_enabled=True,
         full_rescan_cron="0 4 * * *",
-        monitor_no_usable_media_episode_cron_enabled=True,
-        monitor_no_usable_media_episode_cron="*/20 * * * *",
         metadata_refresh_intervals="1h,6h,24h,3d",
     ))
     episode_status_timing: EpisodeStatusTiming = Field(default=EpisodeStatusTiming(
         published_final_after_minutes=3 * 60,
         dw_processing_max_minutes=60,
-        no_usable_media_delete_after_minutes=4 * 60,
     ))
     site_settings: dict[str, SiteSettingValues] = Field(
         default_factory=dict,
