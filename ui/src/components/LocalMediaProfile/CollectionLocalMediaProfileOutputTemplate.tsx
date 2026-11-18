@@ -2,12 +2,17 @@ import {UseFormReturn} from 'react-hook-form'
 
 import OutputTemplateEditor from './OutputTemplateEditor'
 
-export default function CollectionLocalMediaProfileOutputTemplate({form, readOnly = false}: { form: UseFormReturn<any>, readOnly?: boolean }) {
+export default function CollectionLocalMediaProfileOutputTemplate({form, readOnly = false, isCreating = false}: {
+    form: UseFormReturn<any>
+    readOnly?: boolean
+    isCreating?: boolean
+}) {
     return (
         <OutputTemplateEditor
             form={form}
             mode="collection"
             readOnly={readOnly}
+            isCreating={isCreating}
             placeholder={'/downloads/shows/{{ collection }}/{{ episode_title }}.ext'}
             help={(
                 <>

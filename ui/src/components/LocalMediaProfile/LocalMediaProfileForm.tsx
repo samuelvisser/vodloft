@@ -85,7 +85,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
 
             <LocalMediaProfileSection
                 form={form} title="Files and metadata" description="What VODLoft saves besides the media"
-                summary={summaries.files} fields={FILES_FIELDS}
+                summary={summaries.files} fields={FILES_FIELDS} defaultOpen={isCreating}
             >
                 <MediaFilesFields form={form} mode={mode}/>
             </LocalMediaProfileSection>
@@ -93,7 +93,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
             {offersSubtitles && (
                 <LocalMediaProfileSection
                     form={form} title="Subtitles" description="Which subtitles are saved, and where"
-                    summary={summaries.subtitles} fields={SUBTITLE_FIELDS}
+                    summary={summaries.subtitles} fields={SUBTITLE_FIELDS} defaultOpen={isCreating}
                 >
                     <SubtitleFields form={form} mode={mode} onSubtitleModeChange={onSubtitleModeChange}/>
                 </LocalMediaProfileSection>
@@ -102,7 +102,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
             {offersSponsorBlock && (
                 <LocalMediaProfileSection
                     form={form} title="SponsorBlock" description="Sponsor reads and other parts of a video"
-                    summary={summaries.sponsorblock} fields={SPONSORBLOCK_FIELDS}
+                    summary={summaries.sponsorblock} fields={SPONSORBLOCK_FIELDS} defaultOpen={isCreating}
                 >
                     <SponsorBlockSection form={form} mode={mode}/>
                 </LocalMediaProfileSection>
@@ -110,11 +110,11 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
 
             <LocalMediaProfileSection
                 form={form} title="Output path" description="Where files go and how they are named"
-                summary={summaries.outputPath} fields={OUTPUT_FIELDS} defaultOpen={isCreating}
+                summary={summaries.outputPath} fields={OUTPUT_FIELDS} defaultOpen
             >
                 {mode === 'movie' && <MovieLocalMediaProfileForm form={form}/>}
                 {mode === 'video' && <VideoLocalMediaProfileForm form={form}/>}
-                {mode === 'collection' && <CollectionLocalMediaProfileForm form={form}/>}
+                {mode === 'collection' && <CollectionLocalMediaProfileForm form={form} isCreating={isCreating}/>}
             </LocalMediaProfileSection>
         </>
     )

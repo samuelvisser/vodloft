@@ -48,6 +48,8 @@ type Props = {
     help: ReactNode
     /** Shows a saved profile's template and its examples without letting it be changed here. */
     readOnly?: boolean
+    /** A new profile, which starts with the presets open. */
+    isCreating?: boolean
 }
 
 type TemplateCodeEditorProps = {
@@ -533,7 +535,7 @@ function describeTypedCharacter(char: string): string {
     return char
 }
 
-export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false}: Props) {
+export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false, isCreating = false}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
@@ -874,7 +876,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
 
     return (
         <>
-            {!readOnly && <OutputTemplateStartFields form={form} mode={mode}/>}
+            {!readOnly && <OutputTemplateStartFields form={form} mode={mode} isCreating={isCreating}/>}
             <div className="form-row output-template-field">
                 <section className="template-workbench" aria-labelledby="template-editor-heading">
                     <div className="template-editor-heading">
