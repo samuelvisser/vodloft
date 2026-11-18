@@ -335,7 +335,10 @@ export default function StreamProfileAdvisory({
             selectedEpisodeTypes,
             preferredFormat === 'format_audio_only' ? 'audio' : 'video',
         )
-        if (!downloadProfilesLoaded || coverage.uncoveredEpisodeTypes.length === 0) return null
+        // Without a collection or a format, it is not known yet what the share needs.
+        if (!collectionSlug || !preferredFormat || !downloadProfilesLoaded || coverage.uncoveredEpisodeTypes.length === 0) {
+            return null
+        }
         const partial = coverage.profiles.length > 0
         return (
             <AdvisoryCard
