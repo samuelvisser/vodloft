@@ -20,7 +20,7 @@ function downloadsType(profile: StreamDownloadProfileDefault, episodeType: strin
 type DownloadMediaKind = 'audio' | 'video' | 'hls'
 
 type Props = {
-    mode: 'rss' | 'base'
+    mode: 'rss' | 'webdav' | 'base'
     preferredFormat?: string
     videoOutputMode?: string | null
     useDownloads: boolean
@@ -327,6 +327,51 @@ export default function StreamProfileAdvisory({
     const isRssProfile = mode === 'rss'
     const downloadProfilesLoaded = downloadProfileDefaults !== undefined
     const downloadProfiles = downloadProfileDefaults ?? []
+
+    if (mode === 'webdav') {
+        // A share only lists downloaded files, so it needs a Download Profile of its kind for every selected type.
+        const coverage = coverageForKind(
+            downloadProfiles,
+            selectedEpisodeTypes,
+            preferredFormat === 'format_audio_only' ? 'audio' : 'video',
+        )
+        if (!downloadProfilesLoaded || coverage.uncoveredEpisodeTypes.length === 0) return null
+        const partial = coverage.profiles.length > 0
+        return (
+            <AdvisoryCard
+                title={partial ? 'Download profile coverage is incomplete' : 'No matching download profile is setup'}
+                helpSummary="Why a share needs downloads"
+                help={(
+                    <>
+                        <p>
+                            Media players jump around in a file while you watch, so a WebDAV share only lists episodes
+                            VODLoft has downloaded as a whole file. It never streams episodes from {sourceName}.
+                        </p>
+                        <p>
+                            HLS downloads are kept as many small parts instead of one file, so a share cannot list
+                            them. Multiple Download Profiles can combine to cover every selected episode type.
+                        </p>
+                    </>
+                )}
+            >
+                <p>
+                    {partial
+                        ? 'The existing Download Profiles do not cover every episode this share is set up to include, so those episodes are left out.'
+                        : 'No enabled Download Profile of this collection downloads the files this share lists, so it stays empty.'}
+                </p>
+                <div className="stream-profile-advisory-requirements">
+                    <CoverageRequirement
+                        coverage={coverage}
+                        preferredFormat={preferredFormat}
+                        collectionSlug={collectionSlug}
+                        canOpenDownloadProfiles={canOpenDownloadProfiles}
+                        useDownloads={useDownloads}
+                        onEnableDownloads={onEnableDownloads}
+                    />
+                </div>
+            </AdvisoryCard>
+        )
+    }
 
     const usesVideo = preferredFormat !== 'format_audio_only'
     const usesDirectMp4Video = usesVideo

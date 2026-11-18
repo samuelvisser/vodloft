@@ -77,9 +77,8 @@ export default function WebdavStreamProfileForm({
                 maxItemsHelp={(
                     <ReadMore summary={<span>Only the newest episodes are in the share.</span>}>
                         <p>
-                            The share lists an episode once VODLoft has a whole file of it: a download, or a video
-                            VODLoft already joined for another app. Media players seek in a file, which they cannot
-                            do in a stream.
+                            The share only lists downloaded episodes. Media players seek in a whole file, which they
+                            cannot do in a stream.
                         </p>
                         <p>Set to 0 to remove all limits.</p>
                     </ReadMore>

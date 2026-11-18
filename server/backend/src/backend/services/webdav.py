@@ -1,8 +1,8 @@
 """What a WebDAV stream profile's share holds: a folder per show, laid out the way media players read a TV show.
 
 A show's folder holds its episodes, sorted into a folder per season, per year or none, each named
-``<Show> - S01E05 - <Title>`` or ``<Show> - 2026-03-15 - <Title>``. An episode is listed only once VODLoft
-has a whole file of it, downloaded or in the Stream Video Cache, as a player seeks in a file. Beside them,
+``<Show> - S01E05 - <Title>`` or ``<Show> - 2026-03-15 - <Title>``. Only downloaded episodes are listed, as a
+player seeks in a whole file; a share never streams from the Site. Beside them,
 as the profile chooses, are NFO files and artwork, made when they are asked for: nothing is written next
 to the downloads.
 """
@@ -18,15 +18,14 @@ from typing import Optional, Union
 from sqlalchemy.orm import Session
 
 from backend.db.datetime_types import utc_datetime
-from backend.db.models import Collection, Episode, EpisodeMediaDownload
+from backend.db.models import Collection, Episode
 from backend.db.models.stream_profile import WebdavStreamProfile
 from backend.services.collection_assets import collection_asset_sources
 from backend.services.download_metadata import build_episode_metadata, build_season_metadata, build_show_metadata
-from backend.services.sites import collection_site
 from backend.services.stream_episodes import get_stream_items
 from backend.services.stream_tokens import profiles_for_token
 from backend.services.thumbnails import own_thumbnail_file
-from backend.services.video_cache import artwork_cache_path, episode_mp4_key, get_cached_mp4_path, mark_used
+from backend.services.video_cache import artwork_cache_path, mark_used
 from backend.utils.collection_asset_files import download_collection_asset
 from config import get_settings
 from backend.types.stream_profile_types import WebdavMetadataFiles, WebdavSeasonFolders
@@ -120,18 +119,6 @@ def show_name(profile: WebdavStreamProfile) -> str:
     return _name(profile.overwrite_collection_title or profile.collection.title)
 
 
-def _episode_file(
-    profile: WebdavStreamProfile, episode: Episode, download: Optional[EpisodeMediaDownload],
-) -> Optional[Path]:
-    """The whole file the share lists for the episode: its download, or else its video in the Stream Video Cache."""
-    if download is not None:
-        return Path(download.file_path)
-    if profile.media_kinds[0] != "mp4" or not profile.use_source_stream:
-        return None
-    site = collection_site(profile.collection)
-    return get_cached_mp4_path(episode_mp4_key(site, profile.preferred_format, episode.uuid))
-
-
 def _modified(path: Path) -> datetime:
     return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
 
@@ -180,8 +167,7 @@ def _episode_artwork(episode: Episode) -> Optional[Artwork]:
 
 
 def show_folder(s: Session, profile: WebdavStreamProfile) -> ShareFolder:
-    """The show's folder, with every episode VODLoft has a whole file of and, as the profile chooses, its
-    NFO files and artwork."""
+    """The show's folder, with every downloaded episode and, as the profile chooses, its NFO files and artwork."""
     collection = profile.collection
     name = show_name(profile)
     metadata = WebdavMetadataFiles(profile.metadata_files)
@@ -193,8 +179,7 @@ def show_folder(s: Session, profile: WebdavStreamProfile) -> ShareFolder:
 
     seasons: dict[int, ShareFolder] = {}
     for episode, download in get_stream_items(s, profile):
-        path = _episode_file(profile, episode, download)
-        if path is None or not path.is_file():
+        if download is None or not (path := Path(download.file_path)).is_file():
             continue
         modified = _modified(path)
         parent = _season_folder(folder, profile, episode, modified)

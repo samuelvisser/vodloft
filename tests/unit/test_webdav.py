@@ -168,20 +168,27 @@ def test_an_audio_share_lists_audio_files_in_one_folder_with_artwork_only(db_ses
     ]
 
 
-def test_a_share_that_streams_from_the_site_lists_episodes_in_the_stream_video_cache(db_session, tmp_path, monkeypatch):
+def test_a_share_only_lists_downloads_and_cannot_stream_from_the_site(db_session, tmp_path):
+    from pydantic import ValidationError
+
+    from backend.api.models.webdav_stream_profile import WebdavStreamProfileAPIUpdate
     from backend.services import webdav
 
     collection = _collection(db_session)
-    _episode(db_session, collection, 1, at=datetime(2026, 3, 1, tzinfo=timezone.utc))
+    _download(db_session, _episode(db_session, collection, 1, at=datetime(2026, 3, 1, tzinfo=timezone.utc)), tmp_path)
     _episode(db_session, collection, 2, at=datetime(2026, 3, 2, tzinfo=timezone.utc))
-    cached = tmp_path / "cached.mp4"
-    cached.write_bytes(b"cached")
-    monkeypatch.setattr(webdav, "get_cached_mp4_path", lambda key: cached if key == "show-2" else None)
-    profile = _share(db_session, collection, use_downloads=False, use_source_stream=True, metadata_files="none")
+    profile = _share(db_session, collection, metadata_files="none")
 
     assert _tree(webdav.show_folder(db_session, profile)) == [
-        "Season 01/", "Season 01/The Show - S01E02 - Episode 2： A⧸B.mp4",
+        "Season 01/", "Season 01/The Show - S01E01 - Episode 1： A⧸B.mp4",
     ]
+    fields = {
+        "title": "The Show", "enableProfile": True, "preferredFormat": "format_1080p", "preferExactMatch": False,
+    }
+    saved = WebdavStreamProfileAPIUpdate.model_validate(fields)
+    assert (saved.use_downloads, saved.use_source_stream) == (True, False)
+    with pytest.raises(ValidationError):
+        WebdavStreamProfileAPIUpdate.model_validate({**fields, "useSourceStream": True})
 
 
 def test_a_user_token_opens_all_their_shows_and_names_that_clash_are_numbered(db_session, tmp_path):

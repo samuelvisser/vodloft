@@ -30,7 +30,8 @@ VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
-HEAD_REVISION = "940039d2712d"
+WEBDAV_TITLE_IS_FOLDER_NAME_REVISION = "940039d2712d"
+HEAD_REVISION = "fbd592943ccc"
 
 
 @pytest.fixture
@@ -1247,3 +1248,38 @@ def test_a_webdav_folder_name_becomes_the_profiles_title(migration_database):
         columns = [row[1] for row in connection.execute(text("PRAGMA table_info(stream_profiles_webdav)"))]
     assert titles == {1: "Folder", 2: None, 3: "Listed"}
     assert "folder_name" not in columns
+
+
+def test_webdav_shares_become_downloads_only(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, WEBDAV_TITLE_IS_FOLDER_NAME_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key, episode_order) VALUES (1, 'c1', 'c1', 'The Show', "
+            "'https://www.dailywire.com/show/c1', 'free', 'series', 'date_based', 'Host', 'host', 'dailywire', "
+            "'newest_first')"
+        ))
+        # A share that streamed from the Site only, one that did both, and an RSS feed that streams.
+        for profile_id, profile_type, use_downloads, use_source_stream in (
+            (1, "webdav", 0, 1), (2, "webdav", 1, 1), (3, "rss", 0, 1),
+        ):
+            connection.execute(text(
+                "INSERT INTO stream_profiles (id, type, collection_id, enable_profile, token, use_downloads, "
+                "use_source_stream, preferred_format, prefer_exact_match, ep_id_type_list, max_items, "
+                "stream_live_episodes, proxy_source_stream, live_episode_handoff_ids) "
+                "VALUES (:id, :type, 1, 1, :token, :downloads, :stream, 'format_1080p', 0, '[]', 0, 0, 1, '[]')"
+            ), {"id": profile_id, "type": profile_type, "token": f"t{profile_id}", "downloads": use_downloads,
+                "stream": use_source_stream})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        sources = connection.execute(text(
+            "SELECT id, use_downloads, use_source_stream FROM stream_profiles ORDER BY id"
+        )).all()
+    assert [tuple(row) for row in sources] == [(1, 1, 0), (2, 1, 0), (3, 0, 1)]
