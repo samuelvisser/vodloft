@@ -2,23 +2,25 @@ from __future__ import annotations
 
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, Request
 
 from backend.db.model_mapping import create_database_fields
 from backend.services.episode_filters import set_profile_filters
 from backend.api.models.collection import CollectionAPIRead
-from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate, CollectionLocalMediaProfileAPIUpdate
+from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 from backend.api.models.collection_as_bundle import (
-    CollectionLocalMediaProfileAPIUpsert,
+    CollectionLocalMediaProfileAPIChoice,
     CollectionLocalMediaProfileCreateNew,
-    CollectionLocalMediaProfileUpdateBySlug,
+    CollectionLocalMediaProfileUseExisting,
     CollectionAPICreateBundle,
 )
 from backend.db.models import Season, Collection, CollectionLocalMediaProfile
 from backend.db.models.download_profile import DownloadProfile
 from backend.db.models.stream_profile import RssStreamProfile
 from backend.services.adoption import AdoptionError
+from backend.services.errors import NotFoundError
 from backend.services.existing_files import ExistingFilesError, request_scan
 from backend.utils.feed_urls import build_rss_feed_url, request_base_url
 from backend.utils.helpers import generate_stream_profile_token
@@ -26,25 +28,25 @@ from task_manager.scheduler.requester import current_requester
 from backend.utils.season_ordering import number_initial_seasons
 
 from ...stream_profiles.service import ensure_site_can_stream
-from ...collection_local_media_profiles.service import create_collection_local_media_profile, update_collection_local_media_profile
+from ...collection_local_media_profiles.service import create_collection_local_media_profile
 from backend.services.collections import add_collection, index_new_collection
 
 
-def upsert_collection_local_media_profile(
+def choose_collection_local_media_profile(
     s: Session,
-    mp_input: CollectionLocalMediaProfileAPIUpsert,
+    mp_input: CollectionLocalMediaProfileAPIChoice,
 ) -> CollectionLocalMediaProfile:
-    """Create or update the profile the way the profile endpoints do, indexing values included."""
-    fields = mp_input.model_dump(exclude={"op", "slug_selector"})
+    """Create a new profile the way the profile endpoint does, or pick an existing one without changing it."""
+    if isinstance(mp_input, CollectionLocalMediaProfileUseExisting):
+        profile = s.scalar(select(CollectionLocalMediaProfile).where(CollectionLocalMediaProfile.slug == mp_input.slug))
+        if profile is None:
+            raise NotFoundError("Collection Local Media Profile")
+        return profile
     if isinstance(mp_input, CollectionLocalMediaProfileCreateNew):
+        fields = mp_input.model_dump(exclude={"op"})
         saved = create_collection_local_media_profile(s, CollectionLocalMediaProfileAPICreate.model_validate(fields))
-    elif isinstance(mp_input, CollectionLocalMediaProfileUpdateBySlug):
-        saved = update_collection_local_media_profile(
-            s, mp_input.slug_selector, CollectionLocalMediaProfileAPIUpdate.model_validate(fields),
-        )
-    else:
-        raise TypeError(f"Unsupported media profile input {type(mp_input).__name__}")
-    return s.get(CollectionLocalMediaProfile, saved.id)
+        return s.get(CollectionLocalMediaProfile, saved.id)
+    raise TypeError(f"Unsupported media profile input {type(mp_input).__name__}")
 
 
 def create_collection_bundle(
@@ -68,7 +70,7 @@ def create_collection_bundle(
 
     local_media_profile: Optional[CollectionLocalMediaProfile] = None
     if payload.local_media_profile is not None:
-        local_media_profile = upsert_collection_local_media_profile(s, payload.local_media_profile)
+        local_media_profile = choose_collection_local_media_profile(s, payload.local_media_profile)
 
     download_profile: Optional[DownloadProfile] = None
     if payload.download_profile is not None:
