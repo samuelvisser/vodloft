@@ -52,7 +52,7 @@ ${NUMBERS}
 		S{{ season_num }}E{{ ep_num }}
 	{% endif %}
 {% endset %}
-{# Plex reads a number such as 4x4 in a title as the episode, and the title sits in brackets. #}
+{# Plex reads a number such as 4x4 in a title as the season/episode #}
 {% set plex_title = title | replace('[', '(') | replace(']', ')') | regex_replace('(?<=\\d)[xX](?=\\d)', '-by-') %}
 
 {# Path #}
