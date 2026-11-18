@@ -197,6 +197,34 @@ def test_a_show_by_season_keeps_specials_in_season_0_and_trailers_in_a_trailers_
     assert b"<seasonnumber>0</seasonnumber>" in specials["season.nfo"].content
 
 
+@pytest.mark.parametrize("episode_extras, expected", [
+    (False, [
+        "Other/", "Other/Extra 1.2 - Episode 3： A⧸B.mp4",
+        "Season 01/", "Season 01/The Show - S01E01 - Episode 1： A⧸B.mp4",
+        "Trailers/", "Trailers/Trailer 1.1 - Episode 2： A⧸B.mp4",
+    ]),
+    (True, [
+        "Season 01/", "Season 01/The Show - S01E01 - Episode 1： A⧸B-other2.mp4",
+        "Season 01/The Show - S01E01 - Episode 1： A⧸B-trailer1.mp4", "Season 01/The Show - S01E01 - Episode 1： A⧸B.mp4",
+    ]),
+])
+def test_the_extras_of_an_episode_are_listed_in_the_shows_folders_or_beside_it(
+    db_session, tmp_path, episode_extras, expected,
+):
+    from backend.services.webdav import show_folder
+
+    collection = _collection(db_session)
+    _download(db_session, _episode(db_session, collection, 1, at=datetime(2026, 3, 1, tzinfo=timezone.utc)), tmp_path)
+    for number, identifier in ((2, "ep-extra.trailer.1.1"), (3, "ep-extra.other.1.2")):
+        extra = _episode(db_session, collection, number, at=datetime(2026, 3, number, tzinfo=timezone.utc))
+        extra.episode_identifier = identifier
+        _download(db_session, extra, tmp_path)
+    profile = _share(db_session, collection, metadata_files="none", episode_extras=episode_extras)
+    profile.ep_id_type_list = ["ep", "ep-extra"]
+
+    assert _tree(show_folder(db_session, profile)) == expected
+
+
 def test_a_share_only_lists_downloads_and_cannot_stream_from_the_site(db_session, tmp_path):
     from pydantic import ValidationError
 

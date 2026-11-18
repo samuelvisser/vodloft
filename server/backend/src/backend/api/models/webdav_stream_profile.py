@@ -11,6 +11,7 @@ from backend.types.stream_profile_types import StreamProfileType, WebdavMetadata
 # ---------- Strict input (create/update) ----------
 class _WebdavStreamProfileAPIBaseIn(StreamProfileFieldsIn):
     season_folders: WebdavSeasonFolders = WebdavSeasonFolders.SEASON
+    episode_extras: bool = False
     metadata_files: WebdavMetadataFiles = WebdavMetadataFiles.NFO_AND_ARTWORK
     # A share lists whole files, so only downloads, and never live episodes.
     use_downloads: Literal[True] = True
@@ -34,6 +35,7 @@ class WebdavStreamProfileAPIRead(StreamProfileFieldsOut):
 
     type: Literal["webdav"] = StreamProfileType.WEBDAV.value
     season_folders: WebdavSeasonFolders
+    episode_extras: bool
     metadata_files: WebdavMetadataFiles
     token: str = Field(exclude=True)
 
