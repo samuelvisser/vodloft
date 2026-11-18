@@ -22,6 +22,7 @@ import {
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
 import CustomIndexAdvisories from './CustomIndexAdvisories'
+import OpaqueOutputTemplateCode from './OpaqueOutputTemplateCode'
 import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStartFields'
 import CollectionRootNote from './CollectionRootNote'
 import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
@@ -60,7 +61,6 @@ type TemplateCodeEditorProps = {
     ariaLabel?: string
     /** The help and error text, when they are not the profile form's own. */
     describedBy?: string
-    readOnly?: boolean
 }
 
 type JinjaStatement = {
@@ -420,7 +420,6 @@ export function TemplateCodeEditor({
                                 id = 'mp-path',
                                 ariaLabel = 'Output path template',
                                 describedBy,
-                                readOnly = false,
                             }: TemplateCodeEditorProps) {
     const canonicalValue = value ?? ''
     const [editorValue, setEditorValue] = useState(() => (
@@ -442,8 +441,6 @@ export function TemplateCodeEditor({
             minHeight="96px"
             placeholder={placeholder}
             extensions={extensions}
-            editable={!readOnly}
-            readOnly={readOnly}
             basicSetup={{
                 lineNumbers: false,
                 foldGutter: false,
@@ -882,31 +879,34 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                 <section className="template-workbench" aria-labelledby="template-editor-heading">
                     <div className="template-editor-heading">
                         <div>
-                            <label id="template-editor-heading" htmlFor="mp-path">Output path template</label>
+                            <label id="template-editor-heading" htmlFor={readOnly ? undefined : 'mp-path'}>Output path template</label>
                             {readOnly
                                 ? <p>Read only. Edit the media profile to change it.</p>
                                 : <p>Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>}
                         </div>
                         <span className="template-language-badge">Jinja</span>
                     </div>
-                    <Controller
-                        control={control}
-                        name="outputTemplate"
-                        render={({field}) => (
-                            <TemplateCodeEditor
-                                value={field.value ?? ''}
-                                placeholder={placeholder}
-                                extensions={editorExtensions}
-                                invalid={!!errors.outputTemplate}
-                                onChange={(value) => {
-                                    field.onChange(value)
-                                    form.clearErrors('outputTemplate')
-                                }}
-                                onBlur={field.onBlur}
-                                readOnly={readOnly}
-                            />
-                        )}
-                    />
+                    {readOnly ? (
+                        <OpaqueOutputTemplateCode source={template} sourceMode="compact" label="Output path template"/>
+                    ) : (
+                        <Controller
+                            control={control}
+                            name="outputTemplate"
+                            render={({field}) => (
+                                <TemplateCodeEditor
+                                    value={field.value ?? ''}
+                                    placeholder={placeholder}
+                                    extensions={editorExtensions}
+                                    invalid={!!errors.outputTemplate}
+                                    onChange={(value) => {
+                                        field.onChange(value)
+                                        form.clearErrors('outputTemplate')
+                                    }}
+                                    onBlur={field.onBlur}
+                                />
+                            )}
+                        />
+                    )}
                     {errors.outputTemplate && (
                         <div id="mp-path-error" className="error" role="alert" aria-live="polite">
                             {String(errors.outputTemplate.message)}
