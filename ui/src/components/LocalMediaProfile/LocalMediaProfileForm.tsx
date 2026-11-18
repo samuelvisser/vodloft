@@ -1,9 +1,10 @@
+import type {ReactNode} from 'react'
 import {type FieldValues, UseFormReturn} from 'react-hook-form'
 
 import {LocalMediaProfileServerErrors} from '../../types/schemas/local_media_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import LocalMediaProfileCommonFields from './LocalMediaProfileCommonFields'
-import LocalMediaProfileSection from './LocalMediaProfileSection'
+import LocalMediaProfileSection, {RevealFieldsProvider} from './LocalMediaProfileSection'
 import MediaFilesFields from './MediaFilesFields'
 import CollectionLocalMediaProfileForm from './CollectionLocalMediaProfileForm'
 import QualityField from './QualityField'
@@ -17,6 +18,10 @@ type Props = {
     mode: LocalMediaProfileMode
     form: UseFormReturn<any>
     isCreating: boolean
+    /** Hears the collection root of the output path's example. */
+    onCollectionRoot?: (path: string) => void
+    /** Buttons beside the output template's heading. */
+    outputTemplateActions?: ReactNode
 }
 
 export type LocalMediaProfileMode = 'collection' | 'video'
@@ -48,7 +53,7 @@ export function buildLocalMediaProfileOnSubmit<TIn extends FieldValues, TOut ext
  * The Local Media Profile form, in folding sections. A new profile opens the sections that need a choice; the others
  * start from good defaults and show their values while folded.
  */
-export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
+export default function LocalMediaProfileForm({form, mode, isCreating, onCollectionRoot, outputTemplateActions}: Props) {
     const {register, formState: {errors}} = form
     const {onSubtitleModeChange, onScopeChange} = useSubtitleModeDefaults(form, mode, isCreating)
     const summaries = useLocalMediaProfileSummaries(form, mode)
@@ -56,7 +61,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
     const offersSponsorBlock = useOffersSponsorBlock(form, mode)
 
     return (
-        <>
+        <RevealFieldsProvider>
             {errors.root && (
                 <div className="form-error-card" role="alert" aria-live="polite">
                     {String(errors.root.message)}
@@ -70,7 +75,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
 
             <LocalMediaProfileSection
                 form={form} title="Profile" description="Name, where it is offered and for which Sites"
-                summary={summaries.profile} fields={PROFILE_FIELDS} defaultOpen={isCreating}
+                summary={summaries.profile} fields={PROFILE_FIELDS} defaultOpen
             >
                 <LocalMediaProfileCommonFields form={form} mode={mode} isCreating={isCreating} onScopeChange={onScopeChange}/>
             </LocalMediaProfileSection>
@@ -109,11 +114,11 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
 
             <LocalMediaProfileSection
                 form={form} title="Output path" description="Where files go and how they are named"
-                summary={summaries.outputPath} fields={OUTPUT_FIELDS} defaultOpen={isCreating}
+                summary={summaries.outputPath} fields={OUTPUT_FIELDS} defaultOpen
             >
                 {mode === 'video' && <VideoLocalMediaProfileForm form={form}/>}
-                {mode === 'collection' && <CollectionLocalMediaProfileForm form={form}/>}
+                {mode === 'collection' && <CollectionLocalMediaProfileForm form={form} isCreating={isCreating} onCollectionRoot={onCollectionRoot} outputTemplateActions={outputTemplateActions}/>}
             </LocalMediaProfileSection>
-        </>
+        </RevealFieldsProvider>
     )
 }

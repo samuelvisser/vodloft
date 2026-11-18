@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 import PathChangeList, {type PathChange} from '../common/PathChangeList'
 import SimpleSelect from '../common/SimpleSelect'
+import Modal from '../Modal/Modal'
 import DownloadLogDialog from '../MediaDownload/DownloadLogDialog'
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import {useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
@@ -287,87 +288,92 @@ export default function MoveEpisodesDialog({profile, sourceEmpty, onDeleteProfil
     }
 
     return (
-        <div className="modal-overlay" role="presentation">
-            <div className="modal move-episodes-dialog" role="dialog" aria-modal="true" aria-labelledby="move-episodes-title">
-                <div className="modal-header">
-                    <div className="modal-icon" aria-hidden><FontAwesomeIcon icon={faIcon('fass', 'file-export')}/></div>
-                    <h2 id="move-episodes-title" className="modal-title">Move episodes to another profile</h2>
-                </div>
-
-                <div className="move-episodes-body">
-                    <p className="move-episodes-intro">
-                        The downloaded episodes of "{profile.name}" move over to another Local Media Profile, with their
-                        history, and their files are renamed into its layout. Nothing is overwritten: an episode that
-                        can't move stays where it is.
-                    </p>
-
-                    <div className="form-group">
-                        <label htmlFor="move-episodes-target">Move to</label>
-                        <SimpleSelect
-                            inputId="move-episodes-target"
-                            registry={registry}
-                            value={targetId}
-                            onChange={(value) => { setTargetId(value); setChoices({}); setFinished(false) }}
-                            isDisabled={running}
-                            // The dialog body scrolls, so its own menu would be clipped: draw it above the dialog.
-                            menuPortalTarget={document.body}
-                            menuPosition="fixed"
-                            styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
-                            placeholder={others.length ? 'Choose a Local Media Profile' : 'No other Collection Local Media Profiles'}
-                        />
-                    </div>
-
-                    {operation && (
-                        <div className="form-info-card" role="status" aria-live="polite">
-                            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>{' '}
-                            {operation.message || 'Moving episodes…'}
-                        </div>
-                    )}
-                    {sourceEmpty && (finished || (preview.data && collections.length === 0)) && (
-                        <div className="form-info-card move-episodes-empty" role="status">
-                            <span>Nothing downloaded is left on "{profile.name}" and no Download Profile uses it.</span>
-                            <button type="button" className="btn btn-danger" onClick={onDeleteProfile}>
-                                <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
-                                <span>Delete {profile.name}</span>
-                            </button>
-                        </div>
-                    )}
-
-                    {target && preview.isLoading && <p className="move-episodes-muted">Working out what moves…</p>}
-                    {preview.error && <p role="alert">{preview.error.message}</p>}
-                    {target && preview.data && collections.length === 0 && (
-                        <p className="move-episodes-muted">"{profile.name}" has no downloaded episodes left to move.</p>
-                    )}
-                    {target && collections.map((collection) => (
-                        <CollectionCard
-                            key={collection.collectionId}
-                            collection={collection}
-                            choice={choiceOf(collection)}
-                            setChoice={(choice) => setChoices((current) => ({...current, [collection.collectionId]: choice}))}
-                            source={profile.name}
-                            target={target.name}
-                            disabled={running}
-                        />
-                    ))}
-                    {chosen.length > 0 && (
-                        <p className="move-episodes-muted">
-                            The Download Profiles of these Collections pause while their files move.
-                        </p>
-                    )}
-                </div>
-
-                <div className="modal-actions">
-                    <button type="button" className="btn" onClick={onClose}>Close</button>
-                    <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={running || episodes === 0}
-                        onClick={() => void move()}
-                    >
-                        {starting ? 'Starting…' : episodes ? `Move ${plural(episodes, 'episode')}` : 'Move episodes'}
-                    </button>
-                </div>
+        <Modal
+            onDismiss={onClose}
+            dismissOnOverlayClick={false}
+            // Escape closes, as Close does, but not while it would lose the choices made per collection.
+            dismissOnEscape={!starting && Object.keys(choices).length === 0}
+            className="modal move-episodes-dialog"
+            labelledBy="move-episodes-title"
+        >
+            <div className="modal-header">
+                <div className="modal-icon" aria-hidden><FontAwesomeIcon icon={faIcon('fass', 'file-export')}/></div>
+                <h2 id="move-episodes-title" className="modal-title">Move episodes to another profile</h2>
             </div>
-        </div>
+
+            <div className="move-episodes-body">
+                <p className="move-episodes-intro">
+                    The downloaded episodes of "{profile.name}" move over to another Local Media Profile, with their
+                    history, and their files are renamed into its layout. Nothing is overwritten: an episode that
+                    can't move stays where it is.
+                </p>
+
+                <div className="form-group">
+                    <label htmlFor="move-episodes-target">Move to</label>
+                    <SimpleSelect
+                        inputId="move-episodes-target"
+                        registry={registry}
+                        value={targetId}
+                        onChange={(value) => { setTargetId(value); setChoices({}); setFinished(false) }}
+                        isDisabled={running}
+                        // The dialog body scrolls, so its own menu would be clipped: draw it above the dialog.
+                        menuPortalTarget={document.body}
+                        menuPosition="fixed"
+                        styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                        placeholder={others.length ? 'Choose a Local Media Profile' : 'No other Collection Local Media Profiles'}
+                    />
+                </div>
+
+                {operation && (
+                    <div className="form-info-card" role="status" aria-live="polite">
+                        <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>{' '}
+                        {operation.message || 'Moving episodes…'}
+                    </div>
+                )}
+                {sourceEmpty && (finished || (preview.data && collections.length === 0)) && (
+                    <div className="form-info-card move-episodes-empty" role="status">
+                        <span>Nothing downloaded is left on "{profile.name}" and no Download Profile uses it.</span>
+                        <button type="button" className="btn btn-danger" onClick={onDeleteProfile}>
+                            <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
+                            <span>Delete {profile.name}</span>
+                        </button>
+                    </div>
+                )}
+
+                {target && preview.isLoading && <p className="move-episodes-muted">Working out what moves…</p>}
+                {preview.error && <p role="alert">{preview.error.message}</p>}
+                {target && preview.data && collections.length === 0 && (
+                    <p className="move-episodes-muted">"{profile.name}" has no downloaded episodes left to move.</p>
+                )}
+                {target && collections.map((collection) => (
+                    <CollectionCard
+                        key={collection.collectionId}
+                        collection={collection}
+                        choice={choiceOf(collection)}
+                        setChoice={(choice) => setChoices((current) => ({...current, [collection.collectionId]: choice}))}
+                        source={profile.name}
+                        target={target.name}
+                        disabled={running}
+                    />
+                ))}
+                {chosen.length > 0 && (
+                    <p className="move-episodes-muted">
+                        The Download Profiles of these Collections pause while their files move.
+                    </p>
+                )}
+            </div>
+
+            <div className="modal-actions">
+                <button type="button" className="btn" onClick={onClose}>Close</button>
+                <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={running || episodes === 0}
+                    onClick={() => void move()}
+                >
+                    {starting ? 'Starting…' : episodes ? `Move ${plural(episodes, 'episode')}` : 'Move episodes'}
+                </button>
+            </div>
+        </Modal>
     )
 }
