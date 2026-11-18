@@ -55,6 +55,7 @@ export default function SponsorBlockSection({form, mode}: {form: UseFormReturn<a
     const withSponsorBlock = profileSitesWithSetting(sites, mode, siteKeys, includeUpcomingSites, 'sponsorblock')
     // The dialog works on a copy, so Cancel leaves the profile as it was.
     const [draft, setDraft] = useState<Record<string, string> | null>(null)
+    const draftChanged = draft !== null && CATEGORIES.some((category) => (draft[category] ?? 'keep') !== (segments?.[category] ?? 'keep'))
     const marked = CATEGORIES.filter((category) => (segments?.[category] ?? 'keep') !== 'keep').length
 
     return (
@@ -95,6 +96,7 @@ export default function SponsorBlockSection({form, mode}: {form: UseFormReturn<a
                 title="SponsorBlock segments"
                 className="sponsorblock-dialog"
                 onDismiss={() => setDraft(null)}
+                dismissOnEscape={!draftChanged}
                 cancelButton={{label: 'Cancel', onClick: () => setDraft(null)}}
                 confirmButton={{
                     label: 'Done',
