@@ -96,8 +96,15 @@ def _give_files(session, *slugs):
     """Downloaded files for the episodes, which keep them where they are."""
     from backend.db.models import Episode
     from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.db.models import CollectionLocalMediaProfile
     from conftest import available_artifact
 
+    if session.get(CollectionLocalMediaProfile, 1) is None:
+        session.add(CollectionLocalMediaProfile(
+            id=1, slug="videos", name="Videos", preferred_format="format_1080p",
+            output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext",
+        ))
+        session.flush()
     for slug in slugs:
         episode_id = session.scalar(select(Episode.id).where(Episode.source_slug == slug))
         session.add(EpisodeMediaDownload(
@@ -549,3 +556,85 @@ def test_ytdlp_lists_a_playlist_in_its_order_and_a_single_video_as_itself(monkey
 
     assert [item.slug for item in source.list_items("https://www.youtube.com/playlist?list=PLx")] == ["b2", "a1"]
     assert [item.slug for item in source.list_items("https://www.youtube.com/watch?v=one")] == ["one"]
+
+
+def test_a_downloaded_video_the_creator_takes_out_of_a_playlist_stays_until_the_user_lets_it_go(source, session, monkeypatch):
+    from backend.api.endpoints.media_downloads.service import get_keep_questions
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Episode
+    from backend.services.removed_downloads import answer_keep_question
+    from task_manager.tasks.workers.remove_left_episodes import service as worker
+
+    queued = []
+    monkeypatch.setattr(
+        "task_manager.scheduler.transactional.queue_task_after_commit",
+        lambda s, **kwargs: queued.append(kwargs),
+    )
+    deleted = []
+    monkeypatch.setattr(worker, "delete_episode_download_artifact", lambda s, download: deleted.append(download.file_path))
+    monkeypatch.setattr(worker, "cancel_active_download_attempts", lambda s, downloads, reason: None)
+
+    source.videos = [_video("a", 2024)]
+    source.lists = [_list("PLcollab", "Collabs")]
+    source.items = {"PLcollab": ("guest", "a", "other")}
+    source.outside = {"guest": _video("guest", 2023), "other": _video("other", 2023)}
+    collection = _collection(session)
+    collection.outside_videos = "add"
+    session.commit()
+    _index(session, collection, source)
+    _give_files(session, "guest")
+
+    # The creator takes both guests' videos out of the playlist.
+    source.items = {"PLcollab": ("a",)}
+    _index(session, collection, source)
+
+    # The one without files leaves; the downloaded one stays, marked removed, nothing is deleted, and Home asks.
+    session.expire_all()
+    assert sorted(session.scalars(select(Episode.source_slug)).all()) == ["a", "guest"]
+    guest = session.scalar(select(Episode).where(Episode.source_slug == "guest"))
+    assert guest.removed_from_source
+    assert queued == []
+    (question,) = get_keep_questions(session)
+    assert (question.episode_title, question.left_link) == ("Video guest", "Collabs")
+    assert worker.run_remove_left_episodes(session, collection_id=collection.id) == 0
+    assert deleted == []
+    session.rollback()
+
+    # Don't keep lets it go, files and all.
+    run_write_transaction(lambda s: answer_keep_question(s, [guest.id], keep=False))
+    assert queued == [{"def_key": "remove_left_episodes", "resource_type": "collection", "resource_id": collection.id}]
+    assert worker.run_remove_left_episodes(session, collection_id=collection.id) == 1
+    assert deleted == ["/downloads/guest.mp4"]
+    session.expire_all()
+    assert session.scalars(select(Episode.source_slug)).all() == ["a"]
+
+
+def test_a_kept_video_stays_and_is_back_when_the_playlist_lists_it_again(source, session):
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Episode
+    from backend.services.removed_downloads import answer_keep_question
+
+    source.videos = [_video("a", 2024)]
+    source.lists = [_list("PLcollab", "Collabs")]
+    source.items = {"PLcollab": ("guest",)}
+    source.outside = {"guest": _video("guest", 2023)}
+    collection = _collection(session)
+    collection.outside_videos = "add"
+    session.commit()
+    _index(session, collection, source)
+    _give_files(session, "guest")
+    source.items = {"PLcollab": ()}
+    _index(session, collection, source)
+    guest_id = session.scalar(select(Episode.id).where(Episode.source_slug == "guest"))
+    session.rollback()
+    run_write_transaction(lambda s: answer_keep_question(s, [guest_id], keep=True))
+
+    _index(session, collection, source)
+    session.expire_all()
+    assert session.get(Episode, guest_id).removed_from_source
+
+    source.items = {"PLcollab": ("guest",)}
+    _index(session, collection, source)
+    session.expire_all()
+    assert not session.get(Episode, guest_id).removed_from_source
+    assert _seasons(session) == [("Videos", 1, ["a"]), ("Collabs", 2, ["guest"])]

@@ -64,7 +64,7 @@ function registries(names: CollectionSeasonsRead['names'], words: Words) {
         }),
         outside: createSelectRegistry(`OutsideVideos-${names.many}`, {
             leave_out: {label: 'Leave them out', help: `A ${names.one} only takes the ${words.videos} the collection's own link has.`},
-            add: {label: 'Add them to the collection', help: `They join the collection in their ${names.one}'s season, and leave again, files and all, when no ${names.one} that is a season has them any more.`},
+            add: {label: 'Add them to the collection', help: `They join the collection in their ${names.one}'s season. Switching a ${names.one} or this setting off removes them again, files and all. When the ${words.creator} takes a downloaded one out, Home asks whether to keep it.`},
         }),
     }
 }

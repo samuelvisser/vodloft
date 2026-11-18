@@ -2,8 +2,10 @@
 channel's playlists its seasons, every playlist or the ones the user keeps on. An artist's albums are their playlists.
 
 A playlist only takes videos the collection itself lists, so a video of another creator in it stays out, unless the
-collection is set to add those too: they then leave again, files and all, once no playlist that is a season lists
-them. A video in
+collection is set to add those too: they then leave again once no playlist that is a season lists them. When the
+user turns that playlist or setting off, they leave files and all. When the creator takes a downloaded one out of
+the playlist, it stays, and the Home page asks whether to keep it, as for a video its Site no longer has; it leaves
+once the answer is not to keep it. A video in
 a playlist that is a season goes to that season, and a video in several of them to the one that comes first. A video
 that is in none of them goes to one season of such videos, named as their Site calls it, such as Videos, or Singles for an artist, or as the collection
 can be set, to a season per upload year.
@@ -369,13 +371,15 @@ def _season_for(finder: "SeasonFinder", episode: Episode, belonging: Belonging) 
 
 def place_in_link_seasons(
     s: Session, collection: Collection, *, with_files: bool | set[int] = False, now: datetime | None = None,
+    by_user: bool = False,
 ) -> int:
     """Put each of the collection's videos where it belongs: in the season of the first playlist that has it, or in
     the season of videos in no playlist. A video with files stays where it is, unless ``with_files`` is True or holds
-    its id. Returns how many moved.
+    its id. Returns how many moved. ``by_user`` says the user changed the playlists, so the videos that leave take
+    their files with them.
 
     ``s`` is a write transaction's session."""
-    _drop_outside(s, collection)
+    _drop_outside(s, collection, by_user=by_user)
     places = _Places(s, collection)
     if not places.anything:
         return 0
@@ -387,6 +391,9 @@ def place_in_link_seasons(
     ).all()
     left: set[int] = set()
     for episode in episodes:
+        if episode.from_link_season and episode.removed_from_source and episode.source_slug in places.holders:
+            # A playlist that is a season lists it again, so it is back at its Site.
+            episode.removed_from_source = False
         if episode.id in kept:
             continue
         belonging = places.belonging(episode)
@@ -456,9 +463,24 @@ def remove_left_episode(s: Session, episode: Episode) -> None:
     _drop_emptied(s, collection, {season_id})
 
 
-def _drop_outside(s: Session, collection: Collection) -> int:
+def held_back(episode: Episode) -> bool:
+    """Whether a video that left its collection keeps its files for now: one of its downloads is kept, or waits for
+    the user to say whether to keep it."""
+    from backend.services.removed_downloads import awaits_keep_answer
+
+    return any(
+        download.kept or awaits_keep_answer(download, removed_from_source=episode.removed_from_source)
+        for download in episode.downloads
+    )
+
+
+def _drop_outside(s: Session, collection: Collection, *, by_user: bool = False) -> int:
     """Remove the videos that left the collection: at once when they have no files, and otherwise by a task that
-    deletes their files first. Returns how many went now."""
+    deletes their files first. A downloaded video only leaves with its files when the user changed the playlists;
+    one the creator took out of a playlist stays, and the Home page asks whether to keep it. Returns how many went
+    now.
+
+    ``s`` is a write transaction's session."""
     from task_manager.scheduler.transactional import queue_task_after_commit
 
     leaving = leaving_outside(s, collection)
@@ -466,7 +488,21 @@ def _drop_outside(s: Session, collection: Collection) -> int:
         return 0
     with_files = _with_files(s, collection)
     gone = [episode for episode in leaving if episode.id not in with_files]
-    if len(gone) < len(leaving):
+    now = datetime.now(timezone.utc)
+    removing = False
+    for episode in leaving:
+        if episode.id not in with_files:
+            continue
+        if by_user:
+            # The user was told the files go with it.
+            for download in episode.downloads:
+                download.kept = False
+                download.removal_answered_at = download.removal_answered_at or now
+        elif not episode.removed_from_source:
+            # As for a video its Site no longer has: the Home page asks whether to keep the files.
+            episode.removed_from_source = True
+        removing = removing or not held_back(episode)
+    if removing:
         queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=collection.id)
     for episode in gone:
         remove_left_episode(s, episode)

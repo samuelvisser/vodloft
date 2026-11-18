@@ -15,6 +15,7 @@ type EpisodeQuestion = {
     href: string
     collectionTitle: string
     siteName: string
+    leftLink: string | null
     profileNames: string[]
 }
 
@@ -35,6 +36,7 @@ function byEpisode(questions: KeepQuestionRead[]): EpisodeQuestion[] {
             href: `/collection/${question.collectionSlug}/episode/${question.episodeSlug}`,
             collectionTitle: question.collectionTitle,
             siteName: question.siteName,
+            leftLink: question.leftLink,
             profileNames: [question.localMediaProfileName],
         })
     }
@@ -84,9 +86,10 @@ export default function KeepQuestions({questions}: {questions: KeepQuestionRead[
                         {one ? 'Keep a download the Source no longer has?' : `Keep ${episodes.length} downloads the Source no longer has?`}
                     </h2>
                     <p>
-                        Removed from {one ? 'its Site' : 'their Site'} after VODLoft downloaded {one ? 'it' : 'them'}, so
-                        your copy may be the last one. VODLoft won't delete {one ? 'it' : 'them'} until you answer;
-                        Don't keep lets the Download Profile handle {one ? 'it' : 'them'} as usual.
+                        Removed from {one ? 'its Site' : 'their Site'}, or from the playlist {one ? 'it' : 'they'} came
+                        from, after VODLoft downloaded {one ? 'it' : 'them'}, so your copy may be the last one. VODLoft
+                        won't delete {one ? 'it' : 'them'} until you answer. Don't keep lets the Download Profile handle
+                        {one ? ' it' : ' them'} as usual; a video that left its playlist leaves its collection instead.
                     </p>
                 </div>
             </div>
@@ -96,7 +99,9 @@ export default function KeepQuestions({questions}: {questions: KeepQuestionRead[
                     <li key={episode.episodeId}>
                         <span className="keep-question-copy">
                             <Link to={episode.href}><strong>{episode.title}</strong></Link>
-                            <small>{episode.collectionTitle} • no longer on {episode.siteName} • {episode.profileNames.join(', ')}</small>
+                            <small>
+                                {episode.collectionTitle} • {episode.leftLink ? `no longer in ${episode.leftLink}` : `no longer on ${episode.siteName}`} • {episode.profileNames.join(', ')}
+                            </small>
                         </span>
                         {mayAnswer && (
                             <span className="keep-question-actions">

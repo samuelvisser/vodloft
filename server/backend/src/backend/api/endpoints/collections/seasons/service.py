@@ -154,7 +154,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         select(Episode.id).join(MediaDownloadBase, MediaDownloadBase.media_item_id == Episode.id)
         .where(Episode.collection_id == collection.id, Episode.season_id.in_(lost))
     )) - leaving if lost else set()
-    place_in_link_seasons(s, collection, with_files=moving)
+    place_in_link_seasons(s, collection, with_files=moving, by_user=True)
     if moving:
         match_seasons_of_downloaded(s, collection, moving)
         queue_season_folder_moves(s, collection, sorted(moving))

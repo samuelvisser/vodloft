@@ -885,12 +885,17 @@ def set_media_download_kept(s: Session, media_download_id: int, body: MediaDownl
 class _KeepQuestion:
     download: EpisodeMediaDownload
     site_name: str
+    left_link: Optional[str] = None
 
 
 def get_keep_questions(s: Session) -> list[KeepQuestionAPIRead]:
     """Downloads whose episode left the Source, waiting for the person to say whether to keep them."""
     return [
-        KeepQuestionAPIRead.model_validate(_KeepQuestion(download, collection_site(download.media.collection).name))
+        KeepQuestionAPIRead.model_validate(_KeepQuestion(
+            download, collection_site(download.media.collection).name,
+            # A video the collection had from a playlist, which the creator took out of it.
+            download.media.season.name if download.media.from_link_season and download.media.season else None,
+        ))
         for download in downloads_awaiting_keep_answer(s)
     ]
 
