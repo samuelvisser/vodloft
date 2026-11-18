@@ -13,3 +13,8 @@
 @media (max-width: 560px) {
     .season-place-note { flex-wrap: wrap; }
 }
+
+.moved-badge { background: #0369a1; }
+@media (prefers-color-scheme: dark) {
+    .moved-badge { background: #7dd3fc; color: #082f49; }
+}

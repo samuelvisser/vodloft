@@ -7,6 +7,7 @@ import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {DrmBadge} from '../common/DrmProtected'
 import {AccessBadge} from '../common/AccessLocked'
 import {RemovedBadge} from '../common/RemovedFromSource'
+import {MovedBadge} from './SeasonPlaceNote'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../common/DurationPill'
 import EpisodeTypePill from './EpisodeTypePill'
@@ -102,10 +103,12 @@ type Props = {
     ep: EpisodeReadView
     collectionSlug: string
     downloads?: MediaDownloadViewRead[]
+    /** Belongs in another season now, and waits for the user to move it there. */
+    moved?: boolean
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
+export default function EpisodeCard({ep, collectionSlug, downloads, moved = false}: Props) {
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -148,7 +151,8 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
                 {ep.drmProtected ? <DrmBadge onCover/>
                     // Media the account may watch only shows its open lock on its own page.
                     : ep.access && !ep.accessGranted ? <AccessBadge label={ep.accessLabel} description={ep.accessDescription} onCover/>
-                    : ep.removedFromSource && <RemovedBadge onCover/>}
+                    : ep.removedFromSource ? <RemovedBadge onCover/>
+                    : moved && <MovedBadge onCover/>}
                 {isLive && (
                     <span style={LIVE_BADGE_STYLE} aria-label="Episode is live">
                         <span style={LIVE_BADGE_DOT_STYLE} aria-hidden/>

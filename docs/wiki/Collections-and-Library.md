@@ -98,7 +98,7 @@ When a playlist season is turned off, its downloaded videos move to the season a
 
 When the creator takes such a video out of the playlist, VODLoft never deletes its files on its own. A video without files leaves the collection. A downloaded one stays, marked **Removed**, and the Home page asks whether to keep it, as for a video its site no longer has. **Keep** keeps it in the collection; **Don't keep** removes it, files and all. If the playlist lists it again, it is back as usual.
 
-When a video belongs in another season than the one it is in, for example because it was added to a playlist after it was downloaded, its page says so. **Move it there** moves it, and renames its files to match.
+A downloaded video stays where it is when it belongs in another season now, for example because it was added to a playlist after it was downloaded, since moving it renames its files. The collection marks it **Moved**, and its page explains where it belongs now. **Move it there** on its page, or **Move to its new season** in its **Actions** menu, moves it and renames its files to match. To move every such video of the collection at once, use **Rename all episode files** with **Rename season folders too**.
 
 Episodes can also have different Daily Wire types, such as regular episodes and auxiliary items. Profiles can choose which types they apply to.
 

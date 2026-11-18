@@ -530,6 +530,19 @@ def belongs_elsewhere(s: Session, episode: Episode) -> Belonging | None:
     return places.belonging(episode) if places.anything else None
 
 
+def moved_episodes(s: Session, collection: Collection) -> list[Episode]:
+    """The collection's videos that its playlists put in another season than the one they are in: downloaded ones,
+    which wait for the user to move them, since moving renames their files."""
+    places = _Places(s, collection)
+    if not places.anything:
+        return []
+    episodes = s.scalars(
+        select(Episode).where(Episode.collection_id == collection.id, Episode.season_id.in_(places.movable))
+        .order_by(Episode.id)
+    )
+    return [episode for episode in episodes if places.belonging(episode) is not None]
+
+
 def move_to_where_it_belongs(s: Session, episode: Episode) -> bool:
     """Move a video, files and all, to the season its collection's playlists put it in now. Returns whether it moved.
 

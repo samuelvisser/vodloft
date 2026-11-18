@@ -155,7 +155,7 @@ def test_a_video_in_two_playlists_goes_to_the_one_that_comes_first(source, sessi
 
 def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, session):
     from backend.db.models import Episode
-    from backend.services.link_seasons import belongs_elsewhere, move_to_where_it_belongs
+    from backend.services.link_seasons import belongs_elsewhere, move_to_where_it_belongs, moved_episodes
 
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
@@ -171,6 +171,8 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
 
     episode = session.scalar(select(Episode).where(Episode.source_slug == "b"))
     assert belongs_elsewhere(session, episode).link.title == "One"
+    # The collection view marks it Moved.
+    assert [moved.source_slug for moved in moved_episodes(session, collection)] == ["b"]
     assert move_to_where_it_belongs(session, episode)
     session.commit()
     # The season it left is empty now, and goes.
@@ -178,6 +180,7 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
     session.expire_all()
     assert session.scalar(select(Episode.episode_identifier).where(Episode.source_slug == "b")).startswith("ep.S01E")
     assert belongs_elsewhere(session, session.scalar(select(Episode).where(Episode.source_slug == "b"))) is None
+    assert moved_episodes(session, session.get(type(collection), collection.id)) == []
 
 
 def test_a_new_playlist_waits_for_the_users_choice_when_only_selected_ones_are_seasons(source, session):

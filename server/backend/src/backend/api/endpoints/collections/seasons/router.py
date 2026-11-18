@@ -4,12 +4,13 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from backend.app import db_session
-from backend.api.models.collection_seasons import CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate
+from backend.api.models.collection_seasons import CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead
 from backend.db.core import run_write_transaction
 from backend.security.access import Area, Level
 from backend.security.deps import requires
 
 from .service import (
+    moved_view,
     CollectionNotFoundError, look_up_links, links_lookup, save_listed_links, seasons_view, update_seasons,
 )
 
@@ -31,6 +32,19 @@ def collection_seasons_get(collection_slug: str):
     """The collection's seasons in order, and whether its channel's playlists are seasons."""
     with db_session() as s:
         return _found(lambda: seasons_view(s, collection_slug))
+
+
+@router.get(
+    "/{collection_slug}/season-settings/moved-episodes", dependencies=[requires(Area.LIBRARY, Level.VIEW)],
+    response_model=MovedEpisodesAPIRead,
+)
+def collection_moved_episodes_get(collection_slug: str):
+    """The episodes that the collection's playlists put in another season than the one they are in."""
+    with db_session() as s:
+        try:
+            return _found(lambda: moved_view(s, collection_slug))
+        finally:
+            s.rollback()
 
 
 @router.put(

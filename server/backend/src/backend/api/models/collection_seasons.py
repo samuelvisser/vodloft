@@ -71,6 +71,11 @@ class CollectionSeasonsAPIRead(ResponseBase):
     playlists: list[LinkSeasonAPIRead]
 
 
+class MovedEpisodesAPIRead(ResponseBase):
+    episode_slugs: list[str]
+    """The episodes that belong in another season now, by slug."""
+
+
 class SeasonChangeAPIIn(RequestBase):
     id: int
     name: str = Field(min_length=1, max_length=200)

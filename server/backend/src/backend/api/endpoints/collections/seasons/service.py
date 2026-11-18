@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.api.models.collection_seasons import CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate
+from backend.api.models.collection_seasons import CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead
 from backend.db.models import Collection, Episode
 from backend.db.models import MediaDownloadBase
 from backend.services.collections import reindex_collection
@@ -69,6 +69,13 @@ class _View:
 
     def __getattr__(self, name):
         return getattr(self.collection, name)
+
+
+def moved_view(s: Session, collection_slug: str) -> MovedEpisodesAPIRead:
+    """The collection's episodes that belong in another season now. Reading only."""
+    from backend.services.link_seasons import moved_episodes
+
+    return MovedEpisodesAPIRead(episode_slugs=[episode.slug for episode in moved_episodes(s, _collection(s, collection_slug))])
 
 
 def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
@@ -204,6 +211,7 @@ def save_listed_links(s: Session, collection_slug: str, listing: LinkListing) ->
 
 
 __all__ = [
+    "moved_view",
     "CollectionNotFoundError", "look_up_links", "links_lookup", "save_listed_links",
     "seasons_view", "update_seasons",
 ]

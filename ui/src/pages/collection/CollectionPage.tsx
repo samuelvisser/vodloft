@@ -1,4 +1,5 @@
 import {sourceControls} from '../../lib/sourceControls'
+import {useMovedEpisodes} from '../../components/Episode/SeasonPlaceNote'
 import {addedByLabel, can} from '../../lib/access'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
@@ -116,6 +117,7 @@ const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
 
 export default function CollectionPage() {
   const { id } = useParams()
+  const {data: movedEpisodes} = useMovedEpisodes(id)
   const startOperation = useStartOperation()
   const controlOperation = useControlOperation()
   const {isStarting, onStartingChange} = useStartingOperations()
@@ -815,6 +817,7 @@ export default function CollectionPage() {
             {visibleItems.map((ep: any) => (
               <EpisodeCard
                 key={ep.id} ep={ep} collectionSlug={id} downloads={downloadsBySlug.get(ep.slug)}
+                moved={movedEpisodes?.has(ep.slug)}
               />
             ))}
           </div>
