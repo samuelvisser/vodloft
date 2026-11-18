@@ -942,6 +942,8 @@ input[type="time"] {
 .wizard-sticky-region > .wizard-main { display: grid; gap: 16px; }
 .form-fluid { max-width: none; }
 .wizard-aside { position: sticky; top: 8px; }
+/* A picked profile's output path stays in the main column, next to the collection card. */
+.chosen-profile-output-path .template-workbench { width: 100%; max-width: 100%; box-sizing: border-box; }
 @media (min-width: 1060px) {
   .wizard-with-aside,
   .wizard-sticky-region { grid-template-columns: minmax(450px, 1fr) minmax(0, 400px); }
