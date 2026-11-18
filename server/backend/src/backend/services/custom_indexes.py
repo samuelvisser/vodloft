@@ -13,6 +13,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.services.local_media_profile_sites import profile_offered_for_site
 from backend.services.sites import collection_site_key
 from backend.services.download_options import effective_filename_mode
+from backend.services.extra_indexes import number_extras
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.utils.custom_index import (
     CustomIndexNotReadyError,
@@ -202,9 +203,11 @@ def dispatch_custom_index_reconciliation(
 
 
 def request_collection_custom_index_reconciliation(session: Session, collection_id: int) -> None:
+    """Number the collection again after its episodes changed: its new extras, and each profile's Custom Indexes."""
     collection = session.get(Collection, collection_id)
     if collection is None:
         return
+    number_extras(session, collection_id)
 
     existing_profile_ids = set(session.scalars(
         select(CustomIndexState.local_media_profile_id).where(
