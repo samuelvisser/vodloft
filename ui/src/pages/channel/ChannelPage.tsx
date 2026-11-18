@@ -18,7 +18,8 @@ function listedSources(titles: string[]) {
 }
 
 function sectionFacts(section: ChannelSectionRead) {
-    return [section.kindLabel, section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? 'video' : 'videos'}` : null]
+    const noun = section.kindLabel === 'Album' ? ['track', 'tracks'] : ['video', 'videos']
+    return [section.kindLabel, section.itemCount != null ? `${section.itemCount} ${noun[section.itemCount === 1 ? 0 : 1]}` : null]
         .filter(Boolean).join(' · ')
 }
 
@@ -144,10 +145,12 @@ export default function ChannelPage() {
                                 <Link key={collection.slug} className="channel-collection" to={`/collection/${collection.slug}`}>
                                     {image
                                         ? <img src={image} alt="" loading="lazy"/>
-                                        : <span className="channel-collection-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'tv')}/></span>}
+                                        : <span className="channel-collection-art" aria-hidden="true"><FontAwesomeIcon icon={collection.type === 'music' ? faIcon('fass', 'music') : faIcon('fass', 'tv')}/></span>}
                                     <b>{collection.title}</b>
                                     <span>
-                                        {collection.episodeCount} {collection.episodeCount === 1 ? 'video' : 'videos'}
+                                        {collection.episodeCount} {collection.type === 'music'
+                                            ? (collection.episodeCount === 1 ? 'track' : 'tracks')
+                                            : (collection.episodeCount === 1 ? 'video' : 'videos')}
                                         {collection.links.length > 1 ? ` from ${listedSources(collection.links)}` : ''}
                                     </span>
                                 </Link>

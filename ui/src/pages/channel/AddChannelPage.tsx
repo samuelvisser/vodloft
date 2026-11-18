@@ -22,7 +22,12 @@ import ChannelHeader from './ChannelHeader'
 import './ChannelPages.css'
 
 /** The starting points, in the words of what this channel has: playlists on YouTube, shows on The Daily Wire. */
-function presetText(key: ChannelCreateIn['preset'], lists: string, hasFeeds: boolean) {
+function presetText(key: ChannelCreateIn['preset'], lists: string, hasFeeds: boolean, music: boolean) {
+    if (music) {
+        if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with each album as a season${hasFeeds ? ' and the other tracks by year' : ''}.`}
+        if (key === 'per_list') return {label: 'A collection per album', help: 'Each album is a Music collection of its own.'}
+        return {label: 'Only what I pick', help: 'Everything starts skipped.'}
+    }
     if (key === 'one_show') return {label: 'One show', help: `Videos and livestreams by year, ${lists} as named seasons, Shorts apart.`}
     if (key === 'per_list') {
         return {
@@ -72,7 +77,10 @@ function choicesFor(channel: ChannelLookupRead, section: ChannelSectionRead) {
 function sectionFacts(section: ChannelSectionRead): string {
     return [
         section.kindLabel,
-        section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? 'video' : 'videos'}` : null,
+        section.year,
+        section.itemCount != null
+            ? `${section.itemCount} ${section.kindLabel === 'Album' ? (section.itemCount === 1 ? 'track' : 'tracks') : (section.itemCount === 1 ? 'video' : 'videos')}`
+            : null,
     ].filter(Boolean).join(' · ')
 }
 
@@ -232,14 +240,15 @@ export default function AddChannelPage() {
         )
     }
 
-    const listsTitle = channel.sections.find((section) => section.kind === 'list')?.kindLabel === 'Show' ? 'Shows' : 'Playlists'
+    const listLabel = channel.sections.find((section) => section.kind === 'list')?.kindLabel
+    const listsTitle = listLabel === 'Show' ? 'Shows' : listLabel === 'Album' ? 'Albums' : 'Playlists'
     const lists = listsTitle.toLowerCase()
     const hasFeeds = channel.sections.some((section) => section.kind === 'feed')
     const order = orderText(channel.sections, lists)
     const groups: [string, ChannelSectionRead[]][] = [
         ['Feeds', channel.sections.filter((section) => section.kind === 'feed')],
         [listsTitle, channel.sections.filter((section) => section.kind === 'list')],
-        ['Movies', channel.sections.filter((section) => section.kind === 'item')],
+        [channel.music ? 'Singles' : 'Movies', channel.sections.filter((section) => section.kind === 'item')],
     ]
     // What is in the library already stays where it is, so it makes no collection.
     const inLibrary = new Set(channel.sections.filter((section) => section.collectionSlug).map((section) => section.ref))
@@ -259,7 +268,7 @@ export default function AddChannelPage() {
                     <h1 id="add-channel-title">Add {channel.channelLabel}</h1>
                     <p className="view-description">
                         Choose where each part of this {channel.channelLabel} goes. The main collection is called
-                        {' '}{channel.title}; anything you give a collection of its own gets one. A video that is in several
+                        {' '}{channel.title}; anything you give a collection of its own gets one. A {channel.music ? 'track' : 'video'} that is in several
                         places is kept once.
                     </p>
                 </div>
@@ -277,8 +286,8 @@ export default function AddChannelPage() {
                         {channel.presets.map((item) => (
                             <label key={item.key} className={`channel-preset${preset === item.key ? ' is-on' : ''}`}>
                                 <input type="radio" name="preset" checked={preset === item.key} onChange={() => choosePreset(item.key)}/>
-                                <b>{presetText(item.key, lists, hasFeeds).label}</b>
-                                <span>{presetText(item.key, lists, hasFeeds).help}</span>
+                                <b>{presetText(item.key, lists, hasFeeds, channel.music).label}</b>
+                                <span>{presetText(item.key, lists, hasFeeds, channel.music).help}</span>
                             </label>
                         ))}
                     </fieldset>
@@ -325,13 +334,13 @@ export default function AddChannelPage() {
 
                 {order && (
                     <p className="channel-order-note">
-                        A video in more than one of these places goes to the first one in this order: {order}.
-                        Once a video has a file, it stays where it is.
+                        A {channel.music ? 'track' : 'video'} in more than one of these places goes to the first one in this
+                        order: {order}. Once it has a file, it stays where it is.
                     </p>
                 )}
 
                 <div className="form-row channel-membership">
-                    <label htmlFor="channel-new-sections">When the {channel.channelLabel} adds a {lists.replace(/s$/, '')}</label>
+                    <label htmlFor="channel-new-sections">When the {channel.channelLabel} adds {/^[aeiou]/.test(lists) ? 'an' : 'a'} {lists.replace(/s$/, '')}</label>
                     <SimpleSelect
                         inputId="channel-new-sections" registry={newSectionActionReg(channel.channelLabel)} value={newSections}
                         onChange={(value) => setValue('newSections', value as ChannelCreateIn['newSections'])}

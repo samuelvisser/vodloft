@@ -263,8 +263,10 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                             <div className="add-media-preview-actions">
                                 {channelChoice && (
                                     <button className="btn btn-primary" type="button" onClick={addChannel}
-                                            title="Add its videos, livestreams and playlists, and choose where each goes">
-                                        Add the channel
+                                            title={link.channelLabel === 'artist'
+                                                ? 'Add their albums, and choose where each goes'
+                                                : 'Add its videos, livestreams and playlists, and choose where each goes'}>
+                                        Add the {link.channelLabel ?? 'channel'}
                                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                                     </button>
                                 )}

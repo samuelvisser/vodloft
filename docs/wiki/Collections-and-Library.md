@@ -168,6 +168,14 @@ A video that appears in more than one place is kept once. It goes to the first p
 
 Collections made from a channel start without Download Profiles; add them on each collection as usual. In the Library, channels show with a round picture next to your collections; the **Kind** filter shows only channels or only collections.
 
+### Music artists
+
+A musician on **Bandcamp** or **SoundCloud** can be added the same way: paste a link to the artist's page, such as `https://artist.bandcamp.com` or `https://soundcloud.com/artist`, and choose **Add the artist**. Their albums are listed newest first, with the year each came out. On SoundCloud a **Tracks** feed holds everything the artist uploaded, so tracks that are on no album have a place too. A Bandcamp track released on its own is listed as a single, which you add from its own page.
+
+An artist's collections are **Music** collections. **One discography** puts every album in one collection, with each album as a season named after it; **A collection per album** gives each album its own. Download them with a Music profile (see [[Local-Media-Profiles#music-profiles]]), which tags every track with its album, artist and track number, such as 3/10.
+
+Looking up an artist reads each album once, so an artist with many albums takes a minute; the page shows how far it is. YouTube's Releases tab cannot be read yet.
+
 ### Following a channel
 
 Once a day VODLoft looks at each channel for playlists or shows it did not have before. **Check now** on the channel's page looks right away. What happens with a new one is up to you, under **When the channel adds a playlist or show** on the Add channel page or in the channel's **Edit** page:

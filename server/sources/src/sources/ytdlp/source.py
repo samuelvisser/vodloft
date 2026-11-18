@@ -21,7 +21,7 @@ from ..contract import (
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
-from . import sites, thumbnails, youtube_rss, youtube_search
+from . import artists, sites, thumbnails, youtube_rss, youtube_search
 from .youtube_api import ApiKeyError, QuotaExceededError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.client import MAX_RESULTS
@@ -588,11 +588,14 @@ class YtDlpSource(Source):
         youtube = mapping.youtube_ref(url)
         # A channel's Videos tab is the whole channel too, which can be added as a channel instead.
         channel = channel_root(url) if youtube is not None and youtube.kind != "playlist" and youtube.tab == "videos" else None
+        if artists.is_artist_page(url):
+            channel = artists.artist_root(url)
+        channel_label = sites.site_for(channel).channel_label if channel else None
         if collection := self._api_collection(url):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site="YouTube", channel_url=channel,
+                site="YouTube", channel_url=channel, channel_label=channel_label,
             )
         try:
             info = self._info(url)
@@ -606,7 +609,7 @@ class YtDlpSource(Source):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site=site, channel_url=channel,
+                site=site, channel_url=channel, channel_label=channel_label,
             )
         return ResolvedLink(
             kind=LinkKind.VIDEO,
@@ -622,7 +625,9 @@ class YtDlpSource(Source):
         )
 
     def channel_of(self, url: str) -> str | None:
-        """A channel's tab is the channel; a playlist belongs to the channel that made it."""
+        """A channel's tab is the channel; a playlist belongs to the channel that made it, and an album to its artist."""
+        if root := artists.artist_root(url):
+            return root
         if root := channel_root(collection_url(url)):
             return root
         if mapping.youtube_ref(collection_url(url)) is None:
@@ -632,7 +637,10 @@ class YtDlpSource(Source):
 
     def channel_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> ChannelDetails:
         """A YouTube channel through yt-dlp, which costs no API quota: its details, the Videos, Live and Shorts tabs
-        it has, and its playlists. ``ref`` is the channel's link or its ID."""
+        it has, and its playlists. ``ref`` is the channel's link or its ID. A Bandcamp or SoundCloud artist is a
+        channel of their albums."""
+        if artist := artists.artist_root(ref):
+            return artists.artist_details(artist, progress)
         root = channel_root(ref) if ref.startswith("http") else mapping.channel_url(ref)
         if root is None:
             raise runner.YtDlpError("This link is not a YouTube channel")

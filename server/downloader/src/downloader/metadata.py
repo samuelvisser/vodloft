@@ -38,6 +38,8 @@ class MediaServerMetadata:
     album: str | None = None
     """For a track: the album it is on, which music players group by."""
     track_number: int | None = None
+    track_count: int | None = None
+    """How many tracks the album has; the track tag reads like 3/10 with it."""
 
     @property
     def is_track(self) -> bool:
@@ -53,7 +55,8 @@ class MediaServerMetadata:
             if self.album:
                 tags["album"] = self.album
             if self.track_number is not None:
-                tags["track"] = str(self.track_number)
+                total = f"/{self.track_count}" if self.track_count and self.track_count >= self.track_number else ""
+                tags["track"] = f"{self.track_number}{total}"
         elif self.collection_title:
             tags["show"] = self.collection_title
             tags["album"] = self.collection_title

@@ -10,7 +10,7 @@ dependencies = [
   "keyring>=24.3.0",
   "keyrings.alt>=5.0.0",
   "config",
-  "yt-dlp[default,deno]>=2026.10.21",
+  "yt-dlp[default,deno,curl-cffi]>=2026.10.21",
 ]
 
 [project.scripts]
