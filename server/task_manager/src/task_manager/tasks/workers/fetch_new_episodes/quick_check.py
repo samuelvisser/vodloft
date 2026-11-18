@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.services.reassigned import settle_channel
 from backend.services import check_frequency
 from backend.db.core import run_write_transaction
 from backend.services.check_frequency import joins_regular_checks
@@ -125,6 +126,8 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
         if collection is not None and listing is not None:
             link_seasons_found(w, collection, save_lists(w, collection, listing))
             place_in_link_seasons(w, collection)
+        if collection is not None:
+            settle_channel(w, collection)
         return added
 
     added = run_write_transaction(save)

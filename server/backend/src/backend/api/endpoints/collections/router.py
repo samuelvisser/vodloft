@@ -160,6 +160,7 @@ def collection_rename_files(collection_slug: str, body: CollectionFileRenameAPIR
             collection_slug,
             body.local_media_profile_id,
             season_folders=body.season_folders,
+            move_reassigned=body.move_reassigned,
         )
         return result
 

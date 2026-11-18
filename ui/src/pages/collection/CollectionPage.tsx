@@ -1,5 +1,5 @@
 import {sourceControls} from '../../lib/sourceControls'
-import {useMovedEpisodes} from '../../components/Episode/SeasonPlaceNote'
+import {useMovedEpisodes, useReassignedEpisodes} from '../../components/Episode/SeasonPlaceNote'
 import {addedByLabel, can} from '../../lib/access'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
@@ -118,6 +118,7 @@ const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
 export default function CollectionPage() {
   const { id } = useParams()
   const {data: movedEpisodes} = useMovedEpisodes(id)
+  const {data: reassignedEpisodes} = useReassignedEpisodes(id)
   const startOperation = useStartOperation()
   const controlOperation = useControlOperation()
   const {isStarting, onStartingChange} = useStartingOperations()
@@ -140,6 +141,7 @@ export default function CollectionPage() {
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
   const [fileRenameConfirm, setFileRenameConfirm] = useState(false)
   const [renameSeasonFolders, setRenameSeasonFolders] = useState(true)
+  const [moveReassigned, setMoveReassigned] = useState(false)
   const [fileRenameProfileId, setFileRenameProfileId] = useState<number | undefined>(undefined)
   const [searchParams, setSearchParams] = useSearchParams()
   const existingFilesParam = Number(searchParams.get('existingFiles'))
@@ -818,6 +820,7 @@ export default function CollectionPage() {
               <EpisodeCard
                 key={ep.id} ep={ep} collectionSlug={id} downloads={downloadsBySlug.get(ep.slug)}
                 moved={movedEpisodes?.has(ep.slug)}
+                reassignedTo={reassignedEpisodes?.get(ep.slug)}
               />
             ))}
           </div>
@@ -929,7 +932,7 @@ export default function CollectionPage() {
         scope_by_local_media_profile
         localMediaProfiles={actionLocalMediaProfiles}
         initialLocalMediaProfileId={fileRenameProfileId}
-        extraBody={{seasonFolders: renameSeasonFolders}}
+        extraBody={{seasonFolders: renameSeasonFolders, moveReassigned: moveReassigned && !!reassignedEpisodes?.size}}
       >
         <p>
           Rename existing episode files in "{collection.title}" so their paths match the current Local Media Profile output templates.
@@ -950,6 +953,26 @@ export default function CollectionPage() {
             </span>
           </span>
         </label>
+        {!!reassignedEpisodes?.size && (
+          <label className="rename-season-folders">
+            <Switch
+              checked={moveReassigned}
+              onChange={setMoveReassigned}
+              onColor="#0ea5e9" offColor="#d1d5db" uncheckedIcon={false} checkedIcon={false}
+              height={18} width={34} handleDiameter={14}
+            />
+            <span>
+              <b>Also move reassigned episodes out</b>
+              <span className="help">
+                {reassignedEpisodes.size === 1
+                  ? 'One downloaded episode belongs in another collection of this channel now. It moves there with its files'
+                  : `${reassignedEpisodes.size} downloaded episodes belong in other collections of this channel now. They move there with their files`},
+                or are downloaded again there when that collection uses another Local Media Profile. Episodes reassigned
+                to this collection from elsewhere stay where they are.
+              </span>
+            </span>
+          </label>
+        )}
       </ActionConfirmDialogue>
 
       <ActionConfirmDialogue

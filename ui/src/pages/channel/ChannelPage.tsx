@@ -7,6 +7,9 @@ import {can} from '../../lib/access'
 import {addChannelSections, checkChannel, useChannel} from '../../lib/queries'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {PageHeaderAction} from '../../components/common/PageHeader'
+import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import {postReassignedMove, reassignedMoveMessage} from '../../components/Episode/SeasonPlaceNote'
+import {toast} from 'react-hot-toast'
 import type {ChannelPageRead, ChannelSectionRead, SectionPlan} from '../../types/schemas/channel'
 import ChannelHeader from './ChannelHeader'
 import './ChannelPages.css'
@@ -44,6 +47,7 @@ export default function ChannelPage() {
     const [busy, setBusy] = useState<string | null>(null)
     const [actionError, setActionError] = useState<string | null>(null)
     const [checking, setChecking] = useState(false)
+    const [movingReassigned, setMovingReassigned] = useState(false)
 
     if (isLoading) return <section className="view"><p>Loading…</p></section>
     if (error || !channel) {
@@ -80,6 +84,20 @@ export default function ChannelPage() {
         }
     }
 
+    const moveReassigned = async () => {
+        setMovingReassigned(true)
+        try {
+            const result = await postReassignedMove(`/channels/${encodeURIComponent(channel.slug)}/move-reassigned`)
+            toast.success(reassignedMoveMessage(result))
+            await queryClient.invalidateQueries({queryKey: ['channel', slug]})
+            await queryClient.invalidateQueries({queryKey: ['collection']})
+        } catch (exc) {
+            toast.error(exc instanceof Error ? exc.message : String(exc))
+        } finally {
+            setMovingReassigned(false)
+        }
+    }
+
     const found = channel.sections.filter((section) => section.status === 'new' && !section.collectionSlug)
     const left = channel.sections.filter((section) => (
         !section.collectionSlug && section.kind !== 'item' && section.status !== 'new'
@@ -101,6 +119,16 @@ export default function ChannelPage() {
                             icon={faIcon('fass', 'arrows-rotate')} label={checking ? 'Looking…' : 'Check now'} variant="secondary"
                             onClick={() => void check()}
                         />
+                        <ActionMenu items={[{
+                            label: 'Move reassigned episodes',
+                            description: channel.reassignedCount
+                                ? `${channel.reassignedCount} downloaded ${channel.reassignedCount === 1 ? 'episode belongs' : 'episodes belong'} in another collection of this ${channel.channelLabel} now`
+                                : undefined,
+                            icon: faIcon('fass', 'arrow-right-from-bracket'),
+                            disabled: movingReassigned || !channel.reassignedCount,
+                            disabledReason: channel.reassignedCount ? undefined : `No episode of this ${channel.channelLabel} belongs in another of its collections.`,
+                            onSelect: () => void moveReassigned(),
+                        }]}/>
                     </>
                 )}
             />

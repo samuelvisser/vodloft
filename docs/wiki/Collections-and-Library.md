@@ -235,6 +235,24 @@ The channel's **Edit** page holds:
 - **When the channel adds a playlist or show**: the choice described under Following a channel.
 - **Genre** and **Content rating**: written to the NFO file of each of the channel's collections that has none of its own. Changing them here changes the collections that still had the old value.
 
+### A video that moves to another collection: Reassigned
+
+A channel keeps each of its videos in one of its collections, and a playlist wins over a feed: a video in a playlist that is a collection of its own belongs in that collection, not in the main collection with the rest of the uploads. A video that is not downloaded yet just goes there. The main collection doesn't add a video that such a playlist has, and leaves one it had.
+
+When a video is already downloaded, for example because the creator put it in a playlist only after VODLoft downloaded it, it stays where it is, files and all, with a **Reassigned** badge. Its page says which collection it belongs in now. That collection doesn't download it again while it waits. You choose when it moves:
+
+- **Move to** the collection, in the episode's **Actions** menu, moves that one.
+- **Also move reassigned episodes out** in **Rename all episode files** moves the collection's reassigned episodes along with the rename. It only moves them out of this collection, never into it.
+- **Move reassigned episodes** in the channel page's **Actions** menu moves every reassigned episode of the channel.
+
+How the files move depends on the new collection's Download Profiles:
+
+- When one of them downloads the episode with the same Local Media Profile, the files are renamed to their new place, and that profile keeps them.
+- When none of them downloads it, or the collection has none, the files are renamed with the Local Media Profile they have, and become a manual download. A manual download always stays manual.
+- When one downloads it with another Local Media Profile, the new collection downloads it again with that profile. The old files are only removed once the new download succeeded, so a failed download loses nothing; until then the episode stays Reassigned in its old collection.
+
+When several Download Profiles download it, the first one in the collection's order decides.
+
 ### Adding a collection to a channel, and removing it
 
 A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its channel later. Choose **Add to channel** (**Add to host** for a Daily Wire show) in the collection's **Actions** menu. VODLoft finds the channel or host behind the collection's links, adds the channel to your Library if it is not there yet, and shows which of the channel's playlists or shows the collection becomes. The collection keeps its seasons, episode numbers, profiles and files; nothing is indexed again. A collection that another of the channel's collections already covers can't join.

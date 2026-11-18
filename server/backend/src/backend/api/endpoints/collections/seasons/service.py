@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.api.models.collection_seasons import CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead
+from backend.api.models.collection_seasons import (
+    CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead, ReassignedEpisodesAPIRead,
+)
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, Season
 from backend.db.models import MediaDownloadBase
 from backend.services.collections import reindex_collection
@@ -85,8 +87,21 @@ class _View:
 def moved_view(s: Session, collection_slug: str) -> MovedEpisodesAPIRead:
     """The collection's episodes that belong in another season now. Reading only."""
     from backend.services.link_seasons import moved_episodes
+    from backend.services.reassigned import reassigned_episodes
 
-    return MovedEpisodesAPIRead(episode_slugs=[episode.slug for episode in moved_episodes(s, _collection(s, collection_slug))])
+    collection = _collection(s, collection_slug)
+    # A video its channel places in another collection is Reassigned, not Moved.
+    reassigned = {item.episode.id for item in reassigned_episodes(s, collection)}
+    return MovedEpisodesAPIRead(episode_slugs=[
+        episode.slug for episode in moved_episodes(s, collection) if episode.id not in reassigned
+    ])
+
+
+def reassigned_view(s: Session, collection_slug: str) -> ReassignedEpisodesAPIRead:
+    """The collection's downloaded videos that its channel places in another collection now. Reading only."""
+    from backend.services.reassigned import reassigned_episodes
+
+    return ReassignedEpisodesAPIRead.model_validate({"episodes": reassigned_episodes(s, _collection(s, collection_slug))})
 
 
 def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:

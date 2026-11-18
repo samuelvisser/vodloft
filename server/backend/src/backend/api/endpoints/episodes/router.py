@@ -2,6 +2,7 @@ from fastapi import APIRouter, Query, status
 
 from .service import *
 from ...models.episode import *
+from ...models.collection_seasons import ReassignedMoveAPIRead
 from ...models.media_download import EpisodeDownloadAPICreate
 from ...models.operations import EpisodeMetadataOperationAccepted, MediaDownloadOperationAccepted, TaskOperationAccepted
 from ..media_downloads.service import create_episode_download
@@ -157,6 +158,16 @@ def episode_season_place_get(episode_slug: str):
 def episode_move_to_season(episode_slug: str):
     """Move the episode, and its files, to the season its collection's playlists put it in now."""
     return run_write_transaction(lambda s: move_episode_to_its_season(s, episode_slug))
+
+
+@router.post(
+    "/{episode_slug}/move-to-collection",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=ReassignedMoveAPIRead,
+)
+def episode_move_to_collection(episode_slug: str):
+    """Move a reassigned episode, and its files, to the collection its channel places it in now."""
+    return run_write_transaction(lambda s: move_episode_to_its_collection(s, episode_slug))
 
 
 @router.get("/{episode_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=EpisodeAPIRead)

@@ -11,6 +11,7 @@ from backend.api.models.channel import (
     ChannelAPICreate, ChannelAPIRead, ChannelAPIUpdate, ChannelLookupAPIRead, ChannelLookupAPIRequest, ChannelPageAPIRead,
     ChannelSectionsAPIAdd,
 )
+from backend.api.models.collection_seasons import ReassignedMoveAPIRead
 from backend.app import db_session
 from backend.db.core import run_write_transaction
 from backend.security.access import Access, Area, Level
@@ -21,7 +22,7 @@ from config.network import NO_INTERNET_CONNECTION_MESSAGE, is_no_internet_error
 
 from .service import (
     ChannelNotFoundError, add_channel, add_sections, channel_lookup, channel_page, check_channel, list_channels, look_up_channel, lookup_channel_label,
-    update_channel,
+    move_channel_reassigned, update_channel,
 )
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,14 @@ def channel_update(slug: str, body: ChannelAPIUpdate):
 def channel_add_sections(slug: str, body: ChannelSectionsAPIAdd, access: Access = signed_in()):
     """Add sections of the channel to its collections, or ignore them."""
     return _found(lambda: run_write_transaction(lambda s: add_sections(s, slug, body, added_by_id=access.user_id)))
+
+
+@router.post(
+    "/{slug}/move-reassigned", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ReassignedMoveAPIRead,
+)
+def channel_move_reassigned(slug: str):
+    """Move every reassigned episode of the channel to the collection it belongs in now, with its files."""
+    return _found(lambda: run_write_transaction(lambda s: move_channel_reassigned(s, slug)))
 
 
 @router.post("/{slug}/check", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], status_code=status.HTTP_202_ACCEPTED)

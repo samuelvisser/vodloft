@@ -6,13 +6,14 @@ from fastapi import APIRouter, HTTPException
 from backend.app import db_session
 from backend.api.models.collection_seasons import (
     CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, CollectionListAddAPIIn, MovedEpisodesAPIRead,
+    ReassignedEpisodesAPIRead,
 )
 from backend.db.core import run_write_transaction
 from backend.security.access import Area, Level
 from backend.security.deps import requires
 
 from .service import (
-    CollectionNotFoundError, link_to_add, look_up_added_link, look_up_links, links_lookup, moved_view, save_added_link,
+    CollectionNotFoundError, link_to_add, look_up_added_link, look_up_links, links_lookup, moved_view, reassigned_view, save_added_link,
     save_listed_links, seasons_view, update_seasons,
 )
 
@@ -45,6 +46,19 @@ def collection_moved_episodes_get(collection_slug: str):
     with db_session() as s:
         try:
             return _found(lambda: moved_view(s, collection_slug))
+        finally:
+            s.rollback()
+
+
+@router.get(
+    "/{collection_slug}/season-settings/reassigned-episodes", dependencies=[requires(Area.LIBRARY, Level.VIEW)],
+    response_model=ReassignedEpisodesAPIRead,
+)
+def collection_reassigned_episodes_get(collection_slug: str):
+    """The downloaded episodes that the collection's channel places in another of its collections now."""
+    with db_session() as s:
+        try:
+            return _found(lambda: reassigned_view(s, collection_slug))
         finally:
             s.rollback()
 
