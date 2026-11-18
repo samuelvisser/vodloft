@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -23,6 +25,9 @@ from task_manager.scheduler.transactional import queue_task_after_commit
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from sources import CreatorDetails, Feature, SectionRef, get_source
 from backend.services.source_requests import asking_source
+
+
+logger = logging.getLogger(__name__)
 
 
 class CreatorNotFoundError(LookupError):
@@ -289,6 +294,30 @@ def add_sections(
     )
     s.flush()
     return creator_page(s, slug)
+
+
+def account_link(s: Session, slug: str, account_id: int) -> tuple[str, str]:
+    """The Source and the link or id that look one of the creator's accounts up, read before the slow lookup."""
+    account = _account(s, slug, account_id)
+    return account.source_key, account.url or account.site_ref
+
+
+def look_up_account(source_key: str, ref: str) -> CreatorDetails | None:
+    """Who the account is at its Site now, or None when the Site can't say. Slow: call it outside a transaction."""
+    try:
+        return get_source(source_key).creator_details(ref)
+    except Exception:  # The account splits off all the same, named after the creator it leaves.
+        logger.warning("Could not look up creator account %s at %s", ref, source_key, exc_info=True)
+        return None
+
+
+def split_creator_account(s: Session, slug: str, account_id: int, details: CreatorDetails | None) -> CreatorPageAPIRead:
+    """Make one of the creator's accounts a creator of their own again, and show that creator.
+
+    ``s`` is a write transaction's session."""
+    own = creators.split_account(s, _account(s, slug, account_id), details)
+    s.expire_all()
+    return creator_page(s, own.slug)
 
 
 def combine_creator(s: Session, slug: str, body: CreatorCombineAPIIn) -> CreatorPageAPIRead:

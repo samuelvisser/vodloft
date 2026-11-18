@@ -21,7 +21,7 @@ from backend.services.source_requests import SourceRequestError, asking_source
 from config.network import NO_INTERNET_CONNECTION_MESSAGE, is_no_internet_error
 
 from .service import (
-    CreatorNotFoundError, add_creator, add_sections, combine_creator, creator_lookup, creator_page, check_creator, list_creators,
+    CreatorNotFoundError, account_link, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, list_creators,
     look_up_creator, lookup_creator_label, move_creator_reassigned, move_creator_section, update_creator,
 )
 
@@ -135,6 +135,21 @@ def creator_move_section(slug: str, account_id: int, ref: str, body: CreatorSect
     return _found(lambda: run_write_transaction(
         lambda s: move_creator_section(s, slug, account_id, ref, body, added_by_id=access.user_id),
     ))
+
+
+@router.post(
+    "/{slug}/accounts/{account_id}/split", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CreatorPageAPIRead,
+)
+def creator_split_account(slug: str, account_id: int):
+    """Make one of the creator's accounts a creator of their own again, with the collections it keeps."""
+    def link():
+        with db_session() as s:
+            return account_link(s, slug, account_id)
+
+    source_key, ref = _found(link)
+    details = look_up_account(source_key, ref)
+    return _found(lambda: run_write_transaction(lambda s: split_creator_account(s, slug, account_id, details)))
 
 
 @router.post("/{slug}/combine", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CreatorPageAPIRead)

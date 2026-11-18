@@ -624,3 +624,25 @@ def test_two_creators_who_are_one_person_combine(client, cast, session):
     assert list(session.scalars(select(Creator.slug))) == ["workshop"]
     assert set(session.scalars(select(Collection.creator_id))) == {page["id"]}
     assert client.post("/api/creators/workshop/combine", json={"otherSlug": "workshop"}).status_code == 422
+
+
+def test_an_account_splits_off_into_a_creator_of_its_own_with_its_collections(client, cast, session):
+    from backend.db.models import Collection
+
+    _one_show(client)
+    page = _add_host(client, into="workshop").json()
+    cast_account = page["accounts"][1]["id"]
+
+    response = client.post(f"/api/creators/workshop/accounts/{cast_account}/split")
+    assert response.status_code == 200, response.text
+    split = response.json()
+    assert (split["slug"], split["title"], split["kind"]) == ("nw-live", "Northwind Workshop Live", "Cast host")
+    assert [collection["slug"] for collection in split["collections"]] == ["workbench"]
+    workshop = client.get("/api/creators/workshop").json()
+    assert [account["site"]["key"] for account in workshop["accounts"]] == ["tube"]
+    assert "workbench" not in {collection["slug"] for collection in workshop["collections"]}
+    session.expire_all()
+    assert session.scalar(select(Collection.creator_id).where(Collection.slug == "workbench")) == split["id"]
+    # A creator's only account stays theirs.
+    only = client.post(f"/api/creators/nw-live/accounts/{cast_account}/split")
+    assert only.status_code == 422

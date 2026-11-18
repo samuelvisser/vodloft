@@ -696,3 +696,36 @@ def combine_creators(s: Session, creator: Creator, other: Creator) -> None:
     for account in creator.accounts:
         if account.main_collection is not None:
             account.main_collection.new_link_seasons = new_link_seasons(creator).value
+
+
+def split_account(s: Session, account: CreatorAccount, details: CreatorDetails | None) -> Creator:
+    """Make one of a creator's accounts a creator of their own again, with the collections it keeps: its own
+    collection and those of its sections. Collections that joined the creator by another link stay. Returns the new
+    creator, named after ``details`` when the account could be looked up, and after the creator otherwise.
+
+    ``details`` was looked up before the write transaction; ``s`` is a write transaction's session."""
+    creator = account.creator
+    if len(creator.accounts) < 2:
+        raise ServiceError(f"{creator.title} has only this account", field="account_id")
+    kept = set(sections_in_library(s, account.source_key, account.site_ref, account.sections, account.main_collection).values())
+    if account.main_collection is not None:
+        kept.add(account.main_collection.slug)
+    own = Creator(
+        uuid=generate_uuid(),
+        slug=_unique_slug(s, Creator, slugify((details.handle or details.title) if details else account.handle or creator.title) or account.site_ref),
+        title=details.title if details else creator.title,
+        description=details.description if details else creator.description,
+        avatar_path=details.avatar_url if details else creator.avatar_path,
+        banner_path=details.banner_url if details else creator.banner_path,
+        links=list(details.links) if details else [], facts=list(details.facts) if details else [],
+        added_by_id=creator.added_by_id, new_sections=creator.new_sections, genre=creator.genre,
+        content_rating=creator.content_rating,
+    )
+    s.add(own)
+    creator.accounts.remove(account)
+    own.accounts.append(account)
+    for collection in list(creator.collections):
+        if collection.slug in kept:
+            collection.creator = own
+    s.flush()
+    return own

@@ -1,10 +1,10 @@
 import {useMemo, useState} from 'react'
-import {Link, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {can} from '../../lib/access'
-import {addCreatorSections, checkCreator, combineCreators, moveCreatorSection, useCreator, useCreators} from '../../lib/queries'
+import {addCreatorSections, checkCreator, combineCreators, moveCreatorSection, splitCreatorAccount, useCreator, useCreators} from '../../lib/queries'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -105,6 +105,8 @@ export default function CreatorPage() {
     const [movingReassigned, setMovingReassigned] = useState(false)
     const [moving, setMoving] = useState<{item: AccountSection, to: Place} | null>(null)
     const [sectionBusy, setSectionBusy] = useState(false)
+    const navigate = useNavigate()
+    const [splitting, setSplitting] = useState<CreatorPageAccountRead | null>(null)
     const [combining, setCombining] = useState(false)
     const [combineWith, setCombineWith] = useState('')
     const {data: libraryCreators} = useCreators()
@@ -191,6 +193,21 @@ export default function CreatorPage() {
             toast.success(`${others.find((other) => other.slug === combineWith)?.title ?? 'The creator'} is now part of ${creator.title}`)
             setCombining(false)
             setCombineWith('')
+        } catch (exc) {
+            toast.error(exc instanceof Error ? exc.message : String(exc))
+        }
+    }
+    const split = async () => {
+        if (!splitting) return
+        try {
+            const page = await splitCreatorAccount(creator.slug, splitting.id)
+            await queryClient.invalidateQueries({queryKey: ['creator', slug]})
+            await queryClient.invalidateQueries({queryKey: ['creators']})
+            await queryClient.invalidateQueries({queryKey: ['collection']})
+            await queryClient.invalidateQueries({queryKey: ['collectionsView']})
+            toast.success(`${page.title} is a creator of their own now`)
+            setSplitting(null)
+            navigate(`/creator/${page.slug}`)
         } catch (exc) {
             toast.error(exc instanceof Error ? exc.message : String(exc))
         }
@@ -289,6 +306,28 @@ export default function CreatorPage() {
                 )
             })}
 
+            {several && (
+                <div className="creator-section-group">
+                    <h2>Accounts</h2>
+                    <div className="creator-section-list">
+                        {creator.accounts.map((account) => (
+                            <div key={account.id} className="creator-section-row">
+                                <span className="creator-section-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'circle-user')}/></span>
+                                <div className="creator-section-copy">
+                                    <b>{account.site.name}</b>
+                                    <span>{[account.handle, `${account.sections.length} ${account.sections.length === 1 ? 'section' : 'sections'}`].filter(Boolean).join(' · ')}</span>
+                                </div>
+                                {can('library', 'manage') && (
+                                    <div className="creator-found-actions">
+                                        <button type="button" className="btn" onClick={() => setSplitting(account)}>Split off</button>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="creator-section-group">
                 <h2>In your library</h2>
                 {creator.collections.length ? (
@@ -355,6 +394,22 @@ export default function CreatorPage() {
                 confirmButton={{label: sectionBusy ? 'Moving…' : 'Move', onClick: moveSection, disabled: sectionBusy}}
             >
                 {moving && <p>{moveNote(moving.item.section, moving.to, mainTitleOf(creator, moving.item.account))}</p>}
+            </ConfirmDialog>
+
+            <ConfirmDialog
+                open={splitting !== null}
+                title={splitting ? `Split ${splitting.site.name} off ${creator.title}` : 'Split off'}
+                icon={faIcon('fass', 'object-ungroup')}
+                onDismiss={() => setSplitting(null)}
+                confirmButton={{label: 'Split off', onClick: split}}
+            >
+                {splitting && (
+                    <ul className="creator-order-note">
+                        <li>The account on {splitting.site.name} becomes a creator of its own, named as {splitting.site.name} names them.</li>
+                        <li>Its own collection and the collections of its playlists and shows go along. Collections that joined {creator.title} by another link stay.</li>
+                        <li>Collections keep their seasons, episodes, profiles and files. Nothing is indexed again.</li>
+                    </ul>
+                )}
             </ConfirmDialog>
 
             <ConfirmDialog

@@ -841,6 +841,17 @@ export async function moveCreatorSection(
     return CreatorPageReadSchema.parse(await response.json())
 }
 
+/** Make one of a creator's accounts a creator of their own again, with its collections. Answers with the new
+ * creator's page. */
+export async function splitCreatorAccount(slug: string, accountId: number): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/split`, {
+        method: 'POST',
+        credentials: 'include',
+    })
+    if (!response.ok) throw await responseError(response)
+    return CreatorPageReadSchema.parse(await response.json())
+}
+
 /** Make another creator in the Library, who is the same person or group, a part of this one. Answers with this
  * creator's page. */
 export async function combineCreators(slug: string, otherSlug: string): Promise<CreatorPageRead> {

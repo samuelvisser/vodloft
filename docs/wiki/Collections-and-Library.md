@@ -286,6 +286,9 @@ playlists and shows, and its own main collection; VODLoft looks at every account
 - **Combine with another creator** in a creator page's **Actions** menu does the same for two creators you added apart.
   The other creator's accounts and collections move over and they leave your Library as a creator of their own. Their
   collections keep their seasons, episodes, profiles and files.
+- **Split off** on an account in a creator page's **Accounts** list undoes that: the account becomes a creator of its
+  own again, named as its site names them, and takes its main collection and the collections of its playlists and
+  shows along. Collections that joined by another link stay.
 
 A creator is called what their site calls them while all their accounts and collections are on one site, such as host
 on The Daily Wire, and an artist when they have a Music collection. On several sites, they are a creator; each account
