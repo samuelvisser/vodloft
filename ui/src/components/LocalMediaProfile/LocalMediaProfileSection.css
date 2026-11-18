@@ -377,6 +377,26 @@
     white-space: pre-line;
 }
 
+.metadata-template-example__text--clamped {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+}
+
+.metadata-template-example__more {
+    justify-self: start;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
 .metadata-template-example-source {
     margin: 0 0 4px;
 }
