@@ -142,6 +142,12 @@ class ChannelPageAPIRead(ChannelAPIRead):
     """The downloaded videos that the channel places in another of its collections than the one they are in."""
 
 
+class ChannelSectionMoveAPIIn(RequestBase):
+    """Where one of the channel's playlists goes now, with its videos."""
+
+    target: Literal["main", "own", "skip"]
+
+
 class ChannelAPIUpdate(RequestBase):
     """Change how VODLoft follows a channel."""
 

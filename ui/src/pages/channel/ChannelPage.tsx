@@ -1,10 +1,13 @@
-import {useState} from 'react'
+import {useMemo, useState} from 'react'
 import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {can} from '../../lib/access'
-import {addChannelSections, checkChannel, useChannel} from '../../lib/queries'
+import {addChannelSections, checkChannel, moveChannelSection, useChannel} from '../../lib/queries'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
+import SimpleSelect from '../../components/common/SimpleSelect'
+import {createSelectRegistry} from '../../utils/selectRegistry'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
@@ -40,6 +43,50 @@ function choices(channel: ChannelPageRead, section: ChannelSectionRead): {label:
     return options
 }
 
+type Place = 'main' | 'own' | 'skip'
+
+/** What moving a playlist does, in words, before the user says yes. */
+function moveNote(section: ChannelSectionRead, to: Place, mainTitle: string): string {
+    const noun = (section.kindLabel ?? 'playlist').toLowerCase()
+    if (to === 'own') {
+        return `${section.title} becomes a collection of its own, and takes its videos out of ${mainTitle}. Downloaded videos `
+            + 'take their files along, renamed into the new collection as manual downloads, since it has no Download '
+            + 'Profiles yet.'
+    }
+    if (to === 'main') {
+        return `${section.title} becomes a season of ${mainTitle}, and its videos move there. Downloaded videos take their `
+            + `files along: renamed when ${mainTitle} downloads them with the same Local Media Profile or not at all, and `
+            + `downloaded again there when it uses another one; the old files go once that succeeded. The collection `
+            + `${section.collectionTitle ?? section.title} goes once it is empty.`
+    }
+    return `${section.title} is no longer a season of ${mainTitle}. Its videos go to the season of videos in no ${noun}, `
+        + `and videos of other channels that only this ${noun} brought in leave ${mainTitle}, files and all. It stays listed `
+        + 'on this page, so you can add it again.'
+}
+
+/** Where one of the channel's playlists is, and a select to move it, with its videos, somewhere else. */
+function SectionPlace({section, place, mainTitle, busy, onMove}: {
+    section: ChannelSectionRead, place: Place, mainTitle: string, busy: boolean, onMove: (to: Place) => void,
+}) {
+    const registry = useMemo(() => createSelectRegistry(`SectionPlace-${place}-${mainTitle}`, {
+        main: {label: `Season of ${mainTitle}`},
+        own: {label: 'Collection of its own'},
+        ...(place === 'main' ? {skip: {label: 'Not in your library'}} : {}),
+    } as Record<Place, {label: string}>), [place, mainTitle])
+    const inputId = `section-place-${section.ref}`
+    return (
+        <div className="channel-section-place">
+            <label className="sr-only" htmlFor={inputId}>Where {section.title} goes</label>
+            <SimpleSelect
+                inputId={inputId} registry={registry} value={place} isDisabled={busy}
+                menuPortalTarget={document.body} menuPlacement="auto"
+                styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                onChange={(value) => { if (value && value !== place) onMove(value as Place) }}
+            />
+        </div>
+    )
+}
+
 export default function ChannelPage() {
     const {slug} = useParams()
     const queryClient = useQueryClient()
@@ -48,6 +95,8 @@ export default function ChannelPage() {
     const [actionError, setActionError] = useState<string | null>(null)
     const [checking, setChecking] = useState(false)
     const [movingReassigned, setMovingReassigned] = useState(false)
+    const [moving, setMoving] = useState<{section: ChannelSectionRead, to: Place} | null>(null)
+    const [sectionBusy, setSectionBusy] = useState(false)
 
     if (isLoading) return <section className="view"><p>Loading…</p></section>
     if (error || !channel) {
@@ -95,6 +144,31 @@ export default function ChannelPage() {
             toast.error(exc instanceof Error ? exc.message : String(exc))
         } finally {
             setMovingReassigned(false)
+        }
+    }
+
+    const mainTitle = channel.collections.find((collection) => collection.slug === channel.mainCollectionSlug)?.title ?? channel.title
+    const placed = channel.site.linkSeasons && channel.mainCollectionSlug
+        ? channel.sections.filter((section) => (
+            section.kind === 'list' && channel.collections.some((collection) => collection.slug === section.collectionSlug)
+        ))
+        : []
+    const placeOf = (section: ChannelSectionRead): Place => section.collectionSlug === channel.mainCollectionSlug ? 'main' : 'own'
+    const moveSection = async () => {
+        if (!moving) return
+        setSectionBusy(true)
+        try {
+            const page = await moveChannelSection(channel.slug, moving.section.ref, moving.to)
+            queryClient.setQueryData(['channel', slug], page)
+            await queryClient.invalidateQueries({queryKey: ['channels']})
+            await queryClient.invalidateQueries({queryKey: ['collection']})
+            await queryClient.invalidateQueries({queryKey: ['collectionsView']})
+            toast.success(`Moved ${moving.section.title}`)
+            setMoving(null)
+        } catch (exc) {
+            toast.error(exc instanceof Error ? exc.message : String(exc))
+        } finally {
+            setSectionBusy(false)
         }
     }
 
@@ -189,6 +263,43 @@ export default function ChannelPage() {
                     <p>None of this {channel.channelLabel}'s collections are in your library any more.</p>
                 )}
             </div>
+
+            {placed.length > 0 && (
+                <div className="channel-section-group">
+                    <h2>Where its {(placed[0].kindLabel ?? 'playlist').toLowerCase()}s go</h2>
+                    <div className="channel-section-list">
+                        {placed.map((section) => (
+                            <div key={section.ref} className="channel-section-row">
+                                {sectionArt(section)}
+                                <div className="channel-section-copy">
+                                    <b>{section.title}</b>
+                                    <span>{sectionFacts(section)}</span>
+                                </div>
+                                {can('library', 'manage') ? (
+                                    <SectionPlace
+                                        section={section} place={placeOf(section)} mainTitle={mainTitle} busy={sectionBusy}
+                                        onMove={(to) => setMoving({section, to})}
+                                    />
+                                ) : (
+                                    <span className="channel-section-note">
+                                        {placeOf(section) === 'main' ? `Season of ${mainTitle}` : 'Collection of its own'}
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            <ConfirmDialog
+                open={moving !== null}
+                title={moving ? `Move ${moving.section.title}` : 'Move'}
+                icon={faIcon('fass', 'arrow-right-arrow-left')}
+                onDismiss={() => setMoving(null)}
+                confirmButton={{label: sectionBusy ? 'Moving…' : 'Move', onClick: moveSection, disabled: sectionBusy}}
+            >
+                {moving && <p>{moveNote(moving.section, moving.to, mainTitle)}</p>}
+            </ConfirmDialog>
 
             {left.length > 0 && (
                 <div className="channel-section-group">

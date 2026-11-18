@@ -120,7 +120,11 @@ def sections_in_library(
         on = main.link_seasons != LinkSeasons.OFF.value
         seasons = {link.ref for link in main.lists if on and is_season(main, link)}
         for section in sections:
-            if (section.kind == SectionKind.FEED and uploads) or section.ref in seasons:
+            if section.ref in seasons:
+                # The channel placed the list in its own collection; a collection of the list left from before keeps
+                # only what the list no longer has.
+                found[section.ref] = main.slug
+            elif section.kind == SectionKind.FEED and uploads:
                 # A collection of its own, such as one of the channel's Shorts, keeps it before the channel's.
                 found.setdefault(section.ref, main.slug)
     return found

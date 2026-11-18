@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session, selectinload
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
 from backend.services.reassigned import move_and_rename, reassigned_in_channel
 from backend.api.models.channel import (
-    ChannelAPICreate, ChannelAPIRead, ChannelAPIUpdate, ChannelLookupAPIRead, ChannelPageAPIRead, ChannelSectionsAPIAdd,
-    CollectionChannelLeaveAPIRead, CollectionChannelMatchAPIRead,
+    ChannelAPICreate, ChannelAPIRead, ChannelAPIUpdate, ChannelLookupAPIRead, ChannelPageAPIRead, ChannelSectionMoveAPIIn,
+    ChannelSectionsAPIAdd, CollectionChannelLeaveAPIRead, CollectionChannelMatchAPIRead,
 )
 from backend.api.models.collection import CollectionAPIRead
 from backend.db.models import Channel, Collection, Episode
@@ -192,6 +192,18 @@ def channel_page(s: Session, slug: str) -> ChannelPageAPIRead:
         channel, _label(channel), collections_count.get(channel.id, 0), episodes.get(channel.id, 0),
         collections=collections, sections=sections, reassigned_count=len(reassigned_in_channel(s, channel)),
     ))
+
+
+def move_channel_section(s: Session, slug: str, ref: str, body: ChannelSectionMoveAPIIn, *, added_by_id: int | None) -> ChannelPageAPIRead:
+    """Move one of the channel's playlists, with its videos and their files, and show the channel again.
+
+    ``s`` is a write transaction's session."""
+    from backend.services.section_moves import move_section
+
+    move_section(s, _channel(s, slug), ref, SectionTarget(body.target), added_by_id=added_by_id)
+    s.flush()
+    s.expire_all()
+    return channel_page(s, slug)
 
 
 def move_channel_reassigned(s: Session, slug: str) -> ReassignedMoveAPIRead:

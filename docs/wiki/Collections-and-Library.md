@@ -253,6 +253,16 @@ How the files move depends on the new collection's Download Profiles:
 
 When several Download Profiles download it, the first one in the collection's order decides.
 
+### Moving a playlist between the main collection and its own
+
+Under **Where its playlists go**, the channel's page lists each playlist that is in your Library, and where it is: a **Season of** the main collection, or a **Collection of its own**. Pick another place to move it, videos and all:
+
+- **Collection of its own**: the playlist becomes a new collection, and its videos leave the main collection. The new collection starts without Download Profiles, like every collection made from a channel.
+- **Season of** the main collection: the playlist becomes a season again, and its collection goes once its videos have moved. A video in that collection that the playlist no longer lists stays there.
+- **Not in your library**, for a season only: the season is turned off and the playlist moves to **Not in your library** on the channel's page. To take a playlist with a collection of its own out of your Library, delete that collection.
+
+Videos that are not downloaded just move. Downloaded videos move their files the way a Reassigned video does, see the section above, so a video the new place downloads with another Local Media Profile is downloaded again there before its old files go. The window that asks you to confirm the move says which of these will happen.
+
 ### Adding a collection to a channel, and removing it
 
 A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its channel later. Choose **Add to channel** (**Add to host** for a Daily Wire show) in the collection's **Actions** menu. VODLoft finds the channel or host behind the collection's links, adds the channel to your Library if it is not there yet, and shows which of the channel's playlists or shows the collection becomes. The collection keeps its seasons, episode numbers, profiles and files; nothing is indexed again. A collection that another of the channel's collections already covers can't join.

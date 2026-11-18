@@ -224,3 +224,95 @@ def test_the_api_shows_and_moves_reassigned_episodes(channel, client, session):
     assert moved.status_code == 200, moved.text
     assert (moved.json()["episodes"], moved.json()["renamed"]) == (1, 1)
     assert client.get("/api/channels/workshop").json()["reassignedCount"] == 0
+
+
+def _cabin_video(session, main):
+    """k1, an upload of the channel that only its Building the Cabin playlist season has, downloaded."""
+    from backend.db.core import run_write_transaction
+    from backend.db.models import CollectionList, CollectionListItem
+    from task_manager.tasks.helpers.listed_collections import add_listed_episodes
+
+    main_id = main.id
+    cabin = session.scalar(select(CollectionList).where(CollectionList.collection_id == main_id, CollectionList.ref == "PLcabin"))
+    session.add(CollectionListItem(list_id=cabin.id, source_slug="k1", position=2))
+    session.commit()
+    run_write_transaction(lambda w: add_listed_episodes(w, collection_id=main_id, found=[_video("k1", 5)]))
+    session.expire_all()
+    shows = _profile(session, "shows")
+    _download(session, _episode(session, session.get(type(main), main_id), "k1"), shows)
+    session.commit()
+
+
+def test_a_playlist_season_moves_to_a_collection_of_its_own_with_its_files(channel, client, session):
+    from backend.db.models import Collection, CollectionList
+    from backend.db.models.media_download import EpisodeMediaDownload
+
+    main, _tools = channel
+    _cabin_video(session, main)
+
+    moved = client.post("/api/channels/workshop/sections/PLcabin/move", json={"target": "own"})
+
+    assert moved.status_code == 200, moved.text
+    session.expire_all()
+    cabin = session.scalar(select(Collection).where(Collection.sharing_url == "https://tube.example/playlist?list=PLcabin"))
+    assert cabin is not None and cabin.channel_id == main.channel_id
+    k1 = _episode(session, cabin, "k1")
+    # The download moved along, as a manual download, since the new collection has no Download Profile yet.
+    [download] = session.scalars(select(EpisodeMediaDownload).where(EpisodeMediaDownload.media_item_id == k1.id)).all()
+    assert download.download_profile_id is None
+    assert _episode(session, main, "k1") is None
+    assert session.scalar(select(CollectionList.enabled).where(
+        CollectionList.collection_id == main.id, CollectionList.ref == "PLcabin",
+    )) is False
+    page = moved.json()
+    assert {section["ref"]: section["collectionSlug"] for section in page["sections"]}["PLcabin"] == cabin.slug
+
+
+def test_a_playlist_collection_becomes_a_season_and_goes_once_it_is_empty(channel, client, session):
+    from backend.db.models import Collection
+    from backend.db.models.media_download import EpisodeMediaDownload
+
+    main, tools = channel
+    shows = _profile(session, "shows")
+    download = _download(session, _episode(session, tools, "t1"), shows)
+    download_id, tools_id = download.id, tools.id
+    session.commit()
+
+    moved = client.post("/api/channels/workshop/sections/PLtools/move", json={"target": "main"})
+
+    assert moved.status_code == 200, moved.text
+    session.expire_all()
+    assert session.get(Collection, tools_id) is None
+    assert session.get(EpisodeMediaDownload, download_id).media.collection_id == main.id
+    season = _episode(session, main, "t1").season
+    assert season.name == "Tool Reviews"
+
+
+def test_a_playlist_season_leaves_the_library_and_a_collection_of_its_own_must_be_deleted_instead(channel, client, session):
+    out = client.post("/api/channels/workshop/sections/PLcabin/move", json={"target": "skip"})
+    assert out.status_code == 200, out.text
+    sections = {section["ref"]: section for section in out.json()["sections"]}
+    assert (sections["PLcabin"]["collectionSlug"], sections["PLcabin"]["status"]) == (None, "ignored")
+
+    refused = client.post("/api/channels/workshop/sections/PLtools/move", json={"target": "skip"})
+    assert refused.status_code == 422 and "delete that collection" in refused.text
+
+
+def test_a_video_only_the_playlist_collection_has_joins_the_channels_collection_with_its_files(channel, client, session):
+    from backend.db.core import run_write_transaction
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from task_manager.tasks.helpers.listed_collections import add_listed_episodes
+
+    main, tools = channel
+    main_id, tools_id = main.id, tools.id
+    run_write_transaction(lambda w: add_listed_episodes(w, collection_id=tools_id, found=[_video("t4", 6)]))
+    session.expire_all()
+    download = _download(session, _episode(session, session.get(type(tools), tools_id), "t4"), _profile(session, "shows"))
+    download_id = download.id
+    session.commit()
+
+    assert client.post("/api/channels/workshop/sections/PLtools/move", json={"target": "main"}).status_code == 200
+
+    session.expire_all()
+    moved = session.get(EpisodeMediaDownload, download_id)
+    assert (moved.media.collection_id, moved.media.season.name) == (main_id, "Tool Reviews")
