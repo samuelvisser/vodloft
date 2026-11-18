@@ -168,6 +168,31 @@ def test_an_audio_share_lists_audio_files_in_one_folder_with_artwork_only(db_ses
     ]
 
 
+def test_a_show_by_season_keeps_auxiliary_episodes_in_a_specials_season(db_session, tmp_path):
+    from backend.services.webdav import show_folder
+
+    collection = _collection(db_session)
+    _download(db_session, _episode(db_session, collection, 1, at=datetime(2026, 3, 1, tzinfo=timezone.utc)), tmp_path)
+    aux = _episode(db_session, collection, 207, at=datetime(2026, 3, 2, tzinfo=timezone.utc))
+    aux.episode_identifier = "aux.207"
+    _download(db_session, aux, tmp_path)
+    profile = _share(db_session, collection)
+    profile.ep_id_type_list = ["ep", "aux"]
+
+    folder = show_folder(db_session, profile)
+
+    assert [line for line in _tree(folder) if not line.endswith(".jpg")] == [
+        "Season 01/", "Season 01/The Show - S01E01 - Episode 1： A⧸B.mp4",
+        "Season 01/The Show - S01E01 - Episode 1： A⧸B.nfo", "Season 01/season.nfo",
+        "Specials/", "Specials/The Show - S00E207 - Episode 207： A⧸B.mp4",
+        "Specials/The Show - S00E207 - Episode 207： A⧸B.nfo", "Specials/season.nfo", "tvshow.nfo",
+    ]
+    specials = folder.children["Specials"].children
+    episode_nfo = specials["The Show - S00E207 - Episode 207： A⧸B.nfo"].content
+    assert b"<season>0</season>" in episode_nfo and b"<episode>207</episode>" in episode_nfo
+    assert b"<seasonnumber>0</seasonnumber>" in specials["season.nfo"].content
+
+
 def test_a_share_only_lists_downloads_and_cannot_stream_from_the_site(db_session, tmp_path):
     from pydantic import ValidationError
 
