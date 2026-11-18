@@ -69,6 +69,8 @@ export default function ActionMenu({label = 'Actions', items, note, className = 
 
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key !== 'Escape') return
+            // Handled here, so a modal around the menu stays open.
+            event.preventDefault()
             setOpen(false)
             triggerRef.current?.focus()
         }

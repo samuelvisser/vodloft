@@ -4,3 +4,9 @@
     align-items: center;
     gap: 12px;
 }
+
+/* The button may not make the row taller than a plain label, so this field lines up with the one beside it. */
+.select-all-label > .btn {
+    margin-block: -4px;
+    padding-block: 2px;
+}
