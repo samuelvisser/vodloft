@@ -2,6 +2,7 @@ import {z} from 'zod'
 
 export const LinkSeasonModeValues = ['all', 'selected'] as const
 export const NewLinkSeasonValues = ['ask', 'add', 'ignore'] as const
+export const ListLayoutValues = ['season_each', 'by_year'] as const
 export const LooseVideosValues = ['one_season', 'by_year'] as const
 export const OutsideVideosValues = ['leave_out', 'add', 'only'] as const
 
@@ -53,6 +54,7 @@ export const CollectionSeasonsReadSchema = z.object({
     linksOnlyOffered: z.boolean().default(false),
     linkSeasons: z.enum(['off', ...LinkSeasonModeValues]),
     newLinkSeasons: z.enum(NewLinkSeasonValues),
+    listLayout: z.enum(ListLayoutValues).default('season_each'),
     looseVideos: z.enum(LooseVideosValues),
     outsideVideos: z.enum(OutsideVideosValues),
     outsideCount: z.number(),
@@ -78,6 +80,7 @@ export const CollectionSeasonsFormSchema = z.object({
     linkSeasonsOn: z.boolean().default(false),
     linkSeasonMode: z.enum(LinkSeasonModeValues).default('all'),
     newLinkSeasons: z.enum(NewLinkSeasonValues).default('ask'),
+    listLayout: z.enum(ListLayoutValues).default('season_each'),
     looseVideos: z.enum(LooseVideosValues).default('one_season'),
     outsideVideos: z.enum(OutsideVideosValues).default('leave_out'),
     /** Each list, whether it is a season, and the season it is in: its own, or another list's that it shares. */
@@ -102,6 +105,7 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         linkSeasonsOn: view.linkSeasons !== 'off',
         linkSeasonMode: view.linkSeasons === 'off' ? 'all' : view.linkSeasons,
         newLinkSeasons: view.newLinkSeasons,
+        listLayout: view.listLayout,
         looseVideos: view.looseVideos,
         outsideVideos: view.outsideVideos,
         playlists: view.playlists.map((playlist) => ({id: playlist.id, enabled: playlist.enabled, seasonId: playlist.seasonId})),

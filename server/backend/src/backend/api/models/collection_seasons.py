@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.types.link_season_types import LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
+from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 
 
 class CollectionSeasonAPIRead(ResponseBase):
@@ -70,6 +70,7 @@ class CollectionSeasonsAPIRead(ResponseBase):
     Source."""
     link_seasons: LinkSeasons
     new_link_seasons: NewLinkSeasonAction
+    list_layout: ListLayout
     loose_videos: LooseVideos
     outside_videos: OutsideVideos
     outside_count: int = 0
@@ -114,6 +115,7 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     """False puts the seasons back in VODLoft's order by date, whatever ``seasons`` says about their order."""
     link_seasons: LinkSeasons = LinkSeasons.OFF
     new_link_seasons: NewLinkSeasonAction = NewLinkSeasonAction.ASK
+    list_layout: ListLayout = ListLayout.SEASON_EACH
     loose_videos: LooseVideos = LooseVideos.ONE_SEASON
     outside_videos: OutsideVideos = OutsideVideos.LEAVE_OUT
     playlists: list[CollectionListChangeAPIIn] = Field(default_factory=list, max_length=5000)

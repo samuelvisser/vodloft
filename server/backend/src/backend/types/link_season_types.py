@@ -42,6 +42,16 @@ class OutsideVideos(StrEnum):
     season that is on lists it."""
 
 
+class ListLayout(StrEnum):
+    """How a collection whose lists are seasons lays them out."""
+
+    SEASON_EACH = "season_each"
+    """Each list is a season, or shares one with the lists the user put together with it."""
+    BY_YEAR = "by_year"
+    """The lists still decide which videos are in, but the seasons are years, by each video's date. Videos in no
+    list join the same year seasons."""
+
+
 class LooseVideos(StrEnum):
     """Where a collection whose playlists are seasons puts the videos that are in none of them."""
 

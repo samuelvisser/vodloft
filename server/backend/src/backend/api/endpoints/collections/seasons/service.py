@@ -208,6 +208,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     collection.outside_videos = body.outside_videos
     collection.new_link_seasons = body.new_link_seasons
     collection.loose_videos = body.loose_videos
+    collection.list_layout = body.list_layout
     regrouped = _regroup(playlists, seasons, body)
     for change in body.playlists:
         if change.id not in playlists:

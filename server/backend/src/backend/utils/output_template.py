@@ -510,10 +510,20 @@ def _channel_values(episode: "Episode") -> dict[str, str]:
 
 def _episode_list(episode: "Episode"):
     """The list of the episode's season that has it: the season's own list, or, in a season of several lists, the
-    first of them that has the episode."""
-    links = [link for link in episode.collection.lists if episode.season_id is not None and link.season_id == episode.season_id]
-    if len(links) <= 1:
+    first of them that has the episode. In a collection that lays its lists out by year, the first list that has it."""
+    if not episode.collection.lists:
+        return None
+    from backend.services.link_seasons import lists_by_year
+
+    by_year = lists_by_year(episode.collection)
+    links = [
+        link for link in episode.collection.lists
+        if by_year or (episode.season_id is not None and link.season_id == episode.season_id)
+    ]
+    if len(links) <= 1 and not by_year:
         return links[0] if links else None
+    if not links:
+        return None
     from sqlalchemy import select
     from sqlalchemy.orm import object_session
 
@@ -522,10 +532,12 @@ def _episode_list(episode: "Episode"):
 
     s = object_session(episode)
     if s is None:
-        return links[0]
+        return None if by_year else links[0]
     holding = set(s.scalars(select(CollectionListItem.list_id).where(
         CollectionListItem.list_id.in_([link.id for link in links]), CollectionListItem.source_slug == episode.source_slug,
     )))
+    if by_year:
+        return next((link for link in links if link.id in holding), None)
     ordered = lists_by_season(s, episode.collection).get(episode.season_id, links)
     return next((link for link in ordered if link.id in holding), ordered[0])
 
