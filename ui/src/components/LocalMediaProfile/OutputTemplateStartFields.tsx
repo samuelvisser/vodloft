@@ -12,7 +12,7 @@ import {faIcon} from '../../icons/faIcon'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import {FollowsSettingsSelect} from './FollowsSettings'
 import {parseOutputTemplate, renderCompactOutputTemplate} from './outputTemplateFormatting'
-import {outputTemplatePreset, outputTemplatePresetRegistry, templateBaseFolder} from './outputTemplatePresets'
+import {PRESET_CHOICE_FIELDS, outputTemplatePreset, outputTemplatePresetRegistry, templateBaseFolder} from './outputTemplatePresets'
 
 /** Which characters file and folder names may hold: the mode in Settings, or the profile's own. */
 export function FilenameModeField({form}: {form: UseFormReturn<any>}) {
@@ -74,9 +74,7 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
     const preferredFormat = useWatch({control, name: 'preferredFormat'})
     const [pendingPreset, setPendingPreset] = useState<string | null>(null)
     const outputTemplate = useWatch({control, name: 'outputTemplate'}) as string | undefined
-    const [metadataMode, showNfo, kodiSafeNfo, fileDateFromPublishDate] = useWatch({
-        control, name: ['metadataMode', 'showNfo', 'kodiSafeNfo', 'fileDateFromPublishDate'],
-    })
+    const choiceValues = useWatch({control, name: [...PRESET_CHOICE_FIELDS]}) as unknown[]
     const audioOnly = preferredFormat === 'format_audio_only'
 
     // The preset shows as chosen while the template and the choices are the ones it writes, also after a reload or
@@ -85,14 +83,14 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
     const chosenPreset = useMemo(() => {
         if (!outputTemplate) return null
         const base = templateBaseFolder(outputTemplate, '/downloads')
-        const current: Record<string, unknown> = {metadataMode, showNfo, kodiSafeNfo, fileDateFromPublishDate}
+        const current: Record<string, unknown> = Object.fromEntries(PRESET_CHOICE_FIELDS.map((name, i) => [name, choiceValues[i]]))
         return presetRegistry.values.find((key) => {
             const preset = outputTemplatePreset(key)
             return !!preset
                 && renderCompactOutputTemplate(parseOutputTemplate(preset.template(base), 'editor')) === outputTemplate
                 && Object.entries(preset.choices).every(([name, value]) => current[name] === value)
         }) ?? null
-    }, [outputTemplate, metadataMode, showNfo, kodiSafeNfo, fileDateFromPublishDate, presetRegistry])
+    }, [outputTemplate, choiceValues, presetRegistry])
 
     const applyPreset = (key: string) => {
         const preset = outputTemplatePreset(key)
@@ -174,7 +172,7 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
             >
                 <p>
                     The {pendingPreset ? outputTemplatePresetRegistry(true).getLabelLoose(pendingPreset) : ''} preset
-                    replaces the output template, and sets the metadata, NFO and file date choices of this profile.
+                    replaces the output template, and sets the metadata, NFO and While downloading choices of this profile.
                 </p>
             </ConfirmDialog>
         </>

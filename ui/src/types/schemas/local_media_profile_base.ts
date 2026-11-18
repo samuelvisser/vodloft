@@ -69,7 +69,7 @@ export const LocalMediaProfileSchemaRequest = z.object({
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
     kodiSafeNfo: z.boolean().default(false),
     filenameRestrictionMode: LocalMediaProfileFilenameModeSchema.default('system'),
-    fileDateFromPublishDate: z.boolean().default(false),
+    fileDateFromPublishDate: z.boolean().default(true),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     /** The Sites the profile is offered for; null until the form fills in every Site VODLoft knows. */
     siteKeys: z.array(z.string()).nullable().default(null),
@@ -116,7 +116,7 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
     kodiSafeNfo: z.boolean().default(false),
     filenameRestrictionMode: LocalMediaProfileFilenameModeSchema.default('system'),
-    fileDateFromPublishDate: z.boolean().default(false),
+    fileDateFromPublishDate: z.boolean().default(true),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     ...QualityAndLanguageFields,
     siteKeys: z.array(z.string()).default([]),

@@ -5,8 +5,11 @@ type PresetChoices = {
     metadataMode: 'embed' | 'embed_and_nfo'
     showNfo: boolean
     kodiSafeNfo: boolean
-    fileDateFromPublishDate: boolean
+    downloadMode: 'temporary'
 }
+
+/** The fields a preset sets besides the output template. */
+export const PRESET_CHOICE_FIELDS = ['metadataMode', 'showNfo', 'kodiSafeNfo', 'downloadMode'] as const satisfies readonly (keyof PresetChoices)[]
 
 type Preset = {
     template: (base: string) => string
@@ -60,24 +63,24 @@ ${base}
 /{{ collection_title }}
 /{{ plex_season }}
 /{{ collection_title }} - {{ plex_ep_id }} [{{ plex_title }}].ext`,
-        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true},
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, downloadMode: 'temporary'},
         indexingValue: EXTRAS,
     },
     jellyfin: {
         template: nfoServerTemplate,
-        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: false, fileDateFromPublishDate: true},
+        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: false, downloadMode: 'temporary'},
         indexingValue: EXTRAS,
     },
     kodi: {
         template: nfoServerTemplate,
-        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: true, fileDateFromPublishDate: true},
+        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: true, downloadMode: 'temporary'},
         indexingValue: EXTRAS,
     },
     audiobookshelf: {
         template: (base) => `${base}
 /{{ collection_title }}
 /{% if episode_published_date %}{{ episode_published_date }} - {% endif %}{{ title }}.ext`,
-        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true},
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, downloadMode: 'temporary'},
     },
 }
 

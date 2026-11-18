@@ -82,8 +82,9 @@ class LocalMediaProfileBase(Base):
         server_default=LocalMediaProfileFilenameMode.SYSTEM.value,
         comment="How file and folder names are made safe: system, unrestricted, windows or restricted (ASCII only)",
     )
+    # New profiles date their files by publish date; the column's server default stays false for the rows it added.
     file_date_from_publish_date: Mapped[bool] = mapped_column(
-        default=False, server_default=false(), nullable=False,
+        default=True, server_default=false(), nullable=False,
         comment="Downloaded files get the date the media was published, so players sort them by air date",
     )
 
