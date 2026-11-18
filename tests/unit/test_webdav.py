@@ -189,7 +189,7 @@ def test_a_show_by_season_keeps_specials_in_season_0_and_trailers_in_a_trailers_
         "Season 01/The Show - S01E01 - Episode 1： A⧸B.nfo", "Season 01/season.nfo",
         "Specials/", "Specials/The Show - S00E207 - Episode 207： A⧸B.mp4",
         "Specials/The Show - S00E207 - Episode 207： A⧸B.nfo", "Specials/season.nfo",
-        "Trailers/", "Trailers/Episode 3： A⧸B.mp4", "tvshow.nfo",
+        "Trailers/", "Trailers/Trailer 3 - Episode 3： A⧸B.mp4", "tvshow.nfo",
     ]
     specials = folder.children["Specials"].children
     episode_nfo = specials["The Show - S00E207 - Episode 207： A⧸B.nfo"].content

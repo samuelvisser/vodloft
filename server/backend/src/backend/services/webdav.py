@@ -210,8 +210,11 @@ def show_folder(s: Session, profile: WebdavStreamProfile) -> ShareFolder:
         modified = _modified(path)
         extension = _EXTENSIONS[profile.media_kinds[0]]
         if episode.episode_type == EpIdType.TRAILER:
-            # Plex and Jellyfin play the files in a show's Trailers folder as its trailers, named by their title.
-            folder.folder(_TRAILERS, modified).add(ShareFile(f"{_name(episode.title)}{extension}", modified, path=path))
+            # Plex and Jellyfin play the files in a show's Trailers folder as its trailers, by the name of the file.
+            # The trailer's own number keeps the names apart and in order.
+            folder.folder(_TRAILERS, modified).add(ShareFile(
+                f"Trailer {episode.episode_number} - {_name(episode.title)}{extension}", modified, path=path,
+            ))
             continue
         episode_metadata = _episode_metadata(episode, by_number)
         parent = _season_folder(folder, profile, episode, episode_metadata, modified)
