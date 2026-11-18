@@ -124,7 +124,7 @@ export default function DestinationDialog({destination, onDismiss}: Props) {
         },
         mode: 'onBlur',
     })
-    const {register, setValue, watch, control, formState: {errors, isSubmitting}} = form
+    const {register, setValue, watch, control, formState: {errors, isSubmitting, isDirty}} = form
     const kind = watch('kind') ?? 'apprise'
     const mode = watch('mode') ?? 'fields'
     const serviceKey = watch('service') ?? ''
@@ -254,6 +254,7 @@ export default function DestinationDialog({destination, onDismiss}: Props) {
             icon={faIcon('fass', 'paper-plane')}
             onDismiss={onDismiss}
             dismissOnOverlayClick={false}
+            dismissOnEscape={!isDirty}
             confirmButton={{
                 label: editing ? 'Save' : 'Add',
                 icon: faIcon('fass', isSubmitting ? 'spinner' : 'check'),
