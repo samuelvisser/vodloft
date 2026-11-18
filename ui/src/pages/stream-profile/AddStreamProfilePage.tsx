@@ -17,7 +17,7 @@ import {downloadedEpisodeTypes} from '../../components/DownloadProfile/episodeFi
 import {apiUrl} from '../../lib/api'
 
 // Settings whose defaults differ per type, so they start from the new type's default when the type changes.
-const OWN_FIELDS = {streamLiveEpisodes: true}
+const OWN_FIELDS = {useDownloads: true, useSourceStream: true, streamLiveEpisodes: true}
 
 export default function AddStreamProfilePage() {
     const navigate = useNavigate()
