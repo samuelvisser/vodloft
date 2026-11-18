@@ -117,7 +117,7 @@ export default function StreamProfileForm({
     // Direct streaming is on by default, but only a Source with RSS streaming can serve it.
     // Turn it off for any other Source, and back on if the form moves to one that can stream.
     useEffect(() => {
-        if (!streamSourceKnown) return
+        if (!streamSourceKnown || mode === 'webdav') return
         if (!canStreamFromSource && getValues('useSourceStream')) {
             setValue('useSourceStream', false, {shouldDirty: false, shouldValidate: true})
             dwStreamClearedForSource.current = true
@@ -125,7 +125,7 @@ export default function StreamProfileForm({
             setValue('useSourceStream', true, {shouldDirty: false, shouldValidate: true})
             dwStreamClearedForSource.current = false
         }
-    }, [streamSourceKnown, canStreamFromSource, getValues, setValue])
+    }, [streamSourceKnown, canStreamFromSource, getValues, setValue, mode])
 
     // Live episodes are only offered where the Site streams them, so a profile never keeps the setting elsewhere.
     useEffect(() => {
@@ -237,7 +237,7 @@ export default function StreamProfileForm({
         setValue('epIdTypeList', values, {shouldDirty: true, shouldValidate: true})
     }
 
-    const streamProfileAdvisory = mode === 'rss' ? (
+    const streamProfileAdvisory = mode === 'rss' || mode === 'webdav' ? (
         <StreamProfileAdvisory
             mode={mode}
             preferredFormat={preferredFormat}
@@ -278,23 +278,32 @@ export default function StreamProfileForm({
             )}
 
             <div className="form-row">
-                <label htmlFor="stream-profile-title">Title</label>
+                {/* A WebDAV share names the show's folder by the title. */}
+                <label htmlFor="stream-profile-title">{mode === 'webdav' ? 'Folder name' : 'Title'}</label>
                 <input
                     id="stream-profile-title"
                     className="input"
                     type="text"
                     {...register('title')}
                     aria-invalid={!!errors.title}
-                    aria-describedby={errors.title ? 'stream-profile-title-error' : undefined}
+                    aria-describedby={errors.title
+                        ? 'stream-profile-title-error'
+                        : mode === 'webdav' ? 'stream-profile-title-help' : undefined}
                 />
                 {errors.title && (
                     <div id="stream-profile-title-error" className="error" role="alert" aria-live="polite">
                         {String(errors.title.message)}
                     </div>
                 )}
+                {mode === 'webdav' && (
+                    <div className="help" id="stream-profile-title-help">
+                        The show&apos;s folder in the share, and the name in front of each episode.
+                    </div>
+                )}
             </div>
 
-            <div className="form-row">
+            {/* A WebDAV share only lists downloads, so it has no choice of where media comes from. */}
+            {mode !== 'webdav' && <div className="form-row">
                 <label id="stream-sources-label">Streaming sources</label>
                 <SegmentedOptions
                     name="stream-sources"
@@ -349,7 +358,7 @@ export default function StreamProfileForm({
                         setValue('useSourceStream', nextUseDwStream, {shouldDirty: true, shouldValidate: true})
                     }}
                 />
-            </div>
+            </div>}
 
             <div className="form-row">
                 <label htmlFor="enable-profile">Enable streaming</label>
@@ -412,13 +421,22 @@ export default function StreamProfileForm({
                         </div>
                     )}
                     <div className="help" id="sp-pref-format-help">
-                        <ReadMore summary={<span>Content type to prefer while streaming.</span>}>
-                            <p>Serves the specified content type if available. If not, it will try to serve the next best option by default.</p>
-                            <p>If you need audio-only content, you can set this to 'Audio Only' to stream audio only.</p>
-                        </ReadMore>
+                        {mode === 'webdav' ? (
+                            <ReadMore summary={<span>The format of the downloads the share lists.</span>}>
+                                <p>A video share lists the downloaded MP4 video nearest to this format, whether a Download Profile or a manual download made it. Set it to 'Audio Only' for a share of audio files.</p>
+                                <p>HLS downloads are kept as many small parts instead of one file, so a share cannot list them.</p>
+                            </ReadMore>
+                        ) : (
+                            <ReadMore summary={<span>Content type to prefer while streaming.</span>}>
+                                <p>Serves the specified content type if available. If not, it will try to serve the next best option by default.</p>
+                                <p>If you need audio-only content, you can set this to 'Audio Only' to stream audio only.</p>
+                            </ReadMore>
+                        )}
                     </div>
                 </div>
-            ) : (
+            ) : null}
+            {mode === 'webdav' ? streamProfileAdvisory : null}
+            {useDownloads ? null : (
                 <div className="form-row">
                     <label htmlFor="sp-preferred-format">Media Type</label>
                     <Controller

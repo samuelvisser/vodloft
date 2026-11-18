@@ -12,25 +12,33 @@ The share is read-only: apps can play the episodes, but cannot change or delete 
 
 ## What is in the share
 
-The share lists an episode once VODLoft has a whole file of it:
-
-- a download of the episode, or
-- a video VODLoft already prepared for another app, such as a podcast feed, in the Stream Video Cache.
-
-Media players jump around in a file while you watch, which they cannot do in a live stream, so episodes VODLoft only
-has as a stream are left out. Choose where the media comes from the same way as for a podcast feed (see
-[[Podcast-RSS-Feeds#choose-where-media-comes-from]]).
+The share only lists episodes you have downloaded. Media players jump around in a file while you watch, which they
+cannot do in a stream, so a share never streams episodes from the site. To get an episode into the share, download it
+in a video format such as 1080p (or audio only, for an audio share), with a Download Profile of the collection or by
+hand. HLS downloads are kept as many small parts instead of one file, so a share cannot list them. When no Download
+Profile matches the share's format, its settings page says so and offers to create one.
 
 **Maximum episodes in the folder** keeps only the newest episodes in the share. 0 means no limit.
 
 ## Show settings
 
-- **Folder name** — the show's folder in the share, and the name in front of each episode. Left empty, it is the
-  collection's title.
+- **Folder name** — the show's folder in the share, and the name in front of each episode. It starts as the
+  collection's title, and is also the share's name in the list of Stream Profiles.
 - **Season folders**:
   - **One per season** (the default) puts each season's episodes in a *Season 01* folder, and names them *S01E05*.
+    Specials (the episodes of extra seasons, and other types than normal episodes, such as auxiliary episodes or
+    YouTube Shorts) go in a *Specials* folder as season 0, where media players look for a show's specials. They are
+    numbered by their extra index (*S00E03*), so no two share a number.
   - **One per year** puts each year's episodes in a *Season 2026* folder, and names them by date.
   - **All in one folder** puts every episode in the show's folder, named by date.
+
+  Trailers always go in a *Trailers* folder in the show's folder, named *Trailer 3 - <title>*: Plex and Jellyfin show them as
+  the show's trailers, and Infuse as its extras.
+- **Support episode extras** — where an episode's own extras, such as its trailer, are listed. Off (the default), they
+  go in the show's *Trailers* and *Other* folders, which most media players show as the show's extras. On, they are
+  listed beside their episode, named after its file with a suffix such as *-trailer1* or *-other2*, so a media player
+  that supports episode extras, such as Plex, shows them with their episode. An extra whose episode is not in the
+  share still goes in the show's folders.
 - **Files for media players**:
   - **NFO files and artwork** (the default) lists `tvshow.nfo`, `season.nfo` and an NFO file per episode, with the
     show's poster and each episode's picture.
