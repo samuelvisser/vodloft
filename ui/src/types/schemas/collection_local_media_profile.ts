@@ -34,6 +34,10 @@ export const CollectionLocalMediaProfileIndexingValuesSchema = z.array(IndexingV
     })
 
 
+/** The templates that give each episode the title and description the site gives it. */
+export const SITE_TITLE_TEMPLATE = '{{ title }}'
+export const SITE_DESCRIPTION_TEMPLATE = '{{ description }}'
+
 // ---------- Strict request (create/update) ----------
 const CollectionLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
     type: z.enum(['collection', 'music']).default('collection'),
@@ -46,8 +50,8 @@ const CollectionLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.ext
     showNfo: z.boolean().default(false),
     episodeNfo: z.enum(EpisodeNfoReg.values).default('episode'),
     /** Jinja templates for each episode's title and description in its metadata; empty keeps the site's. */
-    episodeTitleTemplate: z.string().max(1000).nullable().default(null),
-    episodeDescriptionTemplate: z.string().max(4000).nullable().default(null),
+    episodeTitleTemplate: z.string().max(1000).nullable().default(SITE_TITLE_TEMPLATE),
+    episodeDescriptionTemplate: z.string().max(4000).nullable().default(SITE_DESCRIPTION_TEMPLATE),
     indexingValues: CollectionLocalMediaProfileIndexingValuesSchema.default([]),
 })
 
@@ -76,8 +80,9 @@ export const CollectionLocalMediaProfileReadSchema = LocalMediaProfileSchemaResp
     downloadCollectionAssets: z.boolean().nullable().default(null),
     showNfo: z.boolean().default(false),
     episodeNfo: z.enum(EpisodeNfoReg.values).default('episode'),
-    episodeTitleTemplate: z.string().nullable().default(null),
-    episodeDescriptionTemplate: z.string().nullable().default(null),
+    // A profile without its own keeps the site's, which these templates show.
+    episodeTitleTemplate: z.string().nullable().default(null).transform((value) => value ?? SITE_TITLE_TEMPLATE),
+    episodeDescriptionTemplate: z.string().nullable().default(null).transform((value) => value ?? SITE_DESCRIPTION_TEMPLATE),
     indexingValues: z.array(IndexingValueEntrySchema).default([]),
 })
 export type CollectionLocalMediaProfileRead = z.infer<typeof CollectionLocalMediaProfileReadSchema>

@@ -1,4 +1,4 @@
-import {useMemo} from 'react'
+import {useLayoutEffect, useMemo, useRef, useState} from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import type {Extension} from '@codemirror/state'
 import {EditorView} from '@codemirror/view'
@@ -338,6 +338,43 @@ function MetadataTemplateEditor({form, name, id, label, placeholder, completions
     )
 }
 
+/** Text cut at four lines, with Read more when there is more, as a long YouTube description has. */
+function ClampedText({text, multiline}: {text: string, multiline: boolean}) {
+    const ref = useRef<HTMLSpanElement>(null)
+    const [expanded, setExpanded] = useState(false)
+    const [overflows, setOverflows] = useState(false)
+    useLayoutEffect(() => {
+        const element = ref.current
+        if (!element) return
+        // Measured while cut, and again whenever the box changes width.
+        const measure = () => setOverflows(element.classList.contains('metadata-template-example__text--clamped')
+            ? element.scrollHeight > element.clientHeight + 1
+            : true)
+        measure()
+        const observer = new ResizeObserver(measure)
+        observer.observe(element)
+        return () => observer.disconnect()
+    }, [text, expanded])
+    return (
+        <>
+            <span
+                ref={ref}
+                className={[
+                    multiline ? 'metadata-template-example__text--multiline' : '',
+                    expanded ? '' : 'metadata-template-example__text--clamped',
+                ].filter(Boolean).join(' ') || undefined}
+            >
+                {text}
+            </span>
+            {overflows && (
+                <button type="button" className="metadata-template-example__more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+                    {expanded ? 'Show less' : 'Read more'}
+                </button>
+            )}
+        </>
+    )
+}
+
 /** What the template gives the example episode, or why it can't render. */
 function MetadataExample({id, text, error, loading, multiline}: {
     id: string
@@ -354,7 +391,7 @@ function MetadataExample({id, text, error, loading, multiline}: {
                 : text === undefined
                     ? <code>{loading ? 'Rendering…' : 'Pick an example episode under Output path.'}</code>
                     : text
-                        ? <span className={multiline ? 'metadata-template-example__text--multiline' : undefined}>{text}</span>
+                        ? <ClampedText text={text} multiline={multiline}/>
                         : <code>The site gives this episode none.</code>}
         </div>
     )
@@ -399,9 +436,10 @@ function MetadataTextFields({form}: {form: UseFormReturn<any>}) {
                 />
                 <div className="help">
                     {example.label && <p className="metadata-template-example-source">The examples are for {example.label}, the example episode under Output path.</p>}
-                    <ReadMore summary="Leave these empty to keep the title and description the site gives each episode.">
+                    <ReadMore summary="{{ title }} and {{ description }} are the title and description the site gives each episode.">
                         <p>They take the same variables as the output path, such as <code>{'{{ title }}'}</code> and <code>{'{{ date }}'}</code>,
                             and <code>{'{{ description }}'}</code> for the site's description. Type <code>{'{{'}</code> to pick one.
+                            A field you leave empty keeps the site's text too.
                             {' '}<code>{'{{ date }} - {{ title }}'}</code> puts the date before each title, as ytdl-sub does.
                             They change the NFO file and the title inside the media, not the file name.</p>
                     </ReadMore>
