@@ -12,14 +12,9 @@ The share is read-only: apps can play the episodes, but cannot change or delete 
 
 ## What is in the share
 
-The share lists an episode once VODLoft has a whole file of it:
-
-- a download of the episode, or
-- a video VODLoft already prepared for another app, such as a podcast feed, in the Stream Video Cache.
-
-Media players jump around in a file while you watch, which they cannot do in a live stream, so episodes VODLoft only
-has as a stream are left out. Choose where the media comes from the same way as for a podcast feed (see
-[[Podcast-RSS-Feeds#choose-where-media-comes-from]]).
+The share only lists episodes you have downloaded. Media players jump around in a file while you watch, which they
+cannot do in a stream, so a share never streams episodes from the site. To get an episode into the share, download it
+with a Download Profile of the collection in a video format such as 1080p (or audio only, for an audio share).
 
 **Maximum episodes in the folder** keeps only the newest episodes in the share. 0 means no limit.
 

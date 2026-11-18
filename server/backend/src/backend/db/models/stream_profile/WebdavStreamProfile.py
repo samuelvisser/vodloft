@@ -17,8 +17,8 @@ class WebdavStreamProfile(StreamProfileBase):
     __tablename__ = "stream_profiles_webdav"
     __mapper_args__ = {"polymorphic_identity": StreamProfileType.WEBDAV.value}
 
-    # A share lists whole files, never the Site's stream.
-    passes_site_streams = False
+    # A share lists whole files, so only downloads: never the Site's stream.
+    streams_from_site = False
 
     id: Mapped[int] = mapped_column(
         ForeignKey("stream_profiles.id", ondelete="CASCADE"),

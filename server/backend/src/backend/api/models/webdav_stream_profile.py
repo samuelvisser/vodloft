@@ -12,7 +12,9 @@ from backend.types.stream_profile_types import StreamProfileType, WebdavMetadata
 class _WebdavStreamProfileAPIBaseIn(StreamProfileFieldsIn):
     season_folders: WebdavSeasonFolders = WebdavSeasonFolders.SEASON
     metadata_files: WebdavMetadataFiles = WebdavMetadataFiles.NFO_AND_ARTWORK
-    # A share lists whole files, so it never has live episodes.
+    # A share lists whole files, so only downloads, and never live episodes.
+    use_downloads: Literal[True] = True
+    use_source_stream: Literal[False] = False
     stream_live_episodes: Literal[False] = False
 
 
