@@ -88,6 +88,7 @@ _EXAMPLE_COLLECTION_VALUES = {
     "episode_extra_type": "",
     "episode_number": "1",
     "episode_index": "1",
+    "extra_index": "",
     "episode_site_id": "the-first-episode",
     "episode_uploader": "Example Host",
     "duration_seconds": "3600",

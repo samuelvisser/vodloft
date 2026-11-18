@@ -32,6 +32,7 @@ def _episode(*, collection_metadata=None):
         episode_identifier="ep.1",
         published_date=None,
         index=1,
+        extra_index=None,
         dw_episode_number=None,
     )
 
