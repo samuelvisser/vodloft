@@ -31,6 +31,7 @@ import {
     loadLocalMediaProfileDraft,
     saveLocalMediaProfileDraft,
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
+import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {LocalMediaProfileTypeReg, localMediaProfileEndpoint} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
@@ -47,6 +48,8 @@ function duplicateValues(profile: LocalMediaProfileRead): LocalMediaProfileCreat
 export default function AddLocalMediaProfilePage() {
     const [searchParams] = useSearchParams()
     const duplicateSlug = searchParams.get('duplicate')
+    // Discarding a restored draft mounts a fresh form, so every field starts from its default again.
+    const [generation, setGeneration] = useState(0)
 
     // The cache can still hold the profile as it was before its last save: copy it as loaded now.
     const {data: source, isFetchedAfterMount, error} = useQuery<LocalMediaProfileRead>({
@@ -60,7 +63,17 @@ export default function AddLocalMediaProfilePage() {
         },
     })
 
-    if (!duplicateSlug) return <AddLocalMediaProfileForm/>
+    if (!duplicateSlug) {
+        return (
+            <AddLocalMediaProfileForm
+                key={generation}
+                onDiscardDraft={() => {
+                    clearLocalMediaProfileDraft(addLocalMediaProfileDraftKey())
+                    setGeneration((current) => current + 1)
+                }}
+            />
+        )
+    }
 
     if (!isFetchedAfterMount || !source || error) {
         return (
@@ -76,7 +89,7 @@ export default function AddLocalMediaProfilePage() {
     return <AddLocalMediaProfileForm key={source.slug} source={source}/>
 }
 
-function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) {
+function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMediaProfileRead, onDiscardDraft?: () => void }) {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const qc = useQueryClient()
@@ -94,6 +107,8 @@ function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) 
         : undefined
     const initialMode: LocalMediaProfileMode = explicitMode || (restoredDraft?.mode ?? 'collection')
     const [mode, setMode] = useState<LocalMediaProfileMode>(initialMode)
+    // A draft is only kept once something is typed, so a draft that is there holds the user's own changes.
+    const showRestored = !source && !!restoredDraft
 
     const formCollection = useForm<WithRoot<CollectionLocalMediaProfileCreateIn>>({
         resolver: zodResolver(CollectionLocalMediaProfileCreateSchema),
@@ -133,6 +148,7 @@ function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) 
 
     const form = ({collection: formCollection, movie: formMovie, video: formVideo}[mode]) as UseFormReturn<any>
 
+
     useEffect(() => {
         if (!draftKey) return
         const saveDraft = (values: Partial<LocalMediaProfileCreateIn>) => {
@@ -142,7 +158,6 @@ function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) 
             })
         }
 
-        saveDraft(form.getValues() as Partial<LocalMediaProfileCreateIn>)
         const subscription = form.watch((values) => {
             saveDraft(values as Partial<LocalMediaProfileCreateIn>)
         })
@@ -176,6 +191,7 @@ function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) 
     })
 
     const {formState: {isSubmitting}} = form
+    const formId = 'add-local-media-profile-form'
 
     return (
         <section className="view" aria-labelledby="add-media-profile-title">
@@ -184,7 +200,7 @@ function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) 
                 {mode === 'collection' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
-            <form className="form local-media-profile-form" onSubmit={onCreate} noValidate>
+            <form id={formId} className="form local-media-profile-form" onSubmit={onCreate} noValidate>
                 <div className="form-row">
                     <label>Profile type</label>
                     {source ? (
@@ -220,6 +236,20 @@ function AddLocalMediaProfileForm({source}: { source?: LocalMediaProfileRead }) 
                     <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting}/>
                 </div>
             </form>
+
+            {showRestored ? (
+                <UnsavedChangesBar
+                    title="Unsaved changes restored"
+                    message="This form was restored from a profile you started in this browser. It has not been created in VODLoft yet."
+                >
+                    <button className="btn" type="button" disabled={isSubmitting} onClick={onDiscardDraft}>
+                        Discard
+                    </button>
+                    <button className="btn btn-primary" type="submit" form={formId} disabled={isSubmitting}>
+                        {isSubmitting ? 'Creating…' : 'Create profile'}
+                    </button>
+                </UnsavedChangesBar>
+            ) : null}
         </section>
     )
 }

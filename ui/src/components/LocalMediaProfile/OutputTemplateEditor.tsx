@@ -22,6 +22,7 @@ import {
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import TemplateSourceSelect from './TemplateSourceSelect'
 import CustomIndexAdvisories from './CustomIndexAdvisories'
+import OpaqueOutputTemplateCode from './OpaqueOutputTemplateCode'
 import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStartFields'
 import CollectionRootNote from './CollectionRootNote'
 import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
@@ -45,6 +46,14 @@ type Props = {
     mode: LocalMediaProfileMode
     placeholder: string
     help: ReactNode
+    /** Shows a saved profile's template and its examples without letting it be changed here. */
+    readOnly?: boolean
+    /** A new profile, which starts with the presets open. */
+    isCreating?: boolean
+    /** Hears the collection root once an example of the collection being added has shown it. */
+    onCollectionRoot?: (path: string) => void
+    /** Buttons beside the template's heading, such as the Indexing values editor. */
+    headerActions?: ReactNode
 }
 
 type TemplateCodeEditorProps = {
@@ -530,7 +539,7 @@ function describeTypedCharacter(char: string): string {
     return char
 }
 
-export default function OutputTemplateEditor({form, mode, placeholder, help}: Props) {
+export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false, isCreating = false, onCollectionRoot, headerActions}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
@@ -834,6 +843,11 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
         indexingValues: mode === 'collection' ? indexingValues : null,
     } : null)
     const previewPath = preview.result?.output.outputPath ?? ''
+    // Only an example of the collection being added tells its root: an episode of another collection has its own.
+    const collectionRootPath = isExampleSource(selectedSource) ? preview.result?.collectionRoot?.path : null
+    useEffect(() => {
+        if (collectionRootPath) onCollectionRoot?.(collectionRootPath)
+    }, [collectionRootPath, onCollectionRoot])
     // An example of a collection that is not saved yet cannot know its custom indexes, nor the
     // numbers VODLoft counts from the oldest episode; the preview shows their names instead.
     const unsavedNames = useMemo(() => {
@@ -871,39 +885,48 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
 
     return (
         <>
-            <OutputTemplateStartFields form={form} mode={mode}/>
+            {!readOnly && <OutputTemplateStartFields form={form} mode={mode} isCreating={isCreating}/>}
             <div className="form-row output-template-field">
                 <section className="template-workbench" aria-labelledby="template-editor-heading">
                     <div className="template-editor-heading">
                         <div>
-                            <label id="template-editor-heading" htmlFor="mp-path">Output path template</label>
-                            <p>Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>
+                            <label id="template-editor-heading" htmlFor={readOnly ? undefined : 'mp-path'}>Output path template</label>
+                            {readOnly
+                                ? <p>Read only. Edit the media profile to change it.</p>
+                                : <p>Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>}
                         </div>
-                        <span className="template-language-badge">Jinja</span>
+                        <div className="template-editor-heading__actions">
+                            {!readOnly && headerActions}
+                            <span className="template-language-badge">Jinja</span>
+                        </div>
                     </div>
-                    <Controller
-                        control={control}
-                        name="outputTemplate"
-                        render={({field}) => (
-                            <TemplateCodeEditor
-                                value={field.value ?? ''}
-                                placeholder={placeholder}
-                                extensions={editorExtensions}
-                                invalid={!!errors.outputTemplate}
-                                onChange={(value) => {
-                                    field.onChange(value)
-                                    form.clearErrors('outputTemplate')
-                                }}
-                                onBlur={field.onBlur}
-                            />
-                        )}
-                    />
+                    {readOnly ? (
+                        <OpaqueOutputTemplateCode source={template} sourceMode="compact" label="Output path template"/>
+                    ) : (
+                        <Controller
+                            control={control}
+                            name="outputTemplate"
+                            render={({field}) => (
+                                <TemplateCodeEditor
+                                    value={field.value ?? ''}
+                                    placeholder={placeholder}
+                                    extensions={editorExtensions}
+                                    invalid={!!errors.outputTemplate}
+                                    onChange={(value) => {
+                                        field.onChange(value)
+                                        form.clearErrors('outputTemplate')
+                                    }}
+                                    onBlur={field.onBlur}
+                                />
+                            )}
+                        />
+                    )}
                     {errors.outputTemplate && (
                         <div id="mp-path-error" className="error" role="alert" aria-live="polite">
                             {String(errors.outputTemplate.message)}
                         </div>
                     )}
-                    <FilenameModeField form={form}/>
+                    {!readOnly && <FilenameModeField form={form}/>}
                     {variableQuery.isError && (
                         <div className="error" role="alert">
                             Custom metadata fields could not be loaded. Try refreshing the page.
@@ -920,7 +943,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                             {missingMetadataVariables.length === 1 ? ' does' : ' do'} not exist yet and will render as empty.
                         </div>
                     )}
-                    {mode === 'collection' && (
+                    {mode === 'collection' && !readOnly && (
                         <CustomIndexAdvisories
                             template={template}
                             indexingValues={indexingValues}
@@ -976,7 +999,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                         <div className="template-playground-heading">
                             <div>
                                 <h3 id="template-preview-heading">Example output</h3>
-                                <p>Try different values here. Your profile is not changed.</p>
+                                <p>{readOnly ? 'Pick an episode to see where its file would go.' : 'Try different values here. Your profile is not changed.'}</p>
                             </div>
                             <label className="template-source-label" htmlFor="template-example-source">
                                 <span>Example episode</span>
