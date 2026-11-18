@@ -81,7 +81,7 @@ def _make_local_media_profile(session):
     return profile
 
 
-def _make_podcast_profile(session, collection, local_media_profile, *, starting_from: date):
+def _make_podcast_profile(session, collection, local_media_profile, *, starting_from: date, until=None):
     from backend.db.models.download_profile import DownloadProfile
     from backend.types.download_profile_types import EpIdType
 
@@ -89,7 +89,7 @@ def _make_podcast_profile(session, collection, local_media_profile, *, starting_
         collection=collection,
         local_media_profile=local_media_profile,
         enable_profile=True,
-        filters=filter_rows(line("only", "types", episode_types=[EpIdType.EP.value]), published_since(starting_from)),
+        filters=filter_rows(line("only", "types", episode_types=[EpIdType.EP.value]), published_since(starting_from, until)),
         download_with_countdown=False,
         redownload_final=False,
         delete_older_episodes=True,
@@ -206,3 +206,31 @@ def test_api_rejects_a_date_line_with_more_than_one_limit():
         DownloadProfileFilterAPIIn(action="only", field="published", days=30, starting_from=date(2026, 1, 1))
     with pytest.raises(ValidationError, match="a number of days, a number of episodes or a date"):
         DownloadProfileFilterAPIIn(action="only", field="published", days=30, count=5)
+
+
+def test_a_published_line_can_end_on_a_date_inclusively(db_session):
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    local_media_profile = _make_local_media_profile(db_session)
+    first, last_day, after = (
+        _make_episode(db_session, collection, season, index=index, published_at=moment)
+        for index, moment in enumerate((
+            datetime(2026, 1, 10, 0, tzinfo=timezone.utc),
+            datetime(2026, 3, 31, 23, 59, tzinfo=timezone.utc),
+            datetime(2026, 4, 1, 0, tzinfo=timezone.utc),
+        ), start=1)
+    )
+    between = _make_podcast_profile(
+        db_session, collection, local_media_profile, starting_from=date(2026, 1, 10), until=date(2026, 3, 31),
+    )
+    assert {episode.id for episode in get_download_profile_episodes(db_session, between)} == {first.id, last_day.id}
+
+    from backend.api.models.download_profile import DownloadProfileFilterAPIIn
+
+    assert DownloadProfileFilterAPIIn(action="only", field="published", until=date(2026, 3, 31)).until == date(2026, 3, 31)
+    with pytest.raises(ValidationError, match="on or after the start date"):
+        DownloadProfileFilterAPIIn(action="only", field="published", starting_from=date(2026, 4, 1), until=date(2026, 3, 31))
+    with pytest.raises(ValidationError, match="a number of days, a number of episodes or a date"):
+        DownloadProfileFilterAPIIn(action="only", field="published", days=3, until=date(2026, 3, 31))

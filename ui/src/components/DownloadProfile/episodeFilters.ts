@@ -15,6 +15,7 @@ export type FilterLike = {
     days?: number | null
     count?: number | null
     startingFrom?: string | null
+    until?: string | null
 }
 
 export const DATE_FIELDS: readonly string[] = ['published', 'downloaded']

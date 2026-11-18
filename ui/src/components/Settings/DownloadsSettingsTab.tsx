@@ -443,6 +443,28 @@ export default function DownloadsSettingsTab({
                     })}
                     help="Maximum automatic attempts before a download is marked as failed."
                 />
+                <NumberField
+                    id="settings-daily-download-limit"
+                    label="Automatic downloads per day"
+                    value={draft.downloadSettings.dailyDownloadLimit}
+                    min={0}
+                    max={10000}
+                    unit="per Site"
+                    error={errorFor('downloadSettings.dailyDownloadLimit')}
+                    environmentVariable={environmentVariableFor('downloadSettings.dailyDownloadLimit')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.dailyDownloadLimit = value
+                    })}
+                    help={
+                        <ReadMore summary={<span>How many downloads VODLoft starts on its own on one Site in 24 hours. 0 means no limit.</span>}>
+                            <p>
+                                Sites such as YouTube may slow down or block an account or address that downloads a lot at once.
+                                Once a Site reaches its number, its next automatic downloads wait until the oldest is a day old.
+                                Downloads you start yourself always start, and don't count. Each Site can have a number of its own under Sites below.
+                            </p>
+                        </ReadMore>
+                    }
+                />
                 <DurationField
                     id="settings-download-timeout"
                     label="Download timeout"

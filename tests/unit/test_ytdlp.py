@@ -286,6 +286,16 @@ FAKE_YTDLP = textwrap.dedent('''
             {"category": "poi_highlight", "start_time": 300.0, "end_time": 301.0, "title": "Highlight", "type": "poi"},
         ]
         print("[vodloft-sponsorblock] " + json.dumps(found if "segments" in url else None))
+    if "--write-info-json" in args:
+        (work / "media.info.json").write_text('{"id": "x", "title": "Video"}')
+    if "--remove-chapters" in args:
+        import json
+        chapters = [
+            {"title": "Intro", "start_time": 0, "end_time": 15.5},
+            {"title": "The story", "start_time": 15.5, "end_time": 600.0},
+            {"title": "Sponsor: Example", "start_time": 600.0, "end_time": 660.0},
+        ]
+        print("[vodloft-chapters] " + json.dumps(chapters))
     if "360p" in url:
         if "throttled" in url:
             print("WARNING: [youtube] x: n challenge solving failed: Some formats may be missing.")
@@ -593,3 +603,48 @@ def test_ytdlp_reports_the_sponsorblock_segments_it_found(fake_ytdlp, tmp_path):
     assert empty.sponsorblock == ()
     # Not asked: not known.
     assert download_ytdlp("https://x/segments", str(tmp_path / "off.mp4"), command=fake_ytdlp).sponsorblock is None
+
+
+def test_chapter_choices_map_to_yt_dlp_options():
+    from downloader.plan import YtdlpChapters
+    from downloader.ytdlp import resolve_ytdlp_source, ytdlp_chapter_options
+
+    assert ytdlp_chapter_options(YtdlpChapters()) == ()
+    assert ytdlp_chapter_options(YtdlpChapters(keep=True, cut=("^Intro$", "(?i)sponsor"))) == (
+        "--embed-chapters", "--remove-chapters", "^Intro$", "--remove-chapters", "(?i)sponsor",
+    )
+    with pytest.raises(DownloadError):
+        YtdlpChapters(cut=("(",))
+    # An HLS bundle keeps the site's files as they are, and a part does not line up with the chapters.
+    for format_, section in (("format_hls", None), ("format_1080p", (10.0, 20.0))):
+        source = resolve_ytdlp_source(
+            "https://www.youtube.com/watch?v=x", command=("yt-dlp",), preferred_format=format_, audio_only=False,
+            chapters=YtdlpChapters(keep=True, cut=("Intro",)), section=section,
+        )
+        assert "--embed-chapters" not in source.ytdlp_command and "--remove-chapters" not in source.ytdlp_command
+
+
+def test_ytdlp_reports_the_chapters_it_cut_out(fake_ytdlp, tmp_path):
+    from downloader.models import CutChapter
+    from downloader.plan import YtdlpChapters
+    from downloader.ytdlp import download_ytdlp
+
+    chapters = YtdlpChapters(cut=("^Intro$", "(?i)^sponsor"))
+    result = download_ytdlp(
+        "https://x/video", str(tmp_path / "out.mp4"), command=(*fake_ytdlp, "--remove-chapters", "^Intro$"),
+        chapters=chapters,
+    )
+    assert result.cut_chapters == (CutChapter("Intro", 0.0, 15.5), CutChapter("Sponsor: Example", 600.0, 660.0))
+    # Not asked: not known.
+    assert download_ytdlp("https://x/video", str(tmp_path / "off.mp4"), command=fake_ytdlp).cut_chapters is None
+
+
+def test_ytdlp_writes_the_info_file_when_asked(fake_ytdlp, tmp_path):
+    from downloader.ytdlp import download_ytdlp
+
+    keep = tmp_path / "keep"
+    keep.mkdir()
+    result = download_ytdlp("https://x/video", str(tmp_path / "out.mp4"), command=fake_ytdlp, info_json_dir=keep)
+    assert result.info_json == str(keep / "media.info.json")
+    assert (keep / "media.info.json").read_text() == '{"id": "x", "title": "Video"}'
+    assert download_ytdlp("https://x/video", str(tmp_path / "off.mp4"), command=fake_ytdlp).info_json is None

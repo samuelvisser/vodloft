@@ -171,12 +171,13 @@ VODLOFT_VARIABLES = frozenset({
     "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
     "channel_title", "channel_handle", "channel_kind", "section_title", "section_kind",
     "artist", "album", "track_number", "track_number_padded",
-    "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second",
+    "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second", "day_of_year",
+    "day_of_year_reversed",
 })
 _MATCH = "ytdlp_match"
 
 # strftime formats that a VODLoft variable already gives.
-_DATE_VARIABLES = {"%Y": "year", "%m": "month", "%d": "day", "%Y-%m-%d": "date"}
+_DATE_VARIABLES = {"%Y": "year", "%m": "month", "%d": "day", "%Y-%m-%d": "date", "%j": "day_of_year"}
 _TIME_VARIABLES = {"%H": "hour", "%M": "minute", "%S": "second", "%H:%M:%S": "time"}
 
 

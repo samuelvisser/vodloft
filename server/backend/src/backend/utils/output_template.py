@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import re
 import unicodedata
 from collections.abc import Iterator
@@ -26,6 +27,7 @@ from .custom_index import (
 )
 from .episode import EpisodeIdentifierInfo
 from .filenames import clean_component, clean_value
+from .name_length import fit_name, note_filled_value, tracking_output_names
 from .output_template_jinja import TypedText, create_output_template_environment
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
@@ -41,7 +43,7 @@ _SINGLE_BRACE_TEMPLATE_VARIABLE = re.compile(
 )
 
 DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second",
+    "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second", "day_of_year", "day_of_year_reversed",
 })
 MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     f"movie_{field}" for field in DATE_OUTPUT_TEMPLATE_FIELDS
@@ -309,7 +311,9 @@ def _sanitize_emitted_output_value(value: object) -> str:
     text = str(value) if isinstance(value, TypedText) else clean_value(value, mode)
     # Whatever the mode, a value can never add a path level or a line.
     text = text.replace("/", "\u29f8").replace("\x00", "")
-    return "".join(char for char in text if char == "\t" or ord(char) >= 32)
+    text = "".join(char for char in text if char == "\t" or ord(char) >= 32)
+    note_filled_value(text)
+    return text
 
 
 def _sanitize_rendered_path(
@@ -323,7 +327,10 @@ def _sanitize_rendered_path(
     parts = relative.split("/")
     last = len(parts) - 1
     sanitized = [
-        sanitize_path_component(part, mode=mode, extension=extension if index == last else None)
+        fit_name(
+            sanitize_path_component(part, mode=mode, extension=extension if index == last else None),
+            extension=extension if index == last else None,
+        )
         if part
         else ""
         for index, part in enumerate(parts)
@@ -815,7 +822,14 @@ def _date_substitutions(value: Optional[date | datetime]) -> dict[str, str]:
         "hour": value_datetime.strftime("%H"),
         "minute": value_datetime.strftime("%M"),
         "second": value_datetime.strftime("%S"),
+        "day_of_year": value_datetime.strftime("%j"),
+        # Counts down to 001 on the last day of the year, so the newest day of a year sorts first.
+        "day_of_year_reversed": f"{_days_in_year(value_datetime.year) + 1 - value_datetime.timetuple().tm_yday:03d}",
     }
+
+
+def _days_in_year(year: int) -> int:
+    return 366 if calendar.isleap(year) else 365
 
 
 def replace_output_extension(resolved: str, extension: Optional[str]) -> str:
@@ -842,9 +856,9 @@ def _render_output_path(
     **render_options,
 ) -> Path:
     """Render a profile's template with the profile's filename mode, into a path in the download root."""
-    with rendering_with_filename_mode(filename_mode):
+    with rendering_with_filename_mode(filename_mode), tracking_output_names():
         rendered = render_output_template(output_template, values, **render_options)
-    return _finish_output_path(rendered, extension=extension, mode=filename_mode)
+        return _finish_output_path(rendered, extension=extension, mode=filename_mode)
 
 
 def _finish_output_path(resolved: str, *, extension: Optional[str], mode: FilenameRestrictionMode) -> Path:

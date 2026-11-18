@@ -183,6 +183,8 @@ presets:
       allow_auto_generated_subtitles: true
     chapters:
       remove_sponsorblock_categories: ["sponsor"]
+      remove_chapters_regex: ["^Intro$", "(unclosed"]
+      allow_chapters_from_comments: true
     overrides:
       tv_show_directory: "/media/tv"
       episode_file_name: "{upload_date_standardized} - {%regex_sub('[0-9]+', '', title)}"
@@ -210,6 +212,8 @@ YouTube Releases:
     assert (profile.settings["preferred_format"], profile.settings["metadata_mode"], profile.settings["show_nfo"]) == (
         "format_1080p", "embed_and_nfo", True)
     assert (profile.settings["subtitle_mode"], profile.settings["subtitle_languages"]) == ("sidecar", ["en", "nl"])
+    # ytdl-sub's base preset saves the info file beside each video.
+    assert profile.settings["save_info_json"] is True
     collection = plan.collections[0]
     assert collection.title == "Kurzgesagt – In a Nutshell"
     rules = collection.download_profile["rules"]
@@ -220,8 +224,11 @@ YouTube Releases:
     assert collection.download_profile["ep_id_type_list"] == ["ep"]
     assert collection.download_profile["auto_subtitles"] == "fallback"
     assert collection.download_profile["sponsorblock_segments"]["sponsor"] == "cut"
+    # ytdl-sub keeps the video's own chapters unless embed_chapters is turned off.
+    assert (collection.download_profile["keep_chapters"], collection.download_profile["cut_chapters"]) == (True, ["^Intro$"])
     subjects = {warning.subject for warning in collection.warnings}
-    assert {"throttle_protection", "ytdl_options extractor_args"} <= subjects
+    assert {"throttle_protection", "ytdl_options extractor_args", "remove_chapters_regex",
+            "allow_chapters_from_comments"} <= subjects
     assert [setting.key for setting in plan.settings] == ["downloads.filename_restriction_mode", "ytdlp.cookies"]
     assert any(warning.subject == "Some Band" and "Releases tab" in warning.message for warning in plan.warnings)
 
@@ -578,3 +585,108 @@ def test_a_tv_show_collection_of_only_playlists_holds_only_them(tmp_path):
         ("https://www.youtube.com/watch?v=single", "Season 2", 2),
     ]
     assert not any(warning.subject == "links" for warning in mixed.warnings)
+
+
+def test_backwards_episode_orderings_number_the_newest_first(tmp_path):
+    plan = _plan(_write(tmp_path, """
+__preset__:
+  overrides:
+    tv_show_directory: "/tv_shows"
+
+Plex TV Show by Date:
+  = Documentaries:
+    "~NOVA PBS":
+      url: "https://www.youtube.com/@novapbs"
+      tv_show_by_date_episode_ordering: "upload-month-day-reversed"
+"""))
+
+    profile = plan.profiles[0]
+    assert profile.output_template == (
+        "/downloads/{{ collection_title }}/Season {{ year }}/s{{ year }}.e{{ day_of_year_reversed }}"
+        "{{ '%02d' | format('day' | custom_index(per=date, start=99, step=-1)) }} - {{ title }}.ext"
+    )
+    assert [index.key for index in profile.custom_indexes] == ["day"]
+    assert not any(warning.subject == "tv_show_by_date_episode_ordering" for warning in plan.collections[0].warnings)
+
+
+def test_the_day_of_year_counts_back_from_the_end_of_the_year():
+    from datetime import date
+
+    from backend.utils.output_template import _date_substitutions
+
+    assert (_date_substitutions(date(2026, 1, 1))["day_of_year"], _date_substitutions(date(2026, 1, 1))["day_of_year_reversed"]) == ("001", "365")
+    assert _date_substitutions(date(2026, 12, 31))["day_of_year_reversed"] == "001"
+    assert _date_substitutions(date(2028, 1, 1))["day_of_year_reversed"] == "366"
+
+
+def test_a_date_range_with_an_end_date_downloads_between_two_dates(tmp_path):
+    config = """
+presets:
+  closed_period:
+    preset:
+      - "Jellyfin TV Show by Date"
+    date_range:
+      after: "20200101"
+      before: "20221231"
+    overrides:
+      tv_show_directory: "/tv_shows"
+"""
+    plan = _plan(_write(tmp_path, """
+closed_period:
+  "NOVA PBS": "https://www.youtube.com/@novapbs"
+""", config))
+
+    from backend.services.import_filters import filters_from_plan
+
+    collection = plan.collections[0]
+    (published,) = [item for item in filters_from_plan(collection.download_profile, seasons=False) if item.field == "published"]
+    assert (published.starting_from.isoformat(), published.until.isoformat()) == ("2020-01-01", "2022-12-31")
+    assert not any(warning.subject == "date_range" for warning in collection.warnings)
+
+
+def test_an_own_episode_title_and_plot_become_the_profiles_metadata_templates(tmp_path):
+    config = """
+presets:
+  titled:
+    preset:
+      - "Jellyfin TV Show by Date"
+    overrides:
+      tv_show_directory: "/tv_shows"
+      episode_title: "{upload_date_standardized} - {title}"
+      episode_plot: "{description}"
+"""
+    plan = _plan(_write(tmp_path, """
+titled:
+  "NOVA PBS": "https://www.youtube.com/@novapbs"
+""", config))
+
+    settings = plan.profiles[0].settings
+    assert settings["episode_title_template"] == "{{ date }} - {{ title }}"
+    assert settings["episode_description_template"] == "{{ description }}"
+
+
+MUSIC_VIDEOS = """
+__preset__:
+  overrides:
+    music_video_directory: "/music_videos"
+
+Jellyfin Music Videos:
+  = Pop:
+    "Rick Astley": "https://www.youtube.com/@RickAstleyYT"
+"""
+
+
+def test_an_artists_music_videos_become_a_collection_of_their_channel(tmp_path):
+    plan = _plan(_write(tmp_path, MUSIC_VIDEOS), ("/music_videos", "/downloads/music_videos"))
+
+    assert not any(warning.subject == "Rick Astley" for warning in plan.warnings)
+    videos = next(collection for collection in plan.collections if collection.title == "Rick Astley")
+    assert (videos.url, videos.channel, videos.settings["type"], videos.settings["genre"]) == (
+        "https://www.youtube.com/@RickAstleyYT", True, "series", "Pop",
+    )
+    profile = next(profile for profile in plan.profiles if profile.external_id == videos.profile_external_id)
+    assert profile.output_template == "/downloads/music_videos/{{ artist }}/{{ title }}.ext"
+    assert (profile.settings["episode_nfo"], profile.settings["show_nfo"], profile.settings["metadata_mode"]) == (
+        "music_video", False, "embed_and_nfo",
+    )
+    assert plan.download_folder == "/music_videos"

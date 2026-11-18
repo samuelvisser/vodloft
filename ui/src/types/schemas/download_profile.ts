@@ -44,13 +44,17 @@ export const EpisodeFilterSchema = z.object({
     days: z.int('Enter a number of days').min(1, 'Use at least 1 day').nullable().default(null),
     count: z.int('Enter a number of episodes').min(1, 'Use at least 1 episode').nullable().default(null),
     startingFrom: z.iso.date().nullable().default(null),
+    /** Published on or before this day, with or without a start date. */
+    until: z.iso.date().nullable().default(null),
 }).superRefine((filter, ctx) => {
     if (isDateLine(filter)) {
         if (filter.action === 'skip') ctx.addIssue({code: 'custom', path: ['action'], message: 'A date line can only download or keep episodes'})
         if (filter.field === 'downloaded') {
             if (!filter.days) ctx.addIssue({code: 'custom', path: ['days'], message: 'Choose a number of days'})
-        } else if ([filter.days, filter.count, filter.startingFrom].filter((value) => value !== null).length !== 1) {
+        } else if ([filter.days, filter.count, filter.startingFrom ?? filter.until].filter((value) => value !== null).length !== 1) {
             ctx.addIssue({code: 'custom', path: ['days'], message: 'Choose a number of days, a number of episodes or a date'})
+        } else if (filter.startingFrom && filter.until && filter.until < filter.startingFrom) {
+            ctx.addIssue({code: 'custom', path: ['until'], message: 'Choose an end date on or after the start date'})
         }
     } else if (filter.field === 'types') {
         if (!filter.episodeTypes?.length) ctx.addIssue({code: 'custom', path: ['episodeTypes'], message: 'Choose at least one episode type'})
@@ -71,7 +75,7 @@ export type EpisodeFilter = z.output<typeof EpisodeFilterSchema>
 
 const EMPTY_FILTER: Omit<EpisodeFilter, 'action' | 'field'> = {
     pattern: null, durationOperator: null, durationSeconds: null, episodeTypes: null,
-    seasonSlugs: null, includeUpcoming: false, days: null, count: null, startingFrom: null,
+    seasonSlugs: null, includeUpcoming: false, days: null, count: null, startingFrom: null, until: null,
 }
 
 /** A new filter of a field, with the values its editor starts from. A date line cannot skip. */
@@ -185,6 +189,7 @@ export const DownloadProfileReadSchema = z.looseObject({
         days: z.int().nullable(),
         count: z.int().nullable(),
         startingFrom: z.iso.date().nullable(),
+        until: z.iso.date().nullable().default(null),
     })),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,

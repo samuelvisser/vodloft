@@ -24,7 +24,7 @@ export const LocalMediaProfileServerErrors = createServerErrorMapper({
 
 
 const DATE_OUTPUT_TEMPLATE_FIELDS = [
-    'date', 'time', 'datetime', 'year', 'month', 'day', 'hour', 'minute', 'second',
+    'date', 'time', 'datetime', 'year', 'month', 'day', 'hour', 'minute', 'second', 'day_of_year', 'day_of_year_reversed',
 ] as const
 
 export const COLLECTION_OUTPUT_TEMPLATE_FIELDS = [
@@ -43,7 +43,7 @@ export const VIDEO_OUTPUT_TEMPLATE_FIELDS = [
     'movie_slug', 'movie_title', 'movie_extended_title', 'movie_author',
     'movie_mature_rating', 'movie_duration_seconds',
     'movie_date', 'movie_time', 'movie_datetime', 'movie_year', 'movie_month', 'movie_day',
-    'movie_hour', 'movie_minute', 'movie_second',
+    'movie_hour', 'movie_minute', 'movie_second', 'movie_day_of_year', 'movie_day_of_year_reversed',
     'slug', 'title', 'extended_title', 'author', 'mature_rating', 'rating',
     'duration_seconds', 'media_type', 'source',
     ...DATE_OUTPUT_TEMPLATE_FIELDS,

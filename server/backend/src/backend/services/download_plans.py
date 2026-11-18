@@ -23,7 +23,7 @@ from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_track_metadata, build_movie_metadata, build_video_metadata, publish_time, select_thumbnail
 from backend.services.download_options import effective_download_mode, effective_filename_mode, effective_metadata_mode, effective_thumbnail_mode
 from backend.services.download_quality import (
-    chosen_subtitle_tracks, custom_ytdlp_options, default_subtitle_languages, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
+    chosen_subtitle_tracks, custom_ytdlp_options, default_subtitle_languages, ytdlp_chapters, ytdlp_quality, ytdlp_sponsorblock, ytdlp_subtitles,
 )
 from backend.types.download_profile_types import AutoSubtitles
 from backend.services.source_options import ytdlp_source_options
@@ -40,7 +40,7 @@ from downloader import (
 )
 from downloader.lifecycle import DownloadTracker
 from downloader.metadata import render_nfo
-from downloader.plan import EMBEDS_ARTWORK, EMBEDS_METADATA, DownloadPlan, SidecarSpec, YtdlpSponsorBlock, build_download_plan
+from downloader.plan import EMBEDS_ARTWORK, EMBEDS_METADATA, DownloadPlan, SidecarSpec, YtdlpChapters, YtdlpSponsorBlock, build_download_plan
 from downloader.source import resolve_download_source
 from downloader.ytdlp import resolve_ytdlp_source
 from sources import Feature, PlaybackKind, Source, get_source
@@ -90,6 +90,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     sponsorblock = ytdlp_sponsorblock(
         site_choices["sponsorblock_enabled"], dict(site_choices["sponsorblock_segments"]),
     ) if site_choices and section is None else YtdlpSponsorBlock()
+    chapters = ytdlp_chapters(site_choices) if site_choices else YtdlpChapters()
     option_texts = [("the yt-dlp Source", ytdlp_source_options(session))]
     if episode is not None:
         option_texts.append((f"the Collection '{episode.collection.title}'", episode.collection.ytdlp_options))
@@ -99,6 +100,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     output_template, filename_mode = profile.output_template, effective_filename_mode(profile)
     music = profile.type == LocalMediaProfileType.MUSIC.value
     file_date_from_publish_date = profile.file_date_from_publish_date
+    save_info_json = profile.save_info_json
     title, slug, media_id = media.title, media.slug, media.id
     thumbnail = select_thumbnail(media)
     media_source = get_source(media.source_key)
@@ -119,7 +121,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
             source = resolve_ytdlp_source(
                 playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only,
                 quality=quality, subtitles=subtitle_request,
-                sponsorblock=sponsorblock,
+                sponsorblock=sponsorblock, chapters=chapters,
                 custom_options=custom_ytdlp_options(*option_texts) if media_source.has(Feature.YTDLP_OPTIONS) else (),
                 ffmpeg_path=ffmpeg_path, throttle_guard=throttle_guard, section=section,
             )
@@ -216,7 +218,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     media = download.media
     if isinstance(media, Episode):
         destination = resolve_episode_output_path(output_template, episode=media, local_media_profile=download.local_media_profile, media_download=download, filename_mode=filename_mode, extension=source.extension)
-        metadata = (build_track_metadata if music else build_episode_metadata)(media, media.collection)
+        metadata = (build_track_metadata if music else build_episode_metadata)(media, media.collection, download.local_media_profile)
     elif isinstance(media, Video):
         destination = resolve_video_output_path(output_template, video=media, filename_mode=filename_mode, extension=source.extension)
         metadata = build_video_metadata(media, source_name=media_source.name)
@@ -261,6 +263,12 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         and (source.hls_bundle or source.extension in {"mp4", "m4v", "mkv"})
     )
     embedded_subtitle_ids: list[str] = []
+    if save_info_json and source.ytdlp_command and not source.hls_bundle:
+        # yt-dlp writes the video's info file while it downloads the media.
+        assets.append(SidecarSpec(
+            "info_json", "info_json", url=source.url, extension="json", target_suffix=".info.json",
+            source_format="ytdlp", required=False,
+        ))
     if (publish_subtitles or embed_subtitles) and source.ytdlp_command:
         # yt-dlp writes the subtitles itself while it downloads the media.
         assets.append(SidecarSpec(

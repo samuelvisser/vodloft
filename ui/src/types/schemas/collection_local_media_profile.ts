@@ -1,7 +1,7 @@
 import {z} from 'zod'
 import {IndexingValueEntrySchema} from './custom_metadata'
 
-import {PreferredFormatReg, CollectionLocalMediaProfileScopeReg} from '../local_media_profile'
+import {PreferredFormatReg, CollectionLocalMediaProfileScopeReg, EpisodeNfoReg} from '../local_media_profile'
 import {
     LocalMediaProfileCreateBaseSchema,
     LocalMediaProfileOutputTemplateSchema,
@@ -44,6 +44,10 @@ const CollectionLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.ext
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
     downloadCollectionAssets: z.boolean().nullable().default(null),
     showNfo: z.boolean().default(false),
+    episodeNfo: z.enum(EpisodeNfoReg.values).default('episode'),
+    /** Jinja templates for each episode's title and description in its metadata; empty keeps the site's. */
+    episodeTitleTemplate: z.string().max(1000).nullable().default(null),
+    episodeDescriptionTemplate: z.string().max(4000).nullable().default(null),
     indexingValues: CollectionLocalMediaProfileIndexingValuesSchema.default([]),
 })
 
@@ -71,6 +75,9 @@ export const CollectionLocalMediaProfileReadSchema = LocalMediaProfileSchemaResp
         .transform((value) => value ?? 'both'),
     downloadCollectionAssets: z.boolean().nullable().default(null),
     showNfo: z.boolean().default(false),
+    episodeNfo: z.enum(EpisodeNfoReg.values).default('episode'),
+    episodeTitleTemplate: z.string().nullable().default(null),
+    episodeDescriptionTemplate: z.string().nullable().default(null),
     indexingValues: z.array(IndexingValueEntrySchema).default([]),
 })
 export type CollectionLocalMediaProfileRead = z.infer<typeof CollectionLocalMediaProfileReadSchema>

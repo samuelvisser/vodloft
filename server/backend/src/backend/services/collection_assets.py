@@ -266,7 +266,26 @@ def collection_asset_sources(collection: Collection) -> tuple[CollectionAssetSou
         )
         if url is not None:
             sources.append(CollectionAssetSource(kind, url, forced_format))
-    return tuple(sources)
+    return tuple(sources) + season_poster_sources(collection)
+
+
+def season_poster_sources(collection: Collection) -> tuple[CollectionAssetSource, ...]:
+    """A poster for each season a playlist fills, from the playlist's picture: ``season01-poster.jpg`` in the
+    collection's folder, the name Jellyfin, Emby, Kodi and Plex look for."""
+    posters: dict[int, str] = {}
+    for playlist in sorted(collection.lists, key=lambda playlist: playlist.site_position):
+        season, url = playlist.season, playlist.image_path
+        if not playlist.enabled or season is None or not isinstance(url, str) or not url.startswith(("https://", "http://")):
+            continue
+        if 0 <= season.season_number <= _MAX_POSTER_SEASON:
+            posters.setdefault(season.season_number, url)
+    return tuple(
+        CollectionAssetSource(f"season{number:02d}-poster", url) for number, url in sorted(posters.items())
+    )
+
+
+_MAX_POSTER_SEASON = 999
+"""Above it the artwork's name no longer fits its column."""
 
 
 @dataclass(frozen=True)

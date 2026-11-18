@@ -346,3 +346,10 @@
 .sponsorblock-dialog .help {
     margin-top: 12px;
 }
+
+/* An episode's own title and description: Jinja, so monospace. */
+.media-files-template {
+    width: 100%;
+    max-width: 640px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

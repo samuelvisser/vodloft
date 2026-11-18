@@ -41,6 +41,12 @@ export const CollectionLocalMediaProfileScopeReg = createSelectRegistry("Collect
   'music': { label: "Music", help: "Music collections, which only Music profiles keep" },
 });
 
+/** What each episode's NFO file and embedded metadata call it. */
+export const EpisodeNfoReg = createSelectRegistry("EpisodeNfo", {
+  'episode': { label: "Episodes of a show", help: "Show, season and episode number, for a TV Shows library" },
+  'music_video': { label: "Music videos", help: "The artist and title, for a Music Videos library" },
+});
+
 /** The scopes a Collection profile can choose: Music collections take Music profiles only. */
 export const CollectionProfileScopeChoiceReg = createSelectRegistry("CollectionLocalMediaProfileScope", {
   'both': CollectionLocalMediaProfileScopeReg.spec.both,

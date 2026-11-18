@@ -86,6 +86,10 @@ class LocalMediaProfileBase(Base):
         default=False, server_default=false(), nullable=False,
         comment="Downloaded files get the date the media was published, so players sort them by air date",
     )
+    save_info_json: Mapped[bool] = mapped_column(
+        default=False, server_default=false(), nullable=False,
+        comment="Save the site's info file, which yt-dlp writes, beside the media",
+    )
 
     subtitle_mode: Mapped[str] = mapped_column(
         String(24),
@@ -142,6 +146,13 @@ class LocalMediaProfileBase(Base):
         JSON, nullable=False, server_default="{}",
         comment="SponsorBlock segment type to keep, chapter or cut",
     )
+    keep_chapters: Mapped[bool] = mapped_column(
+        nullable=False, server_default=false(), comment="Keep the chapters the video comes with",
+    )
+    cut_chapters: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]",
+        comment="Regular expressions: a chapter whose title matches one is cut out",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
@@ -173,7 +184,7 @@ def _start_new_profile(_mapper, connection, target: LocalMediaProfileBase) -> No
     from backend.services.site_settings import local_media_profile_defaults
 
     defaults = None
-    for field in ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments"):
+    for field in ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments", "keep_chapters"):
         if getattr(target, field) is None:
             defaults = defaults or local_media_profile_defaults()
             setattr(target, field, defaults[field])

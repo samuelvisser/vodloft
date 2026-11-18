@@ -46,7 +46,7 @@ export function filterComplete(filter: FilterLike): boolean {
     if (filter.field === 'types') return !!filter.episodeTypes?.length
     if (filter.field === 'seasons') return !!filter.seasonSlugs?.length || !!filter.includeUpcoming
     if (filter.field === 'duration') return !!filter.durationSeconds && !!filter.durationOperator
-    if (filter.field === 'published') return !!filter.days || !!filter.count || !!filter.startingFrom
+    if (filter.field === 'published') return !!filter.days || !!filter.count || !!filter.startingFrom || !!filter.until
     if (filter.field === 'downloaded') return !!filter.days
     return !!splitIgnoreCase(filter.pattern).pattern
 }
@@ -89,6 +89,14 @@ function dateLineSentence(filter: FilterLike, deleteOlder: boolean, today: Date)
         ]
         if (only && deleteOlder) parts.push({text: ', and delete them once they are older'})
         return parts
+    }
+    if (filter.until) {
+        const until = {text: shortDate(new Date(`${filter.until}T00:00:00`)), strong: true}
+        if (!filter.startingFrom) return [{text: `${lead}episodes published up to and including `}, until]
+        return [
+            {text: `${lead}episodes published from `}, {text: shortDate(new Date(`${filter.startingFrom}T00:00:00`)), strong: true},
+            {text: ' up to and including '}, until,
+        ]
     }
     if (filter.startingFrom) {
         return [{text: `${lead}episodes published since `}, {text: shortDate(new Date(`${filter.startingFrom}T00:00:00`)), strong: true}]

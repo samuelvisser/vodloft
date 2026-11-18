@@ -62,6 +62,7 @@ class EpisodeFilter(Protocol):
     days: Optional[int]
     count: Optional[int]
     starting_from: Optional[date]
+    until: Optional[date]
 
 
 @dataclass(frozen=True)
@@ -153,9 +154,15 @@ def _in_date_line(item: EpisodeFilter, episodes: Sequence[Episode], now: datetim
             episode.id for episode in episodes
             if (moment := published_at(episode)) is None or moment >= cutoff
         }
-    if item.field == EpisodeFilterField.PUBLISHED and item.starting_from is not None:
-        start = _local_start(item.starting_from)
-        return {episode.id for episode in episodes if (moment := published_at(episode)) is not None and moment >= start}
+    if item.field == EpisodeFilterField.PUBLISHED and (item.starting_from is not None or item.until is not None):
+        start = _local_start(item.starting_from) if item.starting_from is not None else None
+        # The whole of the last day counts.
+        end = _local_start(item.until + timedelta(days=1)) if item.until is not None else None
+        return {
+            episode.id for episode in episodes
+            if (moment := published_at(episode)) is not None
+            and (start is None or moment >= start) and (end is None or moment < end)
+        }
     return {episode.id for episode in episodes}
 
 
@@ -466,6 +473,7 @@ def set_profile_filters(profile: DownloadProfile, filters: Sequence[EpisodeFilte
             days=only(DATE_FIELDS, item, "days") or None,
             count=only((EpisodeFilterField.PUBLISHED,), item, "count") or None,
             starting_from=only((EpisodeFilterField.PUBLISHED,), item, "starting_from"),
+            until=only((EpisodeFilterField.PUBLISHED,), item, "until"),
         )
         for position, item in enumerate(filters)
     ]

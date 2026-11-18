@@ -7,6 +7,7 @@ import LocalMediaProfileCommonFields from './LocalMediaProfileCommonFields'
 import LocalMediaProfileSection from './LocalMediaProfileSection'
 import MediaFilesFields from './MediaFilesFields'
 import CollectionLocalMediaProfileForm from './CollectionLocalMediaProfileForm'
+import ChaptersSection, {useOffersChapters} from './ChaptersSection'
 import QualityField from './QualityField'
 import SponsorBlockSection, {useOffersSponsorBlock} from './SponsorBlockSection'
 import SubtitleFields, {useOffersSubtitles} from './SubtitleFields'
@@ -30,9 +31,10 @@ export function profileMode(type: LocalMediaProfileType): LocalMediaProfileMode 
 // The form fields in each section, so a section with an error opens.
 const PROFILE_FIELDS = ['name', 'slug', 'collectionScope', 'siteKeys', 'includeUpcomingSites'] as const
 const QUALITY_FIELDS = ['preferredFormat', 'qualityGoal', 'videoCodecs', 'codecFallback', 'container', 'audioCodec', 'audioFormat', 'audioLanguage'] as const
-const FILES_FIELDS = ['thumbnailMode', 'metadataMode', 'kodiSafeNfo', 'showNfo', 'downloadCollectionAssets', 'fileDateFromPublishDate', 'downloadMode'] as const
+const FILES_FIELDS = ['thumbnailMode', 'metadataMode', 'kodiSafeNfo', 'showNfo', 'episodeNfo', 'downloadCollectionAssets', 'fileDateFromPublishDate', 'saveInfoJson', 'episodeTitleTemplate', 'episodeDescriptionTemplate', 'downloadMode'] as const
 const SUBTITLE_FIELDS = ['subtitleMode', 'subtitleLanguageMode', 'subtitleLanguages', 'autoSubtitles'] as const
 const SPONSORBLOCK_FIELDS = ['sponsorblockEnabled', 'sponsorblockSegments'] as const
+const CHAPTER_FIELDS = ['keepChapters', 'cutChapters'] as const
 const OUTPUT_FIELDS = ['outputTemplate', 'filenameRestrictionMode', 'indexingValues'] as const
 
 export function buildLocalMediaProfileOnSubmit<TIn extends FieldValues, TOut extends FieldValues = TIn>(
@@ -60,6 +62,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
     const summaries = useLocalMediaProfileSummaries(form, mode)
     const offersSubtitles = useOffersSubtitles(form, mode)
     const offersSponsorBlock = useOffersSponsorBlock(form, mode)
+    const offersChapters = useOffersChapters(form, mode)
 
     return (
         <>
@@ -101,6 +104,15 @@ export default function LocalMediaProfileForm({form, mode, isCreating}: Props) {
                     summary={summaries.subtitles} fields={SUBTITLE_FIELDS}
                 >
                     <SubtitleFields form={form} mode={mode} onSubtitleModeChange={onSubtitleModeChange}/>
+                </LocalMediaProfileSection>
+            )}
+
+            {offersChapters && (
+                <LocalMediaProfileSection
+                    form={form} title="Chapters" description="The chapters a video comes with"
+                    summary={summaries.chapters} fields={CHAPTER_FIELDS}
+                >
+                    <ChaptersSection form={form} mode={mode}/>
                 </LocalMediaProfileSection>
             )}
 

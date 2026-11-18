@@ -6,6 +6,7 @@ type PresetChoices = {
     showNfo: boolean
     kodiSafeNfo: boolean
     fileDateFromPublishDate: boolean
+    episodeNfo: 'episode' | 'music_video'
 }
 
 type Preset = {
@@ -50,7 +51,7 @@ ${base}
 /{{ artist }}
 /{{ album }}
 /{{ track_number_padded }} - {{ title }}.ext`,
-        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true},
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, episodeNfo: 'episode'},
     },
     plex: {
         template: (base) => `{# Variables #}
@@ -71,25 +72,32 @@ ${base}
 /{{ collection_title }}
 /{{ plex_season }}
 /{{ collection_title }} - {{ plex_ep_id }} [{{ plex_title }}].ext`,
-        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true},
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, episodeNfo: 'episode'},
         indexingValue: EXTRAS,
     },
     jellyfin: {
         template: nfoServerTemplate,
-        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: false, fileDateFromPublishDate: true},
+        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: false, fileDateFromPublishDate: true, episodeNfo: 'episode'},
         indexingValue: EXTRAS,
     },
     kodi: {
         template: nfoServerTemplate,
-        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: true, fileDateFromPublishDate: true},
+        choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: true, fileDateFromPublishDate: true, episodeNfo: 'episode'},
         indexingValue: EXTRAS,
+    },
+    music_videos: {
+        template: (base) => `{# Path #}
+${base}
+/{{ artist }}
+/{{ title }}.ext`,
+        choices: {metadataMode: 'embed_and_nfo', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, episodeNfo: 'music_video'},
     },
     audiobookshelf: {
         template: (base) => `{# Path #}
 ${base}
 /{{ collection_title }}
 /{% if episode_published_date %}{{ episode_published_date }} - {% endif %}{{ title }}.ext`,
-        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true},
+        choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, episodeNfo: 'episode'},
     },
 }
 
@@ -99,10 +107,12 @@ const PRESET_NAMES = {
     kodi: {label: 'Kodi'},
     audiobookshelf: {label: 'Audiobookshelf'},
     music: {label: 'Music library'},
+    music_videos: {label: 'Music videos'},
 } as const
 
 const VideoPresetReg = createSelectRegistry('OutputTemplatePreset', {
     plex: PRESET_NAMES.plex, jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi,
+    music_videos: PRESET_NAMES.music_videos,
 })
 const AudioPresetReg = createSelectRegistry('OutputTemplatePreset', {
     plex: PRESET_NAMES.plex, jellyfin: PRESET_NAMES.jellyfin, kodi: PRESET_NAMES.kodi,

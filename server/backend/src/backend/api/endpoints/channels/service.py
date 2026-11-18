@@ -142,8 +142,7 @@ class _ChannelRead:
 
 
 def _label(channel: Channel) -> str:
-    site = get_source(channel.source_key).site_of(channel.site_key)
-    return site.channel_label if site is not None else "channel"
+    return channels.channel_label(channel)
 
 
 def list_channels(s: Session) -> list[ChannelAPIRead]:
@@ -329,6 +328,17 @@ def join_collection_channel(
         s, collection, source_key=source_key, details=details, added_by_id=added_by_id, move_here=move_here,
     )
     s.flush()
+    s.refresh(collection)
+    return CollectionAPIRead.model_validate(collection)
+
+
+def add_collection_to_channel(s: Session, collection_slug: str, channel_slug: str) -> CollectionAPIRead:
+    """Add the collection to a channel in the Library that its link is not on."""
+    collection = _collection(s, collection_slug)
+    channel = s.scalar(select(Channel).where(Channel.slug == channel_slug))
+    if channel is None:
+        raise ServiceError("This channel is not in the Library", field="channel_slug")
+    channels.add_to_channel(s, collection, channel)
     s.refresh(collection)
     return CollectionAPIRead.model_validate(collection)
 

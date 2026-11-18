@@ -53,12 +53,14 @@ const PublishedModeReg = createSelectRegistry('PublishedMode', {
     count: {label: 'the latest … episodes'},
     days: {label: 'episodes published in the last … days'},
     since: {label: 'episodes published since a date'},
+    between: {label: 'episodes published between two dates'},
 })
 type PublishedMode = (typeof PublishedModeReg)['values'][number]
 
 const UPCOMING_SEASONS = '__upcoming__'
 
 function publishedMode(filter: EpisodeFilter): PublishedMode {
+    if (filter.until !== null) return 'between'
     if (filter.startingFrom !== null) return 'since'
     if (filter.days !== null) return 'days'
     return 'count'
@@ -226,7 +228,10 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
         const name = `filters.${index}`
         setValue(`${name}.count`, mode === 'count' ? 25 : null, {shouldDirty: true})
         setValue(`${name}.days`, mode === 'days' ? 180 : null, {shouldDirty: true})
-        setValue(`${name}.startingFrom`, mode === 'since' ? new Date().toISOString().slice(0, 10) : null, {shouldDirty: true})
+        const today = new Date().toISOString().slice(0, 10)
+        const yearAgo = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10)
+        setValue(`${name}.startingFrom`, mode === 'since' ? today : mode === 'between' ? yearAgo : null, {shouldDirty: true})
+        setValue(`${name}.until`, mode === 'between' ? today : null, {shouldDirty: true})
     }
 
     const onDragStart = (event: DragEvent<HTMLLIElement>, index: number) => {
@@ -395,6 +400,29 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                             {filter.field === 'downloaded' && filter.action === 'only' && (
                                 <div className="help">Only episodes published in this many days are downloaded.</div>
                             )}
+                        </div>
+                    )}
+                    {mode === 'between' && (
+                        <div className="form-row">
+                            <label htmlFor={`${id}-from`}>From</label>
+                            <DateInput
+                                id={`${id}-from`}
+                                value={filter.startingFrom}
+                                onChange={(value) => setValue(`${name}.startingFrom`, value, {shouldDirty: true, shouldValidate: true})}
+                                clearButtonLabel="Clear the start date"
+                            />
+                            <label htmlFor={`${id}-until`}>Up to and including</label>
+                            <DateInput
+                                id={`${id}-until`}
+                                value={filter.until}
+                                onChange={(value) => setValue(`${name}.until`, value, {shouldDirty: true, shouldValidate: true})}
+                                clearButtonLabel="Clear the end date"
+                            />
+                            <div className="help">
+                                {filter.action === 'only'
+                                    ? 'To keep a closed period, such as a finished series. Leave From empty for everything up to the end date. Episodes outside the dates that are already downloaded are not deleted.'
+                                    : 'Leave From empty for everything up to the end date.'}
+                            </div>
                         </div>
                     )}
                     {mode === 'since' && (
@@ -657,7 +685,7 @@ function FilterError({form, index}: {form: UseFormReturn<any>; index: number}) {
     const filterErrors = errors?.filters?.[index]
     const message = filterErrors?.pattern?.message ?? filterErrors?.durationSeconds?.message ?? filterErrors?.episodeTypes?.message
         ?? filterErrors?.seasonSlugs?.message ?? filterErrors?.days?.message ?? filterErrors?.count?.message
-        ?? filterErrors?.startingFrom?.message ?? filterErrors?.action?.message ?? filterErrors?.message ?? filterErrors?.root?.message
+        ?? filterErrors?.startingFrom?.message ?? filterErrors?.until?.message ?? filterErrors?.action?.message ?? filterErrors?.message ?? filterErrors?.root?.message
     if (!message) return null
     return <div className="error" role="alert" aria-live="polite">{String(message)}</div>
 }

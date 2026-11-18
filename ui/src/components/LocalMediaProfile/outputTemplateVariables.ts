@@ -21,6 +21,8 @@ const DATE_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'hour', description: 'Two-digit hour'},
     {name: 'minute', description: 'Two-digit minute'},
     {name: 'second', description: 'Two-digit second'},
+    {name: 'day_of_year', description: 'Three-digit day of the year, 001 on 1 January'},
+    {name: 'day_of_year_reversed', description: 'Three-digit day of the year counted back, 001 on 31 December, so newer days sort first'},
 ]
 
 const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
@@ -143,6 +145,8 @@ const VIDEO_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'hour', description: 'Upload or release hour'},
     {name: 'minute', description: 'Upload or release minute'},
     {name: 'second', description: 'Upload or release second'},
+    {name: 'day_of_year', description: 'Upload or release day of the year, 001 on 1 January'},
+    {name: 'day_of_year_reversed', description: 'Upload or release day of the year counted back, 001 on 31 December'},
     {name: 'movie_title', description: 'Parent movie title; empty for a single video'},
     {name: 'movie_slug', description: 'Parent movie URL slug; empty for a single video'},
     {name: 'movie_extended_title', description: 'Parent movie full title; empty for a single video'},
@@ -158,6 +162,8 @@ const VIDEO_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'movie_hour', description: 'Parent movie release hour'},
     {name: 'movie_minute', description: 'Parent movie release minute'},
     {name: 'movie_second', description: 'Parent movie release second'},
+    {name: 'movie_day_of_year', description: 'Parent movie release day of the year'},
+    {name: 'movie_day_of_year_reversed', description: 'Parent movie release day of the year counted back'},
 ]
 
 const VARIABLES_BY_MODE: Record<LocalMediaProfileMode, readonly OutputTemplateVariable[]> = {

@@ -6,7 +6,7 @@ services, so a profile is checked the same way wherever it comes from.
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, computed_field, field_validator, model_validator
 
@@ -24,6 +24,7 @@ from backend.types.local_media_profile_types import (
     AudioFormat,
     CodecFallback,
     CollectionLocalMediaProfileScope,
+    EpisodeNfo,
     LocalMediaProfileFilenameMode,
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
@@ -39,6 +40,9 @@ from backend.types.local_media_profile_types import (
 )
 from backend.utils.custom_index import INDEXING_VALUE_KEY_MAX_LENGTH, is_valid_custom_index_key
 from backend.utils.helpers import slugify
+from backend.utils.metadata_template import (
+    DESCRIPTION_TEMPLATE_MAX_LENGTH, TITLE_TEMPLATE_MAX_LENGTH, validate_metadata_template,
+)
 from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
@@ -106,6 +110,8 @@ class LocalMediaProfileInput(InputModel):
     """How file and folder names are made safe; System follows Settings."""
     file_date_from_publish_date: bool = False
     """Downloaded files get the date the media was published."""
+    save_info_json: bool = False
+    """The site's info file, which yt-dlp writes, is saved beside the media."""
     subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
     subtitle_languages: list[str] = Field(default_factory=lambda: ["en"], max_length=20)
     subtitle_language_mode: SubtitleLanguageMode = SubtitleLanguageMode.LISTED
@@ -127,6 +133,19 @@ class LocalMediaProfileInput(InputModel):
     auto_subtitles: AutoSubtitles | None = None
     sponsorblock_enabled: bool | None = None
     sponsorblock_segments: dict[SponsorBlockCategory, SponsorBlockAction] | None = None
+    keep_chapters: bool | None = None
+    cut_chapters: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=20)
+    """Regular expressions: a chapter whose title matches one is cut out of the file."""
+
+    @field_validator("cut_chapters")
+    @classmethod
+    def _chapter_patterns(cls, value: list[str]) -> list[str]:
+        for pattern in value:
+            try:
+                re.compile(pattern)
+            except re.error as error:
+                raise ValueError(f"{pattern!r} is not a valid regular expression: {error}") from None
+        return list(dict.fromkeys(value))
 
     @field_validator("sponsorblock_segments")
     @classmethod
@@ -220,11 +239,12 @@ class LocalMediaProfileInput(InputModel):
         }
 
 
-_SITE_CHOICES = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments")
+_SITE_CHOICES = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments", "keep_chapters")
 _KEPT_WHEN_UNSET = {
     "site_keys", "include_upcoming_sites", *_SITE_CHOICES, "subtitle_mode", "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs",
     "codec_fallback", "container", "audio_codec", "audio_format", "audio_language",
-    "kodi_safe_nfo", "file_date_from_publish_date", "show_nfo",
+    "kodi_safe_nfo", "file_date_from_publish_date", "show_nfo", "cut_chapters", "save_info_json",
+    "episode_title_template", "episode_description_template", "episode_nfo",
 }
 
 class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
@@ -236,7 +256,20 @@ class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
     download_collection_assets: bool | None = None
     show_nfo: bool = False
     """Write tvshow.nfo in the collection's folder and season.nfo in each season's folder."""
+    episode_nfo: EpisodeNfo = EpisodeNfo.EPISODE
+    """What each episode's NFO file and embedded metadata call it: an episode of a show, or a music video."""
     indexing_values: list[IndexingValueDefinition] = Field(default_factory=list, max_length=100)
+    episode_title_template: str | None = Field(default=None, max_length=TITLE_TEMPLATE_MAX_LENGTH)
+    """A Jinja template for each episode's title in its NFO and embedded metadata; empty keeps the site's."""
+    episode_description_template: str | None = Field(default=None, max_length=DESCRIPTION_TEMPLATE_MAX_LENGTH)
+    """A Jinja template for each episode's description in its NFO and embedded metadata; empty keeps the site's."""
+
+    @field_validator("episode_title_template", "episode_description_template")
+    @classmethod
+    def _validate_metadata_template(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return validate_metadata_template(value)
 
     @model_validator(mode="after")
     def _music_is_audio(self):

@@ -194,6 +194,9 @@ class JoinOverlapAPIRead(ResponseBase):
 class CollectionChannelJoinAPIIn(RequestBase):
     move_here: list[str] = Field(default_factory=list, max_length=5000)
     """The lists, by ref, that leave the channel's own collection for the joining one."""
+    channel_slug: Optional[str] = Field(default=None, max_length=255)
+    """A channel in the Library to join instead of the one behind the collection's link, such as an artist whose
+    music videos are on their label's channel."""
 
 
 class CollectionChannelLeaveAPIRead(ResponseBase):

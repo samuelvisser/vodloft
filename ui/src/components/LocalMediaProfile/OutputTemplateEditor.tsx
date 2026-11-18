@@ -591,6 +591,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
     const [provisionalIndexingValueNames, setProvisionalIndexingValueNames] = useState<string[]>([])
     const [replacedTyped, setReplacedTyped] = useState<{mode: string, characters: string[]}>({mode: '', characters: []})
+    const [shortenedNames, setShortenedNames] = useState<string[]>([])
     const usedVariables = useMemo(
         () => {
             const used = new Set(usedVariableNames)
@@ -859,6 +860,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
             mode: output.filenameMode,
             characters: output.replacedTypedCharacters,
         } : {mode: '', characters: []})
+        setShortenedNames(output?.outputPath ? output.shortenedNames : [])
     }, [preview.loading, preview.result])
 
     function chooseSource(source: LocalMediaProfileTemplateSource) {
@@ -961,6 +963,14 @@ export default function OutputTemplateEditor({form, mode, placeholder, help}: Pr
                                 <span key={char}>{index > 0 ? ' ' : ''}<code>{describeTypedCharacter(char)}</code></span>
                             ))}
                             {' '}will be replaced in file names. The preview shows the result.
+                        </div>
+                    )}
+                    {shortenedNames.length > 0 && (
+                        <div className="template-metadata-warning" role="status">
+                            {shortenedNames.length === 1 ? 'A name is' : `${shortenedNames.length} names are`} too
+                            long for the file system, which allows 255 bytes per file or folder name. VODLoft shortens
+                            the values the template fills in, and leaves room for subtitle and NFO files beside the
+                            media. The preview shows the result.
                         </div>
                     )}
                     {pathHasLeadingSpace && (

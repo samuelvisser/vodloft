@@ -110,6 +110,8 @@ _EXAMPLE_COLLECTION_VALUES = {
     "hour": "20",
     "minute": "00",
     "second": "00",
+    "day_of_year": "242",
+    "day_of_year_reversed": "124",
 }
 
 EXAMPLE_MOVIE_SOURCE_ID = "example:movie"
@@ -130,6 +132,8 @@ _EXAMPLE_MOVIE_VALUES = {
     "movie_hour": "00",
     "movie_minute": "00",
     "movie_second": "00",
+    "movie_day_of_year": "242",
+    "movie_day_of_year_reversed": "124",
     "slug": "example-movie",
     "title": "Example Movie",
     "extended_title": "Example Movie",
@@ -148,6 +152,8 @@ _EXAMPLE_MOVIE_VALUES = {
     "hour": "00",
     "minute": "00",
     "second": "00",
+    "day_of_year": "242",
+    "day_of_year_reversed": "124",
 }
 
 _EXAMPLE_VIDEO_VALUES = {
@@ -167,6 +173,8 @@ _EXAMPLE_VIDEO_VALUES = {
     "hour": "00",
     "minute": "00",
     "second": "00",
+    "day_of_year": "242",
+    "day_of_year_reversed": "124",
 }
 
 

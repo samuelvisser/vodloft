@@ -131,6 +131,8 @@ def sidecar_assets(media_path: Path) -> list[tuple[str, str, Path]]:
         found.append(("artwork", "thumbnail", media_path.parent / thumbnail))
     if f"{stem}.nfo" in names:
         found.append(("nfo", "nfo", media_path.parent / f"{stem}.nfo"))
+    if f"{stem}.info.json" in names:
+        found.append(("info_json", "info_json", media_path.parent / f"{stem}.info.json"))
     for name in names:
         if not name.startswith(f"{stem}."):
             continue

@@ -154,7 +154,11 @@ What comes along:
 - **Quality**: *Max 1080p*, *Max 720p* and the other resolution presets, and the audio presets, become the Local
   Media Profile's quality.
 - **Subtitles**, **SponsorBlock**, **NFO files** and **thumbnails** become the matching Local Media Profile settings.
-- **Only Recent**, `date_range` and `keep_max_files` become the Download Profile's date and "latest N" filters;
+- **Chapters** (`embed_chapters` and `remove_chapters_regex`) and the **info file** become the Local Media Profile's
+  chapter settings and **Save the site's info file**. Your own `episode_title` and `episode_plot` become the profile's
+  own title and description.
+- **Only Recent**, `date_range` (also with a `before` date) and `keep_max_files` become the Download Profile's date and
+  "latest N" filters;
   **Filter Keywords** and **Filter Duration** become **Only download** and **Skip** filters.
 - The **genre** and **content rating** you give with `= Documentaries` and `= TV-Y` become the collection's own genre
   and content rating, which VODLoft writes into its NFO files.
@@ -175,10 +179,15 @@ What comes along:
   artist and per album. The genre you give with `= Lofi` becomes the artist's genre, which new albums get too.
 - A **YouTube Full Albums** subscription becomes a Music collection that splits videos by chapter: each video is an
   album and each chapter a track, as in ytdl-sub. The tracks ytdl-sub already saved are adopted one by one.
+- A **Music Videos** subscription (for Plex, Jellyfin, Emby or Kodi) becomes a collection of the artist's channel,
+  with a Collection profile that keeps ytdl-sub's folder per artist and writes `musicvideo` NFO files. One whose
+  categories list several links per artist is not imported; add those as collections of the artist instead (see
+  [[Collections-and-Library#music-videos]]).
 
 What does not come along is listed in the report: scripts that compute values (VODLoft's templates are Jinja, see
 [[Local-Media-Profiles]]), throttle settings (VODLoft has a guard of its own, see
-[[Downloads-and-File-Integrity#when-youtube-only-offers-360p]]), chunked downloads, music videos, *YouTube Releases*
+[[Downloads-and-File-Integrity#when-youtube-only-offers-360p]]; **Automatic downloads per day** in Settings limits how
+many downloads a Site starts), chunked downloads, *YouTube Releases*
 (VODLoft can't read YouTube's Releases tab yet), and yt-dlp options VODLoft has no setting for.
 
 Stop ytdl-sub's cron job before you turn on the imported Download Profiles, or both will download the same videos.

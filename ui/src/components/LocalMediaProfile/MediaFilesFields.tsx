@@ -1,8 +1,9 @@
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import {useLibraryDefaults} from '../../lib/settings'
-import {type LocalMediaProfileType} from '../../types/local_media_profile'
+import {EpisodeNfoReg, type LocalMediaProfileType} from '../../types/local_media_profile'
 import ReadMore from '../../utils/ReadMore'
+import SimpleSelect from '../common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {FollowCheck, FollowsSettingsBadge, FollowsSettingsSelect} from './FollowsSettings'
 
@@ -118,7 +119,7 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
     const [metadataMode, showNfo] = useWatch({control, name: ['metadataMode', 'showNfo']}) as [string | undefined, boolean | undefined]
     const effectiveMetadata = (metadataMode ?? 'system') === 'system' ? defaults?.metadataMode : metadataMode
     const writesNfo = isBeside(METADATA, effectiveMetadata) || (mode === 'collection' && !!showNfo)
-    const fieldErrors = ['thumbnailMode', 'metadataMode', 'kodiSafeNfo', 'showNfo', 'downloadCollectionAssets', 'fileDateFromPublishDate']
+    const fieldErrors = ['thumbnailMode', 'metadataMode', 'kodiSafeNfo', 'showNfo', 'downloadCollectionAssets', 'fileDateFromPublishDate', 'saveInfoJson']
         .map((name) => errors[name]?.message)
         .filter(Boolean)
 
@@ -144,6 +145,26 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                 />
             </div>
 
+            {writesNfo && mode === 'collection' && (
+                <div className="form-row media-files-checks--indented">
+                    <label htmlFor="local-media-episode-nfo">Each episode is</label>
+                    <Controller
+                        control={control}
+                        name="episodeNfo"
+                        render={({field}) => (
+                            <SimpleSelect
+                                inputId="local-media-episode-nfo" registry={EpisodeNfoReg} value={field.value ?? 'episode'}
+                                onChange={(value) => field.onChange(value)}
+                            />
+                        )}
+                    />
+                    <div className="help">
+                        Music videos get a musicvideo NFO with the channel's artist, which Jellyfin, Emby and Kodi keep in a Music Videos library.
+                    </div>
+                    {errors.episodeNfo && <div className="error" role="alert">{String(errors.episodeNfo.message)}</div>}
+                </div>
+            )}
+
             {writesNfo && (
                 <div className="media-files-checks media-files-checks--indented">
                     <PlainCheck
@@ -152,6 +173,8 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                     />
                 </div>
             )}
+
+            {mode === 'collection' && <MetadataTextFields form={form}/>}
 
             {mode === 'collection' && (
                 <>
@@ -184,7 +207,7 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                                                 />
                                             </span>
                                         )}
-                                        description="Saved in the collection root that Output path shows. Artwork you added yourself is kept."
+                                        description="Saved in the collection root that Output path shows, with a poster for each season a playlist fills. Artwork you added yourself is kept."
                                     />
                                 )
                             }}
@@ -197,6 +220,10 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                 <PlainCheck
                     form={form} name="fileDateFromPublishDate" id="local-media-file-date" label="Date files by publish date"
                     description="So players and file browsers sort episodes in the order they aired. An old episode you download today then does not show up under Recently added."
+                />
+                <PlainCheck
+                    form={form} name="saveInfoJson" id="local-media-info-json" label="Save the site's info file"
+                    description="Everything yt-dlp knows about the video, as an .info.json file beside the media, for other programs that read it. Only for sites VODLoft downloads with yt-dlp."
                 />
             </div>
 
@@ -226,6 +253,44 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                     </ReadMore>
                 )}
             />
+        </>
+    )
+}
+
+
+/** An episode's own title and description in its NFO and embedded metadata, as Jinja templates. */
+function MetadataTextFields({form}: {form: UseFormReturn<any>}) {
+    const {register, formState: {errors}} = form
+    const asNull = (value: string | null) => (value == null || value.trim() === '' ? null : value)
+    return (
+        <>
+            <div className="media-files-subheading">Title and description in the metadata</div>
+            <div className="form-row">
+                <label htmlFor="local-media-title-template">Title</label>
+                <input
+                    id="local-media-title-template" spellCheck={false} placeholder="{{ title }}"
+                    className="input media-files-template"
+                    {...register('episodeTitleTemplate', {setValueAs: asNull})}
+                />
+                {errors.episodeTitleTemplate && <div className="error" role="alert">{String(errors.episodeTitleTemplate.message)}</div>}
+            </div>
+            <div className="form-row">
+                <label htmlFor="local-media-description-template">Description</label>
+                <textarea
+                    id="local-media-description-template" spellCheck={false} rows={3} placeholder="{{ description }}"
+                    className="input media-files-template"
+                    {...register('episodeDescriptionTemplate', {setValueAs: asNull})}
+                />
+                {errors.episodeDescriptionTemplate && <div className="error" role="alert">{String(errors.episodeDescriptionTemplate.message)}</div>}
+                <div className="help">
+                    <ReadMore summary="Leave these empty to keep the title and description the site gives each episode.">
+                        <p>They take the same variables as the output path, such as <code>{'{{ title }}'}</code> and <code>{'{{ date }}'}</code>,
+                            and <code>{'{{ description }}'}</code> for the site's description.
+                            {' '}<code>{'{{ date }} - {{ title }}'}</code> puts the date before each title, as ytdl-sub does.
+                            They change the NFO file and the title inside the media, not the file name.</p>
+                    </ReadMore>
+                </div>
+            </div>
         </>
     )
 }

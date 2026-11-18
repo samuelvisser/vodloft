@@ -577,3 +577,32 @@ def leave_channel(s: Session, collection: Collection) -> None:
         channel.main_collection = None
     collection.channel = None
     s.flush()
+
+
+ARTIST_LABEL = "artist"
+"""What VODLoft calls a channel that has a Music collection."""
+
+
+def channel_label(channel: Channel) -> str:
+    """What the channel is called: an artist when it has a Music collection, and otherwise what its Site calls it."""
+    if any(collection.type == CollectionType.MUSIC.value for collection in channel.collections):
+        return ARTIST_LABEL
+    site = get_source(channel.source_key).site_of(channel.site_key)
+    return site.channel_label if site is not None else "channel"
+
+
+def add_to_channel(s: Session, collection: Collection, channel: Channel) -> None:
+    """Make a collection one of a channel's although its link is somewhere else, such as an artist's music videos
+    on a channel or playlist of their label. It keeps its own link, and the channel's look for new sections leaves
+    it alone. Nothing is indexed again and no file moves.
+
+    ``s`` is a write transaction's session."""
+    if collection.channel_id is not None:
+        raise ServiceError(f"{collection.title} is already in {collection.channel.title}")
+    if collection.sharing_url is not None and any(section.url == collection.sharing_url for section in channel.sections):
+        raise ServiceError(
+            f"{collection.title} is a part of {channel.title}'s own page: add it to the {channel_label(channel)} "
+            "behind its link instead", field="channel_slug",
+        )
+    collection.channel = channel
+    s.flush()

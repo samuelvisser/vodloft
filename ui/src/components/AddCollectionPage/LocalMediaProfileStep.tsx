@@ -23,7 +23,7 @@ import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableF
 const PROFILE_CHOICE_FIELDS = [
     'subtitleLanguages', 'subtitleLanguageMode', 'qualityGoal', 'videoCodecs', 'codecFallback',
     'container', 'audioCodec', 'audioFormat', 'audioLanguage', 'siteKeys', 'includeUpcomingSites',
-    'autoSubtitles', 'sponsorblockEnabled', 'sponsorblockSegments',
+    'autoSubtitles', 'sponsorblockEnabled', 'sponsorblockSegments', 'keepChapters', 'cutChapters',
 ] as const
 
 

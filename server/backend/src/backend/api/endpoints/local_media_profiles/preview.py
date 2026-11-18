@@ -18,6 +18,7 @@ from backend.db.models import Episode, Movie, MovieExtra, CollectionLocalMediaPr
 from backend.services.custom_index_preview import plan_custom_index_preview
 from backend.services.collection_assets import get_collection_asset_root_preview
 from backend.utils.custom_index import indexing_value_definition_keys
+from backend.utils.name_length import tracking_output_names
 from backend.utils.output_template import (
     _finish_output_path,
     episode_output_template_values,
@@ -168,13 +169,16 @@ def get_local_media_profile_preview(
     try:
         # Keep test-value controls available even when rendering has an error.
         result.output.used_variables = sorted(output_template_fields(draft.output_template))
-        rendered = get_output_template_preview(session, draft)
-        result.output = LocalMediaProfileOutputPreview.model_validate(rendered)
-        # Use the same concrete filesystem root and filename policy as collection art,
-        # rather than mixing a logical /downloads path with a real collection path.
-        result.output.output_path = str(_finish_output_path(
-            rendered.output_path, extension=Path(rendered.output_path).suffix, mode=effective_filename_mode(draft),
-        ))
+        with tracking_output_names() as names:
+            rendered = get_output_template_preview(session, draft)
+            result.output = LocalMediaProfileOutputPreview.model_validate(rendered)
+            # Use the same concrete filesystem root and filename policy as collection art,
+            # rather than mixing a logical /downloads path with a real collection path.
+            result.output.output_path = str(_finish_output_path(
+                rendered.output_path, extension=Path(rendered.output_path).suffix,
+                mode=effective_filename_mode(draft),
+            ))
+        result.output.shortened_names = names.shortened
     except (TemplateError, ValueError, TypeError, ArithmeticError) as exc:
         result.output.output_path = None
         result.output.error = str(exc)

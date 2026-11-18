@@ -6,7 +6,7 @@ from .existing_files.router import router as existing_files_router
 from .seasons.router import router as collection_seasons_router
 from .sync_log import collection_scans
 from backend.api.endpoints.channels.service import (
-    CollectionNotFoundError, collection_channel_leave, collection_channel_match, collection_link, join_collection_channel,
+    CollectionNotFoundError, add_collection_to_channel, collection_channel_leave, collection_channel_match, collection_link, join_collection_channel,
     leave_collection_channel, look_up_collection_channel,
 )
 from backend.api.models.channel import (
@@ -350,7 +350,13 @@ def collection_channel_join(
     collection_slug: str, body: CollectionChannelJoinAPIIn | None = None, access: Access = signed_in(),
 ):
     """Add the collection to the channel behind its links, adding the channel when it is not in the Library. A list
-    that would be in two places stays in one: the ones in ``move_here`` move to this collection."""
+    that would be in two places stays in one: the ones in ``move_here`` move to this collection. With
+    ``channel_slug``, it joins that channel in the Library instead, whatever its link is."""
+    if body is not None and body.channel_slug:
+        channel_slug = body.channel_slug
+        return _collection_found(lambda: run_write_transaction(
+            lambda s: add_collection_to_channel(s, collection_slug, channel_slug)
+        ))
     source_key, details = _channel_behind(collection_slug)
     move_here = frozenset(body.move_here if body is not None else ())
     return _collection_found(lambda: run_write_transaction(

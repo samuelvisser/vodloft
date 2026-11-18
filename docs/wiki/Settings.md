@@ -93,6 +93,7 @@ These settings are available under **Settings → Downloads**.
 | `downloadSettings.maxConcurrentDownloads` | `VL_DOWNLOAD_SETTINGS__MAX_CONCURRENT_DOWNLOADS` | `5` | Maximum primary-media transfers running at once. Their slots are released while post-processing continues. |
 | `downloadSettings.maxDownloadAttempts` | `VL_DOWNLOAD_SETTINGS__MAX_DOWNLOAD_ATTEMPTS` | `3` | Automatic attempts before a download is left failed. |
 | `downloadSettings.episodeDownloadDelayMinutes` | `VL_DOWNLOAD_SETTINGS__EPISODE_DOWNLOAD_DELAY_MINUTES` | `10` | Delay after publication before automatically downloading an episode. Manual downloads can be scheduled until the delay expires or started immediately. |
+| `downloadSettings.dailyDownloadLimit` | `VL_DOWNLOAD_SETTINGS__DAILY_DOWNLOAD_LIMIT` | `0` | Automatic downloads one Site may start in 24 hours; `0` for no limit. Downloads you start yourself don't count. Each Site can have its own under [Per-Site scheduling](#per-site-scheduling). |
 | `downloadSettings.ensureSafeDelay` | `VL_DOWNLOAD_SETTINGS__ENSURE_SAFE_DELAY` | `false` | When enabled, post-publication delay is always calculated from a point in time VODLoft itself recorded the episode as published final. With this disabled, VODLoft makes a best- effort guess for publication time as The Daily Wire API does not accurately report it for every collection. |
 | `downloadSettings.downloadTimeoutSeconds` | `VL_DOWNLOAD_SETTINGS__DOWNLOAD_TIMEOUT_SECONDS` | `600` | Timeout for one download attempt. |
 | `downloadSettings.filenameRestrictionMode` | `VL_DOWNLOAD_SETTINGS__FILENAME_RESTRICTION_MODE` | `windows` | Filename compatibility: `unrestricted`, `windows`, or `restricted`. |
@@ -128,7 +129,7 @@ Below the system defaults, each Site has a row of its own, the same way as [Per-
 3 minutes as a different length. A Site can also have a **Download delay** of its own: the
 **Episode download delay** for its episodes only, or 0 for none. Some settings only
 exist on the Sites they are made for, so they have no Default: downloading with the countdown on The Daily Wire, and
-SponsorBlock and its segments on YouTube. The Daily Wire makes no subtitles, so it has no auto-generated subtitles.
+SponsorBlock and its segments on YouTube, and keeping chapters on the sites VODLoft downloads with yt-dlp. The Daily Wire makes no subtitles, so it has no auto-generated subtitles.
 
 ### Speed
 
@@ -238,6 +239,7 @@ siteSettings:
       live: 5
     upgradeAfterDays: default     # use the system default instead of The Daily Wire's 3 days
     downloadDelayMinutes: 30      # wait 30 minutes after publishing; 0 waits not at all
+    dailyDownloadLimit: 50        # start at most 50 automatic downloads a day; 0 for no limit
 ```
 
 ### Episode lifecycle safeguards

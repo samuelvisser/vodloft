@@ -220,16 +220,21 @@ def execute_download_plan(
                 limiter.wait_while_paused(
                     tracker.is_canceled, waiting=lambda until: tracker.wait("media", "downloads_paused" if until else None, until),
                 )
-                ytdlp_subtitles = [spec.id for spec in plan.assets if spec.source_format == "ytdlp"]
+                ytdlp_assets = [spec for spec in plan.assets if spec.source_format == "ytdlp"]
+                ytdlp_asset_ids = [spec.id for spec in ytdlp_assets]
+                info_json = any(spec.kind == "info_json" for spec in ytdlp_assets)
                 if plan.source.ytdlp_command:
                     rate = limiter.share(resources.media.active)
                     transfer = partial(
                         partial(download_ytdlp_hls_bundle, ffmpeg_path=plan.ffmpeg_path) if plan.source.hls_bundle else download_ytdlp,
                         command=(*plan.source.ytdlp_command, *(("--limit-rate", f"{int(rate)}") if rate else ())),
-                        subtitles_dir=workspace.workspace if ytdlp_subtitles else None,
+                        subtitles_dir=workspace.workspace if any(spec.kind == "subtitle" for spec in ytdlp_assets) else None,
                         subtitles=plan.source.ytdlp_subtitles,
                         sponsorblock=plan.source.ytdlp_sponsorblock,
-                        **({} if plan.source.hls_bundle else {"throttle_guard": plan.source.ytdlp_throttle_guard}),
+                        **({} if plan.source.hls_bundle else {
+                            "throttle_guard": plan.source.ytdlp_throttle_guard, "chapters": plan.source.ytdlp_chapters,
+                            "info_json_dir": workspace.workspace if info_json else None,
+                        }),
                     )
                 else:
                     transfer = download_hls_bundle if plan.source.hls_bundle else download_hls if plan.source.use_hls else download_file
@@ -237,9 +242,9 @@ def execute_download_plan(
                     plan.source.url, str(transfer_path),
                     progress=lambda value: tracker.progress("media", value), should_cancel=tracker.is_canceled,
                 )
-        for asset_id in ytdlp_subtitles:
+        for asset_id in ytdlp_asset_ids:
             with tracker.activity(f"acquire:{asset_id}", foreground=False):
-                assets.fulfil(asset_id, result.subtitles)
+                assets.fulfil(asset_id, result)
         if media_path.is_file() and not (plan.source.remux_to_mp4 or plan.source.convert_video_to_m4a):
             owned_media = inspect_artifact(media_path)
         # Completion of the transfer releases its lease, not the operation. The
@@ -383,7 +388,7 @@ def execute_download_plan(
         tracker.ensure_active()
         successful = True
         return DownloadExecution(
-            DownloadResult(str(destination), result.bytes_downloaded, result.segments_downloaded, sponsorblock=result.sponsorblock, video=result.video, subtitles=result.subtitles),
+            DownloadResult(str(destination), result.bytes_downloaded, result.segments_downloaded, sponsorblock=result.sponsorblock, video=result.video, subtitles=result.subtitles, cut_chapters=result.cut_chapters),
             plan.source.format_downloaded, identity, tuple(published), workspace, journal,
             replacement_journal=replacement_journal,
         )

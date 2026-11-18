@@ -33,6 +33,7 @@ _SHAPES = {
     "datetime": r"\d{4} \d{2} \d{2} \d{2} \d{2} \d{2}",
     "episode_published_datetime": r"\d{4} \d{2} \d{2} \d{2} \d{2} \d{2}",
     "year": r"\d{4}", "month": r"\d{2}", "day": r"\d{2}", "hour": r"\d{2}", "minute": r"\d{2}", "second": r"\d{2}",
+    "day_of_year": r"\d{3}", "day_of_year_reversed": r"\d{3}",
     **dict.fromkeys(
         ("season_index", "season_number", "episode_index", "duration_seconds", "dw_episode_number",
          "episode_number", "episode_sub_number"),
