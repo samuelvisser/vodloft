@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useMemo, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {type UseFormReturn, useWatch} from 'react-hook-form'
 
@@ -73,7 +73,19 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
     const [presetOpen, setPresetOpen] = useState(isCreating)
     const preferredFormat = useWatch({control, name: 'preferredFormat'})
     const [pendingPreset, setPendingPreset] = useState<string | null>(null)
+    const outputTemplate = useWatch({control, name: 'outputTemplate'}) as string | undefined
     const audioOnly = preferredFormat === 'format_audio_only'
+
+    // The preset shows as chosen while the template is the one it writes, also after a reload or on a saved profile.
+    const presetRegistry = outputTemplatePresetRegistry(audioOnly)
+    const chosenPreset = useMemo(() => {
+        if (!outputTemplate) return null
+        const base = templateBaseFolder(outputTemplate, '/downloads')
+        return presetRegistry.values.find((key) => {
+            const preset = outputTemplatePreset(key)
+            return !!preset && renderCompactOutputTemplate(parseOutputTemplate(preset.template(base), 'editor')) === outputTemplate
+        }) ?? null
+    }, [outputTemplate, presetRegistry])
 
     const applyPreset = (key: string) => {
         const preset = outputTemplatePreset(key)
@@ -81,7 +93,8 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
         const options = {shouldDirty: true, shouldTouch: true, shouldValidate: true}
         const base = templateBaseFolder(getValues('outputTemplate') ?? '', audioOnly ? '/downloads/podcasts' : '/downloads/shows')
         // The presets are written as the editor shows them; the form keeps the compact template.
-        setValue('outputTemplate', renderCompactOutputTemplate(parseOutputTemplate(preset.template(base), 'editor')), options)
+        const template = renderCompactOutputTemplate(parseOutputTemplate(preset.template(base), 'editor'))
+        setValue('outputTemplate', template, options)
         for (const [name, value] of Object.entries(preset.choices)) setValue(name, value, options)
         const indexingValues: {key: string}[] = getValues('indexingValues') ?? []
         if (preset.indexingValue && !indexingValues.some(({key}) => key === preset.indexingValue?.key)) {
@@ -108,8 +121,8 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
                         <div id="mp-output-template-preset-body" className="output-template-preset-body">
                             <SimpleSelect
                                 inputId="mp-output-template-preset"
-                                registry={outputTemplatePresetRegistry(audioOnly)}
-                                value={null}
+                                registry={presetRegistry}
+                                value={chosenPreset}
                                 placeholder="Choose a media server…"
                                 onChange={setPendingPreset}
                                 aria-describedby="mp-output-template-preset-help"
