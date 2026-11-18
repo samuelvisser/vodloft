@@ -1,4 +1,5 @@
 import {Controller, UseFormReturn} from 'react-hook-form'
+import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
 import SimpleSelect from '../common/SimpleSelect'
 import {publicAddress} from '../../lib/api'
@@ -26,32 +27,10 @@ export default function WebdavStreamProfileForm({
     regeneratingToken,
     siteName = 'its site',
 }: Props) {
-    const {control, formState: {errors}, register, watch} = form
-    const title: string | undefined = watch('title')
+    const {control, formState: {errors}} = form
 
     return (
         <>
-            <div className="form-row">
-                <label htmlFor="webdav-folder-name">Folder name</label>
-                <input
-                    id="webdav-folder-name"
-                    className="input"
-                    type="text"
-                    placeholder={title || undefined}
-                    {...register('folderName', {setValueAs: (value) => (value?.trim() ? value.trim() : null)})}
-                    aria-invalid={!!errors.folderName}
-                    aria-describedby={errors.folderName ? 'webdav-folder-name-error' : 'webdav-folder-name-help'}
-                />
-                {errors.folderName && (
-                    <div id="webdav-folder-name-error" className="error" role="alert" aria-live="polite">
-                        {String(errors.folderName.message)}
-                    </div>
-                )}
-                <div className="help" id="webdav-folder-name-help">
-                    The show&apos;s folder in the share, and the name in front of each episode. Leave it empty to use the title.
-                </div>
-            </div>
-
             {([
                 ['seasonFolders', 'webdav-season-folders', 'Season folders', WebdavSeasonFoldersReg,
                     'How the episodes are sorted into folders.'],
@@ -92,6 +71,45 @@ export default function WebdavStreamProfileForm({
                 </div>
             ))}
 
+            <div className="form-row">
+                <label htmlFor="webdav-episode-extras">Support episode extras</label>
+                <Controller
+                    control={control}
+                    name="episodeExtras"
+                    render={({field}) => (
+                        <Switch
+                            id="webdav-episode-extras"
+                            checked={!!field.value}
+                            onChange={(checked) => field.onChange(checked)}
+                            onColor="#0ea5e9"
+                            offColor="#d1d5db"
+                            uncheckedIcon={false}
+                            checkedIcon={false}
+                            aria-invalid={!!errors.episodeExtras}
+                            aria-describedby={errors.episodeExtras ? 'webdav-episode-extras-error' : 'webdav-episode-extras-help'}
+                        />
+                    )}
+                />
+                {errors.episodeExtras && (
+                    <div id="webdav-episode-extras-error" className="error" role="alert" aria-live="polite">
+                        {String(errors.episodeExtras.message)}
+                    </div>
+                )}
+                <div className="help" id="webdav-episode-extras-help">
+                    <ReadMore summary={<span>List an episode&apos;s extras, such as its trailer, beside the episode.</span>}>
+                        <p>
+                            When enabled, an episode&apos;s extras are named after the episode&apos;s file with a suffix such
+                            as <code>-trailer1</code> or <code>-other2</code>, so a media player that supports episode extras,
+                            such as Plex, shows them with their episode.
+                        </p>
+                        <p>
+                            When disabled, or when the episode itself is not in the share, they go in the show&apos;s
+                            Trailers and Other folders, which most media players show as the show&apos;s extras.
+                        </p>
+                    </ReadMore>
+                </div>
+            </div>
+
             <StreamDeliveryFields
                 form={form}
                 app="media player"
@@ -99,9 +117,8 @@ export default function WebdavStreamProfileForm({
                 maxItemsHelp={(
                     <ReadMore summary={<span>Only the newest episodes are in the share.</span>}>
                         <p>
-                            The share lists an episode once VODLoft has a whole file of it: a download, or a video
-                            VODLoft already joined for another app. Media players seek in a file, which they cannot
-                            do in a stream.
+                            The share only lists downloaded episodes. Media players seek in a whole file, which they
+                            cannot do in a stream.
                         </p>
                         <p>Set to 0 to remove all limits.</p>
                     </ReadMore>

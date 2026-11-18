@@ -268,9 +268,10 @@ For example, to keep only the part of a title before ` | `, and leave the title 
 | `episode_uploader` | Who uploaded the episode, when the site says; empty otherwise |
 | `duration_seconds` | Episode duration in whole seconds |
 | `dw_episode_number` | Raw episode number exactly as returned by The Daily Wire |
-| `episode_type` | `ep`, `ep-extra`, `aux`, or `trailer` |
+| `episode_type` | `ep` for a normal episode on every site; other types depend on the site: `ep-extra`, `aux` and `trailer` on The Daily Wire, `short` and `livestream` on YouTube |
 | `episode_extra_type` | `other` or `trailer` for attached episode extras; empty otherwise |
-| `episode_number` | The Daily Wire main episode number for `ep`/`ep-extra`, or VODLoft's collection-wide counter for `aux`/`trailer` |
+| `episode_number` | The episode's number; an episode extra has its episode's number, and other types count on their own |
+| `extra_index` | VODLoft's number for an extra, counted across the whole collection; empty for normal episodes (see below) |
 | `episode_sub_number` | The Daily Wire fractional/sub-episode number for `ep-extra`; empty otherwise |
 | `episode_label` | Canonical identifier label without the type prefix |
 | `episode_identifier` | Full VODLoft episode identifier; unique within the collection |
@@ -290,6 +291,17 @@ For example, to keep only the part of a title before ` | `, and leave the title 
 `season_number` is the value intended for media-library season numbering. It ignores Daily Wire Extras collections and remains stable if another Extras season appears later. `season_index` is used by VODLoft to order the seasons themselves and is unique for a season within a collection.
 
 VODLoft preserves The Daily Wire's episode number for full episodes and attached episode extras. It only invents collection-wide numbers for auxiliary content and standalone collection trailers. Extras seasons use `season_type == 'extra'` and `season_number == 0`, which is handy if you want specials to end up in a different 'Specials' directory, for example.
+
+### The extra index
+
+An extra is an episode of an Extras season, or an episode of any type other than `ep`: auxiliary episodes, trailers, episode extras, YouTube Shorts and livestreams. VODLoft numbers every extra of a collection in one count, in episode order, and keeps that number in `extra_index`. So no two extras share a number, which is what a media server's Specials season needs. The Media Server presets use it:
+
+```jinja
+{% set is_extra = season_type == 'extra' or episode_type != 'ep' %}
+{% if is_extra %}S00E{{ "%02d"|format(extra_index|int) }}{% else %}S{{ season_num }}E{{ ep_num }}{% endif %}
+```
+
+An extra keeps its number, so its files keep their names. A new extra takes the next number, and an episode that stops being an extra leaves a gap.
 
 ## Custom Indexes
 

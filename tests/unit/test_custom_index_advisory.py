@@ -31,7 +31,7 @@ PLEX = (
     '{# Variables #}'
     '{% set season_num = "%02d"|format(season_number|int) %}'
     '{% set ep_num = "%02d"|format(episode_number|int) %}'
-    "{% set is_extra = season_type == 'extra' or episode_type == 'aux' or episode_type == 'trailer' %}"
+    "{% set is_extra = season_type == 'extra' or episode_type != 'ep' %}"
     "{% set extra_num = 'extra' | custom_index %}"
     "{% set plex_year = ' (' ~ meta_collection_year ~ ')' if meta_collection_year %}"
     "{% set plex_show_title = collection_title ~ plex_year %}"
@@ -49,7 +49,7 @@ def test_reversed_inline_condition_still_gets_a_safe_set_block_suggestion(enviro
         "{% set ep_num = '%02d'|format(episode_number|int) %}"
         "{% set plex_year = ' (' ~ meta_collection_year ~ ')' if meta_collection_year != '' else '' %}"
         "{% set extra_num='extra'|custom_index %}"
-        "{% set is_extra = season_type == 'extra' or episode_type == 'aux' or episode_type == 'trailer' %}"
+        "{% set is_extra = season_type == 'extra' or episode_type != 'ep' %}"
         "{% set plex_season = 'Season ' ~ season_num if not is_extra else 'Specials' %}"
         "{% set plex_ep_id = 'S' ~ season_num ~ 'E' ~ ep_num if not is_extra else 'extra' ~ extra_num %}"
         "/downloads/{{ plex_season }}/{{ plex_ep_id }}{{ plex_year }}.ext"
@@ -83,7 +83,7 @@ def test_no_else_inline_condition_gets_a_safe_conditional_set_block(environment)
         '{# Variables #}'
         '{% set season_num = "%02d"|format(season_number|int) %}'
         '{% set ep_num = "%02d"|format(episode_number|int) %}'
-        "{% set is_extra = season_type == 'extra' or episode_type == 'aux' or episode_type == 'trailer' %}"
+        "{% set is_extra = season_type == 'extra' or episode_type != 'ep' %}"
         "{% set extra_num = 'extra' | custom_index %}"
         "{% set plex_year = ' (' ~ meta_collection_year ~ ')' if meta_collection_year %}"
         "{% set plex_show_title = collection_title ~ plex_year %}"
