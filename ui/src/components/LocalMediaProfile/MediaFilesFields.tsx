@@ -399,9 +399,10 @@ function MetadataTextFields({form}: {form: UseFormReturn<any>}) {
                 />
                 <div className="help">
                     {example.label && <p className="metadata-template-example-source">The examples are for {example.label}, the example episode under Output path.</p>}
-                    <ReadMore summary="Leave these empty to keep the title and description the site gives each episode.">
+                    <ReadMore summary="{{ title }} and {{ description }} are the title and description the site gives each episode.">
                         <p>They take the same variables as the output path, such as <code>{'{{ title }}'}</code> and <code>{'{{ date }}'}</code>,
                             and <code>{'{{ description }}'}</code> for the site's description. Type <code>{'{{'}</code> to pick one.
+                            A field you leave empty keeps the site's text too.
                             {' '}<code>{'{{ date }} - {{ title }}'}</code> puts the date before each title, as ytdl-sub does.
                             They change the NFO file and the title inside the media, not the file name.</p>
                     </ReadMore>

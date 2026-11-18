@@ -347,7 +347,20 @@
     margin-top: 12px;
 }
 
-/* An episode's own title and description: Jinja, in the output path's editor, each with its example. */
+/* An episode's own title and description: Jinja, in the output path's editor, each with its example. The editor
+   is short, so its suggestions open outside it instead of being cut off; its own corners stay rounded. */
+.output-template-code-editor.metadata-template-editor {
+    overflow: visible;
+}
+
+.output-template-code-editor.metadata-template-editor .cm-editor {
+    border-radius: 11px;
+}
+
+.output-template-code-editor.metadata-template-editor .cm-scroller {
+    border-radius: inherit;
+}
+
 .output-template-code-editor.metadata-template-editor .cm-scroller {
     min-height: 0;
 }
