@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from backend.api.models.creator import (
-    CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorLookupAPIRead, CreatorLookupAPIRequest, CreatorPageAPIRead,
-    CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd,
+    CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorLookupAPIRequest,
+    CreatorPageAPIRead, CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd,
 )
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
 from backend.app import db_session
@@ -21,8 +21,8 @@ from backend.services.source_requests import SourceRequestError, asking_source
 from config.network import NO_INTERNET_CONNECTION_MESSAGE, is_no_internet_error
 
 from .service import (
-    CreatorNotFoundError, add_creator, add_sections, creator_lookup, creator_page, check_creator, list_creators, look_up_creator, lookup_creator_label,
-    move_creator_reassigned, move_creator_section, update_creator,
+    CreatorNotFoundError, add_creator, add_sections, combine_creator, creator_lookup, creator_page, check_creator, list_creators,
+    look_up_creator, lookup_creator_label, move_creator_reassigned, move_creator_section, update_creator,
 )
 
 logger = logging.getLogger(__name__)
@@ -114,21 +114,34 @@ def creator_update(slug: str, body: CreatorAPIUpdate):
     return _found(lambda: run_write_transaction(lambda s: update_creator(s, slug, body)))
 
 
-@router.post("/{slug}/sections", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CreatorPageAPIRead)
-def creator_add_sections(slug: str, body: CreatorSectionsAPIAdd, access: Access = signed_in()):
-    """Add sections of the creator to its collections, or ignore them."""
-    return _found(lambda: run_write_transaction(lambda s: add_sections(s, slug, body, added_by_id=access.user_id)))
+@router.post(
+    "/{slug}/accounts/{account_id}/sections", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)],
+    response_model=CreatorPageAPIRead,
+)
+def creator_add_sections(slug: str, account_id: int, body: CreatorSectionsAPIAdd, access: Access = signed_in()):
+    """Add sections of one of the creator's accounts to the creator's collections, or ignore them."""
+    return _found(lambda: run_write_transaction(
+        lambda s: add_sections(s, slug, account_id, body, added_by_id=access.user_id),
+    ))
 
 
 @router.post(
-    "/{slug}/sections/{ref}/move", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CreatorPageAPIRead,
+    "/{slug}/accounts/{account_id}/sections/{ref}/move", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CreatorPageAPIRead,
 )
-def creator_move_section(slug: str, ref: str, body: CreatorSectionMoveAPIIn, access: Access = signed_in()):
-    """Move one of the creator's playlists to a season of its own collection, to a collection of its own, or out of
-    the Library, with its videos and their files."""
+def creator_move_section(slug: str, account_id: int, ref: str, body: CreatorSectionMoveAPIIn, access: Access = signed_in()):
+    """Move one of the playlists of a creator's account to a season of the account's own collection, to a collection
+    of its own, or out of the Library, with its videos and their files."""
     return _found(lambda: run_write_transaction(
-        lambda s: move_creator_section(s, slug, ref, body, added_by_id=access.user_id),
+        lambda s: move_creator_section(s, slug, account_id, ref, body, added_by_id=access.user_id),
     ))
+
+
+@router.post("/{slug}/combine", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CreatorPageAPIRead)
+def creator_combine(slug: str, body: CreatorCombineAPIIn):
+    """Make another creator in the Library, who is the same person or group, a part of this one: their accounts and
+    collections move over, and the other creator leaves the Library."""
+    return _found(lambda: run_write_transaction(lambda s: combine_creator(s, slug, body)))
 
 
 @router.post(

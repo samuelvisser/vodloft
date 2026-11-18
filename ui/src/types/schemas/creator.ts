@@ -53,16 +53,33 @@ export type CreatorLookupRead = z.infer<typeof CreatorLookupReadSchema>
 
 export const NewSectionActionValues = ['ask', 'season', 'own', 'ignore'] as const
 
+const SiteSchema = z.object({
+    key: z.string(), name: z.string(), creatorLabel: z.string().default('creator'), linkSeasons: z.boolean().default(false),
+})
+
+/** A creator's account on one Site, such as their YouTube channel. */
+export const CreatorAccountReadSchema = z.object({
+    id: z.number(),
+    sourceKey: z.string(),
+    site: SiteSchema,
+    siteRef: z.string(),
+    url: z.string().nullable(),
+    handle: z.string().nullable(),
+    checkedAt: z.string().nullable(),
+    /** The collection named after the creator that takes this account's uploads. */
+    mainCollectionSlug: z.string().nullable(),
+})
+export type CreatorAccountRead = z.infer<typeof CreatorAccountReadSchema>
+
 export const CreatorReadSchema = z.object({
     id: z.number(),
     slug: z.string(),
-    sourceKey: z.string(),
-    site: z.object({key: z.string(), name: z.string(), linkSeasons: z.boolean().default(false)}),
+    /** Artist, the word of their one Site, such as host, or creator. */
     creatorLabel: z.string(),
-    siteRef: z.string(),
-    url: z.string().nullable(),
+    /** The label with their Site, when they are on one only, such as "The Daily Wire host". */
+    kind: z.string(),
+    accounts: z.array(CreatorAccountReadSchema),
     title: z.string(),
-    handle: z.string().nullable(),
     description: z.string().nullable(),
     avatarUrl: z.string().nullable(),
     bannerUrl: z.string().nullable(),
@@ -74,9 +91,13 @@ export const CreatorReadSchema = z.object({
     newSections: z.enum(NewSectionActionValues),
     genre: z.string().nullable(),
     contentRating: z.string().nullable(),
-    checkedAt: z.string().nullable(),
 })
 export type CreatorRead = z.infer<typeof CreatorReadSchema>
+
+export const CreatorPageAccountReadSchema = CreatorAccountReadSchema.extend({
+    sections: z.array(CreatorSectionReadSchema),
+})
+export type CreatorPageAccountRead = z.infer<typeof CreatorPageAccountReadSchema>
 
 export const CreatorPageReadSchema = CreatorReadSchema.extend({
     collections: z.array(z.object({
@@ -87,8 +108,7 @@ export const CreatorPageReadSchema = CreatorReadSchema.extend({
         episodeCount: z.number(),
         links: z.array(z.string()),
     })),
-    sections: z.array(CreatorSectionReadSchema),
-    mainCollectionSlug: z.string().nullable(),
+    accounts: z.array(CreatorPageAccountReadSchema),
     /** Downloaded episodes the creator places in another of its collections than the one they are in. */
     reassignedCount: z.number().default(0),
 })
@@ -103,6 +123,8 @@ export const CreatorCreateSchema = z.object({
     sections: z.array(SectionPlanSchema).default([]),
     membershipLevel: z.enum(DwMembershipLevelReg.Enum).default(DwMembershipLevelReg.Enum.HIGHEST_ALLOWED),
     newSections: z.enum(NewSectionActionValues).default('ask'),
+    /** A creator in the Library who is the same person or group: the account joins them. Empty for a new creator. */
+    into: z.string().default(''),
 }).refine((value) => value.sections.some((section) => section.target !== 'skip'), {
     message: 'Pick at least one section to keep',
     path: ['sections'],

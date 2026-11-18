@@ -275,6 +275,22 @@ Under **Where its playlists go**, the creator's page lists each playlist that is
 
 Videos that are not downloaded just move. Downloaded videos move their files the way a Reassigned video does, see the section above, so a video the new place downloads with another Local Media Profile is downloaded again there before its old files go. The window that asks you to confirm the move says which of these will happen.
 
+### A creator on several sites
+
+The same person or group often has a page on more than one site, such as a Daily Wire host who also has a YouTube
+channel. VODLoft keeps them as one creator, with an account for each site. Each account brings its own feeds,
+playlists and shows, and its own main collection; VODLoft looks at every account for new ones once a day.
+
+- When you add a creator, **Add it as** chooses a creator in your Library who is the same person or group. The new
+  account and its collections join them, and follow their settings.
+- **Combine with another creator** in a creator page's **Actions** menu does the same for two creators you added apart.
+  The other creator's accounts and collections move over and they leave your Library as a creator of their own. Their
+  collections keep their seasons, episodes, profiles and files.
+
+A creator is called what their site calls them while all their accounts and collections are on one site, such as host
+on The Daily Wire, and an artist when they have a Music collection. On several sites, they are a creator; each account
+on their page still shows its own site.
+
 ### Adding a collection to a creator, and removing it
 
 A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its creator later. Choose **Add to creator** (**Add to host** for a Daily Wire show) in the collection's **Actions** menu. VODLoft finds the creator behind the collection's links, adds the creator to your Library if they are not there yet, and shows which of the creator's playlists or shows the collection becomes. The collection keeps its seasons, episode numbers, profiles and files; nothing is indexed again. A collection that another of the creator's collections already covers can't join.
@@ -285,6 +301,9 @@ When some of the collection's playlists are already somewhere else under the cre
 joins it with its own link, for example an artist's music videos that are on their label's channel. The creator's
 daily look for new playlists leaves such a collection alone, and their name is the `creator_title` and `artist` of the
 collection's episodes. A collection of one of the creator's own playlists joins through its link instead.
+
+This works for a collection from any site, also one where VODLoft can't look up creators, such as NPO Start: there
+the window only offers the creators in your Library.
 
 **Remove from creator** in the same menu makes it a plain collection again. It keeps its episodes, profiles, files, genre and content rating.
 

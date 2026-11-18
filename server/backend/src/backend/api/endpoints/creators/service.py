@@ -9,11 +9,11 @@ from sqlalchemy.orm import Session, selectinload
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
 from backend.services.reassigned import move_and_rename, reassigned_in_creator
 from backend.api.models.creator import (
-    CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorLookupAPIRead, CreatorPageAPIRead, CreatorSectionMoveAPIIn,
-    CreatorSectionsAPIAdd, CollectionCreatorLeaveAPIRead, CollectionCreatorMatchAPIRead,
+    CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorPageAPIRead,
+    CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd, CollectionCreatorLeaveAPIRead, CollectionCreatorMatchAPIRead,
 )
 from backend.api.models.collection import CollectionAPIRead
-from backend.db.models import Creator, Collection, Episode
+from backend.db.models import Creator, CreatorAccount, Collection, Episode
 from backend.services import creators
 from backend.services.creators import NewCollectionSettings, SectionPlan
 from backend.services.errors import ServiceError
@@ -87,7 +87,7 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
     site = creators.creator_site(source_key, details.url) if details.url else get_source(source_key).sites[0]
     kept = creators.sections_in_library(s, source_key, details.ref, details.sections)
     titles = dict(s.execute(select(Collection.slug, Collection.title).where(Collection.slug.in_(kept.values()))).all())
-    existing = creators.creator_in_library(s, site.key, details.ref)
+    existing = creators.account_in_library(s, site.key, details.ref)
     return CreatorLookupAPIRead.model_validate(_Lookup(
         details=details, source_key=source_key, site_key=site.key, site_name=site.name,
         creator_label=site.creator_label, link_seasons=creators.lists_are_seasons(site),
@@ -96,12 +96,17 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
             for section in details.sections
         ],
         presets=[_Preset(preset.value, creators.preset_plan(details, preset)) for preset in site.creator_presets],
-        creator_slug=existing.slug if existing is not None else None,
+        creator_slug=existing.creator.slug if existing is not None else None,
         links=list(details.links), facts=list(details.facts),
     ))
 
 
 def add_creator(s: Session, body: CreatorAPICreate, details: CreatorDetails, *, added_by_id: int | None) -> CreatorPageAPIRead:
+    into = None
+    if body.into:
+        into = s.scalar(select(Creator).where(Creator.slug == body.into))
+        if into is None:
+            raise ServiceError("This creator is not in the Library", field="into")
     creator, _collections = creators.add_creator(
         s, source_key=body.source_key, details=details,
         plans=[SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections],
@@ -110,7 +115,7 @@ def add_creator(s: Session, body: CreatorAPICreate, details: CreatorDetails, *, 
             CollectionType.MUSIC if details.music else CollectionType(body.type), EpisodeIdentifier(body.episode_identifier),
             body.membership_level,
         ),
-        added_by_id=added_by_id, new_sections=NewSectionAction(body.new_sections),
+        added_by_id=added_by_id, new_sections=NewSectionAction(body.new_sections), into=into,
     )
     s.flush()
     return creator_page(s, creator.slug)
@@ -128,30 +133,48 @@ def _counts(s: Session, creator_ids: list[int]) -> tuple[dict[int, int], dict[in
 
 
 @dataclass
+class _AccountRead:
+    account: CreatorAccount
+    sections: list
+
+    def __getattr__(self, name):
+        return getattr(self.account, name)
+
+
+@dataclass
 class _CreatorRead:
     creator: Creator
-    creator_label: str
     collection_count: int
     episode_count: int
     collections: list = field(default_factory=list)
-    sections: list = field(default_factory=list)
+    accounts: list | None = None
     reassigned_count: int = 0
 
+    @property
+    def creator_label(self) -> str:
+        return creators.creator_label(self.creator)
+
+    @property
+    def kind(self) -> str:
+        return creators.creator_kind(self.creator)
+
     def __getattr__(self, name):
+        if name == "accounts":
+            return self.creator.accounts
         return getattr(self.creator, name)
 
-
-def _label(creator: Creator) -> str:
-    return creators.creator_label(creator)
+    def __post_init__(self):
+        if self.accounts is None:
+            self.accounts = list(self.creator.accounts)
 
 
 def list_creators(s: Session) -> list[CreatorAPIRead]:
-    rows = list(s.scalars(select(Creator).order_by(Creator.title)))
+    rows = list(s.scalars(
+        select(Creator).order_by(Creator.title).options(selectinload(Creator.accounts), selectinload(Creator.collections))
+    ))
     collections, episodes = _counts(s, [creator.id for creator in rows])
     return [
-        CreatorAPIRead.model_validate(_CreatorRead(
-            creator, _label(creator), collections.get(creator.id, 0), episodes.get(creator.id, 0),
-        ))
+        CreatorAPIRead.model_validate(_CreatorRead(creator, collections.get(creator.id, 0), episodes.get(creator.id, 0)))
         for creator in rows
     ]
 
@@ -168,7 +191,8 @@ class _CollectionRead:
 
 def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     creator = s.scalar(
-        select(Creator).where(Creator.slug == slug).options(selectinload(Creator.sections), selectinload(Creator.collections))
+        select(Creator).where(Creator.slug == slug)
+        .options(selectinload(Creator.accounts).selectinload(CreatorAccount.sections), selectinload(Creator.collections))
     )
     if creator is None:
         raise CreatorNotFoundError(f"Creator '{slug}' not found")
@@ -177,29 +201,46 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
         select(Episode.collection_id, func.count()).where(Episode.collection_id.in_([c.id for c in creator.collections]))
         .group_by(Episode.collection_id)
     ).all())
-    kept = creators.sections_in_library(s, creator.source_key, creator.site_ref, creator.sections, creator.main_collection)
-    titles = dict(s.execute(select(Collection.slug, Collection.title).where(Collection.slug.in_(kept.values()))).all())
+    kept = {
+        account.id: creators.sections_in_library(
+            s, account.source_key, account.site_ref, account.sections, account.main_collection,
+        )
+        for account in creator.accounts
+    }
+    slugs = {slug for found in kept.values() for slug in found.values()}
+    titles = dict(s.execute(select(Collection.slug, Collection.title).where(Collection.slug.in_(slugs))).all())
     collections = [
         _CollectionRead(
             collection, per_collection.get(collection.id, 0),
-            [section.title for section in creator.sections if kept.get(section.ref) == collection.slug],
+            [
+                section.title for account in creator.accounts for section in account.sections
+                if kept[account.id].get(section.ref) == collection.slug
+            ],
         )
         for collection in sorted(creator.collections, key=lambda c: c.created_at or c.id)
     ]
-    sections = [_Section(section, kept.get(section.ref), titles.get(kept.get(section.ref))) for section in creator.sections]
+    accounts = [
+        _AccountRead(account, [
+            _Section(section, kept[account.id].get(section.ref), titles.get(kept[account.id].get(section.ref)))
+            for section in account.sections
+        ])
+        for account in creator.accounts
+    ]
     return CreatorPageAPIRead.model_validate(_CreatorRead(
-        creator, _label(creator), collections_count.get(creator.id, 0), episodes.get(creator.id, 0),
-        collections=collections, sections=sections, reassigned_count=len(reassigned_in_creator(s, creator)),
+        creator, collections_count.get(creator.id, 0), episodes.get(creator.id, 0),
+        collections=collections, accounts=accounts, reassigned_count=len(reassigned_in_creator(s, creator)),
     ))
 
 
-def move_creator_section(s: Session, slug: str, ref: str, body: CreatorSectionMoveAPIIn, *, added_by_id: int | None) -> CreatorPageAPIRead:
-    """Move one of the creator's playlists, with its videos and their files, and show the creator again.
+def move_creator_section(
+    s: Session, slug: str, account_id: int, ref: str, body: CreatorSectionMoveAPIIn, *, added_by_id: int | None,
+) -> CreatorPageAPIRead:
+    """Move one of the playlists of a creator's account, with its videos and their files, and show the creator again.
 
     ``s`` is a write transaction's session."""
     from backend.services.section_moves import move_section
 
-    move_section(s, _creator(s, slug), ref, SectionTarget(body.target), added_by_id=added_by_id)
+    move_section(s, _account(s, slug, account_id), ref, SectionTarget(body.target), added_by_id=added_by_id)
     s.flush()
     s.expire_all()
     return creator_page(s, slug)
@@ -223,6 +264,13 @@ def _creator(s: Session, slug: str) -> Creator:
     return creator
 
 
+def _account(s: Session, slug: str, account_id: int) -> CreatorAccount:
+    account = next((account for account in _creator(s, slug).accounts if account.id == account_id), None)
+    if account is None:
+        raise CreatorNotFoundError(f"Creator '{slug}' has no account {account_id}")
+    return account
+
+
 def update_creator(s: Session, slug: str, body: CreatorAPIUpdate) -> CreatorPageAPIRead:
     creator = _creator(s, slug)
     creators.update_creator_settings(s, creator, creators.CreatorSettings(
@@ -232,13 +280,27 @@ def update_creator(s: Session, slug: str, body: CreatorAPIUpdate) -> CreatorPage
     return creator_page(s, slug)
 
 
-def add_sections(s: Session, slug: str, body: CreatorSectionsAPIAdd, *, added_by_id: int | None) -> CreatorPageAPIRead:
-    creator = _creator(s, slug)
+def add_sections(
+    s: Session, slug: str, account_id: int, body: CreatorSectionsAPIAdd, *, added_by_id: int | None,
+) -> CreatorPageAPIRead:
     creators.place_sections(
-        s, creator, [SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections],
+        s, _account(s, slug, account_id), [SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections],
         added_by_id=added_by_id,
     )
     s.flush()
+    return creator_page(s, slug)
+
+
+def combine_creator(s: Session, slug: str, body: CreatorCombineAPIIn) -> CreatorPageAPIRead:
+    """Make another creator in the Library a part of this one, and show this creator again.
+
+    ``s`` is a write transaction's session."""
+    creator = _creator(s, slug)
+    other = s.scalar(select(Creator).where(Creator.slug == body.other_slug))
+    if other is None:
+        raise ServiceError("This creator is not in the Library", field="other_slug")
+    creators.combine_creators(s, creator, other)
+    s.expire_all()
     return creator_page(s, slug)
 
 
@@ -308,13 +370,14 @@ class _Match:
 def collection_creator_match(s: Session, collection_slug: str, source_key: str, details: CreatorDetails) -> CollectionCreatorMatchAPIRead:
     collection = _collection(s, collection_slug)
     site = creators.creator_site(source_key, details.url or collection.site_key or get_source(source_key).sites[0].key)
-    existing = creators.creator_in_library(s, site.key, details.ref)
+    existing = creators.account_in_library(s, site.key, details.ref)
     section, keeper = creators.collection_section(s, collection, source_key, details, existing)
     overlaps = creators.join_overlaps(s, collection, source_key, details, existing)
     movable = keeper is not None and any(overlap.ref == section.ref and overlap.can_move_here for overlap in overlaps)
     return CollectionCreatorMatchAPIRead.model_validate(_Match(
         details, site.name, site.creator_label, section if keeper is None or movable else None,
-        keeper.title if keeper is not None and not movable else None, existing.slug if existing is not None else None,
+        keeper.title if keeper is not None and not movable else None,
+        existing.creator.slug if existing is not None else None,
         overlaps,
     ))
 

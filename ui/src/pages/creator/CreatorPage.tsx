@@ -4,7 +4,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {can} from '../../lib/access'
-import {addCreatorSections, checkCreator, moveCreatorSection, useCreator} from '../../lib/queries'
+import {addCreatorSections, checkCreator, combineCreators, moveCreatorSection, useCreator, useCreators} from '../../lib/queries'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -13,7 +13,8 @@ import {PageHeaderAction} from '../../components/common/PageHeader'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import {postReassignedMove, reassignedMoveMessage} from '../../components/Episode/SeasonPlaceNote'
 import {toast} from 'react-hot-toast'
-import type {CreatorPageRead, CreatorSectionRead, SectionPlan} from '../../types/schemas/creator'
+import type {CreatorPageAccountRead, CreatorPageRead, CreatorSectionRead, SectionPlan} from '../../types/schemas/creator'
+import {creatorKindText} from '../../types/creator'
 import CreatorHeader from './CreatorHeader'
 import './CreatorPages.css'
 
@@ -29,14 +30,21 @@ function sectionFacts(section: CreatorSectionRead) {
         .filter(Boolean).join(' · ')
 }
 
+/** One section of one of the creator's accounts. */
+type AccountSection = {account: CreatorPageAccountRead, section: CreatorSectionRead}
+
+/** The title of the collection named after the creator that takes the account's uploads. */
+function mainTitleOf(creator: CreatorPageRead, account: CreatorPageAccountRead): string {
+    return creator.collections.find((collection) => collection.slug === account.mainCollectionSlug)?.title ?? creator.title
+}
+
 /** The ways a section of a creator in the Library can be added, in the words of this creator. */
-function choices(creator: CreatorPageRead, section: CreatorSectionRead): {label: string, plan: SectionPlan}[] {
-    const main = creator.collections.find((collection) => collection.slug === creator.mainCollectionSlug)
-    const mainTitle = main?.title ?? creator.title
+function choices(creator: CreatorPageRead, {account, section}: AccountSection): {label: string, plan: SectionPlan}[] {
+    const mainTitle = mainTitleOf(creator, account)
     const options: {label: string, plan: SectionPlan}[] = []
     if (section.kind === 'feed') {
         options.push({label: `Add to ${mainTitle}`, plan: {ref: section.ref, target: 'main'}})
-    } else if (section.kind === 'list' && creator.site.linkSeasons) {
+    } else if (section.kind === 'list' && account.site.linkSeasons) {
         options.push({label: `As a season of ${mainTitle}`, plan: {ref: section.ref, target: 'main'}})
     }
     options.push({label: 'As its own collection', plan: {ref: section.ref, target: 'own'}})
@@ -95,8 +103,19 @@ export default function CreatorPage() {
     const [actionError, setActionError] = useState<string | null>(null)
     const [checking, setChecking] = useState(false)
     const [movingReassigned, setMovingReassigned] = useState(false)
-    const [moving, setMoving] = useState<{section: CreatorSectionRead, to: Place} | null>(null)
+    const [moving, setMoving] = useState<{item: AccountSection, to: Place} | null>(null)
     const [sectionBusy, setSectionBusy] = useState(false)
+    const [combining, setCombining] = useState(false)
+    const [combineWith, setCombineWith] = useState('')
+    const {data: libraryCreators} = useCreators()
+    const others = useMemo(
+        () => (libraryCreators ?? []).filter((other) => other.slug !== slug),
+        [libraryCreators, slug],
+    )
+    const combineRegistry = useMemo(() => createSelectRegistry(`CombineCreator-${slug}-${others.length}`, {
+        '': {label: 'Pick a creator'},
+        ...Object.fromEntries(others.map((other) => [other.slug, {label: `${other.title} (${other.kind})`}])),
+    }), [others, slug])
 
     if (isLoading) return <section className="view"><p>Loading…</p></section>
     if (error || !creator) {
@@ -108,11 +127,12 @@ export default function CreatorPage() {
     }
 
     const mayAdd = can('add_media')
-    const place = async (plan: SectionPlan) => {
-        setBusy(plan.ref)
+    const sectionKey = (account: CreatorPageAccountRead, ref: string) => `${account.id}:${ref}`
+    const place = async (account: CreatorPageAccountRead, plan: SectionPlan) => {
+        setBusy(sectionKey(account, plan.ref))
         setActionError(null)
         try {
-            const page = await addCreatorSections(creator.slug, [plan])
+            const page = await addCreatorSections(creator.slug, account.id, [plan])
             queryClient.setQueryData(['creator', slug], page)
             await queryClient.invalidateQueries({queryKey: ['creators']})
             await queryClient.invalidateQueries({queryKey: ['collectionsView']})
@@ -147,23 +167,44 @@ export default function CreatorPage() {
         }
     }
 
-    const mainTitle = creator.collections.find((collection) => collection.slug === creator.mainCollectionSlug)?.title ?? creator.title
-    const placed = creator.site.linkSeasons && creator.mainCollectionSlug
-        ? creator.sections.filter((section) => (
-            section.kind === 'list' && creator.collections.some((collection) => collection.slug === section.collectionSlug)
-        ))
-        : []
-    const placeOf = (section: CreatorSectionRead): Place => section.collectionSlug === creator.mainCollectionSlug ? 'main' : 'own'
-    const moveSection = async () => {
-        if (!moving) return
-        setSectionBusy(true)
+    const several = creator.accounts.length > 1
+    const all: AccountSection[] = creator.accounts.flatMap((account) => account.sections.map((section) => ({account, section})))
+    const placed = all.filter(({account, section}) => (
+        account.site.linkSeasons && account.mainCollectionSlug && section.kind === 'list'
+        && creator.collections.some((collection) => collection.slug === section.collectionSlug)
+    ))
+    const placeOf = ({account, section}: AccountSection): Place => section.collectionSlug === account.mainCollectionSlug ? 'main' : 'own'
+    /** Which account a section is of, when the creator has several. */
+    const onSite = (account: CreatorPageAccountRead) => several ? ` on ${account.site.name}` : ''
+    const checkedAt = creator.accounts.map((account) => account.checkedAt).filter(Boolean).sort().pop()
+    const links = creator.accounts.filter((account) => account.url).map((account) => ({
+        label: several ? `Open on ${account.site.name}` : 'Open on the site', url: account.url!,
+    }))
+    const combine = async () => {
+        if (!combineWith) return
         try {
-            const page = await moveCreatorSection(creator.slug, moving.section.ref, moving.to)
+            const page = await combineCreators(creator.slug, combineWith)
             queryClient.setQueryData(['creator', slug], page)
             await queryClient.invalidateQueries({queryKey: ['creators']})
             await queryClient.invalidateQueries({queryKey: ['collection']})
             await queryClient.invalidateQueries({queryKey: ['collectionsView']})
-            toast.success(`Moved ${moving.section.title}`)
+            toast.success(`${others.find((other) => other.slug === combineWith)?.title ?? 'The creator'} is now part of ${creator.title}`)
+            setCombining(false)
+            setCombineWith('')
+        } catch (exc) {
+            toast.error(exc instanceof Error ? exc.message : String(exc))
+        }
+    }
+    const moveSection = async () => {
+        if (!moving) return
+        setSectionBusy(true)
+        try {
+            const page = await moveCreatorSection(creator.slug, moving.item.account.id, moving.item.section.ref, moving.to)
+            queryClient.setQueryData(['creator', slug], page)
+            await queryClient.invalidateQueries({queryKey: ['creators']})
+            await queryClient.invalidateQueries({queryKey: ['collection']})
+            await queryClient.invalidateQueries({queryKey: ['collectionsView']})
+            toast.success(`Moved ${moving.item.section.title}`)
             setMoving(null)
         } catch (exc) {
             toast.error(exc instanceof Error ? exc.message : String(exc))
@@ -172,8 +213,8 @@ export default function CreatorPage() {
         }
     }
 
-    const found = creator.sections.filter((section) => section.status === 'new' && !section.collectionSlug)
-    const left = creator.sections.filter((section) => (
+    const found = all.filter(({section}) => section.status === 'new' && !section.collectionSlug)
+    const left = all.filter(({section}) => (
         !section.collectionSlug && section.kind !== 'item' && section.status !== 'new'
     ))
     const sectionArt = (section: CreatorSectionRead) => section.imageUrl
@@ -183,9 +224,10 @@ export default function CreatorPage() {
     return (
         <section className="view creator-view" aria-labelledby="creator-title">
             <CreatorHeader
-                title={creator.title} label={`${creator.site.name} ${creator.creatorLabel}`} handle={creator.handle}
+                title={creator.title} label={creatorKindText(creator)}
+                handle={creator.accounts[0]?.handle}
                 avatarUrl={creator.avatarUrl} bannerUrl={creator.bannerUrl} facts={creator.facts}
-                description={creator.description} url={creator.url} titleId="creator-title"
+                description={creator.description} links={links} titleId="creator-title"
                 actions={can('library', 'manage') && (
                     <>
                         <PageHeaderAction icon={faIcon('fass', 'pen')} label="Edit" variant="secondary" to={`/edit-creator/${creator.slug}`}/>
@@ -202,6 +244,13 @@ export default function CreatorPage() {
                             disabled: movingReassigned || !creator.reassignedCount,
                             disabledReason: creator.reassignedCount ? undefined : `No episode of this ${creator.creatorLabel} belongs in another of its collections.`,
                             onSelect: () => void moveReassigned(),
+                        }, {
+                            label: 'Combine with another creator',
+                            description: 'The same person or group, added from another site or twice',
+                            icon: faIcon('fass', 'object-group'),
+                            disabled: !others.length,
+                            disabledReason: others.length ? undefined : 'There is no other creator in your library.',
+                            onSelect: () => setCombining(true),
                         }]}/>
                     </>
                 )}
@@ -214,28 +263,31 @@ export default function CreatorPage() {
             )}
             {actionError && <div className="form-error-card" role="alert">{actionError}</div>}
 
-            {found.map((section) => (
-                <div key={section.ref} className="creator-found" role="region" aria-label={`New: ${section.title}`}>
+            {found.map((item) => {
+                const {account, section} = item
+                return (
+                <div key={sectionKey(account, section.ref)} className="creator-found" role="region" aria-label={`New: ${section.title}`}>
                     {sectionArt(section)}
                     <div className="creator-section-copy">
-                        <b>New {(section.kindLabel ?? 'section').toLowerCase()}: {section.title}</b>
+                        <b>New {(section.kindLabel ?? 'section').toLowerCase()}{onSite(account)}: {section.title}</b>
                         <span>{sectionFacts(section) || `Found on ${creator.title}`}</span>
                     </div>
                     {mayAdd && (
                         <div className="creator-found-actions">
-                            {choices(creator, section).map((choice) => (
-                                <button key={choice.label} type="button" className="btn" disabled={busy !== null} onClick={() => void place(choice.plan)}>
+                            {choices(creator, item).map((choice) => (
+                                <button key={choice.label} type="button" className="btn" disabled={busy !== null} onClick={() => void place(account, choice.plan)}>
                                     {choice.label}
                                 </button>
                             ))}
                             <button type="button" className="btn btn-link" disabled={busy !== null}
-                                    onClick={() => void place({ref: section.ref, target: 'skip'})}>
+                                    onClick={() => void place(account, {ref: section.ref, target: 'skip'})}>
                                 Ignore
                             </button>
                         </div>
                     )}
                 </div>
-            ))}
+                )
+            })}
 
             <div className="creator-section-group">
                 <h2>In your library</h2>
@@ -266,75 +318,105 @@ export default function CreatorPage() {
 
             {placed.length > 0 && (
                 <div className="creator-section-group">
-                    <h2>Where its {(placed[0].kindLabel ?? 'playlist').toLowerCase()}s go</h2>
+                    <h2>Where the {(placed[0].section.kindLabel ?? 'playlist').toLowerCase()}s go</h2>
                     <div className="creator-section-list">
-                        {placed.map((section) => (
-                            <div key={section.ref} className="creator-section-row">
+                        {placed.map((item) => {
+                            const {account, section} = item
+                            const mainTitle = mainTitleOf(creator, account)
+                            return (
+                            <div key={sectionKey(account, section.ref)} className="creator-section-row">
                                 {sectionArt(section)}
                                 <div className="creator-section-copy">
                                     <b>{section.title}</b>
-                                    <span>{sectionFacts(section)}</span>
+                                    <span>{[sectionFacts(section), several ? account.site.name : null].filter(Boolean).join(' · ')}</span>
                                 </div>
                                 {can('library', 'manage') ? (
                                     <SectionPlace
-                                        section={section} place={placeOf(section)} mainTitle={mainTitle} busy={sectionBusy}
-                                        onMove={(to) => setMoving({section, to})}
+                                        section={section} place={placeOf(item)} mainTitle={mainTitle} busy={sectionBusy}
+                                        onMove={(to) => setMoving({item, to})}
                                     />
                                 ) : (
                                     <span className="creator-section-note">
-                                        {placeOf(section) === 'main' ? `Season of ${mainTitle}` : 'Collection of its own'}
+                                        {placeOf(item) === 'main' ? `Season of ${mainTitle}` : 'Collection of its own'}
                                     </span>
                                 )}
                             </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 </div>
             )}
 
             <ConfirmDialog
                 open={moving !== null}
-                title={moving ? `Move ${moving.section.title}` : 'Move'}
+                title={moving ? `Move ${moving.item.section.title}` : 'Move'}
                 icon={faIcon('fass', 'arrow-right-arrow-left')}
                 onDismiss={() => setMoving(null)}
                 confirmButton={{label: sectionBusy ? 'Moving…' : 'Move', onClick: moveSection, disabled: sectionBusy}}
             >
-                {moving && <p>{moveNote(moving.section, moving.to, mainTitle)}</p>}
+                {moving && <p>{moveNote(moving.item.section, moving.to, mainTitleOf(creator, moving.item.account))}</p>}
+            </ConfirmDialog>
+
+            <ConfirmDialog
+                open={combining}
+                title={`Combine ${creator.title} with another creator`}
+                icon={faIcon('fass', 'object-group')}
+                onDismiss={() => setCombining(false)}
+                confirmButton={{label: 'Combine', onClick: combine, disabled: !combineWith}}
+            >
+                <div className="form-row">
+                    <label htmlFor="combine-creator">Who is the same person or group</label>
+                    <SimpleSelect
+                        inputId="combine-creator" registry={combineRegistry} value={combineWith}
+                        menuPortalTarget={document.body} menuPlacement="auto"
+                        styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                        onChange={(value) => setCombineWith(value ?? '')}
+                    />
+                </div>
+                <ul className="creator-order-note">
+                    <li>Their accounts and collections become {creator.title}'s, and they leave your library as a creator of their own.</li>
+                    <li>Collections keep their seasons, episodes, profiles and files. Nothing is indexed again.</li>
+                    <li>{creator.title}'s name, picture and settings stay.</li>
+                </ul>
             </ConfirmDialog>
 
             {left.length > 0 && (
                 <div className="creator-section-group">
                     <h2>Not in your library</h2>
                     <div className="creator-section-list">
-                        {left.map((section) => (
-                            <div key={section.ref} className="creator-section-row">
+                        {left.map((item) => {
+                            const {account, section} = item
+                            return (
+                            <div key={sectionKey(account, section.ref)} className="creator-section-row">
                                 {sectionArt(section)}
                                 <div className="creator-section-copy">
                                     <b>{section.title}</b>
                                     <span>
                                         {section.access
                                             ? 'Only some members can watch this.'
-                                            : [sectionFacts(section), section.status === 'ignored' ? 'ignored' : null].filter(Boolean).join(' · ')}
+                                            : [sectionFacts(section), several ? account.site.name : null, section.status === 'ignored' ? 'ignored' : null].filter(Boolean).join(' · ')}
                                     </span>
                                 </div>
                                 {mayAdd && (
                                     <div className="creator-found-actions">
-                                        {choices(creator, section).map((choice) => (
+                                        {choices(creator, item).map((choice) => (
                                             <button key={choice.label} type="button" className="btn" disabled={busy !== null}
-                                                    onClick={() => void place(choice.plan)}>
-                                                {busy === section.ref ? 'Adding…' : choice.label}
+                                                    onClick={() => void place(account, choice.plan)}>
+                                                {busy === sectionKey(account, section.ref) ? 'Adding…' : choice.label}
                                             </button>
                                         ))}
                                     </div>
                                 )}
                             </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 </div>
             )}
 
-            {creator.checkedAt && (
+            {checkedAt && (
                 <p className="creator-note">
-                    VODLoft looks for new playlists and shows once a day. Last look: {new Date(creator.checkedAt).toLocaleString()}.
+                    VODLoft looks for new playlists and shows once a day. Last look: {new Date(checkedAt).toLocaleString()}.
                 </p>
             )}
         </section>

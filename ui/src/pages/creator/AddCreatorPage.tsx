@@ -6,7 +6,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
-import {lookUpCreator} from '../../lib/queries'
+import {lookUpCreator, useCreators} from '../../lib/queries'
 import {
     CreatorCreateSchema, type CreatorCreateIn, type CreatorCreateOut, type CreatorLookupRead, type CreatorSectionRead,
     type SectionPlan,
@@ -130,6 +130,15 @@ export default function AddCreatorPage() {
         defaultValues: {...getZodDefaults(CreatorCreateSchema), sourceKey, url, ref},
     })
     const {watch, setValue, formState: {errors, isSubmitting}} = form
+    const {data: libraryCreators} = useCreators()
+    const into = watch('into') ?? ''
+    const intoRegistry = useMemo(() => createSelectRegistry(`AddCreatorInto-${(libraryCreators ?? []).length}`, {
+        '': {label: `A new ${label} in your library`},
+        ...Object.fromEntries((libraryCreators ?? []).map((other) => [
+            other.slug, {label: `${other.title} (${other.kind})`, help: 'The same person or group: this account joins them, with their settings.'},
+        ])),
+    }), [libraryCreators, label])
+    const intoTitle = libraryCreators?.find((other) => other.slug === into)?.title
 
     useEffect(() => {
         const controller = new AbortController()
@@ -177,7 +186,7 @@ export default function AddCreatorPage() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             sourceKey: data.sourceKey, url: data.url, ref: data.ref, sections: data.sections,
-            membershipLevel: data.membershipLevel, newSections: data.newSections,
+            membershipLevel: data.membershipLevel, newSections: data.newSections, into: data.into || null,
         }),
     }), {
         fallbackField: 'sections',
@@ -210,7 +219,7 @@ export default function AddCreatorPage() {
         return (
             <section className="view" aria-labelledby="add-creator-title">
                 <div className="view-header"><h1 id="add-creator-title">Add {label}</h1></div>
-                <p>{creator.title} is already in your library.</p>
+                <p>{creator.title} on {creator.siteName} is already in your library.</p>
                 <div className="actions">
                     <button type="button" className="btn btn-primary" onClick={() => navigate(`/creator/${creator.creatorSlug}`)}>
                         Open {creator.creatorLabel}
@@ -235,7 +244,7 @@ export default function AddCreatorPage() {
     const inLibrary = new Set(creator.sections.filter((section) => section.collectionSlug).map((section) => section.ref))
     const kept = plans.filter((plan) => plan.target !== 'skip' && !inLibrary.has(plan.ref))
     const collectionTitles = [
-        ...(kept.some((plan) => plan.target === 'main') ? [creator.title] : []),
+        ...(kept.some((plan) => plan.target === 'main') ? [intoTitle ?? creator.title] : []),
         ...kept.filter((plan) => plan.target === 'own').map((plan) => {
             const section = creator.sections.find((item) => item.ref === plan.ref)
             return section?.kind === 'feed' ? `${creator.title} ${section.title}` : section?.title ?? plan.ref
@@ -272,6 +281,22 @@ export default function AddCreatorPage() {
                             </label>
                         ))}
                     </fieldset>
+                )}
+
+                {(libraryCreators?.length ?? 0) > 0 && (
+                    <div className="form-row creator-membership">
+                        <label htmlFor="creator-into">Add it as</label>
+                        <SimpleSelect
+                            inputId="creator-into" registry={intoRegistry} value={into}
+                            onChange={(value) => setValue('into', value ?? '', {shouldValidate: true})}
+                        />
+                        <div className="help">
+                            {into
+                                ? `${creator.title} on ${creator.siteName} becomes an account of ${intoTitle}, next to their accounts on other sites. Its collections join theirs.`
+                                : `Or pick a creator in your library who is the same person or group, such as a host whose YouTube channel you add.`}
+                        </div>
+                        {errors.into && <div className="error" role="alert">{errors.into.message}</div>}
+                    </div>
                 )}
 
                 {groups.filter(([, sections]) => sections.length).map(([title, sections]) => (
@@ -314,14 +339,14 @@ export default function AddCreatorPage() {
                 ))}
 
 
-                <div className="form-row creator-membership">
+                {!into && <div className="form-row creator-membership">
                     <label htmlFor="creator-new-sections">When the {creator.creatorLabel} adds {/^[aeiou]/.test(lists) ? 'an' : 'a'} {lists.replace(/s$/, '')}</label>
                     <SimpleSelect
                         inputId="creator-new-sections" registry={newSectionActionReg(creator.creatorLabel)} value={newSections}
                         onChange={(value) => setValue('newSections', value as CreatorCreateIn['newSections'])}
                     />
                     <div className="help">{newSectionActionReg(creator.creatorLabel).meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
-                </div>
+                </div>}
 
                 {sourceKey === 'dailywire' && (
                     <div className="form-row creator-membership">
@@ -345,7 +370,7 @@ export default function AddCreatorPage() {
                     </span>
                     <button type="button" className="btn" onClick={() => navigate(-1)}>Cancel</button>
                     <button type="submit" className="btn btn-primary" disabled={isSubmitting || !collectionTitles.length}>
-                        {isSubmitting ? 'Adding…' : `Add ${creator.creatorLabel}`}
+                        {isSubmitting ? 'Adding…' : into ? `Add to ${intoTitle}` : `Add ${creator.creatorLabel}`}
                     </button>
                 </div>
             </form>

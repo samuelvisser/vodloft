@@ -553,7 +553,7 @@ def test_an_imported_collection_joins_the_creator_behind_its_link(installation, 
 
     creator = session.scalar(select(Creator))
     guitar = session.scalar(select(Collection))
-    assert (guitar.creator_id, creator.main_collection_id) == (creator.id, guitar.id)
+    assert (guitar.creator_id, creator.accounts[0].main_collection_id) == (creator.id, guitar.id)
     # The playlist is no section of the creator's here, but it stays a season of the collection.
     assert [link.ref for link in guitar.lists] == ["PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W"]
 

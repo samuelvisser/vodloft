@@ -3,10 +3,10 @@
 .creator-header {
     border: 1px solid rgba(100, 116, 139, 0.24);
     border-radius: 12px;
-    overflow: hidden;
     background: transparent;
 }
-.creator-banner { aspect-ratio: 6 / 1; background-size: cover; background-position: center; }
+/* The banner rounds its own corners, so the header lets its Actions menu reach past its edge. */
+.creator-banner { aspect-ratio: 6 / 1; background-size: cover; background-position: center; border-radius: 11px 11px 0 0; }
 .creator-identity { display: flex; gap: 1rem; align-items: flex-start; padding: 1rem; }
 .creator-avatar {
     flex: 0 0 auto; width: 72px; height: 72px; border-radius: 50%; object-fit: cover;

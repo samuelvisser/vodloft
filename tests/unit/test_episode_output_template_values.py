@@ -184,7 +184,8 @@ def test_an_episode_of_a_creators_collection_knows_its_creator_and_section() -> 
 
     episode = _episode("ep.S2024E03")
     episode.collection.creator = SimpleNamespace(
-        title="Northwind Workshop", handle="@northwindworkshop", source_key="ytdlp", site_key="youtube",
+        title="Northwind Workshop", collections=[], sections=[], main_collection_ids=set(),
+        accounts=[SimpleNamespace(handle="@northwindworkshop", source_key="ytdlp", site_key="youtube")],
     )
     episode.season_id = 7
     episode.collection.lists = [SimpleNamespace(title="Tool Reviews", season_id=7)]

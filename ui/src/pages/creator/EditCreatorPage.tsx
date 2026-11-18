@@ -9,7 +9,7 @@ import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import PageHeader from '../../components/common/PageHeader'
-import {newSectionActionReg} from '../../types/creator'
+import {creatorKindText, newSectionActionReg} from '../../types/creator'
 import {
     CreatorPageReadSchema, CreatorUpdateSchema, type CreatorUpdateIn, type CreatorUpdateOut,
 } from '../../types/schemas/creator'
@@ -61,7 +61,7 @@ export default function EditCreatorPage() {
         <section className="view creator-view" aria-labelledby="edit-creator-title">
             <PageHeader
                 title="Edit creator" titleId="edit-creator-title"
-                subtitle={<p className="view-description">{creator.title} · {creator.site.name} {creator.creatorLabel}</p>}
+                subtitle={<p className="view-description">{creator.title} · {creatorKindText(creator)}</p>}
             />
             <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
                 <div className="form-row creator-membership">

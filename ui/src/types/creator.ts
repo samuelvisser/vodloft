@@ -5,6 +5,13 @@ export function capitalized(label: string): string {
     return label.slice(0, 1).toUpperCase() + label.slice(1)
 }
 
+/** What a creator is, for a label: "YouTube creator" on one Site, "Creator on YouTube and The Daily Wire" on several. */
+export function creatorKindText(creator: {kind: string, accounts: {site: {name: string}}[]}): string {
+    const names = [...new Set(creator.accounts.map((account) => account.site.name))]
+    if (names.length < 2) return creator.kind
+    return `${capitalized(creator.kind)} on ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
 const newSectionActionRegs = new Map<string, ReturnType<typeof makeNewSectionActionReg>>()
 
 function makeNewSectionActionReg(label: string) {

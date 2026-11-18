@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "5fd4ae698d31"
+HEAD_REVISION = "a3c81e6f0d52"
 
 
 @pytest.fixture
@@ -1378,7 +1378,9 @@ def test_a_channel_knows_its_own_collection_and_installations_get_the_new_sectio
     command.upgrade(config, HEAD_REVISION)
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT main_collection_id, new_sections FROM creators")).one() == (2, "ask")
+        assert connection.execute(text(
+            "SELECT a.main_collection_id, c.new_sections FROM creators c JOIN creator_accounts a ON a.creator_id = c.id"
+        )).one() == (2, "ask")
         rules = connection.execute(text("SELECT default_key, position FROM notification_rules ORDER BY position")).all()
         assert rules[-1] == ("creator_sections_found", rules[-2].position + 1)
 
@@ -1414,7 +1416,7 @@ def test_channels_become_creators_with_their_sections_collections_and_stored_val
             "CURRENT_TIMESTAMP, 'New sections', '', '/channel/workshop', '{\"channel\": \"workshop\"}')"
         ))
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, "5fd4ae698d31")
 
     with engine.connect() as connection:
         tables = set(inspect(connection).get_table_names())
@@ -1435,6 +1437,59 @@ def test_channels_become_creators_with_their_sections_collections_and_stored_val
     with engine.connect() as connection:
         assert connection.execute(text("SELECT channel_id FROM collections")).scalar_one() == 7
         assert connection.execute(text("SELECT channel_id FROM channel_sections")).scalar_one() == 7
+
+
+def test_each_creator_gets_an_account_with_their_site_sections_and_collection(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "5fd4ae698d31")
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('youtube', 'YouTube', '[\"youtube.com\"]')"))
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key, episode_order) VALUES (1, 'u1', 'c1', 'Workshop', "
+            "'https://example.test/1', 'free', 'series', 'seasonal', 'Host', 'host', 'ytdlp', 'newest_first')"
+        ))
+        connection.execute(text(
+            "INSERT INTO creators (id, uuid, slug, source_key, site_key, site_ref, url, handle, title, main_collection_id) "
+            "VALUES (4, 'cr', 'workshop', 'ytdlp', 'youtube', 'UCw', 'https://youtube.test/@w', '@w', 'Workshop', 1)"
+        ))
+        connection.execute(text("UPDATE collections SET creator_id = 4"))
+        connection.execute(text(
+            "INSERT INTO creator_sections (id, creator_id, ref, url, title, kind) "
+            "VALUES (3, 4, 'videos', 'https://youtube.test/@w/videos', 'Videos', 'feed')"
+        ))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        account = connection.execute(text(
+            "SELECT id, creator_id, source_key, site_key, site_ref, url, handle, main_collection_id FROM creator_accounts"
+        )).one()
+        assert tuple(account) == (4, 4, "ytdlp", "youtube", "UCw", "https://youtube.test/@w", "@w", 1)
+        assert connection.execute(text("SELECT account_id FROM creator_sections")).scalar_one() == 4
+        assert "site_key" not in {column["name"] for column in inspect(connection).get_columns("creators")}
+
+    # A creator with a second account becomes two creators again on the way down.
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('dailywire', 'The Daily Wire', '[]')"))
+        connection.execute(text(
+            "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref) "
+            "VALUES (9, 4, 'dailywire', 'dailywire', 'host-w')"
+        ))
+        connection.execute(text(
+            "INSERT INTO creator_sections (account_id, ref, url, title, kind) VALUES (9, 'show', 'https://dw.test/show', 'Show', 'show')"
+        ))
+    command.downgrade(config, "5fd4ae698d31")
+    with engine.connect() as connection:
+        creators = connection.execute(text("SELECT id, site_key, site_ref, main_collection_id FROM creators ORDER BY id")).all()
+        assert [(row.site_key, row.site_ref, row.main_collection_id) for row in creators] == [
+            ("youtube", "UCw", 1), ("dailywire", "host-w", None),
+        ]
+        sections = dict(connection.execute(text("SELECT ref, creator_id FROM creator_sections")).all())
+        assert sections == {"videos": 4, "show": creators[1].id}
 
 
 def test_episodes_without_usable_media_leave_or_stay_removed_from_their_source(migration_database):

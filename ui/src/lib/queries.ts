@@ -811,9 +811,10 @@ export function useCreator(slug: string | undefined) {
     })
 }
 
-/** Add sections of a creator to its collections, or ignore them. Answers with the creator's page. */
-export async function addCreatorSections(slug: string, sections: SectionPlan[]): Promise<CreatorPageRead> {
-    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/sections`, {
+/** Add sections of one of a creator's accounts to the creator's collections, or ignore them. Answers with the
+ * creator's page. */
+export async function addCreatorSections(slug: string, accountId: number, sections: SectionPlan[]): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
@@ -823,14 +824,31 @@ export async function addCreatorSections(slug: string, sections: SectionPlan[]):
     return CreatorPageReadSchema.parse(await response.json())
 }
 
-/** Move one of the creator's playlists, with its videos and their files: a season of its own collection, a collection
- * of its own, or out of the Library. */
-export async function moveCreatorSection(slug: string, ref: string, target: 'main' | 'own' | 'skip'): Promise<CreatorPageRead> {
-    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/sections/${encodeURIComponent(ref)}/move`, {
+/** Move one of the playlists of a creator's account, with its videos and their files: a season of the account's own
+ * collection, a collection of its own, or out of the Library. */
+export async function moveCreatorSection(
+    slug: string, accountId: number, ref: string, target: 'main' | 'own' | 'skip',
+): Promise<CreatorPageRead> {
+    const response = await fetch(
+        `${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections/${encodeURIComponent(ref)}/move`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({target}),
+        },
+    )
+    if (!response.ok) throw await responseError(response)
+    return CreatorPageReadSchema.parse(await response.json())
+}
+
+/** Make another creator in the Library, who is the same person or group, a part of this one. Answers with this
+ * creator's page. */
+export async function combineCreators(slug: string, otherSlug: string): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/combine`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({target}),
+        body: JSON.stringify({otherSlug}),
     })
     if (!response.ok) throw await responseError(response)
     return CreatorPageReadSchema.parse(await response.json())

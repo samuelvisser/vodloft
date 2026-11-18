@@ -26,7 +26,7 @@ import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg} from '../types/collection'
 import DurationPill from '../components/common/DurationPill'
 import './LibraryPage.css'
-import {capitalized} from '../types/creator'
+import {capitalized, creatorKindText} from '../types/creator'
 import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
@@ -210,8 +210,8 @@ export default function LibraryPage() {
     const filteredCreators = useMemo(() => (
         matchesChipFilter('creator', activeKindFilter) && activeCollectionTypeFilter.length === 0
             ? creators?.filter((creator) => (
-                matchesSiteFilter(creator, activeSiteFilter)
-                && matchesLibrarySearch({title: creator.title, authorName: creator.handle}, searchWords)
+                creator.accounts.some((account) => matchesSiteFilter(account, activeSiteFilter))
+                && matchesLibrarySearch({title: creator.title, authorName: creator.accounts[0]?.handle}, searchWords)
             )) ?? []
             : []
     ), [creators, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords])
@@ -405,11 +405,11 @@ export default function LibraryPage() {
                                         {avatar
                                             ? <img className="library-creator-avatar" src={avatar} alt="" loading="lazy" decoding="async"/>
                                             : <span className="library-creator-avatar library-creator-avatar--empty" aria-hidden="true">{creator.title.slice(0, 2).toUpperCase()}</span>}
-                                        <SourceBadge sourceKey={creator.sourceKey} className="library-tile-source"/>
+                                        {creator.accounts.length === 1 && <SourceBadge sourceKey={creator.accounts[0].sourceKey} className="library-tile-source"/>}
                                     </span>
                                     <span className="library-tile-copy">
                                         <span className="library-tile-title">{creator.title}</span>
-                                        <span className="library-tile-author">{creator.site.name} {creator.creatorLabel}</span>
+                                        <span className="library-tile-author">{creatorKindText(creator)}</span>
                                         <span className="library-tile-meta">
                                             <span>{creator.collectionCount} {creator.collectionCount === 1 ? 'collection' : 'collections'}</span>
                                             <span>{creator.episodeCount} videos</span>

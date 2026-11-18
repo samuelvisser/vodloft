@@ -16,6 +16,8 @@ type DialogProps = {
     /** What the collection's Site calls a creator, such as host on The Daily Wire. */
     creatorLabel: string
     onDismiss: () => void
+    /** The collection's Source can find the creator behind its link. Without it, it joins a creator in the Library. */
+    findsCreator?: boolean
 }
 
 function useRefresh(collectionSlug: string) {
@@ -42,16 +44,17 @@ function sectionNote(creator: CollectionCreatorMatch, label: string): string {
 }
 
 /** "Add to creator", in the words of the Site: find the creator behind the collection's link, show what the collection becomes, and add it. */
-export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, onDismiss}: DialogProps) {
-    /** ``behind``: the creator behind the collection's link; otherwise the slug of a creator in the Library. */
-    const [target, setTarget] = useState('behind')
+export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, onDismiss, findsCreator = true}: DialogProps) {
     const {data: libraryCreators} = useCreators()
-    const targets = useMemo(() => createSelectRegistry(`JoinCreatorTarget-${collectionSlug}`, {
-        behind: {label: `The ${creatorLabel} behind its link`},
+    /** ``behind``: the creator behind the collection's link; otherwise the slug of a creator in the Library. */
+    const [picked, setTarget] = useState<string | null>(null)
+    const target = picked ?? (findsCreator ? 'behind' : libraryCreators?.[0]?.slug ?? '')
+    const targets = useMemo(() => createSelectRegistry<string>(`JoinCreatorTarget-${collectionSlug}-${findsCreator}`, {
+        ...(findsCreator ? {behind: {label: `The ${creatorLabel} behind its link`}} : {}),
         ...Object.fromEntries((libraryCreators ?? []).map((other) => [
-            other.slug, {label: `${other.title} (${other.site.name} ${other.creatorLabel})`},
+            other.slug, {label: `${other.title} (${other.kind})`},
         ])),
-    }), [collectionSlug, creatorLabel, libraryCreators])
+    }), [collectionSlug, creatorLabel, libraryCreators, findsCreator])
     const chosen = libraryCreators?.find((other) => other.slug === target)
     const match = useCollectionCreatorMatch(collectionSlug, open && target === 'behind')
     const refresh = useRefresh(collectionSlug)

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import Switch from 'react-switch'
-import { useCollectionDownloadProfilesView, useCollectionStreamProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionEpisodeDownloads, useCollectionDownloadedLocalMediaProfiles, useCollectionSeasons, useEpisodeTagsInCollection, useSourceLookup, useCollectionLocked } from '../../lib/queries'
+import { useCollectionDownloadProfilesView, useCollectionStreamProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionEpisodeDownloads, useCollectionDownloadedLocalMediaProfiles, useCollectionSeasons, useEpisodeTagsInCollection, useSourceLookup, useCollectionLocked, useCreators } from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
@@ -232,6 +232,7 @@ export default function CollectionPage() {
   const [storedShowLocked, setShowLocked] = useShowLocked(id)
   const showLocked = storedShowLocked ?? collection?.site?.showsLocked ?? true
   const creatorLabel = collection?.site?.creatorLabel ?? 'creator'
+  const {data: libraryCreators} = useCreators()
   const {
     data: episodePagesData,
     isLoading: episodesLoading,
@@ -556,7 +557,7 @@ export default function CollectionPage() {
       label: `Remove from ${creatorLabel}`,
       icon: faIcon('fass', 'link-slash') as [string, string],
       onSelect: () => setCreatorDialog('remove'),
-    }] : hasSourceFeature(collection, SourceFeature.CREATORS) ? [{
+    }] : hasSourceFeature(collection, SourceFeature.CREATORS) || (libraryCreators?.length ?? 0) > 0 ? [{
       label: `Add to ${creatorLabel}`,
       icon: faIcon('fass', 'circle-user') as [string, string],
       onSelect: () => setCreatorDialog('add'),
@@ -890,6 +891,7 @@ export default function CollectionPage() {
 
       <AddToCreatorDialog
         open={creatorDialog === 'add'}
+        findsCreator={hasSourceFeature(collection, SourceFeature.CREATORS)}
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
         creatorLabel={creatorLabel}

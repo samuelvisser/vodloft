@@ -43,13 +43,16 @@ def _list_collection_ids(creator: Creator, seasons: frozenset[str] = frozenset()
     refs = {section.ref for section in lists}
     return {
         collection.id for collection in creator.collections
-        if collection.id != creator.main_collection_id and (collection.sharing_url in urls or collection.slug in refs)
+        if collection.id not in creator.main_collection_ids and (collection.sharing_url in urls or collection.slug in refs)
     }
 
 
 def _main_seasons(s: Session, creator: Creator) -> frozenset[str]:
-    main = creator.main_collection
-    return frozenset(link.ref for link in active_lists(s, main)) if main is not None else frozenset()
+    """The lists that are seasons of the creator's own collections, one for each account that has one."""
+    return frozenset(
+        link.ref for account in creator.accounts if account.main_collection is not None
+        for link in active_lists(s, account.main_collection)
+    )
 
 
 @dataclass
@@ -82,7 +85,8 @@ class CreatorPlaces:
 
 
 def creator_places(s: Session, creator: Creator) -> CreatorPlaces:
-    order = sorted(creator.collections, key=lambda collection: (collection.id != creator.main_collection_id, collection.id))
+    mains = creator.main_collection_ids
+    order = sorted(creator.collections, key=lambda collection: (collection.id not in mains, collection.id))
     lists = _list_collection_ids(creator, _main_seasons(s, creator))
     places = CreatorPlaces(order=order, held={})
     ids = [collection.id for collection in order]
@@ -91,7 +95,7 @@ def creator_places(s: Session, creator: Creator) -> CreatorPlaces:
     for episode in s.scalars(select(Episode).where(Episode.collection_id.in_(ids), Episode.part_of.is_(None))):
         places.episodes[episode.collection_id][episode.source_slug] = episode
     for collection in order:
-        if collection.id == creator.main_collection_id:
+        if collection.id in mains:
             places.held[collection.id] = set(_holders(s, active_lists(s, collection))) if link_seasons_on(collection) else set()
         elif collection.id in lists:
             # Its own link is the list: every video it has that the list still lists.

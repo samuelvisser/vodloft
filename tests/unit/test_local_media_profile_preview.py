@@ -301,7 +301,10 @@ def test_item_specific_directory_segment_has_no_shared_collection_root(examples)
 
 
 def test_a_folder_per_creator_is_above_the_collections_own_folder(examples):
-    creator = SimpleNamespace(title="Northwind Workshop", handle="@northwind", source_key="ytdlp", site_key="youtube")
+    creator = SimpleNamespace(
+        title="Northwind Workshop", collections=[], sections=[], main_collection_ids=set(),
+        accounts=[SimpleNamespace(handle="@northwind", source_key="ytdlp", site_key="youtube")],
+    )
     collection = SimpleNamespace(
         title="Tool Reviews", slug="tool-reviews", seasons=[], meta_items=[], creator=creator,
     )

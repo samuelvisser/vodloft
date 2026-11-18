@@ -3,21 +3,22 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 
 type CreatorHeaderProps = {
     title: string
-    /** What the Site calls it, such as "YouTube creator". */
+    /** What it is, such as "YouTube creator", or "creator" on several Sites. */
     label: string
     handle?: string | null
     avatarUrl?: string | null
     bannerUrl?: string | null
     facts?: string[]
     description?: string | null
-    url?: string | null
+    /** Its pages on its Sites, such as "Open on YouTube". */
+    links?: {label: string, url: string}[]
     /** The id of the title, when it is the page's own heading. */
     titleId?: string
     actions?: ReactNode
 }
 
-/** A creator's banner, picture, name and facts, as its Site shows them. */
-export default function CreatorHeader({title, label, handle, avatarUrl, bannerUrl, facts = [], description, url, titleId, actions}: CreatorHeaderProps) {
+/** A creator's banner, picture, name and facts, as their Site shows them, and their pages on their Sites. */
+export default function CreatorHeader({title, label, handle, avatarUrl, bannerUrl, facts = [], description, links = [], titleId, actions}: CreatorHeaderProps) {
     const Heading = titleId ? 'h1' : 'h2'
     const banner = toImageUrl(bannerUrl)
     const avatar = toImageUrl(avatarUrl)
@@ -33,7 +34,9 @@ export default function CreatorHeader({title, label, handle, avatarUrl, bannerUr
                     <Heading id={titleId}>{title}</Heading>
                     <p className="creator-facts">
                         {[handle, ...facts].filter(Boolean).join(' · ')}
-                        {url && <> · <a href={url} target="_blank" rel="noreferrer">Open on the site</a></>}
+                        {links.map((link) => (
+                            <span key={link.url}> · <a href={link.url} target="_blank" rel="noreferrer">{link.label}</a></span>
+                        ))}
                     </p>
                     {description && <p className="creator-description">{description}</p>}
                 </div>

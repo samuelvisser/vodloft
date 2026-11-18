@@ -9,7 +9,6 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from sources import site_of
 
 from backend.db.models import Creator, CreatorSection, Collection, CollectionList, DownloadProfile, Episode, User
 
@@ -80,6 +79,8 @@ def quick_download_finished(session: Session, *, owner: str | None, title: str) 
 
 def creator_sections_found(session: Session, creator: Creator, sections: list[CreatorSection]) -> None:
     """The daily look found sections of a creator that wait for a choice: add them, or ignore them."""
+    from backend.services.creators import creator_label
+
     if not sections:
         return
     names = ", ".join(section.title for section in sections[:3]) + (f" and {len(sections) - 3} more" if len(sections) > 3 else "")
@@ -89,7 +90,7 @@ def creator_sections_found(session: Session, creator: Creator, sections: list[Cr
     emit(
         session, Event.CREATOR_SECTIONS_FOUND,
         title=f"New {what} on {creator.title}" if len(sections) == 1 else f"{len(sections)} new {what} on {creator.title}",
-        body=f"{names}. Choose on the {site_of(creator.site_key).creator_label}'s page whether to add {'it' if len(sections) == 1 else 'them'}.",
+        body=f"{names}. Choose on the {creator_label(creator)}'s page whether to add {'it' if len(sections) == 1 else 'them'}.",
         url=f"/creator/{creator.slug}", data={"creator": creator.title, "sections": [section.title for section in sections]},
         dedupe_key=f"creator-sections:{creator.id}:{','.join(sorted(section.ref for section in sections))}",
     )
