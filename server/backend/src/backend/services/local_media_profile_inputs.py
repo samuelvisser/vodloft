@@ -104,7 +104,7 @@ class LocalMediaProfileInput(InputModel):
     """NFO files replace the characters Kodi cannot show, such as emoji."""
     filename_restriction_mode: LocalMediaProfileFilenameMode = LocalMediaProfileFilenameMode.SYSTEM
     """How file and folder names are made safe; System follows Settings."""
-    file_date_from_publish_date: bool = True
+    file_date_from_publish_date: bool = False
     """Downloaded files get the date the media was published."""
     subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
     subtitle_languages: list[str] = Field(default_factory=lambda: ["en"], max_length=20)
