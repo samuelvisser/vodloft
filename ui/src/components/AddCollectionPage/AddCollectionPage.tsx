@@ -77,8 +77,13 @@ const loadWizardState = () => loadFormDraft<WizardState>(STORAGE_KEY, DRAFT_SCHE
 const saveWizardState = (state: WizardState) => saveFormDraft(STORAGE_KEY, DRAFT_SCHEMA_VERSION, state)
 const clearWizardState = () => clearFormDraft(STORAGE_KEY)
 
-/** Whether the saved wizard holds anything the user did, rather than only the empty first step. */
-const hasWizardProgress = (state: WizardState | null) => !!state && (state.step > 1 || !!state.collection.input.url?.trim())
+/**
+ * Whether the saved wizard holds anything the user did, rather than only the first step as it opened: empty, or
+ * with the collection link the wizard was opened with.
+ */
+const hasWizardProgress = (state: WizardState | null, initialUrl?: string) => (
+    !!state && (state.step > 1 || (!initialUrl && !!state.collection.input.url?.trim()))
+)
 
 /** The settings of the profile the collection gets: the new one, or the existing one it picked. */
 function chosenProfileSettings(
@@ -116,7 +121,6 @@ export default function AddCollectionPage(props: Props) {
         <AddCollectionWizard
             key={generation}
             {...props}
-            initialUrl={generation === 0 ? props.initialUrl : undefined}
             onStartOver={() => {
                 clearWizardState()
                 setGeneration((current) => current + 1)
@@ -126,8 +130,14 @@ export default function AddCollectionPage(props: Props) {
 }
 
 function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Props & {onStartOver: () => void}) {
-    const [persisted] = useState(() => initialUrl ? null : loadWizardState())
-    const [showRestored, setShowRestored] = useState(() => hasWizardProgress(persisted))
+    // A link that opens the wizard for a collection (?url=...) still finds the wizard as it was left for that
+    // collection, so a reload keeps the user's place; for another collection it starts over.
+    const [persisted] = useState(() => {
+        const saved = loadWizardState()
+        if (!initialUrl || saved?.collection.input.url?.trim() === initialUrl.trim()) return saved
+        return null
+    })
+    const [showRestored, setShowRestored] = useState(() => hasWizardProgress(persisted, initialUrl))
     const [globalMessage, setGlobalMessage] = useState<WizardMessage | null>(() => persisted?.globalMessage ?? null)
     const [isFinishing, setIsFinishing] = useState(false)
     const setWizardMessage = (message: string, type: WizardType) => setGlobalMessage({text: message, type})
