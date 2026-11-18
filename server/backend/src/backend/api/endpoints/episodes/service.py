@@ -549,7 +549,7 @@ def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPI
 
 
 def move_episode_to_its_collection(s: Session, episode_slug: str):
-    """Move a reassigned episode to the collection its channel places it in now, with its files.
+    """Move a reassigned episode to the collection its creator places it in now, with its files.
 
     ``s`` is a write transaction's session."""
     from backend.services.reassigned import move_and_rename, reassignment_of

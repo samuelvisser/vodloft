@@ -20,7 +20,7 @@ import {PreferredFormatReg} from '../../types/local_media_profile'
 import {getEpisodePreviewTotal, loadEpisodePreviewFromStorage} from '../../lib/cache'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import CollectionDownloadAllDialog from './CollectionDownloadAllDialog'
-import {AddToChannelDialog, RemoveFromChannelDialog} from './CollectionChannelDialogs'
+import {AddToCreatorDialog, RemoveFromCreatorDialog} from './CollectionCreatorDialogs'
 import {hasSourceFeature, SourceFeature} from '../../types/schemas/source'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import './CollectionPage.css'
@@ -151,7 +151,7 @@ export default function CollectionPage() {
   const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
   const [redownloadConfirm, setRedownloadConfirm] = useState(false)
   const [downloadAllConfirm, setDownloadAllConfirm] = useState(false)
-  const [channelDialog, setChannelDialog] = useState<'add' | 'remove' | null>(null)
+  const [creatorDialog, setCreatorDialog] = useState<'add' | 'remove' | null>(null)
   const [syncLogOpen, setSyncLogOpen] = useState(false)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
@@ -231,7 +231,7 @@ export default function CollectionPage() {
   // YouTube channel's members-only videos. Episodes the account can watch are never hidden.
   const [storedShowLocked, setShowLocked] = useShowLocked(id)
   const showLocked = storedShowLocked ?? collection?.site?.showsLocked ?? true
-  const channelLabel = collection?.site?.channelLabel ?? 'channel'
+  const creatorLabel = collection?.site?.creatorLabel ?? 'creator'
   const {
     data: episodePagesData,
     isLoading: episodesLoading,
@@ -552,14 +552,14 @@ export default function CollectionPage() {
       disabledReason: lockedCheckBusy ? 'The locked videos are being checked again.' : undefined,
       onSelect: () => void checkLockedAgain(),
     }] : []),
-    ...(collection.channelSlug ? [{
-      label: `Remove from ${channelLabel}`,
+    ...(collection.creatorSlug ? [{
+      label: `Remove from ${creatorLabel}`,
       icon: faIcon('fass', 'link-slash') as [string, string],
-      onSelect: () => setChannelDialog('remove'),
-    }] : hasSourceFeature(collection, SourceFeature.CHANNELS) ? [{
-      label: `Add to ${channelLabel}`,
+      onSelect: () => setCreatorDialog('remove'),
+    }] : hasSourceFeature(collection, SourceFeature.CREATORS) ? [{
+      label: `Add to ${creatorLabel}`,
       icon: faIcon('fass', 'circle-user') as [string, string],
-      onSelect: () => setChannelDialog('add'),
+      onSelect: () => setCreatorDialog('add'),
     }] : []),
     ...(sourceControls(collection).metadataRefresh ? [{
       label: 'Refresh all metadata',
@@ -636,8 +636,8 @@ export default function CollectionPage() {
         <header className="collection-page-header">
           <div className="collection-page-heading">
             <div className="collection-author">
-              {collection.channelSlug
-                ? <Link to={`/channel/${collection.channelSlug}`}>{collection.channelTitle ?? collection.authorName}</Link>
+              {collection.creatorSlug
+                ? <Link to={`/creator/${collection.creatorSlug}`}>{collection.creatorTitle ?? collection.authorName}</Link>
                 : collection.authorName}
             </div>
             <div className="collection-meta">{[`${total} episodes`, collection.years, addedByLabel(collection.addedBy)].filter(Boolean).join(' • ')}</div>
@@ -888,19 +888,19 @@ export default function CollectionPage() {
         />
       )}
 
-      <AddToChannelDialog
-        open={channelDialog === 'add'}
+      <AddToCreatorDialog
+        open={creatorDialog === 'add'}
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
-        channelLabel={channelLabel}
-        onDismiss={() => setChannelDialog(null)}
+        creatorLabel={creatorLabel}
+        onDismiss={() => setCreatorDialog(null)}
       />
-      <RemoveFromChannelDialog
-        open={channelDialog === 'remove'}
+      <RemoveFromCreatorDialog
+        open={creatorDialog === 'remove'}
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
-        channelLabel={channelLabel}
-        onDismiss={() => setChannelDialog(null)}
+        creatorLabel={creatorLabel}
+        onDismiss={() => setCreatorDialog(null)}
       />
 
       <ActionConfirmDialogue
@@ -965,8 +965,8 @@ export default function CollectionPage() {
               <b>Also move reassigned episodes out</b>
               <span className="help">
                 {reassignedEpisodes.size === 1
-                  ? 'One downloaded episode belongs in another collection of this channel now. It moves there with its files'
-                  : `${reassignedEpisodes.size} downloaded episodes belong in other collections of this channel now. They move there with their files`},
+                  ? 'One downloaded episode belongs in another collection of this creator now. It moves there with its files'
+                  : `${reassignedEpisodes.size} downloaded episodes belong in other collections of this creator now. They move there with their files`},
                 or are downloaded again there when that collection uses another Local Media Profile. Episodes reassigned
                 to this collection from elsewhere stay where they are.
               </span>

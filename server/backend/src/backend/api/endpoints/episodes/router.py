@@ -166,7 +166,7 @@ def episode_move_to_season(episode_slug: str):
     response_model=ReassignedMoveAPIRead,
 )
 def episode_move_to_collection(episode_slug: str):
-    """Move a reassigned episode, and its files, to the collection its channel places it in now."""
+    """Move a reassigned episode, and its files, to the collection its creator places it in now."""
     return run_write_transaction(lambda s: move_episode_to_its_collection(s, episode_slug))
 
 

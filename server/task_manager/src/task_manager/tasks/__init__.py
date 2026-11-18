@@ -41,7 +41,7 @@ _WORKER_EXPORTS = {
     "upgrade_check": ".workers.upgrade_check",
     "check_locked_media": ".workers.check_locked_media",
     "rescan_quick_checked_collections": ".workers.quick_check_new_videos",
-    "follow_channels": ".workers.follow_channels",
+    "follow_creators": ".workers.follow_creators",
 }
 
 

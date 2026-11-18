@@ -133,7 +133,7 @@ class CollectionFileRenameAPIRequest(RequestBase):
     """Files move to their season's folder too. Without it each file keeps its folder and only its name changes.
     With it, a video with files also moves to the playlist season it belongs in now first."""
     move_reassigned: bool = False
-    """The collection's reassigned videos move out to the collections of its channel they belong in now, with their
+    """The collection's reassigned videos move out to the collections of its creator they belong in now, with their
     files. Videos reassigned to this collection from another one stay where they are."""
 
 
@@ -233,12 +233,12 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     cookies_needed_until: Optional[datetime] = None
     check_frequency: CheckFrequency = CheckFrequency.DEFAULT
     check_cron: Optional[str] = None
-    channel_slug: Optional[str] = Field(
-        default=None, validation_alias=AliasChoices(AliasPath("channel", "slug"), AliasPath("collection", "channel", "slug")),
+    creator_slug: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices(AliasPath("creator", "slug"), AliasPath("collection", "creator", "slug")),
     )
-    """The channel the collection belongs to, when it was added with one."""
-    channel_title: Optional[str] = Field(
-        default=None, validation_alias=AliasChoices(AliasPath("channel", "title"), AliasPath("collection", "channel", "title")),
+    """The creator the collection belongs to, when it was added with one."""
+    creator_title: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices(AliasPath("creator", "title"), AliasPath("collection", "creator", "title")),
     )
 
 

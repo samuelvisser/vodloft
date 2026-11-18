@@ -148,7 +148,7 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
                                     {!audioOnly && (
                                         <p>
                                             <strong>Music videos</strong>: <code>Artist/Title</code>, with a musicvideo NFO for a Music
-                                            Videos library in Jellyfin, Emby, Kodi or Plex. The artist is the channel's name.
+                                            Videos library in Jellyfin, Emby, Kodi or Plex. The artist is the creator's name.
                                         </p>
                                     )}
                                     {audioOnly && (

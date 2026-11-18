@@ -131,8 +131,8 @@ class ImportOptions:
     """Output templates the person edited, by profile external id."""
     feed_base_url: str | None = None
     """VODLoft's own address, from the request that started the run: imported feeds get their URL on it."""
-    as_channels: bool = True
-    """Add each new Collection to the channel behind its links, adding the channel when it is not in the Library."""
+    as_creators: bool = True
+    """Add each new Collection to the creator behind its links, adding the creator when it is not in the Library."""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -145,7 +145,7 @@ class ImportOptions:
             "merge_profiles": self.merge_profiles,
             "templates": dict(self.templates),
             "feed_base_url": self.feed_base_url,
-            "as_channels": self.as_channels,
+            "as_creators": self.as_creators,
         }
 
     @classmethod
@@ -164,7 +164,7 @@ class ImportOptions:
             merge_profiles=bool(data.get("merge_profiles", False)) if data else None,
             templates=dict(data.get("templates") or {}),
             feed_base_url=data.get("feed_base_url"),
-            as_channels=bool(data.get("as_channels", True)),
+            as_creators=bool(data.get("as_creators", True)),
         )
 
 
@@ -613,8 +613,8 @@ class ImportPreview:
     last_run: ImportRun | None
     merge_profiles: bool
     counts: ImportCounts
-    channels: bool = False
-    """Whether the person chooses to add the collections to their channels."""
+    creators: bool = False
+    """Whether the person chooses to add the collections to their creators."""
 
 
 def last_run(session: Session, importer: Importer) -> ImportRun | None:
@@ -704,7 +704,7 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> Imp
         warnings=plan.warnings,
         records=records,
         last_run=last_run(session, importer),
-        channels=plan.channels,
+        creators=plan.creators,
         merge_profiles=bool(options.merge_profiles),
         counts=ImportCounts(
             collections=len(records["collections"]) if records else len(plan.collections),
@@ -1046,7 +1046,7 @@ def _settle_field_keys(session: Session, plan: ImportPlan, links, library: Mappi
     return replace(plan, profiles=profiles, collections=tuple(collections))
 
 
-def _create_collection(session: Session, plan: CollectionPlan, as_channels: bool = True) -> Collection:
+def _create_collection(session: Session, plan: CollectionPlan, as_creators: bool = True) -> Collection:
     """A new yt-dlp Collection for the plan, looked up the way Add Collection does."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
@@ -1054,8 +1054,8 @@ def _create_collection(session: Session, plan: CollectionPlan, as_channels: bool
     from sources import get_source
 
     source = get_source("ytdlp")
-    if plan.channel:
-        return _create_channel_collection(session, plan) if as_channels else _create_artist_collection(session, plan)
+    if plan.creator:
+        return _create_creator_collection(session, plan) if as_creators else _create_artist_collection(session, plan)
     if plan.links_only:
         return _create_links_only_collection(session, plan)
     details = source.collection_details(plan.url)
@@ -1070,8 +1070,8 @@ def _create_collection(session: Session, plan: CollectionPlan, as_channels: bool
     )
     add_collection(session, collection)
     _add_link_seasons(session, collection, plan)
-    if as_channels:
-        _join_channel(session, collection)
+    if as_creators:
+        _join_creator(session, collection)
     index_new_collection(session, collection)
     return collection
 
@@ -1091,28 +1091,28 @@ def _create_links_only_collection(session: Session, plan: CollectionPlan) -> Col
     return collection
 
 
-def _join_channel(session: Session, collection: Collection) -> None:
-    """Make a new Collection one of the channel behind its link, as Add to channel does, when it has one."""
-    from backend.services.channels import join_channel
+def _join_creator(session: Session, collection: Collection) -> None:
+    """Make a new Collection one of the creator behind its link, as Add to creator does, when it has one."""
+    from backend.services.creators import join_creator
     from sources import Feature, get_source
 
     source = get_source(collection.source_key)
-    if not source.has(Feature.CHANNELS) or collection.sharing_url is None:
+    if not source.has(Feature.CREATORS) or collection.sharing_url is None:
         return
     try:
-        ref = source.channel_of(collection.sharing_url)
+        ref = source.creator_of(collection.sharing_url)
         if ref is None:
             return
-        details = source.channel_details(ref)
+        details = source.creator_details(ref)
         with session.begin_nested():
-            join_channel(session, collection, source_key=source.id, details=details)
-    except Exception as exc:  # noqa: BLE001  (a channel that can't be looked up leaves a plain collection)
-        logger.info("Imported %s without its channel: %s", collection.title, exc)
+            join_creator(session, collection, source_key=source.id, details=details)
+    except Exception as exc:  # noqa: BLE001  (a creator that can't be looked up leaves a plain collection)
+        logger.info("Imported %s without its creator: %s", collection.title, exc)
 
 
 def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collection:
     """A plain collection of everything on a creator's page, such as a Bandcamp artist's albums, each album a season
-    of its own, for an import that adds no channels."""
+    of its own, for an import that adds no creators."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
     from backend.types.link_season_types import LinkSeasons
@@ -1120,7 +1120,7 @@ def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collect
     from sources import SectionKind, get_source
 
     source = get_source("ytdlp")
-    details = source.channel_details(plan.url)
+    details = source.creator_details(plan.url)
     sections = [section for section in details.sections if section.access is None]
     if not sections:
         raise ValueError(f"{details.title} has nothing VODLoft can add")
@@ -1141,34 +1141,34 @@ def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collect
     return collection
 
 
-def _create_channel_collection(session: Session, plan: CollectionPlan) -> Collection:
-    """The collection of the creator whose page the plan's link is, such as a Bandcamp artist: the channel is added
+def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collection:
+    """The collection of the creator whose page the plan's link is, such as a Bandcamp artist: the creator is added
     with everything on it in one collection, each list a season of its own, and takes the plan's genre and rating
     for the collections it makes later."""
-    from backend.services.channels import NewCollectionSettings, SectionPlan, add_channel
-    from backend.types.channel_types import SectionTarget
+    from backend.services.creators import NewCollectionSettings, SectionPlan, add_creator
+    from backend.types.creator_types import SectionTarget
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
     from sources import get_source
 
-    from backend.services.channels import channel_in_library, channel_site
+    from backend.services.creators import creator_in_library, creator_site
 
     source = get_source("ytdlp")
-    details = source.channel_details(plan.url)
-    site = channel_site(source.id, details.url or plan.url)
-    existing = channel_in_library(session, site.key, details.ref)
+    details = source.creator_details(plan.url)
+    site = creator_site(source.id, details.url or plan.url)
+    existing = creator_in_library(session, site.key, details.ref)
     if existing is not None and existing.main_collection is not None:
         # The artist is in the Library already: the import links their collection.
         raise CollectionAlreadyAddedError(existing.main_collection, existing.site)
     plans = [SectionPlan(section.ref, SectionTarget.MAIN) for section in details.sections if section.access is None]
     kind = CollectionType.MUSIC if details.music else CollectionType(plan.settings.get("type", CollectionType.SERIES.value))
-    channel, _made = add_channel(session, source_key=source.id, details=details, plans=plans, settings=NewCollectionSettings(
+    creator, _made = add_creator(session, source_key=source.id, details=details, plans=plans, settings=NewCollectionSettings(
         type=kind, episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
         membership_level="FREE",
     ))
-    channel.genre, channel.content_rating = plan.settings.get("genre"), plan.settings.get("content_rating")
-    if channel.main_collection is None:
+    creator.genre, creator.content_rating = plan.settings.get("genre"), plan.settings.get("content_rating")
+    if creator.main_collection is None:
         raise ValueError(f"{details.title} has nothing VODLoft can add")
-    return channel.main_collection
+    return creator.main_collection
 
 
 def _add_link_seasons(session: Session, collection: Collection, plan: CollectionPlan) -> int:
@@ -1204,7 +1204,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
 
     loose = plan.loose_season
     if loose is not None and not any(season.loose for season in seasons.values()):
-        # The channel's videos in none of the playlists keep the season the other program had them in.
+        # The creator's videos in none of the playlists keep the season the other program had them in.
         if (season := season_of(loose.season_number, loose.title)) is not None:
             season.loose = True
     added = 0
@@ -1232,7 +1232,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
 
 
 def _upsert_collection(
-    session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report, as_channels: bool = True,
+    session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report, as_creators: bool = True,
 ) -> tuple[Collection | None, bool]:
     """The Collection, and whether it was just created (and so is being indexed)."""
     link = links.get(("collection", plan.external_id))
@@ -1246,7 +1246,7 @@ def _upsert_collection(
     if existing is None:
         try:
             with session.begin_nested():
-                existing = _create_collection(session, plan, as_channels)
+                existing = _create_collection(session, plan, as_creators)
         except CollectionAlreadyAddedError as exc:
             # The same collection, through another Source or under another link.
             existing = exc.existing
@@ -1434,7 +1434,7 @@ def _apply_loaded_plan(
         if profile is None:
             continue
         collection, created = _upsert_collection(
-            session, collection_plan, library, links, run, report, plan.channels and options.as_channels,
+            session, collection_plan, library, links, run, report, plan.creators and options.as_creators,
         )
         if collection is None:
             continue

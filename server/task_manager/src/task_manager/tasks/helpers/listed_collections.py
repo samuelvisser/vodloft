@@ -12,8 +12,8 @@ how its episodes are identified:
 Only episodes with the Source's main tag follow that scheme. Every other tag,
 such as a YouTube Short, counts on its own across the collection: short.1, short.2.
 
-A collection made from a creator's channel, on a Site with ``link_seasons``,
-can make the channel's playlists, or an artist's albums, its link seasons: every
+A collection made from a creator's whole channel, on a Site with ``link_seasons``,
+can make the creator's playlists, or an artist's albums, its link seasons: every
 one, or the ones the user keeps on. A link season only takes videos the collection
 itself lists, so a video of another creator in it stays out. A video in a link
 season goes to that season, and a video in several of them to the one that comes
@@ -53,7 +53,7 @@ from backend.db.models import Collection, Episode, Season
 from backend.db.core import run_write_transaction
 from backend.services.media_access import lock_refused
 from backend.services.notifications.emitters import link_seasons_found
-from backend.services.reassigned import placed_elsewhere, settle_channel
+from backend.services.reassigned import placed_elsewhere, settle_creator
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
     SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, place_in_link_seasons, link_seasons_on,
@@ -147,7 +147,7 @@ def date_based_identifier(s: Session, episode: Episode, published_at: datetime) 
 
 
 def known_episode_slugs(s: Session, collection: Collection) -> frozenset[str]:
-    """The videos the collection has, and the ones it does not add because another collection of its channel holds
+    """The videos the collection has, and the ones it does not add because another collection of its creator holds
     them by a list."""
     return frozenset(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id))) | placed_elsewhere(s, collection)
 
@@ -231,7 +231,7 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
         if listing is not None:
             link_seasons_found(w, collection, save_lists(w, collection, listing))
         place_in_link_seasons(w, collection)
-        settle_channel(w, collection)
+        settle_creator(w, collection)
         return added
 
     return run_write_transaction(save)
@@ -340,7 +340,7 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
         return 0
 
     known = set(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id, Episode.video_slug.in_(listed))))
-    # A list of another collection of the channel holds it, so it belongs there.
+    # A list of another collection of the creator holds it, so it belongs there.
     known |= placed_elsewhere(s, collection) & set(listed)
     ordered = sorted((details for slug, details in listed.items() if slug not in known), key=lambda details: _order_key(details, now))
 

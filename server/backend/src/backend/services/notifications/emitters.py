@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from sources import site_of
 
-from backend.db.models import Channel, ChannelSection, Collection, CollectionList, DownloadProfile, Episode, User
+from backend.db.models import Creator, CreatorSection, Collection, CollectionList, DownloadProfile, Episode, User
 
 from .events import Event, emit
 
@@ -78,8 +78,8 @@ def quick_download_finished(session: Session, *, owner: str | None, title: str) 
     )
 
 
-def channel_sections_found(session: Session, channel: Channel, sections: list[ChannelSection]) -> None:
-    """The daily look found sections of a channel that wait for a choice: add them, or ignore them."""
+def creator_sections_found(session: Session, creator: Creator, sections: list[CreatorSection]) -> None:
+    """The daily look found sections of a creator that wait for a choice: add them, or ignore them."""
     if not sections:
         return
     names = ", ".join(section.title for section in sections[:3]) + (f" and {len(sections) - 3} more" if len(sections) > 3 else "")
@@ -87,11 +87,11 @@ def channel_sections_found(session: Session, channel: Channel, sections: list[Ch
     label = labels.pop() if len(labels) == 1 and "" not in labels else "section"
     what = label if len(sections) == 1 else f"{label}s"
     emit(
-        session, Event.CHANNEL_SECTIONS_FOUND,
-        title=f"New {what} on {channel.title}" if len(sections) == 1 else f"{len(sections)} new {what} on {channel.title}",
-        body=f"{names}. Choose on the {site_of(channel.site_key).channel_label}'s page whether to add {'it' if len(sections) == 1 else 'them'}.",
-        url=f"/channel/{channel.slug}", data={"channel": channel.title, "sections": [section.title for section in sections]},
-        dedupe_key=f"channel-sections:{channel.id}:{','.join(sorted(section.ref for section in sections))}",
+        session, Event.CREATOR_SECTIONS_FOUND,
+        title=f"New {what} on {creator.title}" if len(sections) == 1 else f"{len(sections)} new {what} on {creator.title}",
+        body=f"{names}. Choose on the {site_of(creator.site_key).creator_label}'s page whether to add {'it' if len(sections) == 1 else 'them'}.",
+        url=f"/creator/{creator.slug}", data={"creator": creator.title, "sections": [section.title for section in sections]},
+        dedupe_key=f"creator-sections:{creator.id}:{','.join(sorted(section.ref for section in sections))}",
     )
 
 
@@ -102,7 +102,7 @@ def link_seasons_found(session: Session, collection: Collection, playlists: list
     names = ", ".join(playlist.title for playlist in playlists[:3]) + (f" and {len(playlists) - 3} more" if len(playlists) > 3 else "")
     one = len(playlists) == 1
     emit(
-        session, Event.CHANNEL_SECTIONS_FOUND,
+        session, Event.CREATOR_SECTIONS_FOUND,
         title=f"New playlist for {collection.title}" if one else f"{len(playlists)} new playlists for {collection.title}",
         body=f"{names}. Choose in the collection's seasons whether {'it becomes a season' if one else 'they become seasons'}.",
         url=f"/edit-collection/{collection.id}?seasons=1",

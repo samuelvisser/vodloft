@@ -2,17 +2,17 @@ from enum import StrEnum
 
 
 class LinkSeasons(StrEnum):
-    """Whether a collection made from a channel turns the channel's playlists into seasons."""
+    """Whether a collection made from a creator turns the creator's playlists into seasons."""
 
     OFF = "off"
     ALL = "all"
-    """Every playlist is a season, also the ones the channel adds later."""
+    """Every playlist is a season, also the ones the creator adds later."""
     SELECTED = "selected"
     """Only the playlists the user keeps on; ``NewLinkSeasonAction`` says what happens with new ones."""
 
 
 class NewLinkSeasonAction(StrEnum):
-    """What happens with a playlist the channel adds later, when only selected playlists are seasons."""
+    """What happens with a playlist the creator adds later, when only selected playlists are seasons."""
 
     ASK = "ask"
     """Send a message, and show the playlist in the collection's Seasons dialog to turn on."""

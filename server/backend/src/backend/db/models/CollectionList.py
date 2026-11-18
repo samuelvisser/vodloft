@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 class CollectionList(Base):
     """A list of a collection: what a Site groups videos in, such as a YouTube playlist or an artist's album, from the
-    channel the collection is made from. It is a season of the collection, or one of the lists of a season that holds
+    creator the collection is made from. It is a season of the collection, or one of the lists of a season that holds
     several. A collection that only holds its lists' videos can also have lists the user added, from any Site its
     Source fetches.
     """
@@ -41,7 +41,7 @@ class CollectionList(Base):
     )
     added_by_user: Mapped[bool] = mapped_column(
         default=False, server_default="0",
-        comment="The user added the link, rather than it being one of the playlists of the collection's channel",
+        comment="The user added the link, rather than it being one of the playlists of the collection's creator",
     )
     season_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("seasons.id", ondelete="SET NULL"), comment="The list's season, once it has one, which other lists of the collection may share",

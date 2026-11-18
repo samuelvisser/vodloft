@@ -1,4 +1,4 @@
-"""A collection's Seasons dialog: its seasons in order, and whether its channel's playlists are seasons."""
+"""A collection's Seasons dialog: its seasons in order, and whether its creator's playlists are seasons."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -46,7 +46,7 @@ class CollectionListAPIRead(ResponseBase):
     """How many of those have files."""
     added_by_user: bool = False
     """A link the user added, which they can remove again, rather than one of the playlists of the collection's
-    channel."""
+    creator."""
 
 
 class ListNamesAPIRead(ResponseBase):
@@ -82,12 +82,12 @@ class CollectionSeasonsAPIRead(ResponseBase):
     to hold only what its playlists have."""
     only_leaving_with_files: int = 0
     names: ListNamesAPIRead
-    channel_slug: Optional[str] = None
-    """For a channel's own collection: the channel, which finds its new lists and decides what happens with them."""
-    channel_title: Optional[str] = None
+    creator_slug: Optional[str] = None
+    """For a creator's own collection: the creator, which finds its new lists and decides what happens with them."""
+    creator_title: Optional[str] = None
     """What the collection's Site calls its link seasons, such as playlists or albums."""
     music: bool = False
-    """A Music collection, of an artist's tracks rather than a channel's videos."""
+    """A Music collection, of an artist's tracks rather than a creator's videos."""
     playlists: list[CollectionListAPIRead]
 
 
@@ -97,7 +97,7 @@ class MovedEpisodesAPIRead(ResponseBase):
 
 
 class ReassignedEpisodeAPIRead(ResponseBase):
-    """A downloaded video that its channel places in another of its collections now."""
+    """A downloaded video that its creator places in another of its collections now."""
 
     episode_slug: str = Field(validation_alias=AliasPath("episode", "slug"))
     collection_slug: str = Field(validation_alias=AliasPath("target", "collection", "slug"))

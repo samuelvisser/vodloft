@@ -23,7 +23,7 @@ class DefaultRule:
     delivery: str = "now"
 
 
-# Out of the box: problems, and choices a channel asks for, pushed to administrators, and the daily summary one
+# Out of the box: problems, and choices a creator asks for, pushed to administrators, and the daily summary one
 # switch away.
 DEFAULT_RULES: tuple[DefaultRule, ...] = (
     DefaultRule("download_failed", Event.DOWNLOAD_FAILED),
@@ -31,7 +31,7 @@ DEFAULT_RULES: tuple[DefaultRule, ...] = (
     DefaultRule("disk_almost_full", Event.DISK_ALMOST_FULL),
     DefaultRule("task_failing", Event.TASK_FAILING),
     DefaultRule("update_available", Event.UPDATE_AVAILABLE),
-    DefaultRule("channel_sections_found", Event.CHANNEL_SECTIONS_FOUND),
+    DefaultRule("creator_sections_found", Event.CREATOR_SECTIONS_FOUND),
     DefaultRule("daily_summary", Event.EVERYTHING, enabled=False, delivery="daily"),
 )
 

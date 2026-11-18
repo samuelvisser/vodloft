@@ -8,7 +8,7 @@ import requests
 from downloader.hls import is_master_playlist, media_playlist_segments, parse_master_playlist
 
 from ..contract import (
-    Access, ChannelDetails, ChannelPreset, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
+    Access, CreatorDetails, CreatorPreset, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
     DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, SiteSetting, SiteSettings, Source, StreamMethod,
     ReleaseDate, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
@@ -110,9 +110,9 @@ class DailyWireSource(Source):
         ),
         accesses=MEMBERSHIP_ACCESSES,
         # A host has no feed to fold into one show: each of their shows keeps its own seasons.
-        channels=True,
-        channel_label="host",
-        channel_presets=(ChannelPreset.PER_LIST, ChannelPreset.PICK),
+        creators=True,
+        creator_label="host",
+        creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
     features = frozenset({
@@ -125,7 +125,7 @@ class DailyWireSource(Source):
         Feature.MEMBERSHIP_LEVELS,
         Feature.EPISODE_LOOKUPS,
         Feature.OWN_STUDIO,
-        Feature.CHANNELS,
+        Feature.CREATORS,
     })
     episode_tags = (
         EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", "episode", "episodes", main=True),
@@ -186,7 +186,7 @@ class DailyWireSource(Source):
         found.sort(key=lambda item: item[0].published_date, reverse=True)
         return [_video(record, refs.get(season_slug)) for record, season_slug in found]
 
-    def channel_of(self, url: str) -> str | None:
+    def creator_of(self, url: str) -> str | None:
         """The host of a show."""
         slug = self.collection_ref(url)
         if slug is None:
@@ -194,7 +194,7 @@ class DailyWireSource(Source):
         catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
         return next((show.author_slug for show in catalog.collections if show.slug == slug and show.author_slug), None)
 
-    def channel_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> ChannelDetails:
+    def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
         """A host, by the slug The Daily Wire gives them: their shows and movies from the Browse page.
 
         The Daily Wire has no page of its own for a host, so a host has no link."""
@@ -221,7 +221,7 @@ class DailyWireSource(Source):
             for movie in movies
         )
         name = (first.author_name if first else None) or (movies[0].author_name if movies else None) or ref
-        return ChannelDetails(
+        return CreatorDetails(
             ref=ref, url=None, title=name, avatar_url=first.author_headshot_path if first else None,
             banner_url=first.background_image_path if first else None, sections=sections,
         )

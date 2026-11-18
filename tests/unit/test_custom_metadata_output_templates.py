@@ -20,7 +20,7 @@ def _episode(*, collection_metadata=None):
             title="Parenting",
             author_name="Host",
             meta_items=_metadata_items(collection_metadata),
-            channel=None,
+            creator=None,
             lists=[],
             sharing_url="",
         ),

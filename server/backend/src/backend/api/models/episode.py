@@ -170,5 +170,5 @@ class EpisodeSeasonPlaceAPIRead(ResponseBase):
     link_kind: str = "playlist"
     """What the collection's Site calls one of its link seasons, such as playlist, or album in a Music collection."""
     collection_slug: Optional[str] = None
-    """Reassigned: the collection of its channel that it belongs in now, when that is another one."""
+    """Reassigned: the collection of its creator that it belongs in now, when that is another one."""
     collection_title: Optional[str] = None

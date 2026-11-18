@@ -159,7 +159,7 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                         )}
                     />
                     <div className="help">
-                        Music videos get a musicvideo NFO with the channel's artist, which Jellyfin, Emby and Kodi keep in a Music Videos library.
+                        Music videos get a musicvideo NFO with the creator's artist, which Jellyfin, Emby and Kodi keep in a Music Videos library.
                     </div>
                     {errors.episodeNfo && <div className="error" role="alert">{String(errors.episodeNfo.message)}</div>}
                 </div>

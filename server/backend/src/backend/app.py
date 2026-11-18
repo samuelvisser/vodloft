@@ -300,7 +300,7 @@ def create_app() -> FastAPI:
         download_profile_router,
         media_download_router,
         collection_router,
-        channel_router,
+        creator_router,
         movie_router,
         video_router,
         library_router,
@@ -354,7 +354,7 @@ def create_app() -> FastAPI:
     app.include_router(season_router, prefix="/api")
     app.include_router(media_download_router, prefix="/api")
     app.include_router(collection_router, prefix="/api")
-    app.include_router(channel_router, prefix="/api")
+    app.include_router(creator_router, prefix="/api")
     app.include_router(movie_router, prefix="/api")
     app.include_router(video_router, prefix="/api")
     app.include_router(library_router, prefix="/api")

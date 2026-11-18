@@ -253,7 +253,7 @@ Bandcamp:
 """
 
 
-def test_a_discography_becomes_an_artist_channel_with_a_music_profile(tmp_path):
+def test_a_discography_becomes_an_artist_creator_with_a_music_profile(tmp_path):
     plan = _plan(_write(tmp_path, MUSIC), ("/music", "/downloads/music"))
 
     profile = next(profile for profile in plan.profiles if profile.name == "Bandcamp")
@@ -264,7 +264,7 @@ def test_a_discography_becomes_an_artist_channel_with_a_music_profile(tmp_path):
     )
     collections = {collection.title: collection for collection in plan.collections}
     hopkins = collections["Emily Hopkins"]
-    assert (hopkins.url, hopkins.channel, hopkins.settings["type"], hopkins.settings["genre"]) == (
+    assert (hopkins.url, hopkins.creator, hopkins.settings["type"], hopkins.settings["genre"]) == (
         "https://emilyharpist.bandcamp.com/", True, "music", "Lofi",
     )
     assert collections["UKNOWY"].profile_external_id == "preset:SoundCloud Discography"
@@ -285,7 +285,7 @@ def test_full_albums_are_split_into_tracks_by_their_chapters(tmp_path):
     plan = _plan(_write(tmp_path / "config", MUSIC), ("/music", "/downloads/music"), downloads)
 
     albums = next(collection for collection in plan.collections if collection.title == "Game Chops")
-    assert (albums.channel, albums.link_seasons, albums.settings["type"], albums.settings["split_chapters"]) == (False, (), "music", True)
+    assert (albums.creator, albums.link_seasons, albums.settings["type"], albums.settings["split_chapters"]) == (False, (), "music", True)
     profile = next(profile for profile in plan.profiles if profile.external_id == albums.profile_external_id)
     assert profile.output_template == (
         "/downloads/music/{{ artist }}/[{{ year }}] {{ album }}/{{ track_number_padded }} - {{ title }}.ext"
@@ -459,7 +459,7 @@ def _artist_import(monkeypatch):
     """The music example uploaded, and a yt-dlp Source that knows Emily Hopkins on Bandcamp."""
     from backend.services import import_uploads
     from sources import registry
-    from sources.contract import ChannelDetails, Feature, SectionKind, SectionRef, Site
+    from sources.contract import CreatorDetails, Feature, SectionKind, SectionRef, Site
 
     subscriptions = MUSIC.encode()
     import_uploads.begin_upload(ytdl_sub.IMPORTER, [("subscriptions.yaml", len(subscriptions))], include_secrets=False)
@@ -469,22 +469,22 @@ def _artist_import(monkeypatch):
 
     class Artists(type(ytdlp)):
         domains = ("bandcamp.com",)
-        features = ytdlp.features | {Feature.CHANNELS}
-        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), channels=True, channel_label="artist", link_seasons=True),)
+        features = ytdlp.features | {Feature.CREATORS}
+        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_label="artist", link_seasons=True),)
 
-        def channel_details(self, ref, progress=lambda step: None):
+        def creator_details(self, ref, progress=lambda step: None):
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
                                kind=SectionKind.LIST, kind_label="Album")
             single = SectionRef(ref="track/one", url="https://emilyharpist.bandcamp.com/track/one", title="One",
                                 kind=SectionKind.ITEM, kind_label="Single")
-            return ChannelDetails(ref="emilyharpist", url="https://emilyharpist.bandcamp.com", title="Emily Hopkins",
+            return CreatorDetails(ref="emilyharpist", url="https://emilyharpist.bandcamp.com", title="Emily Hopkins",
                                   sections=(album, single), music=True)
 
     monkeypatch.setattr(registry, "_sources", {**registry._sources, "ytdlp": Artists()})
 
 
 def test_an_imported_discography_adds_the_artist_with_each_album_a_season(installation, monkeypatch):
-    from backend.db.models import Channel, Collection, LocalMediaProfileBase
+    from backend.db.models import Creator, Collection, LocalMediaProfileBase
     from backend.services import imports
 
     session = installation
@@ -494,76 +494,76 @@ def test_an_imported_discography_adds_the_artist_with_each_album_a_season(instal
     imports.apply_run(run.id)
     session.expire_all()
 
-    channel = session.scalar(select(Channel))
-    assert (channel.title, channel.genre) == ("Emily Hopkins", "Lofi")
+    creator = session.scalar(select(Creator))
+    assert (creator.title, creator.genre) == ("Emily Hopkins", "Lofi")
     collection = session.scalar(select(Collection))
-    assert (collection.channel_id, collection.type) == (channel.id, "music")
+    assert (collection.creator_id, collection.type) == (creator.id, "music")
     # The artist's page is the collection, and each album a link season of it.
     assert collection.sharing_url == "https://emilyharpist.bandcamp.com"
     assert [(link.title, link.enabled) for link in collection.lists] == [("Harp", True)]
     assert session.scalar(select(LocalMediaProfileBase.type).where(LocalMediaProfileBase.name == "Bandcamp")) == "music"
 
 
-def test_an_import_without_channels_makes_the_artist_one_plain_collection(installation, monkeypatch):
-    from backend.db.models import Channel, Collection
+def test_an_import_without_creators_makes_the_artist_one_plain_collection(installation, monkeypatch):
+    from backend.db.models import Creator, Collection
     from backend.services import imports
 
     session = installation
     _artist_import(monkeypatch)
-    options = imports.ImportOptions(collections=("subscription:Emily Hopkins",), as_channels=False)
-    assert imports.ImportOptions.from_dict(options.to_dict()).as_channels is False
+    options = imports.ImportOptions(collections=("subscription:Emily Hopkins",), as_creators=False)
+    assert imports.ImportOptions.from_dict(options.to_dict()).as_creators is False
     run = imports.start_run(session, ytdl_sub.IMPORTER, options)
     session.commit()
     imports.apply_run(run.id)
     session.expire_all()
 
-    assert session.scalar(select(Channel)) is None
+    assert session.scalar(select(Creator)) is None
     collection = session.scalar(select(Collection))
-    assert (collection.title, collection.type, collection.channel_id) == ("Emily Hopkins", "music", None)
+    assert (collection.title, collection.type, collection.creator_id) == ("Emily Hopkins", "music", None)
     # Every album is a season, the ones to come too.
     assert (collection.sharing_url, collection.link_seasons) == ("https://emilyharpist.bandcamp.com", "all")
 
 
-def test_an_imported_collection_joins_the_channel_behind_its_link(installation, monkeypatch):
-    from backend.db.models import Channel, Collection
+def test_an_imported_collection_joins_the_creator_behind_its_link(installation, monkeypatch):
+    from backend.db.models import Creator, Collection
     from backend.services import imports
     from sources import registry
-    from sources.contract import ChannelDetails, Feature, SectionKind, SectionRef, Site
+    from sources.contract import CreatorDetails, Feature, SectionKind, SectionRef, Site
 
     session = installation
     ytdlp = registry._sources["ytdlp"]
 
-    class Channels(type(ytdlp)):
-        features = ytdlp.features | {Feature.CHANNELS}
-        sites = (Site("youtube", "YouTube", ("youtube.com",), channels=True),)
+    class Creators(type(ytdlp)):
+        features = ytdlp.features | {Feature.CREATORS}
+        sites = (Site("youtube", "YouTube", ("youtube.com",), creators=True),)
 
-        def channel_of(self, url):
+        def creator_of(self, url):
             return "BeyondTheGuitar"
 
-        def channel_details(self, ref, progress=lambda step: None):
-            return ChannelDetails(ref=ref, url="https://www.youtube.com/c/BeyondTheGuitar", title="Beyond the Guitar", sections=(
+        def creator_details(self, ref, progress=lambda step: None):
+            return CreatorDetails(ref=ref, url="https://www.youtube.com/c/BeyondTheGuitar", title="Beyond the Guitar", sections=(
                 SectionRef(ref="videos", url="https://www.youtube.com/c/BeyondTheGuitar", title="Videos", kind=SectionKind.FEED),
             ))
 
-    monkeypatch.setattr(registry, "_sources", {**registry._sources, "ytdlp": Channels()})
+    monkeypatch.setattr(registry, "_sources", {**registry._sources, "ytdlp": Creators()})
     run = imports.start_run(session, ytdl_sub.IMPORTER, imports.ImportOptions(collections=("subscription:Beyond the Guitar",)))
     session.commit()
     imports.apply_run(run.id)
     session.expire_all()
 
-    channel = session.scalar(select(Channel))
+    creator = session.scalar(select(Creator))
     guitar = session.scalar(select(Collection))
-    assert (guitar.channel_id, channel.main_collection_id) == (channel.id, guitar.id)
-    # The playlist is no section of the channel's here, but it stays a season of the collection.
+    assert (guitar.creator_id, creator.main_collection_id) == (creator.id, guitar.id)
+    # The playlist is no section of the creator's here, but it stays a season of the collection.
     assert [link.ref for link in guitar.lists] == ["PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W"]
 
 
-def test_only_an_import_that_knows_channels_offers_them(tmp_path):
+def test_only_an_import_that_knows_creators_offers_them(tmp_path):
     from importer.pinchflat import IMPORTER as PINCHFLAT  # noqa: F401  (registers it)
     from importer.contract import ImportPlan
 
-    assert _plan(_write(tmp_path, EXAMPLE)).channels is True
-    assert ImportPlan(importer="pinchflat").channels is False
+    assert _plan(_write(tmp_path, EXAMPLE)).creators is True
+    assert ImportPlan(importer="pinchflat").creators is False
 
 
 def test_a_tv_show_collection_of_only_playlists_holds_only_them(tmp_path):
@@ -676,12 +676,12 @@ Jellyfin Music Videos:
 """
 
 
-def test_an_artists_music_videos_become_a_collection_of_their_channel(tmp_path):
+def test_an_artists_music_videos_become_a_collection_of_their_creator(tmp_path):
     plan = _plan(_write(tmp_path, MUSIC_VIDEOS), ("/music_videos", "/downloads/music_videos"))
 
     assert not any(warning.subject == "Rick Astley" for warning in plan.warnings)
     videos = next(collection for collection in plan.collections if collection.title == "Rick Astley")
-    assert (videos.url, videos.channel, videos.settings["type"], videos.settings["genre"]) == (
+    assert (videos.url, videos.creator, videos.settings["type"], videos.settings["genre"]) == (
         "https://www.youtube.com/@RickAstleyYT", True, "series", "Pop",
     )
     profile = next(profile for profile in plan.profiles if profile.external_id == videos.profile_external_id)

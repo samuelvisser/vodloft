@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
     from backend.db.models import Season, DownloadProfile, Site
-    from backend.db.models import Channel, CustomIndexState, CollectionList
+    from backend.db.models import Creator, CustomIndexState, CollectionList
 
 
 def _default_episode_order(context) -> str:
@@ -38,8 +38,8 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         ForeignKey("sites.key"), index=True, comment="The Site the collection is on; filled in the background for older collections",
     )
     site_ref: Mapped[Optional[str]] = mapped_column(comment="The Site's own id for the collection")
-    channel_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("channels.id", ondelete="SET NULL"), index=True, comment="The channel it was added through",
+    creator_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("creators.id", ondelete="SET NULL"), index=True, comment="The creator it was added through",
     )
     title: Mapped[str]
     description: Mapped[Optional[str]]
@@ -52,11 +52,11 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     )
     link_seasons: Mapped[str] = mapped_column(
         default=LinkSeasons.OFF.value, server_default=LinkSeasons.OFF.value,
-        comment="Whether the channel's playlists are seasons: off, all or selected",
+        comment="Whether the creator's playlists are seasons: off, all or selected",
     )
     new_link_seasons: Mapped[str] = mapped_column(
         default=NewLinkSeasonAction.ASK.value, server_default=NewLinkSeasonAction.ASK.value,
-        comment="What happens with a playlist the channel adds, when only selected playlists are seasons: ask, add or ignore",
+        comment="What happens with a playlist the creator adds, when only selected playlists are seasons: ask, add or ignore",
     )
     list_layout: Mapped[str] = mapped_column(
         default=ListLayout.SEASON_EACH.value, server_default=ListLayout.SEASON_EACH.value,
@@ -131,7 +131,7 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
 
     # Relationships
     site: Mapped[Optional["Site"]] = relationship(lazy="joined")
-    channel: Mapped[Optional["Channel"]] = relationship(back_populates="collections", foreign_keys=[channel_id])
+    creator: Mapped[Optional["Creator"]] = relationship(back_populates="collections", foreign_keys=[creator_id])
     episodes: Mapped[list["Episode"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan", order_by="desc(Episode.index)"
     )

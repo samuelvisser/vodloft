@@ -25,7 +25,7 @@ export const SourceFeature = {
     EPISODE_LOOKUPS: 'episode_lookups',
     PAGE_STREAMS: 'page_streams',
     OWN_STUDIO: 'own_studio',
-    CHANNELS: 'channels',
+    CREATORS: 'creators',
     CHAPTERS: 'chapters',
     LINK_COLLECTIONS: 'link_collections',
 } as const
@@ -124,9 +124,9 @@ export const ResolvedLinkReadSchema = z.object({
         imageUrl: z.string().nullable(),
         authorName: z.string().nullable(),
     }),
-    /** The creator's channel this link is, on a Site with channels. */
-    channelUrl: z.string().nullable().optional().default(null),
-    channelLabel: z.string().nullable().optional().default(null),
+    /** The creator this link is, on a Site with creators. */
+    creatorUrl: z.string().nullable().optional().default(null),
+    creatorLabel: z.string().nullable().optional().default(null),
     /** Every Source that claims the link's site, preferred first. */
     candidates: z.array(SourceReadSchema),
 })
@@ -185,8 +185,8 @@ export const SiteReadSchema = z.object({
     name: z.string(),
     /** A collection on the Site shows what VODLoft has no access to until the user hides it. */
     showsLocked: z.boolean().optional().default(true),
-    /** What the Site calls a creator's channel, in lower case, such as host on The Daily Wire. */
-    channelLabel: z.string().optional().default('channel'),
+    /** What the Site calls a creator, in lower case, such as host on The Daily Wire. */
+    creatorLabel: z.string().optional().default('creator'),
 })
 export type SiteRead = z.infer<typeof SiteReadSchema>
 

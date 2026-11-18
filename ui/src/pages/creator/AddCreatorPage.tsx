@@ -6,23 +6,23 @@ import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
-import {lookUpChannel} from '../../lib/queries'
+import {lookUpCreator} from '../../lib/queries'
 import {
-    ChannelCreateSchema, type ChannelCreateIn, type ChannelCreateOut, type ChannelLookupRead, type ChannelSectionRead,
+    CreatorCreateSchema, type CreatorCreateIn, type CreatorCreateOut, type CreatorLookupRead, type CreatorSectionRead,
     type SectionPlan,
-} from '../../types/schemas/channel'
+} from '../../types/schemas/creator'
 import {DwMembershipLevelReg} from '../../types/dailywire_user_info'
-import {newSectionActionReg} from '../../types/channel'
+import {newSectionActionReg} from '../../types/creator'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
-import ChannelHeader from './ChannelHeader'
-import './ChannelPages.css'
+import CreatorHeader from './CreatorHeader'
+import './CreatorPages.css'
 
-/** The starting points, in the words of what this channel has: playlists on YouTube, shows on The Daily Wire. */
-function presetText(key: ChannelCreateIn['preset'], lists: string, hasFeeds: boolean, music: boolean) {
+/** The starting points, in the words of what this creator has: playlists on YouTube, shows on The Daily Wire. */
+function presetText(key: CreatorCreateIn['preset'], lists: string, hasFeeds: boolean, music: boolean) {
     if (music) {
         if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with each album as a season${hasFeeds ? ' and the other tracks by year' : ''}.`}
         if (key === 'per_list') return {label: 'A collection per album', help: 'Each album is a Music collection of its own.'}
@@ -44,17 +44,17 @@ function choiceOf(plan: SectionPlan | undefined): Choice {
     return plan?.target ?? 'skip'
 }
 
-/** What the Site's sections can become, in the words of this channel. */
-function choicesFor(channel: ChannelLookupRead, section: ChannelSectionRead) {
+/** What the Site's sections can become, in the words of this creator. */
+function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead) {
     const spec: Partial<Record<Choice, {label: string}>> = {}
     if (section.kind === 'feed') spec.main = {label: 'Main collection'}
-    else if (section.kind === 'list' && channel.linkSeasons) spec.main = {label: `Main collection, as ${channel.music ? 'an album' : 'a playlist'} season`}
+    else if (section.kind === 'list' && creator.linkSeasons) spec.main = {label: `Main collection, as ${creator.music ? 'an album' : 'a playlist'} season`}
     spec.own = {label: 'A collection of its own'}
     spec.skip = {label: 'Skip'}
-    return createSelectRegistry(`ChannelSection-${channel.ref}-${section.ref}`, spec as Record<Choice, {label: string}>)
+    return createSelectRegistry(`CreatorSection-${creator.ref}-${section.ref}`, spec as Record<Choice, {label: string}>)
 }
 
-function sectionFacts(section: ChannelSectionRead): string {
+function sectionFacts(section: CreatorSectionRead): string {
     return [
         section.kindLabel,
         section.year,
@@ -65,10 +65,10 @@ function sectionFacts(section: ChannelSectionRead): string {
 }
 
 /** What the lookup has done so far, over the shape of the page it is filling in. */
-function AddChannelSkeleton({steps, label}: {steps: string[], label: string}) {
+function AddCreatorSkeleton({steps, label}: {steps: string[], label: string}) {
     return (
-        <div className="channel-skeleton" aria-busy="true">
-            <ol className="channel-lookup-steps" aria-live="polite">
+        <div className="creator-skeleton" aria-busy="true">
+            <ol className="creator-lookup-steps" aria-live="polite">
                 {(steps.length ? steps : [`Looking the ${label} up`]).map((step, index, all) => {
                     const current = index === all.length - 1
                     return (
@@ -79,32 +79,32 @@ function AddChannelSkeleton({steps, label}: {steps: string[], label: string}) {
                     )
                 })}
             </ol>
-            <div className="channel-header" aria-hidden="true">
-                <div className="channel-banner skeleton-block"/>
-                <div className="channel-identity">
-                    <span className="channel-avatar skeleton-block"/>
-                    <div className="channel-identity-copy channel-skeleton-copy">
-                        <span className="skeleton-block channel-skeleton-line channel-skeleton-line--kind"/>
-                        <span className="skeleton-block channel-skeleton-line channel-skeleton-line--title"/>
-                        <span className="skeleton-block channel-skeleton-line"/>
-                        <span className="skeleton-block channel-skeleton-line channel-skeleton-line--short"/>
+            <div className="creator-header" aria-hidden="true">
+                <div className="creator-banner skeleton-block"/>
+                <div className="creator-identity">
+                    <span className="creator-avatar skeleton-block"/>
+                    <div className="creator-identity-copy creator-skeleton-copy">
+                        <span className="skeleton-block creator-skeleton-line creator-skeleton-line--kind"/>
+                        <span className="skeleton-block creator-skeleton-line creator-skeleton-line--title"/>
+                        <span className="skeleton-block creator-skeleton-line"/>
+                        <span className="skeleton-block creator-skeleton-line creator-skeleton-line--short"/>
                     </div>
                 </div>
             </div>
-            <div className="channel-presets" aria-hidden="true">
-                {[0, 1, 2].map((key) => <div key={key} className="skeleton-block channel-skeleton-preset"/>)}
+            <div className="creator-presets" aria-hidden="true">
+                {[0, 1, 2].map((key) => <div key={key} className="skeleton-block creator-skeleton-preset"/>)}
             </div>
-            <div className="channel-section-group" aria-hidden="true">
-                <span className="skeleton-block channel-skeleton-line channel-skeleton-line--heading"/>
-                <div className="channel-section-list">
+            <div className="creator-section-group" aria-hidden="true">
+                <span className="skeleton-block creator-skeleton-line creator-skeleton-line--heading"/>
+                <div className="creator-section-list">
                     {[0, 1, 2, 3].map((key) => (
-                        <div key={key} className="channel-section-row">
-                            <span className="channel-section-art skeleton-block"/>
-                            <div className="channel-section-copy channel-skeleton-copy">
-                                <span className="skeleton-block channel-skeleton-line channel-skeleton-line--title-small"/>
-                                <span className="skeleton-block channel-skeleton-line channel-skeleton-line--short"/>
+                        <div key={key} className="creator-section-row">
+                            <span className="creator-section-art skeleton-block"/>
+                            <div className="creator-section-copy creator-skeleton-copy">
+                                <span className="skeleton-block creator-skeleton-line creator-skeleton-line--title-small"/>
+                                <span className="skeleton-block creator-skeleton-line creator-skeleton-line--short"/>
                             </div>
-                            <span className="channel-section-choice skeleton-block channel-skeleton-choice"/>
+                            <span className="creator-section-choice skeleton-block creator-skeleton-choice"/>
                         </div>
                     ))}
                 </div>
@@ -113,34 +113,34 @@ function AddChannelSkeleton({steps, label}: {steps: string[], label: string}) {
     )
 }
 
-export default function AddChannelPage() {
+export default function AddCreatorPage() {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
     const [params] = useSearchParams()
     const sourceKey = params.get('source') ?? ''
     const url = params.get('url')
     const ref = params.get('ref')
-    const [channel, setChannel] = useState<ChannelLookupRead | null>(null)
+    const [creator, setCreator] = useState<CreatorLookupRead | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [steps, setSteps] = useState<string[]>([])
-    const [label, setLabel] = useState('channel')
+    const [label, setLabel] = useState('creator')
 
-    const form = useForm<ChannelCreateIn, unknown, ChannelCreateOut>({
-        resolver: zodResolver(ChannelCreateSchema),
-        defaultValues: {...getZodDefaults(ChannelCreateSchema), sourceKey, url, ref},
+    const form = useForm<CreatorCreateIn, unknown, CreatorCreateOut>({
+        resolver: zodResolver(CreatorCreateSchema),
+        defaultValues: {...getZodDefaults(CreatorCreateSchema), sourceKey, url, ref},
     })
     const {watch, setValue, formState: {errors, isSubmitting}} = form
 
     useEffect(() => {
         const controller = new AbortController()
         setSteps([])
-        lookUpChannel({sourceKey, url, ref}, (step, channelLabel) => {
-            if (channelLabel) setLabel(channelLabel)
+        lookUpCreator({sourceKey, url, ref}, (step, creatorLabel) => {
+            if (creatorLabel) setLabel(creatorLabel)
             setSteps((done) => [...done, step])
         }, controller.signal)
             .then((found) => {
-                setChannel(found)
-                setLabel(found.channelLabel)
+                setCreator(found)
+                setLabel(found.creatorLabel)
                 const preset = found.presets[0]
                 if (preset) {
                     setValue('preset', preset.key)
@@ -157,12 +157,12 @@ export default function AddChannelPage() {
     const newSections = watch('newSections') ?? 'ask'
     const byRef = useMemo(() => new Map(plans.map((plan) => [plan.ref, plan])), [plans])
     const registries = useMemo(
-        () => new Map((channel?.sections ?? []).map((section) => [section.ref, choicesFor(channel!, section)])),
-        [channel],
+        () => new Map((creator?.sections ?? []).map((section) => [section.ref, choicesFor(creator!, section)])),
+        [creator],
     )
 
-    const choosePreset = (key: ChannelCreateIn['preset']) => {
-        const chosen = channel?.presets.find((item) => item.key === key)
+    const choosePreset = (key: CreatorCreateIn['preset']) => {
+        const chosen = creator?.presets.find((item) => item.key === key)
         if (!chosen || !key) return
         setValue('preset', key)
         setValue('sections', chosen.plan, {shouldValidate: true})
@@ -171,7 +171,7 @@ export default function AddChannelPage() {
         setValue('sections', plans.map((plan) => plan.ref === section ? {ref: section, target: choice} : plan), {shouldValidate: true})
     }
 
-    const onSubmit = buildServerAwareSubmit<ChannelCreateIn, ChannelCreateOut>(form, (data) => fetch(`${apiUrl()}/channels`, {
+    const onSubmit = buildServerAwareSubmit<CreatorCreateIn, CreatorCreateOut>(form, (data) => fetch(`${apiUrl()}/creators`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
@@ -182,108 +182,108 @@ export default function AddChannelPage() {
     }), {
         fallbackField: 'sections',
         onSuccess: async (created: any) => {
-            await queryClient.invalidateQueries({queryKey: ['channels']})
+            await queryClient.invalidateQueries({queryKey: ['creators']})
             await queryClient.invalidateQueries({queryKey: ['collections']})
             await queryClient.invalidateQueries({queryKey: ['collectionsView']})
-            navigate(`/channel/${created.slug}`, {replace: true})
+            navigate(`/creator/${created.slug}`, {replace: true})
         },
     })
 
     if (error) {
         return (
-            <section className="view" aria-labelledby="add-channel-title">
-                <div className="view-header"><h1 id="add-channel-title">Add {label}</h1></div>
+            <section className="view" aria-labelledby="add-creator-title">
+                <div className="view-header"><h1 id="add-creator-title">Add {label}</h1></div>
                 <div className="form-error-card" role="alert">{error}</div>
                 <div className="actions"><button type="button" className="btn" onClick={() => navigate(-1)}>Back</button></div>
             </section>
         )
     }
-    if (!channel) {
+    if (!creator) {
         return (
-            <section className="view channel-view" aria-labelledby="add-channel-title">
-                <div className="view-header"><h1 id="add-channel-title">Add {label}</h1></div>
-                <AddChannelSkeleton steps={steps} label={label}/>
+            <section className="view creator-view" aria-labelledby="add-creator-title">
+                <div className="view-header"><h1 id="add-creator-title">Add {label}</h1></div>
+                <AddCreatorSkeleton steps={steps} label={label}/>
             </section>
         )
     }
-    if (channel.channelSlug) {
+    if (creator.creatorSlug) {
         return (
-            <section className="view" aria-labelledby="add-channel-title">
-                <div className="view-header"><h1 id="add-channel-title">Add {label}</h1></div>
-                <p>{channel.title} is already in your library.</p>
+            <section className="view" aria-labelledby="add-creator-title">
+                <div className="view-header"><h1 id="add-creator-title">Add {label}</h1></div>
+                <p>{creator.title} is already in your library.</p>
                 <div className="actions">
-                    <button type="button" className="btn btn-primary" onClick={() => navigate(`/channel/${channel.channelSlug}`)}>
-                        Open {channel.channelLabel}
+                    <button type="button" className="btn btn-primary" onClick={() => navigate(`/creator/${creator.creatorSlug}`)}>
+                        Open {creator.creatorLabel}
                     </button>
                 </div>
             </section>
         )
     }
 
-    const listLabel = channel.sections.find((section) => section.kind === 'list')?.kindLabel
-    const hasShows = channel.sections.some((section) => section.kind === 'show')
+    const listLabel = creator.sections.find((section) => section.kind === 'list')?.kindLabel
+    const hasShows = creator.sections.some((section) => section.kind === 'show')
     const listsTitle = listLabel === 'Album' ? 'Albums' : listLabel ? 'Playlists' : hasShows ? 'Shows' : 'Playlists'
     const lists = listsTitle.toLowerCase()
-    const hasFeeds = channel.sections.some((section) => section.kind === 'feed')
-    const groups: [string, ChannelSectionRead[]][] = [
-        ['Feeds', channel.sections.filter((section) => section.kind === 'feed')],
-        [listsTitle, channel.sections.filter((section) => section.kind === 'list')],
-        ...(listLabel && hasShows ? [['Shows', channel.sections.filter((section) => section.kind === 'show')]] as [string, ChannelSectionRead[]][] : []),
-        [channel.music ? 'Singles' : 'Movies', channel.sections.filter((section) => section.kind === 'item')],
+    const hasFeeds = creator.sections.some((section) => section.kind === 'feed')
+    const groups: [string, CreatorSectionRead[]][] = [
+        ['Feeds', creator.sections.filter((section) => section.kind === 'feed')],
+        [listsTitle, creator.sections.filter((section) => section.kind === 'list')],
+        ...(listLabel && hasShows ? [['Shows', creator.sections.filter((section) => section.kind === 'show')]] as [string, CreatorSectionRead[]][] : []),
+        [creator.music ? 'Singles' : 'Movies', creator.sections.filter((section) => section.kind === 'item')],
     ]
     // What is in the library already stays where it is, so it makes no collection.
-    const inLibrary = new Set(channel.sections.filter((section) => section.collectionSlug).map((section) => section.ref))
+    const inLibrary = new Set(creator.sections.filter((section) => section.collectionSlug).map((section) => section.ref))
     const kept = plans.filter((plan) => plan.target !== 'skip' && !inLibrary.has(plan.ref))
     const collectionTitles = [
-        ...(kept.some((plan) => plan.target === 'main') ? [channel.title] : []),
+        ...(kept.some((plan) => plan.target === 'main') ? [creator.title] : []),
         ...kept.filter((plan) => plan.target === 'own').map((plan) => {
-            const section = channel.sections.find((item) => item.ref === plan.ref)
-            return section?.kind === 'feed' ? `${channel.title} ${section.title}` : section?.title ?? plan.ref
+            const section = creator.sections.find((item) => item.ref === plan.ref)
+            return section?.kind === 'feed' ? `${creator.title} ${section.title}` : section?.title ?? plan.ref
         }),
     ]
 
     return (
-        <section className="view channel-view" aria-labelledby="add-channel-title">
+        <section className="view creator-view" aria-labelledby="add-creator-title">
             <div className="view-header">
                 <div>
-                    <h1 id="add-channel-title">Add {channel.channelLabel}</h1>
+                    <h1 id="add-creator-title">Add {creator.creatorLabel}</h1>
                     <p className="view-description">
-                        Choose where each part of this {channel.channelLabel} goes. The main collection is called
-                        {' '}{channel.title}; anything you give a collection of its own gets one. A {channel.music ? 'track' : 'video'} that is in several
+                        Choose where each part of this {creator.creatorLabel} goes. The main collection is called
+                        {' '}{creator.title}; anything you give a collection of its own gets one. A {creator.music ? 'track' : 'video'} that is in several
                         places is kept once.
                     </p>
                 </div>
             </div>
 
-            <ChannelHeader
-                title={channel.title} label={`${channel.siteName} ${channel.channelLabel}`} handle={channel.handle}
-                avatarUrl={channel.avatarUrl} bannerUrl={channel.bannerUrl} facts={channel.facts} description={channel.description}
+            <CreatorHeader
+                title={creator.title} label={`${creator.siteName} ${creator.creatorLabel}`} handle={creator.handle}
+                avatarUrl={creator.avatarUrl} bannerUrl={creator.bannerUrl} facts={creator.facts} description={creator.description}
             />
 
-            <form className="form form-fluid channel-setup" onSubmit={onSubmit} noValidate>
-                {channel.presets.length > 1 && (
-                    <fieldset className="channel-presets">
-                        <legend>What to keep from this {channel.channelLabel}</legend>
-                        {channel.presets.map((item) => (
-                            <label key={item.key} className={`channel-preset${preset === item.key ? ' is-on' : ''}`}>
+            <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
+                {creator.presets.length > 1 && (
+                    <fieldset className="creator-presets">
+                        <legend>What to keep from this {creator.creatorLabel}</legend>
+                        {creator.presets.map((item) => (
+                            <label key={item.key} className={`creator-preset${preset === item.key ? ' is-on' : ''}`}>
                                 <input type="radio" name="preset" checked={preset === item.key} onChange={() => choosePreset(item.key)}/>
-                                <b>{presetText(item.key, lists, hasFeeds, channel.music).label}</b>
-                                <span>{presetText(item.key, lists, hasFeeds, channel.music).help}</span>
+                                <b>{presetText(item.key, lists, hasFeeds, creator.music).label}</b>
+                                <span>{presetText(item.key, lists, hasFeeds, creator.music).help}</span>
                             </label>
                         ))}
                     </fieldset>
                 )}
 
                 {groups.filter(([, sections]) => sections.length).map(([title, sections]) => (
-                    <div key={title} className="channel-section-group">
+                    <div key={title} className="creator-section-group">
                         <h2>{title}</h2>
-                        <div className="channel-section-list">
+                        <div className="creator-section-list">
                             {sections.map((section) => (
-                                <div key={section.ref} className="channel-section-row">
+                                <div key={section.ref} className="creator-section-row">
                                     {section.imageUrl
-                                        ? <img className="channel-section-art" src={toImageUrl(section.imageUrl)} alt="" loading="lazy"/>
-                                        : <span className="channel-section-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', section.kind === 'feed' ? 'rss' : 'list')}/></span>}
-                                    <div className="channel-section-copy">
+                                        ? <img className="creator-section-art" src={toImageUrl(section.imageUrl)} alt="" loading="lazy"/>
+                                        : <span className="creator-section-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', section.kind === 'feed' ? 'rss' : 'list')}/></span>}
+                                    <div className="creator-section-copy">
                                         <b>{section.title}</b>
                                         <span>
                                             {section.collectionSlug
@@ -294,11 +294,11 @@ export default function AddChannelPage() {
                                         </span>
                                     </div>
                                     {section.kind === 'item' ? (
-                                        <span className="channel-section-note">Add it from its own page</span>
+                                        <span className="creator-section-note">Add it from its own page</span>
                                     ) : section.collectionSlug ? (
-                                        <span className="channel-section-note">Stays where it is</span>
+                                        <span className="creator-section-note">Stays where it is</span>
                                     ) : (
-                                        <div className="channel-section-choice">
+                                        <div className="creator-section-choice">
                                             <SimpleSelect
                                                 aria-label={`Where ${section.title} goes`}
                                                 registry={registries.get(section.ref)!}
@@ -314,21 +314,21 @@ export default function AddChannelPage() {
                 ))}
 
 
-                <div className="form-row channel-membership">
-                    <label htmlFor="channel-new-sections">When the {channel.channelLabel} adds {/^[aeiou]/.test(lists) ? 'an' : 'a'} {lists.replace(/s$/, '')}</label>
+                <div className="form-row creator-membership">
+                    <label htmlFor="creator-new-sections">When the {creator.creatorLabel} adds {/^[aeiou]/.test(lists) ? 'an' : 'a'} {lists.replace(/s$/, '')}</label>
                     <SimpleSelect
-                        inputId="channel-new-sections" registry={newSectionActionReg(channel.channelLabel)} value={newSections}
-                        onChange={(value) => setValue('newSections', value as ChannelCreateIn['newSections'])}
+                        inputId="creator-new-sections" registry={newSectionActionReg(creator.creatorLabel)} value={newSections}
+                        onChange={(value) => setValue('newSections', value as CreatorCreateIn['newSections'])}
                     />
-                    <div className="help">{newSectionActionReg(channel.channelLabel).meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
+                    <div className="help">{newSectionActionReg(creator.creatorLabel).meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
                 </div>
 
                 {sourceKey === 'dailywire' && (
-                    <div className="form-row channel-membership">
-                        <label htmlFor="channel-membership">Membership level</label>
+                    <div className="form-row creator-membership">
+                        <label htmlFor="creator-membership">Membership level</label>
                         <SimpleSelect
-                            inputId="channel-membership" registry={DwMembershipLevelReg} value={membershipLevel}
-                            onChange={(value) => setValue('membershipLevel', value as ChannelCreateIn['membershipLevel'])}
+                            inputId="creator-membership" registry={DwMembershipLevelReg} value={membershipLevel}
+                            onChange={(value) => setValue('membershipLevel', value as CreatorCreateIn['membershipLevel'])}
                         />
                         <div className="help">{DwMembershipLevelReg.meta(membershipLevel as never)?.help}</div>
                         {errors.membershipLevel && <div className="error" role="alert">{errors.membershipLevel.message}</div>}
@@ -338,14 +338,14 @@ export default function AddChannelPage() {
                 {errors.sections && <div className="form-error-card" role="alert">{errors.sections.message ?? errors.sections.root?.message}</div>}
 
                 <div className="actions">
-                    <span className="channel-summary">
+                    <span className="creator-summary">
                         {collectionTitles.length
                             ? `Creates ${collectionTitles.length} ${collectionTitles.length === 1 ? 'collection' : 'collections'}: ${collectionTitles.length > 4 ? `${collectionTitles.slice(0, 3).join(', ')} and ${collectionTitles.length - 3} more` : collectionTitles.join(', ')}`
                             : 'Nothing picked yet'}
                     </span>
                     <button type="button" className="btn" onClick={() => navigate(-1)}>Cancel</button>
                     <button type="submit" className="btn btn-primary" disabled={isSubmitting || !collectionTitles.length}>
-                        {isSubmitting ? 'Adding…' : `Add ${channel.channelLabel}`}
+                        {isSubmitting ? 'Adding…' : `Add ${creator.creatorLabel}`}
                     </button>
                 </div>
             </form>

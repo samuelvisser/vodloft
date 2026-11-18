@@ -123,8 +123,8 @@ class CollectionPlan:
     loose_season: PlaylistSeasonPlan | None = None
     """With ``link_seasons``: the season of the channel's videos in none of them, as the other program named and
     numbered it; None lets VODLoft name it."""
-    channel: bool = False
-    """``url`` is a creator's own page, such as a Bandcamp artist: VODLoft adds the creator as a channel, with
+    creator: bool = False
+    """``url`` is a creator's own page, such as a Bandcamp artist: VODLoft adds the creator, with
     everything on the page in this one collection."""
     links_only: bool = False
     """The Collection holds only what its ``link_seasons`` have and has no link of its own: the other program kept
@@ -223,9 +223,9 @@ class ImportPlan:
     """The other program's database version."""
     download_folder: str = "/downloads"
     """The other program's own download folder, which the path map pairs with a VODLoft folder."""
-    channels: bool = False
-    """The other program's collections can join the channels behind their links, as the person chooses. An importer
-    of a program that has nothing like channels leaves it off."""
+    creators: bool = False
+    """The other program's collections can join the creators behind their links, as the person chooses. An importer
+    of a program that has nothing like creators leaves it off."""
     probes: tuple[str, ...] = ()
     """Files the importer reads in the download folders, as the other program names them. They find the path
     map before the plan can list any files, such as ytdl-sub's download archives that list them."""

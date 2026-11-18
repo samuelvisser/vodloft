@@ -14,9 +14,9 @@ import SettingsPage from './pages/SettingsPage'
 import LogsPage from './pages/LogsPage'
 import TasksPage from './pages/TasksPage'
 import AddCollectionPage from './pages/collection/AddCollectionPage'
-import AddChannelPage from './pages/channel/AddChannelPage'
-import ChannelPage from './pages/channel/ChannelPage'
-import EditChannelPage from './pages/channel/EditChannelPage'
+import AddCreatorPage from './pages/creator/AddCreatorPage'
+import CreatorPage from './pages/creator/CreatorPage'
+import EditCreatorPage from './pages/creator/EditCreatorPage'
 import AddLocalMediaProfilePage from './pages/local-media-profile/AddLocalMediaProfilePage'
 import EditLocalMediaProfilePage from './pages/local-media-profile/EditLocalMediaProfilePage'
 import LocalMediaProfilePage from './pages/local-media-profile/LocalMediaProfilePage'
@@ -97,9 +97,9 @@ export const router = createBrowserRouter(
       <Route path="tasks" element={g('tasks', <TasksPage />)} />
       <Route path="existing-files" element={g('library', <ExistingFilesPage />, 'manage')} />
       <Route path="add-collection" element={g('add_media', <AddCollectionRoute />)} />
-      <Route path="add-channel" element={g('add_media', <AddChannelPage />)} />
-      <Route path="channel/:slug" element={g('library', <ChannelPage />)} />
-      <Route path="edit-channel/:slug" element={g('library', <EditChannelPage />, 'manage')} />
+      <Route path="add-creator" element={g('add_media', <AddCreatorPage />)} />
+      <Route path="creator/:slug" element={g('library', <CreatorPage />)} />
+      <Route path="edit-creator/:slug" element={g('library', <EditCreatorPage />, 'manage')} />
       <Route path="add-local-media-profile" element={g('local_media_profiles', <AddLocalMediaProfilePage />, 'manage')} />
       <Route path="local-media-profile/:slug" element={g('local_media_profiles', <LocalMediaProfilePage />)} />
       <Route path="edit-local-media-profile/:slug" element={g('local_media_profiles', <EditLocalMediaProfilePage />, 'manage')} />

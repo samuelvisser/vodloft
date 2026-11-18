@@ -218,12 +218,12 @@ def test_a_profiles_title_and_description_templates_replace_the_sites_text(monke
     assert (metadata.title, metadata.description) == ("An Episode", "Episode description")
 
 
-def test_a_music_video_profile_writes_a_musicvideo_nfo_by_the_channels_artist():
+def test_a_music_video_profile_writes_a_musicvideo_nfo_by_the_creators_artist():
     from backend.services.download_metadata import build_episode_metadata
     from downloader.metadata import render_nfo
 
     episode, collection = _episode()
-    collection.channel = SimpleNamespace(title="The Artist")
+    collection.creator = SimpleNamespace(title="The Artist")
     profile = SimpleNamespace(episode_nfo="music_video", episode_title_template=None, episode_description_template=None)
     metadata = build_episode_metadata(episode, collection, profile)
     root = ET.fromstring(render_nfo(metadata))

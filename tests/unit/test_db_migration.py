@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "8340278b15a0"
+HEAD_REVISION = "5fd4ae698d31"
 
 
 @pytest.fixture
@@ -420,8 +420,8 @@ def test_0_7_0_migration_keeps_what_existing_profiles_and_episodes_did(migration
             "SELECT default_key FROM notification_rules ORDER BY position"
         ))] == [
             "download_failed", "sign_in_needed", "disk_almost_full", "task_failing", "update_available", "daily_summary",
-            # Added for channels in 0.10.0.
-            "channel_sections_found",
+            # Added for creators in 0.10.0.
+            "creator_sections_found",
         ]
 
 
@@ -1378,9 +1378,63 @@ def test_a_channel_knows_its_own_collection_and_installations_get_the_new_sectio
     command.upgrade(config, HEAD_REVISION)
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT main_collection_id, new_sections FROM channels")).one() == (2, "ask")
+        assert connection.execute(text("SELECT main_collection_id, new_sections FROM creators")).one() == (2, "ask")
         rules = connection.execute(text("SELECT default_key, position FROM notification_rules ORDER BY position")).all()
-        assert rules[-1] == ("channel_sections_found", rules[-2].position + 1)
+        assert rules[-1] == ("creator_sections_found", rules[-2].position + 1)
+
+
+def test_channels_become_creators_with_their_sections_collections_and_stored_values(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "8340278b15a0")
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO sites (key, name, domains) VALUES ('youtube', 'YouTube', '[\"youtube.com\"]')"))
+        connection.execute(text(
+            "INSERT INTO channels (id, uuid, slug, source_key, site_key, site_ref, title, links, facts) "
+            "VALUES (7, 'ch', 'workshop', 'ytdlp', 'youtube', 'UCw', 'Northwind Workshop', '[\"https://n.test\"]', '[]')"
+        ))
+        connection.execute(text(
+            "INSERT INTO channel_sections (id, channel_id, ref, url, title, kind, status) "
+            "VALUES (3, 7, 'videos', 'https://youtube.test/@w/videos', 'Videos', 'feed', 'new')"
+        ))
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key, episode_order, channel_id) VALUES (1, 'u1', 'c1', 'Workshop', "
+            "'https://example.test/1', 'free', 'series', 'seasonal', 'Host', 'host', 'ytdlp', 'newest_first', 7)"
+        ))
+        connection.execute(text(
+            "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
+            "VALUES (40, 'by-creator', 'By creator', '{{ channel_title }}/{{ channel_handle }} - {{ channel_kind }}/{{ title }}', "
+            "'mp4', '[]', 'video')"
+        ))
+        connection.execute(text(
+            "INSERT INTO notification_events (event, occurred_at, title, body, url, data) VALUES ('channel_sections_found', "
+            "CURRENT_TIMESTAMP, 'New sections', '', '/channel/workshop', '{\"channel\": \"workshop\"}')"
+        ))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        tables = set(inspect(connection).get_table_names())
+        assert {"creators", "creator_sections"} <= tables and not {"channels", "channel_sections"} & tables
+        assert connection.execute(text("SELECT id, slug, links FROM creators")).one() == (7, "workshop", '["https://n.test"]')
+        assert connection.execute(text("SELECT creator_id, status FROM creator_sections")).one() == (7, "new")
+        assert connection.execute(text("SELECT creator_id FROM collections")).scalar_one() == 7
+        assert connection.execute(text("SELECT output_template FROM local_media_profiles WHERE id = 40")).scalar_one() == (
+            "{{ creator_title }}/{{ creator_handle }} - {{ creator_kind }}/{{ title }}"
+        )
+        event = connection.execute(text("SELECT event, url, data FROM notification_events")).one()
+        assert (event.event, event.url, json.loads(event.data)) == (
+            "creator_sections_found", "/creator/workshop", {"creator": "workshop"},
+        )
+        assert "creator_sections_found" in connection.execute(text("SELECT default_key FROM notification_rules")).scalars().all()
+
+    command.downgrade(config, "8340278b15a0")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT channel_id FROM collections")).scalar_one() == 7
+        assert connection.execute(text("SELECT channel_id FROM channel_sections")).scalar_one() == 7
 
 
 def test_episodes_without_usable_media_leave_or_stay_removed_from_their_source(migration_database):

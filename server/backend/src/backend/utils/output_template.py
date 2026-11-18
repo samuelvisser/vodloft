@@ -55,7 +55,7 @@ COLLECTION_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "episode_number", "episode_sub_number", "episode_label", "episode_identifier", "episode_published_date",
     "episode_published_time", "episode_published_datetime", "episode_index", "extra_index",
     "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
-    "channel_title", "channel_handle", "channel_kind", "section_title", "section_kind",
+    "creator_title", "creator_handle", "creator_kind", "section_title", "section_kind",
     "artist", "album", "track_number", "track_number_padded",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
@@ -409,7 +409,7 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "episode_published_time": published_at.strftime("%H:%M:%S") if published_at else "",
         "episode_published_datetime": published_at.strftime("%Y-%m-%d %H:%M:%S") if published_at else "",
         **_date_substitutions(published_at),
-        **_channel_values(episode),
+        **_creator_values(episode),
         **_music_values(episode),
     }
     values.update(custom_metadata_template_values(
@@ -479,38 +479,38 @@ def movie_output_template_values(
     return values
 
 
-CHANNEL_OUTPUT_TEMPLATE_FIELDS = frozenset({"channel_title", "channel_handle", "channel_kind"})
-"""The channel values, which are the same for every episode of a collection, so a collection's folder may use them."""
+CREATOR_OUTPUT_TEMPLATE_FIELDS = frozenset({"creator_title", "creator_handle", "creator_kind"})
+"""The creator values, which are the same for every episode of a collection, so a collection's folder may use them."""
 
 
-def channel_output_template_values(channel) -> dict[str, str]:
-    """Who made a collection added through a channel. Empty without a channel, so a template that uses them stays
+def creator_output_template_values(creator) -> dict[str, str]:
+    """Who made a collection added through a creator. Empty without a creator, so a template that uses them stays
     valid for every collection."""
-    if channel is None:
-        return {field: "" for field in CHANNEL_OUTPUT_TEMPLATE_FIELDS}
+    if creator is None:
+        return {field: "" for field in CREATOR_OUTPUT_TEMPLATE_FIELDS}
     return {
-        "channel_title": channel.title,
-        "channel_handle": (channel.handle or "").lstrip("@"),
-        "channel_kind": _channel_kind(channel),
+        "creator_title": creator.title,
+        "creator_handle": (creator.handle or "").lstrip("@"),
+        "creator_kind": _creator_kind(creator),
     }
 
 
-def _channel_values(episode: "Episode") -> dict[str, str]:
-    """The episode's channel, and which of the channel's sections it is in: the playlist that is its season, or the
+def _creator_values(episode: "Episode") -> dict[str, str]:
+    """The episode's creator, and which of the creator's sections it is in: the playlist that is its season, or the
     section the collection is made from."""
     collection = episode.collection
     playlist = _episode_list(episode)
     if playlist is not None:
         title, kind = playlist.title, "list"
     else:
-        channel = collection.channel
-        sections = channel.sections if channel is not None else []
+        creator = collection.creator
+        sections = creator.sections if creator is not None else []
         section = next((section for section in sections if section.url == collection.sharing_url), None)
-        if section is None and channel is not None and channel.main_collection_id == collection.id:
+        if section is None and creator is not None and creator.main_collection_id == collection.id:
             section = next((section for section in sections if section.kind == "feed" and section.role == "main"), None)
         title, kind = (section.title, section.kind) if section is not None else ("", "")
     return {
-        **channel_output_template_values(collection.channel),
+        **creator_output_template_values(collection.creator),
         "section_title": title,
         "section_kind": kind,
     }
@@ -564,17 +564,17 @@ def _music_values(episode: "Episode") -> dict[str, str]:
     }
 
 
-def _channel_kind(channel) -> str:
-    """What the Site calls the channel, such as "YouTube channel" or "The Daily Wire host"."""
+def _creator_kind(creator) -> str:
+    """What the Site calls the creator, such as "YouTube creator" or "The Daily Wire host"."""
     from sources import UnknownSourceError, get_source
 
     try:
-        site = get_source(channel.source_key).site_of(channel.site_key)
+        site = get_source(creator.source_key).site_of(creator.site_key)
     except UnknownSourceError:
         site = None
     if site is None:
-        return "channel"
-    return f"{site.name} {site.channel_label}"
+        return "creator"
+    return f"{site.name} {site.creator_label}"
 
 
 def _source_name(source_key: str) -> str:
