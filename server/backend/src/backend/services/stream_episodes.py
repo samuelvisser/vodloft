@@ -214,14 +214,18 @@ def get_local_download_for_episode(
 def get_local_hls_master(
         s: Session,
         profile: StreamProfileBase,
-        episode: Episode,
+        episode_slug: str,
 ) -> Optional[Path]:
-    """The playlist of the episode's HLS download, for serving one of its parts.
+    """The playlist of the HLS download of the episode the profile offers under this slug, for serving
+    one of its parts.
 
-    A player asks for a part every few seconds, so this only trusts what VODLoft already knows of the
-    download. Checking every part of the bundle each time took seconds, longer than a part plays, and
-    the picture never kept up; the playlist itself is checked when the player first asks for it.
+    A player asks for many parts at once when it starts and one every few seconds after, so this only
+    trusts what VODLoft already knows of the download. Checking the whole bundle for each part (its
+    playlists and every file they list) cost a tenth of a second or more a part and the parts waited
+    on each other, so a starting player waited seconds; the playlist is checked when the player first
+    asks for it.
     """
+    episode = _offered_episode(s, profile, episode_slug)
     for download in _candidate_downloads(
         _episode_downloads(s, profile, episode.id),
         kind="hls",
@@ -567,12 +571,12 @@ def get_stream_items(
     return items[:profile.max_items] if profile.max_items > 0 else items
 
 
-def get_stream_episode(
+def _offered_episode(
         s: Session,
         profile: StreamProfileBase,
         episode_slug: str,
 ) -> Episode:
-    """The episode the profile offers under this slug, for playing it."""
+    """The episode under this slug, if it is of a type the profile offers; whether it has media is not checked."""
     allowed_types = set(profile.ep_id_type_list or [])
     if not allowed_types:
         raise _not_offered()
@@ -591,6 +595,16 @@ def get_stream_episode(
     )
     if episode is None:
         raise _not_offered()
+    return episode
+
+
+def get_stream_episode(
+        s: Session,
+        profile: StreamProfileBase,
+        episode_slug: str,
+) -> Episode:
+    """The episode the profile offers under this slug, for playing it."""
+    episode = _offered_episode(s, profile, episode_slug)
 
     if episode.publish_status == EpisodePublishStatus.LIVE.value:
         if not _can_stream_live_episode(s, profile, episode):
