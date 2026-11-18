@@ -50,6 +50,8 @@ type Props = {
     readOnly?: boolean
     /** A new profile, which starts with the presets open. */
     isCreating?: boolean
+    /** Hears the collection root of the example once the preview has worked it out. */
+    onCollectionRoot?: (path: string) => void
 }
 
 type TemplateCodeEditorProps = {
@@ -535,7 +537,7 @@ function describeTypedCharacter(char: string): string {
     return char
 }
 
-export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false, isCreating = false}: Props) {
+export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false, isCreating = false, onCollectionRoot}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
@@ -839,6 +841,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
         indexingValues: mode === 'collection' ? indexingValues : null,
     } : null)
     const previewPath = preview.result?.output.outputPath ?? ''
+    const collectionRootPath = preview.result?.collectionRoot?.path
+    useEffect(() => {
+        if (collectionRootPath) onCollectionRoot?.(collectionRootPath)
+    }, [collectionRootPath, onCollectionRoot])
     // An example of a collection that is not saved yet cannot know its custom indexes, nor the
     // numbers VODLoft counts from the oldest episode; the preview shows their names instead.
     const unsavedNames = useMemo(() => {

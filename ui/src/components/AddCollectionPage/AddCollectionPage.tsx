@@ -7,7 +7,7 @@ import CollectionActionStep, {CollectionAction} from './CollectionActionStep'
 import LocalMediaProfileStep from './LocalMediaProfileStep'
 import DownloadProfileStep from './DownloadProfileStep'
 import StreamProfileStep from './StreamProfileStep'
-import ExistingFilesStep, {defaultExistingFilesFolder, type ExistingFilesChoice} from './ExistingFilesStep'
+import {defaultExistingFilesFolder, type ExistingFilesChoice} from './ExistingFilesFields'
 import {layoutTemplate} from '../ExistingFiles/ExistingFilesSetup'
 
 import {CollectionCreatePayloadOut, CollectionRead, CollectionCreatePayloadIn, CollectionCreatePayloadSchema} from "../../types/schemas/collection";
@@ -39,11 +39,11 @@ export type Props = {
     initialUrl?: string
 }
 
-const STORAGE_KEY = 'addCollectionWizardV11'
+const STORAGE_KEY = 'addCollectionWizardV12'
 
 type WizardType = 'ERROR' | 'INFO'
 type WizardMessage = { text: string; type: WizardType }
-type WizardStep = 1 | 2 | 3 | 4 | 5 | 6
+type WizardStep = 1 | 2 | 3 | 4 | 5
 
 type WizardState = {
     step: WizardStep
@@ -71,7 +71,7 @@ type WizardState = {
 }
 
 // The wizard keeps where the user is in this browser, so a reload or a look elsewhere does not lose it.
-const DRAFT_SCHEMA_VERSION = 'add-collection-wizard-v11'
+const DRAFT_SCHEMA_VERSION = 'add-collection-wizard-v12'
 
 const loadWizardState = () => loadFormDraft<WizardState>(STORAGE_KEY, DRAFT_SCHEMA_VERSION)
 const saveWizardState = (state: WizardState) => saveFormDraft(STORAGE_KEY, DRAFT_SCHEMA_VERSION, state)
@@ -348,13 +348,12 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Pro
     // The newest episodes serve as examples in the later steps; they load in the background.
     const examples = useCollectionExamplesQuery(collectionSubmit, seasonsSubmit)
 
-    const totalSteps = collectionAction === 'download-stream' ? 6 : collectionAction === 'download' ? 5 : collectionAction === 'stream' ? 3 : 2
+    const totalSteps = collectionAction === 'download-stream' ? 5 : collectionAction === 'download' ? 4 : collectionAction === 'stream' ? 3 : 2
     const stepTitle = step === 1 ? 'Choose collection'
         : step === 2 ? 'Choose what VODLoft should do'
         : collectionAction === 'stream' ? 'Stream Profile'
         : step === 3 ? 'Media Profile'
-        : step === 4 ? 'Existing files'
-        : step === 5 ? 'Download Profile'
+        : step === 4 ? 'Download Profile'
         : 'Stream Profile'
 
     return (
@@ -440,6 +439,7 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Pro
                     onSubmit={(value) => {
                         setLocalMediaProfileSubmit(value)
                         const settings = chosenProfileSettings(value, localMediaProfiles)
+                        // The collection root fills the folder in once the example is shown; this covers a profile without one.
                         setExistingFiles((current) => current.folder ? current : {
                             ...current,
                             folder: defaultExistingFilesFolder(settings?.outputTemplate),
@@ -452,6 +452,8 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Pro
                     onBack={() => setStep(2)}
                     onContinue={() => setStep(4)}
                     onCancel={handleCancel}
+                    existingFiles={existingFiles}
+                    onExistingFilesChange={setExistingFiles}
                     collectionSlug={collectionSubmit.slug}
                     collection={collectionSubmit}
                     siteKey={collectionSite?.siteKey}
@@ -460,16 +462,6 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Pro
             )}
 
             {step === 4 && (collectionAction === 'download' || collectionAction === 'download-stream') && (
-                <ExistingFilesStep
-                    value={existingFiles}
-                    onChange={setExistingFiles}
-                    onBack={() => setStep(3)}
-                    onContinue={() => setStep(5)}
-                    onCancel={handleCancel}
-                />
-            )}
-
-            {step === 5 && (collectionAction === 'download' || collectionAction === 'download-stream') && (
                 <DownloadProfileStep
                     value={downloadProfileInput}
                     onChange={setDownloadProfileInput}
@@ -477,13 +469,13 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Pro
                         setDownloadProfileSubmit(value)
                         downloadProfileSubmitRef.current = value
                     }}
-                    onBack={() => setStep(4)}
+                    onBack={() => setStep(3)}
                     onContinue={() => {
                         if (collectionAction === 'download') {
                             void handleFinish('download')
                             return
                         }
-                        setStep(6)
+                        setStep(5)
                     }}
                     onCancel={handleCancel}
                     collection={collectionSubmit}
@@ -492,7 +484,7 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Pro
                 />
             )}
 
-            {step === 6 && collectionAction === 'download-stream' && (
+            {step === 5 && collectionAction === 'download-stream' && (
                 <StreamProfileStep
                     value={streamProfileInput}
                     onChange={setStreamProfileInput}
@@ -500,7 +492,7 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Pro
                         setStreamProfileSubmit(value)
                         streamProfileSubmitRef.current = value
                     }}
-                    onBack={() => setStep(5)}
+                    onBack={() => setStep(4)}
                     onFinish={() => handleFinish('download-stream')}
                     onCancel={handleCancel}
                     collectionSlug={collectionSubmit?.slug}

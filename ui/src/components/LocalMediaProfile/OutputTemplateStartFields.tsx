@@ -12,6 +12,7 @@ import {faIcon} from '../../icons/faIcon'
 import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import {FollowsSettingsSelect} from './FollowsSettings'
 import {parseOutputTemplate, renderCompactOutputTemplate} from './outputTemplateFormatting'
+import {useRevealFields} from './LocalMediaProfileSection'
 import {PRESET_CHOICE_FIELDS, outputTemplatePreset, outputTemplatePresetRegistry, templateBaseFolder} from './outputTemplatePresets'
 
 /** Which characters file and folder names may hold: the mode in Settings, or the profile's own. */
@@ -73,6 +74,7 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
     const [presetOpen, setPresetOpen] = useState(isCreating)
     const preferredFormat = useWatch({control, name: 'preferredFormat'})
     const [pendingPreset, setPendingPreset] = useState<string | null>(null)
+    const revealFields = useRevealFields()
     const outputTemplate = useWatch({control, name: 'outputTemplate'}) as string | undefined
     const choiceValues = useWatch({control, name: [...PRESET_CHOICE_FIELDS]}) as unknown[]
     const audioOnly = preferredFormat === 'format_audio_only'
@@ -106,6 +108,8 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
             setValue('indexingValues', [...indexingValues, preset.indexingValue], options)
         }
         form.clearErrors('outputTemplate')
+        // Many of the Files and metadata choices just changed, so that section opens to show them.
+        revealFields(PRESET_CHOICE_FIELDS)
     }
 
     return (

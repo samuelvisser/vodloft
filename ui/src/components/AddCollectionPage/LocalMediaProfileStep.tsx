@@ -1,4 +1,4 @@
-import {useEffect, useRef} from 'react'
+import {useCallback, useEffect, useRef} from 'react'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {ChosenCollectionCard} from './CollectionPreviewCard'
@@ -15,13 +15,17 @@ import {
     LocalMediaProfileCreateUnionSchema,
 } from '../../types/schemas/collection_as_bundle'
 import LocalMediaProfileCard from '../LocalMediaProfile/LocalMediaProfileCard'
+import ExistingFilesFields, {type ExistingFilesChoice} from './ExistingFilesFields'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
 
 
 /** The picked profile's output path and its examples, shown as they are: the profile is edited on its own page. */
-function ChosenProfileOutputPath({profile}: {profile: CollectionLocalMediaProfileRead}) {
+function ChosenProfileOutputPath({profile, onCollectionRoot}: {
+    profile: CollectionLocalMediaProfileRead
+    onCollectionRoot: (path: string) => void
+}) {
     const display = useForm<CollectionLocalMediaProfileRead>({defaultValues: profile})
     return (
         <>
@@ -43,7 +47,7 @@ function ChosenProfileOutputPath({profile}: {profile: CollectionLocalMediaProfil
                 </div>
             </div>
             <div className="chosen-profile-output-path">
-                <CollectionLocalMediaProfileOutputTemplate form={display} readOnly/>
+                <CollectionLocalMediaProfileOutputTemplate form={display} readOnly onCollectionRoot={onCollectionRoot}/>
             </div>
         </>
     )
@@ -62,9 +66,14 @@ type Props = {
     /** The Site the chosen collection is on. */
     siteKey?: string | null
     collectionType: CollectionLocalMediaProfileContext
+    existingFiles: ExistingFilesChoice
+    onExistingFilesChange: (value: ExistingFilesChoice) => void
 }
 
-export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, collection, collectionType, siteKey}: Props) {
+export default function LocalMediaProfileStep({
+    value, onChange, onSubmit: onSubmitParent, onBack, onContinue, onCancel, collection, collectionType, siteKey,
+    existingFiles, onExistingFilesChange,
+}: Props) {
     const profilesQuery = useLocalMediaProfiles()
     const {data: sites} = useLocalMediaProfileSites()
     const knownSiteKeys = sites?.sites.map((site) => site.key)
@@ -90,6 +99,15 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
         })
         return () => subscription.unsubscribe()
     }, [watch, getValues, onChange])
+
+    // The existing files are looked for in the collection root, until the user picks another folder.
+    const existingFilesRef = useRef(existingFiles)
+    existingFilesRef.current = existingFiles
+    const onCollectionRoot = useCallback((root: string) => {
+        const current = existingFilesRef.current
+        if (current.folderChosen || current.folder === root) return
+        onExistingFilesChange({...current, folder: root})
+    }, [onExistingFilesChange])
 
     // What the user typed for a new profile, kept while an existing profile is picked.
     const newProfileRef = useRef<Partial<LocalMediaProfileChoiceIn> | null>(null)
@@ -145,13 +163,13 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                     </div>
 
                     {watchedOp === 'use_existing' ? (
-                        chosenProfile ? <ChosenProfileOutputPath key={chosenProfile.slug} profile={chosenProfile}/> : null
+                        chosenProfile ? <ChosenProfileOutputPath key={chosenProfile.slug} profile={chosenProfile} onCollectionRoot={onCollectionRoot}/> : null
                     ) : (
                         <>
                             <hr className="divider" aria-hidden="true"/>
                             <div className="divider-label" aria-hidden="true">Or create a new profile</div>
 
-                            <LocalMediaProfileForm form={form} mode="collection" isCreating/>
+                            <LocalMediaProfileForm form={form} mode="collection" isCreating onCollectionRoot={onCollectionRoot}/>
                             <div className="form-row">
                                 <label>Indexing values</label>
                                 <IndexingValuesEditorButton form={form}/>
@@ -161,6 +179,9 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                             </div>
                         </>
                     )}
+
+                    <hr className="divider" aria-hidden="true"/>
+                    <ExistingFilesFields value={existingFiles} onChange={onExistingFilesChange}/>
                 </div>
 
                 {collection ? (
@@ -172,7 +193,12 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
 
             <div className="actions">
                 <button type="button" className="btn" onClick={onBack}>Back</button>
-                <input type="submit" className="btn btn-primary" value="Continue" disabled={isSubmitting}/>
+                <input
+                    type="submit"
+                    className="btn btn-primary"
+                    value="Continue"
+                    disabled={isSubmitting || (existingFiles.enabled && !existingFiles.folder.trim())}
+                />
                 <button type="button" className="btn" onClick={onCancel}>Cancel</button>
             </div>
         </form>
