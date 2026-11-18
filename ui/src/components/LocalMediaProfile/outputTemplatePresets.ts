@@ -15,8 +15,6 @@ export const PRESET_CHOICE_FIELDS = ['metadataMode', 'showNfo', 'kodiSafeNfo', '
 type Preset = {
     template: (base: string) => string
     choices: PresetChoices
-    /** An Indexing Value the template numbers extras with, added to the profile when it has none of that key. */
-    indexingValue?: {key: string, name: string, keepNumbers: boolean}
 }
 
 // Season and episode as two digits, and whether an episode belongs with the specials.
@@ -24,15 +22,13 @@ const NUMBERS = `{% set season_num = "%02d"|format(season_number|int) %}
 {% set ep_num = "%02d"|format(episode_number|int) %}
 {% set is_extra = season_type == 'extra' or episode_type != 'ep' %}`
 
-const EXTRAS = {key: 'extra', name: 'Extras', keepNumbers: true}
-
 // Jellyfin, Emby and Kodi name shows the same way, and read the show and season NFO files.
 const nfoServerTemplate = (base: string) => `{# Variables #}
 ${NUMBERS}
 {% set season_folder = 'Season 00' if is_extra else 'Season ' ~ season_num %}
 {% set episode_id %}
 	{% if is_extra %}
-		S00E{{ "%02d"|format('extra' | custom_index) }}
+		S00E{{ "%02d"|format(extra_index|int) }}
 	{% else %}
 		S{{ season_num }}E{{ ep_num }}
 	{% endif %}
@@ -51,7 +47,7 @@ ${NUMBERS}
 {% set plex_season = 'Specials' if is_extra else 'Season ' ~ season_num %}
 {% set plex_ep_id %}
 	{% if is_extra %}
-		other{{ 'extra' | custom_index }}
+		other{{ extra_index }}
 	{% else %}
 		S{{ season_num }}E{{ ep_num }}
 	{% endif %}
@@ -65,17 +61,14 @@ ${base}
 /{{ plex_season }}
 /{{ collection_title }} - {{ plex_ep_id }} [{{ plex_title }}].ext`,
         choices: {metadataMode: 'embed', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary'},
-        indexingValue: EXTRAS,
     },
     jellyfin: {
         template: nfoServerTemplate,
         choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary'},
-        indexingValue: EXTRAS,
     },
     kodi: {
         template: nfoServerTemplate,
         choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: true, fileDateFromPublishDate: true, downloadMode: 'temporary'},
-        indexingValue: EXTRAS,
     },
     audiobookshelf: {
         template: (base) => `${base}
