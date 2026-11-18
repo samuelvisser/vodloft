@@ -25,8 +25,8 @@ has as a stream are left out. Choose where the media comes from the same way as 
 
 ## Show settings
 
-- **Folder name** — the show's folder in the share, and the name in front of each episode. Left empty, it is the
-  collection's title.
+- **Folder name** — the show's folder in the share, and the name in front of each episode. It starts as the
+  collection's title, and is also the share's name in the list of Stream Profiles.
 - **Season folders**:
   - **One per season** (the default) puts each season's episodes in a *Season 01* folder, and names them *S01E05*.
   - **One per year** puts each year's episodes in a *Season 2026* folder, and names them by date.

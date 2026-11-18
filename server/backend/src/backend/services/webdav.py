@@ -117,7 +117,7 @@ def _name(value: str) -> str:
 
 
 def show_name(profile: WebdavStreamProfile) -> str:
-    return _name(profile.folder_name or profile.overwrite_collection_title or profile.collection.title)
+    return _name(profile.overwrite_collection_title or profile.collection.title)
 
 
 def _episode_file(

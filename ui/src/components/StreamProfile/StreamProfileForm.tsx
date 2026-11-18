@@ -278,18 +278,26 @@ export default function StreamProfileForm({
             )}
 
             <div className="form-row">
-                <label htmlFor="stream-profile-title">Title</label>
+                {/* A WebDAV share names the show's folder by the title. */}
+                <label htmlFor="stream-profile-title">{mode === 'webdav' ? 'Folder name' : 'Title'}</label>
                 <input
                     id="stream-profile-title"
                     className="input"
                     type="text"
                     {...register('title')}
                     aria-invalid={!!errors.title}
-                    aria-describedby={errors.title ? 'stream-profile-title-error' : undefined}
+                    aria-describedby={errors.title
+                        ? 'stream-profile-title-error'
+                        : mode === 'webdav' ? 'stream-profile-title-help' : undefined}
                 />
                 {errors.title && (
                     <div id="stream-profile-title-error" className="error" role="alert" aria-live="polite">
                         {String(errors.title.message)}
+                    </div>
+                )}
+                {mode === 'webdav' && (
+                    <div className="help" id="stream-profile-title-help">
+                        The show&apos;s folder in the share, and the name in front of each episode.
                     </div>
                 )}
             </div>

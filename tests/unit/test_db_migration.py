@@ -29,7 +29,8 @@ VODLOFT_0_5_0_REVISION = "817515eb8209"
 VODLOFT_0_6_0_REVISION = "d0f28c7f863e"
 VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
-HEAD_REVISION = "2f7a91c4d8e3"
+VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
+HEAD_REVISION = "940039d2712d"
 
 
 @pytest.fixture
@@ -1211,3 +1212,38 @@ def test_iptv_migration_gives_each_user_and_the_install_a_stream_token(migration
         install = connection.execute(text("SELECT stream_token FROM settings")).scalar_one()
     assert len(set(tokens)) == 2 and all(len(token) >= 32 for token in tokens)
     assert install and install not in tokens
+
+
+def test_a_webdav_folder_name_becomes_the_profiles_title(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_9_0_REVISION)
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key, episode_order) VALUES (1, 'c1', 'c1', 'The Show', "
+            "'https://www.youtube.com/@host', 'free', 'series', 'date_based', 'Host', 'host', 'ytdlp', 'newest_first')"
+        ))
+        # A folder name of its own, one that is the collection's title, and none beside a title of its own.
+        for profile_id, title, folder_name in ((1, "Listed", "Folder"), (2, "Listed", "The Show"), (3, "Listed", None)):
+            connection.execute(text(
+                "INSERT INTO stream_profiles (id, type, collection_id, overwrite_collection_title, enable_profile, "
+                "token, use_downloads, use_source_stream, preferred_format, prefer_exact_match, ep_id_type_list, "
+                "max_items, stream_live_episodes, proxy_source_stream, live_episode_handoff_ids) "
+                "VALUES (:id, 'webdav', 1, :title, 1, :token, 1, 0, 'best', 0, '[]', 0, 0, 1, '[]')"
+            ), {"id": profile_id, "title": title, "token": f"t{profile_id}"})
+            connection.execute(text(
+                "INSERT INTO stream_profiles_webdav (id, folder_name, season_folders, metadata_files) "
+                "VALUES (:id, :folder_name, 'season', 'none')"
+            ), {"id": profile_id, "folder_name": folder_name})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        titles = dict(connection.execute(text("SELECT id, overwrite_collection_title FROM stream_profiles")).all())
+        columns = [row[1] for row in connection.execute(text("PRAGMA table_info(stream_profiles_webdav)"))]
+    assert titles == {1: "Folder", 2: None, 3: "Listed"}
+    assert "folder_name" not in columns
