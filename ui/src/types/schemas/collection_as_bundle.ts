@@ -1,9 +1,6 @@
 import {CollectionCreatePayloadSchema} from './collection'
 import {DownloadProfileSchemaRequest} from './download_profile'
-import {
-    CollectionLocalMediaProfileCreateSchema,
-    CollectionLocalMediaProfileUpdateSchema,
-} from './collection_local_media_profile'
+import {CollectionLocalMediaProfileCreateSchema} from './collection_local_media_profile'
 import {RssStreamProfileCreateSchema} from './rss_stream_profile'
 import {z} from 'zod'
 import {SeasonDetachedSchema} from './season'
@@ -22,19 +19,21 @@ export type LocalMediaProfileCreateUnionIn = z.input<typeof LocalMediaProfileCre
 export type LocalMediaProfileCreateUnionOut = z.output<typeof LocalMediaProfileCreateUnionSchema>
 
 
-export const LocalMediaProfileUpdateUnionSchema = CollectionLocalMediaProfileUpdateSchema.safeExtend({
-    op: z.literal('update_by_slug').default('update_by_slug'),
+// The wizard uses an existing profile as it is: other collections share it, so it is changed on its own page.
+export const LocalMediaProfileUseExistingSchema = z.object({
+    op: z.literal('use_existing').default('use_existing'),
+    slug: z.string().min(1),
 })
-export type LocalMediaProfileUpdateUnionIn = z.input<typeof LocalMediaProfileUpdateUnionSchema>
-export type LocalMediaProfileUpdateUnionOut = z.output<typeof LocalMediaProfileUpdateUnionSchema>
+export type LocalMediaProfileUseExistingIn = z.input<typeof LocalMediaProfileUseExistingSchema>
+export type LocalMediaProfileUseExistingOut = z.output<typeof LocalMediaProfileUseExistingSchema>
 
 
-export const LocalMediaProfileUpsertSchema = z.discriminatedUnion('op', [
+export const LocalMediaProfileChoiceSchema = z.discriminatedUnion('op', [
     LocalMediaProfileCreateUnionSchema,
-    LocalMediaProfileUpdateUnionSchema,
+    LocalMediaProfileUseExistingSchema,
 ])
-export type LocalMediaProfileUpsertIn = z.input<typeof LocalMediaProfileUpsertSchema>
-export type LocalMediaProfileUpsertOut = z.output<typeof LocalMediaProfileUpsertSchema>
+export type LocalMediaProfileChoiceIn = z.input<typeof LocalMediaProfileChoiceSchema>
+export type LocalMediaProfileChoiceOut = z.output<typeof LocalMediaProfileChoiceSchema>
 
 
 export const RssStreamProfileBundleSchema = RssStreamProfileCreateSchema.omit({collectionId: true})
@@ -45,7 +44,7 @@ export type RssStreamProfileBundleOut = z.output<typeof RssStreamProfileBundleSc
 export const CollectionCreateBundleSchema = z.object({
     collection: CollectionCreatePayloadSchema,
     seasons: z.array(SeasonDetachedSchema),
-    localMediaProfile: LocalMediaProfileUpsertSchema.optional(),
+    localMediaProfile: LocalMediaProfileChoiceSchema.optional(),
     downloadProfile: DownloadProfileBundleSchema.optional(),
     streamProfile: RssStreamProfileBundleSchema.optional(),
 })
