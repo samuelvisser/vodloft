@@ -1,3 +1,4 @@
+import type {ReactNode} from 'react'
 import {type FieldValues, UseFormReturn} from 'react-hook-form'
 
 import {LocalMediaProfileServerErrors} from '../../types/schemas/local_media_profile'
@@ -20,6 +21,8 @@ type Props = {
     isCreating: boolean
     /** Hears the collection root of the output path's example. */
     onCollectionRoot?: (path: string) => void
+    /** Buttons beside the output template's heading. */
+    outputTemplateActions?: ReactNode
 }
 
 export type LocalMediaProfileMode = 'collection' | 'movie' | 'video'
@@ -51,7 +54,7 @@ export function buildLocalMediaProfileOnSubmit<TIn extends FieldValues, TOut ext
  * The Local Media Profile form, in folding sections. A new profile opens the sections that need a choice; the others
  * start from good defaults and show their values while folded.
  */
-export default function LocalMediaProfileForm({form, mode, isCreating, onCollectionRoot}: Props) {
+export default function LocalMediaProfileForm({form, mode, isCreating, onCollectionRoot, outputTemplateActions}: Props) {
     const {register, formState: {errors}} = form
     const {onSubtitleModeChange, onScopeChange} = useSubtitleModeDefaults(form, mode, isCreating)
     const summaries = useLocalMediaProfileSummaries(form, mode)
@@ -116,7 +119,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating, onCollect
             >
                 {mode === 'movie' && <MovieLocalMediaProfileForm form={form}/>}
                 {mode === 'video' && <VideoLocalMediaProfileForm form={form}/>}
-                {mode === 'collection' && <CollectionLocalMediaProfileForm form={form} isCreating={isCreating} onCollectionRoot={onCollectionRoot}/>}
+                {mode === 'collection' && <CollectionLocalMediaProfileForm form={form} isCreating={isCreating} onCollectionRoot={onCollectionRoot} outputTemplateActions={outputTemplateActions}/>}
             </LocalMediaProfileSection>
         </RevealFieldsProvider>
     )

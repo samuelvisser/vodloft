@@ -52,6 +52,8 @@ type Props = {
     isCreating?: boolean
     /** Hears the collection root of the example once the preview has worked it out. */
     onCollectionRoot?: (path: string) => void
+    /** Buttons beside the template's heading, such as the Indexing values editor. */
+    headerActions?: ReactNode
 }
 
 type TemplateCodeEditorProps = {
@@ -537,7 +539,7 @@ function describeTypedCharacter(char: string): string {
     return char
 }
 
-export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false, isCreating = false, onCollectionRoot}: Props) {
+export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false, isCreating = false, onCollectionRoot, headerActions}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
@@ -892,7 +894,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                                 ? <p>Read only. Edit the media profile to change it.</p>
                                 : <p>Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>}
                         </div>
-                        <span className="template-language-badge">Jinja</span>
+                        <div className="template-editor-heading__actions">
+                            {!readOnly && headerActions}
+                            <span className="template-language-badge">Jinja</span>
+                        </div>
                     </div>
                     {readOnly ? (
                         <OpaqueOutputTemplateCode source={template} sourceMode="compact" label="Output path template"/>

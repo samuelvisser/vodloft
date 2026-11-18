@@ -169,14 +169,13 @@ export default function LocalMediaProfileStep({
                             <hr className="divider" aria-hidden="true"/>
                             <div className="divider-label" aria-hidden="true">Or create a new profile</div>
 
-                            <LocalMediaProfileForm form={form} mode="collection" isCreating onCollectionRoot={onCollectionRoot}/>
-                            <div className="form-row">
-                                <label>Indexing values</label>
-                                <IndexingValuesEditorButton form={form}/>
-                                <div className="help">
-                                    Configure optional named number sequences for use with <code>custom_index</code> in the output template.
-                                </div>
-                            </div>
+                            <LocalMediaProfileForm
+                                form={form}
+                                mode="collection"
+                                isCreating
+                                onCollectionRoot={onCollectionRoot}
+                                outputTemplateActions={<IndexingValuesEditorButton form={form} className="btn btn-small"/>}
+                            />
                         </>
                     )}
 
