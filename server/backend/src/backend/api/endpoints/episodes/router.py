@@ -149,6 +149,30 @@ def episode_early_delete(episode_slug: str):
     return run_write_transaction(work)
 
 
+@router.get(
+    "/{episode_slug}/season-place", dependencies=[requires(Area.LIBRARY, Level.VIEW)],
+    response_model=EpisodeSeasonPlaceAPIRead,
+)
+def episode_season_place_get(episode_slug: str):
+    """Whether the episode belongs in another season now that its collection's playlists changed."""
+    with db_session() as s:
+        try:
+            return episode_season_place(s, episode_slug)
+        finally:
+            s.rollback()
+
+
+@router.post(
+    "/{episode_slug}/move-to-season",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=TaskOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def episode_move_to_season(episode_slug: str):
+    """Move the episode, and its files, to the season its collection's playlists put it in now."""
+    return run_write_transaction(lambda s: move_episode_to_its_season(s, episode_slug))
+
+
 @router.get("/{episode_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=EpisodeAPIRead)
 def episode_detail(episode_slug: str):
     with db_session() as s:

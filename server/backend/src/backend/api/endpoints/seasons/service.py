@@ -74,28 +74,3 @@ def update_season(s: Session, collection_slug: str, season_slug: str, body: Seas
     s.flush()
     return SeasonAPIRead.model_validate(season)
 
-
-def delete_season(s: Session, collection_slug: str, season_slug: str) -> SeasonAPIRead:
-    season = (
-        s.query(Season)
-        .filter(
-            Season.slug == season_slug,
-            Season.collection.has(slug=collection_slug)
-        )
-        .one_or_none()
-    )
-    if season is None:
-        raise HTTPException(status_code=404, detail="Season not found")
-
-    payload = SeasonAPIRead.model_validate(season)
-
-    queue_event(s, "season.deleted", {
-        "resource_id": season.id,
-        "id": season.id,
-        "slug": season.slug,
-        "collection_id": season.collection_id
-    })
-
-    s.delete(season)
-    s.flush()
-    return payload

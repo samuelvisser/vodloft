@@ -97,11 +97,15 @@ class CollectionFileRenameOperation(_CollectionOperation):
         collection: Collection,
         *,
         local_media_profile_ids: Sequence[int],
+        season_folders: bool = True,
+        episode_ids: Sequence[int] | None = None,
     ) -> None:
         super().__init__(collection)
         self.local_media_profile_ids = tuple(
             dict.fromkeys(int(profile_id) for profile_id in local_media_profile_ids)
         )
+        self.season_folders = season_folders
+        self.episode_ids = list(episode_ids) if episode_ids is not None else None
 
     def targets(self) -> tuple[OperationTargetSpec, ...]:
         return tuple(
@@ -109,7 +113,10 @@ class CollectionFileRenameOperation(_CollectionOperation):
                 task_key=_RENAME_FILE_TASK_KEY,
                 resource_type="collection",
                 resource_id=self.resource.id,
-                task_kwargs={"local_media_profile_id": profile_id},
+                task_kwargs={
+                    "local_media_profile_id": profile_id, "season_folders": self.season_folders,
+                    **({"episode_ids": self.episode_ids} if self.episode_ids is not None else {}),
+                },
                 slot_key=f"profile:{profile_id}",
             )
             for profile_id in self.local_media_profile_ids

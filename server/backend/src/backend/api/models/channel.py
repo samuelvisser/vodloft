@@ -8,7 +8,6 @@ from pydantic import AliasChoices, AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.source import SiteAPIRead
 from backend.types.channel_types import NewSectionAction, SectionTarget
-from backend.types.collection_link_types import LinkPlacement
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
 from sources import ChannelPreset
@@ -46,7 +45,6 @@ class ChannelSectionAPIRead(ResponseBase):
 class SectionPlanAPIRead(ResponseBase):
     ref: str
     target: SectionTarget
-    placement: LinkPlacement
 
 
 class ChannelPresetAPIRead(ResponseBase):
@@ -61,6 +59,8 @@ class ChannelLookupAPIRead(ResponseBase):
     site_key: str
     site_name: str
     channel_label: str
+    link_seasons: bool = False
+    """The channel's lists can be seasons of its own collection."""
     ref: str
     url: Optional[str] = None
     title: str
@@ -71,8 +71,6 @@ class ChannelLookupAPIRead(ResponseBase):
     links: list[str] = Field(default_factory=list)
     facts: list[str] = Field(default_factory=list)
     sections: list[ChannelSectionAPIRead]
-    claim_order: list[str]
-    """The section refs in the order that decides which keeps a video several of them list."""
     presets: list[ChannelPresetAPIRead]
     channel_slug: Optional[str] = None
     """The channel's slug, when it is already in the Library."""
@@ -83,7 +81,6 @@ class ChannelLookupAPIRead(ResponseBase):
 class SectionPlanAPIIn(RequestBase):
     ref: str
     target: SectionTarget
-    placement: LinkPlacement = LinkPlacement.SITE_SEASONS
 
 
 class ChannelAPICreate(RequestBase):
@@ -136,26 +133,11 @@ class ChannelAPIRead(ResponseBase):
     """When VODLoft last looked for new sections."""
 
 
-class ChannelOrderEntryAPIRead(ResponseBase):
-    """A section a collection of the channel takes, in the channel's order."""
-
-    ref: str
-    title: str
-    kind: Literal["feed", "list", "item"]
-    kind_label: Optional[str] = None
-    collection_slug: str
-    collection_title: str
-    placement: LinkPlacement
-    video_count: int = 0
-    """How many videos the section lists."""
-
-
 class ChannelPageAPIRead(ChannelAPIRead):
-    """A channel's page: its collections, and the sections no collection keeps."""
+    """A channel's page: its collections, and its sections with the collection that keeps each."""
 
     collections: list[ChannelCollectionAPIRead]
     sections: list[ChannelSectionAPIRead]
-    order: list[ChannelOrderEntryAPIRead]
     main_collection_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("main_collection", "slug"))
 
 
@@ -165,8 +147,6 @@ class ChannelAPIUpdate(RequestBase):
     new_sections: NewSectionAction
     genre: Optional[str] = Field(default=None, max_length=200)
     content_rating: Optional[str] = Field(default=None, max_length=50)
-    order: Optional[list[str]] = Field(default=None, max_length=500)
-    """The refs of the sections the channel's collections take, highest first."""
 
 
 class ChannelSectionsAPIAdd(RequestBase):
@@ -175,19 +155,8 @@ class ChannelSectionsAPIAdd(RequestBase):
     sections: list[SectionPlanAPIIn] = Field(min_length=1, max_length=500)
 
 
-class ChannelLinkMatchAPIRead(ResponseBase):
-    """One of a collection's links, and the channel's section it becomes."""
-
-    url: str = Field(validation_alias=AliasPath("link", "url"))
-    title: Optional[str] = Field(default=None, validation_alias=AliasPath("link", "title"))
-    section_title: Optional[str] = Field(default=None, validation_alias=AliasPath("section", "title"))
-    section_kind_label: Optional[str] = Field(default=None, validation_alias=AliasPath("section", "kind_label"))
-    kept_by: Optional[str] = None
-    """The title of another of the channel's collections that keeps this section already."""
-
-
 class CollectionChannelMatchAPIRead(ResponseBase):
-    """The channel behind a collection's links, before the collection is added to it."""
+    """The channel behind a collection's link, before the collection is added to it."""
 
     site_name: str
     channel_label: str
@@ -198,12 +167,14 @@ class CollectionChannelMatchAPIRead(ResponseBase):
     avatar_url: Optional[str] = None
     channel_slug: Optional[str] = None
     """The channel's slug, when it is already in the Library."""
-    links: list[ChannelLinkMatchAPIRead]
+    section_title: Optional[str] = Field(default=None, validation_alias=AliasPath("section", "title"))
+    """The channel's section the collection is, when it is one."""
+    section_kind_label: Optional[str] = Field(default=None, validation_alias=AliasPath("section", "kind_label"))
+    kept_by: Optional[str] = None
+    """The title of another of the channel's collections that keeps this section already."""
 
 
 class CollectionChannelLeaveAPIRead(ResponseBase):
     """What removing a collection from its channel changes."""
 
     channel_title: str
-    videos_kept_elsewhere: int
-    """Videos the collection's links list that another of the channel's collections keeps; it adds them too after."""

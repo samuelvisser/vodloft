@@ -54,6 +54,9 @@ _API_KEY_SITES = {"youtube"}
 _CHANNEL_SITES = {"youtube", "bandcamp", "soundcloud"}
 # What a Site calls a channel, where that is not "channel".
 _CHANNEL_LABELS = {"bandcamp": "artist", "soundcloud": "artist"}
+# Sites whose channels' playlists can be the seasons of a collection made from the channel.
+# An artist's albums are their playlists.
+_LINK_SEASON_SITES = {"youtube", "bandcamp", "soundcloud"}
 _CHANNEL_PRESETS = (ChannelPreset.ONE_SHOW, ChannelPreset.PER_LIST, ChannelPreset.PICK)
 # A channel's members-only videos sit among its open ones, so its collections start without them.
 _HIDES_LOCKED = {"youtube"}
@@ -147,7 +150,7 @@ def site_of(key: str, host: str | None = None) -> Site:
         settings=_SITE_SETTINGS.get(key, SiteSettings()), accesses=_accesses(key),
         takes_api_key=key in _API_KEY_SITES, shows_locked=key not in _HIDES_LOCKED,
         channels=key in _CHANNEL_SITES, channel_label=_CHANNEL_LABELS.get(key, "channel"),
-        channel_presets=_CHANNEL_PRESETS if key in _CHANNEL_SITES else (),
+        channel_presets=_CHANNEL_PRESETS if key in _CHANNEL_SITES else (), link_seasons=key in _LINK_SEASON_SITES,
     )
 
 

@@ -38,37 +38,17 @@ function presetText(key: ChannelCreateIn['preset'], lists: string, hasFeeds: boo
     return {label: 'Only what I pick', help: 'Everything starts skipped.'}
 }
 
-/** The order in which places claim a video, as the user sees them. */
-function orderText(sections: ChannelSectionRead[], lists: string) {
-    const feeds = ['live', 'short', 'main']
-        .map((role) => sections.find((section) => section.kind === 'feed' && section.role === role)?.title)
-        .filter((title): title is string => !!title)
-    if (!feeds.length) return null
-    const names = [lists, ...feeds]
-    return `${names.slice(0, -1).join(', ')} and then ${names[names.length - 1]}`
-}
+type Choice = 'main' | 'own' | 'skip'
 
-type Choice = 'main:site_seasons' | 'main:one_season' | 'main:specials' | 'own' | 'skip'
-
-function choiceOf(plan: ChannelCreateIn['sections'] extends (infer P)[] | undefined ? P | undefined : never): Choice {
-    if (!plan || plan.target === 'skip') return 'skip'
-    if (plan.target === 'own') return 'own'
-    return `main:${plan.placement ?? 'site_seasons'}` as Choice
-}
-
-function planOf(ref: string, choice: Choice): SectionPlan {
-    if (choice === 'skip' || choice === 'own') return {ref, target: choice, placement: 'site_seasons'}
-    const [, placement] = choice.split(':') as ['main', SectionPlan['placement']]
-    return {ref, target: 'main', placement}
+function choiceOf(plan: SectionPlan | undefined): Choice {
+    return plan?.target ?? 'skip'
 }
 
 /** What the Site's sections can become, in the words of this channel. */
 function choicesFor(channel: ChannelLookupRead, section: ChannelSectionRead) {
     const spec: Partial<Record<Choice, {label: string}>> = {}
-    if (section.kind === 'feed') spec['main:site_seasons'] = {label: 'Main collection, a season per year'}
-    else if (section.hasSeasons) spec['main:site_seasons'] = {label: 'Main collection, with its own seasons'}
-    if (section.kind !== 'feed') spec['main:one_season'] = {label: 'Main collection, as one season'}
-    spec['main:specials'] = {label: 'Main collection, as specials'}
+    if (section.kind === 'feed') spec.main = {label: 'Main collection'}
+    else if (channel.linkSeasons) spec.main = {label: `Main collection, as ${channel.music ? 'an album' : 'a playlist'} season`}
     spec.own = {label: 'A collection of its own'}
     spec.skip = {label: 'Skip'}
     return createSelectRegistry(`ChannelSection-${channel.ref}-${section.ref}`, spec as Record<Choice, {label: string}>)
@@ -188,7 +168,7 @@ export default function AddChannelPage() {
         setValue('sections', chosen.plan, {shouldValidate: true})
     }
     const choose = (section: string, choice: Choice) => {
-        setValue('sections', plans.map((plan) => plan.ref === section ? planOf(section, choice) : plan), {shouldValidate: true})
+        setValue('sections', plans.map((plan) => plan.ref === section ? {ref: section, target: choice} : plan), {shouldValidate: true})
     }
 
     const onSubmit = buildServerAwareSubmit<ChannelCreateIn, ChannelCreateOut>(form, (data) => fetch(`${apiUrl()}/channels`, {
@@ -244,7 +224,6 @@ export default function AddChannelPage() {
     const listsTitle = listLabel === 'Show' ? 'Shows' : listLabel === 'Album' ? 'Albums' : 'Playlists'
     const lists = listsTitle.toLowerCase()
     const hasFeeds = channel.sections.some((section) => section.kind === 'feed')
-    const order = orderText(channel.sections, lists)
     const groups: [string, ChannelSectionRead[]][] = [
         ['Feeds', channel.sections.filter((section) => section.kind === 'feed')],
         [listsTitle, channel.sections.filter((section) => section.kind === 'list')],
@@ -332,12 +311,6 @@ export default function AddChannelPage() {
                     </div>
                 ))}
 
-                {order && (
-                    <p className="channel-order-note">
-                        A {channel.music ? 'track' : 'video'} in more than one of these places goes to the first one in this
-                        order: {order}. Once it has a file, it stays where it is.
-                    </p>
-                )}
 
                 <div className="form-row channel-membership">
                     <label htmlFor="channel-new-sections">When the {channel.channelLabel} adds {/^[aeiou]/.test(lists) ? 'an' : 'a'} {lists.replace(/s$/, '')}</label>

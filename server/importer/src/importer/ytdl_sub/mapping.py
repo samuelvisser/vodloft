@@ -6,8 +6,10 @@ same presets share one profile, unless their own values name files differently; 
 own variant of it. Every video in a subscription's download archive is adopted at the path ytdl-sub
 wrote it to, so files are matched by video id, not by name.
 
-A subscription with several links becomes one Collection with all of them. A TV Show Collection keeps each
-season's number and name, and a video several seasons list stays in the highest one, as in ytdl-sub.
+A VODLoft Collection has one link, so a subscription with several links becomes a Collection of the first one and
+the rest are reported. A TV Show Collection of a channel and its own playlists becomes a Collection of the channel
+whose playlists are seasons, each with its season's number and name, and a video several of them list stays in the
+highest one, as in ytdl-sub.
 
 A Bandcamp or SoundCloud discography becomes the artist's channel, its albums the seasons of one Music
 collection, with a Music Local Media Profile that keeps ytdl-sub's folder per artist and per album.
@@ -28,7 +30,7 @@ from ..contract import (
     ImportLocation,
     ImportPlan,
     ImportWarning,
-    LinkPlan,
+    PlaylistSeasonPlan,
     ProfilePlan,
     SettingPlan,
 )
@@ -168,18 +170,65 @@ def _season_urls(sub: Subscription, number: int) -> list[str]:
     return [str(url) for url in urls if url and "{" not in str(url)]
 
 
-def _links(sub: Subscription, kind: str | None) -> list[LinkPlan]:
-    """The subscription's links, the one that keeps a video several of them list first. ytdl-sub keeps it in a
-    TV Show Collection's highest season, and otherwise downloads it from the first link that lists it."""
+@dataclass(frozen=True)
+class _Links:
+    url: str
+    """The Collection's own link."""
+    playlists: list[PlaylistSeasonPlan]
+    """The Collection's link seasons: every other link of a subscription of a channel."""
+    left_out: list[str]
+    channel_season: PlaylistSeasonPlan | None = None
+    """The TV Show Collection's season of the channel itself, which keeps its videos in none of the playlists."""
+
+
+_CHANNEL_TABS = frozenset({"videos", "streams", "shorts", "live", "featured", "playlists"})
+
+
+def _is_playlist(url: str) -> bool:
+    return "list=" in (urlsplit(url).query or "")
+
+
+def _is_video(url: str) -> bool:
+    parts = urlsplit(url)
+    return parts.path.startswith(("/watch", "/shorts/")) or (parts.hostname or "").endswith("youtu.be")
+
+
+def _links(sub: Subscription, kind: str | None) -> _Links | None:
+    """The subscription's own link and, for a TV Show Collection of a channel, its playlists that are seasons, the one
+    that keeps a video several of them list first: ytdl-sub keeps it in the highest season."""
     if kind != "tv_show_collection":
-        return [LinkPlan(url) for url in sub.urls]
-    links = []
+        if not sub.urls:
+            return None
+        channel = next((url for url in sub.urls if not _is_playlist(url) and not _is_video(url)), None)
+        if kind == "music" or channel is None or len(sub.urls) == 1:
+            return _Links(sub.urls[0], [], list(sub.urls[1:]))
+        # The channel is the Collection; each other link is a link season, so none of its videos are left out.
+        return _Links(channel, [PlaylistSeasonPlan(url, _link_name(url)) for url in sub.urls if url != channel], [])
+    seasons = []
     for number in (*range(40, 0, -1), 0):
         name = _render(sub, sub.overrides[f"s{number:02d}_name"]) if sub.overrides.get(f"s{number:02d}_name") else None
         for url in _season_urls(sub, number):
-            links.append(LinkPlan(url, name or ("Specials" if number == 0 else f"Season {number}"),
-                                  "specials" if number == 0 else "one_season", number))
-    return links
+            seasons.append((number, name or ("Specials" if number == 0 else f"Season {number}"), url))
+    if not seasons:
+        return None
+    by_number = sorted(seasons, key=lambda season: (season[0] == 0, season[0]))
+    channel = next((season for season in by_number if not _is_playlist(season[2]) and not _is_video(season[2])), None)
+    if channel is None:
+        # Only playlists: the Collection is the first season's, as VODLoft can't tell they share a channel.
+        first = by_number[0]
+        return _Links(first[2], [], [url for _number, _name, url in seasons if url != first[2]])
+    # Every other link, a playlist, another channel or one video, is a link season, which adds its videos the
+    # channel does not have, so the Collection keeps everything the subscription had.
+    playlists = [PlaylistSeasonPlan(url, name, number) for number, name, url in seasons if url != channel[2]]
+    return _Links(channel[2], playlists, [], PlaylistSeasonPlan(channel[2], channel[1], channel[0]))
+
+
+def _link_name(url: str) -> str | None:
+    """A name for the season of another channel, such as @handle, until the user gives it one; a playlist is named
+    as its Site lists it."""
+    if _is_playlist(url) or _is_video(url):
+        return None
+    return next((part for part in reversed(urlsplit(url).path.split("/")) if part and part not in _CHANNEL_TABS), None)
 
 
 def _render(sub: Subscription, value: object) -> str | None:
@@ -450,6 +499,19 @@ def _music_refusal(sub: Subscription) -> str | None:
     return None
 
 
+def _artist_root(url: str) -> tuple[str, str]:
+    """The artist a Bandcamp or SoundCloud link is of: its Bandcamp host, or its first SoundCloud path part."""
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if host.endswith(".bandcamp.com"):
+        return host, ""
+    return "soundcloud.com", parts.path.strip("/").split("/", 1)[0].lower()
+
+
+def _same_artist(artist: str, url: str) -> bool:
+    return _artist_page(url) and _artist_root(artist) == _artist_root(url)
+
+
 def _artist_page(url: str) -> bool:
     host = (urlsplit(url).hostname or "").lower()
     return host.endswith(".bandcamp.com") or host in {"soundcloud.com", "www.soundcloud.com", "m.soundcloud.com"}
@@ -467,8 +529,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         if refused:
             return None, [ImportWarning(sub.name, f"Not imported: {refused}")]
     links = _links(sub, kind)
-    urls = [link.url for link in links]
-    if not urls:
+    if links is None:
         return None, [ImportWarning(sub.name, "Not imported: it has no link VODLoft can read")]
     output = sub.config.get("output_options") or {}
     if not output.get("output_directory") or not output.get("file_name"):
@@ -483,12 +544,18 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
     music = kind == "music"
     full_albums = music and "YouTube Full Albums" in set(sub.applied)
     if music:
-        if len(links) > 1:
-            warnings.append(ImportWarning("links", f"VODLoft adds the artist at {links[0].url}; the other links are left out", "close"))
-            links = links[:1]
+        # Every album of the artist is a season of the artist's collection, so only another artist's links are left out.
+        others = [url for url in links.left_out if not _same_artist(links.url, url)]
+        if others:
+            warnings.append(ImportWarning(
+                "links", f"VODLoft adds the artist at {links.url}; left out: {', '.join(others)}", "close",
+            ))
         settings.update(_MUSIC_SETTINGS)
-    # The Collection's own link: a TV Show Collection's first season, which is usually the channel itself.
-    primary = min(links, key=lambda link: (link.season_number == 0, link.season_number or 0)).url
+    elif links.left_out:
+        warnings.append(ImportWarning(
+            "links", f"A VODLoft collection has one link, {links.url}; left out: {', '.join(links.left_out)}", "close",
+        ))
+    primary = links.url
     collection_type = _collection_type(primary)
     report, problem = _template(sub, layout, folder, path_map, collection_type, music)
     if problem:
@@ -532,7 +599,8 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         download_profile=_download_profile(sub, primary, auto_subtitles, warnings),
         warnings=tuple(warnings),
         assets=tuple(assets),
-        links=tuple(links) if len(links) > 1 or kind == "tv_show_collection" else (),
+        link_seasons=tuple(links.playlists),
+        loose_season=links.channel_season if links.playlists else None,
         channel=music and not full_albums,
     )
     signature = (report.output_template, report.original, repr(sorted(settings.items())))

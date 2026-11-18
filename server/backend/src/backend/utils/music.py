@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func, inspect, select
 
-from backend.types.collection_link_types import LinkPlacement
 from backend.utils.episode import EpisodeIdentifierInfo
 
 if TYPE_CHECKING:
@@ -38,15 +37,12 @@ def music_track(episode: "Episode") -> MusicTrack:
 
 
 def _album(episode: "Episode") -> str:
-    """A season that holds one list, such as a playlist or an album, is the album. A season per year holds a
-    feed's uploads, so the collection is the album then, as it is for specials."""
+    """A named season, such as a playlist, an album or a video split by chapter, is the album. A season per year holds
+    a feed's uploads, so the collection is the album then, as it is for specials, unless the user named it."""
     collection, season = episode.collection, episode.season
     if season is None or season.season_number == 0:
         return collection.title
-    link = getattr(episode, "collection_link", None)
-    if link is not None and link.placement == LinkPlacement.ONE_SEASON.value:
-        return season.name
-    return collection.title if season.name == str(season.season_number) else season.name
+    return collection.title if season.name == season.slug and season.slug.isdigit() else season.name
 
 
 def _track_number(episode: "Episode") -> int | None:

@@ -1,4 +1,5 @@
-"""Music artists on Bandcamp and SoundCloud as channels: an artist whose sections are their albums."""
+"""Bandcamp artists and SoundCloud accounts as channels: an artist whose sections are their albums, or a SoundCloud
+account, which may be a musician or a podcast, whose sections are its albums and playlists."""
 from __future__ import annotations
 
 import logging
@@ -44,13 +45,68 @@ def is_artist_page(url: str) -> bool:
     return len(rest) <= 1 and (rest[0] if rest else "") in _ARTIST_PAGES
 
 
+def lists_all_music(url: str) -> bool:
+    """Whether a link is the page of all of an artist's music: a Bandcamp artist's page, or a SoundCloud artist's
+    page or their Tracks."""
+    root = artist_root(url)
+    if root is None or not is_artist_page(url):
+        return False
+    rest = [part for part in urlsplit(url).path.split("/") if part]
+    page = (rest[1:] if "soundcloud.com" in root else rest) or [""]
+    return page[0] in ({"", "tracks"} if "soundcloud.com" in root else {"", "music"})
+
+
+def albums(root: str) -> list[SectionRef]:
+    """The artist's albums, or a SoundCloud account's albums and playlists, newest first."""
+    return [section for section in artist_details(root, lambda step: None).sections if section.kind is SectionKind.LIST]
+
+
+def all_tracks(url: str, *, newest_albums: int | None = None) -> list[dict]:
+    """yt-dlp's flat entries of every track on the artist's page: on Bandcamp the tracks of each album and the tracks
+    on none, on SoundCloud their Tracks. With ``newest_albums``, only the tracks of that many of the newest albums."""
+    root = artist_root(url)
+    cookies = sites.cookies_for(root)
+    if "soundcloud.com" in root:
+        listing = runner.run_json("--flat-playlist", f"{root}/tracks", cookies=cookies)
+        return [entry for entry in listing.get("entries") or [] if isinstance(entry, dict) and entry.get("id")]
+    listing = runner.run_json("--flat-playlist", "--ignore-errors", f"{root}/music", cookies=cookies)
+    links = [str(entry["url"]) for entry in listing.get("entries") or [] if isinstance(entry, dict) and entry.get("url")]
+    album_links = [link for link in links if "/album/" in link]
+    if newest_albums is not None:
+        album_links = album_links[:newest_albums]
+    tracks: list[dict] = []
+    with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE) as pool:
+        listings = list(pool.map(lambda link: _album_tracks(link, cookies), album_links))
+    for found in listings:
+        tracks += found
+    # A track on no album is listed by its link alone, so it is looked up for its id.
+    for link in (link for link in links if "/track/" in link):
+        try:
+            info = runner.run_json("--no-playlist", link, cookies=cookies)
+        except runner.YtDlpError as exc:
+            logger.info("Leaving out %s: %s", link, exc)
+            continue
+        if info.get("id"):
+            tracks.append({"_type": "url", "url": link, "ie_key": "Bandcamp", "id": info["id"], "title": info.get("title")})
+    return tracks
+
+
+def _album_tracks(url: str, cookies) -> list[dict]:
+    try:
+        listing = runner.run_json("--flat-playlist", url, cookies=cookies)
+    except runner.YtDlpError as exc:
+        logger.info("Leaving out %s: %s", url, exc)
+        return []
+    return [entry for entry in listing.get("entries") or [] if isinstance(entry, dict) and entry.get("id")]
+
+
 def artist_details(root: str, progress: Callable[[str], None]) -> ChannelDetails:
     """The artist and their albums. Bandcamp lists albums and loose tracks; SoundCloud lists albums and, as a feed,
     all of the artist's tracks, so the tracks on no album have a place too."""
     bandcamp = "bandcamp.com" in root
     cookies = sites.cookies_for(root)
     progress("Listing the albums")
-    listing = runner.run_json("--flat-playlist", "--ignore-errors", f"{root}/music" if bandcamp else f"{root}/albums", cookies=cookies)
+    listing = runner.run_json("--flat-playlist", "--ignore-errors", f"{root}/music" if bandcamp else f"{root}/sets", cookies=cookies)
     links = [str(entry["url"]) for entry in listing.get("entries") or [] if isinstance(entry, dict) and entry.get("url")]
 
     def look_up(url: str) -> dict:
@@ -69,17 +125,19 @@ def artist_details(root: str, progress: Callable[[str], None]) -> ChannelDetails
             except runner.YtDlpError as exc:
                 logger.info("Leaving out %s: %s", lookups[lookup], exc)
 
-    releases = [_release(url, info) for url, info in found.items()]
+    releases = [_release(url, info, bandcamp) for url, info in found.items()]
     releases.sort(key=lambda release: release[0], reverse=True)
     sections = [section for _date, section in releases]
     if not bandcamp:
         sections.append(SectionRef(ref="tracks", url=f"{root}/tracks", title="Tracks", kind=SectionKind.FEED, role=SectionRole.MAIN, kind_label="Feed"))
     name = next(filter(None, (_artist_name(info) for info in found.values())), None)
     handle = root.rstrip("/").rsplit("/", 1)[-1] if not bandcamp else urlsplit(root).hostname.split(".", 1)[0]
-    albums = sum(1 for section in sections if section.kind is SectionKind.LIST)
+    lists = sum(1 for section in sections if section.kind is SectionKind.LIST)
+    word = ("album" if lists == 1 else "albums") if bandcamp else ("playlist" if lists == 1 else "playlists")
     return ChannelDetails(
-        ref=handle, url=root, title=str(name or handle), facts=(f"{albums} {'album' if albums == 1 else 'albums'}",),
-        sections=tuple(sections), music=True,
+        ref=handle, url=root, title=str(name or handle), facts=(f"{lists} {word}",),
+        # Bandcamp only has music; a SoundCloud account may as well be a podcast.
+        sections=tuple(sections), music=bandcamp,
     )
 
 
@@ -93,7 +151,7 @@ def _artist_name(info: dict) -> str | None:
     return None
 
 
-def _release(url: str, info: dict) -> tuple[str, SectionRef]:
+def _release(url: str, info: dict, bandcamp: bool = True) -> tuple[str, SectionRef]:
     """An album, or a track on its own, with its release date to sort the artist's music by."""
     track = info if info.get("_type") != "playlist" else next(
         (entry for entry in info.get("entries") or [] if isinstance(entry, dict)), {},
@@ -108,7 +166,7 @@ def _release(url: str, info: dict) -> tuple[str, SectionRef]:
         count = info.get("playlist_count")
         return date, SectionRef(
             ref=path, url=url, title=str(info.get("album") or info.get("title") or path), kind=SectionKind.LIST,
-            kind_label="Album", item_count=count if isinstance(count, int) else None,
+            kind_label="Album" if bandcamp else "Playlist", item_count=count if isinstance(count, int) else None,
             image_url=thumbnails.widest_still(image) if image else None, description=info.get("description") or None,
             year=year,
         )

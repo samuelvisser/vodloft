@@ -77,6 +77,27 @@ A collection can only change to a type its Download Profiles suit. To make a Ser
 
 Series can contain multiple seasons. The collection page lets you switch between them rather than treating the entire collection as one long list.
 
+### Renaming and ordering seasons
+
+**Seasons** on a collection's **Edit** page opens the Seasons window. Give a season another name, or drag the seasons, or use the arrows, to put them in another order. The seasons are numbered again in their new order. **Automatic order** puts them back in VODLoft's own order. Seasons can't be deleted here; only a playlist or album season goes away, when you turn it off (see below).
+
+Renaming a season or giving it another number doesn't rename files you already downloaded. To give them their new names, use **Rename all episode files** in the collection's **Actions** menu. Turn on **Rename season folders too** there to move files into the folder of the season they are in now, with its new number. In a collection with playlist seasons, downloaded videos then also move to the playlist season they belong in now.
+
+### Playlists and albums as seasons
+
+A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundCloud, can make the channel's playlists, or the artist's albums, seasons of their own. Turn on **Playlists as seasons** (**Albums as seasons** in a Music collection) in the Seasons window, and choose:
+
+- **Which playlists**: every playlist, also the ones to come, or only those you switch on in the list. **Look for new playlists** asks the site for the list again.
+- **When the channel adds a playlist**: ask you, make it a season right away, or leave it off.
+- **Videos in no playlist**: one season called **Videos** (**Singles** for music), or a season per year.
+- **Videos of other channels in these playlists**: leave them out (the default), or add them to the collection, in their playlist's season.
+
+Each playlist season is named after its playlist, and its videos keep the order of the playlist, as do their episode numbers. An album's tracks keep the album's track order. Playlist seasons go in the order of their first video, so with a season per year a 2025 playlist comes after the 2025 season. An artist's albums come after Singles, in the order the artist lists them; you can still reorder them, and **Automatic order** brings back the artist's order. A video that is in more than one playlist goes to the season that comes first. Files you already downloaded keep their numbers.
+
+When a playlist season is turned off, its downloaded videos move to the season a new video would go to, and their files are renamed and moved with them. A video that was only in the collection because that playlist had it leaves the collection, and **its downloaded files are deleted**. The same happens when you switch back to leaving out other channels' videos, or when a playlist drops such a video. The Seasons window tells you before you save how many videos leave and how many of them have files.
+
+When a video belongs in another season than the one it is in, for example because it was added to a playlist after it was downloaded, its page says so. **Move it there** moves it, and renames its files to match.
+
 Episodes can also have different Daily Wire types, such as regular episodes and auxiliary items. Profiles can choose which types they apply to.
 
 An episode can appear in VODLoft before final downloadable media exists. You may therefore see an episode that is scheduled, live, processing, still using a countdown version, final, or temporarily unavailable. VODLoft continues monitoring recent non-final episodes automatically.
@@ -158,13 +179,13 @@ Paste a link to a YouTube channel in **Add media** and choose **Add the channel*
 
 The Add channel page lists the channel's feeds (Videos, Live and Shorts on YouTube) and its playlists or shows. For each one you choose where it goes:
 
-- **Main collection**: one collection named after the channel. Feeds become a season per year, a playlist becomes one season named after it, and a Daily Wire show keeps its own seasons. A playlist can also go in as specials (season 0).
+- **Main collection**: one collection named after the channel. Feeds become a season per year, a playlist becomes a playlist season (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)), and a Daily Wire show keeps its own seasons.
 - **A collection of its own**: the part becomes a separate collection, for example Shorts that you want to keep apart from the rest.
 - **Skip**: nothing is added. The part stays listed on the channel's page, so you can add it later.
 
 Three starting points fill these choices in for you: **One show** (YouTube only) puts the videos, livestreams and playlists in the main collection and gives Shorts their own; **A show per playlist** gives every playlist or show its own collection; **Only what I pick** starts with everything skipped. A playlist or show that is already in your Library stays where it is.
 
-A video that appears in more than one place is kept once. It goes to the first place in this order: playlists or shows first, then Live, then Shorts, and Videos last, since the Videos feed lists all of a channel's uploads. Once a video has been downloaded it stays where it is, so its file never moves.
+A video that appears in more than one place is kept once. In the main collection a video in a playlist season is in that season and not in the season of videos in no playlist. Once you change which playlists are seasons, the main collection's Seasons window takes over; see [Playlists and albums as seasons](#playlists-and-albums-as-seasons).
 
 Collections made from a channel start without Download Profiles; add them on each collection as usual. In the Library, channels show with a round picture next to your collections; the **Kind** filter shows only channels or only collections.
 
@@ -172,7 +193,7 @@ Collections made from a channel start without Download Profiles; add them on eac
 
 A musician on **Bandcamp** or **SoundCloud** can be added the same way: paste a link to the artist's page, such as `https://artist.bandcamp.com` or `https://soundcloud.com/artist`, and choose **Add the artist**. Their albums are listed newest first, with the year each came out. On SoundCloud a **Tracks** feed holds everything the artist uploaded, so tracks that are on no album have a place too. A Bandcamp track released on its own is listed as a single, which you add from its own page.
 
-An artist's collections are **Music** collections. **One discography** puts every album in one collection, with each album as a season named after it; **A collection per album** gives each album its own. Download them with a Music profile (see [[Local-Media-Profiles#music-profiles]]), which tags every track with its album, artist and track number, such as 3/10.
+An artist's collections are **Music** collections. **One discography** puts every album in one collection, with each album as a season named after it and the other tracks under **Singles**; **A collection per album** gives each album its own. Download them with a Music profile (see [[Local-Media-Profiles#music-profiles]]), which tags every track with its album, artist and track number, such as 3/10.
 
 Looking up an artist reads each album once, so an artist with many albums takes a minute; the page shows how far it is. YouTube's Releases tab cannot be read yet.
 
@@ -197,15 +218,14 @@ Playlists or shows you skipped stay under **Not in your library** on the channel
 
 The channel's **Edit** page holds:
 
-- **When a video is in more than one place**: the order described above, for this channel. Drag the parts, or use the arrows, to put a playlist or Shorts higher. VODLoft then moves the videos that are not downloaded yet to the place that now comes first.
 - **When the channel adds a playlist or show**: the choice described under Following a channel.
 - **Genre** and **Content rating**: written to the NFO file of each of the channel's collections that has none of its own. Changing them here changes the collections that still had the old value.
 
 ### Adding a collection to a channel, and removing it
 
-A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its channel later. Choose **Add to channel** (**Add to host** for a Daily Wire show) in the collection's **Actions** menu. VODLoft finds the channel or host behind the collection's links, adds the channel to your Library if it is not there yet, and shows which of the channel's playlists or shows each link becomes. The collection keeps its seasons, episode numbers, profiles and files; nothing is indexed again. A playlist goes first in the channel's order, and a feed such as Shorts goes to its usual place. When a video is also in another of the channel's collections, it goes to the one higher in that order, unless it is already downloaded.
+A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its channel later. Choose **Add to channel** (**Add to host** for a Daily Wire show) in the collection's **Actions** menu. VODLoft finds the channel or host behind the collection's links, adds the channel to your Library if it is not there yet, and shows which of the channel's playlists or shows the collection becomes. The collection keeps its seasons, episode numbers, profiles and files; nothing is indexed again. A collection that another of the channel's collections already covers can't join.
 
-**Remove from channel** in the same menu makes it a plain collection again. It keeps its episodes, profiles, files, genre and content rating. Because it no longer follows the channel's order, videos that another of the channel's collections has may be listed in it too after its next sync.
+**Remove from channel** in the same menu makes it a plain collection again. It keeps its episodes, profiles, files, genre and content rating.
 
 Output templates can use the channel too: `channel_title`, `channel_handle` and `channel_kind`, and for a video that came from a playlist or show, `section_title` and `section_kind`. See [Local Media Profiles](Local-Media-Profiles#collection-template-variable-reference).
 

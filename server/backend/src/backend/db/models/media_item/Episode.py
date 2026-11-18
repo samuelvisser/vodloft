@@ -25,7 +25,7 @@ from backend.utils.episode_publication_timing import (
 from backend.utils.episode_slug import is_no_show_today_slug
 
 if TYPE_CHECKING:
-    from backend.db.models import Collection, CollectionLink, Season
+    from backend.db.models import Collection, Season
 
 # A Download Profile does not recreate a download record the user deleted.
 DOWNLOAD_DISMISSED_META_PREFIX = "download_dismissed.local_media_profile."
@@ -74,10 +74,6 @@ class Episode(
     id: Mapped[int] = mapped_column(ForeignKey("media_items.id", ondelete="CASCADE"), primary_key=True)
     collection_id: Mapped[int] = mapped_column(ForeignKey("collections.id"),primary_key=True,)
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
-    collection_link_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("collection_links.id", ondelete="SET NULL"), index=True,
-        comment="The link of the collection that keeps the episode",
-    )
     index: Mapped[int]
     episode_identifier: Mapped[str] = mapped_column(comment="Unique identifier that is used to identify the episode within the collection")
     dw_episode_number: Mapped[Optional[str]] = mapped_column(comment="Episode number exactly as returned by The Daily Wire")
@@ -108,11 +104,14 @@ class Episode(
     )
     part_start: Mapped[Optional[float]] = mapped_column(comment="Where the part starts in its video, in seconds")
     part_end: Mapped[Optional[float]] = mapped_column(comment="Where the part ends in its video, in seconds")
+    from_link_season: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="Added because a playlist that is a season lists it, not the collection's own link",
+    )
 
     # Relationships
     collection: Mapped["Collection"] = relationship(back_populates="episodes")
     season: Mapped["Season"] = relationship(back_populates="episodes")
-    collection_link: Mapped[Optional["CollectionLink"]] = relationship()
 
     @hybrid_property
     def video_slug(self) -> str:

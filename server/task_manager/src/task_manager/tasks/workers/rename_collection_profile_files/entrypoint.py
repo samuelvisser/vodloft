@@ -28,6 +28,7 @@ async def rename_collection_profile_files(
     local_media_profile_id: int | None = None,
     episode_ids: list[int] | None = None,
     expected_sources: dict[str, str] | None = None,
+    season_folders: bool = True,
 ) -> TaskResult:
     if resource_id is None or local_media_profile_id is None:
         raise ValueError("Batch File Rename requires a Collection and Local Media Profile")
@@ -42,6 +43,7 @@ async def rename_collection_profile_files(
                     local_media_profile_id=local_media_profile_id,
                     episode_ids=episode_ids,
                     expected_sources=expected_sources,
+                    season_folders=season_folders,
                     progress=progress,
                 )
                 run_write_transaction(lambda session: request_collection_asset_reconciliation(session, resource_id))

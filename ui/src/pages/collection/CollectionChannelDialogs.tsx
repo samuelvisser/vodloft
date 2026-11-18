@@ -3,7 +3,7 @@ import {toast} from 'react-hot-toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'
 import {setCollectionChannel, useCollectionChannelLeave, useCollectionChannelMatch} from '../../lib/queries'
-import type {ChannelLinkMatch} from '../../types/schemas/channel'
+import type {CollectionChannelMatch} from '../../types/schemas/channel'
 import '../channel/ChannelPages.css'
 
 type DialogProps = {
@@ -29,21 +29,21 @@ function useRefresh(collectionSlug: string) {
     }
 }
 
-function linkNote(link: ChannelLinkMatch, label: string): string {
-    if (link.sectionTitle) {
-        const kind = link.sectionKindLabel ? `${link.sectionKindLabel} · ` : ''
-        return `${kind}becomes the ${label}'s ${link.sectionTitle} section`
+function sectionNote(channel: CollectionChannelMatch, label: string): string {
+    if (channel.sectionTitle) {
+        const kind = channel.sectionKindLabel ? `${channel.sectionKindLabel} · ` : ''
+        return `${kind}becomes the ${label}'s ${channel.sectionTitle} section`
     }
-    if (link.keptBy) return `The ${label}'s ${link.keptBy} has this already, so it stays a link of this collection only`
-    return `Not part of this ${label}, so it stays a link of this collection only`
+    if (channel.keptBy) return `The ${label}'s ${channel.keptBy} has this already, so this collection can't join it`
+    return `Not a playlist, show or the videos of this ${label}, so it can't join it`
 }
 
-/** "Add to channel", in the words of the Site: find the channel behind the collection's links, show what each link becomes, and add it. */
+/** "Add to channel", in the words of the Site: find the channel behind the collection's link, show what the collection becomes, and add it. */
 export function AddToChannelDialog({open, collectionSlug, collectionTitle, channelLabel, onDismiss}: DialogProps) {
     const match = useCollectionChannelMatch(collectionSlug, open)
     const refresh = useRefresh(collectionSlug)
     const channel = match.data
-    const matched = channel?.links.filter((link) => link.sectionTitle).length ?? 0
+    const matched = !!channel?.sectionTitle
 
     const add = async () => {
         if (!channel) return
@@ -66,10 +66,10 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, chann
             confirmButton={{
                 label: channel ? `Add to ${channel.title}` : `Add to ${channelLabel}`,
                 onClick: add,
-                disabled: !channel || matched === 0,
+                disabled: !channel || !matched,
             }}
         >
-            {match.isLoading && <p>Looking up the {channelLabel} behind this collection's links…</p>}
+            {match.isLoading && <p>Looking up the {channelLabel} behind this collection's link…</p>}
             {match.error && <p className="text-danger">{match.error.message}</p>}
             {channel && (
                 <div className="channel-join">
@@ -86,25 +86,19 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, chann
                         </div>
                     </div>
                     <div className="channel-section-list">
-                        {channel.links.map((link) => (
-                            <div key={link.url} className="channel-section-row">
-                                <div className="channel-section-copy">
-                                    <strong>{link.title || (channel.links.length === 1 ? collectionTitle : link.url)}</strong>
-                                    <span>{linkNote(link, channelLabel)}</span>
-                                </div>
+                        <div className="channel-section-row">
+                            <div className="channel-section-copy">
+                                <strong>{collectionTitle}</strong>
+                                <span>{sectionNote(channel, channelLabel)}</span>
                             </div>
-                        ))}
+                        </div>
                     </div>
-                    {matched === 0
-                        ? <p className="channel-order-note">None of this collection's links is a playlist or show of {channel.title} that it does not have yet.</p>
+                    {!matched
+                        ? null
                         : (
                             <ul className="channel-order-note">
                                 <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                                 {!channel.channelSlug && <li>The {channelLabel}'s other playlists and shows start as not in your library, so you can add them from its page.</li>}
-                                <li>
-                                    A video that is also in another of the {channelLabel}'s collections goes to the one higher in
-                                    the {channelLabel}'s order. Videos that are already downloaded stay where they are.
-                                </li>
                             </ul>
                         )}
                 </div>
@@ -118,7 +112,6 @@ export function RemoveFromChannelDialog({open, collectionSlug, collectionTitle, 
     const leave = useCollectionChannelLeave(collectionSlug, open)
     const refresh = useRefresh(collectionSlug)
     const info = leave.data
-    const shared = info?.videosKeptElsewhere ?? 0
 
     const remove = async () => {
         try {
@@ -145,12 +138,6 @@ export function RemoveFromChannelDialog({open, collectionSlug, collectionTitle, 
                 {collectionTitle} becomes a plain collection. It keeps its episodes, profiles and files, and its genre and
                 content rating.
             </p>
-            {shared > 0 && (
-                <p>
-                    It no longer follows the {channelLabel}'s order, so {shared === 1 ? '1 video' : `${shared} videos`} that another
-                    of the {channelLabel}'s collections has may be listed here too.
-                </p>
-            )}
         </ConfirmDialog>
     )
 }

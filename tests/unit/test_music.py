@@ -81,21 +81,22 @@ def test_a_track_is_tagged_with_its_album_artist_and_number():
     assert "show" not in tags and "season_number" not in tags
 
 
-def _episode(season_name, season_number, placement=None):
+def _episode(season_name, season_number, slug=None):
     collection = SimpleNamespace(title="Kavinsky Videos", author_name="Kavinsky", channel=SimpleNamespace(title="Kavinsky"))
     return SimpleNamespace(
-        collection=collection, season=SimpleNamespace(name=season_name, season_number=season_number),
-        collection_link=SimpleNamespace(placement=placement) if placement else None,
+        collection=collection, season=SimpleNamespace(name=season_name, season_number=season_number, slug=slug or season_name.lower()),
     )
 
 
-def test_the_album_of_a_track_is_its_playlist_season_and_else_the_collection():
+def test_the_album_of_a_track_is_its_named_season_and_else_the_collection():
     from backend.utils.music import _album, collection_artist
 
-    assert _album(_episode("OutRun", 3, placement="one_season")) == "OutRun"
+    assert _album(_episode("OutRun", 3)) == "OutRun"
     assert _album(_episode("Reborn", 4)) == "Reborn"
-    # A season per year holds a feed's uploads, not an album.
+    # A season per year holds a feed's uploads, not an album, unless the user named it, and stays one when renumbered.
     assert _album(_episode("2024", 2024)) == "Kavinsky Videos"
+    assert _album(_episode("2024", 3)) == "Kavinsky Videos"
+    assert _album(_episode("Summer tour", 3, slug="2024")) == "Summer tour"
     assert _album(_episode("Specials", 0)) == "Kavinsky Videos"
     assert collection_artist(_episode("Reborn", 4).collection) == "Kavinsky"
 

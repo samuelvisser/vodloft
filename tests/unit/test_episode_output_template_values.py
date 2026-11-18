@@ -3,8 +3,7 @@ from types import SimpleNamespace
 
 def _episode(identifier: str, *, dw_episode_number: str | None = None):
     return SimpleNamespace(
-        collection=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", author_name="Daily Wire", meta_items=[], channel=None),
-        collection_link=None,
+        collection=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", author_name="Daily Wire", meta_items=[], channel=None, season_links=[], sharing_url=""),
         season=SimpleNamespace(
             slug="season-1",
             name="Season 1",
@@ -186,7 +185,8 @@ def test_an_episode_of_a_channels_collection_knows_its_channel_and_section() -> 
     episode.collection.channel = SimpleNamespace(
         title="Northwind Workshop", handle="@northwindworkshop", source_key="ytdlp", site_key="youtube",
     )
-    episode.collection_link = SimpleNamespace(section=SimpleNamespace(title="Tool Reviews", kind="list"), placement="one_season")
+    episode.season_id = 7
+    episode.collection.season_links = [SimpleNamespace(title="Tool Reviews", season_id=7)]
 
     values = episode_output_template_values(episode)
 

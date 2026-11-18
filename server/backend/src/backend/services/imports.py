@@ -1065,7 +1065,7 @@ def _create_collection(session: Session, plan: CollectionPlan, as_channels: bool
         thumbnail_landscape_path=details.image_url, split_chapters=bool(plan.settings.get("split_chapters", False)),
     )
     add_collection(session, collection)
-    _add_links(session, collection, plan)
+    _add_link_seasons(session, collection, plan)
     if as_channels:
         _join_channel(session, collection)
     index_new_collection(session, collection)
@@ -1073,7 +1073,7 @@ def _create_collection(session: Session, plan: CollectionPlan, as_channels: bool
 
 
 def _join_channel(session: Session, collection: Collection) -> None:
-    """Make a new Collection one of the channel behind its links, as Add to channel does, when it has one."""
+    """Make a new Collection one of the channel behind its link, as Add to channel does, when it has one."""
     from backend.services.channels import join_channel
     from sources import Feature, get_source
 
@@ -1081,7 +1081,7 @@ def _join_channel(session: Session, collection: Collection) -> None:
     if not source.has(Feature.CHANNELS):
         return
     try:
-        ref = next((found for found in (source.channel_of(link.url) for link in collection.links) if found), None)
+        ref = source.channel_of(collection.sharing_url)
         if ref is None:
             return
         details = source.channel_details(ref)
@@ -1092,12 +1092,12 @@ def _join_channel(session: Session, collection: Collection) -> None:
 
 
 def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collection:
-    """A plain collection of everything on a creator's page, such as a Bandcamp artist's albums, each list a season
+    """A plain collection of everything on a creator's page, such as a Bandcamp artist's albums, each album a season
     of its own, for an import that adds no channels."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
+    from backend.types.link_season_types import LinkSeasons
     from backend.utils.helpers import generate_uuid, slugify
-    from importer.contract import LinkPlan
     from sources import SectionKind, get_source
 
     source = get_source("ytdlp")
@@ -1105,20 +1105,19 @@ def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collect
     sections = [section for section in details.sections if section.access is None]
     if not sections:
         raise ValueError(f"{details.title} has nothing VODLoft can add")
-    links = tuple(
-        LinkPlan(section.url, section.title, "site_seasons" if section.kind is SectionKind.FEED else "one_season")
-        for section in sorted(sections, key=lambda section: section.kind is SectionKind.FEED)
-    )
+    feed = next((section for section in sections if section.kind is SectionKind.FEED), None)
     collection = Collection(
         uuid=generate_uuid(), slug=slugify(details.handle or details.title) or details.ref, source_key=source.id,
-        title=plan.title or details.title, description=details.description, sharing_url=links[0].url,
+        title=plan.title or details.title, description=details.description,
+        sharing_url=feed.url if feed is not None else details.url or plan.url,
         membership_level="FREE", type=(CollectionType.MUSIC if details.music else CollectionType(plan.settings.get("type", "series"))).value,
         episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
         author_name=details.title, author_slug=slugify(details.handle or details.title) or details.ref,
         thumbnail_landscape_path=details.avatar_url or next((section.image_url for section in sections if section.image_url), None),
+        # Every album is a season, the ones to come too.
+        link_seasons=LinkSeasons.ALL.value,
     )
     add_collection(session, collection)
-    _add_links(session, collection, replace(plan, links=links))
     index_new_collection(session, collection)
     return collection
 
@@ -1129,9 +1128,8 @@ def _create_channel_collection(session: Session, plan: CollectionPlan) -> Collec
     for the collections it makes later."""
     from backend.services.channels import NewCollectionSettings, SectionPlan, add_channel
     from backend.types.channel_types import SectionTarget
-    from backend.types.collection_link_types import LinkPlacement
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
-    from sources import SectionKind, get_source
+    from sources import get_source
 
     from backend.services.channels import channel_in_library, channel_site
 
@@ -1142,11 +1140,7 @@ def _create_channel_collection(session: Session, plan: CollectionPlan) -> Collec
     if existing is not None and existing.main_collection is not None:
         # The artist is in the Library already: the import links their collection.
         raise CollectionAlreadyAddedError(existing.main_collection, existing.site)
-    plans = [
-        SectionPlan(section.ref, SectionTarget.MAIN,
-                    LinkPlacement.SITE_SEASONS if section.kind is SectionKind.FEED else LinkPlacement.ONE_SEASON)
-        for section in details.sections if section.access is None
-    ]
+    plans = [SectionPlan(section.ref, SectionTarget.MAIN) for section in details.sections if section.access is None]
     kind = CollectionType.MUSIC if details.music else CollectionType(plan.settings.get("type", CollectionType.SERIES.value))
     channel, _made = add_channel(session, source_key=source.id, details=details, plans=plans, settings=NewCollectionSettings(
         type=kind, episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
@@ -1158,43 +1152,61 @@ def _create_channel_collection(session: Session, plan: CollectionPlan) -> Collec
     return channel.main_collection
 
 
-def _add_links(session: Session, collection: Collection, plan: CollectionPlan) -> int:
-    """Give the Collection the plan's links it does not have yet, each with the season the other program gave it.
-    Returns how many it added."""
-    from backend.db.models import CollectionLink
+def _add_link_seasons(session: Session, collection: Collection, plan: CollectionPlan) -> int:
+    """Make the plan's playlists seasons of the Collection it does not have yet, each with the season the other
+    program gave it, and keep the seasons in the other program's numbering. Returns how many it added."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from backend.db.models import LinkSeason
     from backend.services.seasons import create_season_record
+    from backend.types.link_season_types import LinkSeasons, LinkSeasonStatus, OutsideVideos
     from backend.utils.helpers import slugify
 
-    if not plan.links:
+    if not plan.link_seasons:
         return 0
     session.flush()
-    order = {link.url: position for position, link in enumerate(plan.links)}
-    have = {_normalise_url(link.url): link for link in collection.links}
-    for link in collection.links:
-        # The link the Collection was added with takes its place in the other program's order.
-        link.position = order.get(link.url, link.position)
+    have = {playlist.ref for playlist in collection.season_links}
     seasons = {season.season_number: season for season in collection.seasons}
+
+    def season_of(number: int | None, title: str | None):
+        """The season with the other program's number, made when the Collection has none yet."""
+        if number is None:
+            return None
+        if number not in seasons:
+            name = title or f"Season {number}"
+            slug = slugify(name) or str(number)
+            if any(existing.slug == slug for existing in seasons.values()):
+                slug = f"{slug}-{number}"
+            seasons[number] = create_season_record(
+                session, collection_id=collection.id, index=max((x.index for x in seasons.values()), default=0) + 1,
+                slug=slug, name=name, season_number=number,
+            )
+        return seasons[number]
+
+    loose = plan.loose_season
+    if loose is not None and not any(season.loose for season in seasons.values()):
+        # The channel's videos in none of the playlists keep the season the other program had them in.
+        if (season := season_of(loose.season_number, loose.title)) is not None:
+            season.loose = True
     added = 0
-    for position, wanted in enumerate(plan.links):
-        link = have.get(_normalise_url(wanted.url))
-        if link is None:
-            link = CollectionLink(url=wanted.url, position=position)
-            collection.links.append(link)
-            added += 1
-        link.title, link.placement = wanted.title, wanted.placement
-        number = wanted.season_number
-        if wanted.placement == "one_season" and number and link.season is None:
-            season = seasons.get(number)
-            if season is None:
-                name = wanted.title or f"Season {number}"
-                slug = slugify(name) or str(number)
-                if any(season.slug == slug for season in seasons.values()):
-                    slug = f"{slug}-{number}"
-                season = seasons[number] = create_season_record(
-                    session, collection_id=collection.id, index=max((x.index for x in seasons.values()), default=0) + 1,
-                    slug=slug, name=name, season_number=number,
-                )
-            link.season = season
+    for position, wanted in enumerate(sorted(plan.link_seasons, key=lambda p: (p.season_number is None, p.season_number or 0))):
+        # A playlist is known by its id, as its Site lists it; another link, such as one video, by the link itself.
+        ref = next(iter(parse_qs(urlsplit(wanted.url).query).get("list") or []), None) or wanted.url
+        if ref in have:
+            continue
+        collection.season_links.append(LinkSeason(
+            ref=ref, url=wanted.url, title=wanted.title or ref, site_position=position, enabled=True,
+            status=LinkSeasonStatus.KNOWN.value, season=season_of(wanted.season_number, wanted.title),
+        ))
+        have.add(ref)
+        added += 1
+    if added:
+        if collection.link_seasons == LinkSeasons.OFF.value:
+            collection.link_seasons = LinkSeasons.SELECTED.value
+        # The other program kept every video of these links, also another creator's.
+        collection.outside_videos = OutsideVideos.ADD.value
+        # The other program's season numbers stay, as its files are named by them.
+        collection.custom_season_order = True
     session.flush()
     return added
 
@@ -1253,12 +1265,11 @@ def _upsert_collection(
             setattr(existing, name, value)
     if not created:
         _report_changes(report, plan.title, changes)
-        if existing.channel_id is None and (added := _add_links(session, existing, plan)):
-            # A collection of a channel keeps the links the channel gave it.
+        if added := _add_link_seasons(session, existing, plan):
             from backend.operations.collections import CollectionIndexOperation
             from task_manager.scheduler.operation_factory import create_operation
 
-            report.add("updated", plan.title, f"Updated: {added} {'link' if added == 1 else 'links'} added")
+            report.add("updated", plan.title, f"Updated: {added} {'playlist' if added == 1 else 'playlists'} added as seasons")
             create_operation(session, CollectionIndexOperation(existing))
     if "check_frequency" in write or "check_cron" in write:
         session.flush()

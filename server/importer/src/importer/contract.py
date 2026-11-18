@@ -89,19 +89,15 @@ class ProfilePlan:
     """Why this variant was not merged with the profile it is a variant of."""
 
 
-LinkPlacement = Literal["site_seasons", "one_season", "specials"]
-
-
 @dataclass(frozen=True)
-class LinkPlan:
-    """One of the links a Collection is indexed from, and where its videos go."""
+class PlaylistSeasonPlan:
+    """A playlist of the channel a Collection is made from that is one of its seasons."""
 
     url: str
     title: str | None = None
-    """The link's own name, the name of its season when it gets one."""
-    placement: LinkPlacement = "site_seasons"
+    """The season's name, as the other program named it."""
     season_number: int | None = None
-    """The number of a ``one_season`` link's season, as the other program numbered it; None lets VODLoft number it."""
+    """The season's number, as the other program numbered it; None lets VODLoft number it."""
 
 
 @dataclass(frozen=True)
@@ -120,9 +116,13 @@ class CollectionPlan:
     """Collection artwork and NFO files as (kind, path), such as ("poster", "/downloads/…/poster.jpg")."""
     added_at: datetime | None = None
     """When the other program added the collection, in UTC; None when it doesn't say."""
-    links: tuple[LinkPlan, ...] = ()
-    """Every link, in the order that decides which one keeps a video several of them list; empty when ``url`` is
-    the only one."""
+    link_seasons: tuple[PlaylistSeasonPlan, ...] = ()
+    """Links that are seasons of the Collection of the channel at ``url``: its playlists, another channel or one
+    video, the one that keeps a video several of them list first. Each adds the videos the channel does not have, so
+    the Collection keeps what the other program had."""
+    loose_season: PlaylistSeasonPlan | None = None
+    """With ``link_seasons``: the season of the channel's videos in none of them, as the other program named and
+    numbered it; None lets VODLoft name it."""
     channel: bool = False
     """``url`` is a creator's own page, such as a Bandcamp artist: VODLoft adds the creator as a channel, with
     everything on the page in this one collection."""
@@ -222,7 +222,7 @@ class ImportPlan:
     """The other program's own download folder, which the path map pairs with a VODLoft folder."""
     channels: bool = False
     """The other program's collections can join the channels behind their links, as the person chooses. An importer
-    of a program that has nothing like channels or several links per collection leaves it off."""
+    of a program that has nothing like channels leaves it off."""
     probes: tuple[str, ...] = ()
     """Files the importer reads in the download folders, as the other program names them. They find the path
     map before the plan can list any files, such as ytdl-sub's download archives that list them."""

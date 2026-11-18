@@ -488,13 +488,26 @@ def channel_output_template_values(channel) -> dict[str, str]:
 
 
 def _channel_values(episode: "Episode") -> dict[str, str]:
-    """The episode's channel, and which of the channel's sections listed it."""
-    link = episode.collection_link
-    section = link.section if link is not None else None
+    """The episode's channel, and which of the channel's sections it is in: the playlist that is its season, or the
+    section the collection is made from."""
+    collection = episode.collection
+    playlist = next(
+        (playlist for playlist in collection.season_links if episode.season_id is not None and playlist.season_id == episode.season_id),
+        None,
+    )
+    if playlist is not None:
+        title, kind = playlist.title, "list"
+    else:
+        channel = collection.channel
+        sections = channel.sections if channel is not None else []
+        section = next((section for section in sections if section.url == collection.sharing_url), None)
+        if section is None and channel is not None and channel.main_collection_id == collection.id:
+            section = next((section for section in sections if section.kind == "feed" and section.role == "main"), None)
+        title, kind = (section.title, section.kind) if section is not None else ("", "")
     return {
-        **channel_output_template_values(episode.collection.channel),
-        "section_title": section.title if section else "",
-        "section_kind": section.kind if section else "",
+        **channel_output_template_values(collection.channel),
+        "section_title": title,
+        "section_kind": kind,
     }
 
 

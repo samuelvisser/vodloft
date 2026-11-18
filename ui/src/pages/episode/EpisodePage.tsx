@@ -22,6 +22,8 @@ import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge} from '../../components/common/RemovedFromSource'
+import SeasonPlaceNote from '../../components/Episode/SeasonPlaceNote'
+import {can} from '../../lib/access'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
 import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
 import {apiUrl} from '../../lib/api'
@@ -376,6 +378,8 @@ export default function EpisodePage() {
                         )}
                     </div>
                 </header>
+
+                <SeasonPlaceNote episodeSlug={episode.slug} canManage={can('library', 'manage')}/>
 
                 {!!episode.description?.trim() && (
                     <section className="episode-description" aria-labelledby="episode-description-title">

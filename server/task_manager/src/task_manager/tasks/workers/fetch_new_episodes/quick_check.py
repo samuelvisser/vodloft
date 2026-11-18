@@ -20,8 +20,10 @@ from backend.services.check_frequency import joins_regular_checks
 from backend.db.models import Episode, Collection
 from config.network import is_no_internet_error
 from sources import Feature, Source, get_source
+from backend.services.notifications.emitters import link_seasons_found
+from backend.services.link_seasons import list_season_links, place_in_link_seasons, link_seasons_on, save_season_links
 from ...helpers.listed_collections import (
-    add_listed_episodes, claim_listed_items, collection_links, index_listed_collection, known_episode_slugs, link_item_slugs, splits_chapters, with_chapters,
+    add_listed_episodes, index_listed_collection, known_episode_slugs, splits_chapters, with_chapters,
 )
 from backend.services.thumbnails import newest_media_item_id
 from .service import finish_index
@@ -74,7 +76,7 @@ def _due_collections(s: Session, now: datetime) -> list[tuple[Collection, Source
     for source_key, collections in by_source.items():
         source = get_source(source_key)
         minutes = source.quick_check_minutes([
-            (link.url, counts.get(collection.id, 0)) for collection in collections for link in collection.links
+            (collection.sharing_url, counts.get(collection.id, 0)) for collection in collections
         ])
         for collection in collections:
             last = _last_checked.get(collection.id)
@@ -85,34 +87,40 @@ def _due_collections(s: Session, now: datetime) -> list[tuple[Collection, Source
 
 
 def _check_collection(s: Session, *, collection: Collection, source: Source) -> int:
-    """Look at the newest videos of each of the collection's links, and add the ones it does not have yet."""
-    collection_id = collection.id
-    collection_known = known_episode_slugs(s, collection)
+    """Look at the collection's newest videos, and add the ones it does not have yet. When it found some and the
+    collection's playlists are seasons, it looks at the playlists too, so a new video goes to its playlist's season
+    before it is downloaded."""
+    collection_id, url = collection.id, collection.sharing_url
+    known = known_episode_slugs(s, collection)
     split = splits_chapters(collection)
-    links = [(link_id, url, link_item_slugs(s, link_id)) for link_id, url in collection_links(s, collection_id)]
+    playlists = link_seasons_on(collection)
     # No transaction stays open while the Source looks videos up.
     s.rollback()
-    added = 0
     newest = newest_media_item_id(s)
     s.rollback()
-    for link_id, url, link_known in links:
-        latest = [item for item in source.latest_items(url) if item.slug not in link_known]
-        if not latest:
-            continue
-        # A video another link already gave the collection is only noted for this link.
-        shared = {item.slug for item in latest if item.slug in collection_known}
-        new = [item for item in latest if item.slug not in collection_known]
-        found = [details for details in source.item_details(new).values() if details is not None] if new else []
-        if split:
-            found = [with_chapters(source, details) for details in found]
+    new = [item for item in source.latest_items(url) if item.slug not in known]
+    if not new:
+        return 0
+    found = [details for details in source.item_details(new).values() if details is not None]
+    if split:
+        found = [with_chapters(source, details) for details in found]
+    if not found:
+        return 0
+    listing = None
+    if playlists:
+        collection = s.get(Collection, collection_id)
+        listing = list_season_links(s, collection, source) if collection is not None else None
+        s.rollback()
 
-        def save(w: Session) -> int:
-            claim_listed_items(w, collection_id=collection_id, link_id=link_id, slugs=shared)
-            return add_listed_episodes(w, collection_id=collection_id, link_id=link_id, found=found)
+    def save(w: Session) -> int:
+        added = add_listed_episodes(w, collection_id=collection_id, found=found)
+        collection = w.get(Collection, collection_id)
+        if collection is not None and listing is not None:
+            link_seasons_found(w, collection, save_season_links(w, collection, listing))
+            place_in_link_seasons(w, collection)
+        return added
 
-        count = run_write_transaction(save)
-        collection_known |= {details.slug for details in found}
-        added += count
+    added = run_write_transaction(save)
     if added:
         finish_index(collection_id=collection_id, found=added, newest=newest)
     return added

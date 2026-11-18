@@ -159,8 +159,11 @@ What comes along:
 - The **genre** and **content rating** you give with `= Documentaries` and `= TV-Y` become the collection's own genre
   and content rating, which VODLoft writes into its NFO files.
 - ytdl-sub's file names use the same characters as VODLoft's Windows-compatible names, so the import sets that.
-- A subscription with **several links** becomes one collection with all of them. A **TV Show Collection** keeps
-  each season's number and name, and a video that is in more than one season stays in the highest, as in ytdl-sub.
+- A subscription with **several links** becomes one collection of its channel, with each of the other links, such
+  as a playlist, another channel or a single video, as a season of its own (see
+  [[Collections-and-Library#playlists-and-albums-as-seasons]]). The collection is set to add the videos the channel
+  doesn't list itself, so nothing you had in ytdl-sub is left out. A **TV Show Collection** keeps each season's
+  number and name; a video that is in more than one season stays in the one that comes first.
 - **Add the collections** in the preview chooses how they arrive. *As channels*, the default, adds each collection to
   the channel behind its links, such as a YouTube channel, and adds the channel when it is not in your Library yet.
   *As collections* adds each one on its own; you can still add it to its channel later. Pinchflat imports always
