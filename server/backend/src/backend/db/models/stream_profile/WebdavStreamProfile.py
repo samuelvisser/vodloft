@@ -1,6 +1,4 @@
-from typing import Optional
-
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .StreamProfileBase import StreamProfileBase
@@ -14,24 +12,25 @@ from backend.types.stream_profile_types import (
 
 
 class WebdavStreamProfile(StreamProfileBase):
-    """A read-only network folder for media players, laid out as a TV show."""
+    """A read-only network folder for media players, laid out as a TV show and named by the profile's title."""
 
     __tablename__ = "stream_profiles_webdav"
     __mapper_args__ = {"polymorphic_identity": StreamProfileType.WEBDAV.value}
 
-    # A share lists whole files, never the Site's stream.
-    passes_site_streams = False
+    # A share lists whole files, so only downloads: never the Site's stream.
+    streams_from_site = False
 
     id: Mapped[int] = mapped_column(
         ForeignKey("stream_profiles.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    folder_name: Mapped[Optional[str]] = mapped_column(
-        nullable=True, default=None, comment="The show's folder; empty uses the profile's title",
-    )
     season_folders: Mapped[str] = mapped_column(
         String(16), default=WebdavSeasonFolders.SEASON.value,
         comment="How the episodes are sorted into folders: a WebdavSeasonFolders value",
+    )
+    episode_extras: Mapped[bool] = mapped_column(
+        default=False, server_default=false(),
+        comment="List the extras of an episode beside it, named after its file; otherwise in the show's Trailers and Other folders",
     )
     metadata_files: Mapped[str] = mapped_column(
         String(32), default=WebdavMetadataFiles.NFO_AND_ARTWORK.value,
@@ -47,6 +46,6 @@ class WebdavStreamProfile(StreamProfileBase):
 
     def __repr__(self) -> str:
         return (
-            f"<WebdavStreamProfile(id={self.id}, folder_name={self.folder_name}, "
+            f"<WebdavStreamProfile(id={self.id}, overwrite_collection_title={self.overwrite_collection_title}, "
             f"season_folders={self.season_folders}, enable_profile={self.enable_profile})>"
         )

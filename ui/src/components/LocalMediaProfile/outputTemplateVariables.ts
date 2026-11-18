@@ -60,7 +60,22 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'episode_uploader', description: 'Who uploaded the episode, when the site says; empty otherwise'},
     {name: 'duration_seconds', description: 'Episode duration in whole seconds'},
     {name: 'dw_episode_number', description: 'Raw episode number exactly as returned by the source'},
-    {name: 'episode_type', description: 'Episode type: ep, ep-extra, aux, or trailer'},
+    {
+        name: 'episode_type',
+        description: 'Episode type: ep for a normal episode, or a type the site gives its other content',
+        readMore: {
+            paragraphs: [
+                'Every site uses <strong>ep</strong> for its normal episodes. Other content gets a type of its own, ' +
+                'depending on the site. Use <code>episode_type != \'ep\'</code> to match all of them at once.',
+                '<strong>ep</strong> a normal episode, on every site (a normal video on YouTube)',
+                '<strong>ep-extra</strong> extra content for one episode (The Daily Wire)',
+                '<strong>trailer</strong> a trailer for the show or its extra content (The Daily Wire)',
+                '<strong>aux</strong> auxiliary content for the show (The Daily Wire)',
+                '<strong>short</strong> a YouTube Short (YouTube)',
+                '<strong>livestream</strong> a livestream, upcoming, live or finished (YouTube)',
+            ],
+        },
+    },
     {name: 'episode_extra_type', description: 'Episode-extra subtype: other or trailer; empty otherwise'},
     {
         name: 'episode_index',
@@ -78,7 +93,22 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
             ],
         },
     },
-    {name: 'episode_number', description: 'Main episode number, or VODLoft counter for aux/trailer'},
+    {
+        name: 'extra_index',
+        description: 'VODLoft number for an extra, counted across the whole collection; empty for normal episodes',
+        readMore: {
+            paragraphs: [
+                'An extra is an episode of an Extras season, or an episode of any type other than <strong>ep</strong>, ' +
+                'such as an auxiliary episode, a trailer, an episode extra or a YouTube Short. This is the same as ' +
+                '<code>season_type == \'extra\' or episode_type != \'ep\'</code>.',
+                'All extras of a collection share one count, in the order of their <code>episode_index</code>, so no two ' +
+                'extras get the same number. That makes it a good fit for a Specials season in a media server.',
+                'An extra keeps its number once VODLoft gave it one, so its files keep their names. A new extra takes the ' +
+                'next number, and an episode that stops being an extra leaves a gap.',
+            ],
+        },
+    },
+    {name: 'episode_number', description: 'Episode number. An episode extra has its episode\'s number; other types count on their own'},
     {name: 'episode_sub_number', description: 'The source\'s sub-episode number for episode extras; empty otherwise'},
     {name: 'episode_label', description: 'Canonical label without the type prefix (e.g. 2497, 2497.1, S01E07, S01E07.1)'},
     {
@@ -138,6 +168,9 @@ const VARIABLES_BY_MODE: Record<LocalMediaProfileMode, readonly OutputTemplateVa
     collection: COLLECTION_VARIABLES,
     video: VIDEO_VARIABLES,
 }
+
+/** The numbers VODLoft keeps for every episode, which the template help lists as built-in Indexing values. */
+export const BUILT_IN_INDEXING_VALUES: ReadonlySet<string> = new Set(['episode_index', 'extra_index'])
 
 export function getOutputTemplateVariables(
     mode: LocalMediaProfileMode,

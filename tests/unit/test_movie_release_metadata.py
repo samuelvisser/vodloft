@@ -279,6 +279,7 @@ def test_collection_date_component_placeholders_use_episode_publish_datetime(tmp
         author_name=None,
         duration=0.0,
         index=1,
+        extra_index=None,
         title="Episode",
         dw_episode_number="1",
         episode_identifier="ep.1",
