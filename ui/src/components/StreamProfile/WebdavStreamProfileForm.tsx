@@ -1,4 +1,5 @@
 import {Controller, UseFormReturn} from 'react-hook-form'
+import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
 import SimpleSelect from '../common/SimpleSelect'
 import {publicAddress} from '../../lib/api'
@@ -69,6 +70,45 @@ export default function WebdavStreamProfileForm({
                     </div>
                 </div>
             ))}
+
+            <div className="form-row">
+                <label htmlFor="webdav-episode-extras">Support episode extras</label>
+                <Controller
+                    control={control}
+                    name="episodeExtras"
+                    render={({field}) => (
+                        <Switch
+                            id="webdav-episode-extras"
+                            checked={!!field.value}
+                            onChange={(checked) => field.onChange(checked)}
+                            onColor="#0ea5e9"
+                            offColor="#d1d5db"
+                            uncheckedIcon={false}
+                            checkedIcon={false}
+                            aria-invalid={!!errors.episodeExtras}
+                            aria-describedby={errors.episodeExtras ? 'webdav-episode-extras-error' : 'webdav-episode-extras-help'}
+                        />
+                    )}
+                />
+                {errors.episodeExtras && (
+                    <div id="webdav-episode-extras-error" className="error" role="alert" aria-live="polite">
+                        {String(errors.episodeExtras.message)}
+                    </div>
+                )}
+                <div className="help" id="webdav-episode-extras-help">
+                    <ReadMore summary={<span>List an episode&apos;s extras, such as its trailer, beside the episode.</span>}>
+                        <p>
+                            When enabled, an episode&apos;s extras are named after the episode&apos;s file with a suffix such
+                            as <code>-trailer1</code> or <code>-other2</code>, so a media player that supports episode extras,
+                            such as Plex, shows them with their episode.
+                        </p>
+                        <p>
+                            When disabled, or when the episode itself is not in the share, they go in the show&apos;s
+                            Trailers and Other folders, which most media players show as the show&apos;s extras.
+                        </p>
+                    </ReadMore>
+                </div>
+            </div>
 
             <StreamDeliveryFields
                 form={form}

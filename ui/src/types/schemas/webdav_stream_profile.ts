@@ -6,6 +6,7 @@ import {WebdavMetadataFilesReg, WebdavSeasonFoldersReg} from '../stream_profile'
 const WebdavStreamProfileBaseSchema = StreamProfileFieldsSchema.extend({
     seasonFolders: z.enum(WebdavSeasonFoldersReg.values).default('season'),
     metadataFiles: z.enum(WebdavMetadataFilesReg.values).default('nfo_and_artwork'),
+    episodeExtras: z.boolean().default(false),
     // A share lists whole files, so only downloads, and never live episodes.
     useDownloads: z.literal(true).default(true),
     useSourceStream: z.literal(false).default(false),
@@ -26,6 +27,7 @@ export const WebdavStreamProfileReadSchema = StreamProfileFieldsReadSchema.exten
     type: z.literal('webdav'),
     seasonFolders: z.enum(WebdavSeasonFoldersReg.values),
     metadataFiles: z.enum(WebdavMetadataFilesReg.values),
+    episodeExtras: z.boolean(),
     sharePath: z.string(),
 })
 export type WebdavStreamProfileRead = z.infer<typeof WebdavStreamProfileReadSchema>

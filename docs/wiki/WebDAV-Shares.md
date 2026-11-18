@@ -33,6 +33,11 @@ Profile matches the share's format, its settings page says so and offers to crea
 
   Trailers always go in a *Trailers* folder in the show's folder, named *Trailer 3 - <title>*: Plex and Jellyfin show them as
   the show's trailers, and Infuse as its extras.
+- **Support episode extras** — where an episode's own extras, such as its trailer, are listed. Off (the default), they
+  go in the show's *Trailers* and *Other* folders, which most media players show as the show's extras. On, they are
+  listed beside their episode, named after its file with a suffix such as *-trailer1* or *-other2*, so a media player
+  that supports episode extras, such as Plex, shows them with their episode. An extra whose episode is not in the
+  share still goes in the show's folders.
 - **Files for media players**:
   - **NFO files and artwork** (the default) lists `tvshow.nfo`, `season.nfo` and an NFO file per episode, with the
     show's poster and each episode's picture.
