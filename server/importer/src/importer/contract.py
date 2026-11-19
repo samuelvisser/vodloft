@@ -126,6 +126,9 @@ class CollectionPlan:
     creator: bool = False
     """``url`` is a creator's own page, such as a Bandcamp artist: VODLoft adds the creator, with
     everything on the page in this one collection."""
+    artist: str | None = None
+    """For music: the artist it is by, as the other program names them. The import gives the artist this name, and
+    the collections of one artist, such as their albums and their music videos, join the same artist."""
     links_only: bool = False
     """The Collection holds only what its ``link_seasons`` have and has no link of its own: the other program kept
     only these playlists, of no one channel. ``url`` is the first of them."""
