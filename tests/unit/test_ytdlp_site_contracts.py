@@ -54,8 +54,10 @@ def test_every_contract_has_a_key_of_its_own():
     assert len(CONTRACTS) == len({contract.__name__ for contract in CONTRACTS.values()})
 
 
-def test_soundcloud_calls_its_sets_playlists_and_the_rest_tracks_outside_music():
-    names = site_of("soundcloud").list_names
+def test_soundcloud_and_bandcamp_name_the_lists_their_link_seasons_come_from():
+    soundcloud, bandcamp = site_of("soundcloud").list_names, site_of("bandcamp").list_names
 
-    assert (names.one, names.many, names.loose_season) == ("playlist", "playlists", "Tracks")
-    assert site_of("soundcloud").music_link_season_names.loose_season == "Singles"
+    assert (soundcloud.one, soundcloud.many, soundcloud.loose_season) == ("album or playlist", "albums and playlists", "Tracks")
+    assert (bandcamp.one, bandcamp.many, bandcamp.loose_season) == ("album", "albums", "Tracks")
+    # A Music collection still puts what is in no album in Singles.
+    assert soundcloud.music_loose_season == bandcamp.music_loose_season == "Singles"

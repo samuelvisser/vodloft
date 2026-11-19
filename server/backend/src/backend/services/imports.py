@@ -1349,9 +1349,11 @@ def _upsert_collection(
         _report_changes(report, plan.title, changes)
         if added := _add_link_seasons(session, existing, plan):
             from backend.operations.collections import CollectionIndexOperation
+            from backend.services.link_seasons import list_names
             from task_manager.scheduler.operation_factory import create_operation
 
-            report.add("updated", plan.title, f"Updated: {added} {'playlist' if added == 1 else 'playlists'} added as seasons")
+            names = list_names(existing)
+            report.add("updated", plan.title, f"Updated: {added} {names.one if added == 1 else names.many} added as seasons")
             create_operation(session, CollectionIndexOperation(existing))
     if "check_frequency" in write or "check_cron" in write:
         session.flush()

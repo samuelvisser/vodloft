@@ -332,7 +332,7 @@ def test_a_site_can_name_its_link_seasons_itself(source, monkeypatch, session):
     collection = _collection(session)
     assert list_names(collection) == ListNames("set", "sets", "Loose")
     collection.type = "music"
-    assert list_names(collection) == ListNames("album", "albums", "Singles")
+    assert list_names(collection) == ListNames("set", "sets", "Singles")
 
 
 def test_a_link_season_keeps_its_sites_order(source, session):

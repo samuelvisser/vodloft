@@ -19,7 +19,7 @@ from __future__ import annotations
 import contextvars
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
@@ -45,11 +45,11 @@ _LISTS_AT_ONCE = 4
 
 
 def list_names(collection: Collection) -> ListNames:
-    """What the collection's Site calls its link seasons, such as playlists, or albums in a Music collection."""
+    """What the collection's Site calls the lists its link seasons come from, such as playlists, with the name of the
+    season of the videos in none of them as this collection calls it: Videos, or Singles in a Music collection."""
     site = collection_site(collection)
-    if site is None:
-        return ListNames()
-    return site.music_link_season_names if collection.type == CollectionType.MUSIC.value else site.list_names
+    names = site.list_names if site is not None else ListNames()
+    return replace(names, loose_season=names.music_loose_season) if collection.type == CollectionType.MUSIC.value else names
 
 
 def link_seasons_on(collection: Collection) -> bool:

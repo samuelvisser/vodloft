@@ -67,11 +67,9 @@ export const CollectionSeasonsReadSchema = z.object({
     /** The videos no playlist that is a season has now, which leave once the collection holds only what they have. */
     onlyLeavingCount: z.number().default(0),
     onlyLeavingWithFiles: z.number().default(0),
-    /** What the collection's Site calls them: playlist and Videos, or album and Singles in a Music collection. */
+    /** What the collection's Site calls its lists, such as playlists on YouTube, and the season of what is in none
+     * of them: Videos, or Singles in a Music collection. */
     names: z.object({one: z.string(), many: z.string(), looseSeason: z.string()}),
-    /** What the Site calls the lists its creators add, such as "a playlist" and "playlists" on YouTube, also in a Music
-     * collection, whose seasons are albums. */
-    sectionNames: z.object({one: z.string(), many: z.string()}),
     /** For a creator's own collection: the creator, which finds its new playlists and decides what happens with them. */
     creatorSlug: z.string().nullable().default(null),
     creatorTitle: z.string().nullable().default(null),

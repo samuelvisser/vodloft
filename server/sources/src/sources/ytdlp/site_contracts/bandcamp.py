@@ -1,4 +1,4 @@
-from ...contract import CreatorSectionNames
+from ...contract import CreatorSectionNames, ListNames
 from .other_sites import CREATOR_PRESETS, OtherSites
 
 
@@ -12,3 +12,5 @@ class Bandcamp(OtherSites):
     # An artist's albums are their playlists.
     creator_sections = CreatorSectionNames("an album", "albums")
     link_seasons = True
+    # A collection's link seasons come from its albums; what is in none of them is its tracks.
+    list_names = ListNames("album", "albums", "Tracks")

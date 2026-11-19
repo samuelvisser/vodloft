@@ -51,14 +51,6 @@ const dialogWords = (collection: CollectionWords, music: boolean, names: Collect
 const capitalized = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
-/** What the dialog calls the Site's lists, such as playlists on YouTube. A Music collection's seasons are albums,
- * but where its content comes from is the Site's lists, so it says playlists for an artist on YouTube and albums on
- * Bandcamp. */
-function siteListNames(view: CollectionSeasonsRead): CollectionSeasonsRead['names'] {
-    if (!view.music) return view.names
-    return {...view.names, one: view.sectionNames.one.replace(/^(a|an) /, ''), many: view.sectionNames.many}
-}
-
 async function readSeasons(response: Response): Promise<CollectionSeasonsRead> {
     if (!response.ok) {
         const body = await response.json().catch(() => null)
@@ -142,7 +134,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         loadedFor.current = queryClient.setQueryData<CollectionSeasonsRead>(queryKey, fresh) ?? fresh
     }
 
-    const names = view ? siteListNames(view) : undefined
+    // What the Site calls its lists, such as playlists on YouTube, also in a Music collection, whose seasons are albums.
+    const names = view?.names
     const words = dialogWords(collectionWordsGiven ?? collectionWords(view?.music ? 'music' : null), view?.music ?? false, names)
     const {season} = words
     const regs = useMemo(() => view && names ? registries(names, words, view) : null, [view, names, words])
