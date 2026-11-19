@@ -8,7 +8,7 @@ import requests
 from downloader.hls import is_master_playlist, media_playlist_segments, parse_master_playlist
 
 from ..contract import (
-    Access, CreatorDetails, CreatorPreset, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
+    Access, CreatorDetails, CreatorPreset, CreatorSectionNames, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
     DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, SiteSetting, SiteSettings, Source, StreamMethod,
     ReleaseDate, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
@@ -112,6 +112,7 @@ class DailyWireSource(Source):
         # A host has no feed to fold into one show: each of their shows keeps its own seasons.
         creators=True,
         creator_label="host",
+        creator_sections=CreatorSectionNames("a show", "shows"),
         creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})

@@ -1,4 +1,6 @@
 import {sourceControls} from '../../lib/sourceControls'
+import OpenOnSiteLink from '../../components/common/OpenOnSiteLink'
+import CreatorLink from '../../components/Creator/CreatorLink'
 import {useMovedEpisodes, useReassignedEpisodes} from '../../components/Episode/SeasonPlaceNote'
 import {addedByLabel, can} from '../../lib/access'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -636,20 +638,15 @@ export default function CollectionPage() {
       <article className="collection-details" aria-label="Show details">
         <header className="collection-page-header">
           <div className="collection-page-heading">
-            <div className="collection-author">
-              {collection.creatorSlug
-                ? <Link to={`/creator/${collection.creatorSlug}`}>{collection.creatorTitle ?? collection.authorName}</Link>
-                : collection.authorName}
-            </div>
+            {collection.creatorSlug
+              ? <CreatorLink slug={collection.creatorSlug} title={collection.creatorTitle ?? collection.authorName} avatarUrl={collection.creatorAvatarUrl}/>
+              : <div className="collection-author">{collection.authorName}</div>}
             <div className="collection-meta">{[`${total} episodes`, collection.years, addedByLabel(collection.addedBy)].filter(Boolean).join(' • ')}</div>
           </div>
 
           <div className="collection-page-actions">
-            {collection.sharingUrl && (
-              <a className="btn collection-open-link" href={collection.sharingUrl} target="_blank" rel="noreferrer" title={`Open on ${openOnName}`}>
-                <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                <span className="collection-open-label"><span className="collection-open-prefix">Open on </span>{openOnName}</span>
-              </a>
+            {collection.sharingUrl && openOnName && (
+              <OpenOnSiteLink className="collection-open-link" url={collection.sharingUrl} siteName={openOnName}/>
             )}
             {can('library', 'manage') && (
               <>

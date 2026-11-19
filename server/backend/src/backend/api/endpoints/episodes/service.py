@@ -89,6 +89,33 @@ def _episode_view_order(s: Session, collection_slug: str, season_id: int | None)
     return EpisodeOrder(row.episode_order)
 
 
+def episode_view_columns():
+    """The columns of an episode's grid card, ``EpisodeAPIReadView``, for a select that joins its Collection."""
+    return (
+        Episode.id.label("id"),
+        Episode.source_key.label("source_key"),
+        Episode.collection_id.label("collection_id"),
+        Episode.season_id.label("season_id"),
+        Episode.index.label("index"),
+        Episode.episode_identifier.label("episode_identifier"),
+        Episode.dw_episode_number.label("dw_episode_number"),
+        Episode.publish_status.label("publish_status"),
+        Episode.drm_protected.label("drm_protected"),
+        Episode.access.label("access"),
+        Collection.site_key.label("site_key"),
+        Episode.access_refused_at.label("access_refused_at"),
+        Episode.access_check_at.label("access_check_at"),
+        Episode.removed_from_source.label("removed_from_source"),
+        Episode.title.label("title"),
+        Episode.duration.label("duration"),
+        Episode.slug.label("slug"),
+        Episode.thumbnail_landscape_path.label("thumbnail_landscape_path"),
+        Episode.thumbnail_portrait_path.label("thumbnail_portrait_path"),
+        Episode.thumbnail_square_path.label("thumbnail_square_path"),
+        Episode.published_date.label("published_date"),
+    )
+
+
 def _episode_view_stmt(
         collection_slug: str,
         season_id: int | None = None,
@@ -100,29 +127,7 @@ def _episode_view_stmt(
     # constructing full ORM entities (and their select-in metadata relationship), then sending and
     # validating descriptions/timestamps that the grid never renders.
     stmt = (
-        select(
-            Episode.id.label("id"),
-            Episode.source_key.label("source_key"),
-            Episode.collection_id.label("collection_id"),
-            Episode.season_id.label("season_id"),
-            Episode.index.label("index"),
-            Episode.episode_identifier.label("episode_identifier"),
-            Episode.dw_episode_number.label("dw_episode_number"),
-            Episode.publish_status.label("publish_status"),
-            Episode.drm_protected.label("drm_protected"),
-            Episode.access.label("access"),
-            Collection.site_key.label("site_key"),
-            Episode.access_refused_at.label("access_refused_at"),
-            Episode.access_check_at.label("access_check_at"),
-            Episode.removed_from_source.label("removed_from_source"),
-            Episode.title.label("title"),
-            Episode.duration.label("duration"),
-            Episode.slug.label("slug"),
-            Episode.thumbnail_landscape_path.label("thumbnail_landscape_path"),
-            Episode.thumbnail_portrait_path.label("thumbnail_portrait_path"),
-            Episode.thumbnail_square_path.label("thumbnail_square_path"),
-            Episode.published_date.label("published_date"),
-        )
+        select(*episode_view_columns())
         .join(Collection, Episode.collection_id == Collection.id)
         .where(Collection.slug == collection_slug)
     )

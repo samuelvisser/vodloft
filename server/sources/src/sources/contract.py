@@ -126,6 +126,15 @@ class ListNames:
 
 
 @dataclass(frozen=True)
+class CreatorSectionNames:
+    """What a Site calls the things a creator adds there, which VODLoft looks for every day, in lower case."""
+
+    one: str = "a playlist or show"
+    """One of them, with its article, such as "a playlist"."""
+    many: str = "playlists and shows"
+
+
+@dataclass(frozen=True)
 class SiteSettings:
     """Which of the settings in ``config.settings.site_settings`` a Site shows, and what it starts with.
 
@@ -792,6 +801,8 @@ class Site:
     names the Site's creators by it everywhere."""
     creator_presets: tuple[CreatorPreset, ...] = ()
     """The ways the Site offers to keep a creator, the first one the default."""
+    creator_sections: CreatorSectionNames = CreatorSectionNames()
+    """What the Site calls the things its creators add, such as playlists on YouTube or shows on The Daily Wire."""
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""

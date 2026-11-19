@@ -14,7 +14,7 @@ import {
   type FrontendPullRead,
 } from '../types/schemas/puller'
 import {usePageActive} from './pageActivity'
-import {VODLOFT_VERSION as FRONTEND_APP_VERSION} from 'virtual:vodloft-version'
+import {VODLOFT_BUILD_ID as FRONTEND_BUILD_ID, VODLOFT_VERSION as FRONTEND_APP_VERSION} from 'virtual:vodloft-version'
 import {apiUrl} from './api'
 
 
@@ -46,7 +46,7 @@ class FrontendPullError extends Error {
 
 const FrontendPullerContext = createContext<FrontendPullerContextValue | null>(null)
 
-function reloadIfFrontendIsOutdated(backendAppVersion: string) {
+function reloadIfFrontendIsOutdated(backendAppVersion: string, backendBuildId: string) {
   if (reloadRequested) return
 
   if (import.meta.env.DEV) {
@@ -59,7 +59,11 @@ function reloadIfFrontendIsOutdated(backendAppVersion: string) {
 
     // In development the running backend is authoritative.
     window.sessionStorage.setItem(DEV_BACKEND_VERSION_KEY, backendAppVersion)
-  } else if (backendAppVersion === FRONTEND_APP_VERSION) {
+  } else if (
+    backendAppVersion === FRONTEND_APP_VERSION
+    // A new build of the same version, such as a test build deployed again, has a build id of its own.
+    && (!backendBuildId || !FRONTEND_BUILD_ID || backendBuildId === FRONTEND_BUILD_ID)
+  ) {
     return
   }
 
@@ -73,8 +77,8 @@ async function fetchFrontendPuller(signal?: AbortSignal): Promise<FrontendPullRe
   if (!response.ok) throw new FrontendPullError(response.status)
 
   const payload: unknown = await response.json()
-  const {appVersion} = FrontendPullVersionSchema.parse(payload)
-  reloadIfFrontendIsOutdated(appVersion)
+  const {appVersion, buildId} = FrontendPullVersionSchema.parse(payload)
+  reloadIfFrontendIsOutdated(appVersion, buildId)
   return FrontendPullReadSchema.parse(payload)
 }
 

@@ -7,35 +7,37 @@ import {faIcon} from '../../icons/faIcon'
 import {can} from '../../lib/access'
 import {addCreatorSections, moveCreatorSection, splitCreatorAccount} from '../../lib/queries'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
+import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import type {CreatorPageAccountRead, CreatorPageRead, CreatorSectionRead, SectionPlan} from '../../types/schemas/creator'
 
-function sectionFacts(section: CreatorSectionRead) {
+export function sectionFacts(section: CreatorSectionRead) {
     const noun = section.kindLabel === 'Album' ? ['track', 'tracks'] : ['video', 'videos']
     return [section.kindLabel, section.itemCount != null ? `${section.itemCount} ${noun[section.itemCount === 1 ? 0 : 1]}` : null]
         .filter(Boolean).join(' · ')
 }
 
 /** One section of one of the creator's accounts. */
-type AccountSection = {account: CreatorPageAccountRead, section: CreatorSectionRead}
+export type AccountSection = {account: CreatorPageAccountRead, section: CreatorSectionRead}
 
 /** The title of the collection named after the creator that takes the account's uploads. */
-function mainTitleOf(creator: CreatorPageRead, account: CreatorPageAccountRead): string {
+export function mainTitleOf(creator: CreatorPageRead, account: CreatorPageAccountRead): string {
     return creator.collections.find((collection) => collection.slug === account.mainCollectionSlug)?.title ?? creator.title
 }
 
 /** The ways a section of a creator in the Library can be added, in the words of this creator. */
-function choices(creator: CreatorPageRead, {account, section}: AccountSection): {label: string, plan: SectionPlan}[] {
+export function choices(creator: CreatorPageRead, {account, section}: AccountSection): {label: string, description: string, plan: SectionPlan}[] {
     const mainTitle = mainTitleOf(creator, account)
-    const options: {label: string, plan: SectionPlan}[] = []
+    const main = `the ${creator.creatorLabel}'s main collection`
+    const options: {label: string, description: string, plan: SectionPlan}[] = []
     if (section.kind === 'feed') {
-        options.push({label: `Add to ${mainTitle}`, plan: {ref: section.ref, target: 'main'}})
+        options.push({label: `Add to ${mainTitle}`, description: `Its videos go into ${main}`, plan: {ref: section.ref, target: 'main'}})
     } else if (section.kind === 'list' && account.site.linkSeasons) {
-        options.push({label: `Season of ${mainTitle}`, plan: {ref: section.ref, target: 'main'}})
+        options.push({label: `Season of ${mainTitle}`, description: `A season of ${main}`, plan: {ref: section.ref, target: 'main'}})
     }
-    options.push({label: 'Own collection', plan: {ref: section.ref, target: 'own'}})
+    options.push({label: 'Own collection', description: 'A collection of its own in your library', plan: {ref: section.ref, target: 'own'}})
     return options
 }
 
@@ -99,6 +101,8 @@ export default function CreatorSectionsEditor({creator, part}: {
     const [moving, setMoving] = useState<{item: AccountSection, to: Place} | null>(null)
     const [sectionBusy, setSectionBusy] = useState(false)
     const [splitting, setSplitting] = useState<CreatorPageAccountRead | null>(null)
+    // The section that becomes a collection of its own, while the user chooses its type and identification.
+    const [adding, setAdding] = useState<AccountSection | null>(null)
 
     const mayAdd = can('add_media')
     const mayManage = can('library', 'manage')
@@ -171,7 +175,7 @@ export default function CreatorSectionsEditor({creator, part}: {
         <div className="creator-row-actions">
             {choices(creator, item).map((choice) => (
                 <button key={choice.label} type="button" className="btn" disabled={busy !== null}
-                        onClick={() => void place(item.account, choice.plan)}>
+                        onClick={() => choice.plan.target === 'own' ? setAdding(item) : void place(item.account, choice.plan)}>
                     {busy === sectionKey(item.account, item.section.ref) ? 'Adding…' : choice.label}
                 </button>
             ))}
@@ -282,7 +286,7 @@ export default function CreatorSectionsEditor({creator, part}: {
 
             {part === 'rest' && checkedAt && (
                 <p className="creator-note">
-                    VODLoft looks for new playlists and shows once a day. Last look: {new Date(checkedAt).toLocaleString()}.
+                    VODLoft looks for new {creator.sectionNames.many} once a day. Last look: {new Date(checkedAt).toLocaleString()}.
                 </p>
             )}
 
@@ -306,11 +310,13 @@ export default function CreatorSectionsEditor({creator, part}: {
                 {splitting && (
                     <ul className="creator-order-note">
                         <li>The account on {splitting.site.name} becomes a creator of its own, named as {splitting.site.name} names them.</li>
-                        <li>Its own collection and the collections of its playlists and shows go along. Collections that joined {creator.title} by another link stay.</li>
+                        <li>Its own collection and the collections of its {splitting.site.creatorSections.many} go along. Collections that joined {creator.title} by another link stay.</li>
                         <li>Collections keep their seasons, episodes, profiles and files. Nothing is indexed again.</li>
                     </ul>
                 )}
             </ConfirmDialog>
+
+            {adding && <NewCreatorCollectionDialog creator={creator} item={adding} onDismiss={() => setAdding(null)}/>}
         </>
     )
 }

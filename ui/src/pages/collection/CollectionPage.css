@@ -341,16 +341,6 @@
         min-width: 0;
     }
 
-    .collection-open-label {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .collection-open-prefix {
-        display: none;
-    }
-
     .collection-profile-links {
         gap: 7px;
     }

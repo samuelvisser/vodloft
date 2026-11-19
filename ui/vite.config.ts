@@ -51,7 +51,11 @@ function vodLoftVersionPlugin(): Plugin {
     },
     load(id) {
       if (id !== RESOLVED_VIRTUAL_VERSION_MODULE) return
-      return `export const VODLOFT_VERSION = ${JSON.stringify(readVODLoftVersion())}`
+      // The Docker build's id, which the backend reports too, so an open page reloads after a new deploy.
+      return [
+        `export const VODLOFT_VERSION = ${JSON.stringify(readVODLoftVersion())}`,
+        `export const VODLOFT_BUILD_ID = ${JSON.stringify(process.env.VODLOFT_BUILD_ID ?? '')}`,
+      ].join('\n')
     },
   }
 }

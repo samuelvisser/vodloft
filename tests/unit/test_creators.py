@@ -359,6 +359,24 @@ def test_a_new_playlist_waits_for_a_choice_and_says_so(client, session, tube):
     assert next(s for s in page["accounts"][0]["sections"] if s["ref"] == "PLbarn")["status"] == "known"
 
 
+def test_a_playlist_added_as_a_collection_of_its_own_takes_the_type_and_identification_the_user_chose(client, session, tube):
+    from backend.db.models import Collection
+
+    _one_show(client)
+    _follow(session, tube, SECTIONS)
+    main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
+    assert (main.type, main.episode_identifier) == ("series", "seasonal")
+
+    page = client.post("/api/creators/workshop/accounts/1/sections", json={
+        "sections": [{"ref": "PLcabin", "target": "own"}], "type": "podcast", "episodeIdentifier": "date_based",
+    }).json()
+
+    slug = next(s for s in page["accounts"][0]["sections"] if s["ref"] == "PLcabin")["collectionSlug"]
+    session.expire_all()
+    added = session.scalar(select(Collection).where(Collection.slug == slug))
+    assert (added.type, added.episode_identifier) == ("podcast", "date_based")
+
+
 def test_the_creator_asks_about_a_new_playlist_also_when_its_collection_has_playlist_seasons(client, session, tube):
     from backend.db.models import Collection
 
@@ -586,6 +604,18 @@ def test_a_site_names_its_creators_in_its_own_words(client, tube, monkeypatch):
     assert lines[-1]["creator"]["creatorLabel"] == "host"
 
 
+def test_a_creator_names_what_vodloft_looks_for_in_the_words_of_its_site(client, tube, monkeypatch):
+    from dataclasses import replace
+
+    from sources import CreatorSectionNames
+
+    _one_show(client)
+    assert client.get("/api/creators/workshop").json()["sectionNames"] == {"one": "a playlist or show", "many": "playlists and shows"}
+
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], creator_sections=CreatorSectionNames("a playlist", "playlists")),))
+    assert client.get("/api/creators/workshop").json()["sectionNames"] == {"one": "a playlist", "many": "playlists"}
+
+
 def test_a_playlist_that_is_a_season_of_the_creators_collection_moves_to_a_collection_that_joins(client, session):
     from backend.db.models import Collection, CollectionList
 
@@ -765,3 +795,85 @@ def test_an_account_splits_off_into_a_creator_of_its_own_with_its_collections(cl
     # A creator's only account stays theirs.
     only = client.post(f"/api/creators/nw-live/accounts/{cast_account}/split")
     assert only.status_code == 422
+
+
+def _video(session, collection, slug, published):
+    from backend.db.models import Episode, Season
+    from backend.types.media_types import MediaType
+
+    season = session.scalar(select(Season).where(Season.collection_id == collection.id))
+    if season is None:
+        season = Season(collection_id=collection.id, index=1, slug=f"{collection.slug}-1", name="Season 1")
+        session.add(season)
+        session.flush()
+    session.add(Episode(
+        source_key="tube", uuid=f"uuid-{slug}", type=MediaType.EPISODE.value, collection_id=collection.id,
+        season_id=season.id, index=published.year, episode_identifier=f"ep.S01E{published.year}", slug=slug,
+        publish_status="published_final", sharing_url=f"https://example.test/{slug}", published_date=published,
+        title=slug, duration=60,
+    ))
+
+
+def test_the_creator_page_shows_each_collections_years_and_pages_through_the_newest_episodes(client, session):
+    from datetime import datetime, timezone
+
+    from backend.db.models import Collection
+
+    _one_show(client)
+    main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
+    shorts = session.scalar(select(Collection).where(Collection.slug != "UCworkshop"))
+    _video(session, main, "first", datetime(2019, 3, 1, tzinfo=timezone.utc))
+    _video(session, main, "latest", datetime(2024, 5, 1, tzinfo=timezone.utc))
+    _video(session, shorts, "short", datetime(2025, 1, 1, tzinfo=timezone.utc))
+    session.commit()
+
+    page = client.get("/api/creators/workshop").json()
+
+    assert {c["slug"]: c["years"] for c in page["collections"]} == {"UCworkshop": "2019-2024", shorts.slug: "2025-2025"}
+    assert page["lastPublishedDate"].startswith("2025-01-01")
+
+    first = client.get("/api/creators/workshop/episodes", params={"limit": 2}).json()
+    assert [(e["slug"], e["collectionSlug"]) for e in first["items"]] == [("short", shorts.slug), ("latest", "UCworkshop")]
+    assert first["items"][0]["collectionTitle"] == shorts.title
+    rest = client.get("/api/creators/workshop/episodes", params={"limit": 2, "cursor": first["nextCursor"]}).json()
+    assert [e["slug"] for e in rest["items"]] == ["first"]
+    assert rest["hasMore"] is False
+
+
+def test_deleting_a_creator_keeps_its_collections_as_plain_ones(client, session):
+    from backend.db.models import Collection, Creator
+
+    _one_show(client)
+
+    assert client.delete("/api/creators/workshop").status_code == 204
+
+    session.expire_all()
+    assert session.scalar(select(Creator).where(Creator.slug == "workshop")) is None
+    collections = session.scalars(select(Collection)).all()
+    assert collections and all(c.creator_id is None for c in collections)
+    assert client.delete("/api/creators/workshop").status_code == 404
+
+
+def test_a_renamed_creator_keeps_its_name_and_gives_it_to_its_collections_as_author(client, session, tube):
+    from backend.db.models import Collection
+
+    _one_show(client)
+    assert client.patch("/api/creators/workshop", json={"title": "Northwind", "newSections": "ask"}).status_code == 200
+    authors = {collection.author_name for collection in session.scalars(select(Collection))}
+    assert authors == {"Northwind"}
+
+    # The Site's name no longer replaces the one the user gave.
+    _follow(session, tube, SECTIONS)
+    assert client.get("/api/creators/workshop").json()["title"] == "Northwind"
+
+    # A collection of the creator can't have another author.
+    collection = client.get("/api/collections/UCworkshop").json()
+    body = {
+        "title": collection["title"], "membershipLevel": collection["membershipLevel"], "sharingUrl": collection["sharingUrl"],
+        "authorName": "Someone else",
+    }
+    refused = client.patch("/api/collections/UCworkshop", json=body)
+    assert refused.status_code == 422
+    assert "change it on their Edit page" in refused.json()["detail"]
+    assert client.patch("/api/collections/UCworkshop", json={**body, "authorName": "Northwind"}).status_code == 200
+

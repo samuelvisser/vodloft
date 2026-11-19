@@ -123,6 +123,7 @@ export const CollectionReadSchema = z.looseObject({
     checkCron: z.string().nullable().optional(),
     creatorSlug: z.string().nullable().optional(),
     creatorTitle: z.string().nullable().optional(),
+    creatorAvatarUrl: z.string().nullable().optional(),
     customMetadata: z.record(z.string(), z.string()).default({}),
 
     createdAt: ApiDateTimeSchema,

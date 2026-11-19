@@ -30,6 +30,15 @@ def get_app_version() -> str:
     return version
 
 
+def get_build_id() -> str:
+    """The id of the Docker build that made this VODLoft, which its UI was built with too, or nothing outside one.
+    It tells an open page that a new build runs, also when the version stays the same, such as a test build."""
+    try:
+        return (PROJECT_ROOT / "build-id").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 class _NormalizingYamlSource(YamlConfigSettingsSource):
     """Load config.yml through Pydantic's registered YAML source and normalize aliases."""
 
@@ -77,6 +86,7 @@ def environment_settings_source_documents(
 class AppSettings(SettingsBase):
 
     app_version: str = Field(default_factory=get_app_version, frozen=True)
+    build_id: str = Field(default_factory=get_build_id, frozen=True)
 
     # The SQLite file used when no database_url is set. Also the file that a
     # PostgreSQL database takes its data from on its first start.

@@ -1,5 +1,9 @@
 import {z} from 'zod'
 import {DwMembershipLevelReg} from '../dailywire_user_info'
+import {CollectionTypeReg, EpisodeIdentifierReg} from '../collection'
+import {ApiDateTimeSchema} from './datetime'
+import {EpisodeReadViewSchema} from './episode'
+import {CreatorSectionNamesSchema} from './source'
 
 export const SectionTargetValues = ['main', 'own', 'skip'] as const
 export const CreatorPresetValues = ['one_show', 'per_list', 'pick'] as const
@@ -57,6 +61,8 @@ export const NewSectionActionValues = ['ask', 'season', 'own', 'ignore'] as cons
 
 const SiteSchema = z.object({
     key: z.string(), name: z.string(), creatorLabel: z.string().default('creator'), linkSeasons: z.boolean().default(false),
+    /** What the Site calls the things its creators add, such as playlists on YouTube. */
+    creatorSections: CreatorSectionNamesSchema,
 })
 
 /** A creator's account on one Site, such as their YouTube channel. */
@@ -78,6 +84,8 @@ export const CreatorReadSchema = z.object({
     slug: z.string(),
     /** Artist, the word of their one Site, such as host, or creator. */
     creatorLabel: z.string(),
+    /** What VODLoft looks for: what their one Site calls it, such as playlists, or playlists and shows. */
+    sectionNames: CreatorSectionNamesSchema,
     /** The label with their Site, when they are on one only, such as "The Daily Wire host". */
     kind: z.string(),
     accounts: z.array(CreatorAccountReadSchema),
@@ -108,14 +116,33 @@ export const CreatorPageReadSchema = CreatorReadSchema.extend({
         type: z.string(),
         sourceKey: z.string(),
         thumbnailLandscapePath: z.string().nullable(),
+        thumbnailPortraitPath: z.string().nullable(),
+        thumbnailSquarePath: z.string().nullable(),
+        logoImagePath: z.string().nullable(),
+        authorHeadshotPath: z.string().nullable(),
         episodeCount: z.number(),
+        years: z.string(),
+        firstPublishedDate: ApiDateTimeSchema.nullable(),
         links: z.array(z.string()),
     })),
+    /** When the newest episode of all of the creator's collections came out. */
+    lastPublishedDate: ApiDateTimeSchema.nullable(),
     accounts: z.array(CreatorPageAccountReadSchema),
     /** Downloaded episodes the creator places in another of its collections than the one they are in. */
     reassignedCount: z.number().default(0),
 })
 export type CreatorPageRead = z.infer<typeof CreatorPageReadSchema>
+
+/** One page of the episodes of all of a creator's collections, newest first. */
+export const CreatorEpisodePageReadSchema = z.object({
+    items: z.array(EpisodeReadViewSchema.extend({
+        collectionSlug: z.string(),
+        collectionTitle: z.string(),
+    })),
+    nextCursor: z.string().nullable().optional(),
+    hasMore: z.boolean(),
+})
+export type CreatorEpisode = z.infer<typeof CreatorEpisodePageReadSchema>['items'][number]
 
 /** The form that adds a creator: where each of its sections goes. */
 export const CreatorCreateSchema = z.object({
@@ -137,6 +164,7 @@ export type CreatorCreateOut = z.output<typeof CreatorCreateSchema>
 
 /** The form that changes how VODLoft follows a creator. */
 export const CreatorUpdateSchema = z.object({
+    title: z.string().trim().min(1, 'Give them a name').max(255).default(''),
     newSections: z.enum(NewSectionActionValues).default('ask'),
     genre: z.string().trim().max(200).default(''),
     contentRating: z.string().trim().max(50).default(''),
@@ -150,6 +178,8 @@ export const CollectionCreatorMatchSchema = z.object({
     lookupId: z.string().nullable().optional(),
     siteName: z.string(),
     creatorLabel: z.string(),
+    /** What the creator's Site calls the things the creator adds, such as playlists on YouTube. */
+    sectionNames: CreatorSectionNamesSchema,
     ref: z.string(),
     url: z.string().nullable().optional(),
     title: z.string(),
@@ -176,3 +206,13 @@ export const CollectionCreatorLeaveSchema = z.object({
     creatorTitle: z.string(),
 })
 export type CollectionCreatorLeave = z.infer<typeof CollectionCreatorLeaveSchema>
+
+/** The type and episode identification of a section of a creator that becomes a collection of its own. */
+export const CreatorCollectionFormSchema = z.object({
+    type: z.union([z.enum(CollectionTypeReg.values), z.literal('')]).default('')
+        .pipe(z.enum(CollectionTypeReg.values, {error: 'Choose a collection type'})),
+    episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')]).default('')
+        .pipe(z.enum(EpisodeIdentifierReg.values, {error: 'Choose how its episodes are identified'})),
+})
+export type CreatorCollectionFormIn = z.input<typeof CreatorCollectionFormSchema>
+export type CreatorCollectionFormOut = z.output<typeof CreatorCollectionFormSchema>

@@ -4,6 +4,7 @@ import CollectionPreviewCard from "./CollectionPreviewCard";
 import {useDailywireShow, useDailywireUserInfo, useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
 import {DAILYWIRE_SOURCE_KEY, SourceFeature, sourceHas} from "../../types/schemas/source";
 import ReadMore from "../../utils/ReadMore";
+import {dailywireShowDefaults, listedCollectionDefaults} from "./collectionDefaults";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {ZodSafeParseResult} from "zod";
@@ -12,7 +13,7 @@ import {
     CollectionCreatePayloadSchema,
     type CollectionCreateFormIn, CollectionCreatePayloadOut, CollectionCreatePayloadIn,
 } from "../../types/schemas/collection";
-import {EpisodeIdentifierReg, EpisodeIdentifierValue, CollectionTypeReg, CollectionTypeValue} from "../../types/collection";
+import {EpisodeIdentifierReg, CollectionTypeReg} from "../../types/collection";
 import Select from "react-select";
 import {UseQueryResult} from "@tanstack/react-query";
 import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
@@ -76,19 +77,12 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
     useEffect(() => {
         if (!listed.data) return;
         setValue("membershipLevel", DwMembershipLevelReg.Enum.FREE, {shouldValidate: true});
-        // Suggest the type the backend guessed from the name. A series is numbered by the Source's own
-        // seasons when it has them, and a podcast or a series without seasons by date.
+        // Suggest the type the backend guessed from the name, and identification to match.
         if (lastListedUrlRef.current === listed.data.sharingUrl) return;
         lastListedUrlRef.current = listed.data.sharingUrl;
-        const type = CollectionTypeReg.normalize(listed.data.probableCollectionType) ?? CollectionTypeReg.Enum.series;
-        setValue("type", type, {shouldDirty: true});
-        setValue(
-            "episodeIdentifier",
-            type === CollectionTypeReg.Enum.series && listed.data.seasons.length
-                ? EpisodeIdentifierReg.Enum.seasonal
-                : EpisodeIdentifierReg.Enum.date_based,
-            {shouldDirty: true},
-        );
+        const suggested = listedCollectionDefaults(listed.data);
+        setValue("type", suggested.type, {shouldDirty: true});
+        setValue("episodeIdentifier", suggested.episodeIdentifier, {shouldDirty: true});
     }, [listed.data, setValue]);
 
     // --- Fetch DailyWire data using the slug
@@ -132,13 +126,9 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         const currentUrl = watchedUrl ?? "";
         if (currentUrl === (lastPrefilledUrlRef.current ?? "")) return;
 
-        const inferredType: CollectionTypeValue | "" = CollectionTypeReg.normalize(dw.data.probableCollectionType) ?? "";
-        const inferredEpisodeId: EpisodeIdentifierValue | "" = inferredType === CollectionTypeReg.Enum.series
-            ? EpisodeIdentifierReg.Enum.seasonal
-            : (EpisodeIdentifierReg.normalize(dw.data.probableEpisodeIdentification) ?? "");
-
-        setValue("type", inferredType, {shouldDirty: true});
-        setValue("episodeIdentifier", inferredEpisodeId, {shouldDirty: true});
+        const suggested = dailywireShowDefaults(dw.data);
+        setValue("type", suggested.type, {shouldDirty: true});
+        setValue("episodeIdentifier", suggested.episodeIdentifier, {shouldDirty: true});
 
         // Remember that we prefetched for this URL to prevent reapplying on mount/reload
         lastPrefilledUrlRef.current = currentUrl;

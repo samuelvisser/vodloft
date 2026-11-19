@@ -8,8 +8,9 @@ import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
@@ -17,8 +18,11 @@ from backend.services.reassigned import move_and_rename, reassigned_in_creator
 from backend.api.models.creator import (
     CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorPageAPIRead,
     CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd, CollectionCreatorLeaveAPIRead, CollectionCreatorMatchAPIRead,
+    CreatorEpisodeAPIRead, CreatorEpisodePageAPIRead,
 )
+from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from backend.api.models.collection import CollectionAPIRead
+from backend.api.endpoints.episodes.service import episode_view_columns
 from backend.db.models import Creator, CreatorAccount, Collection, Episode
 from backend.services import creators
 from backend.services.creators import NewCollectionSettings, SectionPlan
@@ -204,10 +208,15 @@ class _CreatorRead:
     collections: list = field(default_factory=list)
     accounts: list | None = None
     reassigned_count: int = 0
+    last_published_date: datetime | None = None
 
     @property
     def creator_label(self) -> str:
         return creators.creator_label(self.creator)
+
+    @property
+    def section_names(self):
+        return creators.creator_sections(self.creator)
 
     @property
     def kind(self) -> str:
@@ -238,7 +247,15 @@ def list_creators(s: Session) -> list[CreatorAPIRead]:
 class _CollectionRead:
     collection: Collection
     episode_count: int
+    first_published_date: datetime | None
+    last_published_date: datetime | None
     links: list[str]
+
+    @property
+    def years(self) -> str:
+        if self.first_published_date is None or self.last_published_date is None:
+            return ""
+        return f"{self.first_published_date.year}-{self.last_published_date.year}"
 
     def __getattr__(self, name):
         return getattr(self.collection, name)
@@ -252,10 +269,15 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     if creator is None:
         raise CreatorNotFoundError(f"Creator '{slug}' not found")
     collections_count, episodes = _counts(s, [creator.id])
-    per_collection = dict(s.execute(
-        select(Episode.collection_id, func.count()).where(Episode.collection_id.in_([c.id for c in creator.collections]))
-        .group_by(Episode.collection_id)
-    ).all())
+    collection_ids = [c.id for c in creator.collections]
+    stats = {
+        row.collection_id: row for row in s.execute(
+            select(
+                Episode.collection_id, func.count().label("episode_count"),
+                func.min(Episode.published_date).label("first"), func.max(Episode.published_date).label("last"),
+            ).where(Episode.collection_id.in_(collection_ids)).group_by(Episode.collection_id)
+        )
+    }
     kept = {
         account.id: creators.sections_in_library(
             s, account.source_key, account.site_ref, account.sections, account.main_collection,
@@ -266,7 +288,9 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     titles = dict(s.execute(select(Collection.slug, Collection.title).where(Collection.slug.in_(slugs))).all())
     collections = [
         _CollectionRead(
-            collection, per_collection.get(collection.id, 0),
+            collection, stats[collection.id].episode_count if collection.id in stats else 0,
+            stats[collection.id].first if collection.id in stats else None,
+            stats[collection.id].last if collection.id in stats else None,
             [
                 section.title for account in creator.accounts for section in account.sections
                 if kept[account.id].get(section.ref) == collection.slug
@@ -284,7 +308,51 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     return CreatorPageAPIRead.model_validate(_CreatorRead(
         creator, collections_count.get(creator.id, 0), episodes.get(creator.id, 0),
         collections=collections, accounts=accounts, reassigned_count=len(reassigned_in_creator(s, creator)),
+        last_published_date=max((row.last for row in stats.values() if row.last is not None), default=None),
     ))
+
+
+def creator_episodes(s: Session, slug: str, *, cursor: str | None, limit: int) -> CreatorEpisodePageAPIRead:
+    """One page of the episodes of all of the creator's collections, newest first, and those without a date last."""
+    creator_id = s.scalar(select(Creator.id).where(Creator.slug == slug))
+    if creator_id is None:
+        raise CreatorNotFoundError(f"Creator '{slug}' not found")
+    stmt = (
+        select(*episode_view_columns(), Collection.slug.label("collection_slug"), Collection.title.label("collection_title"))
+        .join(Collection, Episode.collection_id == Collection.id)
+        .where(Collection.creator_id == creator_id)
+        .order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
+    )
+    if cursor:
+        values = decode_cursor(cursor)
+        cursor_id, published_raw = values.get("id"), values.get("published_at")
+        if (
+            values.get("kind") != "creator-episodes" or values.get("creator") != slug
+            or not isinstance(cursor_id, int) or isinstance(cursor_id, bool)
+            or (published_raw is not None and not isinstance(published_raw, str))
+        ):
+            raise InvalidCursorError("Cursor does not match this list")
+        if published_raw is None:
+            stmt = stmt.where(Episode.published_date.is_(None), Episode.id < cursor_id)
+        else:
+            published_at = datetime.fromisoformat(published_raw)
+            stmt = stmt.where(or_(
+                Episode.published_date < published_at,
+                and_(Episode.published_date == published_at, Episode.id < cursor_id),
+                Episode.published_date.is_(None),
+            ))
+    rows = s.execute(stmt.limit(limit + 1)).mappings().all()
+    next_cursor = None
+    if len(rows) > limit:
+        rows = rows[:limit]
+        last = rows[-1]
+        next_cursor = encode_cursor({
+            "kind": "creator-episodes", "creator": slug, "id": last["id"],
+            "published_at": last["published_date"].isoformat() if last["published_date"] else None,
+        })
+    return CreatorEpisodePageAPIRead(
+        items=[CreatorEpisodeAPIRead.model_validate(row) for row in rows], limit=limit, next_cursor=next_cursor,
+    )
 
 
 def move_creator_section(
@@ -328,6 +396,10 @@ def _account(s: Session, slug: str, account_id: int) -> CreatorAccount:
 
 def update_creator(s: Session, slug: str, body: CreatorAPIUpdate) -> CreatorPageAPIRead:
     creator = _creator(s, slug)
+    title = (body.title or "").strip()
+    if title and title != creator.title:
+        creators.rename_creator(creator, title)
+        creator.title_from_user = True
     creators.update_creator_settings(s, creator, creators.CreatorSettings(
         NewSectionAction(body.new_sections), body.genre, body.content_rating,
     ))
@@ -341,6 +413,8 @@ def add_sections(
     creators.place_sections(
         s, _account(s, slug, account_id), [SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections],
         added_by_id=added_by_id,
+        type=CollectionType(body.type) if body.type else None,
+        episode_identifier=EpisodeIdentifier(body.episode_identifier) if body.episode_identifier else None,
     )
     s.flush()
     return creator_page(s, slug)
@@ -381,6 +455,13 @@ def combine_creator(s: Session, slug: str, body: CreatorCombineAPIIn) -> Creator
     creators.combine_creators(s, creator, other)
     s.expire_all()
     return creator_page(s, slug)
+
+
+def delete_creator(s: Session, slug: str) -> None:
+    """Take the creator out of the Library, and keep its collections as plain ones.
+
+    ``s`` is a write transaction's session."""
+    creators.delete_creator(s, _creator(s, slug))
 
 
 def check_creator(s: Session, slug: str) -> None:
@@ -441,6 +522,7 @@ class _Match:
     details: CreatorDetails
     site_name: str
     creator_label: str
+    section_names: object
     section: object | None
     kept_by: str | None
     creator_slug: str | None = None
@@ -458,7 +540,7 @@ def collection_creator_match(s: Session, collection_slug: str, source_key: str, 
     overlaps = creators.join_overlaps(s, collection, source_key, details, existing)
     movable = keeper is not None and any(overlap.ref == section.ref and overlap.can_move_here for overlap in overlaps)
     return CollectionCreatorMatchAPIRead.model_validate(_Match(
-        details, site.name, site.creator_label, section if keeper is None or movable else None,
+        details, site.name, site.creator_label, site.creator_sections, section if keeper is None or movable else None,
         keeper.title if keeper is not None and not movable else None,
         existing.creator.slug if existing is not None else None,
         overlaps,

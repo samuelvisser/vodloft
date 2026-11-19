@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from backend.api.models.creator import (
     CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorLookupAPIRequest,
-    CreatorPageAPIRead, CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd,
+    CreatorEpisodePageAPIRead, CreatorPageAPIRead, CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd,
 )
+from backend.api.pagination import InvalidCursorError
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
 from backend.api.steps import STEPS_RESPONSE, stream_steps
 from backend.app import db_session
@@ -14,7 +15,7 @@ from backend.services.source_requests import asking_source
 
 from . import lookups
 from .service import (
-    CreatorNotFoundError, account_link, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, list_creators,
+    CreatorNotFoundError, account_link, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
     look_up_creator, lookup_creator_label, move_creator_reassigned, move_creator_section, update_creator,
 )
 
@@ -69,6 +70,22 @@ def creator_get(slug: str):
             return creator_page(s, slug)
         except CreatorNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{slug}/episodes", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=CreatorEpisodePageAPIRead)
+def creator_episode_page(
+        slug: str,
+        cursor: str | None = Query(default=None, max_length=2048),
+        limit: int = Query(default=12, ge=1, le=100),
+):
+    """One page of the episodes of all of the creator's collections, newest first, for the row on their page."""
+    with db_session() as s:
+        try:
+            return creator_episodes(s, slug, cursor=cursor, limit=limit)
+        except CreatorNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (InvalidCursorError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _found(work):
@@ -135,6 +152,12 @@ def creator_combine(slug: str, body: CreatorCombineAPIIn):
 def creator_move_reassigned(slug: str):
     """Move every reassigned episode of the creator to the collection it belongs in now, with its files."""
     return _found(lambda: run_write_transaction(lambda s: move_creator_reassigned(s, slug)))
+
+
+@router.delete("/{slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], status_code=status.HTTP_204_NO_CONTENT)
+def creator_delete(slug: str):
+    """Take the creator out of the Library. Its collections stay, with their episodes and files, as plain collections."""
+    _found(lambda: run_write_transaction(lambda s: delete_creator(s, slug)))
 
 
 @router.post("/{slug}/check", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], status_code=status.HTTP_202_ACCEPTED)

@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export type CollectionFormValue = {
   name: string
   author: string
@@ -23,9 +25,11 @@ export const defaultCollectionFormValue: CollectionFormValue = {
 type Props = {
   value: CollectionFormValue
   onChange: (value: CollectionFormValue) => void
+  /** The creator the collection belongs to, whose name is its author. */
+  creator?: { slug: string, title: string } | null
 }
 
-export default function CollectionForm({ value, onChange }: Props) {
+export default function CollectionForm({ value, onChange, creator }: Props) {
 
   return (
     <>
@@ -48,9 +52,17 @@ export default function CollectionForm({ value, onChange }: Props) {
           className="input"
           type="text"
           placeholder="Ben Shapiro"
-          value={value.author}
+          value={creator ? creator.title : value.author}
           onChange={(e) => onChange({ ...value, author: e.target.value })}
+          disabled={!!creator}
+          aria-describedby={creator ? 'collection-author-help' : undefined}
         />
+        {creator && (
+          <div className="help" id="collection-author-help">
+            The name of its creator, {creator.title}. Change it on the{' '}
+            <Link to={`/edit-creator/${creator.slug}`}>creator's Edit page</Link>.
+          </div>
+        )}
       </div>
 
 

@@ -1,0 +1,6 @@
+@media (max-width: 460px) {
+    /* The site name loses its "Open on" first, then shortens, so the buttons beside it keep one row. */
+    .open-on-site { flex-shrink: 1; min-width: 0; }
+    .open-on-site-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .open-on-site-prefix { display: none; }
+}

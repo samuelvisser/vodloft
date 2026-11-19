@@ -11,7 +11,7 @@ Wire host, and collections from any other link can join them too.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 from sqlalchemy import select
@@ -28,7 +28,7 @@ from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus
 from backend.utils.helpers import generate_uuid, slugify
 from sources import (
-    CreatorDetails, CreatorPreset, Feature, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source, site_of,
+    CreatorDetails, CreatorPreset, CreatorSectionNames, Feature, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source, site_of,
 )
 
 
@@ -312,6 +312,21 @@ def _place(
     return made
 
 
+def belong_to(collection: Collection, creator: Creator | None) -> None:
+    """Make the collection one of the creator's, or a plain one again with None. A creator's collection takes the
+    creator's name as its author."""
+    collection.creator = creator
+    if creator is not None:
+        collection.author_name = creator.title
+
+
+def rename_creator(creator: Creator, title: str) -> None:
+    """Give the creator a new name, which its collections take as their author."""
+    creator.title = title
+    for collection in creator.collections:
+        collection.author_name = title
+
+
 def _new_collection(
     s: Session, account: CreatorAccount, settings: NewCollectionSettings, *, title: str, slug: str, url: str,
     description: str | None, image: str | None, added_by_id: int | None,
@@ -325,7 +340,7 @@ def _new_collection(
         genre=creator.genre, content_rating=creator.content_rating,
     )
     add_collection(s, collection, added_by_id=added_by_id)
-    collection.creator = creator
+    belong_to(collection, creator)
     return collection
 
 
@@ -340,10 +355,12 @@ def _settings_of(creator: Creator) -> NewCollectionSettings:
 
 def place_sections(
     s: Session, account: CreatorAccount, plans: list[SectionPlan], *, added_by_id: int | None = None,
+    type: CollectionType | None = None, episode_identifier: EpisodeIdentifier | None = None,
 ) -> list[Collection]:
     """Add sections of a creator's account that is in the Library to the creator's collections, or ignore them.
 
-    ``s`` is a write transaction's session."""
+    A section that becomes a collection of its own gets ``type`` and ``episode_identifier`` when they are given, and
+    otherwise those of the creator's own collection. ``s`` is a write transaction's session."""
     creator = account.creator
     sections = {section.ref: section for section in account.sections}
     unknown = [plan.ref for plan in plans if plan.ref not in sections]
@@ -355,7 +372,11 @@ def place_sections(
     adding = [plan for plan in plans if plan.target is not SectionTarget.SKIP]
     if not adding:
         return []
-    return _place(s, account, adding, _settings_of(creator), added_by_id=added_by_id)
+    settings = _settings_of(creator)
+    settings = replace(
+        settings, type=type or settings.type, episode_identifier=episode_identifier or settings.episode_identifier,
+    )
+    return _place(s, account, adding, settings, added_by_id=added_by_id)
 
 
 def _as_ref(section: CreatorSection) -> SectionRef:
@@ -402,14 +423,17 @@ class FollowResult:
 def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails, *, now: datetime) -> FollowResult:
     """Take in what the Site says about a creator's account now: its handle and its sections' titles and counts, the
     sections it did not have before, which the creator's setting adds, ignores or asks about, new playlists too, and
-    for the creator's first account the creator's name, pictures and facts. Sections the Site no longer lists stay,
+    for the creator's first account the creator's name (unless the user gave it one), pictures and facts. Sections the Site no longer lists stay,
     with what they hold.
 
     ``details`` was looked up before the write transaction; ``s`` is a write transaction's session."""
     creator = account.creator
     if creator.accounts[0] is account:
+        # A name the user gave stays.
+        if details.title and details.title != creator.title and not creator.title_from_user:
+            rename_creator(creator, details.title)
         for field, value in (
-            ("title", details.title), ("description", details.description),
+            ("description", details.description),
             ("avatar_path", details.avatar_url), ("banner_path", details.banner_url),
             ("links", list(details.links)), ("facts", list(details.facts)),
         ):
@@ -576,7 +600,7 @@ def join_creator(
             _switch_off(collection, overlap.ref)
             changed.add(collection.id)
     section.status = SectionStatus.KNOWN.value
-    collection.creator = creator
+    belong_to(collection, creator)
     if section.kind == SectionKind.FEED and section.role == SectionRole.MAIN and account.main_collection is None:
         account.main_collection = collection
     s.flush()
@@ -609,6 +633,17 @@ def leave_creator(s: Session, collection: Collection) -> None:
         if account.main_collection_id == collection.id:
             account.main_collection = None
     collection.creator = None
+    s.flush()
+
+
+def delete_creator(s: Session, creator: Creator) -> None:
+    """Take a creator out of the Library. Its collections stay, as plain collections with their episodes, files and
+    settings; VODLoft stops looking for the creator's new sections.
+
+    ``s`` is a write transaction's session."""
+    for collection in list(creator.collections):
+        leave_creator(s, collection)
+    s.delete(creator)
     s.flush()
 
 
@@ -648,6 +683,13 @@ def creator_label(creator: Creator) -> str:
     return sites[0].creator_label if len(sites) == 1 else CREATOR_LABEL
 
 
+def creator_sections(creator: Creator) -> CreatorSectionNames:
+    """What the creator adds, which VODLoft looks for: what their Site calls it, such as playlists on YouTube, when
+    all their accounts and collections are on one Site, and otherwise playlists and shows."""
+    sites = list(_sites(creator).values())
+    return sites[0].creator_sections if len(sites) == 1 else CreatorSectionNames()
+
+
 def creator_kind(creator: Creator) -> str:
     """What the creator is, with their Site when they are on one only: "YouTube creator", "The Daily Wire host" or
     "Bandcamp artist", and otherwise "creator" or "artist"."""
@@ -669,7 +711,7 @@ def add_to_creator(s: Session, collection: Collection, creator: Creator) -> None
             f"{collection.title} is a part of {creator.title}'s own page: add it to the {creator_label(creator)} "
             "behind its link instead", field="creator_slug",
         )
-    collection.creator = creator
+    belong_to(collection, creator)
     s.flush()
 
 
@@ -685,7 +727,7 @@ def combine_creators(s: Session, creator: Creator, other: Creator) -> None:
         other.accounts.remove(account)
         creator.accounts.append(account)
     for collection in list(other.collections):
-        collection.creator = creator
+        belong_to(collection, creator)
     for field in ("description", "avatar_path", "banner_path", "genre", "content_rating"):
         if getattr(creator, field) is None and getattr(other, field) is not None:
             setattr(creator, field, getattr(other, field))
@@ -726,6 +768,6 @@ def split_account(s: Session, account: CreatorAccount, details: CreatorDetails |
     own.accounts.append(account)
     for collection in list(creator.collections):
         if collection.slug in kept:
-            collection.creator = own
+            belong_to(collection, own)
     s.flush()
     return own

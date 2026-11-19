@@ -23,7 +23,7 @@ import {
 import {useFrontendPuller} from './puller'
 import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/siteSettings'
 import {
-    CreatorLookupReadSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorLookupRead, type CreatorPageRead, type CreatorRead,
+    CreatorEpisodePageReadSchema, CreatorLookupReadSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorLookupRead, type CreatorPageRead, type CreatorRead,
     CollectionCreatorLeaveSchema, CollectionCreatorMatchSchema, type CollectionCreatorLeave, type CollectionCreatorMatch,
     type SectionPlan,
 } from '../types/schemas/creator'
@@ -844,15 +844,44 @@ export function useCreator(slug: string | undefined) {
     })
 }
 
+const CREATOR_EPISODE_PAGE_SIZE = 12
+
+/** The episodes of all of a creator's collections, newest first, a page at a time. */
+export function useCreatorEpisodes(slug: string | undefined) {
+    return useInfiniteQuery({
+        queryKey: ['creator', slug, 'episodes'] as const,
+        enabled: !!slug && can('library'),
+        initialPageParam: null as string | null,
+        queryFn: ({pageParam, signal}) => {
+            const params = new URLSearchParams({limit: String(CREATOR_EPISODE_PAGE_SIZE)})
+            if (pageParam) params.set('cursor', pageParam)
+            return fetchParsed(`${apiUrl()}/creators/${encodeURIComponent(slug ?? '')}/episodes?${params}`, CreatorEpisodePageReadSchema, signal)
+        },
+        getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    })
+}
+
 /** Add sections of one of a creator's accounts to the creator's collections, or ignore them. Answers with the
  * creator's page. */
-export async function addCreatorSections(slug: string, accountId: number, sections: SectionPlan[]): Promise<CreatorPageRead> {
-    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections`, {
+/**
+ * Add sections of a creator's account to its collections, or ignore them. A section that becomes a collection of its
+ * own takes ``type`` and ``episodeIdentifier`` when they are given, and otherwise those of the creator's collection.
+ */
+export function creatorSectionsRequest(slug: string, accountId: number, body: {
+    sections: SectionPlan[]
+    type?: string
+    episodeIdentifier?: string
+}): Promise<Response> {
+    return fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({sections}),
+        body: JSON.stringify(body),
     })
+}
+
+export async function addCreatorSections(slug: string, accountId: number, sections: SectionPlan[]): Promise<CreatorPageRead> {
+    const response = await creatorSectionsRequest(slug, accountId, {sections})
     if (!response.ok) throw await responseError(response)
     return CreatorPageReadSchema.parse(await response.json())
 }

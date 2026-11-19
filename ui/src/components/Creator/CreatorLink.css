@@ -1,0 +1,14 @@
+.creator-link {
+    display: inline-flex; align-items: center; gap: 8px; max-width: 100%; margin: 2px 0 4px;
+    color: inherit; font-weight: 600; text-decoration: none;
+}
+.creator-link-avatar {
+    flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; object-fit: cover;
+    display: inline-grid; place-items: center; font-size: 10px; font-weight: 800;
+}
+.creator-link-avatar--empty { background: rgba(100, 116, 139, 0.2); }
+.creator-link-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.creator-link-chevron { flex: 0 0 auto; font-size: .7em; color: var(--muted); transition: transform .15s ease; }
+.creator-link:hover .creator-link-name { text-decoration: underline; }
+.creator-link:hover .creator-link-chevron { transform: translateX(2px); }
+.creator-link:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; border-radius: 6px; }
