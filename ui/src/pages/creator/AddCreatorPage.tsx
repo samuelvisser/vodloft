@@ -31,8 +31,8 @@ function presetText(key: CreatorCreateIn['preset'], lists: string, hasFeeds: boo
         help: `All ${hasFeeds ? `feeds and ${creator.creatorSections.many}` : creator.creatorSections.many} start skipped.`,
     }
     if (music) {
-        if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with each album as a season${hasFeeds ? ' and the other tracks by year' : ''}.`}
-        if (key === 'per_list') return {label: 'A collection per album', help: 'Each album is a Music collection of its own.'}
+        if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with ${lists === 'albums' ? 'every album' : `each ${lists.replace(/s$/, '')} as an album`}${hasFeeds ? ' and the other tracks by year' : ''}.`}
+        if (key === 'per_list') return {label: 'A collection per album', help: `Each ${lists === 'albums' ? 'album' : lists.replace(/s$/, '')} is a Music collection of its own.`}
         return skipped
     }
     if (key === 'one_show') {
@@ -55,13 +55,19 @@ function choiceOf(plan: SectionPlan | undefined): Choice {
     return plan?.target ?? 'skip'
 }
 
+/** What happens with a list the creator adds later, to start with: an artist's new playlist is a new album of
+ *  theirs, where the Site's lists can be seasons; anyone else is asked. */
+function newSectionsFor(creator: CreatorLookupRead, music: boolean): CreatorCreateIn['newSections'] {
+    return music && creator.linkSeasons ? 'season' : 'ask'
+}
+
 const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
 
 /** What the Site's sections can become, in the words of this creator. */
 function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, music: boolean) {
     const spec: Partial<Record<Choice, {label: string}>> = {}
     if (section.kind === 'feed') spec.main = {label: 'Main collection'}
-    else if (section.kind === 'list' && creator.linkSeasons) spec.main = {label: `Main collection, as ${music ? 'an album' : 'a playlist'} season`}
+    else if (section.kind === 'list' && creator.linkSeasons) spec.main = {label: music ? 'Main collection, as an album' : 'Main collection, as a playlist season'}
     spec.own = {label: 'A collection of its own'}
     spec.skip = {label: 'Skip'}
     return createSelectRegistry(`CreatorSection-${creator.ref}-${section.ref}-${music}`, spec as Record<Choice, {label: string}>)
@@ -154,10 +160,11 @@ export default function AddCreatorPage() {
                 setCreator(found)
                 setLabel(found.creatorLabel)
                 setValue('type', found.music ? 'music' : 'series')
+                setValue('newSections', newSectionsFor(found, found.music))
                 const preset = found.presets[0]
                 if (preset) {
                     setValue('preset', preset.key)
-                    setValue('sections', preset.plan)
+                    setValue('sections', found.music ? preset.musicPlan : preset.plan)
                 }
             })
             .catch((exc) => { if (!controller.signal.aborted) setError(exc instanceof Error ? exc.message : String(exc)) })
@@ -179,11 +186,17 @@ export default function AddCreatorPage() {
         .flatMap((section) => registries.get(section.ref)?.options.map((option) => option.label) ?? []),
     [creator, registries])
 
-    const choosePreset = (key: CreatorCreateIn['preset']) => {
+    const choosePreset = (key: CreatorCreateIn['preset'], asArtist = music) => {
         const chosen = creator?.presets.find((item) => item.key === key)
         if (!chosen || !key) return
         setValue('preset', key)
-        setValue('sections', chosen.plan, {shouldValidate: true})
+        setValue('sections', asArtist ? chosen.musicPlan : chosen.plan, {shouldValidate: true})
+    }
+    // An artist starts from what the preset keeps of an artist, such as only their albums on YouTube.
+    const chooseKind = (kind: 'series' | 'music') => {
+        setValue('type', kind, {shouldValidate: true})
+        if (creator) setValue('newSections', newSectionsFor(creator, kind === 'music'))
+        choosePreset(preset ?? creator?.presets[0]?.key, kind === 'music')
     }
     const choose = (section: string, choice: Choice) => {
         setValue('sections', plans.map((plan) => plan.ref === section ? {ref: section, target: choice} : plan), {shouldValidate: true})
@@ -245,6 +258,8 @@ export default function AddCreatorPage() {
     const listsTitle = listLabel === 'Album' ? 'Albums' : listLabel ? 'Playlists' : hasShows ? 'Shows' : 'Playlists'
     const lists = listsTitle.toLowerCase()
     const hasFeeds = creator.sections.some((section) => section.kind === 'feed')
+    const feeds = new Set(creator.sections.filter((section) => section.kind === 'feed').map((section) => section.ref))
+    const keepsFeeds = (plan: SectionPlan[]) => plan.some((item) => feeds.has(item.ref) && item.target !== 'skip')
     // A Daily Wire host has no collection of their own: each show is one.
     const hasMain = [...registries.values()].some((registry) => registry.options.some((option) => option.value === 'main'))
     const groups: [string, CreatorSectionRead[]][] = [
@@ -291,7 +306,7 @@ export default function AddCreatorPage() {
                             name="creator-kind"
                             ariaLabelledBy="creator-kind-label"
                             value={music ? 'music' : 'series'}
-                            onChange={(value) => setValue('type', value as 'series' | 'music', {shouldValidate: true})}
+                            onChange={(value) => chooseKind(value as 'series' | 'music')}
                             options={[
                                 {
                                     value: 'series',
@@ -319,8 +334,8 @@ export default function AddCreatorPage() {
                         {creator.presets.map((item) => (
                             <label key={item.key} className={`creator-preset${preset === item.key ? ' is-on' : ''}`}>
                                 <input type="radio" name="preset" checked={preset === item.key} onChange={() => choosePreset(item.key)}/>
-                                <b>{presetText(item.key, lists, hasFeeds, creator, music).label}</b>
-                                <span>{presetText(item.key, lists, hasFeeds, creator, music).help}</span>
+                                <b>{presetText(item.key, lists, music ? keepsFeeds(item.musicPlan) : hasFeeds, creator, music).label}</b>
+                                <span>{presetText(item.key, lists, music ? keepsFeeds(item.musicPlan) : hasFeeds, creator, music).help}</span>
                             </label>
                         ))}
                     </fieldset>
@@ -386,10 +401,10 @@ export default function AddCreatorPage() {
                 {!into && <div className="form-row creator-membership">
                     <label htmlFor="creator-new-sections">When the {creatorWord} adds {/^[aeiou]/.test(lists) ? 'an' : 'a'} {lists.replace(/s$/, '')}</label>
                     <SimpleSelect
-                        inputId="creator-new-sections" registry={newSectionActionReg(creatorWord, [{name: creator.siteName, linkSeasons: creator.linkSeasons, creatorSections: creator.creatorSections}])} value={newSections}
+                        inputId="creator-new-sections" registry={newSectionActionReg(creatorWord, [{name: creator.siteName, linkSeasons: creator.linkSeasons, creatorSections: creator.creatorSections}], music)} value={newSections}
                         onChange={(value) => setValue('newSections', value as CreatorCreateIn['newSections'])}
                     />
-                    <div className="help">{newSectionActionReg(creatorWord, [{name: creator.siteName, linkSeasons: creator.linkSeasons, creatorSections: creator.creatorSections}]).meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
+                    <div className="help">{newSectionActionReg(creatorWord, [{name: creator.siteName, linkSeasons: creator.linkSeasons, creatorSections: creator.creatorSections}], music).meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
                 </div>}
 
                 {sourceKey === 'dailywire' && (

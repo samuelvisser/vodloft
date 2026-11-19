@@ -612,6 +612,32 @@ def test_the_user_decides_whether_a_creator_the_site_isnt_sure_of_is_an_artist(c
     assert set(session.scalars(select(Collection.type))) == {"series"}
 
 
+def test_an_artist_on_a_video_site_keeps_only_their_albums(client, session):
+    from backend.db.models import Collection
+    from backend.types.link_season_types import OutsideVideos
+
+    _steps, body = _lookup(client)
+    for preset in ("one_show", "per_list"):
+        music = {item["ref"]: item["target"] for item in next(p for p in body["presets"] if p["key"] == preset)["musicPlan"]}
+        # The channel's uploads are much more than the artist's albums, so its feeds start skipped.
+        assert {music[ref] for ref in ("videos", "streams", "shorts")} == {"skip"}
+    music = {item["ref"]: item["target"] for item in next(p for p in body["presets"] if p["key"] == "one_show")["musicPlan"]}
+    assert music["PLcabin"] == "main"
+
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "type": "music", "sections": [
+        {"ref": ref, "target": target} for ref, target in music.items()
+    ]})
+    assert response.status_code == 201, response.text
+    # Without a feed the artist's collection holds only what its playlists give it.
+    assert session.scalar(select(Collection.outside_videos).where(Collection.slug == "UCworkshop")) == OutsideVideos.ONLY.value
+
+    # A feed that joins it later brings the uploads back.
+    added = client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "videos", "target": "main"}]})
+    assert added.status_code == 200, added.text
+    session.expire_all()
+    assert session.scalar(select(Collection.outside_videos).where(Collection.slug == "UCworkshop")) == OutsideVideos.LEAVE_OUT.value
+
+
 def test_a_creator_the_site_knows_isnt_an_artist_isnt_added_as_one(client, tube, monkeypatch):
     from dataclasses import replace
 

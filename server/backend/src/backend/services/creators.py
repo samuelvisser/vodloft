@@ -25,7 +25,7 @@ from backend.services.sites import collection_site, site_record
 from backend.types.creator_types import NewSectionAction, SectionStatus, SectionTarget
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
-from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus
+from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 from backend.utils.helpers import generate_uuid, slugify
 from sources import (
     CreatorDetails, CreatorPreset, CreatorSectionNames, Feature, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source, site_of,
@@ -60,15 +60,17 @@ def _usable(section: SectionRef) -> bool:
     return section.access is None and section.kind is not SectionKind.ITEM
 
 
-def preset_plan(details: CreatorDetails, preset: CreatorPreset) -> list[SectionPlan]:
-    """What a preset does with each section. The user can change any of it before the creator is added."""
+def preset_plan(details: CreatorDetails, preset: CreatorPreset, *, feeds: bool = True) -> list[SectionPlan]:
+    """What a preset does with each section. The user can change any of it before the creator is added. Without
+    ``feeds``, such as for a music artist on a video site, whose uploads are much more than their albums, the feeds
+    start skipped, so the artist's collection holds only what their lists give it."""
     plans = []
     for section in details.sections:
         target = SectionTarget.SKIP
         if preset is not CreatorPreset.PICK and _usable(section):
             # The creator's own collection lists its Shorts and Live too, tagged, so they need no collection of their own.
             if section.kind is SectionKind.FEED:
-                target = SectionTarget.MAIN
+                target = SectionTarget.MAIN if feeds else SectionTarget.SKIP
             elif section.kind is SectionKind.SHOW or preset is CreatorPreset.PER_LIST:
                 target = SectionTarget.OWN
             else:
@@ -102,8 +104,12 @@ def lists_are_seasons(site: Site | None) -> bool:
 
 
 def _takes_uploads(collection: Collection) -> bool:
-    """Whether the collection lists all of a creator's uploads: its Videos page, which has its Shorts and Live too."""
-    return collection.sharing_url is not None and get_source(collection.source_key).is_creator_page(collection.sharing_url)
+    """Whether the collection lists all of a creator's uploads: its Videos page, which has its Shorts and Live too,
+    unless it holds only what its link seasons give it."""
+    return (
+        collection.sharing_url is not None and collection.outside_videos != OutsideVideos.ONLY.value
+        and get_source(collection.source_key).is_creator_page(collection.sharing_url)
+    )
 
 
 def sections_in_library(
@@ -119,12 +125,17 @@ def sections_in_library(
     main_feed = _main_feed(sections)
     slugs[creator_ref] = main_feed.ref if main_feed is not None else ""
     found: dict[str, str] = {}
-    for url, slug in s.execute(
-        select(Collection.sharing_url, Collection.slug).where(Collection.source_key == source_key, Collection.sharing_url.in_(urls))
+    for url, slug, outside in s.execute(
+        select(Collection.sharing_url, Collection.slug, Collection.outside_videos)
+        .where(Collection.source_key == source_key, Collection.sharing_url.in_(urls))
     ):
-        found.setdefault(urls[url], slug)
-    for slug in s.scalars(select(Collection.slug).where(Collection.source_key == source_key, Collection.slug.in_(slugs))):
-        if slugs[slug]:
+        # A collection that holds only what its lists give it, such as an artist's albums, doesn't keep its link's feed.
+        if outside != OutsideVideos.ONLY.value:
+            found.setdefault(urls[url], slug)
+    for slug, outside in s.execute(
+        select(Collection.slug, Collection.outside_videos).where(Collection.source_key == source_key, Collection.slug.in_(slugs))
+    ):
+        if slugs[slug] and not (slug == creator_ref and outside == OutsideVideos.ONLY.value):
             found.setdefault(slugs[slug], slug)
     if main is not None:
         uploads = _takes_uploads(main)
@@ -303,6 +314,12 @@ def _place(
             made.append(main)
         else:
             changed.append(main)
+        # Without a feed, the creator's collection holds only what its lists give it; a feed brings its uploads back.
+        if any(sections[plan.ref].kind == SectionKind.FEED for plan in main_plans):
+            if main.outside_videos == OutsideVideos.ONLY.value:
+                main.outside_videos = OutsideVideos.LEAVE_OUT.value
+        elif main in made:
+            main.outside_videos = OutsideVideos.ONLY.value
         lists = {plan.ref for plan in main_plans if sections[plan.ref].kind == SectionKind.LIST}
         if lists:
             _make_seasons(account, main, lists)

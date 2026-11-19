@@ -122,6 +122,7 @@ class _Section:
 class _Preset:
     key: str
     plan: list[SectionPlan]
+    music_plan: list[SectionPlan]
 
 
 @dataclass
@@ -156,7 +157,14 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
             _Section(section, kept.get(section.ref), titles.get(kept.get(section.ref)))
             for section in details.sections
         ],
-        presets=[_Preset(preset.value, creators.preset_plan(details, preset)) for preset in site.creator_presets],
+        presets=[
+            _Preset(
+                preset.value, creators.preset_plan(details, preset),
+                # A music artist on a site with videos keeps their albums, not all of their uploads.
+                creators.preset_plan(details, preset, feeds=site.audio),
+            )
+            for preset in site.creator_presets
+        ],
         creator_slug=existing.creator.slug if existing is not None else None,
         links=list(details.links), facts=list(details.facts),
     ))

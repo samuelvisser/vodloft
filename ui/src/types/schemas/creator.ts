@@ -53,7 +53,8 @@ export const CreatorLookupReadSchema = z.object({
     links: z.array(z.string()),
     facts: z.array(z.string()),
     sections: z.array(CreatorSectionReadSchema),
-    presets: z.array(z.object({key: z.enum(CreatorPresetValues), plan: z.array(SectionPlanSchema)})),
+    /** What each preset does with the sections; ``musicPlan`` when the creator is added as a music artist. */
+    presets: z.array(z.object({key: z.enum(CreatorPresetValues), plan: z.array(SectionPlanSchema), musicPlan: z.array(SectionPlanSchema)})),
     creatorSlug: z.string().nullable(),
     /** A music artist, whose collections are Music collections. Unless ``musicKnown``, a guess the user can change. */
     music: z.boolean().default(false),

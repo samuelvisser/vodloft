@@ -18,7 +18,7 @@ export type NewSectionSite = {name: string, linkSeasons: boolean, creatorSection
 
 const newSectionActionRegs = new Map<string, ReturnType<typeof makeNewSectionActionReg>>()
 
-function makeNewSectionActionReg(label: string, sites: readonly NewSectionSite[]) {
+function makeNewSectionActionReg(label: string, sites: readonly NewSectionSite[], music: boolean) {
     // A creator on several Sites, such as YouTube and The Daily Wire, says which of their new ones become seasons.
     const several = new Set(sites.map((site) => site.name)).size > 1
     const named = (list: readonly NewSectionSite[]) => [...new Set(list.map((site) => (
@@ -26,24 +26,27 @@ function makeNewSectionActionReg(label: string, sites: readonly NewSectionSite[]
     )))].join(' and ')
     const seasons = sites.filter((site) => site.linkSeasons)
     const others = sites.filter((site) => !site.linkSeasons)
-    const seasonHelp = `New ${named(seasons)} become seasons of the ${label}'s own collection.`
+    // An artist's lists are albums of their own collection.
+    const season = music ? 'album' : 'season'
+    const seasonHelp = `New ${named(seasons)} become ${season}s of the ${label}'s own collection.`
         + (others.length ? ` New ${named(others)} can't be seasons, so each gets a collection of its own.` : '')
-    return createSelectRegistry(`NewSectionAction-${label}-${named(seasons)}-${named(others)}`, {
+    return createSelectRegistry(`NewSectionAction-${label}-${music}-${named(seasons)}-${named(others)}`, {
         ask: {label: 'Ask me', help: `Sends a message, and shows the new one on the ${label}'s Edit page with the choices.`},
         // Only where one of the creator's Sites can make its lists seasons, unlike The Daily Wire's shows.
-        ...(seasons.length ? {season: {label: 'Add it as a season', help: seasonHelp}} : {}),
+        ...(seasons.length ? {season: {label: music ? 'Add it as an album' : 'Add it as a season', help: seasonHelp}} : {}),
         own: {label: 'Add it as a collection', help: 'Each new one becomes a collection of its own.'},
         ignore: {label: 'Ignore it', help: `It is only listed on the ${label}'s Edit page.`},
     } as Record<'ask' | 'season' | 'own' | 'ignore', {label: string, help: string}>)
 }
 
 /** What to do when a creator adds a playlist, show or album, in the words of its Sites, such as host on The Daily
- * Wire. "Add it as a season" is only there when one of ``sites`` can make its lists seasons. */
-export function newSectionActionReg(label: string, sites: readonly NewSectionSite[]) {
-    const key = `${label}\n${sites.map((site) => `${site.name}:${site.linkSeasons}:${site.creatorSections.many}`).join('\n')}`
+ * Wire. "Add it as a season" is only there when one of ``sites`` can make its lists seasons; for a ``music`` artist
+ * it is "Add it as an album". */
+export function newSectionActionReg(label: string, sites: readonly NewSectionSite[], music = false) {
+    const key = `${label}\n${music}\n${sites.map((site) => `${site.name}:${site.linkSeasons}:${site.creatorSections.many}`).join('\n')}`
     let registry = newSectionActionRegs.get(key)
     if (!registry) {
-        registry = makeNewSectionActionReg(label, sites)
+        registry = makeNewSectionActionReg(label, sites, music)
         newSectionActionRegs.set(key, registry)
     }
     return registry
