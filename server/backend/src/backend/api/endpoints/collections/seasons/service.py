@@ -27,7 +27,8 @@ from config.network import is_no_internet_error
 from backend.types.collection_types import CollectionType
 from backend.types.season_types import SeasonType
 from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
-from sources import Feature, get_source
+from backend.services.sites import collection_site
+from sources import CreatorSectionNames, Feature, get_source
 
 
 class CollectionNotFoundError(LookupError):
@@ -68,6 +69,7 @@ class _View:
     seasons: list
     link_seasons_offered: bool
     names: object
+    section_names: object
     music: bool
     playlists: list
     outside_count: int
@@ -136,6 +138,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         ],
         link_seasons_offered=offers_link_seasons(collection),
         names=list_names(collection),
+        section_names=site.creator_sections if (site := collection_site(collection)) is not None else CreatorSectionNames(),
         music=music,
         playlists=[_Playlist(playlist, firsts.get(playlist.id), *leaving.get(playlist.id, (0, 0))) for playlist in playlists],
         outside_count=len(outside), outside_with_files=len(with_files),

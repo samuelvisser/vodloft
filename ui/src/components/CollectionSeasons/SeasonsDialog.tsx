@@ -62,7 +62,7 @@ function registries(names: CollectionSeasonsRead['names'], words: Words, view: C
     const outside = {
         leave_out: {label: 'Only include media already in the collection', help: `A ${names.one} only takes the ${words.videos} the collection's own link has.`},
         add: {label: 'Include media that is not in the collection', help: `They join the collection in their ${names.one}'s ${words.season.one}${words.here}. Switching a ${names.one} or this setting off removes them again, files and all. When the ${words.creator} takes a downloaded one out, Home asks whether to keep it.`},
-        only: {label: `Include only what the ${names.many} contain`, help: `The collection holds nothing but the ${words.videos} of its ${names.many}, also other ${words.creators}', and you can add links of your own, from any site. Its own ${words.videos} in no ${names.one} leave.`},
+        only: {label: `Include only what the ${view.sectionNames.many} contain`, help: `The collection holds nothing but the ${words.videos} of its ${names.many}, also other ${words.creators}', and you can add links of your own, from any site. Its own ${words.videos} in no ${names.one} leave.`},
     }
     return {
         mode: createSelectRegistry(`LinkSeasonMode-${names.many}`, {
@@ -445,7 +445,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
                                                     {view.listsPlaylists ? (
                                                         <div className="form-row">
-                                                            <label htmlFor="seasons-outside">How {view.names.one} content fits in the collection</label>
+                                                            <label htmlFor="seasons-outside">How {view.sectionNames.one.replace(/^(a|an) /, '')} content fits in the collection</label>
                                                             <SimpleSelect
                                                                 inputId="seasons-outside" registry={regs.outside} value={outsideVideos}
                                                                 onChange={(value) => setValue('outsideVideos', value as CollectionSeasonsFormIn['outsideVideos'], {shouldDirty: true})}
