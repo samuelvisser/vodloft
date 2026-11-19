@@ -116,13 +116,16 @@ class UpgradeChecks:
 
 @dataclass(frozen=True)
 class ListNames:
-    """What a Site calls its link seasons, and the one season of a collection's videos in none of them."""
+    """What a Site calls the lists a collection's link seasons come from, in any collection, and the one season of
+    a collection's videos in none of them."""
 
     one: str = "playlist"
-    """One link season, in lower case, such as playlist or album."""
+    """One list, in lower case, such as playlist or album."""
     many: str = "playlists"
     loose_season: str = "Videos"
-    """The name of the one season of the videos in none of the link seasons."""
+    """The name of the one season of the videos in none of the lists."""
+    music_loose_season: str = "Singles"
+    """That season's name in a Music collection, whose seasons are albums."""
 
 
 @dataclass(frozen=True)
@@ -838,9 +841,8 @@ class Site:
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
     list_names: ListNames = field(default_factory=lambda: ListNames())
-    """What link seasons are called in a collection on the Site, other than a Music collection."""
-    music_link_season_names: ListNames = field(default_factory=lambda: ListNames("album", "albums", "Singles"))
-    """What link seasons are called in a Music collection on the Site."""
+    """What the Site calls the lists a collection's link seasons come from, such as playlists on YouTube, in every
+    collection on the Site. A Music collection still calls the seasons themselves albums."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only

@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.api.models.source import CreatorSectionNamesAPIRead, ListKindAPIRead
+from backend.api.models.source import ListKindAPIRead
 from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 
 
@@ -90,9 +90,6 @@ class CollectionSeasonsAPIRead(ResponseBase):
     to hold only what its playlists have."""
     only_leaving_with_files: int = 0
     names: ListNamesAPIRead
-    section_names: CreatorSectionNamesAPIRead
-    """What the collection's Site calls the lists its creators add, such as playlists on YouTube, also in a Music
-    collection, whose seasons are albums."""
     creator_slug: Optional[str] = None
     """For a creator's own collection: the creator, which finds its new lists and decides what happens with them."""
     creator_title: Optional[str] = None

@@ -30,8 +30,7 @@ from config.network import is_no_internet_error
 from backend.types.collection_types import CollectionType
 from backend.types.season_types import SeasonType
 from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
-from backend.services.sites import collection_site
-from sources import CreatorSectionNames, Feature, get_source
+from sources import Feature, get_source
 
 
 class CollectionNotFoundError(LookupError):
@@ -72,7 +71,6 @@ class _View:
     seasons: list
     link_seasons_offered: bool
     names: object
-    section_names: object
     music: bool
     playlists: list
     outside_count: int
@@ -142,7 +140,6 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         ],
         link_seasons_offered=offers_link_seasons(collection),
         names=list_names(collection),
-        section_names=site.creator_sections if (site := collection_site(collection)) is not None else CreatorSectionNames(),
         music=music,
         playlists=[_Playlist(playlist, firsts.get(playlist.id), *leaving.get(playlist.id, (0, 0))) for playlist in playlists],
         outside_count=len(outside), outside_with_files=len(with_files),
@@ -183,8 +180,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         season = CollectionType(collection.type).season_word
         raise ServiceError(f"The {season}s must name each {season} of the collection exactly once", field="seasons")
     playlists = {playlist.id: playlist for playlist in collection.lists}
-    # The Site's own word for its lists, such as playlists on YouTube or albums on Bandcamp.
-    lists = site_list_names(collection)
+    lists = list_names(collection)
     unknown = [change.id for change in [*body.playlists] if change.id not in playlists]
     unknown += [link_id for link_id in body.removed_links if link_id not in playlists]
     if unknown:

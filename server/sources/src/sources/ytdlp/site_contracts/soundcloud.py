@@ -20,6 +20,5 @@ class SoundCloud(OtherSites):
         ListType(PLAYLIST_LIST, CreatorSectionNames("a playlist", "playlists")),
     )
     link_seasons = True
-    # Outside a Music collection, such as a podcast's, its sets are playlists, and what is in none of them is its
-    # tracks.
-    list_names = ListNames("playlist", "playlists", "Tracks")
+    # A collection's link seasons come from its albums and playlists; what is in none of them is its tracks.
+    list_names = ListNames("album or playlist", "albums and playlists", "Tracks")
