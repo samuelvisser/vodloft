@@ -132,12 +132,15 @@ export default function AddCreatorPage() {
     const {watch, setValue, formState: {errors, isSubmitting}} = form
     const {data: libraryCreators} = useCreators()
     const into = watch('into') ?? ''
-    const intoRegistry = useMemo(() => createSelectRegistry(`AddCreatorInto-${(libraryCreators ?? []).length}`, {
-        '': {label: `A new ${label} in your library`},
+    // A music artist is called an artist everywhere on the page, whatever their site calls its creators.
+    const music = watch('type') === 'music'
+    const creatorWord = creator && music ? 'artist' : label
+    const intoRegistry = useMemo(() => createSelectRegistry(`AddCreatorInto-${(libraryCreators ?? []).length}-${creatorWord}`, {
+        '': {label: `A new ${creatorWord} in your library`},
         ...Object.fromEntries((libraryCreators ?? []).map((other) => [
             other.slug, {label: `${other.title} (${other.kind})`, help: 'The same person or group: this account joins them, with their settings.'},
         ])),
-    }), [libraryCreators, label])
+    }), [libraryCreators, creatorWord])
     const intoTitle = libraryCreators?.find((other) => other.slug === into)?.title
 
     useEffect(() => {
@@ -166,8 +169,6 @@ export default function AddCreatorPage() {
     const membershipLevel = watch('membershipLevel')
     const newSections = watch('newSections') ?? 'ask'
     const byRef = useMemo(() => new Map(plans.map((plan) => [plan.ref, plan])), [plans])
-    // Whether the creator is a music artist: the Site's word where it is sure, the user's choice elsewhere.
-    const music = watch('type') === 'music'
     const registries = useMemo(
         () => new Map((creator?.sections ?? []).map((section) => [section.ref, choicesFor(creator!, section, music)])),
         [creator, music],
@@ -268,9 +269,9 @@ export default function AddCreatorPage() {
         <section className="view creator-view" aria-labelledby="add-creator-title">
             <div className="view-header">
                 <div>
-                    <h1 id="add-creator-title">Add {creator.creatorLabel}</h1>
+                    <h1 id="add-creator-title">Add {creatorWord}</h1>
                     <p className="view-description">
-                        Choose where each part of this {creator.creatorLabel} goes.
+                        Choose where each part of this {creatorWord} goes.
                         {hasMain ? ` The main collection is called ${creator.title}; anything you give a collection of its own gets one.` : ''}
                         {' '}A {music ? 'track' : 'video'} that is in several places is kept once.
                     </p>
@@ -278,7 +279,7 @@ export default function AddCreatorPage() {
             </div>
 
             <CreatorHeader
-                title={creator.title} label={`${creator.siteName} ${creator.creatorLabel}`} handle={creator.handle}
+                title={creator.title} label={`${creator.siteName} ${creatorWord}`} handle={creator.handle}
                 avatarUrl={creator.avatarUrl} bannerUrl={creator.bannerUrl} facts={creator.facts} description={creator.description}
             />
 
@@ -314,7 +315,7 @@ export default function AddCreatorPage() {
                 )}
                 {creator.presets.length > 1 && (
                     <fieldset className="creator-presets">
-                        <legend>Presets for this {creator.creatorLabel}</legend>
+                        <legend>Presets for this {creatorWord}</legend>
                         {creator.presets.map((item) => (
                             <label key={item.key} className={`creator-preset${preset === item.key ? ' is-on' : ''}`}>
                                 <input type="radio" name="preset" checked={preset === item.key} onChange={() => choosePreset(item.key)}/>
@@ -327,7 +328,7 @@ export default function AddCreatorPage() {
 
                 {(libraryCreators?.length ?? 0) > 0 && (
                     <div className="form-row creator-membership">
-                        <label htmlFor="creator-into">Add {creator.creatorLabel} as</label>
+                        <label htmlFor="creator-into">Add {creatorWord} as</label>
                         <SimpleSelect
                             inputId="creator-into" registry={intoRegistry} value={into}
                             onChange={(value) => setValue('into', value ?? '', {shouldValidate: true})}
@@ -383,12 +384,12 @@ export default function AddCreatorPage() {
 
 
                 {!into && <div className="form-row creator-membership">
-                    <label htmlFor="creator-new-sections">When the {creator.creatorLabel} adds {/^[aeiou]/.test(lists) ? 'an' : 'a'} {lists.replace(/s$/, '')}</label>
+                    <label htmlFor="creator-new-sections">When the {creatorWord} adds {/^[aeiou]/.test(lists) ? 'an' : 'a'} {lists.replace(/s$/, '')}</label>
                     <SimpleSelect
-                        inputId="creator-new-sections" registry={newSectionActionReg(creator.creatorLabel)} value={newSections}
+                        inputId="creator-new-sections" registry={newSectionActionReg(creatorWord)} value={newSections}
                         onChange={(value) => setValue('newSections', value as CreatorCreateIn['newSections'])}
                     />
-                    <div className="help">{newSectionActionReg(creator.creatorLabel).meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
+                    <div className="help">{newSectionActionReg(creatorWord).meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
                 </div>}
 
                 {sourceKey === 'dailywire' && (
@@ -413,7 +414,7 @@ export default function AddCreatorPage() {
                     </span>
                     <button type="button" className="btn" onClick={() => navigate(-1)}>Cancel</button>
                     <button type="submit" className="btn btn-primary" disabled={isSubmitting || !collectionTitles.length}>
-                        {isSubmitting ? 'Adding…' : into ? `Add to ${intoTitle}` : `Add ${creator.creatorLabel}`}
+                        {isSubmitting ? 'Adding…' : into ? `Add to ${intoTitle}` : `Add ${creatorWord}`}
                     </button>
                 </div>
             </form>
