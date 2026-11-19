@@ -57,15 +57,28 @@ def _main_seasons(s: Session, creator: Creator) -> frozenset[str]:
 
 @dataclass
 class CreatorPlaces:
-    """Which videos each of a creator's collections holds by a list, and which videos each one has."""
+    """Which videos each of a creator's collections holds by a list, and which videos each one has.
 
+    A creator can have thousands of videos, and only the few that are reassigned or leave are needed whole, so each
+    video is known by its id here and loaded with ``episode``."""
+
+    s: Session
     order: list[Collection]
     held: dict[int, set[str]]
     """The slugs of the videos a list of the collection holds, by collection id."""
-    episodes: dict[int, dict[str, Episode]] = field(default_factory=dict)
-    """Each collection's whole videos, by slug, by collection id."""
+    episodes: dict[int, dict[str, int]] = field(default_factory=dict)
+    """The ids of each collection's whole videos, by slug, by collection id."""
     downloaded: set[int] = field(default_factory=set)
     """The ids of the episodes with a download, whether or not its file is there yet."""
+
+    def episode(self, episode_id: int) -> Episode:
+        return self.s.get(Episode, episode_id)
+
+    def load(self, episode_ids: Iterable[int]) -> None:
+        """Load the episodes at once, so that ``episode`` finds them without a query each."""
+        ids = list(episode_ids)
+        for start in range(0, len(ids), 500):
+            list(self.s.scalars(select(Episode).where(Episode.id.in_(ids[start:start + 500]))))
 
     def place(self, collection_id: int, slug: str) -> Collection | None:
         """The collection the video belongs in, when that is another one than ``collection_id``."""
@@ -88,19 +101,25 @@ def creator_places(s: Session, creator: Creator) -> CreatorPlaces:
     mains = creator.main_collection_ids
     order = sorted(creator.collections, key=lambda collection: (collection.id not in mains, collection.id))
     lists = _list_collection_ids(creator, _main_seasons(s, creator))
-    places = CreatorPlaces(order=order, held={})
+    places = CreatorPlaces(s=s, order=order, held={})
     ids = [collection.id for collection in order]
     for collection in order:
         places.episodes[collection.id] = {}
-    for episode in s.scalars(select(Episode).where(Episode.collection_id.in_(ids), Episode.part_of.is_(None))):
-        places.episodes[episode.collection_id][episode.source_slug] = episode
+    gone: set[int] = set()
+    for episode_id, collection_id, slug, removed in s.execute(
+        select(Episode.id, Episode.collection_id, Episode.source_slug, Episode.removed_from_source)
+        .where(Episode.collection_id.in_(ids), Episode.part_of.is_(None))
+    ):
+        places.episodes[collection_id][slug] = episode_id
+        if removed:
+            gone.add(episode_id)
     for collection in order:
         if collection.id in mains:
             places.held[collection.id] = set(_holders(s, active_lists(s, collection))) if link_seasons_on(collection) else set()
         elif collection.id in lists:
             # Its own link is the list: every video it has that the list still lists.
             places.held[collection.id] = {
-                slug for slug, episode in places.episodes[collection.id].items() if not episode.removed_from_source
+                slug for slug, episode_id in places.episodes[collection.id].items() if episode_id not in gone
             }
         else:
             places.held[collection.id] = set()
@@ -120,15 +139,16 @@ class Reassignment:
 
 
 def _reassigned(places: CreatorPlaces, collections: Iterable[Collection]) -> list[Reassignment]:
-    found = []
+    pairs = []
     for collection in collections:
-        for slug, episode in places.episodes.get(collection.id, {}).items():
-            if episode.id not in places.downloaded:
+        for slug, episode_id in places.episodes.get(collection.id, {}).items():
+            if episode_id not in places.downloaded:
                 continue
             target = places.place(collection.id, slug)
             if target is not None:
-                found.append(Reassignment(episode, places.episodes[target.id][slug]))
-    return sorted(found, key=lambda item: item.episode.id)
+                pairs.append((episode_id, places.episodes[target.id][slug]))
+    places.load(episode_id for pair in pairs for episode_id in pair)
+    return [Reassignment(places.episode(episode_id), places.episode(target_id)) for episode_id, target_id in sorted(pairs)]
 
 
 def reassigned_episodes(s: Session, collection: Collection) -> list[Reassignment]:
@@ -153,7 +173,7 @@ def reassignment_of(s: Session, episode: Episode, *, downloaded: bool = True) ->
     if downloaded and episode.id not in places.downloaded:
         return None
     target = places.place(episode.collection_id, episode.source_slug)
-    return Reassignment(episode, places.episodes[target.id][episode.source_slug]) if target is not None else None
+    return Reassignment(episode, places.episode(places.episodes[target.id][episode.source_slug])) if target is not None else None
 
 
 def placed_elsewhere(s: Session, collection: Collection) -> frozenset[str]:
@@ -175,13 +195,14 @@ def settle_creator(s: Session, collection: Collection) -> int:
         return 0
     places = creator_places(s, creator)
     leaving = [
-        episode
+        episode_id
         for other in places.order
-        for slug, episode in places.episodes[other.id].items()
-        if episode.id not in places.downloaded and places.place(other.id, slug) is not None
+        for slug, episode_id in places.episodes[other.id].items()
+        if episode_id not in places.downloaded and places.place(other.id, slug) is not None
     ]
-    for episode in leaving:
-        remove_left_episode(s, episode)
+    places.load(leaving)
+    for episode_id in leaving:
+        remove_left_episode(s, places.episode(episode_id))
     return len(leaving)
 
 

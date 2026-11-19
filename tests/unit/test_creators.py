@@ -48,6 +48,14 @@ class CreatorSource(ListedSource):
         )
 
 
+@pytest.fixture(autouse=True)
+def forget_lookups(monkeypatch):
+    """Each test looks its creators up afresh."""
+    from backend.api.endpoints.creators import service
+
+    monkeypatch.setattr(service, "_lookups", {})
+
+
 @pytest.fixture
 def tube(monkeypatch):
     monkeypatch.setattr(registry, "_sources", dict(registry._sources))
@@ -154,6 +162,30 @@ def test_adding_a_creator_uses_what_its_lookup_found(client, tube, monkeypatch):
         "sourceKey": "tube", "url": f"{ROOT}/videos", "sections": plan, "lookupId": found["lookupId"],
     })
     assert asked == [f"{ROOT}/videos"] and other.status_code == 422
+
+
+def test_a_creator_looked_up_ahead_is_found_by_the_users_lookup(client, tube, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from backend.api.endpoints.creators import service
+
+    calls = []
+    looked_up = tube.creator_details
+
+    def creator_details(ref, progress=lambda step: None):
+        calls.append(ref)
+        return looked_up(ref, progress)
+
+    monkeypatch.setattr(tube, "creator_details", creator_details)
+    with ThreadPoolExecutor(max_workers=1) as ahead:
+        monkeypatch.setattr(service, "_ahead", ahead)
+        service.look_up_creator_ahead("tube", ROOT)
+        ahead.submit(lambda: None).result()
+
+    _steps, body = _lookup(client)
+
+    assert body["title"] == "Northwind Workshop"
+    assert calls == [ROOT]
 
 
 def test_a_section_already_in_the_library_stays_where_it_is(client, session):

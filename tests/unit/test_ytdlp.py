@@ -511,13 +511,13 @@ class _Head:
 def test_widest_still_uses_maxresdefault_when_youtube_has_it(monkeypatch, still):
     from sources.ytdlp import thumbnails
     head = _Head(200)
-    monkeypatch.setattr(thumbnails.requests, "head", head)
+    monkeypatch.setattr(thumbnails, "_head", head)
     assert thumbnails.widest_still(f"https://i.ytimg.com/vi/dQw4w9WgXcQ/{still}") == "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"
 
 
 def test_widest_still_keeps_the_still_when_youtube_has_no_maxresdefault(monkeypatch):
     from sources.ytdlp import thumbnails
-    monkeypatch.setattr(thumbnails.requests, "head", _Head(404))
+    monkeypatch.setattr(thumbnails, "_head", _Head(404))
     assert thumbnails.widest_still("https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg") == "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
 
 
@@ -527,15 +527,30 @@ def test_widest_still_keeps_the_still_when_youtube_is_unreachable(monkeypatch):
     def offline(*_args, **_kwargs):
         raise thumbnails.requests.ConnectionError("offline")
 
-    monkeypatch.setattr(thumbnails.requests, "head", offline)
+    monkeypatch.setattr(thumbnails, "_head", offline)
     assert thumbnails.widest_still("https://i.ytimg.com/vi_webp/dQw4w9WgXcQ/sddefault.webp") == "https://i.ytimg.com/vi_webp/dQw4w9WgXcQ/sddefault.webp"
+
+
+def test_widest_stills_checks_many_stills_and_keeps_their_order(monkeypatch):
+    from sources.ytdlp import thumbnails
+
+    def head(url, **_kwargs):
+        # Only the even videos have a maxresdefault still.
+        return type("Response", (), {"status_code": 200 if int(url.split("/")[-2][-2:]) % 2 == 0 else 404})()
+
+    monkeypatch.setattr(thumbnails, "_head", head)
+    stills = [f"https://i.ytimg.com/vi/video0000{number:02d}/hqdefault.jpg" for number in range(40)]
+
+    assert thumbnails.widest_stills([*stills, None, "https://example.com/a.jpg"]) == [
+        still.replace("hqdefault", "maxresdefault") if number % 2 == 0 else still for number, still in enumerate(stills)
+    ] + [None, "https://example.com/a.jpg"]
 
 
 @pytest.mark.parametrize("url", [None, "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg", "https://yt3.ggpht.com/avatar=s900", "https://example.com/hqdefault.jpg"])
 def test_widest_still_leaves_other_urls_alone(monkeypatch, url):
     from sources.ytdlp import thumbnails
     head = _Head(200)
-    monkeypatch.setattr(thumbnails.requests, "head", head)
+    monkeypatch.setattr(thumbnails, "_head", head)
     assert thumbnails.widest_still(url) == url
     assert head.urls == []
 

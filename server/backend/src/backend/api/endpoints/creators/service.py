@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import contextvars
 import logging
+import threading
+import time
 
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from sqlalchemy import func, select
@@ -42,16 +46,62 @@ def lookup_creator_label(source_key: str, url: str | None) -> str:
     return next((site.creator_label for site in source.sites if site.creators), "creator")
 
 
+# A creator's lookup takes seconds. Looking a creator up takes what a lookup of the same creator started in the last
+# minute found, such as the lookup VODLoft starts when a pasted link turns out to be a creator, or waits for it while
+# it runs. Adding the creator uses its lookup's id instead, see ``lookups``.
+_FRESH_SECONDS = 60
+_lookups: dict[tuple[str, str], tuple[float, Future]] = {}
+_lookups_lock = threading.Lock()
+_ahead = ThreadPoolExecutor(max_workers=2, thread_name_prefix="creator-lookup")
+
+
+def _shared(key: tuple[str, str], work: Callable[[], CreatorDetails]) -> CreatorDetails:
+    """What ``work`` finds, or what a lookup of the same creator started in the last minute found or will find."""
+    now = time.monotonic()
+    with _lookups_lock:
+        for old in [old for old, (at, future) in _lookups.items() if now - at >= _FRESH_SECONDS and future.done()]:
+            del _lookups[old]
+        found = _lookups.get(key)
+        if found is not None and now - found[0] < _FRESH_SECONDS:
+            future, mine = found[1], False
+        else:
+            future, mine = Future(), True
+            _lookups[key] = (now, future)
+    if not mine:
+        return future.result()
+    try:
+        details = work()
+    except BaseException as exc:
+        with _lookups_lock:
+            if _lookups.get(key, (0, None))[1] is future:
+                # A lookup that failed is tried again by the next one.
+                del _lookups[key]
+        future.set_exception(exc)
+        raise
+    future.set_result(details)
+    return details
+
+
 def look_up_creator(
     source_key: str, url: str | None, ref: str | None, progress: Callable[[str], None] = lambda step: None,
 ) -> CreatorDetails:
     """Ask the Source for the creator, telling ``progress`` what it is doing. Slow: call it outside a transaction."""
     if url:
         creators.creator_site(source_key, url)
-        return get_source(source_key).creator_details(url, progress)
-    if not ref:
+    elif not ref:
         raise ServiceError("Give the creator's link", field="url")
-    return get_source(source_key).creator_details(ref, progress)
+    return _shared((source_key, url or ref), lambda: get_source(source_key).creator_details(url or ref, progress))
+
+
+def look_up_creator_ahead(source_key: str, url: str) -> None:
+    """Start looking up the creator a pasted link is, so that it is found by the time the user chooses to add them."""
+    def look_up():
+        try:
+            look_up_creator(source_key, url, None)
+        except Exception as exc:  # The user's own lookup tries again, and says what went wrong.
+            logger.info("Could not look up the creator at %s ahead: %s", url, exc)
+
+    _ahead.submit(contextvars.copy_context().run, look_up)
 
 
 @dataclass(frozen=True)

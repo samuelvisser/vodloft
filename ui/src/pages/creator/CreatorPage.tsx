@@ -27,7 +27,7 @@ function listedSources(titles: string[]) {
 export default function CreatorPage() {
     const {slug} = useParams()
     const queryClient = useQueryClient()
-    const {data: creator, error, isLoading} = useCreator(slug)
+    const {data: creator, error} = useCreator(slug)
     const [actionError, setActionError] = useState<string | null>(null)
     const [checking, setChecking] = useState(false)
     const [movingReassigned, setMovingReassigned] = useState(false)
@@ -43,7 +43,8 @@ export default function CreatorPage() {
         ...Object.fromEntries(others.map((other) => [other.slug, {label: `${other.title} (${other.kind})`}])),
     }), [others, slug])
 
-    if (isLoading) return <section className="view"><p>Loading…</p></section>
+    // Right after the page opens, before its request starts, there is no creator yet and no error either.
+    if (!creator && !error) return <section className="view"><p>Loading…</p></section>
     if (error || !creator) {
         return (
             <section className="view">

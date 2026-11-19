@@ -11,6 +11,9 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
+from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -31,6 +34,18 @@ _TIMEOUT_SECONDS = 5
 _FRAME_FORMAT = "bv*[height<=720]/b[height<=720]/wv*/w"
 _FRAME_SECONDS = 4
 _FRAME_TIMEOUT_SECONDS = 120
+# A channel can list hundreds of playlists, each with a still to check. One connection per thread, kept open, answers
+# a check in a tenth of the time a new connection takes, and several threads check a channel's stills together.
+_connections = threading.local()
+_checks = ThreadPoolExecutor(16, thread_name_prefix="still-check")
+
+
+def _head(url: str):
+    """YouTube's answer to a HEAD request, over this thread's open connection to it."""
+    session = getattr(_connections, "session", None)
+    if session is None:
+        session = _connections.session = requests.Session()
+    return session.head(url, timeout=_TIMEOUT_SECONDS, allow_redirects=True)
 
 
 def widest_still(url: str | None) -> str | None:
@@ -40,10 +55,17 @@ def widest_still(url: str | None) -> str | None:
         return url
     candidate = f"{match['base']}maxresdefault.{'webp' if match['webp'] else 'jpg'}"
     try:
-        response = requests.head(candidate, timeout=_TIMEOUT_SECONDS, allow_redirects=True)
+        response = _head(candidate)
     except requests.RequestException:
         return url
     return candidate if response.status_code == 200 else url
+
+
+def widest_stills(urls: Sequence[str | None]) -> list[str | None]:
+    """``widest_still`` of each URL, in the same order, with YouTube asked about several at once."""
+    if sum(1 for url in urls if _STILL.match(url or "")) < 2:
+        return [widest_still(url) for url in urls]
+    return list(_checks.map(widest_still, urls))
 
 
 def still_missing(url: str | None) -> bool:
@@ -57,7 +79,7 @@ def still_missing(url: str | None) -> bool:
     if _ANY_STILL.match(url) is None:
         return False
     try:
-        response = requests.head(url, timeout=_TIMEOUT_SECONDS, allow_redirects=True)
+        response = _head(url)
     except requests.RequestException:
         return False
     return response.status_code == 404
