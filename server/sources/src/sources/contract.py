@@ -7,7 +7,7 @@ caller today; methods are added together with the feature that needs them.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -75,6 +75,9 @@ class Feature(StrEnum):
     OWN_STUDIO = "own_studio"
     """The service makes its own shows and movies, so VODLoft names it as the studio of what it
     downloads. Without it the studio is left to the media itself."""
+    CHANNELS = "channels"
+    """Looking up a creator's channel, with ``channel_details``: who they are and the sections
+    their page offers. Only a Site with a ``channel_label`` offers channels."""
     PENDING_CHECKS = "pending_checks"
     """Listing upcoming and live videos with their publish status, and looking them up again
     with ``check_pending`` until they are published. VODLoft shows them, but never records one
@@ -342,6 +345,68 @@ class LinkKind(StrEnum):
     MOVIE = "movie"
     EPISODE = "episode"
     VIDEO = "video"
+    CHANNEL = "channel"
+
+
+class SectionKind(StrEnum):
+    """What one part of a channel is, whatever the Site calls it."""
+
+    FEED = "feed"
+    """Grows forever, ordered by date: Videos, Shorts, Live, Reels."""
+    LIST = "list"
+    """Finite and curated, with a title and artwork of its own: a playlist, an album, a Daily Wire show."""
+    ITEM = "item"
+    """One movie or video, such as a movie on a Daily Wire host's page."""
+
+
+class SectionRole(StrEnum):
+    """What a section holds, which only steers the defaults when a channel is added."""
+
+    MAIN = "main"
+    SHORT = "short"
+    LIVE = "live"
+
+
+@dataclass(frozen=True)
+class SectionRef:
+    """One section of a channel. ``ref`` is the Site's own id for it, which stays the same when it is renamed."""
+
+    ref: str
+    url: str
+    title: str
+    kind: SectionKind
+    role: SectionRole = SectionRole.MAIN
+    kind_label: str | None = None
+    """What the Site calls it, such as Playlist or Show."""
+    item_count: int | None = None
+    image_url: str | None = None
+    description: str | None = None
+    access: str | None = None
+    """The key of the ``Access`` the section needs, as for videos."""
+    has_seasons: bool = False
+    """A list with seasons of its own, such as a Daily Wire show, keeps them."""
+
+
+@dataclass(frozen=True)
+class ChannelDetails:
+    """A creator's channel on one Site: who they are, and the sections their page offers.
+
+    ``ref`` is the Site's own id for the channel. ``url`` is None for a channel the Site has no page of its own for,
+    such as a Daily Wire host, which is only found through VODLoft's Browse page.
+    """
+
+    ref: str
+    url: str | None
+    title: str
+    handle: str | None = None
+    description: str | None = None
+    avatar_url: str | None = None
+    banner_url: str | None = None
+    links: tuple[str, ...] = ()
+    """The creator's own links, such as their website."""
+    facts: tuple[str, ...] = ()
+    """Short facts, such as "1.2M subscribers"."""
+    sections: tuple[SectionRef, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -381,6 +446,8 @@ class ResolvedLink:
     """What the Source calls this kind of result, such as Channel or Playlist for a collection."""
     facts: tuple[str, ...] = ()
     """Short facts for a search result, such as "412 videos" or "19:05"."""
+    channel_url: str | None = None
+    """The creator's channel this link is, on a Site with channels, so it can be added as a channel instead."""
 
 
 @dataclass(frozen=True)
@@ -635,6 +702,17 @@ class ApiKeyRejected(ValueError):
 ANY_DOMAIN = "*"
 
 
+class ChannelPreset(StrEnum):
+    """A starting point for what to keep of a channel. Each one only fills in where its sections go."""
+
+    ONE_SHOW = "one_show"
+    """Its feeds by year and its lists as named seasons, in one collection."""
+    PER_LIST = "per_list"
+    """Each list its own collection, and one for the rest."""
+    PICK = "pick"
+    """Nothing until it is picked."""
+
+
 @dataclass(frozen=True)
 class Site:
     """One website as the user knows it, such as YouTube or The Daily Wire, whichever Source fetches it.
@@ -675,6 +753,10 @@ class Site:
     accesses: tuple[Access, ...] = ()
     """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
     by the keys its Sources tell."""
+    channel_label: str | None = None
+    """What the Site calls a creator's channel, such as channel or host. A Site without one offers no channels."""
+    channel_presets: tuple[ChannelPreset, ...] = ()
+    """The ways the Site offers to keep a channel, the first one the default."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
@@ -850,6 +932,14 @@ class Source(ABC):
     def collection_details(self, url: str) -> CollectionDetails:
         """Look up a collection. Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
         raise NotImplementedError(f"{self.name} does not list episodes")
+
+    def channel_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> ChannelDetails:
+        """Look up a channel by its link, or by the ``ref`` it had before. Only Sources with ``Feature.CHANNELS``
+        implement it.
+
+        A lookup can take a while, so it tells ``progress`` what it is doing, as a short sentence such as
+        "Listing the playlists"."""
+        raise NotImplementedError(f"{self.name} has no channels")
 
     def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
         """The collection's episodes whose slugs are not in ``known``.

@@ -2190,6 +2190,8 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .compact-switch button[aria-pressed="true"] { background: rgba(100,116,139,.2); color: var(--text); }
 .catalog-groups { display: grid; gap: 30px; }
 .catalog-group h2 { margin: 0 0 11px; font-size: 18px; }
+.catalog-group-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 11px; }
+.catalog-group-header h2 { margin: 0; }
 .catalog-collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; }
 .catalog-collection-card { grid-template-columns: 92px minmax(0,1fr); }
 .catalog-collection-card .collection-summary-title { padding-right: 64px; }

@@ -115,6 +115,8 @@ export const CollectionReadSchema = z.looseObject({
     cookiesNeededUntil: ApiDateTimeSchema.nullable().optional(),
     checkFrequency: z.enum(['default', 'less_often', 'own']).default('default'),
     checkCron: z.string().nullable().optional(),
+    channelSlug: z.string().nullable().optional(),
+    channelTitle: z.string().nullable().optional(),
     customMetadata: z.record(z.string(), z.string()).default({}),
 
     createdAt: ApiDateTimeSchema,

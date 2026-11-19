@@ -173,3 +173,63 @@ def test_a_video_only_its_own_link_had_stays_when_it_leaves(links_source, sessio
     refresh_listed_collection(session, collection_id=collection.id, source=links_source)
 
     assert _episodes(session) == {"s1": ("The Series", "ep.S01E01")}
+
+
+SHORTS = "https://www.youtube.com/@a-channel/shorts"
+
+
+def _channel_collections(session):
+    """A channel's main collection of its Videos, and a collection of its own for its Shorts, which the channel's
+    order puts above Videos."""
+    from backend.db.models import Channel, Collection, CollectionLink
+
+    from backend.services.sites import site_record
+    from sources import get_source
+
+    youtube = get_source("ytdlp").site_for(CHANNEL)
+    channel = Channel(
+        uuid="uuid-ch", slug="a-channel", source_key="listed", site_key=site_record(session, youtube).key, site_ref="UCa",
+        title="A Channel",
+    )
+    session.add(channel)
+    made = []
+    for slug, title, url, position in (("a-channel", "A Channel", CHANNEL, 5), ("a-channel-shorts", "A Channel Shorts", SHORTS, 3)):
+        collection = Collection(
+            uuid=f"uuid-{slug}", slug=slug, source_key="listed", title=title, sharing_url=url, membership_level="FREE",
+            type="series", episode_identifier="seasonal", author_name="A Channel", author_slug="a-channel",
+            links=[CollectionLink(url=url, position=position)],
+        )
+        collection.channel = channel
+        session.add(collection)
+        made.append(collection)
+    session.commit()
+    return made
+
+
+def _held(session):
+    from backend.db.models import Episode
+
+    session.expire_all()
+    return {episode.slug: (episode.collection.slug, episode.episode_identifier) for episode in session.scalars(select(Episode))}
+
+
+def test_a_video_the_channel_keeps_in_another_collection_is_not_added_twice(links_source, session):
+    main, shorts = _channel_collections(session)
+    links_source.links = {SHORTS: [_video("s1", 2024)], CHANNEL: [_video("v1", 2024), _video("s1", 2024)]}
+
+    _index(session, shorts, links_source)
+    _index(session, main, links_source)
+
+    assert _held(session) == {"s1": ("a-channel-shorts", "ep.S2024E01"), "v1": ("a-channel", "ep.S2024E01")}
+
+
+def test_a_video_moves_to_the_collection_higher_in_the_channels_order_until_it_has_a_file(links_source, session):
+    main, shorts = _channel_collections(session)
+    links_source.links = {CHANNEL: [_video("v1", 2024), _video("s1", 2024, 2)]}
+    _index(session, main, links_source)
+    assert _held(session)["s1"] == ("a-channel", "ep.S2024E02")
+
+    links_source.links[SHORTS] = [_video("s1", 2024, 2)]
+    _index(session, shorts, links_source)
+
+    assert _held(session) == {"v1": ("a-channel", "ep.S2024E01"), "s1": ("a-channel-shorts", "ep.S2024E01")}

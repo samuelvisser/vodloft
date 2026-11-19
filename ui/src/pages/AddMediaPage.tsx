@@ -166,11 +166,18 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     }
 
     const image = toImageUrl(link?.preview.imageUrl)
+    // A channel's videos can become a collection of their own, or the channel can be added with its playlists.
+    const channelChoice = !!link?.channelUrl && !localCollection && !onCollection
+    const addChannel = () => {
+        if (!link?.channelUrl) return
+        navigate(`/add-channel?source=${encodeURIComponent(link.source.id)}&url=${encodeURIComponent(link.channelUrl)}`)
+    }
     const actionLabel = (() => {
         if (!target) return null
         if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding video…' : 'Add this video'
         if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Continue with this movie'
         if (localCollection) return 'Open collection'
+        if (channelChoice) return 'Only its videos'
         return link?.kind === 'episode' ? 'Add its collection' : 'Continue with this collection'
     })()
 
@@ -254,7 +261,14 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                         {!link.drmProtected && link.accessLocked && <AccessNotice item={link}/>}
                         {target ? (
                             <div className="add-media-preview-actions">
-                                <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>
+                                {channelChoice && (
+                                    <button className="btn btn-primary" type="button" onClick={addChannel}
+                                            title="Add its videos, livestreams and playlists, and choose where each goes">
+                                        Add the channel
+                                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
+                                    </button>
+                                )}
+                                <button className={`btn${channelChoice ? '' : ' btn-primary'}`} type="button" onClick={proceed} disabled={addingVideo}>
                                     {actionLabel}
                                     <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                                 </button>

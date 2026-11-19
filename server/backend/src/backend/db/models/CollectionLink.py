@@ -9,7 +9,7 @@ from backend.db.datetime_types import UTCDateTime
 from backend.types.collection_link_types import LinkPlacement
 
 if TYPE_CHECKING:
-    from backend.db.models import Collection, Season
+    from backend.db.models import ChannelSection, Collection, Season
 
 
 class CollectionLink(Base):
@@ -34,6 +34,10 @@ class CollectionLink(Base):
         default=LinkPlacement.SITE_SEASONS.value, server_default=LinkPlacement.SITE_SEASONS.value,
         comment="Where the link's videos go: site_seasons, one_season or specials",
     )
+    channel_section_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("channel_sections.id", ondelete="SET NULL"), unique=True,
+        comment="The channel section the link is; a section feeds one collection at most",
+    )
     season_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("seasons.id", ondelete="SET NULL"), comment="The season of a one_season link, once it has one",
     )
@@ -41,6 +45,7 @@ class CollectionLink(Base):
 
     collection: Mapped["Collection"] = relationship(back_populates="links")
     season: Mapped[Optional["Season"]] = relationship()
+    section: Mapped[Optional["ChannelSection"]] = relationship()
     items: Mapped[list["CollectionLinkItem"]] = relationship(
         back_populates="link", cascade="all, delete-orphan", passive_deletes=True,
     )

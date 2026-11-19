@@ -121,6 +121,8 @@ export const ResolvedLinkReadSchema = z.object({
         imageUrl: z.string().nullable(),
         authorName: z.string().nullable(),
     }),
+    /** The creator's channel this link is, on a Site with channels. */
+    channelUrl: z.string().nullable().optional().default(null),
     /** Every Source that claims the link's site, preferred first. */
     candidates: z.array(SourceReadSchema),
 })
