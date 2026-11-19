@@ -21,7 +21,7 @@ from config.settings.site_settings import SiteSettingGroup
 from .service import (
     LinkNotRecognisedError, SourceFeatureMissingError, UnknownSiteError, get_api_status, get_program_status,
     list_source_problems, list_source_sites,
-    list_sources, lookup_show_details, resolve_link, search_source, set_site_preference, source_with,
+    list_sources, lookup_show_details, sources_in_use, resolve_link, search_source, set_site_preference, source_with,
     update_source_program,
 )
 from backend.security.access import Access, Area, Level
@@ -43,6 +43,13 @@ def _source(source_id: str, feature: Feature) -> Source:
 def source_list():
     """List every Source with the Features it supports."""
     return list_sources()
+
+
+@router.get("/sources/in-use", dependencies=[signed_in()], response_model=list[str])
+def source_in_use_list():
+    """The Sources the Library has media from, so the UI can leave out which Source an item comes from while there is one."""
+    with db_session() as s:
+        return sources_in_use(s)
 
 
 @router.get("/sources/problems", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=list[SourceProblemAPIRead])
