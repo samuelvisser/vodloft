@@ -206,15 +206,18 @@ export default function LibraryPage() {
         () => hasCreators ? applicableChipFilter(kindFilter, KIND_VALUES) : [],
         [kindFilter, hasCreators],
     )
-    // Creators come first. A collection type says nothing about a creator, so choosing one leaves creators out.
-    const filteredCreators = useMemo(() => (
-        matchesChipFilter('creator', activeKindFilter) && activeCollectionTypeFilter.length === 0
-            ? creators?.filter((creator) => (
-                creator.accounts.some((account) => matchesSiteFilter(account, activeSiteFilter))
-                && matchesLibrarySearch({title: creator.title, authorName: creator.accounts[0]?.handle}, searchWords)
-            )) ?? []
-            : []
-    ), [creators, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords])
+    // Creators come first. A creator matches a collection type when one of its collections has that type.
+    const filteredCreators = useMemo(() => {
+        if (!matchesChipFilter('creator', activeKindFilter)) return []
+        const typed = new Set((collections ?? [])
+            .filter((collection) => collection.creatorSlug && matchesChipFilter(collection.type, activeCollectionTypeFilter))
+            .map((collection) => collection.creatorSlug))
+        return creators?.filter((creator) => (
+            (activeCollectionTypeFilter.length === 0 || typed.has(creator.slug))
+            && creator.accounts.some((account) => matchesSiteFilter(account, activeSiteFilter))
+            && matchesLibrarySearch({title: creator.title, authorName: creator.accounts[0]?.handle}, searchWords)
+        )) ?? []
+    }, [creators, collections, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords])
     const filteredCollections = useMemo(() => {
         if (!matchesChipFilter('collection', activeKindFilter)) return []
         // A creator's collections are behind its card, unless a search looks for them or the card is filtered out.
