@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.api.models.source import CreatorSectionNamesAPIRead
+from backend.api.models.source import CreatorSectionNamesAPIRead, ListKindAPIRead
 from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 
 
@@ -56,6 +56,12 @@ class ListNamesAPIRead(ResponseBase):
     loose_season: str
 
 
+class CollectionNewListAPIRead(ListKindAPIRead):
+    """What the collection does with a new list of one kind, when only selected lists are seasons."""
+
+    action: NewLinkSeasonAction
+
+
 class CollectionSeasonsAPIRead(ResponseBase):
     seasons: list[CollectionSeasonAPIRead]
     custom_season_order: bool
@@ -70,7 +76,8 @@ class CollectionSeasonsAPIRead(ResponseBase):
     """The collection can hold only what its link seasons have, with links the user adds from any Site of its
     Source."""
     link_seasons: LinkSeasons
-    new_link_seasons: NewLinkSeasonAction
+    new_lists: list[CollectionNewListAPIRead]
+    """What happens with a list the creator adds, for each kind of list of the collection's Site."""
     list_layout: ListLayout
     loose_videos: LooseVideos
     outside_videos: OutsideVideos
@@ -148,7 +155,8 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     custom_season_order: bool
     """False puts the seasons back in VODLoft's order by date, whatever ``seasons`` says about their order."""
     link_seasons: LinkSeasons = LinkSeasons.OFF
-    new_link_seasons: NewLinkSeasonAction = NewLinkSeasonAction.ASK
+    new_lists: dict[str, NewLinkSeasonAction] = Field(default_factory=dict, max_length=20)
+    """What happens with a list the creator adds, by the key of its kind; a kind left out keeps its setting."""
     list_layout: ListLayout = ListLayout.SEASON_EACH
     loose_videos: LooseVideos = LooseVideos.ONE_SEASON
     outside_videos: OutsideVideos = OutsideVideos.LEAVE_OUT

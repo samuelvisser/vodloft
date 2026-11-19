@@ -29,8 +29,9 @@ from backend.db.models import Creator, CreatorAccount, Collection, Episode, Movi
 from backend.services import creators
 from backend.services.creators import NewCollectionSettings, SectionPlan
 from backend.services.errors import ServiceError
+from backend.services.new_lists import list_kinds, new_sections_settings
 from backend.services.sites import collection_site
-from backend.types.creator_types import NewSectionAction, SectionTarget
+from backend.types.creator_types import SectionTarget
 from task_manager.scheduler.transactional import queue_task_after_commit
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from sources import CreatorDetails, CreatorSectionNames, Feature, SectionRef, get_source
@@ -153,6 +154,8 @@ class _Lookup:
     movies: bool
     sections: list[_Section]
     presets: list[_Preset]
+    new_lists: list
+    music_new_lists: list
     creator_slug: str | None = None
     links: list[str] = field(default_factory=list)
     facts: list[str] = field(default_factory=list)
@@ -184,6 +187,8 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
             )
             for preset in site.creator_presets
         ],
+        new_lists=new_sections_settings(list_kinds([site]), None, music=False),
+        music_new_lists=new_sections_settings(list_kinds([site]), None, music=True),
         creator_slug=existing.creator.slug if existing is not None else None,
         links=list(details.links), facts=list(details.facts),
     ))
@@ -235,7 +240,7 @@ def add_creator(
             _collection_type(body, details), EpisodeIdentifier(body.episode_identifier),
             body.membership_level,
         ),
-        added_by_id=added_by_id, new_sections=NewSectionAction(body.new_sections), into=into,
+        added_by_id=added_by_id, new_lists=dict(body.new_lists), into=into,
     )
     s.flush()
     return creator_page(s, creator.slug)
@@ -284,6 +289,10 @@ class _CreatorRead:
     @property
     def kind(self) -> str:
         return creators.creator_kind(self.creator)
+
+    @property
+    def new_lists(self):
+        return creators.creator_new_lists(self.creator)
 
     def __getattr__(self, name):
         if name == "accounts":
@@ -472,7 +481,7 @@ def update_creator(s: Session, slug: str, body: CreatorAPIUpdate) -> CreatorPage
         creators.rename_creator(creator, title)
         creator.title_from_user = True
     creators.update_creator_settings(s, creator, creators.CreatorSettings(
-        NewSectionAction(body.new_sections), body.genre, body.content_rating,
+        dict(body.new_lists), body.genre, body.content_rating,
     ))
     s.flush()
     return creator_page(s, slug)

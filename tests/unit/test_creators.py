@@ -389,7 +389,7 @@ def test_the_creator_asks_about_a_new_playlist_also_when_its_collection_has_play
     # The creator alone finds new playlists and asks; its own collection follows the creator's setting.
     assert [section.ref for section in result.asked] == ["PLbarn"]
     main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
-    assert (main.link_seasons, main.new_link_seasons) == ("selected", "ask")
+    assert (main.link_seasons, main.new_lists) == ("selected", {"list": "ask"})
 
 
 def test_a_creator_set_to_make_new_playlists_seasons_adds_them_to_its_own_collection(client, session, tube):
@@ -397,20 +397,20 @@ def test_a_creator_set_to_make_new_playlists_seasons_adds_them_to_its_own_collec
 
     _one_show(client)
     client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
-    assert client.patch("/api/creators/workshop", json={"newSections": "season"}).status_code == 200
+    assert client.patch("/api/creators/workshop", json={"newLists": {"list": "season"}}).status_code == 200
 
     result = _follow(session, tube, (NEW_LIST, *SECTIONS))
 
     assert [section.ref for section in result.added] == ["PLbarn"]
     main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
     session.refresh(main)
-    assert main.new_link_seasons == "add"
+    assert main.new_lists == {"list": "add"}
     assert {link.ref: link.enabled for link in main.lists}["PLbarn"] is True
 
 
 def test_a_creator_set_to_add_new_playlists_as_collections_adds_them(client, session, tube):
     _one_show(client)
-    assert client.patch("/api/creators/workshop", json={"newSections": "own", "genre": "DIY"}).status_code == 200
+    assert client.patch("/api/creators/workshop", json={"newLists": {"list": "own"}, "genre": "DIY"}).status_code == 200
 
     result = _follow(session, tube, (NEW_LIST, *SECTIONS))
 
@@ -441,7 +441,7 @@ def test_the_creators_genre_follows_to_collections_that_had_it(client, session):
     session.execute(Collection.__table__.update().where(Collection.slug == "UCworkshop-shorts").values(genre="Shorts"))
     session.commit()
 
-    client.patch("/api/creators/workshop", json={"newSections": "ask", "genre": "Woodworking", "contentRating": "TV-G"})
+    client.patch("/api/creators/workshop", json={"newLists": {"list": "ask"}, "genre": "Woodworking", "contentRating": "TV-G"})
 
     session.expire_all()
     genres = dict(session.execute(select(Collection.slug, Collection.genre)).all())
@@ -730,14 +730,14 @@ def test_the_seasons_window_of_a_creators_collection_follows_the_creator(client,
     assert (view["creatorSlug"], view["creatorTitle"], view["linkSeasons"]) == ("workshop", "Northwind Workshop", "selected")
     body = {
         "seasons": [{"id": season["id"], "name": season["name"]} for season in view["seasons"]],
-        "customSeasonOrder": False, "linkSeasons": "all", "newLinkSeasons": "add",
+        "customSeasonOrder": False, "linkSeasons": "all", "newLists": {"list": "add"},
         "playlists": [{"id": playlist["id"], "enabled": playlist["enabled"]} for playlist in view["playlists"]],
     }
     refused = client.put("/api/collections/UCworkshop/season-settings", json=body)
     assert refused.status_code == 422 and "decides which of its playlists" in refused.text
     saved = client.put("/api/collections/UCworkshop/season-settings", json={**body, "linkSeasons": "selected"}).json()
     # What happens with a new playlist stays the creator's choice.
-    assert saved["newLinkSeasons"] == "ask"
+    assert [(setting["key"], setting["action"]) for setting in saved["newLists"]] == [("list", "ask")]
 
 
 def test_an_artists_creator_is_called_an_artist(client, tube, session, monkeypatch):
@@ -936,7 +936,7 @@ def test_a_renamed_creator_keeps_its_name_and_gives_it_to_its_collections_as_aut
     from backend.db.models import Collection
 
     _one_show(client)
-    assert client.patch("/api/creators/workshop", json={"title": "Northwind", "newSections": "ask"}).status_code == 200
+    assert client.patch("/api/creators/workshop", json={"title": "Northwind", "newLists": {"list": "ask"}}).status_code == 200
     authors = {collection.author_name for collection in session.scalars(select(Collection))}
     assert authors == {"Northwind"}
 
@@ -966,12 +966,12 @@ def test_new_sections_only_become_seasons_where_a_creators_site_can_make_lists_s
         tube.sites[0], link_seasons=False, creator_sections=CreatorSectionNames("a show", "shows"),
     ),))
     plan = [{"ref": "videos", "target": "own"}]
-    refused = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newSections": "season"})
+    refused = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newLists": {"list": "season"}})
     assert refused.status_code == 422
     assert "can't be added as seasons" in str(refused.json())
 
-    assert client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newSections": "own"}).status_code == 201
-    refused = client.patch("/api/creators/workshop", json={"newSections": "season"})
+    assert client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newLists": {"list": "own"}}).status_code == 201
+    refused = client.patch("/api/creators/workshop", json={"newLists": {"list": "season"}})
     assert refused.status_code == 422
     assert "shows can't be added as seasons" in str(refused.json())
 
@@ -1128,21 +1128,33 @@ def test_each_new_collection_takes_the_type_and_identification_chosen_for_it(cli
     }
 
 
-def test_an_artist_set_to_add_new_albums_asks_about_a_new_playlist(client, session, tube):
+def test_each_kind_of_list_has_its_own_setting_for_new_ones(client, session, tube, monkeypatch):
     from dataclasses import replace
 
-    from backend.db.models import Collection
+    from backend.db.models import Collection, Creator
+    from sources import CreatorSectionNames, ListType
 
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], list_types=(
+        ListType("album", CreatorSectionNames("an album", "albums"), albums=True),
+        ListType("playlist", CreatorSectionNames("a playlist", "playlists")),
+    )),))
     _one_show(client)
     client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
-    assert client.patch("/api/creators/workshop", json={"newSections": "season"}).status_code == 200
+    page = client.patch("/api/creators/workshop", json={"newLists": {"album": "season"}}).json()
+    assert [(setting["key"], setting["many"], setting["albums"], setting["action"]) for setting in page["newLists"]] == [
+        ("album", "albums", True, "season"), ("playlist", "playlists", False, "ask"),
+    ]
+    refused = client.patch("/api/creators/workshop", json={"newLists": {"list": "season"}})
+    assert refused.status_code == 422
+    assert refused.json()["detail"] == "This creator's sites have no lists of the kind list"
     main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
-    main.type = "music"
-    session.commit()
-    album = replace(NEW_LIST, ref="PLalbum", url="https://tube.example/playlist?list=PLalbum", title="Album", album=True)
-    playlist = replace(NEW_LIST, album=False)
+    session.refresh(main)
+    assert main.new_lists == {"album": "add", "playlist": "ask"}
+    assert session.scalar(select(Creator)).new_lists == {"album": "season", "playlist": "ask"}
+    album = replace(NEW_LIST, ref="PLalbum", url="https://tube.example/playlist?list=PLalbum", title="Album", list_type="album")
+    playlist = replace(NEW_LIST, list_type="playlist")
 
     result = _follow(session, tube, (album, playlist, *SECTIONS))
 
-    # The Site tells the album from the playlist, which waits for the user's choice.
+    # The album is added by itself; the playlist waits for the user's choice.
     assert ([section.ref for section in result.added], [section.ref for section in result.asked]) == (["PLalbum"], ["PLbarn"])

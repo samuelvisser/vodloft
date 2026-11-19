@@ -134,6 +134,22 @@ class CreatorSectionNames:
     many: str = "playlists and shows"
 
 
+LIST_TYPE = "list"
+"""The key of a Site's one kind of list, for a Site that names no list types of its own."""
+
+
+@dataclass(frozen=True)
+class ListType:
+    """One kind of list a Site's creators make, such as an album or a playlist on SoundCloud. Each kind has a setting
+    of its own for what happens with a new one. ``key`` is stored with those settings, so it never changes."""
+
+    key: str
+    names: CreatorSectionNames
+    albums: bool = False
+    """The kind that best describes an artist's albums. A new artist on a Site with such kinds adds new lists of
+    those kinds and skips the others; on any other Site, an artist adds every kind."""
+
+
 @dataclass(frozen=True)
 class SiteSettings:
     """Which of the settings in ``config.settings.site_settings`` a Site shows, and what it starts with.
@@ -415,10 +431,9 @@ class SectionRef:
     """A list with seasons of its own, such as a Daily Wire show, keeps them."""
     year: str | None = None
     """The year an album came out."""
-    album: bool | None = None
-    """Whether the list is an album the artist released, rather than a playlist they put together: every list of a
-    Bandcamp artist is, and SoundCloud tells its albums from its playlists. None where the Site can't tell, such as on
-    YouTube."""
+    list_type: str | None = None
+    """The key of the Site's ``ListType`` the list is, such as album or playlist on SoundCloud; None for the Site's
+    first."""
 
 
 @dataclass(frozen=True)
@@ -816,6 +831,9 @@ class Site:
     """The ways the Site offers to keep a creator, the first one the default."""
     creator_sections: CreatorSectionNames = CreatorSectionNames()
     """What the Site calls the things its creators add, such as playlists on YouTube or shows on The Daily Wire."""
+    list_types: tuple[ListType, ...] = ()
+    """The kinds of list the Site's creators make, when there is more than one, such as SoundCloud's albums and
+    playlists. Without, the Site has one, named like ``creator_sections``; see ``kinds_of_list``."""
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
@@ -828,6 +846,16 @@ class Site:
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
     videos, it starts hidden. Where a collection is locked as a whole, as on The Daily Wire, hiding it
     would empty the collection."""
+
+    @property
+    def kinds_of_list(self) -> tuple[ListType, ...]:
+        """The kinds of list the Site's creators make, at least one."""
+        return self.list_types or (ListType(LIST_TYPE, self.creator_sections),)
+
+    def list_type_of(self, section: SectionRef) -> ListType:
+        """The kind of list a section is. A section of no kind of its own, such as a feed or a show, is the first."""
+        kinds = self.kinds_of_list
+        return next((kind for kind in kinds if kind.key == section.list_type), kinds[0])
 
     def access(self, key: str | None) -> Access | None:
         """One of ``accesses`` by its key."""

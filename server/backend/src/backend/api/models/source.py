@@ -407,6 +407,20 @@ class CreatorSectionNamesAPIRead(ResponseBase):
     many: str
 
 
+class ListKindAPIRead(ResponseBase):
+    """One kind of list a creator's Sites have, such as a SoundCloud artist's albums or their playlists, with its own
+    setting for what happens with a new one."""
+
+    key: str
+    one: str
+    """One of them, with its article, such as "an album"."""
+    many: str
+    seasons: bool
+    """The lists can be seasons of the creator's own collection."""
+    albums: bool = Field(default=False, validation_alias=AliasPath("kind", "albums"))
+    """The kind best describes an artist's albums."""
+
+
 class SiteAPIRead(ResponseBase):
     """The website a collection or video is on, such as YouTube, whichever Source fetches it."""
 

@@ -34,8 +34,9 @@ class Creator(Base):
     links: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", comment="The creator's own links")
     facts: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", comment='Short facts, such as "1.2M subscribers"')
     added_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    new_sections: Mapped[str] = mapped_column(
-        default="ask", server_default="ask", comment="What happens when the creator adds a section: ask, season, own or ignore",
+    new_lists: Mapped[dict[str, str]] = mapped_column(
+        JSON, default=dict, server_default="{}",
+        comment="What happens when the creator adds a list, by the kind of list: ask, season, own or ignore",
     )
     genre: Mapped[Optional[str]] = mapped_column(comment="Given to the creator's collections, for their NFO files")
     content_rating: Mapped[Optional[str]] = mapped_column(comment="Given to the creator's collections, for their NFO files")

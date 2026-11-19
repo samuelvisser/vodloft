@@ -107,7 +107,7 @@ Renaming a season or giving it another number doesn't rename files you already d
 A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundCloud, can make the channel's playlists, or the artist's albums, seasons of their own. Turn on **Playlists as seasons** in the Seasons window (in a Music collection, the Albums window has **The artist's albums**), and choose:
 
 - **Which playlists**: every playlist, also the ones to come, or only those you switch on in the list. **Look for new playlists** asks the site for the list again.
-- **When the channel adds a playlist**: ask you, make it a season right away, or leave it off.
+- **When the channel adds a playlist**: ask you, make it a season right away, or always skip it. A site that knows more than one kind of list has a setting for each: on SoundCloud, one for new albums and one for new playlists. A Music collection on such a site skips new playlists until you choose otherwise, and when it is set up it starts with only the albums switched on.
 - **Videos in no playlist**: one season called **Videos** (**Singles** for music), or a season per year.
 - **How playlist content fits in the collection** (in the site's own word, such as album), for videos of other channels in these playlists: **Only include media already in the collection** (the default), **Include media that is not in the collection**, in their playlist's season, or **Include only what the playlists contain** (see [Collections of only playlists](#collections-of-only-playlists)).
 
@@ -258,12 +258,14 @@ Each part downloads only its own stretch of the video, so it works with everythi
 
 ### Following a creator
 
-Once a day VODLoft looks at each creator for playlists or shows it did not have before, also for a main collection that has playlist seasons. **Check now** on the creator's page looks right away. What happens with a new one is up to you, under **When the creator adds a playlist or show** on the Add creator page or in the creator's **Edit** page:
+Once a day VODLoft looks at each creator for playlists or shows it did not have before, also for a main collection that has playlist seasons. **Check now** on the creator's page looks right away. What happens with a new one is up to you, under **New playlists** (or shows, or albums) on the Add creator page or in the creator's **Edit** page. A site that knows more than one kind of list has a setting for each, next to each other: a SoundCloud artist has one for **New albums** and one for **New playlists**. The choices are:
 
 - **Ask me** (the default): VODLoft sends a message and shows the new playlist or show at the top of the creator's **Edit** page, where you choose to add it to the main collection as a season, give it a collection of its own, or ignore it.
 - **Add it as a season**: a new playlist becomes a season of the creator's main collection. A new Daily Wire show gets a collection of its own, because it has seasons of its own.
 - **Add it as a collection**: each new playlist or show becomes a collection.
-- **Ignore it**: nothing is added, and you are not asked.
+- **Always skip it**: nothing is added, and you are not asked.
+
+A music artist starts with every kind of list set to **Add it as an album**. Where the site tells albums from other lists, as SoundCloud does, only the albums are added, and the other kinds, such as the artist's playlists, start at **Always skip it**.
 
 Playlists or shows you skipped stay under **Not in your library** on the creator's **Edit** page, each with buttons to add them.
 
@@ -271,7 +273,7 @@ Playlists or shows you skipped stay under **Not in your library** on the creator
 
 The creator's **Edit** page holds:
 
-- **When the creator adds a playlist or show**: the choice described under Following a creator.
+- **New playlists** (or shows, or albums, one for each kind of list): the choices described under Following a creator.
 - **Genre** and **Content rating**: written to the NFO file of each of the creator's collections that has none of its own. Changing them here changes the collections that still had the old value.
 
 ### A video that moves to another collection: Reassigned

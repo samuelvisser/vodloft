@@ -474,7 +474,7 @@ def _artist_import(monkeypatch):
 
         def creator_details(self, ref, progress=lambda step: None):
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
-                               kind=SectionKind.LIST, kind_label="Album", album=True)
+                               kind=SectionKind.LIST, kind_label="Album")
             single = SectionRef(ref="track/one", url="https://emilyharpist.bandcamp.com/track/one", title="One",
                                 kind=SectionKind.ITEM, kind_label="Single")
             return CreatorDetails(ref="emilyharpist", url="https://emilyharpist.bandcamp.com", title="Emily Hopkins",
@@ -521,8 +521,8 @@ def test_an_import_without_creators_makes_the_artist_one_plain_collection(instal
     collection = session.scalar(select(Collection))
     assert (collection.title, collection.type, collection.creator_id) == ("Emily Hopkins", "music", None)
     # Every album is a season, the ones to come too.
-    assert (collection.sharing_url, collection.link_seasons, collection.new_link_seasons) == (
-        "https://emilyharpist.bandcamp.com", "selected", "add",
+    assert (collection.sharing_url, collection.link_seasons, collection.new_lists) == (
+        "https://emilyharpist.bandcamp.com", "selected", {"list": "add"},
     )
 
 
@@ -807,7 +807,7 @@ def test_an_imported_artist_keeps_ytdl_subs_name_with_their_albums_and_music_vid
     from backend.db.models import Creator, Collection
     from backend.services import import_uploads, imports
     from sources import registry
-    from sources.contract import CreatorDetails, Feature, SectionKind, SectionRef, Site
+    from sources.contract import CreatorDetails, CreatorSectionNames, Feature, ListType, SectionKind, SectionRef, Site
 
     session = installation
     subscriptions = """
@@ -830,13 +830,16 @@ Jellyfin Music Videos:
     class Artists(type(ytdlp)):
         domains = ("bandcamp.com", "youtube.com")
         features = ytdlp.features | {Feature.CREATORS}
-        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_label="artist", link_seasons=True),)
+        # A Site that tells an artist's albums from their playlists.
+        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_label="artist", link_seasons=True,
+                      list_types=(ListType("album", CreatorSectionNames("an album", "albums"), albums=True),
+                                  ListType("playlist", CreatorSectionNames("a playlist", "playlists")))),)
 
         def creator_details(self, ref, progress=lambda step: None):
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
-                               kind=SectionKind.LIST, kind_label="Album", album=True)
+                               kind=SectionKind.LIST, kind_label="Album", list_type="album")
             playlist = SectionRef(ref="sets/favourites", url="https://emilyharpist.bandcamp.com/sets/favourites",
-                                  title="Favourites", kind=SectionKind.LIST, kind_label="Playlist", album=False)
+                                  title="Favourites", kind=SectionKind.LIST, kind_label="Playlist", list_type="playlist")
             # The site names the artist by their handle; ytdl-sub by the subscription.
             return CreatorDetails(ref="emilyharpist", url="https://emilyharpist.bandcamp.com", title="emilyharpist",
                                   sections=(album, playlist), music=True)
@@ -850,7 +853,8 @@ Jellyfin Music Videos:
     session.expire_all()
 
     creator = session.scalar(select(Creator))
-    assert (creator.title, creator.new_sections) == ("Emily Hopkins", "season")
+    # New albums are added as they come out, as the other program did; new playlists are skipped.
+    assert (creator.title, creator.new_lists) == ("Emily Hopkins", {"album": "season", "playlist": "ignore"})
     collections = {collection.title: collection for collection in session.scalars(select(Collection))}
     assert set(collections) == {"Emily Hopkins albums", "Emily Hopkins music videos"}
     albums, videos = collections["Emily Hopkins albums"], collections["Emily Hopkins music videos"]
