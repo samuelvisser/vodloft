@@ -3,7 +3,7 @@
  * values that matter in bold.
  */
 import {describeMatch} from '../RegexEditor/regexModel'
-import type {Noun} from '../../lib/collectionWords'
+import {collectionWords, type Noun} from '../../lib/collectionWords'
 import {isDateLine, splitIgnoreCase, type FilterLike} from './episodeFilters'
 
 /** A piece of a sentence; strong pieces are the values you chose. */
@@ -116,7 +116,7 @@ export function filterSentence(
     deleteOlder = false,
     today: Date = new Date(),
     /** What the collection calls its seasons: albums in a Music collection. */
-    season: Pick<Noun, 'one' | 'many'> = {one: 'season', many: 'seasons'},
+    season: Pick<Noun, 'one' | 'many'> = collectionWords(null).season,
 ): Part[] {
     if (isDateLine(filter)) return dateLineSentence(filter, deleteOlder, today)
     const lead = {text: `${ACTION_WORDS[filter.action] ?? ACTION_WORDS.skip} `}

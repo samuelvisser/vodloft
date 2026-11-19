@@ -61,7 +61,6 @@ const PublishedModeReg = createSelectRegistry('PublishedMode', {
 type PublishedMode = (typeof PublishedModeReg)['values'][number]
 
 const UPCOMING_SEASONS = '__upcoming__'
-const SEASON_WORDS = collectionWords(null)
 
 function publishedMode(filter: EpisodeFilter): PublishedMode {
     if (filter.until !== null) return 'between'
@@ -110,7 +109,7 @@ function numberOrNull(value: string): number | null {
 }
 
 /** One list of filters, from top to bottom, that decides which episodes a Download Profile downloads and keeps. */
-export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, collectionId, season = SEASON_WORDS.season}: Props) {
+export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, collectionId, season = collectionWords(null).season}: Props) {
     const {control, getValues, setValue, trigger} = form
     const {fields, insert, remove, move} = useFieldArray({control, name: 'filters'})
     const seasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal

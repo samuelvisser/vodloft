@@ -33,10 +33,9 @@ const ReassignedMoveSchema = z.object({
 })
 export type ReassignedMove = z.infer<typeof ReassignedMoveSchema>
 
-const SHOW_WORDS = collectionWords(null)
 
 /** What the Moved badge explains, in the collection's words. */
-export const movedMessage = (words: CollectionWords = SHOW_WORDS) =>
+export const movedMessage = (words: CollectionWords = collectionWords(null)) =>
     `Belongs in another ${words.season.one} now; it stays where it is until you move it, files and all`
 
 const placeKey = (episodeSlug: string) => ['episode', episodeSlug, 'seasonPlace']
@@ -88,7 +87,7 @@ export function useReassignedEpisodes(collectionSlug: string | undefined) {
 }
 
 /** What moving reassigned episodes did, in words. */
-export function reassignedMoveMessage(result: ReassignedMove, words: CollectionWords = SHOW_WORDS): string {
+export function reassignedMoveMessage(result: ReassignedMove, words: CollectionWords = collectionWords(null)): string {
     if (!result.episodes) return `No ${words.episode.many} to move`
     const parts = [
         result.renamed ? `renaming ${result.renamed} ${result.renamed === 1 ? 'download' : 'downloads'} into ${result.episodes === 1 ? 'its' : 'their'} new collection` : null,
@@ -108,7 +107,7 @@ export async function postReassignedMove(path: string): Promise<ReassignedMove> 
 }
 
 /** Move a reassigned episode, files and all, to the collection it belongs in now. */
-export function useMoveToCollection(episodeSlug: string, collectionSlug?: string, words: CollectionWords = SHOW_WORDS) {
+export function useMoveToCollection(episodeSlug: string, collectionSlug?: string, words: CollectionWords = collectionWords(null)) {
     const queryClient = useQueryClient()
     const navigate = useNavigate()
     const [moving, setMoving] = useState(false)
@@ -139,7 +138,7 @@ export function useMoveToCollection(episodeSlug: string, collectionSlug?: string
 }
 
 /** Move an episode, files and all, to the season it belongs in now. */
-export function useMoveToSeason(episodeSlug: string, collectionSlug?: string, words: CollectionWords = SHOW_WORDS) {
+export function useMoveToSeason(episodeSlug: string, collectionSlug?: string, words: CollectionWords = collectionWords(null)) {
     const queryClient = useQueryClient()
     const startOperation = useStartOperation()
     const [moving, setMoving] = useState(false)
@@ -163,7 +162,7 @@ export function useMoveToSeason(episodeSlug: string, collectionSlug?: string, wo
 }
 
 /** Where the episode belongs now, in words. */
-export function newPlace(place: SeasonPlace, words: CollectionWords = SHOW_WORDS): string {
+export function newPlace(place: SeasonPlace, words: CollectionWords = collectionWords(null)): string {
     const season = words.season.one
     if (place.linkTitle) {
         if (place.linkKind === season) return `the ${season} ${place.linkTitle}`
@@ -198,7 +197,7 @@ export function ReassignedBadge({collectionTitle, onCover = false, asText = fals
 
 /** A note on a downloaded episode that its collection's link seasons now put in another season, or that its creator
  * places in another collection, with a way to move it. */
-export default function SeasonPlaceNote({episodeSlug, collectionSlug, canManage, words = SHOW_WORDS, fileWords = words}: {
+export default function SeasonPlaceNote({episodeSlug, collectionSlug, canManage, words = collectionWords(null), fileWords = words}: {
     episodeSlug: string, collectionSlug?: string, canManage: boolean,
     /** What the collection calls its seasons and episodes, and the downloads of them. */
     words?: CollectionWords, fileWords?: CollectionWords,

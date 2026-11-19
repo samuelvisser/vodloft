@@ -1,16 +1,13 @@
 import {createSelectRegistry} from '../utils/selectRegistry'
+import {collectionWords} from '../lib/collectionWords'
 
 /** A Site's word for a creator, such as host, at the start of a sentence or a label. */
 export function capitalized(label: string): string {
     return label.slice(0, 1).toUpperCase() + label.slice(1)
 }
 
-/** A Site's word for one thing with its article, such as "an album" or "a playlist". */
-export function withArticle(word: string): string {
-    return `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`
-}
-
-type Names = {one: string, many: string}
+/** A word as the backend names it: one, many, and one with its article, such as "an album". */
+type Names = {one: string, many: string, a: string}
 
 function joined(words: string[], conjunction: string): string {
     const unique = [...new Set(words)]
@@ -20,7 +17,10 @@ function joined(words: string[], conjunction: string): string {
 /** One name for several section types, such as "album or playlist" and "albums and playlists" for SoundCloud's
  * lists, or "album, playlist or list" for three. */
 export function joinedNames(names: Names[]): Names {
-    return {one: joined(names.map((name) => name.one), 'or'), many: joined(names.map((name) => name.many), 'and')}
+    const one = joined(names.map((name) => name.one), 'or')
+    // "an album or playlist" takes the first one's article.
+    const article = names[0] ? names[0].a.slice(0, names[0].a.length - names[0].one.length) : ''
+    return {one, many: joined(names.map((name) => name.many), 'and'), a: `${article}${one}`}
 }
 
 /** The Site's section type a section is: the one it names, or else the Site's first of its kind. */
@@ -29,20 +29,20 @@ export function sectionTypeOf<T extends {key: string, kind: string}>(types: T[],
 }
 
 /** What the Site calls its lists, all its types of list together, such as "albums and playlists" on SoundCloud. */
-export function listNames(types: {kind: string, one: string, many: string}[]): Names {
+export function listNames(types: (Names & {kind: string})[]): Names {
     return joinedNames(types.filter((type) => type.kind === 'list'))
 }
 
 /** What the Site calls the lists and shows its creators add, which VODLoft looks for every day, such as "playlists"
  * on YouTube or "shows" on The Daily Wire. */
-export function growingNames(types: {kind: string, one: string, many: string}[]): Names {
+export function growingNames(types: (Names & {kind: string})[]): Names {
     return joinedNames(types.filter((type) => type.kind === 'list' || type.kind === 'show'))
 }
 
 /** What the Site calls a section, by its type, such as album; VODLoft's own word for its kind where the Site names
  * none. */
-export function sectionName(types: {key: string, kind: string, one: string, many: string}[], section: {type?: string | null, kind: string}): Names {
-    return sectionTypeOf(types, section) ?? (section.kind === 'item' ? {one: 'video', many: 'videos'} : {one: section.kind, many: `${section.kind}s`})
+export function sectionName(types: (Names & {key: string, kind: string})[], section: {type?: string | null, kind: string}): Names {
+    return sectionTypeOf(types, section) ?? (section.kind === 'item' ? {one: 'video', many: 'videos', a: 'a video'} : {one: section.kind, many: `${section.kind}s`, a: `a ${section.kind}`})
 }
 
 /** What a creator is, for a label: "YouTube creator" on one Site, "Creator on YouTube and The Daily Wire" on several. */
@@ -61,13 +61,13 @@ const newListActionRegs = new Map<string, ReturnType<typeof makeNewListActionReg
 
 function makeNewListActionReg(label: string, kind: ListKind, music: boolean) {
     // An artist's lists are albums of their own collection.
-    const season = music ? 'album' : 'season'
+    const season = collectionWords(music ? 'music' : null).season
     return createSelectRegistry(`NewListAction-${label}-${music}-${kind.key}-${kind.many}-${kind.seasons}`, {
         ask: {label: 'Ask me', help: `Sends a message, and shows the new one on the ${label}'s Edit page with the choices.`},
         // Only where the kind's lists can be seasons, unlike The Daily Wire's shows.
         ...(kind.seasons ? {season: {
-            label: music ? 'Add it as an album' : 'Add it as a season',
-            help: `New ${kind.many} become ${season}s of the ${label}'s own collection.`,
+            label: `Add it as ${season.a}`,
+            help: `New ${kind.many} become ${season.many} of the ${label}'s own collection.`,
         }} : {}),
         own: {label: 'Add it as a collection', help: `Each new one becomes a collection of its own.`},
         ignore: {label: 'Always skip it', help: `It is only listed on the ${label}'s Edit page.`},

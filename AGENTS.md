@@ -198,6 +198,15 @@ does differently on a Site lives in that Site's contract, a `Site` from `sources
   sound only: what its contract leaves out of `episode_tags`, `downloads` and `upgrade_checks` becomes the sound
   version (tracks, no video heights, HLS or subtitles). A value the contract sets itself always wins.
 
+### Collection contracts
+What VODLoft does differently per collection type (Podcast, Series, Music) lives in that type's `CollectionContract`
+in `backend.types.collection_contracts`, the way a Site's lives in its Site contract.
+- `CollectionContract`'s field defaults are the fallback for every type; a type's contract sets only what differs.
+- What a collection calls its seasons and episodes comes from there: `collection_contract(type).words_for(audio)` for a
+  type, `collection_words(collection)` in `backend.services.sites` for a collection on its Site. Words are `Names`, with
+  `one`, `many` and `a` (with its article). Do not write season, album, episode or track words into code.
+- The UI gets every contract with the public config and names things only through `ui/src/lib/collectionWords.ts`.
+
 ## Jinja analysis
 Output template analysis lives in the `jinja_analysis` package (`server/jinja_analysis`), which only depends on
 jinja2 and never imports VODLoft code; its tests use jinja2 and the package alone.

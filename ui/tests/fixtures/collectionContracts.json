@@ -1,0 +1,97 @@
+{
+  "words": {
+    "season": {
+      "one": "season",
+      "many": "seasons",
+      "a": "a season"
+    },
+    "episode": {
+      "one": "episode",
+      "many": "episodes",
+      "a": "an episode"
+    }
+  },
+  "types": [
+    {
+      "type": "podcast",
+      "words": {
+        "season": {
+          "one": "season",
+          "many": "seasons",
+          "a": "a season"
+        },
+        "episode": {
+          "one": "episode",
+          "many": "episodes",
+          "a": "an episode"
+        }
+      },
+      "audioWords": {
+        "season": {
+          "one": "season",
+          "many": "seasons",
+          "a": "a season"
+        },
+        "episode": {
+          "one": "episode",
+          "many": "episodes",
+          "a": "an episode"
+        }
+      }
+    },
+    {
+      "type": "series",
+      "words": {
+        "season": {
+          "one": "season",
+          "many": "seasons",
+          "a": "a season"
+        },
+        "episode": {
+          "one": "episode",
+          "many": "episodes",
+          "a": "an episode"
+        }
+      },
+      "audioWords": {
+        "season": {
+          "one": "season",
+          "many": "seasons",
+          "a": "a season"
+        },
+        "episode": {
+          "one": "episode",
+          "many": "episodes",
+          "a": "an episode"
+        }
+      }
+    },
+    {
+      "type": "music",
+      "words": {
+        "season": {
+          "one": "album",
+          "many": "albums",
+          "a": "an album"
+        },
+        "episode": {
+          "one": "music video",
+          "many": "music videos",
+          "a": "a music video"
+        }
+      },
+      "audioWords": {
+        "season": {
+          "one": "album",
+          "many": "albums",
+          "a": "an album"
+        },
+        "episode": {
+          "one": "track",
+          "many": "tracks",
+          "a": "a track"
+        }
+      }
+    }
+  ]
+}

@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {collectionWords, wordsFor} from '../src/lib/collectionWords'
+import {collectionWords, setCollectionContracts, wordsFor} from '../src/lib/collectionWords'
+import contracts from './fixtures/collectionContracts.json'
+
+// The words the backend serves (tests/unit/test_collection_contracts.py keeps this copy the same).
+setCollectionContracts(contracts)
 
 test('a podcast or series has seasons and episodes', () => {
     for (const type of ['podcast', 'series', null]) {

@@ -15,7 +15,7 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry, type SelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
 import NewListSettings from '../common/NewListSettings'
-import {type ListKind, listNames, withArticle} from '../../types/creator'
+import {type ListKind, listNames} from '../../types/creator'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {
     CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, seasonsFormValues,
@@ -50,7 +50,7 @@ const dialogWords = (collection: CollectionWords, music: boolean, view: Collecti
 
 /** What the collection's Site calls its lists, all its types of list together, such as "albums and playlists" on
  * SoundCloud, and the season of the videos in none of them. */
-type ListNames = {one: string, many: string, looseSeason: string}
+type ListNames = {one: string, many: string, a: string, looseSeason: string}
 const namesOf = (view: CollectionSeasonsRead): ListNames => ({...listNames(view.listTypes), looseSeason: view.looseSeason})
 
 const capitalized = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
@@ -67,7 +67,7 @@ async function readSeasons(response: Response): Promise<CollectionSeasonsRead> {
 /** The registries of the dialog's selects, in the words of the collection's Site. */
 function registries(names: ListNames, words: Words, view: CollectionSeasonsRead) {
     const outside = {
-        leave_out: {label: 'Only include media already in the collection', help: `${capitalized(withArticle(names.one))} only takes the ${words.videos} the collection's own link has.`},
+        leave_out: {label: 'Only include media already in the collection', help: `${capitalized(names.a)} only takes the ${words.videos} the collection's own link has.`},
         add: {label: 'Include media that is not in the collection', help: `They join the collection in their ${names.one}'s ${words.season.one}${words.here}. Switching a ${names.one} or this setting off removes them again, files and all. When the ${words.creator} takes a downloaded one out, Home asks whether to keep it.`},
         only: {label: `Include only what the ${names.many} contain`, help: `The collection holds nothing but the ${words.videos} of its ${names.many}, also other ${words.creators}', and you can add links of your own, from any site. Its own ${words.videos} in no ${names.one} leave.`},
     }
@@ -425,7 +425,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
                                                     {mode === 'selected' && view.listsPlaylists && !view.creatorSlug && (
                                                         <div className="form-row">
-                                                            <label>When the {words.creator} adds {withArticle(names.one)}</label>
+                                                            <label>When the {words.creator} adds {names.a}</label>
                                                             <NewListSettings
                                                                 kinds={view.newLists} values={newLists}
                                                                 fallback="ask" idPrefix="seasons-new-links" registryFor={regs.newLinks}

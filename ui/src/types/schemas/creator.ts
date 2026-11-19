@@ -46,6 +46,7 @@ export const CreatorNewListSchema = z.object({
     key: z.string(),
     one: z.string(),
     many: z.string(),
+    a: z.string(),
     /** The lists can be seasons of the creator's own collection. */
     seasons: z.boolean(),
     /** The kind best describes an artist's albums. */

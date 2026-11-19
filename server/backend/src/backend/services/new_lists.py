@@ -40,18 +40,6 @@ class NewListSetting:
     def key(self) -> str:
         return self.kind.key
 
-    @property
-    def one(self) -> str:
-        return self.kind.names.one
-
-    @property
-    def many(self) -> str:
-        return self.kind.names.many
-
-    @property
-    def seasons(self) -> bool:
-        return self.kind.seasons
-
 
 def list_kinds(sites: Iterable[Site]) -> list[ListKind]:
     """The types of list and show of ``sites``, in their order. Sites that share a type, such as YouTube's and

@@ -192,6 +192,8 @@ export const SectionTypeSchema = z.object({
     kind: z.enum(['feed', 'list', 'show', 'item']),
     one: z.string(),
     many: z.string(),
+    /** One of them with its article, such as "an album". */
+    a: z.string(),
 })
 export type SectionType = z.infer<typeof SectionTypeSchema>
 

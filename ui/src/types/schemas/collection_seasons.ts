@@ -57,7 +57,7 @@ export const CollectionSeasonsReadSchema = z.object({
     linkSeasons: z.enum(['off', ...LinkSeasonModeValues]),
     /** What happens with a list the creator adds, for each kind of list of the collection's Site. */
     newLists: z.array(z.object({
-        key: z.string(), one: z.string(), many: z.string(), seasons: z.boolean(), albums: z.boolean().default(false),
+        key: z.string(), one: z.string(), many: z.string(), a: z.string(), seasons: z.boolean(), albums: z.boolean().default(false),
         action: z.enum(NewLinkSeasonValues),
     })),
     listLayout: z.enum(ListLayoutValues).default('season_each'),

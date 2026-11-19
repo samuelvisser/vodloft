@@ -121,10 +121,17 @@ class UpgradeChecks:
 
 @dataclass(frozen=True)
 class Names:
-    """A word in its singular and plural forms, in lower case and without an article, such as album and albums."""
+    """A word in its singular and plural forms, in lower case and without an article, such as album and albums.
+    ``article`` is only set where the first letter does not tell it, as for an hour."""
 
     one: str
     many: str
+    article: str = ""
+
+    @property
+    def a(self) -> str:
+        """The word with its article, such as an album or a playlist."""
+        return f"{self.article or ('an' if self.one[:1] in 'aeiou' else 'a')} {self.one}"
 
 
 LIST_TYPE = "list"

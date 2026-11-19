@@ -401,23 +401,27 @@ class SearchResultsAPIRead(ResponseBase):
 
 class SectionTypeAPIRead(ResponseBase):
     """One type of section a Site's creators have, such as a feed, or an album or a playlist on SoundCloud, and what
-    the Site calls it, in lower case and without an article."""
+    the Site calls it, in lower case."""
 
     key: str
     kind: Literal["feed", "list", "show", "item"]
     one: str = Field(validation_alias=AliasPath("names", "one"))
     many: str = Field(validation_alias=AliasPath("names", "many"))
+    a: str = Field(validation_alias=AliasPath("names", "a"))
+    """One of them with its article, such as "an album"."""
 
 
 class ListKindAPIRead(ResponseBase):
     """One kind of list a creator's Sites have, such as a SoundCloud artist's albums or their playlists, with its own
     setting for what happens with a new one."""
 
-    key: str
-    one: str
+    key: str = Field(validation_alias=AliasPath("kind", "key"))
+    one: str = Field(validation_alias=AliasPath("kind", "names", "one"))
     """One of them, without an article, such as "album"."""
-    many: str
-    seasons: bool
+    many: str = Field(validation_alias=AliasPath("kind", "names", "many"))
+    a: str = Field(validation_alias=AliasPath("kind", "names", "a"))
+    """One of them with its article, such as "an album"."""
+    seasons: bool = Field(validation_alias=AliasPath("kind", "seasons"))
     """The lists can be seasons of the creator's own collection."""
     albums: bool = Field(default=False, validation_alias=AliasPath("kind", "albums"))
     """The kind best describes an artist's albums."""

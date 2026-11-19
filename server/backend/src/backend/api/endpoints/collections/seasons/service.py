@@ -14,7 +14,6 @@ from backend.db.models import Collection, CollectionList, CollectionListItem, Ep
 from backend.db.models import MediaDownloadBase
 from backend.services.collections import reindex_collection
 from backend.services.errors import ServiceError
-from backend.utils.helpers import with_article
 from backend.services.new_lists import checked_new_link_seasons
 from backend.services.link_seasons import (
     collection_list_kinds, collection_new_lists,
@@ -28,6 +27,7 @@ from backend.services.season_order import (
 )
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
+from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType
 from backend.types.season_types import SeasonType
 from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
@@ -181,8 +181,8 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     collection = _collection(s, collection_slug)
     seasons = {season.id: season for season in collection.seasons}
     if sorted(change.id for change in body.seasons) != sorted(seasons):
-        season = CollectionType(collection.type).season_word
-        raise ServiceError(f"The {season}s must name each {season} of the collection exactly once", field="seasons")
+        season = collection_contract(collection.type).words.season
+        raise ServiceError(f"The {season.many} must name each {season.one} of the collection exactly once", field="seasons")
     playlists = {playlist.id: playlist for playlist in collection.lists}
     lists = list_names(collection)
     unknown = [change.id for change in [*body.playlists] if change.id not in playlists]
@@ -190,12 +190,12 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     if unknown:
         raise ServiceError(f"{collection.title} has no {lists.one} {unknown[0]}", field="playlists")
     if any(not playlists[link_id].added_by_user for link_id in body.removed_links):
-        raise ServiceError(f"Only a link you added can be removed; switch {with_article(lists.one)} of the creator off instead", field="playlists")
+        raise ServiceError(f"Only a link you added can be removed; switch {lists.a} of the creator off instead", field="playlists")
     only = body.outside_videos == OutsideVideos.ONLY
     if only and body.link_seasons == LinkSeasons.OFF:
         raise ServiceError(
             f"A collection that holds only what its {lists.many} have needs its {lists.many} as "
-            f"{CollectionType(collection.type).season_word}s", field="link_seasons",
+            f"{collection_contract(collection.type).words.season.many}", field="link_seasons",
         )
     if only and not get_source(collection.source_key).has(Feature.LINK_COLLECTIONS):
         raise ServiceError(f"This collection can't hold only what its {lists.many} have", field="outside_videos")
@@ -216,14 +216,15 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     if body.link_seasons != LinkSeasons.OFF and not only and not lists_playlists(collection):
         raise ServiceError(
             f"Only a collection of a whole channel, on a site whose {lists.many} can be "
-            f"{CollectionType(collection.type).season_word}s, can make them {CollectionType(collection.type).season_word}s",
+            f"{collection_contract(collection.type).words.season.many}, can make them "
+            f"{collection_contract(collection.type).words.season.many}",
             field="link_seasons",
         )
     shared_seasons = {playlist.season_id for playlist in playlists.values() if playlist.season_id is not None}
     stray = next((change for change in body.playlists if change.season_id is not None and change.season_id not in shared_seasons), None)
     if stray is not None:
         raise ServiceError(
-            f"{playlists[stray.id].title} can only join {'an album' if collection.type == CollectionType.MUSIC.value else 'a season'} "
+            f"{playlists[stray.id].title} can only join {collection_contract(collection.type).words.season.a} "
             "that holds one of the collection's lists", field="playlists",
         )
     for change in body.seasons:
