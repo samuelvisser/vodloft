@@ -218,13 +218,19 @@ def test_the_preview_counts_files_to_rename_and_downloads_the_filters_would_leav
     assert [(example.before, example.after) for example in preview.changes][0] == (
         (START + timedelta(days=3)).strftime("%Y-%m-%d %H:%M"), "101",
     )
-    assert [(item.name, item.files_renamed) for item in preview.profiles] == [("Plex", 2)]
+    assert [(item.name, item.files_renamed, item.metadata_rewritten) for item in preview.profiles] == [("Plex", 2, 2)]
     assert [(item.name, item.removed, item.no_longer_wanted) for item in preview.download_profiles] == [("Plex", 0, 1)]
     assert preview.busy is None
     # Nothing changed: the preview only tried the new numbers.
     assert collection.episode_identifier == "date_based"
     assert _identifiers(session, collection)["ep-2"] == _date(2)
     assert not session.dirty
+
+    # A profile that keeps no metadata only has its files renamed.
+    profile.local_media_profile.metadata_mode = "no_metadata"
+    session.commit()
+    preview = preview_identification(session, collection, EpisodeIdentifier.NUMBERED)
+    assert [(item.files_renamed, item.metadata_rewritten) for item in preview.profiles] == [(2, 0)]
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None, reason="needs ffmpeg")

@@ -1,43 +1,52 @@
-.change-identification-dialog .change-identification-examples {
-    list-style: none;
-    margin: 0 0 12px;
-    padding: 0;
-    display: grid;
-    gap: 6px;
-}
-
-.change-identification-dialog .change-identification-examples li {
-    display: grid;
-    gap: 2px;
-    min-width: 0;
-}
-
-.change-identification-dialog .change-identification-numbers {
-    font-variant-numeric: tabular-nums;
-}
-
-.change-identification-dialog .change-identification-title {
-    color: var(--muted);
-    font-size: 0.875em;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.change-identification-dialog .change-identification-warning {
-    color: var(--error);
-}
-
-.change-identification-dialog .change-identification-order {
+/* Wide enough for an old and a new number next to an episode's title. When the dialog is taller than the
+   screen, its content scrolls and the buttons stay at the bottom. */
+.modal.change-identification-dialog {
+    --change-identification-line: var(--select-menu-border);
+    --change-identification-soft: rgba(100, 116, 139, 0.08);
+    --change-identification-danger: #dc2626;
+    --change-identification-danger-soft: rgba(220, 38, 38, 0.06);
+    --change-identification-danger-line: rgba(220, 38, 38, 0.35);
+    max-width: 560px;
+    max-height: calc(100vh - 48px);
+    max-height: calc(100dvh - 48px);
     display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    margin: 4px 0 12px;
+    flex-direction: column;
+    overflow: hidden;
 }
 
-.change-identification-dialog .change-identification-order > span {
-    display: grid;
-    gap: 2px;
+@media (prefers-color-scheme: dark) {
+    .modal.change-identification-dialog {
+        --change-identification-line: rgba(148, 163, 184, 0.22);
+        --change-identification-soft: rgba(148, 163, 184, 0.1);
+        --change-identification-danger: #f87171;
+        --change-identification-danger-soft: rgba(248, 113, 113, 0.08);
+        --change-identification-danger-line: rgba(248, 113, 113, 0.35);
+    }
+}
+
+.change-identification-dialog .confirm-dialog-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin-right: -6px;
+    padding-right: 6px;
+}
+
+.change-identification-dialog .modal-header {
+    flex: none;
+}
+
+.change-identification-dialog .modal-actions {
+    flex: none;
+    container-type: inline-size;
+}
+
+/* "Renumber and rename" would take two lines here. */
+@container (max-width: 250px) {
+    .change-identification-dialog .change-identification-and-rename {
+        display: none;
+    }
 }
 
 .change-identification-dialog .change-identification-loading {
@@ -47,20 +56,225 @@
     padding: 12px 0;
 }
 
-/* Opened up, the list holds every renumbered episode and scrolls on its own. */
-.change-identification-dialog .change-identification-examples.is-all {
-    max-height: min(50vh, 420px);
-    overflow-y: auto;
-    padding-right: 4px;
+/* From -> to */
+.change-identification-dialog .change-identification-change {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 0;
 }
 
-.change-identification-dialog .change-identification-end {
-    min-height: 1px;
+.change-identification-dialog .change-identification-chip {
+    display: inline-flex;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--change-identification-line);
+    background: var(--change-identification-soft);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.change-identification-dialog .change-identification-chip.is-target {
+    border-color: rgba(59, 130, 246, 0.4);
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.change-identification-dialog .change-identification-arrow {
+    color: var(--muted);
+    opacity: 0.75;
+}
+
+/* What the change does, one framed row each */
+.change-identification-dialog .change-identification-steps {
+    list-style: none;
+    margin: 16px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+    container-type: inline-size;
+}
+
+.change-identification-dialog .change-identification-step {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: start;
+    padding: 10px 12px;
+    border: 1px solid var(--change-identification-line);
+    border-radius: 10px;
+}
+
+.change-identification-dialog .change-identification-step.is-danger {
+    border-color: var(--change-identification-danger-line);
+    background: var(--change-identification-danger-soft);
+}
+
+.change-identification-dialog .change-identification-step-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: var(--change-identification-soft);
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.change-identification-dialog .is-danger .change-identification-step-icon {
+    background: var(--change-identification-danger-soft);
+    color: var(--change-identification-danger);
+}
+
+.change-identification-dialog .change-identification-step-text {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+}
+
+.change-identification-dialog .change-identification-step-text > span {
+    color: var(--muted);
+    font-size: 13.5px;
+}
+
+.change-identification-dialog .change-identification-step-count {
+    align-self: center;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.change-identification-dialog .is-danger b,
+.change-identification-dialog .is-danger .change-identification-step-count {
+    color: var(--change-identification-danger);
+}
+
+.change-identification-dialog .change-identification-step-more {
+    grid-column: 2 / -1;
+    min-width: 0;
+}
+
+/* The renumbered episodes: old number, new number, title */
+.change-identification-dialog .change-identification-examples {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 13.5px;
+    display: grid;
+    grid-template-columns: max-content 22px max-content minmax(0, 1fr);
+}
+
+/* Each row lines its numbers up with the other rows. */
+.change-identification-dialog .change-identification-examples li {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: baseline;
+    padding: 6px 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.change-identification-dialog .change-identification-examples li + li {
+    border-top: 1px solid var(--change-identification-line);
+}
+
+.change-identification-dialog .change-identification-before {
+    color: var(--muted);
+}
+
+.change-identification-dialog .change-identification-examples .change-identification-arrow {
+    text-align: center;
+}
+
+.change-identification-dialog .change-identification-title {
+    padding-left: 14px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Too narrow for the title beside the numbers: it goes below them. */
+@container (max-width: 446px) {
+    .change-identification-dialog .change-identification-examples {
+        /* The old number wraps before the row runs out of the dialog. */
+        grid-template-columns: auto 22px max-content minmax(0, 1fr);
+    }
+
+    .change-identification-dialog .change-identification-title {
+        grid-column: 1 / -1;
+        padding-left: 0;
+        font-size: 12.5px;
+    }
+}
+
+/* On the smallest screens, the episodes take the row's full width. */
+@container (max-width: 300px) {
+    .change-identification-dialog .change-identification-step-more {
+        grid-column: 1 / -1;
+    }
+}
+
+/* Opened up, the list holds every renumbered episode and scrolls on its own. */
+.change-identification-dialog .change-identification-examples.is-all {
+    max-height: 240px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 6px;
+    border-top: 1px solid var(--change-identification-line);
+    border-bottom: 1px solid var(--change-identification-line);
+}
+
+.change-identification-dialog .change-identification-examples li.change-identification-end {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 12.5px;
 }
 
 .change-identification-dialog .change-identification-show-all {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin: 0 0 12px;
+    margin-top: 8px;
+    font-size: 13px;
+}
+
+.change-identification-dialog .change-identification-show-fewer {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* The order to list the episodes in */
+.change-identification-dialog .change-identification-order {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--change-identification-line);
+}
+
+.change-identification-dialog .change-identification-order > span {
+    display: grid;
+    gap: 2px;
+}
+
+.change-identification-dialog .change-identification-order + .help,
+.change-identification-dialog .change-identification-steps + .help {
+    margin-top: 10px;
 }

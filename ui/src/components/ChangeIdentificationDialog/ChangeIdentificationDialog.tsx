@@ -1,4 +1,5 @@
-import {useCallback, useEffect, useState} from 'react'
+import {useCallback, useEffect, useState, type ReactNode} from 'react'
+import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useQuery} from '@tanstack/react-query'
 import Switch from 'react-switch'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
@@ -21,7 +22,7 @@ type Preview = {
     /** Every episode that gets a new number, newest first. */
     changes: IdentificationChange[]
     becomeAuxiliary: number
-    profiles: {name: string; filesRenamed: number}[]
+    profiles: {name: string; filesRenamed: number; metadataRewritten: number}[]
     downloadProfiles: {name: string; removed: number; noLongerWanted: number; newlyWanted: number}[]
     busy: string | null
 }
@@ -55,23 +56,48 @@ function ChangeList({changes}: {changes: IdentificationChange[]}) {
             <ul ref={rootRef} className={`change-identification-examples${all ? ' is-all' : ''}`}>
                 {changes.slice(0, shown).map((change, index) => (
                     <li key={index}>
-                        <span className="change-identification-numbers">
-                            <span>{change.before}</span>
-                            <span aria-label="becomes"> → </span>
-                            <b>{change.after}</b>
-                        </span>
+                        <span className="change-identification-before">{change.before}</span>
+                        <span className="change-identification-arrow" aria-label="becomes">→</span>
+                        <b className="change-identification-after">{change.after}</b>
                         <span className="change-identification-title">{change.title}</span>
                     </li>
                 ))}
-                {all && shown < changes.length && <li ref={endRef} className="change-identification-end" aria-hidden="true"/>}
+                {all && shown < changes.length && (
+                    <li ref={endRef} className="change-identification-end" role="status">
+                        <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                        Loading more…
+                    </li>
+                )}
             </ul>
-            {!all && changes.length > EXAMPLES && (
+            {changes.length > EXAMPLES && (all ? (
+                <button type="button" className="change-identification-show-fewer" aria-expanded={true} onClick={() => setShown(EXAMPLES)}>
+                    Show fewer
+                    <FontAwesomeIcon icon={faIcon('fass', 'chevron-up')}/>
+                </button>
+            ) : (
                 <button type="button" className="btn change-identification-show-all" aria-expanded={false} onClick={more}>
                     Show all {changes.length.toLocaleString()}
                     <FontAwesomeIcon icon={faIcon('fass', 'chevron-down')}/>
                 </button>
-            )}
+            ))}
         </>
+    )
+}
+
+/** One thing the change does: an icon, what it is, and how many it touches. */
+function Step({icon, headline, detail, value, danger = false, children}: {
+    icon: IconProp; headline: string; detail: ReactNode; value: number; danger?: boolean; children?: ReactNode
+}) {
+    return (
+        <li className={`change-identification-step${danger ? ' is-danger' : ''}`}>
+            <span className="change-identification-step-icon" aria-hidden="true"><FontAwesomeIcon icon={icon}/></span>
+            <span className="change-identification-step-text">
+                <b>{headline}</b>
+                <span>{detail}</span>
+            </span>
+            <span className="change-identification-step-count">{value.toLocaleString()}</span>
+            {children && <div className="change-identification-step-more">{children}</div>}
+        </li>
     )
 }
 
@@ -86,7 +112,7 @@ function defaultOrder(identification: EpisodeIdentifierValue): EpisodeOrderValue
 }
 
 function count(value: number, one: string, many = `${one}s`) {
-    return `${value} ${value === 1 ? one : many}`
+    return `${value.toLocaleString()} ${value === 1 ? one : many}`
 }
 
 function names(items: string[]) {
@@ -146,6 +172,7 @@ export default function ChangeIdentificationDialog({
     }
 
     const files = preview?.profiles.reduce((sum, profile) => sum + profile.filesRenamed, 0) ?? 0
+    const metadata = preview?.profiles.reduce((sum, profile) => sum + profile.metadataRewritten, 0) ?? 0
     const removed = preview?.downloadProfiles.filter((profile) => profile.removed > 0) ?? []
     const noLongerWanted = preview?.downloadProfiles.filter((profile) => profile.noLongerWanted > 0) ?? []
     const newlyWanted = preview?.downloadProfiles.filter((profile) => profile.newlyWanted > 0) ?? []
@@ -159,7 +186,10 @@ export default function ChangeIdentificationDialog({
             iconTone={removed.length > 0 ? 'danger' : 'default'}
             className="change-identification-dialog"
             confirmButton={{
-                label: files > 0 ? 'Renumber and rename' : 'Renumber',
+                // Where "Renumber and rename" would not fit on one line, the button only says "Renumber".
+                label: files > 0
+                    ? <span>Renumber<span className="change-identification-and-rename"> and rename</span></span>
+                    : 'Renumber',
                 onClick: confirm,
                 className: removed.length > 0 ? 'btn btn-danger' : 'btn btn-primary',
                 disabled: !preview || !!preview.busy,
@@ -174,42 +204,68 @@ export default function ChangeIdentificationDialog({
             {isError && <p className="error" role="alert">VODLoft could not look up what the change does.</p>}
             {preview && target && (
                 <>
-                    <p>
-                        {preview.episodesRenumbered === 0
-                            ? `The episodes of ${collectionTitle} keep their numbers.`
-                            : `${count(preview.episodesRenumbered, 'episode')} of ${preview.episodes} get a new number${preview.changes.length ? ', for example:' : '.'}`}
+                    <p className="change-identification-change">
+                        <span className="change-identification-chip">{EpisodeIdentifierReg.getLabelLoose(current)}</span>
+                        <span className="change-identification-arrow" aria-label="to">→</span>
+                        <span className="change-identification-chip is-target">{EpisodeIdentifierReg.getLabelLoose(target)}</span>
                     </p>
-                    {preview.changes.length > 0 && <ChangeList changes={preview.changes}/>}
-                    {preview.becomeAuxiliary > 0 && (
-                        <p>
-                            {count(preview.becomeAuxiliary, 'episode has', 'episodes have')} no number of its own to
-                            go by, so {preview.becomeAuxiliary === 1 ? 'it is' : 'they are'} numbered as auxiliary
-                            episodes after the others.
-                        </p>
-                    )}
-                    <p>
-                        {files > 0
-                            ? `VODLoft renames ${count(files, 'file')} in ${names(preview.profiles.map((profile) => profile.name))} and rewrites the metadata in and next to them, without downloading anything again.`
-                            : 'No downloaded files are named by these numbers, so no file is renamed. The metadata of downloaded files is rewritten.'}
-                    </p>
-                    {removed.map((profile) => (
-                        <p key={`removed-${profile.name}`} className="change-identification-warning" role="alert">
-                            <b>{profile.name}</b> would delete {count(profile.removed, 'downloaded episode')}: with the
-                            new numbers, its filters leave {profile.removed === 1 ? 'it' : 'them'} out.
-                        </p>
-                    ))}
-                    {noLongerWanted.map((profile) => (
-                        <p key={`out-${profile.name}`}>
-                            {count(profile.noLongerWanted, 'downloaded episode no longer passes', 'downloaded episodes no longer pass')}
-                            {' '}the filters of <b>{profile.name}</b>. They stay on disk until you delete them from the
-                            profile's page.
-                        </p>
-                    ))}
-                    {newlyWanted.map((profile) => (
-                        <p key={`in-${profile.name}`}>
-                            <b>{profile.name}</b> would download {count(profile.newlyWanted, 'more episode')}.
-                        </p>
-                    ))}
+                    {preview.episodesRenumbered === 0 && <p>The episodes of {collectionTitle} keep their numbers.</p>}
+                    <ul className="change-identification-steps">
+                        {preview.episodesRenumbered > 0 && (
+                            <Step
+                                icon={faIcon('fass', 'list-ol')}
+                                headline="Episodes get a new number"
+                                detail={`of ${count(preview.episodes, 'episode')}${preview.becomeAuxiliary > 0 ? `; ${preview.becomeAuxiliary.toLocaleString()} become auxiliary` : ''}`}
+                                value={preview.episodesRenumbered}
+                            >
+                                {preview.changes.length > 0 && <ChangeList changes={preview.changes}/>}
+                            </Step>
+                        )}
+                        {files > 0 && (
+                            <Step
+                                icon={faIcon('fass', 'file-pen')}
+                                headline="Files renamed"
+                                detail={`In ${names(preview.profiles.filter((profile) => profile.filesRenamed > 0).map((profile) => profile.name))}.`}
+                                value={files}
+                            />
+                        )}
+                        {metadata > 0 && (
+                            <Step
+                                icon={faIcon('fass', 'tags')}
+                                headline="Metadata rewritten"
+                                detail="In and next to the downloaded files, without downloading them again."
+                                value={metadata}
+                            />
+                        )}
+                        {removed.map((profile) => (
+                            <Step
+                                key={`removed-${profile.name}`}
+                                danger
+                                icon={faIcon('fass', 'triangle-exclamation')}
+                                headline="Downloads deleted"
+                                detail={`${profile.name}'s filters leave them out with the new numbers.`}
+                                value={profile.removed}
+                            />
+                        ))}
+                        {noLongerWanted.map((profile) => (
+                            <Step
+                                key={`out-${profile.name}`}
+                                icon={faIcon('fass', 'filter')}
+                                headline="No longer wanted"
+                                detail={`They now fall outside the Download Profile filters for ${profile.name}. They stay on disk until you delete them.`}
+                                value={profile.noLongerWanted}
+                            />
+                        ))}
+                        {newlyWanted.map((profile) => (
+                            <Step
+                                key={`in-${profile.name}`}
+                                icon={faIcon('fass', 'download')}
+                                headline="Newly wanted"
+                                detail={`${profile.name} downloads them with the new numbers.`}
+                                value={profile.newlyWanted}
+                            />
+                        ))}
+                    </ul>
                     {offerOrder && (
                         <label className="change-identification-order">
                             <Switch
@@ -230,10 +286,7 @@ export default function ChangeIdentificationDialog({
                     )}
                     {preview.busy && <p className="error" role="alert">{preview.busy}</p>}
                     {error && <p className="error" role="alert">{error}</p>}
-                    <p className="help">
-                        From {EpisodeIdentifierReg.getLabelLoose(current)} to {EpisodeIdentifierReg.getLabelLoose(target)}.
-                        Its progress shows on the collection's page.
-                    </p>
+                    <p className="help">Its progress shows on the collection's page.</p>
                 </>
             )}
         </ConfirmDialog>

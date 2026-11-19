@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import PurePath
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -27,6 +28,7 @@ from sqlalchemy.orm import Session, selectinload
 from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadProfile, Episode, Season
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.operations.collections import CollectionIdentificationChangeOperation
+from backend.services.download_options import effective_metadata_mode
 from backend.services.episode_filters import EpisodeSelection, evaluate, filter_leaving_out, retention_removes
 from backend.services.errors import ServiceError
 from backend.services.season_order import number_in_link_order
@@ -35,6 +37,8 @@ from backend.types.download_profile_types import EpIdType, MediaDownloadArtifact
 from backend.types.season_types import SeasonType
 from backend.utils.episode import EpisodeIdentifierInfo
 from backend.utils.output_template import output_template_fields
+from config.settings.submodels import MetadataMode
+from downloader.plan import EMBEDS_METADATA
 from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
@@ -93,6 +97,8 @@ class ProfileFilesChange:
 
     name: str
     files_renamed: int
+    metadata_rewritten: int
+    """Files whose tags or NFO are written again: every downloaded file of a profile that keeps metadata."""
 
 
 @dataclass(frozen=True)
@@ -293,6 +299,27 @@ def _busy(s: Session, collection: Collection) -> str | None:
     return None
 
 
+def _metadata_rewrites(s: Session, collection: Collection, profile: CollectionLocalMediaProfile) -> int:
+    """How many of the collection's files in the profile get their metadata written again: what the metadata rewrite
+    after the change writes, an NFO for each file or tags in each file that can take them."""
+    mode = effective_metadata_mode(profile)
+    if mode is MetadataMode.NO_METADATA:
+        return 0
+    paths = s.scalars(
+        select(EpisodeMediaDownload.file_path)
+        .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+        .where(
+            Episode.collection_id == collection.id,
+            EpisodeMediaDownload.local_media_profile_id == profile.id,
+            EpisodeMediaDownload.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value,
+            EpisodeMediaDownload.file_path.is_not(None),
+        )
+    )
+    if mode is not MetadataMode.EMBED:
+        return sum(1 for _ in paths)
+    return sum(1 for path in paths if PurePath(path).suffix.lower().removeprefix(".") in EMBEDS_METADATA)
+
+
 def _profiles_with_files(s: Session, collection: Collection) -> list[int]:
     return list(s.scalars(
         select(EpisodeMediaDownload.local_media_profile_id).distinct()
@@ -351,15 +378,16 @@ def preview_identification(
     profiles: list[ProfileFilesChange] = []
     for profile_id in _profiles_with_files(s, collection):
         profile = s.get(CollectionLocalMediaProfile, profile_id)
-        if profile is None or not output_template_fields(profile.output_template) & _IDENTIFIER_FIELDS:
+        if profile is None:
             continue
-        files = s.scalar(select(func.count(EpisodeMediaDownload.id)).where(
+        renamed = s.scalar(select(func.count(EpisodeMediaDownload.id)).where(
             EpisodeMediaDownload.local_media_profile_id == profile_id,
             EpisodeMediaDownload.media_item_id.in_(changed_ids),
             EpisodeMediaDownload.artifact_status.in_(_PHYSICAL),
-        )) if changed_ids else 0
-        if files:
-            profiles.append(ProfileFilesChange(name=profile.name, files_renamed=files))
+        )) if changed_ids and output_template_fields(profile.output_template) & _IDENTIFIER_FIELDS else 0
+        retagged = _metadata_rewrites(s, collection, profile)
+        if renamed or retagged:
+            profiles.append(ProfileFilesChange(name=profile.name, files_renamed=renamed, metadata_rewritten=retagged))
 
     download_profiles = _download_profile_changes(s, collection, list(episodes.values()), plan)
     return IdentificationPreview(

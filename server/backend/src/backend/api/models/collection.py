@@ -302,6 +302,7 @@ class CollectionIdentificationChangeItemAPIRead(ResponseBase):
 class CollectionIdentificationProfileFilesAPIRead(ResponseBase):
     name: str
     files_renamed: int
+    metadata_rewritten: int
 
 
 class CollectionIdentificationDownloadProfileAPIRead(ResponseBase):
