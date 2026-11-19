@@ -396,6 +396,10 @@ def _account(s: Session, slug: str, account_id: int) -> CreatorAccount:
 
 def update_creator(s: Session, slug: str, body: CreatorAPIUpdate) -> CreatorPageAPIRead:
     creator = _creator(s, slug)
+    title = (body.title or "").strip()
+    if title and title != creator.title:
+        creators.rename_creator(creator, title)
+        creator.title_from_user = True
     creators.update_creator_settings(s, creator, creators.CreatorSettings(
         NewSectionAction(body.new_sections), body.genre, body.content_rating,
     ))

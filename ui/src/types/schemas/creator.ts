@@ -164,6 +164,7 @@ export type CreatorCreateOut = z.output<typeof CreatorCreateSchema>
 
 /** The form that changes how VODLoft follows a creator. */
 export const CreatorUpdateSchema = z.object({
+    title: z.string().trim().min(1, 'Give them a name').max(255).default(''),
     newSections: z.enum(NewSectionActionValues).default('ask'),
     genre: z.string().trim().max(200).default(''),
     contentRating: z.string().trim().max(50).default(''),

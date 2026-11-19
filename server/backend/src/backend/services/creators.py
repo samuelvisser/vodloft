@@ -312,6 +312,21 @@ def _place(
     return made
 
 
+def belong_to(collection: Collection, creator: Creator | None) -> None:
+    """Make the collection one of the creator's, or a plain one again with None. A creator's collection takes the
+    creator's name as its author."""
+    collection.creator = creator
+    if creator is not None:
+        collection.author_name = creator.title
+
+
+def rename_creator(creator: Creator, title: str) -> None:
+    """Give the creator a new name, which its collections take as their author."""
+    creator.title = title
+    for collection in creator.collections:
+        collection.author_name = title
+
+
 def _new_collection(
     s: Session, account: CreatorAccount, settings: NewCollectionSettings, *, title: str, slug: str, url: str,
     description: str | None, image: str | None, added_by_id: int | None,
@@ -325,7 +340,7 @@ def _new_collection(
         genre=creator.genre, content_rating=creator.content_rating,
     )
     add_collection(s, collection, added_by_id=added_by_id)
-    collection.creator = creator
+    belong_to(collection, creator)
     return collection
 
 
@@ -408,14 +423,17 @@ class FollowResult:
 def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails, *, now: datetime) -> FollowResult:
     """Take in what the Site says about a creator's account now: its handle and its sections' titles and counts, the
     sections it did not have before, which the creator's setting adds, ignores or asks about, new playlists too, and
-    for the creator's first account the creator's name, pictures and facts. Sections the Site no longer lists stay,
+    for the creator's first account the creator's name (unless the user gave it one), pictures and facts. Sections the Site no longer lists stay,
     with what they hold.
 
     ``details`` was looked up before the write transaction; ``s`` is a write transaction's session."""
     creator = account.creator
     if creator.accounts[0] is account:
+        # A name the user gave stays.
+        if details.title and details.title != creator.title and not creator.title_from_user:
+            rename_creator(creator, details.title)
         for field, value in (
-            ("title", details.title), ("description", details.description),
+            ("description", details.description),
             ("avatar_path", details.avatar_url), ("banner_path", details.banner_url),
             ("links", list(details.links)), ("facts", list(details.facts)),
         ):
@@ -582,7 +600,7 @@ def join_creator(
             _switch_off(collection, overlap.ref)
             changed.add(collection.id)
     section.status = SectionStatus.KNOWN.value
-    collection.creator = creator
+    belong_to(collection, creator)
     if section.kind == SectionKind.FEED and section.role == SectionRole.MAIN and account.main_collection is None:
         account.main_collection = collection
     s.flush()
@@ -693,7 +711,7 @@ def add_to_creator(s: Session, collection: Collection, creator: Creator) -> None
             f"{collection.title} is a part of {creator.title}'s own page: add it to the {creator_label(creator)} "
             "behind its link instead", field="creator_slug",
         )
-    collection.creator = creator
+    belong_to(collection, creator)
     s.flush()
 
 
@@ -709,7 +727,7 @@ def combine_creators(s: Session, creator: Creator, other: Creator) -> None:
         other.accounts.remove(account)
         creator.accounts.append(account)
     for collection in list(other.collections):
-        collection.creator = creator
+        belong_to(collection, creator)
     for field in ("description", "avatar_path", "banner_path", "genre", "content_rating"):
         if getattr(creator, field) is None and getattr(other, field) is not None:
             setattr(creator, field, getattr(other, field))
@@ -750,6 +768,6 @@ def split_account(s: Session, account: CreatorAccount, details: CreatorDetails |
     own.accounts.append(account)
     for collection in list(creator.collections):
         if collection.slug in kept:
-            collection.creator = own
+            belong_to(collection, own)
     s.flush()
     return own

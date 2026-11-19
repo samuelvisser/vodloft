@@ -36,7 +36,7 @@ export default function EditCreatorPage() {
     useEffect(() => {
         if (!creator) return
         reset({
-            newSections: creator.newSections, genre: creator.genre ?? '', contentRating: creator.contentRating ?? '',
+            title: creator.title, newSections: creator.newSections, genre: creator.genre ?? '', contentRating: creator.contentRating ?? '',
         })
     }, [creator, reset])
 
@@ -51,14 +51,19 @@ export default function EditCreatorPage() {
             credentials: 'include',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                newSections: data.newSections, genre: data.genre || null, contentRating: data.contentRating || null,
+                title: data.title, newSections: data.newSections, genre: data.genre || null, contentRating: data.contentRating || null,
             }),
         },
     ), {
         fallbackField: 'newSections',
         onSuccess: async (page: unknown) => {
             queryClient.setQueryData(['creator', slug], CreatorPageReadSchema.parse(page))
-            await queryClient.invalidateQueries({queryKey: ['collectionsView']})
+            // The creator's collections take its name as their author.
+            await Promise.all([
+                queryClient.invalidateQueries({queryKey: ['creators']}),
+                queryClient.invalidateQueries({queryKey: ['collection']}),
+                queryClient.invalidateQueries({queryKey: ['collectionsView']}),
+            ])
             navigate(`/creator/${creator.slug}`)
         },
     })
@@ -89,6 +94,16 @@ export default function EditCreatorPage() {
             />
             <CreatorSectionsEditor creator={creator} part="new"/>
             <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
+                <div className="form-row creator-membership">
+                    <label htmlFor="creator-title">Name</label>
+                    <input id="creator-title" className="input" {...register('title')} aria-invalid={!!errors.title}/>
+                    {errors.title && <div className="error" role="alert">{errors.title.message}</div>}
+                    <div className="help">
+                        The author of each collection of this {creator.creatorLabel}. A name you give here stays, also
+                        when the name on {creator.accounts[0]?.site.name ?? 'their site'} changes.
+                    </div>
+                </div>
+
                 <div className="form-row creator-membership">
                     <label htmlFor="creator-new-sections">When the {creator.creatorLabel} adds {creator.sectionNames.one}</label>
                     <SimpleSelect
