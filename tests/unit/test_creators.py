@@ -631,11 +631,11 @@ def test_an_artist_on_a_video_site_keeps_only_their_albums(client, session):
     # Without a feed the artist's collection holds only what its playlists give it.
     assert session.scalar(select(Collection.outside_videos).where(Collection.slug == "UCworkshop")) == OutsideVideos.ONLY.value
 
-    # A feed that joins it later brings the uploads back.
+    # A feed that joins it later brings the uploads in, and the albums keep the tracks the feed doesn't list.
     added = client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "videos", "target": "main"}]})
     assert added.status_code == 200, added.text
     session.expire_all()
-    assert session.scalar(select(Collection.outside_videos).where(Collection.slug == "UCworkshop")) == OutsideVideos.LEAVE_OUT.value
+    assert session.scalar(select(Collection.outside_videos).where(Collection.slug == "UCworkshop")) == OutsideVideos.ADD.value
 
 
 def test_a_creator_the_site_knows_isnt_an_artist_isnt_added_as_one(client, tube, monkeypatch):

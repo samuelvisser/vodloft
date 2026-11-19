@@ -382,9 +382,11 @@ def _place(
         else:
             changed.append(main)
         # Without a feed, the creator's collection holds only what its lists give it; a feed brings its uploads back.
+        # An artist's albums keep their tracks that the feed doesn't list, such as those on their Topic channel.
         if any(sections[plan.ref].kind == SectionKind.FEED for plan in main_plans):
             if main.outside_videos == OutsideVideos.ONLY.value:
-                main.outside_videos = OutsideVideos.LEAVE_OUT.value
+                music = main.type == CollectionType.MUSIC.value
+                main.outside_videos = (OutsideVideos.ADD if music else OutsideVideos.LEAVE_OUT).value
         elif main in made:
             main.outside_videos = OutsideVideos.ONLY.value
         lists = {plan.ref for plan in main_plans if sections[plan.ref].kind == SectionKind.LIST}
