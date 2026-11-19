@@ -9,7 +9,7 @@ import {
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
-import {addLocalMediaProfilePath, isCollectionContext, isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {addLocalMediaProfilePath, isCollectionContext, safeReturnPath, isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {SelectRegistry} from "../../utils/selectRegistry";
 import {buildCollectionSelectRegistry, EpisodeIdentifierReg} from "../../types/collection";
 import {useQueryClient} from "@tanstack/react-query";
@@ -59,6 +59,8 @@ export default function AddDownloadProfilePage() {
     }, [setValue])
     const requestedCollectionSlug = searchParams.get('collection')
     const requestedPreferredFormat = PreferredFormatReg.normalize(searchParams.get('preferredFormat'))
+    // A Local Media Profile the user just created for this form, from the button under its field.
+    const requestedProfileId = Number(searchParams.get('localMediaProfile')) || undefined
     const requestedEpisodeTypes = useMemo(
         () => searchParams.getAll('episodeType').filter((value) => /^[a-z][a-z-]*$/.test(value)),
         [searchParams],
@@ -77,7 +79,9 @@ export default function AddDownloadProfilePage() {
         if (requestedCollection) selectCollection(requestedCollection.id)
     }
 
-    const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
+    // Opened from a Stream Profile's form: back there once saved or cancelled.
+    const returnTo = safeReturnPath(searchParams.get('returnTo'))
+    const onCancel = useCallback(() => navigate(returnTo ?? '/download-profiles'), [navigate, returnTo])
 
     const submitFn = async (data: DownloadProfileCreateOut) => {
         return fetch(`${apiUrl()}/download-profiles`, {
@@ -92,7 +96,7 @@ export default function AddDownloadProfilePage() {
         await qc.invalidateQueries({queryKey: ['downloadProfilesView']})
         await qc.invalidateQueries({queryKey: ['downloadProfilesByCollectionSlug']})
 
-        navigate('/download-profiles')
+        navigate(returnTo ?? '/download-profiles')
     }
 
     const onSubmit = buildServerAwareSubmit(form, submitFn, {
@@ -149,9 +153,23 @@ export default function AddDownloadProfilePage() {
     // None does yet: the user can add one, for this collection and the format, and come back.
     const noMatchingProfile = !!selectedCollection && !!requestedPreferredFormat && Array.isArray(mediaProfiles)
         && !!collectionProfiles && !matchingProfile
+    // Where a profile created from here sends the user back to: this form, as the link opened it.
+    const returnHere = useMemo(() => {
+        const params = new URLSearchParams(searchParams)
+        params.delete('localMediaProfile')
+        return `/add-download-profile?${params}`
+    }, [searchParams])
     const applyRequestedFormat = () => {
         if (!selectedCollection || !Array.isArray(mediaProfiles) || !collectionProfiles) return false
-        if (matchingProfile) setValue('localMediaProfileId', matchingProfile.id, {shouldDirty: false, shouldValidate: true})
+        // The list can still be the one from before the profile was created, until it loads again.
+        if (requestedProfileId && !mediaProfiles.some((profile) => profile.id === requestedProfileId)) return false
+        const created = mediaProfiles.find((profile) => profile.id === requestedProfileId && (
+            isCollectionLocalMediaProfileAvailableFor(profile, selectedCollection.type)
+            && isLocalMediaProfileAvailableForSite(profile, selectedCollection.site?.key)
+            && !usedLocalMediaProfiles.has(profile.id)
+        ))
+        if (created) setValue('localMediaProfileId', created.id, {shouldDirty: false, shouldValidate: true})
+        else if (matchingProfile) setValue('localMediaProfileId', matchingProfile.id, {shouldDirty: false, shouldValidate: true})
     }
 
     // A link from a Stream Profile asks for a format: the profiles that download it stand out, and another choice says so.
@@ -219,7 +237,7 @@ export default function AddDownloadProfilePage() {
                     <label htmlFor="local-media-profile">Local Media Profile</label>
                     <RequestedField
                         id="localMediaProfile"
-                        requested={requestedPreferredFormat}
+                        requested={requestedPreferredFormat ?? requestedProfileId}
                         value={localMediaProfileId}
                         apply={applyRequestedFormat}
                         fits={() => !otherFormatSelected && !noMatchingProfile}
@@ -233,6 +251,7 @@ export default function AddDownloadProfilePage() {
                                         siteKey: selectedCollection?.site?.key,
                                         audio: selectedCollection?.site?.audio,
                                         format: requestedPreferredFormat,
+                                        returnTo: returnHere,
                                     })}
                                 >
                                     Create one for {PreferredFormatReg.getLabel(requestedPreferredFormat)}

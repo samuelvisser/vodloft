@@ -1,5 +1,5 @@
 import {ReactNode} from 'react'
-import {Link} from 'react-router-dom'
+import {Link, useLocation} from 'react-router-dom'
 import ReadMore from '../../utils/ReadMore'
 import {useCollectionEpisodeTags} from '../../lib/queries'
 import {EpisodeTagRead, episodeTagLabel} from '../../types/schemas/source'
@@ -199,9 +199,12 @@ function createDownloadProfileHref(
     {
         latestFive = false,
         episodeTypes = [],
+        returnTo,
     }: {
         latestFive?: boolean
         episodeTypes?: readonly string[]
+        /** This Stream Profile's form, which the new Download Profile goes back to once it is saved. */
+        returnTo?: string
     } = {},
 ) {
     if (!collectionSlug) return undefined
@@ -214,6 +217,7 @@ function createDownloadProfileHref(
     for (const episodeType of episodeTypes) {
         params.append('episodeType', episodeType)
     }
+    if (returnTo) params.set('returnTo', returnTo)
     return `/add-download-profile?${params.toString()}`
 }
 
@@ -236,8 +240,11 @@ function CoverageRequirement({
         createEpisodeTypes,
         bestProfile,
     } = coverage
+    // The Download Profile forms open here, and come back to this form, which keeps what was typed in this browser.
+    const location = useLocation()
+    const returnTo = `${location.pathname}${location.search}`
     const editHref = bestProfile?.id
-        ? `/edit-download-profile/${bestProfile.id}`
+        ? `/edit-download-profile/${bestProfile.id}?${new URLSearchParams({returnTo})}`
         : undefined
     const createHref = createEpisodeTypes.length > 0
         ? createDownloadProfileHref(
@@ -247,6 +254,7 @@ function CoverageRequirement({
             {
                 latestFive,
                 episodeTypes: createEpisodeTypes,
+                returnTo,
             },
         )
         : undefined
@@ -278,8 +286,6 @@ function CoverageRequirement({
                         <Link
                             className="btn"
                             to={editHref}
-                            target="_blank"
-                            rel="noreferrer"
                             onClick={handleDownloadProfileAction}
                         >
                             Edit {profileButtonLabel(kind)} profile
@@ -289,8 +295,6 @@ function CoverageRequirement({
                         <Link
                             className="btn btn-primary"
                             to={createHref}
-                            target="_blank"
-                            rel="noreferrer"
                             onClick={handleDownloadProfileAction}
                         >
                             {hasExistingProfile ? 'Create another' : 'Create'} {profileButtonLabel(kind)} profile

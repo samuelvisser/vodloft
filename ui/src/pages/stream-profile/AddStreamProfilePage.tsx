@@ -15,16 +15,40 @@ import {useQueryClient} from '@tanstack/react-query'
 import ReadMore from "../../utils/ReadMore";
 import {downloadedEpisodeTypes} from '../../components/DownloadProfile/episodeFilters'
 import {apiUrl} from '../../lib/api'
+import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
+import {
+    addStreamProfileDraftKey,
+    clearStreamProfileDraft,
+    loadStreamProfileDraft,
+    saveStreamProfileDraft,
+} from '../../components/StreamProfile/streamProfileDraft'
 
 // Settings whose defaults differ per type, so they start from the new type's default when the type changes.
 const OWN_FIELDS = {useDownloads: true, useSourceStream: true, streamLiveEpisodes: true}
 
 export default function AddStreamProfilePage() {
+    // Discarding a restored draft mounts a fresh form, so every field starts from its default again.
+    const [generation, setGeneration] = useState(0)
+    return (
+        <AddStreamProfileForm
+            key={generation}
+            onDiscardDraft={() => {
+                clearStreamProfileDraft(addStreamProfileDraftKey())
+                setGeneration((current) => current + 1)
+            }}
+        />
+    )
+}
+
+function AddStreamProfileForm({onDiscardDraft}: {onDiscardDraft: () => void}) {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const qc = useQueryClient()
+    // What was typed here before, such as before leaving to create the Download Profile this profile needs.
+    const draftKey = addStreamProfileDraftKey()
+    const restoredDraft = useMemo(() => loadStreamProfileDraft(draftKey), [draftKey])
 
-    const [mode, setMode] = useState<StreamProfileType>('rss')
+    const [mode, setMode] = useState<StreamProfileType>(restoredDraft?.mode ?? 'rss')
     const createSchema = STREAM_PROFILE_TYPES[mode].createSchema
 
     const {data: collections} = useCollections()
@@ -34,8 +58,13 @@ export default function AddStreamProfilePage() {
         resolver: (values, context, options) => zodResolver(createSchema as any)(values, context, options),
         mode: 'onBlur',
         shouldFocusError: true,
-        defaultValues: getZodDefaults(STREAM_PROFILE_TYPES.rss.createSchema),
+        defaultValues: {...getZodDefaults(STREAM_PROFILE_TYPES[mode].createSchema), ...restoredDraft?.values},
     })
+
+    useEffect(() => {
+        const subscription = form.watch((values) => saveStreamProfileDraft(draftKey, {mode, values}))
+        return () => subscription.unsubscribe()
+    }, [draftKey, form, mode])
 
     // Another type keeps what both types have, and starts its own settings from their defaults.
     const changeMode = (next: StreamProfileType) => {
@@ -45,6 +74,7 @@ export default function AddStreamProfilePage() {
         const shared = Object.keys(schema.shape).filter((key) => key in current && !(key in OWN_FIELDS))
         form.reset({...getZodDefaults(schema), ...Object.fromEntries(shared.map((key) => [key, current[key]]))})
         setMode(next)
+        saveStreamProfileDraft(draftKey, {mode: next, values: form.getValues()})
     }
     const {watch, formState: {errors, isSubmitting}} = form
     const prefillApplied = useRef(false)
@@ -68,6 +98,11 @@ export default function AddStreamProfilePage() {
 
     useEffect(() => {
         if (prefillApplied.current || !requestedCollectionSlug || !Array.isArray(collections)) return
+        // A restored draft already has the collection the user chose.
+        if (restoredDraft?.values.collectionId != null) {
+            prefillApplied.current = true
+            return
+        }
         const requestedCollection = collections.find((collection) => collection.slug === requestedCollectionSlug)
         if (!requestedCollection) return
 
@@ -75,7 +110,10 @@ export default function AddStreamProfilePage() {
         prefillApplied.current = true
     }, [form, requestedCollectionSlug, collections])
 
-    const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
+    const onCancel = useCallback(() => {
+        clearStreamProfileDraft(draftKey)
+        navigate('/stream-profiles')
+    }, [draftKey, navigate])
 
     const submitFn = async (data: unknown) => {
         return fetch(`${apiUrl()}/${STREAM_PROFILE_TYPES[mode].endpoint}`, {
@@ -88,6 +126,7 @@ export default function AddStreamProfilePage() {
 
     const onSuccess = async (result: {id: number}) => {
         await qc.invalidateQueries({queryKey: ['streamProfilesView']})
+        clearStreamProfileDraft(draftKey)
         navigate(`/edit-stream-profile/${mode}/${result.id}`)
     }
 
@@ -103,7 +142,7 @@ export default function AddStreamProfilePage() {
                 <h1 id="add-stream-profile-title">Add Stream Profile</h1>
             </div>
 
-            <form className="form" onSubmit={onSubmit} noValidate>
+            <form id="add-stream-profile-form" className="form" onSubmit={onSubmit} noValidate>
                 {errors.root && (
                     <div className="form-error-card" role="alert" aria-live="polite">
                         {String(errors.root.message)}
@@ -207,6 +246,20 @@ export default function AddStreamProfilePage() {
                     />
                 </div>
             </form>
+
+            {restoredDraft ? (
+                <UnsavedChangesBar
+                    title="Unsaved changes restored"
+                    message="This form was restored from a profile you started in this browser. It has not been created in VODLoft yet."
+                >
+                    <button className="btn" type="button" disabled={isSubmitting} onClick={onDiscardDraft}>
+                        Discard
+                    </button>
+                    <button className="btn btn-primary" type="submit" form="add-stream-profile-form" disabled={isSubmitting}>
+                        {isSubmitting ? 'Creating…' : 'Create profile'}
+                    </button>
+                </UnsavedChangesBar>
+            ) : null}
         </section>
     )
 }

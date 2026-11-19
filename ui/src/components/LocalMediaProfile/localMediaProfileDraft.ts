@@ -6,7 +6,7 @@ export type LocalMediaProfileDraft<T> = {
     values: Partial<T>
 }
 
-const DRAFT_SCHEMA_VERSION = 'local-media-profile-v2'
+const DRAFT_SCHEMA_VERSION = 'local-media-profile-v3'
 
 export function addLocalMediaProfileDraftKey(): string {
     return 'localMediaProfileDraft:add'

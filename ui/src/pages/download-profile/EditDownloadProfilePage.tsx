@@ -2,7 +2,7 @@ import {type FormEvent, useCallback, useEffect, useMemo, useRef, useState} from 
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {Link, useNavigate, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams, useSearchParams} from 'react-router-dom'
 import {
     downloadProfileOutOfScopePreviewQuery, useDownloadProfileOutOfScopePreview, useDownloadProfilesByCollectionSlug,
     useEpisodeTagsInCollection, useLocalMediaProfiles, useCollectionSeasons, type OutOfScopePreviewBody,
@@ -13,7 +13,7 @@ import {
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
-import {isCollectionContext, isLocalMediaProfileAvailableForSite, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {isCollectionContext, isLocalMediaProfileAvailableForSite, safeReturnPath, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_view";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import ReadMore from "../../utils/ReadMore";
@@ -90,7 +90,10 @@ export default function EditDownloadProfilePage() {
             .map((profile) => profile.localMediaProfileId),
     ), [collectionProfiles, profileId])
 
-    const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
+    // Opened from a Stream Profile's form: back there once saved or cancelled.
+    const [searchParams] = useSearchParams()
+    const returnTo = safeReturnPath(searchParams.get('returnTo'))
+    const onCancel = useCallback(() => navigate(returnTo ?? '/download-profiles'), [navigate, returnTo])
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
     // Narrowing the filters never deletes by itself: saving asks whether to delete the downloads that fall out.
@@ -132,7 +135,7 @@ export default function EditDownloadProfilePage() {
             await deleteOutOfScope({notKept: false, kept: false, include: toDelete})
             return
         }
-        navigate('/download-profiles')
+        navigate(returnTo ?? '/download-profiles')
     }
 
     const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfileUpdateOut) => {

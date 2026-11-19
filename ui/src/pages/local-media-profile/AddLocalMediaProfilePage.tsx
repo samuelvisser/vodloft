@@ -31,7 +31,7 @@ import {
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
 import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
 import {getZodDefaults} from '../../utils/defaultZod'
-import {LocalMediaProfileType, LocalMediaProfileTypeReg, PreferredFormatReg, localMediaProfileEndpoint} from '../../types/local_media_profile'
+import {LocalMediaProfileType, LocalMediaProfileTypeReg, PreferredFormatReg, safeReturnPath, localMediaProfileEndpoint} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
 
 
@@ -167,16 +167,26 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
         })
     }
 
-    const onSuccess = async () => {
+    // Opened from another form, such as a Download Profile that needs this profile: back there, with the new
+    // profile chosen.
+    const returnTo = source ? undefined : safeReturnPath(searchParams.get('returnTo'))
+    const onSuccess = async (created: {id?: number} | undefined) => {
         await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         if (draftKey) clearLocalMediaProfileDraft(draftKey)
-        navigate('/local-media-profiles')
+        if (returnTo && created?.id != null) {
+            const [path, query = ''] = returnTo.split('?', 2)
+            const params = new URLSearchParams(query)
+            params.set('localMediaProfile', String(created.id))
+            navigate(`${path}?${params}`)
+        } else {
+            navigate('/local-media-profiles')
+        }
     }
 
     const onCancel = useCallback(() => {
         if (draftKey) clearLocalMediaProfileDraft(draftKey)
-        navigate('/local-media-profiles')
-    }, [draftKey, navigate])
+        navigate(returnTo ?? '/local-media-profiles')
+    }, [draftKey, navigate, returnTo])
 
     const onCreate = buildLocalMediaProfileOnSubmit(form, submitFn, {
         onSuccess,
