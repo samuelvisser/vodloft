@@ -6,7 +6,7 @@ def test_sources_list_their_own_words_for_a_collection():
 
     names = {source.id: source.kind_names for source in list_sources()}
 
-    assert names["dailywire"] == {"collection": "Show"}
+    assert names["dailywire"] == {"collection": "Show", "creator": "Host"}
     assert names["npo"] == {"collection": "Series"}
     # yt-dlp names each search result itself, as a Channel or a Playlist.
     assert names["ytdlp"] == {}
@@ -17,4 +17,4 @@ def test_kind_names_are_sent_as_camel_case_json():
 
     dailywire = next(source for source in list_sources() if source.id == "dailywire")
 
-    assert dailywire.model_dump(by_alias=True)["kindNames"] == {"collection": "Show"}
+    assert dailywire.model_dump(by_alias=True)["kindNames"] == {"collection": "Show", "creator": "Host"}

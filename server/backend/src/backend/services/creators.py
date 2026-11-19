@@ -10,14 +10,14 @@ Wire host, and collections from any other link can join them too.
 """
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection as Refs, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Creator, CreatorAccount, CreatorSection, Collection, CollectionList
+from backend.db.models import Creator, CreatorAccount, CreatorSection, Collection, CollectionList, Movie
 from backend.services.link_seasons import is_season
 from backend.services.collections import add_collection, index_new_collection, reindex_collection
 from backend.services.errors import ServiceError
@@ -56,16 +56,30 @@ def creator_site(source_key: str, url_or_site_key: str) -> Site:
 
 
 def _usable(section: SectionRef) -> bool:
-    # A section only some members can watch is left for the user to pick; a single item is added on its own page.
+    # A section only some members can watch is left for the user to pick; a single item is added on its own page,
+    # unless it is a movie (see preset_plan).
     return section.access is None and section.kind is not SectionKind.ITEM
 
 
-def preset_plan(details: CreatorDetails, preset: CreatorPreset) -> list[SectionPlan]:
-    """What a preset does with each section. The user can change any of it before the creator is added."""
+def takes_movies(source_key: str) -> bool:
+    """Whether the creator's single items are movies VODLoft can add, such as a Daily Wire host's movies."""
+    return get_source(source_key).has(Feature.MOVIES)
+
+
+def preset_plan(
+    details: CreatorDetails, preset: CreatorPreset, *, movies: bool = False, movies_in_library: Refs[str] = (),
+) -> list[SectionPlan]:
+    """What a preset does with each section. The user can change any of it before the creator is added.
+
+    With ``movies``, the creator's single items are movies: the presets add them, and a movie already in the library,
+    by its ref in ``movies_in_library``, joins the creator with every preset."""
     plans = []
     for section in details.sections:
         target = SectionTarget.SKIP
-        if preset is not CreatorPreset.PICK and _usable(section):
+        if movies and section.kind is SectionKind.ITEM:
+            if section.ref in movies_in_library or (preset is not CreatorPreset.PICK and section.access is None):
+                target = SectionTarget.OWN
+        elif preset is not CreatorPreset.PICK and _usable(section):
             # The creator's own collection lists its Shorts and Live too, tagged, so they need no collection of their own.
             if section.kind is SectionKind.FEED:
                 target = SectionTarget.MAIN
@@ -143,6 +157,51 @@ def sections_in_library(
 
 def account_in_library(s: Session, site_key: str, ref: str) -> CreatorAccount | None:
     return s.scalar(select(CreatorAccount).where(CreatorAccount.site_key == site_key, CreatorAccount.site_ref == ref))
+
+
+def movies_in_library(s: Session, source_key: str, sections: Sequence[SectionRef | CreatorSection]) -> dict[str, Movie]:
+    """The movies in the library that are the creator's single items, by the section's ref: the movie known by the
+    item's id or made from its link. Empty where the creator's single items aren't movies."""
+    items = [section for section in sections if section.kind == SectionKind.ITEM]
+    if not items or not takes_movies(source_key):
+        return {}
+    by_slug = {section.ref: section.ref for section in items}
+    by_url = {section.url: section.ref for section in items}
+    found: dict[str, Movie] = {}
+    for movie in s.scalars(select(Movie).where(
+        Movie.source_key == source_key, or_(Movie.slug.in_(by_slug), Movie.sharing_url.in_(by_url)),
+    )):
+        ref = by_slug.get(movie.slug) or by_url.get(movie.sharing_url or "")
+        if ref is not None:
+            found.setdefault(ref, movie)
+    return found
+
+
+def movies_to_add(
+    s: Session, source_key: str, sections: Sequence[SectionRef | CreatorSection], plans: Sequence[SectionPlan],
+) -> list[str]:
+    """The refs of the creator's movies that the plans add and that aren't in the library yet, which the Source
+    looks up before the write transaction."""
+    if not takes_movies(source_key):
+        return []
+    items = {section.ref for section in sections if section.kind == SectionKind.ITEM}
+    kept = movies_in_library(s, source_key, sections)
+    return [plan.ref for plan in plans if plan.target is not SectionTarget.SKIP and plan.ref in items and plan.ref not in kept]
+
+
+def join_movies(s: Session, account: CreatorAccount, plans: Sequence[SectionPlan]) -> list[Movie]:
+    """Make the movies the plans pick, which are in the library now, the account's creator's. A movie the plans skip
+    stays as it is. Returns the movies that joined.
+
+    ``s`` is a write transaction's session."""
+    picked = {plan.ref for plan in plans if plan.target is not SectionTarget.SKIP}
+    joined = []
+    for ref, movie in movies_in_library(s, account.source_key, account.sections).items():
+        if ref in picked and movie.creator_id != account.creator.id:
+            movie.creator = account.creator
+            joined.append(movie)
+    s.flush()
+    return joined
 
 
 def _unique_slug(s: Session, model, wanted: str) -> str:
@@ -225,6 +284,7 @@ def add_creator(
             raise ServiceError(_NO_SEASONS.format(site=site.name, sections=site.creator_sections.many), field="new_sections")
         account = _new_creator(s, source_key, record.key, details, added_by_id=added_by_id, new_sections=new_sections)
     collections = _place(s, account, plans, settings, added_by_id=added_by_id)
+    join_movies(s, account, plans)
     return account.creator, collections
 
 
@@ -277,6 +337,9 @@ def _place(
             continue
         section = sections[plan.ref]
         section.status = SectionStatus.KNOWN.value
+        if section.kind == SectionKind.ITEM:
+            # A single item, such as a movie, is never a collection: join_movies takes the movies.
+            continue
         # A list goes into the creator's own collection only as one of its seasons, and a show, with seasons of its
         # own, always has a collection of its own.
         if plan.target is SectionTarget.MAIN and (
@@ -387,7 +450,9 @@ def place_sections(
     settings = replace(
         settings, type=type or settings.type, episode_identifier=episode_identifier or settings.episode_identifier,
     )
-    return _place(s, account, adding, settings, added_by_id=added_by_id)
+    made = _place(s, account, adding, settings, added_by_id=added_by_id)
+    join_movies(s, account, adding)
+    return made
 
 
 def _as_ref(section: CreatorSection) -> SectionRef:
@@ -660,6 +725,8 @@ def delete_creator(s: Session, creator: Creator) -> None:
     ``s`` is a write transaction's session."""
     for collection in list(creator.collections):
         leave_creator(s, collection)
+    for movie in list(creator.movies):
+        movie.creator = None
     s.delete(creator)
     s.flush()
 
@@ -745,6 +812,8 @@ def combine_creators(s: Session, creator: Creator, other: Creator) -> None:
         creator.accounts.append(account)
     for collection in list(other.collections):
         belong_to(collection, creator)
+    for movie in list(other.movies):
+        movie.creator = creator
     for field in ("description", "avatar_path", "banner_path", "genre", "content_rating"):
         if getattr(creator, field) is None and getattr(other, field) is not None:
             setattr(creator, field, getattr(other, field))
@@ -786,5 +855,9 @@ def split_account(s: Session, account: CreatorAccount, details: CreatorDetails |
     for collection in list(creator.collections):
         if collection.slug in kept:
             belong_to(collection, own)
+    # The account's movies go with it.
+    for movie in movies_in_library(s, account.source_key, account.sections).values():
+        if movie.creator_id == creator.id:
+            movie.creator = own
     s.flush()
     return own

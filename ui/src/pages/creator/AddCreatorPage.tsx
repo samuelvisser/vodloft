@@ -59,12 +59,25 @@ const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1
 
 /** What the Site's sections can become, in the words of this creator. */
 function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, music: boolean) {
+    if (isMovie(creator, section)) {
+        // A movie in the library joins the creator; another one is added to the library, as one of theirs.
+        return createSelectRegistry(`CreatorMovie-${creator.ref}-${section.ref}-${creator.title}-${!!section.movieSlug}`, (
+            section.movieSlug
+                ? {own: {label: `Joins ${creator.title}`}, skip: {label: 'Stays apart'}}
+                : {own: {label: 'Add to your library'}, skip: {label: 'Skip'}}
+        ) as Record<Choice, {label: string}>)
+    }
     const spec: Partial<Record<Choice, {label: string}>> = {}
     if (section.kind === 'feed') spec.main = {label: 'Main collection'}
     else if (section.kind === 'list' && creator.linkSeasons) spec.main = {label: `Main collection, as ${music ? 'an album' : 'a playlist'} season`}
     spec.own = {label: 'A collection of its own'}
     spec.skip = {label: 'Skip'}
     return createSelectRegistry(`CreatorSection-${creator.ref}-${section.ref}-${music}`, spec as Record<Choice, {label: string}>)
+}
+
+/** A single item that is a movie, which VODLoft adds from this page, unlike a single track. */
+function isMovie(creator: CreatorLookupRead, section: CreatorSectionRead) {
+    return section.kind === 'item' && creator.movies
 }
 
 function sectionFacts(section: CreatorSectionRead): string {
@@ -175,7 +188,7 @@ export default function AddCreatorPage() {
     )
     // Every choice select is as wide as the longest choice any of them has, so they line up.
     const choiceLabels = useMemo(() => (creator?.sections ?? [])
-        .filter((section) => section.kind !== 'item' && !section.collectionSlug)
+        .filter((section) => (section.kind !== 'item' || isMovie(creator!, section)) && !section.collectionSlug)
         .flatMap((section) => registries.get(section.ref)?.options.map((option) => option.label) ?? []),
     [creator, registries])
 
@@ -205,6 +218,7 @@ export default function AddCreatorPage() {
             void queryClient.invalidateQueries({queryKey: ['creators']})
             void queryClient.invalidateQueries({queryKey: ['collections']})
             void queryClient.invalidateQueries({queryKey: ['collectionsView']})
+            void queryClient.invalidateQueries({queryKey: ['movies']})
             navigate(`/creator/${created.slug}`, {replace: true})
         },
     })
@@ -256,14 +270,28 @@ export default function AddCreatorPage() {
     ]
     // What is in the library already stays where it is, so it makes no collection.
     const inLibrary = new Set(creator.sections.filter((section) => section.collectionSlug).map((section) => section.ref))
+    const sectionOf = new Map(creator.sections.map((section) => [section.ref, section]))
     const kept = plans.filter((plan) => plan.target !== 'skip' && !inLibrary.has(plan.ref))
+    const keptMovies = kept.filter((plan) => sectionOf.get(plan.ref)?.kind === 'item')
+    const newMovies = keptMovies.filter((plan) => !sectionOf.get(plan.ref)?.movieSlug).map((plan) => sectionOf.get(plan.ref)!.title)
+    const joiningMovies = keptMovies.filter((plan) => sectionOf.get(plan.ref)?.movieSlug).map((plan) => sectionOf.get(plan.ref)!.movieTitle ?? sectionOf.get(plan.ref)!.title)
     const collectionTitles = [
         ...(kept.some((plan) => plan.target === 'main') ? [intoTitle ?? creator.title] : []),
-        ...kept.filter((plan) => plan.target === 'own').map((plan) => {
-            const section = creator.sections.find((item) => item.ref === plan.ref)
+        ...kept.filter((plan) => plan.target === 'own' && sectionOf.get(plan.ref)?.kind !== 'item').map((plan) => {
+            const section = sectionOf.get(plan.ref)
             return section?.kind === 'feed' ? `${creator.title} ${section.title}` : section?.title ?? plan.ref
         }),
     ]
+    const summaryParts = [
+        collectionTitles.length ? `Creates ${collectionTitles.length} ${collectionTitles.length === 1 ? 'collection' : 'collections'}` : null,
+        newMovies.length ? `adds ${newMovies.length} ${newMovies.length === 1 ? 'movie' : 'movies'}` : null,
+        joiningMovies.length ? `adds ${joiningMovies.length} of yours` : null,
+    ].filter((part): part is string => !!part)
+    const summaryTitles = [...collectionTitles, ...newMovies, ...joiningMovies]
+    const summary = summaryParts.length
+        ? `${capitalize(summaryParts.length > 1 ? `${summaryParts.slice(0, -1).join(', ')} and ${summaryParts[summaryParts.length - 1]}` : summaryParts[0])}: ${
+            summaryTitles.length > 4 ? `${summaryTitles.slice(0, 3).join(', ')} and ${summaryTitles.length - 3} more` : summaryTitles.join(', ')}`
+        : 'Nothing picked yet'
 
     return (
         <section className="view creator-view" aria-labelledby="add-creator-title">
@@ -350,18 +378,20 @@ export default function AddCreatorPage() {
                                 <div key={section.ref} className="creator-section-row">
                                     {section.imageUrl
                                         ? <img className="creator-section-art" src={toImageUrl(section.imageUrl)} alt="" loading="lazy"/>
-                                        : <span className="creator-section-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', section.kind === 'feed' ? 'rss' : 'list')}/></span>}
+                                        : <span className="creator-section-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', section.kind === 'feed' ? 'rss' : section.kind === 'item' ? 'film' : 'list')}/></span>}
                                     <div className="creator-section-copy">
                                         <b>{section.title}</b>
                                         <span>
-                                            {section.collectionSlug
+                                            {section.movieSlug && isMovie(creator, section) ? (
+                                                <><span className="creator-section-chip">In your library</span> as {section.movieTitle ?? section.title}</>
+                                            ) : section.collectionSlug
                                                 ? `Already in your library as ${section.collectionTitle ?? section.collectionSlug}`
                                                 : section.access
                                                     ? 'Only some members can watch this. Pick it if VODLoft signs in as one.'
                                                     : sectionFacts(section)}
                                         </span>
                                     </div>
-                                    {section.kind === 'item' ? (
+                                    {section.kind === 'item' && !isMovie(creator, section) ? (
                                         <span className="creator-section-note">Add it from its own page</span>
                                     ) : section.collectionSlug ? (
                                         <span className="creator-section-note">Stays where it is</span>
@@ -407,13 +437,9 @@ export default function AddCreatorPage() {
                 {errors.sections && <div className="form-error-card" role="alert">{errors.sections.message ?? errors.sections.root?.message}</div>}
 
                 <div className="actions">
-                    <span className="creator-summary">
-                        {collectionTitles.length
-                            ? `Creates ${collectionTitles.length} ${collectionTitles.length === 1 ? 'collection' : 'collections'}: ${collectionTitles.length > 4 ? `${collectionTitles.slice(0, 3).join(', ')} and ${collectionTitles.length - 3} more` : collectionTitles.join(', ')}`
-                            : 'Nothing picked yet'}
-                    </span>
+                    <span className="creator-summary">{summary}</span>
                     <button type="button" className="btn" onClick={() => navigate(-1)}>Cancel</button>
-                    <button type="submit" className="btn btn-primary" disabled={isSubmitting || !collectionTitles.length}>
+                    <button type="submit" className="btn btn-primary" disabled={isSubmitting || !summaryParts.length}>
                         {isSubmitting ? 'Adding…' : into ? `Add to ${intoTitle}` : `Add ${creatorWord}`}
                     </button>
                 </div>

@@ -9,7 +9,8 @@ import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import EpisodeCard from '../../components/Episode/EpisodeCard'
+import EpisodeCard, {toImageUrl} from '../../components/Episode/EpisodeCard'
+import {DrmBadge} from '../../components/common/DrmProtected'
 import CollectionTile from '../../components/CollectionTile/CollectionTile'
 import OpenOnSiteLink from '../../components/common/OpenOnSiteLink'
 import {PageHeaderAction} from '../../components/common/PageHeader'
@@ -160,9 +161,10 @@ export default function CreatorPage() {
                 handle={creator.accounts[0]?.handle}
                 avatarUrl={creator.avatarUrl} bannerUrl={creator.bannerUrl} facts={creator.facts}
                 description={creator.description} titleId="creator-title"
-                stats={creator.collections.length > 0 && (
+                stats={(creator.collections.length > 0 || creator.movies.length > 0) && (
                     <ul className="creator-stats">
                         <li><b>{creator.collections.length}</b> {creator.collections.length === 1 ? 'collection' : 'collections'}</li>
+                        {creator.movies.length > 0 && <li><b>{creator.movies.length}</b> {creator.movies.length === 1 ? 'movie' : 'movies'}</li>}
                         <li><b>{episodes}</b> {episodes === 1 ? words.episode.one : words.episode.many}</li>
                         {since && <li>Since <b>{since}</b></li>}
                         {newest && <li>Newest <b>{timeAgo(newest)}</b></li>}
@@ -218,7 +220,7 @@ export default function CreatorPage() {
 
             <EpisodeShelf slug={creator.slug} words={words}/>
 
-            <div className="creator-section-group">
+            {(creator.collections.length > 0 || !creator.movies.length) && <div className="creator-section-group">
                 <h2 className="creator-collections-title">Collections</h2>
                 {creator.collections.length ? (
                     <div className="library-collection-grid" role="list" aria-label="Collections">
@@ -237,7 +239,33 @@ export default function CreatorPage() {
                         {mayManage && <> Add some on the <Link to={`/edit-creator/${creator.slug}`}>Edit page</Link>.</>}
                     </p>
                 )}
-            </div>
+            </div>}
+
+            {creator.movies.length > 0 && (
+                <div className="creator-section-group">
+                    <h2 className="creator-collections-title">Movies</h2>
+                    <div className="movie-poster-grid" role="list" aria-label="Movies">
+                        {creator.movies.map((movie) => {
+                            const image = toImageUrl(
+                                movie.thumbnailPortraitPath || movie.thumbnailLandscapePath || movie.backgroundImagePath || movie.logoImagePath,
+                            )
+                            const year = (movie.releaseDate ?? '').slice(0, 4) || (movie.publishedAt ? String(movie.publishedAt.getFullYear()) : '')
+                            return (
+                                <Link className="movie-poster-card" to={`/movie/${movie.slug}`} key={movie.slug} role="listitem">
+                                    <span className="movie-poster-art">
+                                        {image
+                                            ? <img src={image} alt="" loading="lazy" decoding="async"/>
+                                            : <FontAwesomeIcon icon={faIcon('fass', 'clapperboard')}/>}
+                                        {movie.drmProtected && <DrmBadge onCover/>}
+                                    </span>
+                                    <span className="movie-poster-title">{movie.title}</span>
+                                    {year && <span className="movie-poster-meta">{year}</span>}
+                                </Link>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
 
             <CreatorNotInLibrary creator={creator}/>
 

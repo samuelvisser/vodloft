@@ -22,6 +22,11 @@ export const CreatorSectionReadSchema = z.object({
     year: z.string().nullable().optional(),
     collectionSlug: z.string().nullable(),
     collectionTitle: z.string().nullable(),
+    /** The movie in the Library that this single item is, when it is one. */
+    movieSlug: z.string().nullable().default(null),
+    movieTitle: z.string().nullable().default(null),
+    /** The movie is one of this creator's already. */
+    movieJoined: z.boolean().default(false),
     status: z.enum(['known', 'new', 'ignored']).default('known'),
 })
 export type CreatorSectionRead = z.infer<typeof CreatorSectionReadSchema>
@@ -43,6 +48,8 @@ export const CreatorLookupReadSchema = z.object({
     creatorSections: CreatorSectionNamesSchema,
     /** The creator's lists can be seasons of its own collection. */
     linkSeasons: z.boolean().default(false),
+    /** The creator's single items are movies, which VODLoft adds to the Library and joins to the creator. */
+    movies: z.boolean().default(false),
     ref: z.string(),
     url: z.string().nullable(),
     title: z.string(),
@@ -115,6 +122,8 @@ export type CreatorRead = z.infer<typeof CreatorReadSchema>
 
 export const CreatorPageAccountReadSchema = CreatorAccountReadSchema.extend({
     sections: z.array(CreatorSectionReadSchema),
+    /** The account's single items are movies, which VODLoft adds to the Library and joins to the creator. */
+    movies: z.boolean().default(false),
 })
 export type CreatorPageAccountRead = z.infer<typeof CreatorPageAccountReadSchema>
 
@@ -134,6 +143,18 @@ export const CreatorPageReadSchema = CreatorReadSchema.extend({
         firstPublishedDate: ApiDateTimeSchema.nullable(),
         links: z.array(z.string()),
     })),
+    /** The creator's movies in the Library. */
+    movies: z.array(z.object({
+        slug: z.string(),
+        title: z.string(),
+        thumbnailPortraitPath: z.string().nullable(),
+        thumbnailLandscapePath: z.string().nullable(),
+        backgroundImagePath: z.string().nullable(),
+        logoImagePath: z.string().nullable(),
+        releaseDate: z.string().nullable(),
+        publishedAt: ApiDateTimeSchema.nullable(),
+        drmProtected: z.boolean().default(false),
+    })).default([]),
     /** When the newest episode of all of the creator's collections came out. */
     lastPublishedDate: ApiDateTimeSchema.nullable(),
     accounts: z.array(CreatorPageAccountReadSchema),

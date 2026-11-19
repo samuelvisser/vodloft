@@ -82,6 +82,11 @@
 .creator-section-choice, .creator-section-place, .creator-join-overlap-select { flex: 0 0 auto; min-width: 15rem; max-width: 50%; }
 .creator-section-place { margin-left: auto; }
 .creator-section-note { opacity: .7; font-size: .875rem; }
+/* "In your library", on a row of something the user has already, such as a host's movie. */
+.creator-section-copy .creator-section-chip {
+    display: inline-block; margin-right: .25rem; padding: 0 .45rem; border-radius: 999px; opacity: 1;
+    background: rgba(14, 165, 233, 0.16); font-weight: 600;
+}
 .creator-order-note { margin: 0; opacity: .75; font-size: .875rem; }
 .creator-summary { margin-right: auto; opacity: .8; }
 

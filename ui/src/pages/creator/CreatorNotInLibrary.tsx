@@ -9,7 +9,7 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import CollectionTileArt from '../../components/CollectionTileArt/CollectionTileArt'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import type {CreatorPageRead, SectionPlan} from '../../types/schemas/creator'
-import {choices, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
+import {choices, isMovie, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 
 // Tiles shown before "Show all": two rows on a computer, two on a phone.
@@ -34,7 +34,10 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const queryClient = useQueryClient()
     const items: AccountSection[] = creator.accounts
         .flatMap((account) => account.sections.map((section) => ({account, section})))
-        .filter(({section}) => !section.collectionSlug && section.kind !== 'item')
+        // A movie that isn't one of the creator's yet, also when it is in the library, can join them from here.
+        .filter(({account, section}) => (
+            section.kind === 'item' ? isMovie(account, section) && !section.movieJoined : !section.collectionSlug
+        ))
         // The new ones, which wait for a choice, first.
         .sort((a, b) => Number(b.section.status === 'new') - Number(a.section.status === 'new'))
     const newCount = items.filter(({section}) => section.status === 'new').length
@@ -53,7 +56,14 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const several = creator.accounts.length > 1
     // In the words of their one Site, when they are all on one, such as playlists on YouTube.
     const names = sites.size === 1 ? items[0].account.site.creatorSections : creator.sectionNames
-    const noun = items.length === 1 ? withoutArticle(names.one) : names.many
+    const movieCount = items.filter(({section}) => section.kind === 'item').length
+    const sectionCount = items.length - movieCount
+    const movieNoun = movieCount === 1 ? 'movie' : 'movies'
+    // "3 more shows", "1 more movie", or "3 more shows and 1 movie".
+    const counted = [
+        sectionCount ? `${sectionCount} more ${sectionCount === 1 ? withoutArticle(names.one) : names.many}` : null,
+        movieCount ? `${movieCount} ${sectionCount ? '' : 'more '}${movieNoun}` : null,
+    ].filter(Boolean).join(' and ')
     const onSite = sites.size === 1 ? ` on ${items[0].account.site.name}` : ''
     const arts = items.map(({section}) => toImageUrl(section.imageUrl)).filter((url): url is string => !!url).slice(0, 4)
     const key = ({account, section}: AccountSection) => `${account.id}:${section.ref}`
@@ -69,7 +79,8 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
         event.currentTarget.querySelector<HTMLButtonElement>('.creator-more-plus, .action-menu-trigger')?.click()
     }
     const add = async (item: AccountSection, plan: SectionPlan) => {
-        if (plan.target === 'own') {
+        // A movie needs no collection settings.
+        if (plan.target === 'own' && item.section.kind !== 'item') {
             setAdding(item)
             return
         }
@@ -79,6 +90,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['creators']}),
                 queryClient.invalidateQueries({queryKey: ['collectionsView']}),
+                ...(item.section.kind === 'item' ? [queryClient.invalidateQueries({queryKey: ['movies']})] : []),
             ])
             if (plan.target !== 'skip') toast.success(`Added ${item.section.title}`)
         } catch (exc) {
@@ -124,6 +136,9 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     }
 
     const titles = items.map(({section}) => section.title)
+    // A movie in the library that isn't the creator's is only away from them.
+    const away = items.some(({section}) => section.movieSlug) ? `not with ${creator.title}` : 'not in your library'
+    const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
     return (
         <section className={`creator-more${open ? ' is-open' : ''}`} aria-label="Not in your library">
             <button type="button" className="creator-more-summary" aria-expanded={open} onClick={toggle}>
@@ -134,14 +149,14 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                 )}
                 <span className="creator-more-text">
                     <b>
-                        <span className="creator-more-long">{creator.title} has {items.length} more {noun}{onSite}</span>
-                        <span className="creator-more-short">{items.length} more {noun}</span>
+                        <span className="creator-more-long">{creator.title} has {counted}{onSite}</span>
+                        <span className="creator-more-short">{counted}</span>
                         {newCount > 0 && <span className="creator-more-new">{newCount} new</span>}
                     </b>
                     <span className="creator-more-sub">
                         {open
-                            ? `Not in your library yet${mayAdd ? `: add ${items.length === 1 ? 'it' : 'any of them'} with its + button` : ''}`
-                            : `${listed(titles)} ${items.length === 1 ? 'is' : 'are'} not in your library`}
+                            ? `${capitalize(away)} yet${mayAdd ? `: add ${items.length === 1 ? 'it' : 'any of them'} with its + button` : ''}`
+                            : `${listed(titles)} ${items.length === 1 ? 'is' : 'are'} ${away}`}
                     </span>
                 </span>
                 <span className="btn btn-secondary creator-more-toggle">
@@ -154,7 +169,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                     <div className={`creator-more-grid${showAll ? '' : ' is-cut'}`} role="list">
                         {items.map((item) => {
                             const image = toImageUrl(item.section.imageUrl)
-                            const facts = [sectionFacts(item.section), several ? item.account.site.name : null].filter(Boolean).join(' · ')
+                            const facts = [sectionFacts(item.section), item.section.movieSlug ? 'In your library' : null, several ? item.account.site.name : null].filter(Boolean).join(' · ')
                             return (
                                 <div
                                     key={key(item)} className={`creator-more-tile${mayAdd ? ' is-addable' : ''}`} role="listitem"
@@ -163,7 +178,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                                     <span className="library-tile-art creator-more-art">
                                         {image
                                             ? <CollectionTileArt key={image} src={image}/>
-                                            : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', item.section.kind === 'feed' ? 'rss' : 'list')}/></span>}
+                                            : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', item.section.kind === 'feed' ? 'rss' : item.section.kind === 'item' ? 'film' : 'list')}/></span>}
                                     </span>
                                     {item.section.status === 'new' && <span className="creator-more-new creator-more-tile-new">New</span>}
                                     {mayAdd && <div className="creator-more-add">{addButton(item)}</div>}

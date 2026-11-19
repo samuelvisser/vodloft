@@ -943,3 +943,130 @@ def test_new_sections_only_become_seasons_where_a_creators_site_can_make_lists_s
     refused = client.patch("/api/creators/workshop", json={"newSections": "season"})
     assert refused.status_code == 422
     assert "shows can't be added as seasons" in str(refused.json())
+
+
+FILM_ROOT = "https://film.example/hosts/marsh"
+FILM_SECTIONS = (
+    SectionRef("evenings", "https://film.example/shows/evenings", "Evenings", SectionKind.SHOW),
+    SectionRef("tribute", "https://film.example/videos/tribute", "A Tribute", SectionKind.ITEM, kind_label="Movie"),
+    SectionRef("harbour", "https://film.example/videos/harbour", "The Harbour", SectionKind.ITEM, kind_label="Movie"),
+)
+
+
+class FilmSource(ListedSource):
+    """A Site whose hosts have shows and movies."""
+
+    id = "film"
+    name = "Film"
+    domains = ("film.example",)
+    features = ListedSource.features | {Feature.CREATORS, Feature.MOVIES}
+    sites = (Site(
+        "film", "Film", ("film.example",), creators=True, creator_label="host",
+        creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
+    ),)
+
+    def creator_details(self, ref, progress=lambda step: None):
+        return CreatorDetails(ref="marsh", url=FILM_ROOT, title="Ada Marsh", sections=FILM_SECTIONS)
+
+
+def _movie(session, slug, title):
+    from backend.db.models import Movie
+
+    movie = Movie(uuid=f"uuid-{slug}", slug=slug, title=title, type="movie", source_key="film")
+    session.add(movie)
+    session.commit()
+    return movie
+
+
+@pytest.fixture
+def film(tube, session, monkeypatch):
+    """The Film Site, whose movies the Source "looks up" as their slugs and the Library adds as plain movies."""
+    from backend.api.endpoints.creators import router as creator_router, service as creator_service
+    from backend.db.models import Movie
+
+    asked: list[list[str]] = []
+
+    def look_up_movies(source_key, slugs):
+        asked.append(list(slugs))
+        return list(slugs)
+
+    def add_movies(s, slugs):
+        titles = {section.ref: section.title for section in FILM_SECTIONS}
+        movies = [Movie(uuid=f"uuid-{slug}", slug=slug, title=titles[slug], type="movie", source_key="film") for slug in slugs]
+        s.add_all(movies)
+        s.flush()
+        return movies
+
+    monkeypatch.setattr(creator_router, "look_up_movies", look_up_movies)
+    monkeypatch.setattr(creator_service, "add_movies", add_movies)
+    registry.register(FilmSource())
+    return asked
+
+
+def _film_lookup(client):
+    response = client.post("/api/creators/lookup", json={"sourceKey": "film", "url": FILM_ROOT})
+    return json.loads(response.text.splitlines()[-1])["creator"]
+
+
+def test_a_hosts_movies_are_added_with_them_and_a_movie_in_the_library_joins_them(client, session, film):
+    from backend.db.models import Movie
+
+    _movie(session, "tribute", "A Tribute to the Coast")
+    found = _film_lookup(client)
+    assert found["movies"] is True
+    by_ref = {section["ref"]: section for section in found["sections"]}
+    assert (by_ref["tribute"]["movieSlug"], by_ref["tribute"]["movieTitle"]) == ("tribute", "A Tribute to the Coast")
+    assert by_ref["harbour"]["movieSlug"] is None
+    # Every preset adds the movies, and the one in the library joins the host even when the user picks.
+    assert _plan(found, "per_list") == {"evenings": "own", "tribute": "own", "harbour": "own"}
+    assert _plan(found, "pick") == {"evenings": "skip", "tribute": "own", "harbour": "skip"}
+
+    response = client.post("/api/creators", json={
+        "sourceKey": "film", "url": FILM_ROOT, "lookupId": found["lookupId"],
+        "sections": [{"ref": "evenings", "target": "skip"}, {"ref": "tribute", "target": "own"}, {"ref": "harbour", "target": "own"}],
+    })
+    assert response.status_code == 201, response.text
+    page = response.json()
+    # Only the movie that wasn't in the library is looked up, and neither becomes a collection.
+    assert film == [["harbour"]]
+    assert page["collections"] == []
+    assert sorted(movie["slug"] for movie in page["movies"]) == ["harbour", "tribute"]
+    assert all(section["movieJoined"] for section in page["accounts"][0]["sections"] if section["kind"] == "item")
+    assert page["accounts"][0]["movies"] is True
+    session.expire_all()
+    assert set(session.scalars(select(Movie.creator_id))) == {page["id"]}
+
+
+def test_a_movie_that_stays_apart_keeps_out_of_the_host_and_can_join_later(client, session, film):
+    from backend.db.models import Movie
+
+    _movie(session, "tribute", "A Tribute")
+    response = client.post("/api/creators", json={
+        "sourceKey": "film", "url": FILM_ROOT,
+        "sections": [{"ref": "evenings", "target": "own"}, {"ref": "tribute", "target": "skip"}, {"ref": "harbour", "target": "skip"}],
+    })
+    assert response.status_code == 201, response.text
+    page = response.json()
+    assert page["movies"] == [] and film == [[]]
+    assert session.scalar(select(Movie.creator_id).where(Movie.slug == "tribute")) is None
+
+    # From the host's page, the movie in the library joins and the other one is added.
+    account = page["accounts"][0]["id"]
+    response = client.post(f"/api/creators/{page['slug']}/accounts/{account}/sections", json={
+        "sections": [{"ref": "tribute", "target": "own"}, {"ref": "harbour", "target": "own"}],
+    })
+    assert response.status_code == 200, response.text
+    assert sorted(movie["slug"] for movie in response.json()["movies"]) == ["harbour", "tribute"]
+    assert film[-1] == ["harbour"]
+    assert [collection["slug"] for collection in response.json()["collections"]] == ["evenings"]
+
+
+def test_a_hosts_movies_leave_with_them_and_stay_in_the_library(client, session, film):
+    from backend.db.models import Movie
+
+    page = client.post("/api/creators", json={
+        "sourceKey": "film", "url": FILM_ROOT, "sections": [{"ref": "harbour", "target": "own"}],
+    }).json()
+    assert client.delete(f"/api/creators/{page['slug']}").status_code in (200, 204)
+    session.expire_all()
+    assert list(session.scalars(select(Movie.slug).where(Movie.creator_id.is_(None)))) == ["harbour"]

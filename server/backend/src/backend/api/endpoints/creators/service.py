@@ -5,7 +5,7 @@ import logging
 import threading
 import time
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -23,7 +23,9 @@ from backend.api.models.creator import (
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from backend.api.models.collection import CollectionAPIRead
 from backend.api.endpoints.episodes.service import episode_view_columns
-from backend.db.models import Creator, CreatorAccount, Collection, Episode
+from backend.app import db_session
+from backend.api.endpoints.movies.service import add_movies
+from backend.db.models import Creator, CreatorAccount, Collection, Episode, Movie
 from backend.services import creators
 from backend.services.creators import NewCollectionSettings, SectionPlan
 from backend.services.errors import ServiceError
@@ -113,6 +115,20 @@ class _Section:
     section: SectionRef
     collection_slug: str | None = None
     collection_title: str | None = None
+    movie: Movie | None = None
+    creator_id: int | None = None
+
+    @property
+    def movie_slug(self) -> str | None:
+        return self.movie.slug if self.movie is not None else None
+
+    @property
+    def movie_title(self) -> str | None:
+        return self.movie.title if self.movie is not None else None
+
+    @property
+    def movie_joined(self) -> bool:
+        return self.movie is not None and self.creator_id is not None and self.movie.creator_id == self.creator_id
 
     def __getattr__(self, name):
         return getattr(self.section, name)
@@ -133,6 +149,7 @@ class _Lookup:
     creator_label: str
     creator_sections: CreatorSectionNames
     link_seasons: bool
+    movies: bool
     sections: list[_Section]
     presets: list[_Preset]
     creator_slug: str | None = None
@@ -147,16 +164,21 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
     site = creators.creator_site(source_key, details.url) if details.url else get_source(source_key).sites[0]
     kept = creators.sections_in_library(s, source_key, details.ref, details.sections)
     titles = dict(s.execute(select(Collection.slug, Collection.title).where(Collection.slug.in_(kept.values()))).all())
+    movies = creators.takes_movies(source_key)
+    movies_kept = creators.movies_in_library(s, source_key, details.sections)
     existing = creators.account_in_library(s, site.key, details.ref)
     return CreatorLookupAPIRead.model_validate(_Lookup(
         details=details, source_key=source_key, site_key=site.key, site_name=site.name,
         creator_label=site.creator_label, creator_sections=site.creator_sections,
-        link_seasons=creators.lists_are_seasons(site),
+        link_seasons=creators.lists_are_seasons(site), movies=movies,
         sections=[
-            _Section(section, kept.get(section.ref), titles.get(kept.get(section.ref)))
+            _Section(section, kept.get(section.ref), titles.get(kept.get(section.ref)), movies_kept.get(section.ref))
             for section in details.sections
         ],
-        presets=[_Preset(preset.value, creators.preset_plan(details, preset)) for preset in site.creator_presets],
+        presets=[
+            _Preset(preset.value, creators.preset_plan(details, preset, movies=movies, movies_in_library=movies_kept))
+            for preset in site.creator_presets
+        ],
         creator_slug=existing.creator.slug if existing is not None else None,
         links=list(details.links), facts=list(details.facts),
     ))
@@ -174,15 +196,30 @@ def _collection_type(body: CreatorAPICreate, details: CreatorDetails) -> Collect
     return CollectionType(body.type)
 
 
-def add_creator(s: Session, body: CreatorAPICreate, details: CreatorDetails, *, added_by_id: int | None) -> CreatorPageAPIRead:
+def creator_movies_to_add(body: CreatorAPICreate, details: CreatorDetails) -> list[str]:
+    """The creator's movies that adding them puts in the Library, read before the Source looks them up."""
+    with db_session() as s:
+        return creators.movies_to_add(s, body.source_key, details.sections, _plans(body))
+
+
+def _plans(body: CreatorAPICreate | CreatorSectionsAPIAdd) -> list[SectionPlan]:
+    return [SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections]
+
+
+def add_creator(
+    s: Session, body: CreatorAPICreate, details: CreatorDetails, *, added_by_id: int | None,
+    movies: Sequence[object] = (),
+) -> CreatorPageAPIRead:
+    """Add the creator, with ``movies``, the Source's records of the movies it adds, looked up before."""
     into = None
     if body.into:
         into = s.scalar(select(Creator).where(Creator.slug == body.into))
         if into is None:
             raise ServiceError("This creator is not in the Library", field="into")
+    add_movies(s, list(movies))
     creator, _collections = creators.add_creator(
         s, source_key=body.source_key, details=details,
-        plans=[SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections],
+        plans=_plans(body),
         settings=NewCollectionSettings(
             _collection_type(body, details), EpisodeIdentifier(body.episode_identifier),
             body.membership_level,
@@ -208,6 +245,7 @@ def _counts(s: Session, creator_ids: list[int]) -> tuple[dict[int, int], dict[in
 class _AccountRead:
     account: CreatorAccount
     sections: list
+    movies: bool = False
 
     def __getattr__(self, name):
         return getattr(self.account, name)
@@ -219,6 +257,7 @@ class _CreatorRead:
     collection_count: int
     episode_count: int
     collections: list = field(default_factory=list)
+    movies: list = field(default_factory=list)
     accounts: list | None = None
     reassigned_count: int = 0
     last_published_date: datetime | None = None
@@ -299,6 +338,9 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     }
     slugs = {slug for found in kept.values() for slug in found.values()}
     titles = dict(s.execute(select(Collection.slug, Collection.title).where(Collection.slug.in_(slugs))).all())
+    movies_kept = {
+        account.id: creators.movies_in_library(s, account.source_key, account.sections) for account in creator.accounts
+    }
     collections = [
         _CollectionRead(
             collection, stats[collection.id].episode_count if collection.id in stats else 0,
@@ -313,14 +355,19 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     ]
     accounts = [
         _AccountRead(account, [
-            _Section(section, kept[account.id].get(section.ref), titles.get(kept[account.id].get(section.ref)))
+            _Section(
+                section, kept[account.id].get(section.ref), titles.get(kept[account.id].get(section.ref)),
+                movies_kept[account.id].get(section.ref), creator.id,
+            )
             for section in account.sections
-        ])
+        ], creators.takes_movies(account.source_key))
         for account in creator.accounts
     ]
     return CreatorPageAPIRead.model_validate(_CreatorRead(
         creator, collections_count.get(creator.id, 0), episodes.get(creator.id, 0),
-        collections=collections, accounts=accounts, reassigned_count=len(reassigned_in_creator(s, creator)),
+        collections=collections, accounts=accounts,
+        movies=sorted(creator.movies, key=lambda movie: (movie.release_date or movie.published_at or datetime.min).isoformat(), reverse=True),
+        reassigned_count=len(reassigned_in_creator(s, creator)),
         last_published_date=max((row.last for row in stats.values() if row.last is not None), default=None),
     ))
 
@@ -420,11 +467,21 @@ def update_creator(s: Session, slug: str, body: CreatorAPIUpdate) -> CreatorPage
     return creator_page(s, slug)
 
 
+def account_movies_to_add(slug: str, account_id: int, body: CreatorSectionsAPIAdd) -> tuple[str, list[str]]:
+    """The Source of one of the creator's accounts and the movies that adding the sections puts in the Library,
+    read before the Source looks them up."""
+    with db_session() as s:
+        account = _account(s, slug, account_id)
+        return account.source_key, creators.movies_to_add(s, account.source_key, account.sections, _plans(body))
+
+
 def add_sections(
     s: Session, slug: str, account_id: int, body: CreatorSectionsAPIAdd, *, added_by_id: int | None,
+    movies: Sequence[object] = (),
 ) -> CreatorPageAPIRead:
+    add_movies(s, list(movies))
     creators.place_sections(
-        s, _account(s, slug, account_id), [SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections],
+        s, _account(s, slug, account_id), _plans(body),
         added_by_id=added_by_id,
         type=CollectionType(body.type) if body.type else None,
         episode_identifier=EpisodeIdentifier(body.episode_identifier) if body.episode_identifier else None,

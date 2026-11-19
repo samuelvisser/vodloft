@@ -8,7 +8,7 @@ from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
 
 if TYPE_CHECKING:
-    from backend.db.models import Collection, Site
+    from backend.db.models import Collection, Movie, Site
 
 
 class Creator(Base):
@@ -46,6 +46,7 @@ class Creator(Base):
         back_populates="creator", cascade="all, delete-orphan", order_by="CreatorAccount.id",
     )
     collections: Mapped[list["Collection"]] = relationship(back_populates="creator", foreign_keys="Collection.creator_id")
+    movies: Mapped[list["Movie"]] = relationship(back_populates="creator", foreign_keys="Movie.creator_id")
 
     @property
     def sections(self) -> list["CreatorSection"]:

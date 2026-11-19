@@ -19,6 +19,11 @@ export function sectionFacts(section: CreatorSectionRead) {
         .filter(Boolean).join(' · ')
 }
 
+/** A single item that is a movie VODLoft adds from the creator's page, unlike a single track. */
+export function isMovie(account: CreatorPageAccountRead, section: CreatorSectionRead) {
+    return section.kind === 'item' && account.movies
+}
+
 /** One section of one of the creator's accounts. */
 export type AccountSection = {account: CreatorPageAccountRead, section: CreatorSectionRead}
 
@@ -32,6 +37,12 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
     const mainTitle = mainTitleOf(creator, account)
     const main = `the ${creator.creatorLabel}'s main collection`
     const options: {label: string, description: string, plan: SectionPlan}[] = []
+    if (isMovie(account, section)) {
+        // A movie in the library joins the creator; another one goes into the library as one of theirs.
+        return [section.movieSlug
+            ? {label: `Join ${creator.title}`, description: `${section.movieTitle ?? section.title} in your library becomes one of ${creator.title}'s movies`, plan: {ref: section.ref, target: 'own'}}
+            : {label: 'Add to your library', description: `The movie goes into your library, as one of ${creator.title}'s`, plan: {ref: section.ref, target: 'own'}}]
+    }
     if (section.kind === 'feed') {
         options.push({label: `Add to ${mainTitle}`, description: `Its videos go into ${main}`, plan: {ref: section.ref, target: 'main'}})
     } else if (section.kind === 'list' && account.site.linkSeasons) {

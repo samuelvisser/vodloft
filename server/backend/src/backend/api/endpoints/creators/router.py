@@ -13,9 +13,11 @@ from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, signed_in
 from backend.services.source_requests import asking_source
 
+from backend.api.endpoints.movies.service import look_up_movies
+
 from . import lookups
 from .service import (
-    CreatorNotFoundError, account_link, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
+    CreatorNotFoundError, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
     look_up_creator, lookup_creator_label, move_creator_reassigned, move_creator_section, update_creator,
 )
 
@@ -54,7 +56,9 @@ def create_creator(body: CreatorAPICreate, access: Access = signed_in()):
     if details is None:
         with asking_source("Could not look up this creator"):
             details = look_up_creator(body.source_key, body.url, body.ref)
-    return run_write_transaction(lambda s: add_creator(s, body, details, added_by_id=access.user_id))
+    with asking_source("Could not look up this creator's movies"):
+        movies = look_up_movies(body.source_key, creator_movies_to_add(body, details))
+    return run_write_transaction(lambda s: add_creator(s, body, details, added_by_id=access.user_id, movies=movies))
 
 
 @router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[CreatorAPIRead])
@@ -106,10 +110,17 @@ def creator_update(slug: str, body: CreatorAPIUpdate):
     response_model=CreatorPageAPIRead,
 )
 def creator_add_sections(slug: str, account_id: int, body: CreatorSectionsAPIAdd, access: Access = signed_in()):
-    """Add sections of one of the creator's accounts to the creator's collections, or ignore them."""
-    return _found(lambda: run_write_transaction(
-        lambda s: add_sections(s, slug, account_id, body, added_by_id=access.user_id),
-    ))
+    """Add sections of one of the creator's accounts to the creator's collections, or ignore them. A movie of the
+    account goes into the Library, when it isn't there yet, and joins the creator."""
+    def add():
+        source_key, refs = account_movies_to_add(slug, account_id, body)
+        with asking_source("Could not look up the creator's movies"):
+            movies = look_up_movies(source_key, refs)
+        return run_write_transaction(
+            lambda s: add_sections(s, slug, account_id, body, added_by_id=access.user_id, movies=movies),
+        )
+
+    return _found(add)
 
 
 @router.post(

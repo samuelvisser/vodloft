@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "8bf741c29247"
+HEAD_REVISION = "bd6c56bd1a8d"
 
 
 @pytest.fixture
@@ -1724,4 +1724,35 @@ def test_a_creator_on_sites_without_link_seasons_adds_new_sections_as_collection
     with engine.connect() as connection:
         assert connection.execute(text("SELECT id, new_sections FROM creators ORDER BY id")).all() == [
             (1, "own"), (2, "season"), (3, "season"), (4, "ask"),
+        ]
+
+
+def test_movies_that_a_creators_account_lists_join_that_creator(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "8bf741c29247")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        connection.execute(text("INSERT INTO creators (id, uuid, slug, title) VALUES (1, 'c', 'host', 'Host')"))
+        connection.execute(text(
+            "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref) VALUES (1, 1, 'dailywire', 'dailywire', 'host')"
+        ))
+        # The host's movie, a show of theirs with the same name as another movie, and a movie of nobody's.
+        for section_id, ref, kind in ((1, "tribute", "item"), (2, "other", "show")):
+            connection.execute(text(
+                "INSERT INTO creator_sections (id, account_id, ref, url, title, kind) VALUES (:id, 1, :ref, :ref, :ref, :kind)"
+            ), {"id": section_id, "ref": ref, "kind": kind})
+        for movie_id, slug in ((1, "tribute"), (2, "other"), (3, "nobody")):
+            connection.execute(text(
+                "INSERT INTO media_items (id, uuid, type, source_key) VALUES (:id, :id, 'movie', 'dailywire')"
+            ), {"id": movie_id})
+            connection.execute(text("INSERT INTO media_items_movie (id, slug) VALUES (:id, :slug)"), {"id": movie_id, "slug": slug})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id, creator_id FROM media_items_movie ORDER BY id")).all() == [
+            (1, 1), (2, None), (3, None),
         ]

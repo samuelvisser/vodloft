@@ -220,6 +220,8 @@ The **Presets** for the creator fill these choices in for you, and you can still
 
 A video that appears in more than one place is kept once, and a playlist is always in one place only: a season of the main collection or a collection of its own. In the main collection a video in a playlist season is in that season and not in the season of videos in no playlist. The creator decides which playlists are seasons of its main collection, so that collection's Seasons window doesn't look for new playlists itself; it still lets you name, order and group the seasons, and turn a playlist season off.
 
+A Daily Wire host's movies are listed under **Movies**. **Add to your library** adds a movie as one of the host's, and **Skip** leaves it out. A movie that is already in your Library shows **In your library**, and **Joins** the host unless you choose **Stays apart**. Adding a movie this way doesn't download it. The host's page shows their movies under their collections. A movie you skipped, or that stayed apart, is listed at the bottom of the host's page with the shows that are not in your Library, and its **+** button adds it to the host later. Taking a host out of your Library keeps their movies in your Library.
+
 Collections made from a creator start without Download Profiles; add them on each collection as usual. In the Library, creators show with a round picture next to your collections; the **Kind** filter shows only creators or only collections.
 
 ### Music artists

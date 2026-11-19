@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal, Optional
 
 from pydantic import AliasChoices, AliasPath, Field
@@ -39,6 +39,11 @@ class CreatorSectionAPIRead(ResponseBase):
     collection_slug: Optional[str] = None
     """The collection that keeps the section, when one does."""
     collection_title: Optional[str] = None
+    movie_slug: Optional[str] = None
+    """The movie in the Library that this single item is, when it is one."""
+    movie_title: Optional[str] = None
+    movie_joined: bool = False
+    """The movie is one of this creator's already."""
     status: Literal["known", "new", "ignored"] = "known"
     """For a creator in the Library: "new" when the daily look found it and it waits for a choice."""
 
@@ -67,6 +72,8 @@ class CreatorLookupAPIRead(ResponseBase):
     """What the Site calls the things its creators add, such as playlists on YouTube or shows on The Daily Wire."""
     link_seasons: bool = False
     """The creator's lists can be seasons of its own collection."""
+    movies: bool = False
+    """The creator's single items are movies, which VODLoft adds to the Library and joins to the creator."""
     ref: str
     url: Optional[str] = None
     title: str
@@ -177,6 +184,22 @@ class CreatorPageAccountAPIRead(CreatorAccountAPIRead):
     """An account on the creator's page, with its sections and the collection that keeps each."""
 
     sections: list[CreatorSectionAPIRead]
+    movies: bool = False
+    """The account's single items are movies, which VODLoft adds to the Library and joins to the creator."""
+
+
+class CreatorMovieAPIRead(ResponseBase):
+    """One of the creator's movies in the Library."""
+
+    slug: str
+    title: str
+    thumbnail_portrait_path: Optional[str] = None
+    thumbnail_landscape_path: Optional[str] = None
+    background_image_path: Optional[str] = None
+    logo_image_path: Optional[str] = None
+    release_date: Optional[date] = None
+    published_at: Optional[datetime] = None
+    drm_protected: bool = False
 
 
 class CreatorEpisodeAPIRead(EpisodeAPIReadView):
@@ -194,6 +217,7 @@ class CreatorPageAPIRead(CreatorAPIRead):
     """A creator's page: their collections, and the sections of each account with the collection that keeps each."""
 
     collections: list[CreatorCollectionAPIRead]
+    movies: list[CreatorMovieAPIRead] = Field(default_factory=list)
     last_published_date: Optional[datetime] = None
     """When the newest episode of all of the creator's collections came out."""
     accounts: list[CreatorPageAccountAPIRead]
