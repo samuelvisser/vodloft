@@ -21,9 +21,10 @@ import {
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import './MoveEpisodesDialog.css'
 import {apiUrl} from '../../lib/api'
+import {collectionWords, Noun} from '../../lib/collectionWords'
 
 type Props = {
-    profile: {id: number, slug: string, name: string}
+    profile: {id: number, slug: string, name: string, type?: string | null}
     /** Nothing downloaded is left on the profile and no Download Profile uses it. */
     sourceEmpty: boolean
     onDeleteProfile: () => void
@@ -36,13 +37,13 @@ const api = () => apiUrl()
 
 const MOVES: readonly EpisodeMoveOutcome[] = ['move', 'replace']
 
-function outcomeLabel(outcome: EpisodeMoveOutcome, target: string): string {
+function outcomeLabel(outcome: EpisodeMoveOutcome, target: string, noun: Noun): string {
     switch (outcome) {
         case 'move': return 'Moves'
         case 'replace': return `Moves, in place of ${target}'s record without a file`
-        case 'target_has_file': return `Stays: ${target} already has this episode`
+        case 'target_has_file': return `Stays: ${target} already has this ${noun.one}`
         case 'path_taken': return 'Stays: another file already has the new path'
-        case 'same_path': return 'Same new path as another episode'
+        case 'same_path': return `Same new path as another ${noun.one}`
         case 'file_missing': return 'Stays: the file is missing'
         case 'busy': return 'Stays: a download is running for it'
     }
@@ -56,8 +57,8 @@ function movable(collection: LocalMediaProfileMoveCollection) {
     return collection.inScope && !collection.blocked && moving(collection) > 0
 }
 
-function plural(count: number, word: string) {
-    return `${count} ${word}${count === 1 ? '' : 's'}`
+function plural(count: number, noun: Noun, before = '') {
+    return `${count} ${before}${count === 1 ? noun.one : noun.many}`
 }
 
 /** Opens the download history of an episode's copy on the source profile, where it can be deleted. */
@@ -92,7 +93,7 @@ function EpisodeDownloadLog({episode, onClose}: {episode: LocalMediaProfileMoveE
     return <DownloadLogDialog row={row} onClose={onClose}/>
 }
 
-function episodeChange(episode: LocalMediaProfileMoveEpisode, target: string): PathChange {
+function episodeChange(episode: LocalMediaProfileMoveEpisode, target: string, noun: Noun): PathChange {
     const moves = MOVES.includes(episode.outcome)
     return {
         key: episode.mediaDownloadId,
@@ -103,15 +104,16 @@ function episodeChange(episode: LocalMediaProfileMoveEpisode, target: string): P
         header: (
             <>
                 <span className="move-episodes-episode-title">{episode.episodeTitle}</span>
-                <span className={`move-episodes-episode-outcome${moves ? '' : ' is-stays'}`}>{outcomeLabel(episode.outcome, target)}</span>
+                <span className={`move-episodes-episode-outcome${moves ? '' : ' is-stays'}`}>{outcomeLabel(episode.outcome, target, noun)}</span>
                 {!moves && <HistoryButton episode={episode}/>}
             </>
         ),
     }
 }
 
-function CollectionCard({collection, choice, setChoice, source, target, disabled}: {
+function CollectionCard({collection, choice, setChoice, source, target, disabled, noun}: {
     collection: LocalMediaProfileMoveCollection
+    noun: Noun
     choice: Choice
     setChoice: (choice: Choice) => void
     source: string
@@ -136,7 +138,7 @@ function CollectionCard({collection, choice, setChoice, source, target, disabled
                 />
                 <span className="move-episodes-collection-title">{collection.collectionTitle}</span>
                 <span className="move-episodes-muted">
-                    {plural(count, 'episode')} move{count === 1 ? 's' : ''}
+                    {plural(count, noun)} move{count === 1 ? 's' : ''}
                     {stays > 0 && `, ${stays} stay${stays === 1 ? 's' : ''}`}
                 </span>
             </label>
@@ -151,8 +153,8 @@ function CollectionCard({collection, choice, setChoice, source, target, disabled
             )}
             {collection.blocked && (
                 <p className="move-episodes-note move-episodes-warning">
-                    Several episodes would get the same path in {target}. Change its output template so every
-                    episode gets a path of its own first.
+                    Several {noun.many} would get the same path in {target}. Change its output template so every
+                    {' '}{noun.one} gets a path of its own first.
                 </p>
             )}
 
@@ -171,7 +173,7 @@ function CollectionCard({collection, choice, setChoice, source, target, disabled
                             </label>
                             {!choice.moveDownloadProfile && (
                                 <p className="move-episodes-note move-episodes-warning">
-                                    The Download Profile stays on {source} and downloads the moved episodes there
+                                    The Download Profile stays on {source} and downloads the moved {noun.many} there
                                     again.
                                 </p>
                             )}
@@ -179,19 +181,19 @@ function CollectionCard({collection, choice, setChoice, source, target, disabled
                     )}
                     {hasTargetProfile && (
                         <p className="move-episodes-note">
-                            The moved episodes join {target}'s Download Profile for this Collection.
+                            The moved {noun.many} join {target}'s Download Profile for this Collection.
                         </p>
                     )}
                     {collection.retentionAtRisk > 0 && (
                         <p className="move-episodes-note move-episodes-warning">
-                            {target}'s Download Profile deletes older episodes: {plural(collection.retentionAtRisk, 'moved episode')}
+                            {target}'s Download Profile deletes older {noun.many}: {plural(collection.retentionAtRisk, noun, 'moved ')}
                             {' '}fall{collection.retentionAtRisk === 1 ? 's' : ''} outside its limit and will be deleted.
                             Mark them as kept first to keep them.
                         </p>
                     )}
                     {hasSourceProfile && hasTargetProfile && (
                         <p className="move-episodes-note move-episodes-warning">
-                            {source}'s Download Profile for this Collection stays and downloads the moved episodes
+                            {source}'s Download Profile for this Collection stays and downloads the moved {noun.many}
                             there again. Turn it off or delete it after the move.
                         </p>
                     )}
@@ -199,11 +201,11 @@ function CollectionCard({collection, choice, setChoice, source, target, disabled
             )}
 
             <button type="button" className="btn btn-link move-episodes-toggle" onClick={() => setExpanded(!expanded)}>
-                {expanded ? 'Hide episodes' : 'Show episodes'}
+                {expanded ? `Hide ${noun.many}` : `Show ${noun.many}`}
             </button>
             {expanded && (
                 <PathChangeList
-                    changes={collection.episodes.map((episode) => episodeChange(episode, target))}
+                    changes={collection.episodes.map((episode) => episodeChange(episode, target, noun))}
                     fromLabel="Now"
                     toLabel="After"
                     endless
@@ -215,6 +217,8 @@ function CollectionCard({collection, choice, setChoice, source, target, disabled
 
 /** Move a Collection Local Media Profile's downloaded episodes, and their files, to another profile. */
 export default function MoveEpisodesDialog({profile, sourceEmpty, onDeleteProfile, onClose}: Props) {
+    // A Music profile keeps tracks.
+    const noun = collectionWords(profile.type === 'music' ? 'music' : null, 'audio').episode
     const queryClient = useQueryClient()
     const startOperation = useStartOperation()
     const {data: profiles} = useLocalMediaProfiles()
@@ -279,7 +283,7 @@ export default function MoveEpisodesDialog({profile, sourceEmpty, onDeleteProfil
                 }),
             })
             setFinished(false)
-            toast.success(`Moving ${plural(episodes, 'episode')} to ${target.name}`)
+            toast.success(`Moving ${plural(episodes, noun)} to ${target.name}`)
         } catch (error) {
             toast.error(error instanceof OperationStartError || error instanceof Error ? error.message : 'Could not start the move')
         } finally {
@@ -298,13 +302,13 @@ export default function MoveEpisodesDialog({profile, sourceEmpty, onDeleteProfil
         >
             <div className="modal-header">
                 <div className="modal-icon" aria-hidden><FontAwesomeIcon icon={faIcon('fass', 'file-export')}/></div>
-                <h2 id="move-episodes-title" className="modal-title">Move episodes to another profile</h2>
+                <h2 id="move-episodes-title" className="modal-title">Move {noun.many} to another profile</h2>
             </div>
 
             <div className="move-episodes-body">
                 <p className="move-episodes-intro">
-                    The downloaded episodes of "{profile.name}" move over to another Local Media Profile, with their
-                    history, and their files are renamed into its layout. Nothing is overwritten: an episode that
+                    The downloaded {noun.many} of "{profile.name}" move over to another Local Media Profile, with their
+                    history, and their files are renamed into its layout. Nothing is overwritten: {noun.a} that
                     can't move stays where it is.
                 </p>
 
@@ -327,7 +331,7 @@ export default function MoveEpisodesDialog({profile, sourceEmpty, onDeleteProfil
                 {operation && (
                     <div className="form-info-card" role="status" aria-live="polite">
                         <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>{' '}
-                        {operation.message || 'Moving episodes…'}
+                        {operation.message || `Moving ${noun.many}…`}
                     </div>
                 )}
                 {sourceEmpty && (finished || (preview.data && collections.length === 0)) && (
@@ -343,7 +347,7 @@ export default function MoveEpisodesDialog({profile, sourceEmpty, onDeleteProfil
                 {target && preview.isLoading && <p className="move-episodes-muted">Working out what moves…</p>}
                 {preview.error && <p role="alert">{preview.error.message}</p>}
                 {target && preview.data && collections.length === 0 && (
-                    <p className="move-episodes-muted">"{profile.name}" has no downloaded episodes left to move.</p>
+                    <p className="move-episodes-muted">"{profile.name}" has no downloaded {noun.many} left to move.</p>
                 )}
                 {target && collections.map((collection) => (
                     <CollectionCard
@@ -354,6 +358,7 @@ export default function MoveEpisodesDialog({profile, sourceEmpty, onDeleteProfil
                         source={profile.name}
                         target={target.name}
                         disabled={running}
+                        noun={noun}
                     />
                 ))}
                 {chosen.length > 0 && (
@@ -371,7 +376,7 @@ export default function MoveEpisodesDialog({profile, sourceEmpty, onDeleteProfil
                     disabled={running || episodes === 0}
                     onClick={() => void move()}
                 >
-                    {starting ? 'Starting…' : episodes ? `Move ${plural(episodes, 'episode')}` : 'Move episodes'}
+                    {starting ? 'Starting…' : episodes ? `Move ${plural(episodes, noun)}` : `Move ${noun.many}`}
                 </button>
             </div>
         </Modal>

@@ -194,6 +194,8 @@ export const SiteReadSchema = z.object({
     name: z.string(),
     /** A collection on the Site shows what VODLoft has no access to until the user hides it. */
     showsLocked: z.boolean().optional().default(true),
+    /** The Site has sound only, such as Bandcamp: a Music collection on it holds tracks, not music videos. */
+    audio: z.boolean().optional().default(false),
     /** What the Site calls a creator, in lower case, such as host on The Daily Wire. */
     creatorLabel: z.string().optional().default('creator'),
     /** What the Site calls the things its creators add, which VODLoft looks for, such as playlists on YouTube. */

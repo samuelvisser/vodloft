@@ -419,6 +419,12 @@ class SiteAPIRead(ResponseBase):
 
     @computed_field
     @property
+    def audio(self) -> bool:
+        """The Site has sound only, such as Bandcamp: a Music collection on it holds tracks, not music videos."""
+        return site_of(self.key).audio
+
+    @computed_field
+    @property
     def creator_label(self) -> str:
         """What the Site calls a creator, in lower case, such as host on The Daily Wire."""
         return site_of(self.key).creator_label

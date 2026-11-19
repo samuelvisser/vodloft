@@ -796,6 +796,9 @@ class Site:
     by the keys its Sources tell."""
     creators: bool = False
     """The Site has creators VODLoft can add, through a Source with ``Feature.CREATORS``."""
+    audio: bool = False
+    """The Site has sound only, such as Bandcamp's tracks, so a Music collection on it holds tracks rather than
+    music videos."""
     creator_label: str = "creator"
     """What the Site calls a creator, in lower case, such as host on The Daily Wire or artist on Bandcamp. VODLoft
     names the Site's creators by it everywhere."""

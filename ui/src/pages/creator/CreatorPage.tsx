@@ -20,6 +20,7 @@ import {creatorKindText} from '../../types/creator'
 import CreatorHeader from './CreatorHeader'
 import CreatorNotInLibrary from './CreatorNotInLibrary'
 import './CreatorPages.css'
+import {collectionWords, CollectionWords} from '../../lib/collectionWords'
 
 /** The places a collection lists, short enough for a card: "Videos, Live and 9 more". */
 function listedSources(titles: string[]) {
@@ -39,7 +40,7 @@ function timeAgo(date: Date) {
 }
 
 /** A row of episodes that scrolls sideways, with buttons to scroll it on a computer. */
-function EpisodeShelf({slug}: {slug: string}) {
+function EpisodeShelf({slug, words}: {slug: string, words: CollectionWords}) {
     const {data, hasNextPage, isFetchingNextPage, fetchNextPage} = useCreatorEpisodes(slug)
     const episodes = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data])
     // The next page loads when the end of the row comes near, as the user scrolls it on.
@@ -50,7 +51,7 @@ function EpisodeShelf({slug}: {slug: string}) {
     return (
         <section className="creator-section-group" aria-labelledby="creator-newest-title">
             <div className="creator-shelf-head">
-                <h2 id="creator-newest-title">Newest episodes</h2>
+                <h2 id="creator-newest-title">Newest {words.episode.many}</h2>
                 <div className="creator-shelf-arrows">
                     <button type="button" className="btn" onClick={() => scroll(-1)} aria-label="Scroll back">
                         <FontAwesomeIcon icon={faIcon('fass', 'chevron-left')}/>
@@ -62,7 +63,7 @@ function EpisodeShelf({slug}: {slug: string}) {
             </div>
             <div className="episodes-row creator-shelf" role="list" ref={row}>
                 {episodes.map((episode) => (
-                    <EpisodeCard key={episode.id} ep={episode} collectionSlug={episode.collectionSlug} collectionTitle={episode.collectionTitle}/>
+                    <EpisodeCard key={episode.id} ep={episode} collectionSlug={episode.collectionSlug} collectionTitle={episode.collectionTitle} words={words}/>
                 ))}
                 {hasNextPage && <div ref={endRef} className="creator-shelf-more" aria-hidden="true"/>}
             </div>
@@ -114,7 +115,7 @@ export default function CreatorPage() {
         setMovingReassigned(true)
         try {
             const result = await postReassignedMove(`/creators/${encodeURIComponent(creator.slug)}/move-reassigned`)
-            toast.success(reassignedMoveMessage(result))
+            toast.success(reassignedMoveMessage(result, fileWords))
             await queryClient.invalidateQueries({queryKey: ['creator', slug]})
             await queryClient.invalidateQueries({queryKey: ['collection']})
         } catch (exc) {
@@ -144,6 +145,10 @@ export default function CreatorPage() {
     // Two sites fit as buttons; more go into the Actions menu.
     const linkButtons = links.length <= 2 ? links : []
     const episodes = creator.collections.reduce((total, collection) => total + collection.episodeCount, 0)
+    // An artist whose collections are all Music collections has albums, and tracks on a Site with sound only.
+    const music = creator.collections.length > 0 && creator.collections.every((collection) => collection.type === 'music')
+    const words = collectionWords(music ? 'music' : null, creator.accounts.every((account) => account.site.audio) ? 'audio' : 'video')
+    const fileWords = collectionWords(music ? 'music' : null, 'audio')
     const firstDates = creator.collections.map((collection) => collection.firstPublishedDate).filter((date): date is Date => !!date)
     const since = firstDates.length ? Math.min(...firstDates.map((date) => date.getFullYear())) : null
     const newest = creator.lastPublishedDate
@@ -158,7 +163,7 @@ export default function CreatorPage() {
                 stats={creator.collections.length > 0 && (
                     <ul className="creator-stats">
                         <li><b>{creator.collections.length}</b> {creator.collections.length === 1 ? 'collection' : 'collections'}</li>
-                        <li><b>{episodes}</b> {episodes === 1 ? 'episode' : 'episodes'}</li>
+                        <li><b>{episodes}</b> {episodes === 1 ? words.episode.one : words.episode.many}</li>
                         {since && <li>Since <b>{since}</b></li>}
                         {newest && <li>Newest <b>{timeAgo(newest)}</b></li>}
                     </ul>
@@ -182,13 +187,13 @@ export default function CreatorPage() {
                                 }))),
                                 // Episodes can only move between collections, so a creator with one has nothing to move.
                                 ...(creator.collections.length > 1 ? [{
-                                    label: 'Move reassigned episodes',
+                                    label: `Move reassigned ${fileWords.episode.many}`,
                                     description: creator.reassignedCount
-                                        ? `${creator.reassignedCount} downloaded ${creator.reassignedCount === 1 ? 'episode belongs' : 'episodes belong'} in another collection of this ${creator.creatorLabel} now`
+                                        ? `${creator.reassignedCount} downloaded ${creator.reassignedCount === 1 ? `${fileWords.episode.one} belongs` : `${fileWords.episode.many} belong`} in another collection of this ${creator.creatorLabel} now`
                                         : undefined,
                                     icon: faIcon('fass', 'arrow-right-from-bracket'),
                                     disabled: movingReassigned || !creator.reassignedCount,
-                                    disabledReason: creator.reassignedCount ? undefined : `No episode of this ${creator.creatorLabel} belongs in another of its collections.`,
+                                    disabledReason: creator.reassignedCount ? undefined : `No ${fileWords.episode.one} of this ${creator.creatorLabel} belongs in another of its collections.`,
                                     onSelect: () => void moveReassigned(),
                                 }] : []), {
                                     label: 'Combine with another creator',
@@ -211,7 +216,7 @@ export default function CreatorPage() {
             )}
             {actionError && <div className="form-error-card" role="alert">{actionError}</div>}
 
-            <EpisodeShelf slug={creator.slug}/>
+            <EpisodeShelf slug={creator.slug} words={words}/>
 
             <div className="creator-section-group">
                 <h2 className="creator-collections-title">Collections</h2>
@@ -254,7 +259,7 @@ export default function CreatorPage() {
                 </div>
                 <ul className="creator-order-note">
                     <li>Their accounts and collections become {creator.title}'s, and they leave your library as a creator of their own.</li>
-                    <li>Collections keep their seasons, episodes, profiles and files. Nothing is indexed again.</li>
+                    <li>Collections keep their {words.season.many}, {words.episode.many}, profiles and files. Nothing is indexed again.</li>
                     <li>{creator.title}'s name, picture and settings stay.</li>
                 </ul>
             </ConfirmDialog>

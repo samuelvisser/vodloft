@@ -12,6 +12,7 @@ import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {EpisodeIdentifierReg, EpisodeOrderReg, type EpisodeIdentifierValue, type EpisodeOrderValue} from '../../types/collection'
 import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
 import './ChangeIdentificationDialog.css'
+import {collectionWords, CollectionWords} from '../../lib/collectionWords'
 
 type IdentificationChange = {title: string; before: string; after: string}
 
@@ -38,6 +39,8 @@ type Props = {
     onDismiss: () => void
     /** The change started: its operation shows on the collection page. */
     onStarted: () => void
+    /** What the collection calls its seasons and episodes, such as albums and tracks. */
+    words?: CollectionWords
 }
 
 // Shown before the list is opened up.
@@ -101,11 +104,11 @@ function Step({icon, headline, detail, value, danger = false, children}: {
     )
 }
 
-const HOW: Record<EpisodeIdentifierValue, string> = {
+const how = (target: EpisodeIdentifierValue, words: CollectionWords) => ({
     date_based: 'by date',
     numbered: 'by number',
-    seasonal: 'by season and episode',
-}
+    seasonal: `by ${words.season.one} and ${words.episode.one}`,
+})[target]
 
 function defaultOrder(identification: EpisodeIdentifierValue): EpisodeOrderValue {
     return identification === 'seasonal' ? 'oldest_first' : 'newest_first'
@@ -122,8 +125,9 @@ function names(items: string[]) {
 
 /** Asks before a collection numbers its episodes another way, saying what that does to its files and profiles. */
 export default function ChangeIdentificationDialog({
-    open, collectionSlug, collectionTitle, current, target, episodeOrder, onDismiss, onStarted,
+    open, collectionSlug, collectionTitle, current, target, episodeOrder, onDismiss, onStarted, words = collectionWords(null),
 }: Props) {
+    const {season, episode} = words
     const startOperation = useStartOperation()
     const [error, setError] = useState<string | null>(null)
     const suggestedOrder = target ? defaultOrder(target) : episodeOrder
@@ -164,10 +168,10 @@ export default function ChangeIdentificationDialog({
                     episodeOrder: offerOrder && switchOrder ? suggestedOrder : null,
                 }),
             })
-            toast.success(`Numbering the episodes of ${collectionTitle} ${HOW[target]}`)
+            toast.success(`Numbering the ${episode.many} of ${collectionTitle} ${how(target, words)}`)
             onStarted()
         } catch (caught) {
-            setError(caught instanceof OperationStartError ? caught.message : 'Could not change the episode identification')
+            setError(caught instanceof OperationStartError ? caught.message : `Could not change the ${episode.one} identification`)
         }
     }
 
@@ -180,7 +184,7 @@ export default function ChangeIdentificationDialog({
     return (
         <ConfirmDialog
             open={open && target !== null}
-            title={target ? `Number the episodes ${HOW[target]}?` : ''}
+            title={target ? `Number the ${episode.many} ${how(target, words)}?` : ''}
             onDismiss={onDismiss}
             icon={faIcon('fass', 'list-ol')}
             iconTone={removed.length > 0 ? 'danger' : 'default'}
@@ -209,13 +213,13 @@ export default function ChangeIdentificationDialog({
                         <span className="change-identification-arrow" aria-label="to">→</span>
                         <span className="change-identification-chip is-target">{EpisodeIdentifierReg.getLabelLoose(target)}</span>
                     </p>
-                    {preview.episodesRenumbered === 0 && <p>The episodes of {collectionTitle} keep their numbers.</p>}
+                    {preview.episodesRenumbered === 0 && <p>The {episode.many} of {collectionTitle} keep their numbers.</p>}
                     <ul className="change-identification-steps">
                         {preview.episodesRenumbered > 0 && (
                             <Step
                                 icon={faIcon('fass', 'list-ol')}
-                                headline="Episodes get a new number"
-                                detail={`of ${count(preview.episodes, 'episode')}${preview.becomeAuxiliary > 0 ? `; ${preview.becomeAuxiliary.toLocaleString()} become auxiliary` : ''}`}
+                                headline={`${episode.Many} get a new number`}
+                                detail={`of ${count(preview.episodes, episode.one, episode.many)}${preview.becomeAuxiliary > 0 ? `; ${preview.becomeAuxiliary.toLocaleString()} become auxiliary` : ''}`}
                                 value={preview.episodesRenumbered}
                             >
                                 {preview.changes.length > 0 && <ChangeList changes={preview.changes}/>}
@@ -275,11 +279,11 @@ export default function ChangeIdentificationDialog({
                                 height={18} width={34} handleDiameter={14}
                             />
                             <span>
-                                <b>List the episodes {EpisodeOrderReg.getLabelLoose(suggestedOrder).toLowerCase()}</b>
+                                <b>List the {episode.many} {EpisodeOrderReg.getLabelLoose(suggestedOrder).toLowerCase()}</b>
                                 <span className="help">
                                     {target === 'seasonal'
-                                        ? 'A seasonal collection usually starts each season at its first episode.'
-                                        : 'A collection numbered this way usually lists its newest episode first.'}
+                                        ? `A seasonal collection usually starts each ${season.one} at its first ${episode.one}.`
+                                        : `A collection numbered this way usually lists its newest ${episode.one} first.`}
                                 </span>
                             </span>
                         </label>

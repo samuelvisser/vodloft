@@ -46,8 +46,7 @@ export const MUSIC_OUTPUT_TEMPLATE = '/downloads/music/{{ artist }}/{{ album }}/
 
 const PRESETS: Record<string, Preset> = {
     music: {
-        template: (base) => `{# Path #}
-${base}
+        template: (base) => `${base}
 /{{ artist }}
 /{{ album }}
 /{{ track_number_padded }} - {{ title }}.ext`,
@@ -83,8 +82,7 @@ ${base}
         choices: {metadataMode: 'embed_and_nfo', showNfo: true, kodiSafeNfo: true, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'episode'},
     },
     music_videos: {
-        template: (base) => `{# Path #}
-${base}
+        template: (base) => `${base}
 /{{ artist }}
 /{{ title }}.ext`,
         choices: {metadataMode: 'embed_and_nfo', showNfo: false, kodiSafeNfo: false, fileDateFromPublishDate: true, downloadMode: 'temporary', episodeNfo: 'music_video'},

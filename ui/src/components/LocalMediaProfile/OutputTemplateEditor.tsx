@@ -742,6 +742,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const filenameRestrictionMode = useWatch({control, name: 'filenameRestrictionMode'})
     const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'both'
+    // A Music profile keeps tracks.
+    const music = useWatch({control, name: 'type' as any}) === 'music'
+    const sourceLabel = mode !== 'collection' ? 'Example video or movie' : music ? 'Example track' : 'Example episode'
     const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
     const watchedSiteKeys = useWatch({control, name: 'siteKeys'}) as string[] | null | undefined
     const siteKeys = Array.isArray(watchedSiteKeys) ? watchedSiteKeys : undefined
@@ -1086,12 +1089,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                         <div className="template-playground-heading">
                             <div>
                                 <h3 id="template-preview-heading">Example output</h3>
-                                <p>{readOnly ? 'Pick an episode to see where its file would go.' : 'Try different values here. Your profile is not changed.'}</p>
+                                <p>{readOnly ? `Pick ${sourceLabel === 'Example track' ? 'a track' : 'an episode'} to see where its file would go.` : 'Try different values here. Your profile is not changed.'}</p>
                             </div>
                             <label className="template-source-label" htmlFor="template-example-source">
-                                <span>{mode === 'collection' ? 'Example episode' : 'Example video or movie'}</span>
+                                <span>{sourceLabel}</span>
                                 <TemplateSourceSelect
                                     mode={mode}
+                                    label={sourceLabel}
                                     sources={sources}
                                     selectedSource={selectedSource}
                                     isLoading={

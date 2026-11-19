@@ -26,6 +26,7 @@ import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../../components/common/DurationPill'
 import EpisodeTypePill from '../../components/Episode/EpisodeTypePill'
+import {wordsFor} from '../../lib/collectionWords'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -60,7 +61,7 @@ function EpisodePageSkeleton() {
     return (
         <section
             className="view episode-view episode-page-skeleton"
-            aria-label="Loading episode"
+            aria-label="Loading"
             aria-busy="true"
         >
             <article className="episode-details" aria-hidden="true">
@@ -91,6 +92,9 @@ export default function EpisodePage() {
     const [metadataRefreshStarting, setMetadataRefreshStarting] = useState(false)
 
     const {data: collection, isPending: isCollectionPending, isFetching: isCollectionFetching, error} = useCollection(collectionId)
+    const words = wordsFor(collection)
+    // A Music collection is downloaded by Music Local Media Profiles, as tracks.
+    const fileWords = wordsFor(collection, 'audio')
     const {data: skipped} = useSkippedByFilter(collection?.id)
     const {
         data: episode,
@@ -115,9 +119,9 @@ export default function EpisodePage() {
     // Its collection's playlists put it in another season, where it waits for the user to move it.
     const {data: seasonPlace} = useSeasonPlace(episodeId)
     const moved = !!seasonPlace?.belongsElsewhere
-    const {move: moveToSeason, moving: movingToSeason} = useMoveToSeason(episodeId ?? '', collectionId)
+    const {move: moveToSeason, moving: movingToSeason} = useMoveToSeason(episodeId ?? '', collectionId, words)
     const reassignedTo = seasonPlace?.collectionTitle ?? null
-    const {move: moveToCollection, moving: movingToCollection} = useMoveToCollection(episodeId ?? '', collectionId)
+    const {move: moveToCollection, moving: movingToCollection} = useMoveToCollection(episodeId ?? '', collectionId, words)
     const collectionProfiles = profiles?.filter((profile) => (
         isCollectionLocalMediaProfileAvailableFor(profile, collection?.type)
         // A profile limited to other Sites still shows the download it already made.
@@ -135,7 +139,7 @@ export default function EpisodePage() {
         return (
             <section className="view episode-view">
                 <div className="view-header">
-                    <h1>Episode</h1>
+                    <h1>{words.episode.One}</h1>
                 </div>
                 <p>Collection not found.</p>
                 <p><Link to="/">Go home</Link></p>
@@ -149,7 +153,7 @@ export default function EpisodePage() {
         return (
             <section className="view episode-view">
                 <div className="view-header">
-                    <h1>Episode</h1>
+                    <h1>{words.episode.One}</h1>
                 </div>
                 <p>{(error as any)?.message ?? 'Collection not found.'}</p>
                 <p><Link to="/">Go home</Link></p>
@@ -163,9 +167,9 @@ export default function EpisodePage() {
         return (
             <section className="view episode-view">
                 <div className="view-header">
-                    <h1>Episode</h1>
+                    <h1>{words.episode.One}</h1>
                 </div>
-                <p>Episode not found.</p>
+                <p>{words.episode.One} not found.</p>
                 <p><Link to={`/collection/${collectionId}`}>Back to collection</Link></p>
             </section>
         )
@@ -195,7 +199,7 @@ export default function EpisodePage() {
     const coverUrl: string = episode.thumbnailLandscapePath
         || episode.backgroundImagePath
         || episode.thumbnailPortraitPath
-        || `https://placehold.co/960x540/png?text=Episode+%23${episode.index}`
+        || `https://placehold.co/960x540/png?text=${encodeURIComponent(words.episode.One)}+%23${episode.index}`
 
     const downloadByProfileId = new Map<number, MediaDownloadViewRead>(
         (downloads ?? []).map((d) => [d.localMediaProfileId, d]),
@@ -232,7 +236,7 @@ export default function EpisodePage() {
 
     return (
         <section className="view episode-view" aria-labelledby="episode-title">
-            <article className="episode-details" aria-label="Episode details">
+            <article className="episode-details" aria-label={`${words.episode.One} details`}>
                 {/* The buttons share the breadcrumb's row, so the title below gets the full width. */}
                 <div className="episode-topbar">
                     <nav className="episode-breadcrumb" aria-label="Breadcrumb">
@@ -264,21 +268,21 @@ export default function EpisodePage() {
                                     disabledReason: metadataRefreshStarting
                                         ? OPERATION_STARTING_MESSAGE
                                         : metadataRefreshOperation
-                                            ? 'A metadata refresh is running for this episode.'
+                                            ? `A metadata refresh is running for this ${words.episode.one}.`
                                             : undefined,
                                     operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),
                                 }] : []),
                                 ...(reassignedTo && can('library', 'manage') ? [{
                                     label: `Move to ${reassignedTo}`,
-                                    description: 'Moves the episode to the collection its creator places it in now, with its files',
+                                    description: `Moves the ${words.episode.one} to the collection its creator places it in now, with its files`,
                                     icon: faIcon('fass', 'arrow-right-from-bracket'),
                                     disabled: movingToCollection,
                                     onSelect: () => void moveToCollection(),
                                 }] : []),
                                 ...(moved && can('library', 'manage') ? [{
-                                    label: 'Move to its new season',
-                                    description: 'Moves the episode and renames its files to match',
+                                    label: `Move to its new ${words.season.one}`,
+                                    description: `Moves the ${words.episode.one} and renames its files to match`,
                                     icon: faIcon('fass', 'arrow-right-arrow-left'),
                                     disabled: movingToSeason,
                                     onSelect: () => void moveToSeason(),
@@ -290,26 +294,26 @@ export default function EpisodePage() {
                 </div>
 
                 <div className="episode-cover">
-                    <img src={coverUrl} alt="Episode cover"/>
+                    <img src={coverUrl} alt={`${words.episode.One} cover`}/>
                     {(episode.duration > 0 || isUpcoming) && (
                         <span className="thumb-corner thumb-corner-large">
                             <DurationPill seconds={episode.duration} upcoming={isUpcoming} large/>
                         </span>
                     )}
                     {isLive && (
-                        <span className="episode-live-badge" aria-label="Episode is live">Live</span>
+                        <span className="episode-live-badge" aria-label={`${words.episode.One} is live`}>Live</span>
                     )}
                 </div>
 
                 <header className="episode-header">
                     <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
-                    <div className="episode-summary" aria-label="Episode metadata">
+                    <div className="episode-summary" aria-label={`${words.episode.One} metadata`}>
                         <EpisodeTypePill sourceKey={episode.sourceKey} type={episode.episodeType} asText/>
                         {episode.drmProtected && <DrmBadge asText/>}
                         <ItemAccessBadge item={episode} asText/>
                         {episode.removedFromSource && <RemovedBadge asText/>}
                         {reassignedTo && <ReassignedBadge collectionTitle={reassignedTo} asText/>}
-                        {moved && <MovedBadge asText/>}
+                        {moved && <MovedBadge asText words={words}/>}
                         <span className={`episode-status${isLive ? ' is-live' : ''}`} title={sourceStatus?.help}>
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
                             {statusLabel}
@@ -344,11 +348,11 @@ export default function EpisodePage() {
                     </div>
                 </header>
 
-                <SeasonPlaceNote episodeSlug={episode.slug} collectionSlug={collectionId} canManage={can('library', 'manage')}/>
+                <SeasonPlaceNote episodeSlug={episode.slug} collectionSlug={collectionId} canManage={can('library', 'manage')} words={words} fileWords={fileWords}/>
 
                 {!!episode.description?.trim() && (
                     <section className="episode-description" aria-labelledby="episode-description-title">
-                        <h2 id="episode-description-title">Episode Description</h2>
+                        <h2 id="episode-description-title">Description</h2>
                         <p>{episode.description}</p>
                     </section>
                 )}
@@ -371,7 +375,7 @@ export default function EpisodePage() {
                         {!locked && !downloadStateError && profiles !== undefined && !collectionProfiles?.length && (
                             <p>
                                 No Local Media Profiles configured yet.{' '}
-                                <Link to="/add-local-media-profile">Add one</Link> to download this episode.
+                                <Link to="/add-local-media-profile">Add one</Link> to download this {words.episode.one}.
                             </p>
                         )}
                         {!locked && !downloadStateError && !!collectionProfiles?.length && (

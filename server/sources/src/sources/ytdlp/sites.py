@@ -54,6 +54,8 @@ _API_KEY_SITES = {"youtube"}
 _CREATOR_SITES = {"youtube", "bandcamp", "soundcloud"}
 # What a Site calls a creator, where that is not "creator".
 _CREATOR_LABELS = {"bandcamp": "artist", "soundcloud": "artist"}
+# The Sites that have sound only.
+_AUDIO_SITES = {"bandcamp", "soundcloud"}
 # What a Site's creators add, which VODLoft looks for: a channel's playlists, an artist's albums.
 _CREATOR_SECTIONS = {
     "youtube": CreatorSectionNames("a playlist", "playlists"),
@@ -157,7 +159,7 @@ def site_of(key: str, host: str | None = None) -> Site:
         downloads=_downloads(key), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
         settings=_SITE_SETTINGS.get(key, _SETTINGS), accesses=_accesses(key),
         takes_api_key=key in _API_KEY_SITES, shows_locked=key not in _HIDES_LOCKED,
-        creators=key in _CREATOR_SITES, creator_label=_CREATOR_LABELS.get(key, "creator"),
+        creators=key in _CREATOR_SITES, audio=key in _AUDIO_SITES, creator_label=_CREATOR_LABELS.get(key, "creator"),
         creator_sections=_CREATOR_SECTIONS.get(key, CreatorSectionNames()),
         creator_presets=_CREATOR_PRESETS if key in _CREATOR_SITES else (), link_seasons=key in _LINK_SEASON_SITES,
     )

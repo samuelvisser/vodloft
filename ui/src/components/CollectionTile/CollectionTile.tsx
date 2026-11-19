@@ -5,6 +5,7 @@ import {faIcon} from '../../icons/faIcon'
 import {toImageUrl} from '../Episode/EpisodeCard'
 import CollectionTileArt from '../CollectionTileArt/CollectionTileArt'
 import SourceBadge from '../Source/SourceBadge'
+import {wordsFor} from '../../lib/collectionWords'
 
 type CollectionTileProps = {
     collection: {
@@ -12,6 +13,8 @@ type CollectionTileProps = {
         title: string
         sourceKey: string
         episodeCount: number
+        type?: string | null
+        site?: {audio?: boolean} | null
         years?: string | null
         thumbnailSquarePath?: string | null
         thumbnailPortraitPath?: string | null
@@ -47,7 +50,7 @@ export default function CollectionTile({collection, subtitle, showSource = true,
                 {subtitle && <span className="library-tile-author">{subtitle}</span>}
                 <span className="library-tile-status">
                     <span className="library-tile-meta">
-                        <span>{collection.episodeCount} episodes</span>
+                        <span>{wordsFor(collection).count(collection.episodeCount)}</span>
                         {collection.years && <span>{collection.years}</span>}
                     </span>
                     {children}

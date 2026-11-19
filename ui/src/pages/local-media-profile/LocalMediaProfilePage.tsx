@@ -35,6 +35,7 @@ import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {localMediaProfileEndpoint, sitesForLocalMediaProfileType, takesUpcomingSites} from '../../types/local_media_profile'
 import './LocalMediaProfilePage.css'
 import {apiUrl} from '../../lib/api'
+import {collectionWords} from '../../lib/collectionWords'
 
 const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
 
@@ -106,6 +107,8 @@ export default function LocalMediaProfilePage() {
         )
     }
 
+    // What the profile keeps: a Music profile keeps tracks.
+    const kept = collectionWords(profile.type === 'music' ? 'music' : null, 'audio').episode
     const actionBusy = Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation || moveOperation)
     const runningActionReason = renameOperation
         ? 'A file rename operation is running for this profile.'
@@ -114,13 +117,13 @@ export default function LocalMediaProfilePage() {
             : redownloadOperation
                 ? 'A re-download operation is running for this profile.'
                 : moveOperation
-                    ? 'Episodes are being moved to another profile.'
+                    ? `${kept.Many} are being moved to another profile.`
                     : undefined
     const deleteDisabledReason = runningActionReason
         ? `${runningActionReason} Wait for it to finish before deleting the profile.`
         : undefined
-    const managedLabel = profile.type === 'collection' ? 'Managed episodes' : 'Managed items'
-    const downloadedLabel = profile.type === 'collection' ? 'Downloaded episodes' : 'Downloaded items'
+    const managedLabel = profile.type === 'video' ? 'Managed items' : `Managed ${kept.many}`
+    const downloadedLabel = profile.type === 'video' ? 'Downloaded items' : `Downloaded ${kept.many}`
 
     const controlTaskOperation = async (
         operationId: string,
@@ -238,7 +241,7 @@ export default function LocalMediaProfilePage() {
                 onSelect: () => void matchExistingFiles(),
             },
             {
-                label: 'Move episodes to another profile',
+                label: `Move ${kept.many} to another profile`,
                 icon: faIcon('fass', 'file-export'),
                 disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)
                     || statistics.managedMediaCount === 0,
@@ -249,7 +252,7 @@ export default function LocalMediaProfilePage() {
                         : redownloadOperation
                             ? 'A re-download operation is running for this profile.'
                             : statistics.managedMediaCount === 0
-                                ? 'This Local Media Profile does not manage any episodes yet.'
+                                ? `This Local Media Profile does not manage any ${kept.many} yet.`
                                 : undefined,
                 operation: moveOperation,
                 controls: operationControls(moveOperation?.id, 'move', false),

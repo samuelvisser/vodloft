@@ -71,7 +71,7 @@ Every collection is a **Podcast**, a **Series** or **Music**. You choose when ad
 
 - A **Podcast** downloads its newest episodes, by date or by number.
 - A **Series** downloads by season.
-- **Music** is an artist's music: each season is an album, and each episode a track. It downloads by season, like a Series, and only takes Music profiles (see [[Local-Media-Profiles#music-profiles]]).
+- **Music** is an artist's music: each season is an album, and each episode a track. It downloads by season, like a Series, and only takes Music profiles (see [[Local-Media-Profiles#music-profiles]]). VODLoft uses those words everywhere for it: its pages, menus and windows say album instead of season, and track instead of episode. On a site with videos, such as YouTube, what the collection lists are called music videos, and the files a Music profile makes of them are tracks.
 
 A collection can only change to a type its Download Profiles suit. To make a Series into Music, remove its Download Profiles first, and add new ones with a Music profile.
 
@@ -102,7 +102,7 @@ Renaming a season or giving it another number doesn't rename files you already d
 
 ### Playlists and albums as seasons
 
-A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundCloud, can make the channel's playlists, or the artist's albums, seasons of their own. Turn on **Playlists as seasons** (**Albums as seasons** in a Music collection) in the Seasons window, and choose:
+A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundCloud, can make the channel's playlists, or the artist's albums, seasons of their own. Turn on **Playlists as seasons** in the Seasons window (in a Music collection, the Albums window has **The artist's albums**), and choose:
 
 - **Which playlists**: every playlist, also the ones to come, or only those you switch on in the list. **Look for new playlists** asks the site for the list again.
 - **When the channel adds a playlist**: ask you, make it a season right away, or leave it off.

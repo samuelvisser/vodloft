@@ -143,7 +143,8 @@ export default function QualityField({form, mode}: Props) {
                     onChange={(choice) => choice && setValue('preferredFormat', choice.value, OPTIONS)}
                     formatOptionLabel={(choice, {context}) => {
                         if (isLadderStep(choice.value)) return context === 'value' ? `Video, up to ${choice.label}` : choice.label
-                        const help = QualityDownloadReg.getHelp(choice.value as any)
+                        // A Music profile keeps tracks, not podcasts.
+                        const help = music && choice.value === 'format_audio_only' ? 'No video, for tracks' : QualityDownloadReg.getHelp(choice.value as any)
                         return context === 'menu' && help
                             ? <span className="quality-download-option">{choice.label}<small>{help}</small></span>
                             : choice.label

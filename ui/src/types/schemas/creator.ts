@@ -61,6 +61,8 @@ export const NewSectionActionValues = ['ask', 'season', 'own', 'ignore'] as cons
 
 const SiteSchema = z.object({
     key: z.string(), name: z.string(), creatorLabel: z.string().default('creator'), linkSeasons: z.boolean().default(false),
+    /** The Site has sound only, such as Bandcamp. */
+    audio: z.boolean().default(false),
     /** What the Site calls the things its creators add, such as playlists on YouTube. */
     creatorSections: CreatorSectionNamesSchema,
 })

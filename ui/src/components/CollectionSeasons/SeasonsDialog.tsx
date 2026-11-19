@@ -21,22 +21,30 @@ import {
     type LinkSeasonAddFormIn, type LinkSeasonAddFormOut,
 } from '../../types/schemas/collection_seasons'
 import './SeasonsDialog.css'
+import {collectionWords, CollectionWords, Noun} from '../../lib/collectionWords'
 
 type Props = {
     open: boolean
     collectionSlug: string
     collectionTitle: string
     onDismiss: () => void
+    /** What the collection calls its seasons and episodes, such as albums and music videos. */
+    words?: CollectionWords
 }
 
 /** What saving removes: ``asked`` when the ones with files stay until Home asks about them. */
 type Leaving = {episodes: number, withFiles: number, asked?: boolean}
 
-/** A creator's videos, or an artist's tracks. */
-type Words = {creator: string, video: string, videos: string, creators: string}
-const wordsFor = (music: boolean): Words => music
-    ? {creator: 'artist', creators: 'artists', video: 'track', videos: 'tracks'}
-    : {creator: 'creator', creators: 'creators', video: 'video', videos: 'videos'}
+/** A creator's videos, or an artist's tracks or music videos, and what the collection calls its seasons. In a Music
+ * collection an artist's albums are albums here too, so ``here`` tells them apart where both are meant. */
+type Words = {creator: string, video: string, videos: string, creators: string, season: Noun, here: string}
+const dialogWords = (collection: CollectionWords, music: boolean, names: CollectionSeasonsRead['names'] | undefined): Words => ({
+    ...(music
+        ? {creator: 'artist', creators: 'artists', video: collection.episode.one, videos: collection.episode.many}
+        : {creator: 'creator', creators: 'creators', video: 'video', videos: 'videos'}),
+    season: collection.season,
+    here: names?.one === collection.season.one ? ' here' : '',
+})
 
 const capitalized = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
@@ -44,7 +52,7 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
 async function readSeasons(response: Response): Promise<CollectionSeasonsRead> {
     if (!response.ok) {
         const body = await response.json().catch(() => null)
-        throw new Error(typeof body?.detail === 'string' ? body.detail : `Could not load the seasons (HTTP ${response.status})`)
+        throw new Error(typeof body?.detail === 'string' ? body.detail : `Could not load them (HTTP ${response.status})`)
     }
     return CollectionSeasonsReadSchema.parse(await response.json())
 }
@@ -53,26 +61,26 @@ async function readSeasons(response: Response): Promise<CollectionSeasonsRead> {
 function registries(names: CollectionSeasonsRead['names'], words: Words, view: CollectionSeasonsRead) {
     const outside = {
         leave_out: {label: 'Leave them out', help: `A ${names.one} only takes the ${words.videos} the collection's own link has.`},
-        add: {label: 'Add them to the collection', help: `They join the collection in their ${names.one}'s season. Switching a ${names.one} or this setting off removes them again, files and all. When the ${words.creator} takes a downloaded one out, Home asks whether to keep it.`},
+        add: {label: 'Add them to the collection', help: `They join the collection in their ${names.one}'s ${words.season.one}${words.here}. Switching a ${names.one} or this setting off removes them again, files and all. When the ${words.creator} takes a downloaded one out, Home asks whether to keep it.`},
         only: {label: `Only what the ${names.many} have`, help: `The collection holds nothing but the ${words.videos} of its ${names.many}, also other ${words.creators}', and you can add links of your own, from any site. Its own ${words.videos} in no ${names.one} leave.`},
     }
     return {
         mode: createSelectRegistry(`LinkSeasonMode-${names.many}`, {
-            all: {label: `Every ${names.one}`, help: `Every ${names.one}, also the ones to come, is a season.`},
-            selected: {label: `Only the ${names.many} I pick`, help: `Only the ${names.many} switched on below are seasons.`},
+            all: {label: `Every ${names.one}`, help: `Every ${names.one}, also the ones to come, is ${words.season.a}${words.here}.`},
+            selected: {label: `Only the ${names.many} I pick`, help: `Only the ${names.many} switched on below are ${words.season.many}${words.here}.`},
         }),
         newLinks: createSelectRegistry(`NewLinkSeasons-${names.many}`, {
             ask: {label: 'Ask me', help: `VODLoft sends a message, and the new ${names.one} waits here for you to switch it on.`},
-            add: {label: 'Make it a season', help: `A new ${names.one} becomes a season right away.`},
+            add: {label: `Make it ${words.season.a}${words.here}`, help: `A new ${names.one} becomes ${words.season.a}${words.here} right away.`},
             ignore: {label: 'Leave it off', help: `A new ${names.one} stays off. You can switch it on here.`},
         }),
         layout: createSelectRegistry(`ListLayout-${names.many}`, {
-            season_each: {label: `A season per ${names.one}`, help: `Each ${names.one} is a season, or shares one with the ${names.many} you put together below.`},
-            by_year: {label: 'Together in seasons by year', help: `The ${names.many} still decide which ${words.videos} are in, but every ${words.video} goes to the season of its year, as do the ${words.videos} in no ${names.one}. Downloaded ${words.videos} stay where they are, marked Moved, until you move them.`},
+            season_each: {label: words.here ? `Each ${names.one} on its own` : `A ${words.season.one} per ${names.one}`, help: `Each ${names.one} is ${words.season.a}${words.here}, or shares one with the ${names.many} you put together below.`},
+            by_year: {label: `Together in ${words.season.many} by year`, help: `The ${names.many} still decide which ${words.videos} are in, but every ${words.video} goes to the ${words.season.one} of its year, as do the ${words.videos} in no ${names.one}. Downloaded ${words.videos} stay where they are, marked Moved, until you move them.`},
         }),
         loose: createSelectRegistry(`LooseVideos-${names.looseSeason}`, {
-            one_season: {label: `One season, ${names.looseSeason}`, help: `They share one season, shown before the ${names.many}.`},
-            by_year: {label: 'A season per year', help: `They get a season per upload year, with the ${names.many} between them by date.`},
+            one_season: {label: `One ${words.season.one}, ${names.looseSeason}`, help: `They share one ${words.season.one}, shown before the ${names.many}.`},
+            by_year: {label: `${capitalized(words.season.a)} per year`, help: `They get ${words.season.a} per upload year, with the ${names.many} between them by date.`},
         }),
         outside: createSelectRegistry(
             `OutsideVideos-${names.many}-${view.listsPlaylists}-${view.linksOnlyOffered}`,
@@ -84,7 +92,7 @@ function registries(names: CollectionSeasonsRead['names'], words: Words, view: C
 }
 
 /** The Seasons dialog: rename and reorder a collection's seasons, and choose which of its creator's playlists are seasons. */
-export default function SeasonsDialog({open, collectionSlug, collectionTitle, onDismiss}: Props) {
+export default function SeasonsDialog({open, collectionSlug, collectionTitle, onDismiss, words: collectionWordsGiven}: Props) {
     const queryClient = useQueryClient()
     const titleId = `seasons-dialog-title-${useId()}`
     const endpoint = `${apiUrl()}/collections/${encodeURIComponent(collectionSlug)}/season-settings`
@@ -123,8 +131,9 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         loadedFor.current = queryClient.setQueryData<CollectionSeasonsRead>(queryKey, fresh) ?? fresh
     }
 
-    const words = wordsFor(view?.music ?? false)
-    const regs = useMemo(() => view ? registries(view.names, wordsFor(view.music), view) : null, [view])
+    const words = dialogWords(collectionWordsGiven ?? collectionWords(view?.music ? 'music' : null), view?.music ?? false, view?.names)
+    const {season} = words
+    const regs = useMemo(() => view ? registries(view.names, words, view) : null, [view, words])
     const linkSeasonsOn = watch('linkSeasonsOn') ?? false
     const mode = watch('linkSeasonMode') ?? 'all'
     const playlistChoices = watch('playlists') ?? []
@@ -175,7 +184,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         parseSuccess: readSeasons,
         fallbackField: 'seasons',
         fieldAlias: {linkSeasons: 'linkSeasonsOn', removedLinks: 'playlists'},
-        genericMessage: 'Could not save the seasons',
+        genericMessage: `Could not save the ${season.many}`,
         onSuccess: async (saved) => {
             queryClient.setQueryData(queryKey, saved)
             // The seasons and the episodes in them changed.
@@ -186,7 +195,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 queryClient.invalidateQueries({queryKey: ['seasons', collectionSlug]}),
                 queryClient.invalidateQueries({queryKey: ['collection', collectionSlug]}),
             ])
-            toast.success('Seasons saved')
+            toast.success(`${season.Many} saved`)
             onDismiss()
         },
     })
@@ -273,7 +282,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         Object.fromEntries([
             ['own', {label: 'On its own'}],
             ...listSeasonIds.filter((id) => id !== seasonId && listsIn(id).length > 0).map((id) => [
-                String(id), {label: form.getValues('seasons')?.find((x) => x.id === id)?.name ?? seasonsById.get(id)?.name ?? 'Season'},
+                String(id), {label: form.getValues('seasons')?.find((x) => x.id === id)?.name ?? seasonsById.get(id)?.name ?? season.One},
             ]),
         ]) as Record<string, {label: string}>,
     )
@@ -281,8 +290,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const joinsName = (seasonId: number) => {
         const first = (view?.playlists ?? []).find((playlist) => playlist.seasonId === seasonId)
         const target = first ? playlistChoices.find((choice) => choice.id === first.id)?.seasonId : null
-        if (!target) return 'a season of its own'
-        return form.getValues('seasons')?.find((x) => x.id === target)?.name ?? 'another season'
+        if (!target) return `${season.a} of its own`
+        return form.getValues('seasons')?.find((x) => x.id === target)?.name ?? `another ${season.one}`
     }
     const joinSeason = (from: number, to: number) => setValue('playlists', playlistChoices.map((choice) => (
         choice.seasonId === from ? {...choice, seasonId: to} : choice
@@ -298,12 +307,12 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 <div className="modal seasons-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}
                      onClick={(event) => event.stopPropagation()}>
                     <div className="modal-header">
-                        <h2 id={titleId} className="modal-title">Seasons of {collectionTitle}</h2>
+                        <h2 id={titleId} className="modal-title">{season.Many} of {collectionTitle}</h2>
                     </div>
                     <form onSubmit={onSubmit} noValidate>
                         <div className="seasons-dialog-content">
                             {error && <div className="form-error-card" role="alert">{error.message}</div>}
-                            {!view && !error && <p className="seasons-dialog-muted">Loading the seasons…</p>}
+                            {!view && !error && <p className="seasons-dialog-muted">Loading the {season.many}…</p>}
                             {errors.root && <div className="form-error-card" role="alert">{String(errors.root.message)}</div>}
 
                             {view && names && regs && (
@@ -312,9 +321,11 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                         <section className="seasons-dialog-section" aria-labelledby="seasons-dialog-links">
                                             <div className="seasons-dialog-switch-row">
                                                 <div>
-                                                    <h3 id="seasons-dialog-links">{capitalized(names.many)} as seasons</h3>
+                                                    <h3 id="seasons-dialog-links">
+                                                        {words.here ? `The ${words.creator}'s ${names.many}` : `${capitalized(names.many)} as ${season.many}`}
+                                                    </h3>
                                                     <p className="seasons-dialog-muted">
-                                                        Each {names.one} becomes a season of its own, with its {words.videos} in the
+                                                        Each {names.one} becomes {season.a}{words.here} of its own, with its {words.videos} in the
                                                         order the {names.one} has them.
                                                     </p>
                                                 </div>
@@ -513,12 +524,12 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                     <section className="seasons-dialog-section" aria-labelledby="seasons-dialog-order">
                                         <div className="seasons-dialog-switch-row">
                                             <div>
-                                                <h3 id="seasons-dialog-order">Seasons</h3>
+                                                <h3 id="seasons-dialog-order">{season.Many}</h3>
                                                 <p className="seasons-dialog-muted">
                                                     {customOrder
-                                                        ? 'In your own order. A new season goes last.'
-                                                        : `In VODLoft's order: by date${names.one === 'album' ? ', albums as the artist orders them' : ''}. Drag a season to put them in your own order.`}
-                                                    {' '}Reordering renumbers the seasons. Files keep their names until you rename the collection's files.
+                                                        ? `In your own order. A new ${season.one} goes last.`
+                                                        : `In VODLoft's order: by date${names.one === 'album' ? ', albums as the artist orders them' : ''}. Drag ${season.a} to put them in your own order.`}
+                                                    {' '}Reordering renumbers the {season.many}. Files keep their names until you rename the collection's files.
                                                 </p>
                                             </div>
                                             {customOrder && (
@@ -553,17 +564,17 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         <span className="seasons-dialog-number" aria-hidden="true">{extra ? '0' : customOrder ? index + 1 : season?.seasonNumber}</span>
                                                         <span className="seasons-dialog-season-copy">
                                                             <input
-                                                                className="input" aria-label={`Name of season ${index + 1}`}
+                                                                className="input" aria-label={`Name of ${words.season.one} ${index + 1}`}
                                                                 aria-invalid={!!errors.seasons?.[index]?.name}
                                                                 {...register(`seasons.${index}.name`)}
                                                             />
                                                             <span>
-                                                                {plural(season?.episodeCount ?? 0, 'episode', 'episodes')}
+                                                                {plural(season?.episodeCount ?? 0, words.video, words.videos)}
                                                                 {season?.loose ? ` · ${capitalized(words.videos)} in no ${names.one}` : null}
                                                             </span>
                                                             {season && listLayout !== 'by_year' && listSeasonIds.includes(season.id) && (
                                                                 <SeasonLists
-                                                                    season={field.id} names={names} lists={listsIn(field.id)}
+                                                                    season={field.id} names={names} words={words} lists={listsIn(field.id)}
                                                                     titles={playlistsById} joinRegistry={joinRegistry(field.id)}
                                                                     onJoin={(to) => joinSeason(field.id, to)} onOwn={ownSeason}
                                                                     joinsName={joinsName(field.id)}
@@ -572,10 +583,10 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                             {errors.seasons?.[index]?.name && <span className="error" role="alert">{errors.seasons[index]?.name?.message}</span>}
                                                         </span>
                                                         <span className="seasons-dialog-arrows">
-                                                            <button type="button" aria-label={`Move season ${index + 1} up`} disabled={index === 0} onClick={() => moveSeason(index, index - 1)}>
+                                                            <button type="button" aria-label={`Move ${words.season.one} ${index + 1} up`} disabled={index === 0} onClick={() => moveSeason(index, index - 1)}>
                                                                 <FontAwesomeIcon icon={faIcon('fass', 'chevron-up')}/>
                                                             </button>
-                                                            <button type="button" aria-label={`Move season ${index + 1} down`} disabled={index === fields.length - 1} onClick={() => moveSeason(index, index + 1)}>
+                                                            <button type="button" aria-label={`Move ${words.season.one} ${index + 1} down`} disabled={index === fields.length - 1} onClick={() => moveSeason(index, index + 1)}>
                                                                 <FontAwesomeIcon icon={faIcon('fass', 'chevron-down')}/>
                                                             </button>
                                                         </span>
@@ -583,7 +594,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 )
                                             })}
                                         </ol>
-                                        {fields.length === 0 && <p className="seasons-dialog-muted">This collection has no seasons yet.</p>}
+                                        {fields.length === 0 && <p className="seasons-dialog-muted">This collection has no {season.many} yet.</p>}
                                         {errors.seasons?.message && <div className="error" role="alert">{errors.seasons.message}</div>}
                                         {errors.seasons?.root?.message && <div className="error" role="alert">{errors.seasons.root.message}</div>}
                                     </section>
@@ -593,7 +604,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                         <div className="modal-actions">
                             <button type="button" className="btn" onClick={onDismiss} disabled={isSubmitting}>Cancel</button>
                             <button type="submit" className="btn btn-primary" disabled={!view || isSubmitting || !isDirty}>
-                                {isSubmitting ? 'Saving…' : 'Save seasons'}
+                                {isSubmitting ? 'Saving…' : `Save ${season.many}`}
                             </button>
                         </div>
                     </form>
@@ -602,7 +613,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
             <ConfirmDialog
                 open={confirm !== null}
-                title="Remove episodes from the collection?"
+                title={`Remove ${words.videos} from the collection?`}
                 icon={faIcon('fass', 'triangle-exclamation')}
                 iconTone="danger"
                 onDismiss={() => setConfirm(null)}
@@ -619,8 +630,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 {confirm && names && confirm.asked && (
                     <>
                         <p>
-                            {plural(confirm.episodes, 'episode', 'episodes')} {confirm.episodes === 1 ? 'is' : 'are'} in
-                            none of the {names.many} that are seasons. Once VODLoft has listed the {names.many} again,
+                            {plural(confirm.episodes, words.video, words.videos)} {confirm.episodes === 1 ? 'is' : 'are'} in
+                            none of the {names.many} that are {season.many}{words.here}. Once VODLoft has listed the {names.many} again,
                             {confirm.episodes === 1 ? ' it leaves' : ' they leave'} the collection.
                         </p>
                         {confirm.withFiles > 0 && (
@@ -634,15 +645,15 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 {confirm && names && !confirm.asked && (
                     <>
                         <p>
-                            {plural(confirm.episodes, 'episode', 'episodes')} came from {names.many} and not from the collection's
+                            {plural(confirm.episodes, words.video, words.videos)} came from {names.many} and not from the collection's
                             own link. {confirm.episodes === 1 ? 'It leaves' : 'They leave'} the collection with this change.
                         </p>
                         {confirm.withFiles > 0 && (
                             <p><strong>{plural(confirm.withFiles, 'downloaded file is', 'downloaded files are')} deleted too.</strong></p>
                         )}
                         <p>
-                            The other {words.videos} of these {names.many} stay, and move to the season a new {words.video} would
-                            go to. Their files are renamed into that season.
+                            The other {words.videos} of these {names.many} stay, and move to the {season.one} a new {words.video} would
+                            go to. Their files are renamed into that {season.one}.
                         </p>
                     </>
                 )}
@@ -653,9 +664,10 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
 
 /** The lists of one season in the Seasons dialog: which playlists it holds, and putting it together with another. */
-function SeasonLists({season, names, lists, titles, joinRegistry, onJoin, onOwn, joinsName}: {
+function SeasonLists({season, names, words, lists, titles, joinRegistry, onJoin, onOwn, joinsName}: {
     season: number
     names: CollectionSeasonsRead['names']
+    words: Words
     lists: {id: number, seasonId: number | null}[]
     titles: Map<number, CollectionListRead>
     joinRegistry: SelectRegistry
@@ -664,7 +676,7 @@ function SeasonLists({season, names, lists, titles, joinRegistry, onJoin, onOwn,
     joinsName: string | null
 }) {
     if (lists.length === 0) {
-        return <span className="seasons-dialog-joins">Its {names.many} move to {joinsName ?? 'another season'} when you save.</span>
+        return <span className="seasons-dialog-joins">Its {names.many} move to {joinsName ?? `another ${words.season.one}`} when you save.</span>
     }
     return (
         <span className="seasons-dialog-season-lists">
@@ -674,8 +686,8 @@ function SeasonLists({season, names, lists, titles, joinRegistry, onJoin, onOwn,
                         <span>{capitalized(names.one)} {titles.get(list.id)?.title ?? ''}</span>
                         {lists.length > 1 && (
                             <button type="button" className="btn btn-small" onClick={() => onOwn(list.id)}
-                                    aria-label={`Give ${titles.get(list.id)?.title ?? `this ${names.one}`} a season of its own`}>
-                                Own season
+                                    aria-label={`Give ${titles.get(list.id)?.title ?? `this ${names.one}`} ${words.season.a} of its own`}>
+                                Own {words.season.one}
                             </button>
                         )}
                     </span>
