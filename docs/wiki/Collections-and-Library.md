@@ -109,7 +109,7 @@ A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundClo
 - **Which playlists**: every playlist, also the ones to come, or only those you switch on in the list. **Look for new playlists** asks the site for the list again.
 - **When the channel adds a playlist**: ask you, make it a season right away, or leave it off.
 - **Videos in no playlist**: one season called **Videos** (**Singles** for music), or a season per year.
-- **What the collection holds**, for videos of other channels in these playlists: **Leave them out** (the default), **Add them to the collection** in their playlist's season, or **Only what the playlists have** (see [Collections of only playlists](#collections-of-only-playlists)).
+- **How playlist content fits in the collection** (in the site's own word, such as album), for videos of other channels in these playlists: **Only include media already in the collection** (the default), **Include media that is not in the collection**, in their playlist's season, or **Include only what the playlists contain** (see [Collections of only playlists](#collections-of-only-playlists)).
 
 Each playlist season is named after its playlist, and its videos keep the order of the playlist, as do their episode numbers. An album's tracks keep the album's track order. Playlist seasons go in the order of their first video, so with a season per year a 2025 playlist comes after the 2025 season. An artist's albums come after Singles, in the order the artist lists them; you can still reorder them, and **Automatic order** brings back the artist's order. A video that is in more than one playlist goes to the season that comes first. Files you already downloaded keep their numbers.
 
@@ -129,7 +129,7 @@ An episode can appear in VODLoft before final downloadable media exists. You may
 
 ### Collections of only playlists
 
-A collection set to **Only what the playlists have** holds nothing but its playlist seasons. There is no Videos season, and videos of the channel that are in none of its playlists are left out. Choosing this for an existing collection removes the videos no playlist has; the Seasons window tells you how many, and how many of them have files, before you save.
+A collection set to **Include only what the playlists contain** holds nothing but its playlist seasons. There is no Videos season, and videos of the channel that are in none of its playlists are left out. Choosing this for an existing collection removes the videos no playlist has; the Seasons window tells you how many, and how many of them have files, before you save.
 
 Such a collection doesn't need a link of its own. You can add links to it yourself in the Seasons window: a playlist, a channel or a single video, from any site yt-dlp supports, so one collection can hold playlists from YouTube and Vimeo side by side. Each link becomes a season. **Remove** takes a link you added out again, together with the videos only it had. When the collection does have a channel link, set or change it on its **Edit** page, its playlists are offered as before, and VODLoft keeps looking for new ones.
 
