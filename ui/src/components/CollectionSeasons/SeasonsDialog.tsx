@@ -227,7 +227,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
             })), {shouldDirty: true})
         } catch (exc) {
-            toast.error(exc instanceof Error ? exc.message : 'Could not list the playlists')
+            toast.error(exc instanceof Error ? exc.message : `Could not list the ${view ? view.names.many : 'playlists'}`)
         } finally {
             setRefreshing(false)
         }

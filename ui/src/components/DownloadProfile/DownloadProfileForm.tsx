@@ -4,6 +4,7 @@ import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
 import {useCollectionEpisodeTags, useSiteOptions} from "../../lib/queries";
 import type {SeasonDetachedOut} from "../../types/schemas/season";
+import {collectionWords} from '../../lib/collectionWords'
 import WhichEpisodes from "./WhichEpisodes";
 import UpgradeCheckCard from "./UpgradeCheckCard";
 
@@ -22,9 +23,11 @@ type Props = {
     collectionUrl?: string
     /** The profile is not saved yet, so it starts with what its collection's Site suggests. */
     newProfile?: boolean
+    /** The collection's type, which names its seasons: albums in a Music collection. */
+    collectionType?: string | null
 }
 
-export default function DownloadProfileForm({form, episodeIdentifier, seasons, collectionRoot, collectionId, sourceKey, collectionUrl, newProfile}: Props) {
+export default function DownloadProfileForm({form, episodeIdentifier, seasons, collectionRoot, collectionId, sourceKey, collectionUrl, newProfile, collectionType}: Props) {
     const {control, formState: {errors}} = form
     collectionRoot ??= true
 
@@ -88,6 +91,7 @@ export default function DownloadProfileForm({form, episodeIdentifier, seasons, c
                 tags={tags}
                 seasons={seasons ?? []}
                 collectionId={collectionId}
+                season={collectionWords(collectionType).season}
             />
             <UpgradeCheckCard form={form} collectionId={collectionId} sourceKey={sourceKey} collectionUrl={collectionUrl}/>
         </>

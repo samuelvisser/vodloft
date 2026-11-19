@@ -403,6 +403,7 @@ export default function EpisodePage() {
                                             confirmSafeDelayDownload={!containsCountdown && !episode.downloadDelayPassed}
                                             safeDelayReadyAt={episode.downloadDelayReadyAt}
                                             skippedBy={skippedBy}
+                                            season={words.season}
                                             waitsForCountdown={containsCountdown && waitsForCountdown}
                                         />
                                     )

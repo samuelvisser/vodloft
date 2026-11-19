@@ -170,7 +170,7 @@ VODLOFT_VARIABLES = frozenset({
     "episode_published_time", "episode_published_datetime", "episode_index", "extra_index",
     "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
     "creator_title", "creator_handle", "creator_kind", "section_title", "section_kind",
-    "artist", "album", "track_number", "track_number_padded",
+    "artist", "album", "album_slug", "album_number", "track_number", "track_number_padded",
     "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second", "day_of_year",
     "day_of_year_reversed",
 })

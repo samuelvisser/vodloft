@@ -239,11 +239,14 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                     <p><b>Numbered</b> episodes are identified by an episode number. VODLoft will know
                         when an episode is part of another episode (e.g. a clip) and label it as such.</p>
                     <p><b>Date-based</b> episodes are identified simply by their publish date.</p>
-                    <p><b>Seasonal</b> episodes are identified by a season number and an episode number, like "S01E01".
-                        Auxiliary content like trailers will be identified separately.</p>
+                    {watch("type") === CollectionTypeReg.Enum.music
+                        ? <p><b>By album</b> tracks are identified by an album number and a track number, like "S01E01".
+                            Auxiliary content like trailers will be identified separately.</p>
+                        : <p><b>Seasonal</b> episodes are identified by a season number and an episode number, like "S01E01".
+                            Auxiliary content like trailers will be identified separately.</p>}
                     {listed.data && (seasonsFromSource
                         ? <p>{resolved.data?.source.name} has its own seasons, which VODLoft keeps, and a Seasonal collection keeps its episode numbers too.</p>
-                        : <p>{resolved.data?.source.name ?? 'This site'} has no seasons, so VODLoft puts the videos of each upload year in their own season.</p>)}
+                        : <p>{resolved.data?.source.name ?? 'This site'} has no seasons, so VODLoft puts the videos of each upload year in their own {watch("type") === CollectionTypeReg.Enum.music ? 'album' : 'season'}.</p>)}
                     {!listed.data && <p>VODLoft suggests one from the collection itself. If you're unsure, select "Numbered".</p>}
                 </ReadMore>
             </div>
