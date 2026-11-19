@@ -6,6 +6,7 @@ import {faIcon} from '../icons/faIcon'
 
 import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
 import KeepQuestions from '../components/KeepQuestions/KeepQuestions'
+import ApiKeyNote from '../components/ApiKeyNote/ApiKeyNote'
 import {
     useLocalMediaProfiles,
     useLocalMediaProfilesStorage,
@@ -158,6 +159,8 @@ export default function HomePage() {
             </div>
 
             <KeepQuestions questions={keepQuestions}/>
+
+            <ApiKeyNote/>
 
             <div className="operation-stats" aria-label="VODLoft status summary">
                 <Link to={downloadsUrlForStatusFilters('downloading', 'local_processing')}><span>Active</span><strong>{IN_PROGRESS.reduce((total, status) => total + (downloadsQuery.facets[status] ?? 0), 0)}</strong></Link>

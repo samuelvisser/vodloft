@@ -317,6 +317,8 @@ To get a key, which takes about three minutes:
 
 **Test key** checks a saved key again, and explains what to fix in Google Cloud when Google refuses it. A key that stops working, or a quota that runs out, also shows under **Needs attention** on Home. The key is stored next to the cookies file and is never shown again or written to the log.
 
+While your Library has YouTube collections or creators and there is no key, Home shows a note that asks for one. **Remind me later** hides it for a week, and **Don't show again** hides it for good.
+
 Google gives each project 10,000 units a day, reset at midnight Pacific time. Most calls cost 1 unit; a search costs about 100. VODLoft counts the units it spends and splits the day like this:
 
 | Setting | Environment variable | Default | What it is for |
