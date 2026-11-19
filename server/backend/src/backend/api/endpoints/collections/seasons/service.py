@@ -175,7 +175,8 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     collection = _collection(s, collection_slug)
     seasons = {season.id: season for season in collection.seasons}
     if sorted(change.id for change in body.seasons) != sorted(seasons):
-        raise ServiceError("The seasons must name each season of the collection exactly once", field="seasons")
+        season = CollectionType(collection.type).season_word
+        raise ServiceError(f"The {season}s must name each {season} of the collection exactly once", field="seasons")
     playlists = {playlist.id: playlist for playlist in collection.lists}
     unknown = [change.id for change in [*body.playlists] if change.id not in playlists]
     unknown += [link_id for link_id in body.removed_links if link_id not in playlists]
@@ -213,7 +214,8 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     stray = next((change for change in body.playlists if change.season_id is not None and change.season_id not in shared_seasons), None)
     if stray is not None:
         raise ServiceError(
-            f"{playlists[stray.id].title} can only join a season that holds one of the collection's lists", field="playlists",
+            f"{playlists[stray.id].title} can only join {'an album' if collection.type == CollectionType.MUSIC.value else 'a season'} "
+            "that holds one of the collection's lists", field="playlists",
         )
     for change in body.seasons:
         seasons[change.id].name = change.name.strip()

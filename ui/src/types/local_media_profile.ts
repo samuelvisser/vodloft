@@ -37,7 +37,7 @@ export const CollectionLocalMediaProfileScopeReg = createSelectRegistry("Collect
   'both': { label: "Podcasts and Series", help: "Offer this profile for both Podcasts and Series" },
   'podcast': { label: "Podcasts", help: "Offer this profile only for Podcasts" },
   'series': { label: "Series", help: "Offer this profile only for Series" },
-  'music_tracks': { label: "Music tracks", help: "The tracks of Music collections, kept as tagged audio with an album per season" },
+  'music_tracks': { label: "Music tracks", help: "The tracks of Music collections, kept as tagged audio, with the album they are on" },
   'music_videos': { label: "Music videos", help: "The music videos of Music collections, kept as video" },
 });
 

@@ -38,7 +38,7 @@ export default function AddEmptyCollectionDialog({onDismiss}: Props) {
         resolver: zodResolver(EmptyCollectionSchema),
         defaultValues: getZodDefaults(EmptyCollectionSchema),
     })
-    const {register, control, formState: {errors, isSubmitting}} = form
+    const {register, control, watch, formState: {errors, isSubmitting}} = form
     const onSubmit = buildServerAwareSubmit<EmptyCollectionValues, EmptyCollectionValues, CreatedCollection>(
         form,
         async (data) => fetch(`${apiUrl()}/collections/links-only`, {
@@ -70,7 +70,7 @@ export default function AddEmptyCollectionDialog({onDismiss}: Props) {
                 </div>
                 <p className="modal-text">
                     The collection starts without videos. Next, add the playlists, channels or videos it should hold,
-                    from any site. Each link becomes a season.
+                    from any site. Each link becomes {watch('type') === 'music' ? 'an album' : 'a season'}.
                 </p>
                 <div className="empty-collection-fields">
                     <div className="form-row">
