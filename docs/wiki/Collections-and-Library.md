@@ -216,7 +216,7 @@ The Add creator page lists the YouTube channel's feeds (Videos, Live and Shorts 
 - **A collection of its own**: the part becomes a separate collection, for example Shorts that you want to keep apart from the rest.
 - **Skip**: nothing is added. The part stays listed on the creator's **Edit** page, so you can add it later.
 
-Starting points fill these choices in for you: **One collection** (YouTube only) puts the videos, livestreams and playlists in the main collection, with the playlists as named seasons; **A collection per playlist** (or per show) gives every playlist or show its own collection; **Only what I pick** starts with all feeds and playlists, or all shows, skipped. A playlist or show that is already in your Library stays where it is.
+The **Presets** for the creator fill these choices in for you, and you can still change any of them: **One collection** (YouTube only) puts everything in the main collection, with the playlists as named seasons and the rest as seasons by year; **A collection per playlist** (or per show) gives every playlist or show its own collection; **Only what I pick** starts with all feeds and playlists, or all shows, skipped. A playlist or show that is already in your Library stays where it is.
 
 A video that appears in more than one place is kept once, and a playlist is always in one place only: a season of the main collection or a collection of its own. In the main collection a video in a playlist season is in that season and not in the season of videos in no playlist. The creator decides which playlists are seasons of its main collection, so that collection's Seasons window doesn't look for new playlists itself; it still lets you name, order and group the seasons, and turn a playlist season off.
 
@@ -302,7 +302,7 @@ The same person or group often has a page on more than one site, such as a Daily
 channel. VODLoft keeps them as one creator, with an account for each site. Each account brings its own feeds,
 playlists and shows, and its own main collection; VODLoft looks at every account for new ones once a day.
 
-- When you add a creator, **Add it as** chooses a creator in your Library who is the same person or group. The new
+- When you add a creator, **Add creator as** (**Add host as** on The Daily Wire) chooses a creator in your Library who is the same person or group. The new
   account and its collections join them, and follow their settings.
 - **Combine with another creator** in a creator page's **Actions** menu does the same for two creators you added apart.
   The other creator's accounts and collections move over and they leave your Library as a creator of their own. Their

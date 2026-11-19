@@ -35,7 +35,11 @@ function presetText(key: CreatorCreateIn['preset'], lists: string, hasFeeds: boo
         if (key === 'per_list') return {label: 'A collection per album', help: 'Each album is a Music collection of its own.'}
         return skipped
     }
-    if (key === 'one_show') return {label: 'One collection', help: `Videos and livestreams by year, with the ${lists} as named seasons.`}
+    if (key === 'one_show') {
+        // A Site offers it only where its sections can be seasons, so not The Daily Wire's shows.
+        const many = creator.creatorSections.many
+        return {label: 'One collection', help: `${many.charAt(0).toUpperCase()}${many.slice(1)} as named seasons, the rest as seasons based on their year.`}
+    }
     if (key === 'per_list') {
         return {
             label: `A collection per ${lists.replace(/s$/, '')}`,
@@ -310,7 +314,7 @@ export default function AddCreatorPage() {
                 )}
                 {creator.presets.length > 1 && (
                     <fieldset className="creator-presets">
-                        <legend>What to keep from this {creator.creatorLabel}</legend>
+                        <legend>Presets for this {creator.creatorLabel}</legend>
                         {creator.presets.map((item) => (
                             <label key={item.key} className={`creator-preset${preset === item.key ? ' is-on' : ''}`}>
                                 <input type="radio" name="preset" checked={preset === item.key} onChange={() => choosePreset(item.key)}/>
@@ -323,7 +327,7 @@ export default function AddCreatorPage() {
 
                 {(libraryCreators?.length ?? 0) > 0 && (
                     <div className="form-row creator-membership">
-                        <label htmlFor="creator-into">Add it as</label>
+                        <label htmlFor="creator-into">Add {creator.creatorLabel} as</label>
                         <SimpleSelect
                             inputId="creator-into" registry={intoRegistry} value={into}
                             onChange={(value) => setValue('into', value ?? '', {shouldValidate: true})}
