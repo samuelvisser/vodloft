@@ -87,6 +87,15 @@ def _main_feed(sections: Sequence[SectionRef | CreatorSection]) -> SectionRef | 
     return next((section for section in sections if section.kind == SectionKind.FEED and section.role == SectionRole.MAIN), None)
 
 
+_NO_SEASONS = "{site} has no lists that can be seasons, so new {sections} can't be added as seasons"
+
+
+def new_sections_can_be_seasons(creator: Creator) -> bool:
+    """Whether "Add it as a season" fits the creator: one of their accounts is on a Site whose lists can be seasons
+    of the account's own collection, such as YouTube, and unlike The Daily Wire."""
+    return any(lists_are_seasons(_site(account.source_key, account.site_key)) for account in creator.accounts)
+
+
 def lists_are_seasons(site: Site | None) -> bool:
     """Whether a list of the creator can be a season of the creator's own collection."""
     return site is not None and site.link_seasons
@@ -212,6 +221,8 @@ def add_creator(
     if into is not None:
         account = _new_account(s, into, source_key, record.key, details)
     else:
+        if new_sections is NewSectionAction.SEASON and not lists_are_seasons(site):
+            raise ServiceError(_NO_SEASONS.format(site=site.name, sections=site.creator_sections.many), field="new_sections")
         account = _new_creator(s, source_key, record.key, details, added_by_id=added_by_id, new_sections=new_sections)
     collections = _place(s, account, plans, settings, added_by_id=added_by_id)
     return account.creator, collections
@@ -397,6 +408,12 @@ def update_creator_settings(s: Session, creator: Creator, settings: CreatorSetti
     collection that had the creator's old genre or rating gets the new one; one with its own keeps it.
 
     ``s`` is a write transaction's session."""
+    if settings.new_sections is NewSectionAction.SEASON and not new_sections_can_be_seasons(creator):
+        raise ServiceError(
+            _NO_SEASONS.format(site=" or ".join(sorted({site.name for site in _sites(creator).values()})),
+                               sections=creator_sections(creator).many),
+            field="new_sections",
+        )
     creator.new_sections = settings.new_sections.value
     for account in creator.accounts:
         if account.main_collection is not None:

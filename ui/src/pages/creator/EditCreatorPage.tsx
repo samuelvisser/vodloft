@@ -107,12 +107,12 @@ export default function EditCreatorPage() {
                 <div className="form-row creator-membership">
                     <label htmlFor="creator-new-sections">When the {creator.creatorLabel} adds {creator.sectionNames.one}</label>
                     <SimpleSelect
-                        inputId="creator-new-sections" registry={newSectionActionReg(creator.creatorLabel)} value={newSections}
+                        inputId="creator-new-sections" registry={newSectionActionReg(creator.creatorLabel, creator.accounts.map((account) => account.site))} value={newSections}
                         onChange={(value) => setValue('newSections', value as CreatorUpdateIn['newSections'], {shouldDirty: true})}
                     />
                     {errors.newSections && <div className="error" role="alert">{errors.newSections.message}</div>}
                     <div className="help">
-                        {newSectionActionReg(creator.creatorLabel).meta(newSections as never)?.help} VODLoft looks for new ones once a day.
+                        {newSectionActionReg(creator.creatorLabel, creator.accounts.map((account) => account.site)).meta(newSections as never)?.help} VODLoft looks for new ones once a day.
                     </div>
                 </div>
 

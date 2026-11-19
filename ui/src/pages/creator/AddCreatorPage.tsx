@@ -386,10 +386,10 @@ export default function AddCreatorPage() {
                 {!into && <div className="form-row creator-membership">
                     <label htmlFor="creator-new-sections">When the {creatorWord} adds {/^[aeiou]/.test(lists) ? 'an' : 'a'} {lists.replace(/s$/, '')}</label>
                     <SimpleSelect
-                        inputId="creator-new-sections" registry={newSectionActionReg(creatorWord)} value={newSections}
+                        inputId="creator-new-sections" registry={newSectionActionReg(creatorWord, [{name: creator.siteName, linkSeasons: creator.linkSeasons, creatorSections: creator.creatorSections}])} value={newSections}
                         onChange={(value) => setValue('newSections', value as CreatorCreateIn['newSections'])}
                     />
-                    <div className="help">{newSectionActionReg(creatorWord).meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
+                    <div className="help">{newSectionActionReg(creatorWord, [{name: creator.siteName, linkSeasons: creator.linkSeasons, creatorSections: creator.creatorSections}]).meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
                 </div>}
 
                 {sourceKey === 'dailywire' && (
