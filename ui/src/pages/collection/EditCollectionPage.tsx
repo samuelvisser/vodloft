@@ -17,7 +17,10 @@ import {toast} from 'react-hot-toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
-import {CollectionTypeReg, CollectionTypeValue, EpisodeIdentifierReg, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
+import {CollectionTypeReg, CollectionTypeValue, EpisodeIdentifierReg, EpisodeIdentifierValue, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
+import ChangeIdentificationDialog from '../../components/ChangeIdentificationDialog/ChangeIdentificationDialog'
+import DisabledReason from '../../components/common/DisabledReason'
+import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import {apiUrl} from '../../lib/api'
 import SeasonsDialog from '../../components/CollectionSeasons/SeasonsDialog'
 import PageHeader, {PageHeaderAction} from '../../components/common/PageHeader'
@@ -111,6 +114,12 @@ export default function EditCollectionPage() {
       type: CollectionTypeReg.normalize(collection.type) ?? prev.type,
     }))
   }, [id, collection])
+
+  const [identificationTarget, setIdentificationTarget] = useState<EpisodeIdentifierValue | null>(null)
+  const identificationOperation = useActiveOperation('collection.change_identification', 'collection', collection?.id)
+  const identificationBusyReason = identificationOperation
+    ? `VODLoft is still numbering the episodes of ${collection?.title ?? 'this collection'} again and renaming their files. You can change the identification again once that is done.`
+    : undefined
 
   const usesYtdlp = hasSourceFeature(collection, SourceFeature.YTDLP_OPTIONS)
   const optionalCookies = hasSourceFeature(collection, SourceFeature.OPTIONAL_COOKIES)
@@ -390,16 +399,27 @@ export default function EditCollectionPage() {
 
         <div className="form-row">
           <label htmlFor="collection-episode-identification">Episode identification</label>
-          <input
-            id="collection-episode-identification"
-            className="input"
-            type="text"
-            value={collection ? EpisodeIdentifierReg.getLabelLoose(collection.episodeIdentifier) : ''}
-            disabled
-            aria-describedby="collection-episode-identification-help"
-          />
+          <DisabledReason reason={identificationBusyReason} placement="below-start" as="div">
+            {({describedBy, explain}) => (
+              <div onClick={identificationBusyReason ? explain : undefined}>
+                <SimpleSelect
+                  inputId="collection-episode-identification"
+                  registry={EpisodeIdentifierReg}
+                  value={collection?.episodeIdentifier ?? null}
+                  isDisabled={!collection || !!identificationBusyReason}
+                  onChange={(value) => {
+                    if (collection && value !== collection.episodeIdentifier) {
+                      setIdentificationTarget(value as EpisodeIdentifierValue)
+                    }
+                  }}
+                  aria-describedby={describedBy ?? 'collection-episode-identification-help'}
+                />
+              </div>
+            )}
+          </DisabledReason>
           <div className="help" id="collection-episode-identification-help">
-            How VODLoft numbers the episodes, chosen when the Collection was added. It cannot be changed.
+            How VODLoft numbers the episodes. Changing it numbers every episode again, renames the files that are named
+            by their numbers and rewrites their metadata.
           </div>
         </div>
 
@@ -549,6 +569,22 @@ export default function EditCollectionPage() {
           <button type="button" className="btn btn-primary" onClick={onSave} disabled={!collection}>Save changes</button>
         </div>
       </form>
+
+      {collection && (
+        <ChangeIdentificationDialog
+          open={identificationTarget !== null}
+          collectionSlug={collection.slug}
+          collectionTitle={collection.title}
+          current={collection.episodeIdentifier as EpisodeIdentifierValue}
+          target={identificationTarget}
+          episodeOrder={collection.episodeOrder}
+          onDismiss={() => setIdentificationTarget(null)}
+          onStarted={() => {
+            setIdentificationTarget(null)
+            navigate(`/collection/${collection.slug}`)
+          }}
+        />
+      )}
 
       <SeasonsDialog
         open={seasonsOpen && !!collection}

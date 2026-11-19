@@ -75,6 +75,21 @@ Every collection is a **Podcast**, a **Series** or **Music**. You choose when ad
 
 A collection can only change to a type its Download Profiles suit. To make a Series into Music, remove its Download Profiles first, and add new ones with a Music profile.
 
+### Changing how episodes are numbered
+
+A collection's **Episode identification** decides how its episodes are numbered: by date (such as 2025-01-31), by number (such as 2460), or by season and episode (such as S03E12). You can change it later on the collection's Edit page.
+
+Before anything changes, VODLoft shows what the change would do:
+
+- a few episodes with their old and new numbers, and how many episodes get a new one;
+- episodes that have no number of their own on their site, which become auxiliary episodes;
+- how many downloaded files are renamed, because their file names use the episode number;
+- Download Profiles whose filters would now leave some episodes out, and how many of their downloads would be deleted.
+
+Once you confirm, the collection's page opens and shows the change's progress. VODLoft numbers the episodes again, moves the downloaded files to their new names, and rewrites the metadata in and next to them, without downloading anything again. While the change runs, the Episode identification can't be changed again.
+
+Numbering by season needs every season to have a number. If a season has none, the Seasons window numbers it when you put the seasons in order (see [Renaming and ordering seasons](#renaming-and-ordering-seasons)).
+
 ## Seasons and episodes
 
 Series can contain multiple seasons. The collection page lets you switch between them rather than treating the entire collection as one long list.
@@ -135,6 +150,10 @@ The episode page shows its downloads, formats, file sizes, and download history.
 **Bulk download** on a collection's page downloads many episodes at once with one Local Media Profile. Choose the episode types and, for a series or music, the seasons. For a podcast you can limit it to the latest episodes, the last so many days, or episodes from a start date. Episodes that already have a file for that profile, that are still running, or that VODLoft cannot download (DRM, removed from the Source, or a subscription VODLoft is not signed in with) are skipped. Missing files are downloaded again.
 
 **Bulk delete downloads** and **Bulk delete and re-download** can delete everything, or only episodes older than a number of days, or everything except the latest downloads in the chosen profiles. Episodes without a download do not count toward that number. Deleting everything with **Bulk delete downloads** turns off the Download Profiles for the chosen profiles first, so they do not download it all again. Deleting only some episodes leaves the Download Profiles on, so episodes they cover can be downloaded again.
+
+### Rewriting metadata
+
+**Rewrite metadata of all files** in a collection's **Actions** menu writes the tags inside the downloaded files and their NFO files again, for one Local Media Profile or all of them. Use it after changing a collection's genre or content rating, or a profile's title and description templates, to bring files that were already downloaded up to date. The files are not downloaded again: only their metadata changes. Profiles that keep no metadata are skipped.
 
 ## Movies and extras
 

@@ -47,7 +47,8 @@ from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, Episod
 from sources import ItemRef, VideoDetails, all_sources, get_source
 from ...helpers.episodes.events import queue_episode_status_events
 from ...helpers.episodes.trusted_publication_timing import track_monitor_publication_timing
-from ...helpers.listed_collections import date_based_identifier
+from ...helpers.episodes.identifier import EpisodeNumbering
+from ...helpers.episodes.identifier_reconciliation import reconcile_episode_identifier
 from ...helpers.refreshed_metadata import apply_refreshed_details
 from .service import run_monitor_pending_episode
 
@@ -179,10 +180,7 @@ def _move_to_published_date(s: Session, episode: Episode, details: VideoDetails)
     if details.published_at is None:
         return
     episode.published_date = details.published_at
-    identifier = date_based_identifier(s, episode, details.published_at)
-    if identifier is not None:
-        # Nothing was downloaded before publication, so no file has the old identifier.
-        episode.episode_identifier = identifier
+    reconcile_episode_identifier(s, episode, EpisodeNumbering(slug=episode.slug, published_date=details.published_at))
 
 
 def _apply(s: Session, episode: Episode, details: VideoDetails, result: PendingCheckResult, now: datetime) -> None:

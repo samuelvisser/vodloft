@@ -27,6 +27,8 @@ _WORKER_EXPORTS = {
     "import_adopt_files": ".import_run",
     "manage_custom_indexes": ".manage_custom_indexes",
     "rename_collection_profile_files": ".rename_collection_profile_files",
+    "rewrite_collection_profile_metadata": ".rewrite_collection_profile_metadata",
+    "change_collection_identification": ".change_collection_identification",
     "rename_movie_profile_files": ".rename_movie_profile_files",
     "move_collection_profile_episodes": ".move_collection_profile_episodes",
 }

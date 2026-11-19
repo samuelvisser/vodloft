@@ -142,6 +142,7 @@ export default function CollectionPage() {
   const [syncStarting, setSyncStarting] = useState(false)
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
   const [fileRenameConfirm, setFileRenameConfirm] = useState(false)
+  const [metadataRewriteConfirm, setMetadataRewriteConfirm] = useState(false)
   const [renameSeasonFolders, setRenameSeasonFolders] = useState(true)
   const [moveReassigned, setMoveReassigned] = useState(false)
   const [fileRenameProfileId, setFileRenameProfileId] = useState<number | undefined>(undefined)
@@ -312,6 +313,8 @@ export default function CollectionPage() {
   const deleteDownloadsOperation = useActiveOperation('collection.delete_downloads', 'collection', operationResourceId)
   const redownloadOperation = useActiveOperation('collection.redownload_episodes', 'collection', operationResourceId)
   const downloadAllOperation = useActiveOperation('collection.download_all', 'collection', operationResourceId)
+  const metadataRewriteOperation = useActiveOperation('collection.rewrite_metadata', 'collection', operationResourceId)
+  const identificationOperation = useActiveOperation('collection.change_identification', 'collection', operationResourceId)
   const manualSyncing = syncOperation !== undefined
   const syncBusy = syncStarting || manualSyncing
   const metadataRefreshBusy = metadataRefreshOperation !== undefined
@@ -441,11 +444,19 @@ export default function CollectionPage() {
       : downloadLocalMediaProfiles.length === 0
         ? `No downloaded episodes exist for ${collection.title}.`
         : undefined
+  const identificationDisabledReason = identificationOperation
+    ? `VODLoft is numbering the episodes of ${collection.title} again and renaming their files.`
+    : undefined
   const fileRenameDisabledReason = fileRenameOperation
     ? fileRenameOperation.status === 'WAITING'
       ? fileRenameOperation.message || OPERATION_WAITING_MESSAGE
       : `A File Rename operation is running for ${collection.title}.`
-    : downloadStateDisabledReason
+    : identificationDisabledReason ?? downloadStateDisabledReason
+  const metadataRewriteDisabledReason = metadataRewriteOperation
+    ? metadataRewriteOperation.status === 'WAITING'
+      ? metadataRewriteOperation.message || OPERATION_WAITING_MESSAGE
+      : `A metadata rewrite is running for ${collection.title}.`
+    : identificationDisabledReason ?? downloadStateDisabledReason
   const deleteDownloadsDisabledReason = deleteDownloadsOperation
     ? deleteDownloadsOperation.status === 'WAITING'
       ? deleteDownloadsOperation.message || OPERATION_WAITING_MESSAGE
@@ -585,6 +596,16 @@ export default function CollectionPage() {
       onSelect: () => setFileRenameConfirm(true),
     },
     {
+      label: 'Rewrite metadata of all files',
+      icon: faIcon('fass', 'file-lines'),
+      disabled: metadataRewriteDisabledReason !== undefined,
+      disabledReason: metadataRewriteDisabledReason,
+      operation: metadataRewriteOperation,
+      starting: isStarting('collection.rewrite_metadata'),
+      controls: operationControls(metadataRewriteOperation?.id, 'metadata rewrite'),
+      onSelect: () => setMetadataRewriteConfirm(true),
+    },
+    {
       label: 'Match existing files',
       icon: faIcon('fass', 'file-import'),
       disabled: existingFilesProfiles.length === 0,
@@ -675,6 +696,12 @@ export default function CollectionPage() {
                 icon: faIcon('fass', 'list'),
                 operation: indexingOperation,
                 status: indexingOperation ? presentIndexingStatus(indexingOperation) ?? undefined : undefined,
+              },
+              {
+                label: 'Changing episode identification',
+                icon: faIcon('fass', 'list-ol'),
+                operation: identificationOperation,
+                controls: operationControls(identificationOperation?.id, 'episode identification change', false),
               },
               {
                 label: 'Sync',
@@ -972,6 +999,27 @@ export default function CollectionPage() {
             </span>
           </label>
         )}
+      </ActionConfirmDialogue>
+
+      <ActionConfirmDialogue
+        open={metadataRewriteConfirm}
+        operationDefinition={frontendOperationDefinitions['collection.rewrite_metadata']}
+        onStartingChange={onStartingChange('collection.rewrite_metadata')}
+        requestPath={`/collections/${encodeURIComponent(id)}/rewrite-metadata`}
+        resourceLabel={collection.title}
+        title="Rewrite metadata of all files"
+        onDismiss={() => setMetadataRewriteConfirm(false)}
+        icon={faIcon('fass', 'file-lines')}
+        confirmLabel="Rewrite metadata"
+        disabled={metadataRewriteOperation !== undefined}
+        scope_by_local_media_profile
+        localMediaProfiles={actionLocalMediaProfiles}
+      >
+        <p>
+          Write the current titles, descriptions, numbers and other details into the downloaded files of
+          "{collection.title}" and their NFO files, as the Local Media Profile keeps them. Nothing is downloaded again:
+          each file is copied once with its new details, so this needs free space for the largest file.
+        </p>
       </ActionConfirmDialogue>
 
       <ActionConfirmDialogue

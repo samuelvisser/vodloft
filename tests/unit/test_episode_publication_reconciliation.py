@@ -274,17 +274,16 @@ def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
 def test_identifier_reconciliation_can_fix_extra_ordinal_after_collision_is_gone():
     import backend.db.models  # noqa: F401
     from backend.db import Base
-    from task_manager.tasks.helpers.episodes.identifier import reconcile_episode_identifier_from_dailywire
+    from task_manager.tasks.helpers.episodes.identifier import refresh_episode_identifier
     engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
     use_database(engine)
     session = Session(engine)
     collection, episode = _make_collection_and_episode(session, identifier="ep-extra.other.2500.2")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.01")
-    assert reconcile_episode_identifier_from_dailywire(session, episode, detail) is True
+    assert refresh_episode_identifier(session, episode, detail) is True
     session.commit()
     assert episode.episode_identifier == "ep-extra.other.2500.1"
-    assert episode.dw_episode_number == "2500.01"
     session.close()
     engine.dispose()
 
@@ -292,16 +291,15 @@ def test_identifier_reconciliation_can_fix_extra_ordinal_after_collision_is_gone
 def test_identifier_reconciliation_uses_dailywire_segment_10_directly():
     import backend.db.models  # noqa: F401
     from backend.db import Base
-    from task_manager.tasks.helpers.episodes.identifier import reconcile_episode_identifier_from_dailywire
+    from task_manager.tasks.helpers.episodes.identifier import refresh_episode_identifier
     engine = create_engine("sqlite+pysqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
     use_database(engine)
     session = Session(engine)
     _collection, episode = _make_collection_and_episode(session, identifier="ep-extra.other.2500.1")
     detail = _episode_detail(slug=episode.slug, episode_number="2500.10")
-    assert reconcile_episode_identifier_from_dailywire(session, episode, detail) is True
+    assert refresh_episode_identifier(session, episode, detail) is True
     assert episode.episode_identifier == "ep-extra.other.2500.10"
-    assert episode.dw_episode_number == "2500.10"
     session.close()
     engine.dispose()
 

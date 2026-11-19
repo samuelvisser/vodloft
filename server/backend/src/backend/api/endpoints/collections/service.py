@@ -23,7 +23,7 @@ from backend.services.media_access import locked_clause
 from backend.services.local_media_profile_sites import profile_offered_for_site
 from backend.services.sites import collection_site_key, place_collection
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
-from backend.types.collection_types import CollectionType
+from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
 from backend.api.endpoints.media_downloads.service import create_new_episode_download
 from config import get_settings
 from sources import get_source
@@ -44,6 +44,9 @@ from task_manager.tasks.helpers.download_profiles import (
 from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 from task_manager.scheduler.types import OperationSource
 
+from backend.api.models.operations import CollectionMetadataRewriteOperationAccepted, TaskOperationAccepted
+from backend.services.episode_identification import preview_identification, request_identification_change
+from backend.services.metadata_rewrite import request_metadata_rewrite
 from backend.services.collections import add_collection, add_links_only_collection, index_new_collection
 from backend.services.link_seasons import holds_only_link_seasons, lists_playlists
 from backend.operations.collections import (
@@ -777,3 +780,38 @@ def request_collection_file_rename(
         "local_media_profiles_queued": len(profile_ids),
         "operation_id": operation.id,
     }
+
+
+def _collection_or_404(s: Session, collection_slug: str) -> Collection:
+    collection = s.query(Collection).filter_by(slug=collection_slug).one_or_none()
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return collection
+
+
+def preview_collection_identification(
+        s: Session, collection_slug: str, identification: EpisodeIdentifier,
+) -> CollectionIdentificationPreviewAPIRead:
+    preview = preview_identification(s, _collection_or_404(s, collection_slug), identification)
+    return CollectionIdentificationPreviewAPIRead.model_validate(preview)
+
+
+def change_collection_identification(
+        s: Session, collection_slug: str, body: CollectionIdentificationChangeAPIRequest,
+) -> TaskOperationAccepted:
+    collection = _collection_or_404(s, collection_slug)
+    # The request model keeps enum values as plain strings.
+    operation = request_identification_change(
+        s, collection, EpisodeIdentifier(body.episode_identifier),
+        episode_order=EpisodeOrder(body.episode_order) if body.episode_order else None,
+    )
+    return TaskOperationAccepted(queued=True, operation_id=operation.id)
+
+
+def request_collection_metadata_rewrite(
+        s: Session, collection_slug: str, local_media_profile_id: int | None,
+) -> CollectionMetadataRewriteOperationAccepted:
+    request = request_metadata_rewrite(s, _collection_or_404(s, collection_slug), local_media_profile_id)
+    return CollectionMetadataRewriteOperationAccepted(
+        queued=True, operation_id=request.operation_id, local_media_profiles_queued=request.local_media_profiles_queued,
+    )

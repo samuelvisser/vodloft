@@ -4,9 +4,8 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
-from sources.dailywire.api.records import DwEpisodeRecord
 from .events import queue_episode_identifier_changed_event
-from .identifier import reconcile_episode_identifier_from_dailywire
+from .identifier import NumberedEpisode, refresh_episode_identifier
 
 if TYPE_CHECKING:
     from backend.db.models import Episode
@@ -15,7 +14,7 @@ if TYPE_CHECKING:
 def reconcile_episode_identifier(
         s: Session,
         episode: "Episode",
-        dw_episode: DwEpisodeRecord,
+        numbering: NumberedEpisode,
         *,
         previous_publish_status: str | None = None,
 ) -> bool:
@@ -26,11 +25,7 @@ def reconcile_episode_identifier(
     system-wide consequence of changing a row that had already been published.
     """
     old_identifier = episode.episode_identifier
-    changed = reconcile_episode_identifier_from_dailywire(
-        s,
-        episode,
-        dw_episode,
-    )
+    changed = refresh_episode_identifier(s, episode, numbering)
     if changed:
         queue_episode_identifier_changed_event(
             s,

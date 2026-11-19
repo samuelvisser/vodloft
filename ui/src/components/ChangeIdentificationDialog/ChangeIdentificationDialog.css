@@ -1,0 +1,41 @@
+.change-identification-dialog .change-identification-examples {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+}
+
+.change-identification-dialog .change-identification-examples li {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.change-identification-dialog .change-identification-numbers {
+    font-variant-numeric: tabular-nums;
+}
+
+.change-identification-dialog .change-identification-title {
+    color: var(--muted);
+    font-size: 0.875em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.change-identification-dialog .change-identification-warning {
+    color: var(--error);
+}
+
+.change-identification-dialog .change-identification-order {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 4px 0 12px;
+}
+
+.change-identification-dialog .change-identification-order > span {
+    display: grid;
+    gap: 2px;
+}

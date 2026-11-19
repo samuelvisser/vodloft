@@ -281,3 +281,51 @@ class CollectionSyncLogEntryAPIRead(ResponseBase):
 class CollectionSyncLogAPIRead(ResponseBase):
     items: list[CollectionSyncLogEntryAPIRead]
     total: int
+
+
+class CollectionIdentificationChangeAPIRequest(RequestBase):
+    """Number the collection's episodes another way."""
+
+    episode_identifier: EpisodeIdentifier
+    episode_order: Optional[EpisodeOrder] = None
+    """The order the collection lists its episodes in from now on; left out, it keeps its own."""
+
+
+class CollectionIdentificationExampleAPIRead(ResponseBase):
+    title: str
+    before: str
+    after: str
+
+
+class CollectionIdentificationProfileFilesAPIRead(ResponseBase):
+    name: str
+    files_renamed: int
+
+
+class CollectionIdentificationDownloadProfileAPIRead(ResponseBase):
+    name: str
+    removed: int
+    """Downloads on disk the profile's cleanup would delete, which it would not have before."""
+    no_longer_wanted: int
+    """Other downloads on disk the profile's filters would leave out; they stay until someone deletes them."""
+    newly_wanted: int
+
+
+class CollectionIdentificationPreviewAPIRead(ResponseBase):
+    """What changing the collection's episode identification would do."""
+
+    episode_identifier: EpisodeIdentifier = Field(validation_alias="identification")
+    episodes: int
+    episodes_renumbered: int
+    examples: list[CollectionIdentificationExampleAPIRead]
+    become_auxiliary: int
+    profiles: list[CollectionIdentificationProfileFilesAPIRead]
+    download_profiles: list[CollectionIdentificationDownloadProfileAPIRead]
+    busy: Optional[str] = None
+    """Why the change can't start now."""
+
+
+class CollectionMetadataRewriteAPIRequest(RequestBase):
+    """Select one Local Media Profile, or every profile with downloaded files that keeps metadata."""
+
+    local_media_profile_id: Optional[int] = Field(default=None, gt=0)

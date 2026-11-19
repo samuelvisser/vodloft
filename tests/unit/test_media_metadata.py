@@ -141,9 +141,12 @@ def test_ffmpeg_metadata_embedding_stream_copies_media(tmp_path, monkeypatch):
 
     class Completed:
         returncode = 0
-        stdout = ""
+        stdout = stderr = ""
 
     def fake_run(command, **_kwargs):
+        if "-f" not in command:
+            # Probing whether the file has artwork: it has none.
+            return Completed()
         commands.append(command)
         with open(command[-1], "wb") as handle:
             handle.write(b"tagged")

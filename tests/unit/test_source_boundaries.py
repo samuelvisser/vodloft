@@ -32,8 +32,6 @@ DAILYWIRE_FEATURE_MODULES = {
     "backend/src/backend/db/background_migrations/versions/536d9eeb6f76_daily_wire_episode_access.py",
     "backend/src/backend/services/movies.py",
     "backend/src/backend/services/collection_assets.py",
-    "task_manager/src/task_manager/tasks/helpers/episodes/identifier.py",
-    "task_manager/src/task_manager/tasks/helpers/episodes/identifier_reconciliation.py",
     "task_manager/src/task_manager/tasks/helpers/episodes/mapper.py",
     "task_manager/src/task_manager/tasks/helpers/episodes/metadata.py",
     "task_manager/src/task_manager/tasks/helpers/episodes/same_episode.py",

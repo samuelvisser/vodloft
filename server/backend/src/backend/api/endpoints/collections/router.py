@@ -30,11 +30,15 @@ from .service import (
     count_collection_locked,
     check_collection_locked,
     record_collection_opened,
+    preview_collection_identification,
+    change_collection_identification,
+    request_collection_metadata_rewrite,
 )
 from ...models.operations import (
     CollectionDeleteDownloadsOperationAccepted,
     CollectionDownloadAllOperationAccepted,
     CollectionFileRenameOperationAccepted,
+    CollectionMetadataRewriteOperationAccepted,
     CollectionMetadataOperationAccepted,
     CollectionRedownloadOperationAccepted,
     TaskOperationAccepted,
@@ -50,12 +54,16 @@ from ...models.collection import (
     CollectionDeleteDownloadsAPIRequest,
     CollectionDownloadAllAPIRequest,
     CollectionFileRenameAPIRequest,
+    CollectionIdentificationChangeAPIRequest,
+    CollectionIdentificationPreviewAPIRead,
+    CollectionMetadataRewriteAPIRequest,
     CollectionRedownloadEpisodesAPIRequest,
 )
 from ...models.source import EpisodeTagAPIRead
 from backend.api.endpoints.creators import lookups as creator_lookups
 from backend.api.steps import STEPS_RESPONSE, stream_steps
 from backend.app import db_session
+from backend.types.collection_types import EpisodeIdentifier
 from backend.security.access import Access, Area, Level
 from backend.security.deps import may_delete_files, requires, signed_in
 from backend.db.core import run_write_transaction
@@ -167,6 +175,44 @@ def collection_rename_files(collection_slug: str, body: CollectionFileRenameAPIR
         return result
 
     return run_write_transaction(work)
+
+
+@router.post(
+    "/{collection_slug}/rewrite-metadata",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CollectionMetadataRewriteOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def collection_rewrite_metadata(collection_slug: str, body: CollectionMetadataRewriteAPIRequest):
+    """Rewrite the tags and NFO files of the collection's downloaded files, without downloading them again."""
+    return run_write_transaction(
+        lambda s: request_collection_metadata_rewrite(s, collection_slug, body.local_media_profile_id)
+    )
+
+
+@router.get(
+    "/{collection_slug}/episode-identification",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CollectionIdentificationPreviewAPIRead,
+)
+def collection_identification_preview(
+        collection_slug: str,
+        episode_identifier: EpisodeIdentifier = Query(alias="episodeIdentifier"),
+):
+    """What numbering the collection's episodes another way would do, before it is done."""
+    with db_session() as s:
+        return preview_collection_identification(s, collection_slug, episode_identifier)
+
+
+@router.put(
+    "/{collection_slug}/episode-identification",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=TaskOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def collection_change_identification(collection_slug: str, body: CollectionIdentificationChangeAPIRequest):
+    """Number the collection's episodes another way, then rename its files and rewrite their metadata."""
+    return run_write_transaction(lambda s: change_collection_identification(s, collection_slug, body))
 
 
 @router.post(

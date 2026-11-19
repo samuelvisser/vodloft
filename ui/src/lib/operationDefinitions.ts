@@ -486,6 +486,40 @@ export const frontendOperationDefinitions = {
       return fileRenameSuccessMessage(operation, collectionTitle)
     },
   },
+  'collection.rewrite_metadata': {
+    kind: 'collection.rewrite_metadata',
+    resourceType: 'collection',
+    label: 'Metadata rewrite',
+    invalidate: invalidateCollectionFiles,
+    success: (operation) => {
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const retagged = resultNumber(operation, 'files_retagged') ?? 0
+      const nfos = resultNumber(operation, 'nfos_written') ?? 0
+      const failed = resultNumber(operation, 'files_failed') ?? 0
+      if (retagged + nfos === 0 && failed === 0) return `No downloaded files of ${collectionTitle} needed new metadata`
+      const parts = [
+        retagged > 0 ? `updated the tags of ${retagged} ${plural(retagged, 'file')}` : '',
+        nfos > 0 ? `wrote ${nfos} NFO ${plural(nfos, 'file')}` : '',
+      ].filter(Boolean)
+      const failedDetail = failed > 0 ? `; ${failed} ${plural(failed, 'file')} kept their old metadata` : ''
+      return `Metadata rewrite finished for ${collectionTitle}: ${parts.join(' and ') || 'nothing changed'}${failedDetail}`
+    },
+  },
+  'collection.change_identification': {
+    kind: 'collection.change_identification',
+    resourceType: 'collection',
+    label: 'Episode identification change',
+    invalidate: (operation, invalidations) => {
+      invalidateCollectionStructure(operation, invalidations)
+      invalidateCollectionFiles(operation, invalidations)
+    },
+    success: (operation) => {
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      return operation.result?.summary
+        ? `${collectionTitle}: ${operation.result.summary}`
+        : `${collectionTitle} numbers its episodes the new way`
+    },
+  },
   'collection.scan_existing_files': {
     kind: 'collection.scan_existing_files',
     resourceType: 'collection',

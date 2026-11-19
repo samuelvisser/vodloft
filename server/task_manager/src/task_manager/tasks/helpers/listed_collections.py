@@ -68,6 +68,7 @@ from backend.types.collection_types import EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
 from sources import MAIN_TAG, Chapter, Feature, ItemRef, SeasonRef, Source, VideoDetails, get_source, site_for
 from .episodes.events import queue_episode_status_events
+from .episodes.identifier import next_identifier
 from .general import datetime_to_string
 from .progress import update_progress
 from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
@@ -92,29 +93,19 @@ def _order_key(details: VideoDetails, fallback: datetime):
     return _season_number(details, fallback), number, details.published_at or fallback, details.slug
 
 
-def _next(identifiers: set[str], prefix: str) -> str:
-    """The next free ``<prefix>.<number>`` after the highest one the collection has."""
-    numbers = [
-        int(identifier.removeprefix(f"{prefix}."))
-        for identifier in identifiers
-        if identifier.startswith(f"{prefix}.") and identifier.removeprefix(f"{prefix}.").isdigit()
-    ]
-    return f"{prefix}.{max(numbers, default=0) + 1}"
-
-
 def _identifier(
     collection: Collection, season: Season, details: VideoDetails, identifiers: set[str], numbers: SeasonNumbers,
     fallback: datetime,
 ) -> str:
     if details.tag != MAIN_TAG:
-        return _next(identifiers, details.tag)
+        return next_identifier(identifiers, details.tag)
     match EpisodeIdentifier(collection.episode_identifier):
         case EpisodeIdentifier.DATE_BASED:
             identifier = f"ep.{datetime_to_string(details.published_at or fallback)}"
             # Two videos uploaded at the same moment: the second one is auxiliary.
-            return _next(identifiers, "aux") if identifier in identifiers else identifier
+            return next_identifier(identifiers, "aux") if identifier in identifiers else identifier
         case EpisodeIdentifier.NUMBERED:
-            return _next(identifiers, "ep")
+            return next_identifier(identifiers, "ep")
         case EpisodeIdentifier.SEASONAL:
             number = numbers.take(season, details.episode_number if details.season else None)
             return f"ep.S{season.season_number:02d}E{number:02d}"
@@ -129,21 +120,6 @@ def _episode_slug(s: Session, collection: Collection, source_slug: str) -> str:
 def adds_pending(collection: Collection) -> bool:
     """Whether upcoming and live videos of the collection are added before they are published."""
     return get_source(collection.source_key).has(Feature.PENDING_CHECKS) and site_follows_pending(collection.site_key)
-
-
-def date_based_identifier(s: Session, episode: Episode, published_at: datetime) -> str | None:
-    """The identifier a main episode of a date-based collection gets for a new publication date,
-    or None when it keeps its own: an upcoming video that started later than planned moves."""
-    collection = episode.collection
-    if collection.episode_identifier != EpisodeIdentifier.DATE_BASED.value:
-        return None
-    identifier = f"ep.{datetime_to_string(published_at)}"
-    if not episode.episode_identifier.startswith("ep.") or episode.episode_identifier == identifier:
-        return None
-    identifiers = set(s.scalars(select(Episode.episode_identifier).where(
-        Episode.collection_id == collection.id, Episode.id != episode.id,
-    )))
-    return _next(identifiers, "aux") if identifier in identifiers else identifier
 
 
 def known_episode_slugs(s: Session, collection: Collection) -> frozenset[str]:
@@ -260,7 +236,7 @@ class _Placer(SeasonFinder):
         """A part's identifier: its chapter's number in its video's season, whatever the collection's numbering, so the
         parts of one video never share a date or a number. A Short or another tag counts on its own as always."""
         if details.tag != MAIN_TAG:
-            identifier = _next(self.identifiers, details.tag)
+            identifier = next_identifier(self.identifiers, details.tag)
         else:
             identifier = f"ep.S{season.season_number:02d}E{self.numbers.take(season, number):02d}"
         self.identifiers.add(identifier)

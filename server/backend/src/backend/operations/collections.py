@@ -14,6 +14,8 @@ _REFRESH_METADATA_TASK_KEY = "refresh_episode_metadata"
 _RENAME_FILE_TASK_KEY = "rename_collection_profile_files"
 _DELETE_DOWNLOADS_TASK_KEY = "delete_collection_downloads_worker"
 _SCAN_EXISTING_FILES_TASK_KEY = "scan_existing_files"
+_REWRITE_METADATA_TASK_KEY = "rewrite_collection_profile_metadata"
+_CHANGE_IDENTIFICATION_TASK_KEY = "change_collection_identification"
 
 
 class _CollectionOperation(OperationDefinition[Collection]):
@@ -126,6 +128,57 @@ class CollectionFileRenameOperation(_CollectionOperation):
         return {
             **super().context(),
             "local_media_profiles_requested": len(self.local_media_profile_ids),
+        }
+
+
+class CollectionMetadataRewriteOperation(_CollectionOperation):
+    """Rewrite metadata: the tags and NFO files of the collection's downloaded files, for each Local Media Profile."""
+
+    kind = "collection.rewrite_metadata"
+
+    def __init__(self, collection: Collection, *, local_media_profile_ids: Sequence[int]) -> None:
+        super().__init__(collection)
+        self.local_media_profile_ids = tuple(dict.fromkeys(int(profile_id) for profile_id in local_media_profile_ids))
+
+    def targets(self) -> tuple[OperationTargetSpec, ...]:
+        return tuple(
+            OperationTargetSpec(
+                task_key=_REWRITE_METADATA_TASK_KEY,
+                resource_type="collection",
+                resource_id=self.resource.id,
+                task_kwargs={"local_media_profile_id": profile_id},
+                slot_key=f"profile:{profile_id}",
+            )
+            for profile_id in self.local_media_profile_ids
+        )
+
+    def context(self) -> dict[str, object]:
+        return {
+            **super().context(),
+            "local_media_profiles_requested": len(self.local_media_profile_ids),
+        }
+
+
+class CollectionIdentificationChangeOperation(_CollectionOperation):
+    """Change episode identification: the collection's episodes take their new numbers, then each Local Media
+    Profile's files move to their new names and get their new metadata, all in one task so its progress shows."""
+
+    kind = "collection.change_identification"
+    task = _CHANGE_IDENTIFICATION_TASK_KEY
+
+    def __init__(self, collection: Collection, *, episode_identifier: str, episode_order: str | None) -> None:
+        super().__init__(collection)
+        self.episode_identifier = episode_identifier
+        self.episode_order = episode_order
+
+    def task_kwargs(self) -> dict[str, object]:
+        return {"episode_identifier": self.episode_identifier, "episode_order": self.episode_order}
+
+    def context(self) -> dict[str, object]:
+        return {
+            **super().context(),
+            "episode_identifier": self.episode_identifier,
+            "previous_episode_identifier": self.resource.episode_identifier,
         }
 
 
