@@ -34,8 +34,9 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const queryClient = useQueryClient()
     const items: AccountSection[] = creator.accounts
         .flatMap((account) => account.sections.map((section) => ({account, section})))
-        // A movie that isn't one of the creator's yet, also when it is in the library, can join them from here.
-        .filter(({account, section}) => (
+        // A movie that isn't one of the creator's yet, also when it is in the library, can join them from here. What
+        // the user no longer wants to see here is only on the Edit page.
+        .filter(({account, section}) => section.status !== 'ignored' && (
             section.kind === 'item' ? isMovie(account, section) && !section.movieJoined : !section.collectionSlug
         ))
         // The new ones, which wait for a choice, first.
@@ -111,17 +112,6 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
         if (busy === key(item)) {
             return <span className="btn btn-secondary creator-more-plus" aria-label="Adding…"><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/></span>
         }
-        if (options.length === 1 && !isNew) {
-            return (
-                <button
-                    type="button" className="btn btn-secondary creator-more-plus" disabled={busy !== null}
-                    aria-label={`Add ${item.section.title}`} title={`Add ${item.section.title}`}
-                    onClick={() => void add(item, options[0].plan)}
-                >
-                    <FontAwesomeIcon icon={faIcon('fass', 'plus')} aria-hidden="true"/>
-                </button>
-            )
-        }
         return (
             <ActionMenu
                 label={`Add ${item.section.title}`} triggerIcon={faIcon('fass', 'plus')}
@@ -130,11 +120,12 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                         label: option.label, description: option.description, disabled: busy !== null,
                         onSelect: () => void add(item, option.plan),
                     })),
-                    ...(isNew ? [{
-                        label: 'Ignore', description: 'Leave it out of your library; it stays listed here',
+                    {
+                        label: 'Do not show here again',
+                        description: `It leaves this list${isNew ? ' and stays out of your library' : ''}. You can still add it from the Edit page`,
                         separatorBefore: true, disabled: busy !== null,
                         onSelect: () => void add(item, {ref: item.section.ref, target: 'skip'}),
-                    }] : []),
+                    },
                 ]}
             />
         )

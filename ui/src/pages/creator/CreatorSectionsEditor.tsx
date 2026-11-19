@@ -192,12 +192,15 @@ export default function CreatorSectionsEditor({creator, part}: {
     // Every select in the list is as wide as the longest choice of any of them, where the row has room for it.
     const placeChoiceLabels = placed.flatMap((item) => Object.values(placeLabels(mainTitleOf(creator, item.account), mainSeasonOf(creator, item.account))))
     const found = all.filter(({section}) => section.status === 'new' && !section.collectionSlug)
-    const left = all.filter(({section}) => !section.collectionSlug && section.kind !== 'item' && section.status !== 'new')
+    // Movies that aren't the creator's yet are here too, so one hidden on the creator page can still be added.
+    const left = all.filter(({account, section}) => section.status !== 'new' && (
+        section.kind === 'item' ? isMovie(account, section) && !section.movieJoined : !section.collectionSlug
+    ))
     const checkedAt = creator.accounts.map((account) => account.checkedAt).filter(Boolean).sort().pop()
 
     const sectionArt = (section: CreatorSectionRead) => section.imageUrl
         ? <img className="creator-section-art" src={toImageUrl(section.imageUrl)} alt="" loading="lazy"/>
-        : <span className="creator-section-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', section.kind === 'feed' ? 'rss' : 'list')}/></span>
+        : <span className="creator-section-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', section.kind === 'feed' ? 'rss' : section.kind === 'item' ? 'film' : 'list')}/></span>
     const facts = ({account, section}: AccountSection, ...more: (string | null)[]) => (
         [sectionFacts(section), several ? account.site.name : null, ...more].filter(Boolean).join(' · ')
     )
@@ -205,7 +208,7 @@ export default function CreatorSectionsEditor({creator, part}: {
         <div className="creator-row-actions">
             {choices(creator, item).map((choice) => (
                 <button key={choice.label} type="button" className="btn" disabled={busy !== null}
-                        onClick={() => choice.plan.target === 'own' ? setAdding(item) : void place(item.account, choice.plan)}>
+                        onClick={() => choice.plan.target === 'own' && item.section.kind !== 'item' ? setAdding(item) : void place(item.account, choice.plan)}>
                     {busy === sectionKey(item.account, item.section.ref) ? 'Adding…' : choice.label}
                 </button>
             ))}
@@ -284,7 +287,7 @@ export default function CreatorSectionsEditor({creator, part}: {
                                     <span>
                                         {item.section.access
                                             ? 'Only some members can watch this.'
-                                            : facts(item, item.section.status === 'ignored' ? 'ignored' : null)}
+                                            : facts(item, item.section.movieSlug ? 'In your library' : null, item.section.status === 'ignored' ? 'Hidden on the creator page' : null)}
                                     </span>
                                 </div>
                                 {addButtons(item, false)}
