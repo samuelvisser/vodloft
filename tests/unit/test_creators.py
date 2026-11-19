@@ -582,15 +582,49 @@ def test_an_artists_collections_hold_music(client, tube, session, monkeypatch):
     from backend.db.models import Collection
 
     details = tube.creator_details(ROOT)
-    monkeypatch.setattr(tube, "creator_details", lambda ref, progress=lambda step: None: replace(details, music=True))
+    monkeypatch.setattr(tube, "creator_details", lambda ref, progress=lambda step: None: replace(details, music=True, music_known=True))
     _steps, body = _lookup(client)
-    assert body["music"] is True
+    assert (body["music"], body["musicKnown"]) == (True, True)
 
     response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
         {"ref": "PLcabin", "target": "main"}, {"ref": "PLtools", "target": "own"},
     ]})
     assert response.status_code == 201, response.text
     assert set(session.scalars(select(Collection.type))) == {"music"}
+
+
+def test_the_user_decides_whether_a_creator_the_site_isnt_sure_of_is_an_artist(client, tube, session, monkeypatch):
+    from dataclasses import replace
+
+    from backend.db.models import Collection
+
+    details = tube.creator_details(ROOT)
+    guessed = replace(details, music=True, music_reason="It has releases on YouTube Music")
+    monkeypatch.setattr(tube, "creator_details", lambda ref, progress=lambda step: None: guessed)
+    _steps, body = _lookup(client)
+    assert (body["music"], body["musicKnown"], body["musicReason"]) == (True, False, "It has releases on YouTube Music")
+
+    # The user says it is a channel like any other, despite the guess.
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "type": "series", "sections": [
+        {"ref": "PLcabin", "target": "main"},
+    ]})
+    assert response.status_code == 201, response.text
+    assert set(session.scalars(select(Collection.type))) == {"series"}
+
+
+def test_a_creator_the_site_knows_isnt_an_artist_isnt_added_as_one(client, tube, monkeypatch):
+    from dataclasses import replace
+
+    details = tube.creator_details(ROOT)
+    monkeypatch.setattr(tube, "creator_details", lambda ref, progress=lambda step: None: replace(details, music_known=True))
+    _steps, body = _lookup(client)
+    assert (body["music"], body["musicKnown"]) == (False, True)
+
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "lookupId": body["lookupId"], "type": "music", "sections": [
+        {"ref": "PLcabin", "target": "main"},
+    ]})
+    assert response.status_code == 422, response.text
+    assert "isn't a music artist" in response.json()["detail"]
 
 
 def test_a_site_names_its_creators_in_its_own_words(client, tube, monkeypatch):
@@ -668,7 +702,8 @@ def test_an_artists_creator_is_called_an_artist(client, tube, session, monkeypat
 
     details = tube.creator_details(ROOT)
     monkeypatch.setattr(tube, "creator_details", lambda ref, progress=lambda step: None: replace(details, music=True))
-    client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [{"ref": "PLcabin", "target": "main"}]})
+    # The user says the creator the Site wasn't sure of is an artist.
+    client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "type": "music", "sections": [{"ref": "PLcabin", "target": "main"}]})
 
     assert client.get("/api/creators/workshop").json()["creatorLabel"] == "artist"
     assert [creator["creatorLabel"] for creator in client.get("/api/creators").json()] == ["artist"]

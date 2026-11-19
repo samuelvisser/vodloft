@@ -226,6 +226,8 @@ Collections made from a creator start without Download Profiles; add them on eac
 
 A musician on **Bandcamp** or **SoundCloud** can be added the same way: paste a link to the artist's page, such as `https://artist.bandcamp.com` or `https://soundcloud.com/artist`, and choose **Add the artist**. Their albums are listed newest first, with the year each came out. On SoundCloud a **Tracks** feed holds everything the artist uploaded, so tracks that are on no album have a place too. A Bandcamp track released on its own is listed as a single, which you add from its own page.
 
+Bandcamp only has artists, and The Daily Wire only hosts, so VODLoft knows. Elsewhere the Add creator page asks **What is …?**: the creator as their site calls them, such as a YouTube channel, or a **Music artist**. VODLoft picks one for you: a YouTube channel with a **Releases** tab, or a SoundCloud account with albums, starts as a music artist, and the page says why. Pick the other one if it guessed wrong.
+
 An artist's collections are **Music** collections. **One discography** puts every album in one collection, with each album as a season named after it and the other tracks under **Singles**; **A collection per album** gives each album its own. Download them with a profile for Music tracks (see [[Local-Media-Profiles#music-tracks-and-music-videos]]), which tags every track with its album, artist and track number, such as 3/10.
 
 Looking up an artist reads each album once, so an artist with many albums takes a minute; the page shows how far it is. YouTube's Releases tab cannot be read yet.

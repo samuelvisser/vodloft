@@ -160,6 +160,18 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
     ))
 
 
+def _collection_type(body: CreatorAPICreate, details: CreatorDetails) -> CollectionType:
+    """What the creator's collections are. An artist's hold their music. Where the Site is sure whether the creator is
+    an artist, it decides; elsewhere the user did, by the type they add the creator with."""
+    if not details.music_known:
+        return CollectionType(body.type)
+    if details.music:
+        return CollectionType.MUSIC
+    if CollectionType(body.type) is CollectionType.MUSIC:
+        raise ServiceError(f"{details.title} isn't a music artist", field="type")
+    return CollectionType(body.type)
+
+
 def add_creator(s: Session, body: CreatorAPICreate, details: CreatorDetails, *, added_by_id: int | None) -> CreatorPageAPIRead:
     into = None
     if body.into:
@@ -169,9 +181,8 @@ def add_creator(s: Session, body: CreatorAPICreate, details: CreatorDetails, *, 
     creator, _collections = creators.add_creator(
         s, source_key=body.source_key, details=details,
         plans=[SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections],
-        # An artist's collections hold their music.
         settings=NewCollectionSettings(
-            CollectionType.MUSIC if details.music else CollectionType(body.type), EpisodeIdentifier(body.episode_identifier),
+            _collection_type(body, details), EpisodeIdentifier(body.episode_identifier),
             body.membership_level,
         ),
         added_by_id=added_by_id, new_sections=NewSectionAction(body.new_sections), into=into,

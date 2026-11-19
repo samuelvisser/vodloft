@@ -130,6 +130,9 @@ def artist_details(root: str, progress: Callable[[str], None]) -> CreatorDetails
     sections = [section for _date, section in releases]
     if not bandcamp:
         sections.append(SectionRef(ref="tracks", url=f"{root}/tracks", title="Tracks", kind=SectionKind.FEED, role=SectionRole.MAIN, kind_label="Feed"))
+    # SoundCloud keeps an artist's albums apart from their playlists, so an account with albums is an artist's. One
+    # without may still be, so the user decides.
+    has_albums = not bandcamp and _has_albums(root, cookies)
     name = next(filter(None, (_artist_name(info) for info in found.values())), None)
     handle = root.rstrip("/").rsplit("/", 1)[-1] if not bandcamp else urlsplit(root).hostname.split(".", 1)[0]
     lists = sum(1 for section in sections if section.kind is SectionKind.LIST)
@@ -137,8 +140,18 @@ def artist_details(root: str, progress: Callable[[str], None]) -> CreatorDetails
     return CreatorDetails(
         ref=handle, url=root, title=str(name or handle), facts=(f"{lists} {word}",),
         # Bandcamp only has music; a SoundCloud account may as well be a podcast.
-        sections=tuple(sections), music=bandcamp,
+        sections=tuple(sections), music=bandcamp or has_albums, music_known=bandcamp,
+        music_reason="It has albums on SoundCloud" if has_albums else None,
     )
+
+
+def _has_albums(root: str, cookies) -> bool:
+    """Whether a SoundCloud account lists albums of its own, as artists do and podcasts don't."""
+    try:
+        return bool(runner.run_json("--flat-playlist", "--playlist-items", "1", f"{root}/albums", cookies=cookies).get("entries"))
+    except runner.YtDlpError as exc:
+        logger.debug("%s has no albums: %s", root, exc)
+        return False
 
 
 def _artist_name(info: dict) -> str | None:

@@ -79,7 +79,12 @@ class CreatorLookupAPIRead(ResponseBase):
     creator_slug: Optional[str] = None
     """The creator's slug, when it is already in the Library."""
     music: bool = False
-    """A music artist, whose lists are albums and whose collections are Music collections."""
+    """A music artist, whose lists are albums and whose collections are Music collections. Unless ``music_known``, it
+    is a guess the user can change by adding the creator with ``type`` music or another type."""
+    music_known: bool = False
+    """The Site makes ``music`` certain, so the user isn't asked."""
+    music_reason: Optional[str] = None
+    """Why the creator was taken for a music artist, when that was a guess."""
 
 
 class SectionPlanAPIIn(RequestBase):

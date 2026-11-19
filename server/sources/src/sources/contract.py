@@ -438,7 +438,13 @@ class CreatorDetails:
     """Short facts, such as "1.2M subscribers"."""
     sections: tuple[SectionRef, ...] = ()
     music: bool = False
-    """A music artist, whose lists are albums: their collections are Music collections."""
+    """A music artist, whose lists are albums: their collections are Music collections. Where the Site can't be sure,
+    it is the Source's guess, which the user can change before the creator is added."""
+    music_known: bool = False
+    """The Site makes ``music`` certain: Bandcamp only has artists, and The Daily Wire only hosts."""
+    music_reason: str | None = None
+    """Why the Source took the creator for a music artist, when it guessed so, such as "It has releases on YouTube
+    Music"."""
 
 
 @dataclass(frozen=True)

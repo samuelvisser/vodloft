@@ -1129,7 +1129,7 @@ def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collect
         uuid=generate_uuid(), slug=slugify(details.handle or details.title) or details.ref, source_key=source.id,
         title=plan.title or details.title, description=details.description,
         sharing_url=feed.url if feed is not None else details.url or plan.url,
-        membership_level="FREE", type=(CollectionType.MUSIC if details.music else CollectionType(plan.settings.get("type", "series"))).value,
+        membership_level="FREE", type=(CollectionType.MUSIC if details.music and details.music_known else CollectionType(plan.settings.get("type", "series"))).value,
         episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
         author_name=details.title, author_slug=slugify(details.handle or details.title) or details.ref,
         thumbnail_landscape_path=details.avatar_url or next((section.image_url for section in sections if section.image_url), None),
@@ -1160,7 +1160,7 @@ def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collec
         # The artist is in the Library already: the import links their collection.
         raise CollectionAlreadyAddedError(existing.main_collection, existing.site)
     plans = [SectionPlan(section.ref, SectionTarget.MAIN) for section in details.sections if section.access is None]
-    kind = CollectionType.MUSIC if details.music else CollectionType(plan.settings.get("type", CollectionType.SERIES.value))
+    kind = CollectionType.MUSIC if details.music and details.music_known else CollectionType(plan.settings.get("type", CollectionType.SERIES.value))
     creator, _made = add_creator(session, source_key=source.id, details=details, plans=plans, settings=NewCollectionSettings(
         type=kind, episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
         membership_level="FREE",

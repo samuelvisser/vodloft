@@ -225,6 +225,8 @@ class DailyWireSource(Source):
         return CreatorDetails(
             ref=ref, url=None, title=name, avatar_url=first.author_headshot_path if first else None,
             banner_url=first.background_image_path if first else None, sections=sections,
+            # The Daily Wire's creators are hosts, never music artists.
+            music_known=True,
         )
 
     def episode_media(self, *, slug: str, members_only: bool, interactive: bool = False) -> EpisodeMedia:

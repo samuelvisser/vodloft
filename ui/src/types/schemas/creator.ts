@@ -53,7 +53,12 @@ export const CreatorLookupReadSchema = z.object({
     sections: z.array(CreatorSectionReadSchema),
     presets: z.array(z.object({key: z.enum(CreatorPresetValues), plan: z.array(SectionPlanSchema)})),
     creatorSlug: z.string().nullable(),
+    /** A music artist, whose collections are Music collections. Unless ``musicKnown``, a guess the user can change. */
     music: z.boolean().default(false),
+    /** The Site is sure whether the creator is a music artist, such as Bandcamp, whose creators always are. */
+    musicKnown: z.boolean().default(false),
+    /** Why the lookup took the creator for a music artist, when it guessed so. */
+    musicReason: z.string().nullable().optional(),
 })
 export type CreatorLookupRead = z.infer<typeof CreatorLookupReadSchema>
 
@@ -157,6 +162,8 @@ export const CreatorCreateSchema = z.object({
     newSections: z.enum(NewSectionActionValues).default('ask'),
     /** A creator in the Library who is the same person or group: the account joins them. Empty for a new creator. */
     into: z.string().default(''),
+    /** What the creator's collections are: Music for a music artist. */
+    type: z.enum(['series', 'music']).default('series'),
 }).refine((value) => value.sections.some((section) => section.target !== 'skip'), {
     message: 'Pick at least one section to keep',
     path: ['sections'],

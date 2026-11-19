@@ -674,9 +674,10 @@ class YtDlpSource(Source):
         if root is None:
             raise runner.YtDlpError("This link is not a YouTube channel")
         progress("Reading the channel, its videos and its playlists")
-        with ThreadPoolExecutor(max_workers=len(_CHANNEL_FEEDS) + 1, thread_name_prefix="channel-lookup") as pool:
+        with ThreadPoolExecutor(max_workers=len(_CHANNEL_FEEDS) + 2, thread_name_prefix="channel-lookup") as pool:
             tabs = {tab: pool.submit(self._info, f"{root}/{tab}") for tab, _title, _role in _CHANNEL_FEEDS}
             playlists = pool.submit(self._playlists, root)
+            releases = pool.submit(self._has_releases, root)
             info = tabs["videos"].result()
             channel_id = str(info.get("channel_id") or "")
             if not channel_id:
@@ -698,6 +699,7 @@ class YtDlpSource(Source):
                     ref=tab, url=f"{root}/{tab}", title=title, kind=SectionKind.FEED, role=role, kind_label="Feed",
                 ))
             sections += playlists.result()
+            has_releases = releases.result()
         pictures = {str(item.get("id")): item.get("url") for item in info.get("thumbnails") or [] if isinstance(item, dict)}
         followers = info.get("channel_follower_count")
         return CreatorDetails(
@@ -706,7 +708,19 @@ class YtDlpSource(Source):
             avatar_url=pictures.get("avatar_uncropped"), banner_url=pictures.get("banner_uncropped"),
             facts=(f"{_count(followers)} subscribers",) if isinstance(followers, int) else (),
             sections=tuple(sections),
+            music=has_releases, music_reason="It has releases on YouTube Music" if has_releases else None,
         )
+
+    def _has_releases(self, root: str) -> bool:
+        """Whether a YouTube channel has a Releases tab, which only music artists have. yt-dlp can't always list what is
+        on it, but says when a channel has none. It is a guess the user can change: a channel can be an artist's and
+        still be more than their music."""
+        try:
+            self._info(f"{root}/releases")
+            return True
+        except runner.YtDlpError as exc:
+            logger.debug("%s has no releases: %s", root, exc)
+            return False
 
     @staticmethod
     def _playlists(root: str) -> list[SectionRef]:

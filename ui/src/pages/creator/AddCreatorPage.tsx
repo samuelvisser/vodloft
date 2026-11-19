@@ -18,6 +18,7 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
+import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
 import CreatorHeader from './CreatorHeader'
 import LookupSteps from './LookupSteps'
 import './CreatorPages.css'
@@ -45,14 +46,16 @@ function choiceOf(plan: SectionPlan | undefined): Choice {
     return plan?.target ?? 'skip'
 }
 
+const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
+
 /** What the Site's sections can become, in the words of this creator. */
-function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead) {
+function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, music: boolean) {
     const spec: Partial<Record<Choice, {label: string}>> = {}
     if (section.kind === 'feed') spec.main = {label: 'Main collection'}
-    else if (section.kind === 'list' && creator.linkSeasons) spec.main = {label: `Main collection, as ${creator.music ? 'an album' : 'a playlist'} season`}
+    else if (section.kind === 'list' && creator.linkSeasons) spec.main = {label: `Main collection, as ${music ? 'an album' : 'a playlist'} season`}
     spec.own = {label: 'A collection of its own'}
     spec.skip = {label: 'Skip'}
-    return createSelectRegistry(`CreatorSection-${creator.ref}-${section.ref}`, spec as Record<Choice, {label: string}>)
+    return createSelectRegistry(`CreatorSection-${creator.ref}-${section.ref}-${music}`, spec as Record<Choice, {label: string}>)
 }
 
 function sectionFacts(section: CreatorSectionRead): string {
@@ -138,6 +141,7 @@ export default function AddCreatorPage() {
             .then((found) => {
                 setCreator(found)
                 setLabel(found.creatorLabel)
+                setValue('type', found.music ? 'music' : 'series')
                 const preset = found.presets[0]
                 if (preset) {
                     setValue('preset', preset.key)
@@ -153,9 +157,11 @@ export default function AddCreatorPage() {
     const membershipLevel = watch('membershipLevel')
     const newSections = watch('newSections') ?? 'ask'
     const byRef = useMemo(() => new Map(plans.map((plan) => [plan.ref, plan])), [plans])
+    // Whether the creator is a music artist: the Site's word where it is sure, the user's choice elsewhere.
+    const music = watch('type') === 'music'
     const registries = useMemo(
-        () => new Map((creator?.sections ?? []).map((section) => [section.ref, choicesFor(creator!, section)])),
-        [creator],
+        () => new Map((creator?.sections ?? []).map((section) => [section.ref, choicesFor(creator!, section, music)])),
+        [creator, music],
     )
     // Every choice select is as wide as the longest choice any of them has, so they line up.
     const choiceLabels = useMemo(() => (creator?.sections ?? [])
@@ -180,6 +186,7 @@ export default function AddCreatorPage() {
         body: JSON.stringify({
             sourceKey: data.sourceKey, url: data.url, ref: data.ref, lookupId: creator?.lookupId ?? null, sections: data.sections,
             membershipLevel: data.membershipLevel, newSections: data.newSections, into: data.into || null,
+            type: data.type,
         }),
     }), {
         fallbackField: 'sections',
@@ -232,7 +239,7 @@ export default function AddCreatorPage() {
         ['Feeds', creator.sections.filter((section) => section.kind === 'feed')],
         [listsTitle, creator.sections.filter((section) => section.kind === 'list')],
         ...(listLabel && hasShows ? [['Shows', creator.sections.filter((section) => section.kind === 'show')]] as [string, CreatorSectionRead[]][] : []),
-        [creator.music ? 'Singles' : 'Movies', creator.sections.filter((section) => section.kind === 'item')],
+        [music ? 'Singles' : 'Movies', creator.sections.filter((section) => section.kind === 'item')],
     ]
     // What is in the library already stays where it is, so it makes no collection.
     const inLibrary = new Set(creator.sections.filter((section) => section.collectionSlug).map((section) => section.ref))
@@ -252,7 +259,7 @@ export default function AddCreatorPage() {
                     <h1 id="add-creator-title">Add {creator.creatorLabel}</h1>
                     <p className="view-description">
                         Choose where each part of this {creator.creatorLabel} goes. The main collection is called
-                        {' '}{creator.title}; anything you give a collection of its own gets one. A {creator.music ? 'track' : 'video'} that is in several
+                        {' '}{creator.title}; anything you give a collection of its own gets one. A {music ? 'track' : 'video'} that is in several
                         places is kept once.
                     </p>
                 </div>
@@ -264,14 +271,43 @@ export default function AddCreatorPage() {
             />
 
             <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
+                {!creator.musicKnown && (
+                    <div className="form-row creator-artist-choice">
+                        <label id="creator-kind-label">What is {creator.title}?</label>
+                        <SegmentedOptions<'series' | 'music'>
+                            name="creator-kind"
+                            ariaLabelledBy="creator-kind-label"
+                            value={music ? 'music' : 'series'}
+                            onChange={(value) => setValue('type', value as 'series' | 'music', {shouldValidate: true})}
+                            options={[
+                                {
+                                    value: 'series',
+                                    label: capitalize(creator.creatorLabel),
+                                    description: `Videos and ${lists} in Series collections, with ${lists} as seasons`,
+                                },
+                                {
+                                    value: 'music',
+                                    label: 'Music artist',
+                                    description: `Music collections, with ${lists} as albums and their videos as tracks or music videos`,
+                                },
+                            ]}
+                        />
+                        <div className="help">
+                            {creator.music && creator.musicReason
+                                ? `${creator.musicReason}, so VODLoft took it for a music artist. Pick ${capitalize(creator.creatorLabel)} if it isn't.`
+                                : `${creator.siteName} doesn't say whether this is a music artist. Pick Music artist if it is.`}
+                        </div>
+                        {errors.type && <div className="error" role="alert">{errors.type.message}</div>}
+                    </div>
+                )}
                 {creator.presets.length > 1 && (
                     <fieldset className="creator-presets">
                         <legend>What to keep from this {creator.creatorLabel}</legend>
                         {creator.presets.map((item) => (
                             <label key={item.key} className={`creator-preset${preset === item.key ? ' is-on' : ''}`}>
                                 <input type="radio" name="preset" checked={preset === item.key} onChange={() => choosePreset(item.key)}/>
-                                <b>{presetText(item.key, lists, hasFeeds, creator.music).label}</b>
-                                <span>{presetText(item.key, lists, hasFeeds, creator.music).help}</span>
+                                <b>{presetText(item.key, lists, hasFeeds, music).label}</b>
+                                <span>{presetText(item.key, lists, hasFeeds, music).help}</span>
                             </label>
                         ))}
                     </fieldset>
