@@ -66,7 +66,7 @@ class EpisodeNfo(StrEnum):
 
 
 class CollectionLocalMediaProfileScope(StrEnum):
-    BOTH = "both"
+    PODCAST_AND_SERIES = "podcast_and_series"
     """Podcasts and series."""
     PODCAST = "podcast"
     SERIES = "series"
@@ -77,7 +77,7 @@ class CollectionLocalMediaProfileScope(StrEnum):
 
     def collection_types(self) -> tuple[str, ...]:
         """The collection types a profile with this scope keeps."""
-        if self is CollectionLocalMediaProfileScope.BOTH:
+        if self is CollectionLocalMediaProfileScope.PODCAST_AND_SERIES:
             return (CollectionLocalMediaProfileScope.PODCAST.value, CollectionLocalMediaProfileScope.SERIES.value)
         if self.music:
             return ("music",)

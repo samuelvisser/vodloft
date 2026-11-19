@@ -741,7 +741,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const filenameRestrictionMode = useWatch({control, name: 'filenameRestrictionMode'})
-    const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'both'
+    const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'podcast_and_series'
     const videoScope = useWatch({control, name: 'videoScope' as any}) ?? 'both'
     const sourceLabel = mode !== 'collection'
         ? ({videos: 'Example video', movies: 'Example movie'} as Record<string, string>)[videoScope] ?? 'Example video or movie'

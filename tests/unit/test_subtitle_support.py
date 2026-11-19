@@ -168,7 +168,7 @@ def test_video_profiles_default_to_subtitle_sidecars():
 
 
 @pytest.mark.parametrize(("scope", "expected"), [
-    ("both", "sidecar"),
+    ("podcast_and_series", "sidecar"),
     ("series", "sidecar"),
     ("podcast", "no_subtitles"),
 ])
@@ -187,7 +187,7 @@ def test_collection_subtitle_default_follows_scope_when_not_specified(scope, exp
 @pytest.mark.parametrize("mode", [
     "no_subtitles", "embed", "sidecar", "embed_and_sidecar",
 ])
-@pytest.mark.parametrize("scope", ["podcast", "series", "both"])
+@pytest.mark.parametrize("scope", ["podcast", "series", "podcast_and_series"])
 def test_manual_subtitle_selection_overrides_collection_scope(scope, mode):
     from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
 

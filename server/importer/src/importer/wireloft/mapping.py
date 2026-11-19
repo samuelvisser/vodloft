@@ -178,7 +178,9 @@ def _profiles(data: WireLoftData) -> tuple[ProfilePlan, ...]:
         settings: dict[str, object] = {name: row[name] for name in _PROFILE_SETTINGS if row.get(name) is not None}
         settings["type"] = kind
         if kind == "collection" and profile_id in show_profiles:
-            settings["collection_scope"] = show_profiles[profile_id]["show_scope"]
+            scope = show_profiles[profile_id]["show_scope"]
+            # WireLoft calls a profile for podcasts and series "both".
+            settings["collection_scope"] = "podcast_and_series" if scope == "both" else scope
             if show_profiles[profile_id].get("download_show_assets") is not None:
                 settings["download_collection_assets"] = bool(show_profiles[profile_id]["download_show_assets"])
         indexes = tuple(

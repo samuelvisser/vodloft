@@ -252,7 +252,7 @@ class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
     """A Collection Local Media Profile's fields; an update leaves the kept fields it does not send."""
 
     type: Literal["collection"] = LocalMediaProfileType.COLLECTION.value
-    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH
+    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.PODCAST_AND_SERIES
     """Which collections the profile is offered for. For Music tracks it keeps them as audio tracks with music tags,
     and for Music videos as music videos."""
     download_collection_assets: bool | None = None

@@ -324,7 +324,7 @@ def _profile_settings(sub: Subscription, player: str | None, warnings: list[Impo
                                   else "sidecar" if thumbnail else "no_thumbnail")
     # ytdl-sub's base preset saves the info file; a preset can turn it off with an empty name.
     settings["save_info_json"] = bool((config.get("output_options") or {}).get("info_json_name"))
-    settings["collection_scope"] = "both"
+    settings["collection_scope"] = "podcast_and_series"
     overrides = sub.overrides
     settings["download_collection_assets"] = bool(overrides.get("tv_show_poster_file_name") or overrides.get("tv_show_fanart_file_name"))
     return settings, audio, auto

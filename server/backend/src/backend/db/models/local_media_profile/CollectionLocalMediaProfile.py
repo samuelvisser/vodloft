@@ -17,8 +17,8 @@ class CollectionLocalMediaProfile(LocalMediaProfileBase, HasMetadataMixin):
         primary_key=True,
     )
     collection_scope: Mapped[str] = mapped_column(
-        default=CollectionLocalMediaProfileScope.BOTH.value,
-        server_default=CollectionLocalMediaProfileScope.BOTH.value,
+        default=CollectionLocalMediaProfileScope.PODCAST_AND_SERIES.value,
+        server_default=CollectionLocalMediaProfileScope.PODCAST_AND_SERIES.value,
         nullable=False,
     )
 

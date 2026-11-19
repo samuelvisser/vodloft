@@ -34,7 +34,7 @@ export const LocalMediaProfileTypeReg = createSelectRegistry("LocalMediaProfileT
 });
 
 export const CollectionLocalMediaProfileScopeReg = createSelectRegistry("CollectionLocalMediaProfileScope", {
-  'both': { label: "Podcasts and Series", help: "Offer this profile for both Podcasts and Series" },
+  'podcast_and_series': { label: "Podcasts and Series", help: "Offer this profile for both Podcasts and Series" },
   'podcast': { label: "Podcasts", help: "Offer this profile only for Podcasts" },
   'series': { label: "Series", help: "Offer this profile only for Series" },
   'music_tracks': { label: "Music tracks", help: "The tracks of Music collections, kept as tagged audio with an album per season" },
@@ -90,7 +90,7 @@ export function videoProfileKeeps(profile: {videoScope?: string | null}, kind: '
 
 export function defaultSubtitleModeForProfile(
     type: LocalMediaProfileType,
-    collectionScope: CollectionLocalMediaProfileScope = 'both',
+    collectionScope: CollectionLocalMediaProfileScope = 'podcast_and_series',
 ): LocalMediaProfileSubtitleMode {
     // New Video profiles start without subtitles; they can be turned on like any other profile.
     if (type === 'video') return 'no_subtitles'
@@ -108,9 +108,9 @@ export function isCollectionLocalMediaProfileAvailableFor(
 ): boolean {
     if (!isCollectionProfileType(profile.type)) return false
     if (collectionType !== 'podcast' && collectionType !== 'series' && collectionType !== 'music') return true
-    const scope = profile.collectionScope ?? 'both'
+    const scope = profile.collectionScope ?? 'podcast_and_series'
     if (collectionType === 'music') return scope === 'music_tracks' || scope === 'music_videos'
-    return scope === collectionType || scope === 'both'
+    return scope === collectionType || scope === 'podcast_and_series'
 }
 
 /** What a new Local Media Profile has to fit: a collection of a type, or a video or movie, on a Site. */

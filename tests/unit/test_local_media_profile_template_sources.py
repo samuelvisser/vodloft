@@ -450,7 +450,7 @@ def test_a_saved_profile_starts_on_a_collection_that_downloads_to_it(db_session)
 
     profile = CollectionLocalMediaProfile(
         slug="shows", name="Shows", output_template="/downloads/{{ collection }}/{{ episode }}.ext",
-        preferred_format="format_1080p", collection_scope="both",
+        preferred_format="format_1080p", collection_scope="podcast_and_series",
     )
     db_session.add(profile)
     collections = [
@@ -603,13 +603,13 @@ def test_collection_examples_follow_the_profiles_sites(db_session):
 
     def titles(site_keys):
         page = get_output_template_source_page(
-            db_session, LocalMediaProfileType.COLLECTION, CollectionLocalMediaProfileScope.BOTH,
+            db_session, LocalMediaProfileType.COLLECTION, CollectionLocalMediaProfileScope.PODCAST_AND_SERIES,
             limit=2, site_keys=site_keys,
         )
         labels = [source.label for source in page.items]
         while page.next_cursor:
             page = get_output_template_source_page(
-                db_session, LocalMediaProfileType.COLLECTION, CollectionLocalMediaProfileScope.BOTH,
+                db_session, LocalMediaProfileType.COLLECTION, CollectionLocalMediaProfileScope.PODCAST_AND_SERIES,
                 cursor=page.next_cursor, limit=2, site_keys=site_keys,
             )
             labels += [source.label for source in page.items]

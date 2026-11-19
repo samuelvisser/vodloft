@@ -81,7 +81,7 @@ def library(monkeypatch):
             session.flush()
             return episode
 
-        def add_profile(name: str, scope: str = "both"):
+        def add_profile(name: str, scope: str = "podcast_and_series"):
             profile = LocalMediaProfile(
                 slug=name,
                 name=name,

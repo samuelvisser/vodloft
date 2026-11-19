@@ -56,7 +56,7 @@ def _profile(session, **values):
 
     profile = CollectionLocalMediaProfile(**{
         "slug": "shows", "name": "Shows", "preferred_format": "format_1080p", **values,
-    }, output_template="/downloads/{{ collection_title }}/{{ title }}.ext", collection_scope="both")
+    }, output_template="/downloads/{{ collection_title }}/{{ title }}.ext", collection_scope="podcast_and_series")
     session.add(profile)
     session.flush()
     return profile

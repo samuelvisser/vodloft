@@ -61,7 +61,7 @@ def test_a_profile_with_downloads_does_not_switch_to_or_from_music_tracks():
         )
         _refuse_tracks_switch_with_downloads(session, SimpleNamespace(id=1, collection_scope=saved), fields)
 
-    change("both", "music_videos")
+    change("podcast_and_series", "music_videos")
     change("music_videos", "music_tracks", downloads=False)
     with pytest.raises(ServiceError, match="already has downloads, so it can't be changed to Music tracks") as refused:
         change("music_videos", "music_tracks")
@@ -71,7 +71,7 @@ def test_a_profile_with_downloads_does_not_switch_to_or_from_music_tracks():
 
 
 def test_a_profile_for_podcasts_and_series_is_not_offered_for_music():
-    assert CollectionLocalMediaProfileScope.BOTH.collection_types() == ("podcast", "series")
+    assert CollectionLocalMediaProfileScope.PODCAST_AND_SERIES.collection_types() == ("podcast", "series")
     assert CollectionLocalMediaProfileScope.MUSIC_TRACKS.collection_types() == ("music",)
     assert CollectionLocalMediaProfileScope.MUSIC_VIDEOS.collection_types() == ("music",)
     assert CollectionType.MUSIC.by_season and CollectionType.SERIES.by_season and not CollectionType.PODCAST.by_season
@@ -86,9 +86,9 @@ def test_a_collection_becomes_music_only_when_its_download_profiles_suit_it():
         ])
 
     _check_profiles_suit_type(collection("music_tracks", "music_videos"), CollectionType.MUSIC)
-    _check_profiles_suit_type(collection("both", "series"), CollectionType.SERIES)
-    with pytest.raises(ServiceError, match="Profile both, which is not offered for music collections") as refused:
-        _check_profiles_suit_type(collection("both"), CollectionType.MUSIC)
+    _check_profiles_suit_type(collection("podcast_and_series", "series"), CollectionType.SERIES)
+    with pytest.raises(ServiceError, match="Profile podcast_and_series, which is not offered for music collections") as refused:
+        _check_profiles_suit_type(collection("podcast_and_series"), CollectionType.MUSIC)
     assert refused.value.field == "type"
 
 
