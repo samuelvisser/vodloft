@@ -148,6 +148,8 @@ export const SearchResultReadSchema = z.object({
     facts: z.array(z.string()).optional(),
     access: z.string().nullable().optional(),
     accessLabel: z.string().nullable().optional(),
+    /** What the Site calls a creator, when the result is a creator's own page that can be added as one. */
+    creatorLabel: z.string().nullable().optional(),
 })
 export type SearchResultRead = z.infer<typeof SearchResultReadSchema>
 

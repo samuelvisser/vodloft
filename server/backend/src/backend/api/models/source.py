@@ -365,6 +365,9 @@ class SearchResultAPIRead(ResponseBase):
     access: Optional[str] = None
     access_label: Optional[str] = None
     """What the result's Site calls the access it needs, such as Members only."""
+    creator_label: Optional[str] = None
+    """What the Site calls a creator, when the result is a creator's own page, such as a YouTube channel, that can be
+    added as a creator."""
 
 
 class SearchNoticeAPIRead(ResponseBase):
