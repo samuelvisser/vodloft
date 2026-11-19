@@ -1,5 +1,7 @@
-.seasons-dialog {
-    width: min(760px, calc(100vw - 32px));
+.modal.seasons-dialog {
+    /* Roomy: its lists and rows have a lot to say, and the plain dialog width cramps them. */
+    max-width: none;
+    width: min(960px, calc(100vw - 32px));
     max-height: calc(100dvh - 48px);
     display: flex;
     flex-direction: column;
@@ -61,7 +63,7 @@
     border-radius: 12px;
 }
 
-.seasons-dialog-links { max-height: 320px; overflow-y: auto; }
+.seasons-dialog-links { max-height: min(480px, 45dvh); overflow-y: auto; }
 .seasons-dialog-links li { padding: .5rem .75rem; }
 .seasons-dialog-links li + li,
 .seasons-dialog-season + .seasons-dialog-season { border-top: 1px solid rgba(100, 116, 139, 0.24); }

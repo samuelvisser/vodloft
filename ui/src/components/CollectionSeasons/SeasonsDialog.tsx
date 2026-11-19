@@ -511,7 +511,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                             )}
                                                             {linkForm.formState.errors.url && <div className="error" role="alert">{linkForm.formState.errors.url.message}</div>}
                                                             <div className="help">
-                                                                Each link becomes a season of its own, from any site VODLoft can read. A link is added
+                                                                Each link becomes {words.season.a} of its own, from any site VODLoft can read. A link is added
                                                                 right away; VODLoft then lists its {words.videos}.
                                                             </div>
                                                         </div>
