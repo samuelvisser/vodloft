@@ -1,0 +1,187 @@
+import {useState} from 'react'
+import {useQueryClient} from '@tanstack/react-query'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {toast} from 'react-hot-toast'
+import {faIcon} from '../../icons/faIcon'
+import {can} from '../../lib/access'
+import {addCreatorSections} from '../../lib/queries'
+import {toImageUrl} from '../../components/Episode/EpisodeCard'
+import CollectionTileArt from '../../components/CollectionTileArt/CollectionTileArt'
+import ActionMenu from '../../components/ActionMenu/ActionMenu'
+import type {CreatorPageRead, SectionPlan} from '../../types/schemas/creator'
+import {choices, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
+
+// Whether the viewer left the section open, for every creator.
+const OPEN_KEY = 'vodloft.creator.notInLibrary.open'
+// Tiles shown before "Show all": two rows on a computer, two on a phone.
+const DESKTOP_TILES = 12
+const PHONE_TILES = 4
+
+function readOpen(): boolean | null {
+    try {
+        const value = window.localStorage.getItem(OPEN_KEY)
+        return value === null ? null : value === '1'
+    } catch {
+        return null
+    }
+}
+
+function saveOpen(open: boolean) {
+    try {
+        window.localStorage.setItem(OPEN_KEY, open ? '1' : '0')
+    } catch {
+        // Only a convenience: the section just starts folded next time.
+    }
+}
+
+/** "a show" -> "show": one of what the creator adds, for a count. */
+function withoutArticle(one: string) {
+    return one.replace(/^(a|an) /, '')
+}
+
+function listed(titles: string[]) {
+    if (titles.length <= 3) return titles.length > 1 ? `${titles.slice(0, -1).join(', ')} and ${titles[titles.length - 1]}` : titles[0]
+    return `${titles.slice(0, 3).join(', ')} and ${titles.length - 3} more`
+}
+
+/**
+ * The creator's playlists or shows that are not in the Library: one folded line until the user opens it, then faded
+ * Library tiles with a button that adds each one. It starts open while a new one waits for a choice.
+ */
+export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead}) {
+    const queryClient = useQueryClient()
+    const items: AccountSection[] = creator.accounts
+        .flatMap((account) => account.sections.map((section) => ({account, section})))
+        .filter(({section}) => !section.collectionSlug && section.kind !== 'item')
+        // The new ones, which wait for a choice, first.
+        .sort((a, b) => Number(b.section.status === 'new') - Number(a.section.status === 'new'))
+    const newCount = items.filter(({section}) => section.status === 'new').length
+    const [open, setOpen] = useState(() => newCount > 0 || readOpen() === true)
+    const [showAll, setShowAll] = useState(false)
+    const [busy, setBusy] = useState<string | null>(null)
+    if (!items.length) return null
+
+    const mayAdd = can('add_media')
+    const sites = new Set(items.map(({account}) => account.site.key))
+    const several = creator.accounts.length > 1
+    // In the words of their one Site, when they are all on one, such as playlists on YouTube.
+    const names = sites.size === 1 ? items[0].account.site.creatorSections : creator.sectionNames
+    const noun = items.length === 1 ? withoutArticle(names.one) : names.many
+    const onSite = sites.size === 1 ? ` on ${items[0].account.site.name}` : ''
+    const arts = items.map(({section}) => toImageUrl(section.imageUrl)).filter((url): url is string => !!url).slice(0, 4)
+    const key = ({account, section}: AccountSection) => `${account.id}:${section.ref}`
+
+    const toggle = () => {
+        saveOpen(!open)
+        setOpen(!open)
+    }
+    const add = async (item: AccountSection, plan: SectionPlan) => {
+        setBusy(key(item))
+        try {
+            queryClient.setQueryData(['creator', creator.slug], await addCreatorSections(creator.slug, item.account.id, [plan]))
+            await Promise.all([
+                queryClient.invalidateQueries({queryKey: ['creators']}),
+                queryClient.invalidateQueries({queryKey: ['collectionsView']}),
+            ])
+            if (plan.target !== 'skip') toast.success(`Added ${item.section.title}`)
+        } catch (exc) {
+            toast.error(exc instanceof Error ? exc.message : String(exc))
+        } finally {
+            setBusy(null)
+        }
+    }
+
+    const addButton = (item: AccountSection) => {
+        const options = choices(creator, item)
+        const isNew = item.section.status === 'new'
+        if (busy === key(item)) {
+            return <span className="btn btn-secondary creator-more-plus" aria-label="Adding…"><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/></span>
+        }
+        if (options.length === 1 && !isNew) {
+            return (
+                <button
+                    type="button" className="btn btn-secondary creator-more-plus" disabled={busy !== null}
+                    aria-label={`Add ${item.section.title}`} title={`Add ${item.section.title}`}
+                    onClick={() => void add(item, options[0].plan)}
+                >
+                    <FontAwesomeIcon icon={faIcon('fass', 'plus')} aria-hidden="true"/>
+                </button>
+            )
+        }
+        return (
+            <ActionMenu
+                label={`Add ${item.section.title}`} triggerIcon={faIcon('fass', 'plus')}
+                items={[
+                    ...options.map((option) => ({
+                        label: option.label, description: option.description, disabled: busy !== null,
+                        onSelect: () => void add(item, option.plan),
+                    })),
+                    ...(isNew ? [{
+                        label: 'Ignore', description: 'Leave it out of your library; it stays listed here',
+                        separatorBefore: true, disabled: busy !== null,
+                        onSelect: () => void add(item, {ref: item.section.ref, target: 'skip'}),
+                    }] : []),
+                ]}
+            />
+        )
+    }
+
+    const titles = items.map(({section}) => section.title)
+    return (
+        <section className={`creator-more${open ? ' is-open' : ''}`} aria-label="Not in your library">
+            <button type="button" className="creator-more-summary" aria-expanded={open} onClick={toggle}>
+                {arts.length > 0 && (
+                    <span className="creator-more-stack" aria-hidden="true">
+                        {arts.map((url) => <img key={url} src={url} alt="" loading="lazy"/>)}
+                    </span>
+                )}
+                <span className="creator-more-text">
+                    <b>
+                        <span className="creator-more-long">{creator.title} has {items.length} more {noun}{onSite}</span>
+                        <span className="creator-more-short">{items.length} more {noun}</span>
+                        {newCount > 0 && <span className="creator-more-new">{newCount} new</span>}
+                    </b>
+                    <span className="creator-more-sub">
+                        {open
+                            ? `Not in your library yet${mayAdd ? `: add ${items.length === 1 ? 'it' : 'any of them'} with its + button` : ''}`
+                            : `${listed(titles)} ${items.length === 1 ? 'is' : 'are'} not in your library`}
+                    </span>
+                </span>
+                <span className="btn btn-secondary creator-more-toggle">
+                    <span className="creator-more-toggle-label">{open ? 'Hide' : 'Show'}</span>
+                    <FontAwesomeIcon icon={faIcon('fass', open ? 'chevron-up' : 'chevron-down')} aria-hidden="true"/>
+                </span>
+            </button>
+            {open && (
+                <div className="creator-more-body">
+                    <div className={`creator-more-grid${showAll ? '' : ' is-cut'}`} role="list">
+                        {items.map((item) => {
+                            const image = toImageUrl(item.section.imageUrl)
+                            const facts = [sectionFacts(item.section), several ? item.account.site.name : null].filter(Boolean).join(' · ')
+                            return (
+                                <div key={key(item)} className="creator-more-tile" role="listitem">
+                                    <span className="library-tile-art creator-more-art">
+                                        {image
+                                            ? <CollectionTileArt key={image} src={image}/>
+                                            : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', item.section.kind === 'feed' ? 'rss' : 'list')}/></span>}
+                                    </span>
+                                    {item.section.status === 'new' && <span className="creator-more-new creator-more-tile-new">New</span>}
+                                    {mayAdd && <div className="creator-more-add">{addButton(item)}</div>}
+                                    <span className="library-tile-copy">
+                                        <span className="library-tile-title">{item.section.title}</span>
+                                        {facts && <span className="library-tile-meta"><span>{facts}</span></span>}
+                                    </span>
+                                </div>
+                            )
+                        })}
+                    </div>
+                    {!showAll && items.length > PHONE_TILES && (
+                        <div className={`creator-more-all${items.length > DESKTOP_TILES ? '' : ' is-phone-only'}`}>
+                            <button type="button" className="btn btn-secondary" onClick={() => setShowAll(true)}>Show all {items.length}</button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </section>
+    )
+}

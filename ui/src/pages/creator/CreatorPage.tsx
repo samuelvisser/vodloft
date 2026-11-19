@@ -18,6 +18,7 @@ import {postReassignedMove, reassignedMoveMessage} from '../../components/Episod
 import {toast} from 'react-hot-toast'
 import {creatorKindText} from '../../types/creator'
 import CreatorHeader from './CreatorHeader'
+import CreatorNotInLibrary from './CreatorNotInLibrary'
 import './CreatorPages.css'
 
 /** The places a collection lists, short enough for a card: "Videos, Live and 9 more". */
@@ -142,8 +143,6 @@ export default function CreatorPage() {
     const links = creator.accounts.filter((account) => account.url).map((account) => ({siteName: account.site.name, url: account.url!}))
     // Two sites fit as buttons; more go into the Actions menu.
     const linkButtons = links.length <= 2 ? links : []
-    const waiting = creator.accounts.flatMap((account) => account.sections)
-        .filter((section) => section.status === 'new' && !section.collectionSlug)
     const episodes = creator.collections.reduce((total, collection) => total + collection.episodeCount, 0)
     const firstDates = creator.collections.map((collection) => collection.firstPublishedDate).filter((date): date is Date => !!date)
     const since = firstDates.length ? Math.min(...firstDates.map((date) => date.getFullYear())) : null
@@ -207,21 +206,10 @@ export default function CreatorPage() {
 
             {checking && (
                 <p className="creator-note" role="status">
-                    VODLoft is looking for new {creator.sectionNames.many}. They show on the Edit page when it is done.
+                    VODLoft is looking for new {creator.sectionNames.many}. New ones show under Collections when it is done.
                 </p>
             )}
             {actionError && <div className="form-error-card" role="alert">{actionError}</div>}
-
-            {waiting.length > 0 && mayManage && (
-                <Link className="creator-waiting" to={`/edit-creator/${creator.slug}`}>
-                    <FontAwesomeIcon icon={faIcon('fass', 'circle-plus')}/>
-                    <span>
-                        <b>{waiting.length === 1 ? `New on ${creator.title}: ${waiting[0].title}` : `${waiting.length} new ${creator.sectionNames.many} on ${creator.title}`}</b>
-                        <span>Choose whether to add {waiting.length === 1 ? 'it' : 'them'} to your library</span>
-                    </span>
-                    <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} className="creator-waiting-go"/>
-                </Link>
-            )}
 
             <EpisodeShelf slug={creator.slug}/>
 
@@ -245,6 +233,8 @@ export default function CreatorPage() {
                     </p>
                 )}
             </div>
+
+            <CreatorNotInLibrary creator={creator}/>
 
             <ConfirmDialog
                 open={combining}

@@ -1635,8 +1635,8 @@ div[class$="-indicatorSeparator"] { background-color: rgba(148, 163, 184, 0.4) !
 div[class$="-indicators"] svg { color: var(--muted) !important; fill: currentColor !important; }
 div[class$="-dropdownIndicator"] { color: var(--muted) !important; }
 div[class$="-clearIndicator"] { color: var(--muted) !important; }
-/* Menu */
-div[class$="-menu"] {
+/* Menu (react-select's; an ActionMenu's class also ends in -menu) */
+div[class$="-menu"]:not(.action-menu) {
   background: var(--select-menu-bg) !important;
   color: var(--text) !important;
   border-radius: 8px !important;

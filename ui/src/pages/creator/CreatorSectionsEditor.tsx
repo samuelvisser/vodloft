@@ -12,30 +12,31 @@ import {createSelectRegistry} from '../../utils/selectRegistry'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import type {CreatorPageAccountRead, CreatorPageRead, CreatorSectionRead, SectionPlan} from '../../types/schemas/creator'
 
-function sectionFacts(section: CreatorSectionRead) {
+export function sectionFacts(section: CreatorSectionRead) {
     const noun = section.kindLabel === 'Album' ? ['track', 'tracks'] : ['video', 'videos']
     return [section.kindLabel, section.itemCount != null ? `${section.itemCount} ${noun[section.itemCount === 1 ? 0 : 1]}` : null]
         .filter(Boolean).join(' · ')
 }
 
 /** One section of one of the creator's accounts. */
-type AccountSection = {account: CreatorPageAccountRead, section: CreatorSectionRead}
+export type AccountSection = {account: CreatorPageAccountRead, section: CreatorSectionRead}
 
 /** The title of the collection named after the creator that takes the account's uploads. */
-function mainTitleOf(creator: CreatorPageRead, account: CreatorPageAccountRead): string {
+export function mainTitleOf(creator: CreatorPageRead, account: CreatorPageAccountRead): string {
     return creator.collections.find((collection) => collection.slug === account.mainCollectionSlug)?.title ?? creator.title
 }
 
 /** The ways a section of a creator in the Library can be added, in the words of this creator. */
-function choices(creator: CreatorPageRead, {account, section}: AccountSection): {label: string, plan: SectionPlan}[] {
+export function choices(creator: CreatorPageRead, {account, section}: AccountSection): {label: string, description: string, plan: SectionPlan}[] {
     const mainTitle = mainTitleOf(creator, account)
-    const options: {label: string, plan: SectionPlan}[] = []
+    const main = `the ${creator.creatorLabel}'s main collection`
+    const options: {label: string, description: string, plan: SectionPlan}[] = []
     if (section.kind === 'feed') {
-        options.push({label: `Add to ${mainTitle}`, plan: {ref: section.ref, target: 'main'}})
+        options.push({label: `Add to ${mainTitle}`, description: `Its videos go into ${main}`, plan: {ref: section.ref, target: 'main'}})
     } else if (section.kind === 'list' && account.site.linkSeasons) {
-        options.push({label: `Season of ${mainTitle}`, plan: {ref: section.ref, target: 'main'}})
+        options.push({label: `Season of ${mainTitle}`, description: `A season of ${main}`, plan: {ref: section.ref, target: 'main'}})
     }
-    options.push({label: 'Own collection', plan: {ref: section.ref, target: 'own'}})
+    options.push({label: 'Own collection', description: 'A collection of its own in your library', plan: {ref: section.ref, target: 'own'}})
     return options
 }
 
