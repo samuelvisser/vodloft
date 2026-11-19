@@ -174,6 +174,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                                 <OverlapChoice
                                     key={overlap.ref} title={overlap.title} keptBy={overlap.keptBy}
                                     collectionTitle={collectionTitle} canMoveHere={overlap.canMoveHere}
+                                    fitLabels={creator.overlaps.flatMap((item) => overlapLabels(item.keptBy, collectionTitle))}
                                     movesHere={moveHere.has(overlap.ref)}
                                     onChange={(here) => setMoveHere((current) => {
                                         const next = new Set(current)
@@ -199,15 +200,20 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
     )
 }
 
+/** Where a playlist that is in two places can go, in words. */
+function overlapLabels(keptBy: string, collectionTitle: string): [string, string] {
+    return [`Stays in ${keptBy}`, `Moves to ${collectionTitle}`]
+}
+
 /** Where one playlist that is in two places goes once the collection joins its creator. */
-function OverlapChoice({title, keptBy, collectionTitle, canMoveHere, movesHere, onChange}: {
+function OverlapChoice({title, keptBy, collectionTitle, canMoveHere, movesHere, fitLabels, onChange}: {
     title: string, keptBy: string, collectionTitle: string, canMoveHere: boolean, movesHere: boolean,
-    onChange: (here: boolean) => void,
+    fitLabels: readonly string[], onChange: (here: boolean) => void,
 }) {
-    const registry = useMemo(() => createSelectRegistry(`JoinOverlap-${keptBy}-${collectionTitle}`, {
-        stays: {label: `Stays in ${keptBy}`},
-        here: {label: `Moves to ${collectionTitle}`},
-    }), [keptBy, collectionTitle])
+    const registry = useMemo(() => {
+        const [stays, here] = overlapLabels(keptBy, collectionTitle)
+        return createSelectRegistry(`JoinOverlap-${keptBy}-${collectionTitle}`, {stays: {label: stays}, here: {label: here}})
+    }, [keptBy, collectionTitle])
     const inputId = `join-overlap-${title}`
     return (
         <div className="creator-section-row">
@@ -219,7 +225,7 @@ function OverlapChoice({title, keptBy, collectionTitle, canMoveHere, movesHere, 
                 <div className="creator-join-overlap-select">
                     <label className="sr-only" htmlFor={inputId}>Where {title} goes</label>
                     <SimpleSelect
-                        inputId={inputId} registry={registry} value={movesHere ? 'here' : 'stays'}
+                        inputId={inputId} registry={registry} value={movesHere ? 'here' : 'stays'} fitLabels={fitLabels}
                         menuPortalTarget={document.body} menuPlacement="auto"
                         styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                         onChange={(value) => onChange(value === 'here')}

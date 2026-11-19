@@ -157,6 +157,11 @@ export default function AddCreatorPage() {
         () => new Map((creator?.sections ?? []).map((section) => [section.ref, choicesFor(creator!, section)])),
         [creator],
     )
+    // Every select in the lists is as wide as the longest choice of any of them, where the row has room for it.
+    const choiceLabels = useMemo(
+        () => [...registries.values()].flatMap((registry) => registry.options.map((option) => option.label)),
+        [registries],
+    )
 
     const choosePreset = (key: CreatorCreateIn['preset']) => {
         const chosen = creator?.presets.find((item) => item.key === key)
@@ -316,6 +321,7 @@ export default function AddCreatorPage() {
                                             <SimpleSelect
                                                 aria-label={`Where ${section.title} goes`}
                                                 registry={registries.get(section.ref)!}
+                                                fitLabels={choiceLabels}
                                                 value={choiceOf(byRef.get(section.ref))}
                                                 onChange={(value) => choose(section.ref, value as Choice)}
                                             />

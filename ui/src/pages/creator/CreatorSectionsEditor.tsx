@@ -62,21 +62,30 @@ function moveNote(section: CreatorSectionRead, to: Place, mainTitle: string): st
         + 'on this page, so you can add it again.'
 }
 
+/** The places a playlist in the Library can go, in words. */
+function placeLabels(mainTitle: string): Record<Place, string> {
+    return {main: `Season of ${mainTitle}`, own: 'Collection of its own', skip: 'Not in your library'}
+}
+
 /** Where one of the creator's playlists is, and a select to move it, with its videos, somewhere else. */
-function SectionPlace({section, place, mainTitle, busy, onMove}: {
-    section: CreatorSectionRead, place: Place, mainTitle: string, busy: boolean, onMove: (to: Place) => void,
+function SectionPlace({section, place, mainTitle, busy, fitLabels, onMove}: {
+    section: CreatorSectionRead, place: Place, mainTitle: string, busy: boolean, fitLabels: readonly string[],
+    onMove: (to: Place) => void,
 }) {
-    const registry = useMemo(() => createSelectRegistry(`SectionPlace-${place}-${mainTitle}`, {
-        main: {label: `Season of ${mainTitle}`},
-        own: {label: 'Collection of its own'},
-        ...(place === 'main' ? {skip: {label: 'Not in your library'}} : {}),
-    } as Record<Place, {label: string}>), [place, mainTitle])
+    const registry = useMemo(() => {
+        const labels = placeLabels(mainTitle)
+        return createSelectRegistry(`SectionPlace-${place}-${mainTitle}`, {
+            main: {label: labels.main},
+            own: {label: labels.own},
+            ...(place === 'main' ? {skip: {label: labels.skip}} : {}),
+        } as Record<Place, {label: string}>)
+    }, [place, mainTitle])
     const inputId = `section-place-${section.ref}`
     return (
         <div className="creator-section-place">
             <label className="sr-only" htmlFor={inputId}>Where {section.title} goes</label>
             <SimpleSelect
-                inputId={inputId} registry={registry} value={place} isDisabled={busy}
+                inputId={inputId} registry={registry} value={place} isDisabled={busy} fitLabels={fitLabels}
                 menuPortalTarget={document.body} menuPlacement="auto"
                 styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                 onChange={(value) => { if (value && value !== place) onMove(value as Place) }}
@@ -161,6 +170,8 @@ export default function CreatorSectionsEditor({creator, part}: {
         && creator.collections.some((collection) => collection.slug === section.collectionSlug)
     ))
     const placeOf = ({account, section}: AccountSection): Place => section.collectionSlug === account.mainCollectionSlug ? 'main' : 'own'
+    // Every select in the list is as wide as the longest choice of any of them, where the row has room for it.
+    const placeChoiceLabels = placed.flatMap((item) => Object.values(placeLabels(mainTitleOf(creator, item.account))))
     const found = all.filter(({section}) => section.status === 'new' && !section.collectionSlug)
     const left = all.filter(({section}) => !section.collectionSlug && section.kind !== 'item' && section.status !== 'new')
     const checkedAt = creator.accounts.map((account) => account.checkedAt).filter(Boolean).sort().pop()
@@ -226,11 +237,12 @@ export default function CreatorSectionsEditor({creator, part}: {
                                     {mayManage ? (
                                         <SectionPlace
                                             section={item.section} place={placeOf(item)} mainTitle={mainTitle} busy={sectionBusy}
+                                            fitLabels={placeChoiceLabels}
                                             onMove={(to) => setMoving({item, to})}
                                         />
                                     ) : (
                                         <span className="creator-section-note">
-                                            {placeOf(item) === 'main' ? `Season of ${mainTitle}` : 'Collection of its own'}
+                                            {placeLabels(mainTitle)[placeOf(item) === 'main' ? 'main' : 'own']}
                                         </span>
                                     )}
                                 </div>

@@ -77,7 +77,10 @@
 }
 .creator-section-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .creator-section-copy span { opacity: .75; font-size: .875rem; }
-.creator-section-choice { flex: 0 0 300px; }
+/* A row's select takes the width of the longest choice in its list (SimpleSelect's fitLabels), so the selects of a
+   list line up. The title gives way when the row is short of room, and the select only past 60% of the row. */
+.creator-section-choice, .creator-section-place, .creator-join-overlap-select { flex: 0 0 auto; min-width: 15rem; max-width: 60%; }
+.creator-section-place { margin-left: auto; }
 .creator-section-note { opacity: .7; font-size: .875rem; }
 .creator-order-note { margin: 0; opacity: .75; font-size: .875rem; }
 .creator-summary { margin-right: auto; opacity: .8; }
@@ -110,19 +113,19 @@
     .creator-row-actions, .creator-section-place { margin-left: calc(64px + .75rem); flex: 1 1 100%; min-width: 0; }
     .creator-row-actions .btn { padding: .3rem .65rem; font-size: .85rem; }
     .creator-section-choice { flex: 1 1 100%; }
+    .creator-section-choice, .creator-section-place, .creator-join-overlap-select { max-width: none; }
 }
 .creator-membership { max-width: 360px; }
 .creator-setup .actions .btn { white-space: nowrap; }
 
 .creator-note { margin: 0; opacity: .75; font-size: .875rem; }
-.creator-section-place { margin-left: auto; min-width: 15rem; }
 
 .creator-join { display: flex; flex-direction: column; gap: .75rem; }
 .creator-join-who { display: flex; gap: .75rem; align-items: center; }
 .creator-join-who .creator-identity-copy { display: flex; flex-direction: column; }
 .creator-join-overlaps { display: flex; flex-direction: column; gap: .5rem; }
 .creator-join-overlaps p { margin: 0; }
-.creator-join-overlap-select { min-width: 14rem; }
+
 .creator-avatar.creator-avatar--small { width: 48px; height: 48px; flex-basis: 48px; margin: 0; border: 0; font-size: 1.2rem; }
 ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: column; gap: .25rem; }
 
