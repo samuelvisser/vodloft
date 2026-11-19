@@ -30,25 +30,8 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'collection_title', description: 'Collection title'},
     {name: 'collection_author', description: 'Collection author, host or channel name'},
     {name: 'collection_site_id', description: 'The id the site gives the collection, such as a YouTube channel or playlist id'},
-    {
-        name: 'season',
-        description: 'Season URL slug',
-        readMore: {
-            paragraphs: [
-                'In a Music collection, each album is a season, so <strong>season</strong> holds the album\'s slug.',
-            ],
-        },
-    },
-    {
-        name: 'season_name',
-        description: 'Season name',
-        readMore: {
-            paragraphs: [
-                'In a Music collection, each album is a season, so <strong>season_name</strong> holds the album\'s name, ' +
-                'such as <code>Solar Power</code>. The <strong>album</strong> variable has it too.',
-            ],
-        },
-    },
+    {name: 'season', description: 'Season URL slug'},
+    {name: 'season_name', description: 'Season name'},
     {name: 'season_index', description: 'VODLoft internal season index'},
     {
         name: 'season_type',
@@ -69,7 +52,6 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
             paragraphs: [
                 'Normal seasons use their stable media-facing season number, while every extras season uses 0.',
                 'Unlike the internal season_index, this value is designed for media-server paths and is not affected by where extras seasons appear in the source\'s season list.',
-                'In a Music collection, each album is a season, so this is the album\'s number.',
             ],
         },
     },
@@ -222,11 +204,28 @@ const VARIABLES_BY_MODE: Record<LocalMediaProfileMode, readonly OutputTemplateVa
 /** The numbers VODLoft keeps for every episode, which the template help lists as built-in Indexing values. */
 export const BUILT_IN_INDEXING_VALUES: ReadonlySet<string> = new Set(['episode_index', 'extra_index'])
 
+// What the season variables hold in a Music collection, whose albums are its seasons: told only on a profile for
+// Music tracks or Music videos.
+const MUSIC_SEASON_NOTES: Record<string, string> = {
+    season: 'In a Music collection, each album is a season, so <strong>season</strong> holds the album\'s slug.',
+    season_name: 'In a Music collection, each album is a season, so <strong>season_name</strong> holds the album\'s name, '
+        + 'such as <code>Solar Power</code>. The <strong>album</strong> variable has it too.',
+    season_number: 'In a Music collection, each album is a season, so this is the album\'s number.',
+}
+
+const MUSIC_SCOPES: ReadonlySet<string> = new Set(['music_tracks', 'music_videos'])
+
 export function getOutputTemplateVariables(
     mode: LocalMediaProfileMode,
     customVariables: readonly OutputTemplateVariable[] = [],
+    collectionScope?: string,
 ): readonly OutputTemplateVariable[] {
-    const baseVariables = VARIABLES_BY_MODE[mode]
+    const music = mode === 'collection' && !!collectionScope && MUSIC_SCOPES.has(collectionScope)
+    const baseVariables = VARIABLES_BY_MODE[mode].map((variable) => {
+        const note = music ? MUSIC_SEASON_NOTES[variable.name] : undefined
+        if (!note) return variable
+        return {...variable, readMore: {...variable.readMore, paragraphs: [...(variable.readMore?.paragraphs ?? []), note]}}
+    })
     const merged = new Map(baseVariables.map((variable) => [variable.name, variable]))
     for (const variable of customVariables) merged.set(variable.name, variable)
     return [...merged.values()]
