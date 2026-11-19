@@ -10,6 +10,7 @@ from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.api.models.source import SiteAPIRead, SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
+from backend.types.link_season_types import OutsideVideos
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
@@ -23,7 +24,8 @@ class _CollectionAPIBaseIn(RequestBase):
 
     title: str
     description: Optional[str] = None
-    sharing_url: str
+    sharing_url: Optional[str] = None
+    """The collection's own link; only a collection that holds only what its link seasons have may go without."""
     membership_level: str
     author_name: str
     author_headshot_path: Optional[str] = None
@@ -37,6 +39,7 @@ class _CollectionAPIBaseIn(RequestBase):
 class CollectionAPICreate(_CollectionAPIBaseIn):
     """Request body for creating a collection."""
 
+    sharing_url: str
     slug: str
     source_key: str = Field(min_length=1)
     membership_level: DwMembershipLevel
@@ -48,6 +51,20 @@ class CollectionAPICreate(_CollectionAPIBaseIn):
     @property
     def uuid(self) -> str:
         return generate_uuid()
+
+
+class CollectionLinksOnlyAPICreate(RequestBase):
+    """A new collection without a link of its own, which holds only what the links the user adds to it have."""
+
+    title: str = Field(min_length=1, max_length=200)
+    type: CollectionType = CollectionType.SERIES
+
+    @field_validator("type")
+    @classmethod
+    def _series_or_music(cls, value: CollectionType) -> CollectionType:
+        if CollectionType(value) not in (CollectionType.SERIES, CollectionType.MUSIC):
+            raise ValueError("An empty collection is a Series or Music")
+        return value
 
 
 class CollectionAPIUpdate(_CollectionAPIBaseIn):
@@ -192,7 +209,10 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     author_slug: str
     title: str
     description: Optional[str] = None
-    sharing_url: str
+    sharing_url: Optional[str] = None
+    """None for a collection that only holds what its link seasons have, and has no link of its own."""
+    outside_videos: Optional[OutsideVideos] = None
+    """Whether the collection adds videos from its link seasons that its own link lacks, or holds only those."""
     site: Optional[SiteAPIRead] = None
     """The website the collection is on; None until the background migration finds it for an older collection."""
     author_name: str

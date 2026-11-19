@@ -1054,6 +1054,8 @@ def _create_collection(session: Session, plan: CollectionPlan, as_channels: bool
     source = get_source("ytdlp")
     if plan.channel:
         return _create_channel_collection(session, plan) if as_channels else _create_artist_collection(session, plan)
+    if plan.links_only:
+        return _create_links_only_collection(session, plan)
     details = source.collection_details(plan.url)
     author = details.author_name or details.title
     collection = Collection(
@@ -1072,13 +1074,28 @@ def _create_collection(session: Session, plan: CollectionPlan, as_channels: bool
     return collection
 
 
+def _create_links_only_collection(session: Session, plan: CollectionPlan) -> Collection:
+    """A Collection without a link of its own, which holds only what the plan's playlists have."""
+    from backend.services.collections import add_links_only_collection, reindex_collection
+    from backend.types.collection_types import CollectionType, EpisodeIdentifier
+
+    collection = add_links_only_collection(
+        session, title=plan.title, collection_type=CollectionType(plan.settings.get("type", "series")),
+        episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
+    )
+    collection.split_chapters = bool(plan.settings.get("split_chapters", False))
+    _add_link_seasons(session, collection, plan)
+    reindex_collection(session, collection)
+    return collection
+
+
 def _join_channel(session: Session, collection: Collection) -> None:
     """Make a new Collection one of the channel behind its link, as Add to channel does, when it has one."""
     from backend.services.channels import join_channel
     from sources import Feature, get_source
 
     source = get_source(collection.source_key)
-    if not source.has(Feature.CHANNELS):
+    if not source.has(Feature.CHANNELS) or collection.sharing_url is None:
         return
     try:
         ref = source.channel_of(collection.sharing_url)
@@ -1204,7 +1221,8 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
         if collection.link_seasons == LinkSeasons.OFF.value:
             collection.link_seasons = LinkSeasons.SELECTED.value
         # The other program kept every video of these links, also another creator's.
-        collection.outside_videos = OutsideVideos.ADD.value
+        if collection.outside_videos != OutsideVideos.ONLY.value:
+            collection.outside_videos = OutsideVideos.ADD.value
         # The other program's season numbers stay, as its files are named by them.
         collection.custom_season_order = True
     session.flush()
@@ -1237,7 +1255,8 @@ def _upsert_collection(
             return None, False
         else:
             created = True
-            library[_normalise_url(existing.sharing_url)] = existing
+            if existing.sharing_url is not None:
+                library[_normalise_url(existing.sharing_url)] = existing
             report.add("created", plan.title, "Added to the Library", warnings=[_warning(warning) for warning in plan.warnings])
             report.counts["collections_created"] += 1
     if plan.added_at is not None and (existing.created_at is None or plan.added_at < existing.created_at):

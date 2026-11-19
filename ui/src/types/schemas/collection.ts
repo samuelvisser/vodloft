@@ -3,6 +3,7 @@ import {EpisodeIdentifierReg, EpisodeOrderReg, CollectionTypeReg} from "../colle
 import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
 import {SiteReadSchema, SourcedFields} from "./source";
+import {OutsideVideosValues} from "./collection_seasons";
 
 
 /** Ensure https:// if a scheme is missing */
@@ -95,7 +96,10 @@ export const CollectionReadSchema = z.looseObject({
     authorSlug: z.string(),
     title: z.string(),
     description: z.string().nullable(),
-    sharingUrl: z.string(),
+    /** Null for a collection that holds only what its playlists have and has no link of its own. */
+    sharingUrl: z.string().nullable(),
+    /** 'only' when the collection holds only what its link seasons have, so its own link is optional. */
+    outsideVideos: z.enum(OutsideVideosValues).optional(),
     /** The website it is on; null for an older collection until VODLoft has found it. */
     site: SiteReadSchema.nullable().optional(),
     backgroundImagePath: z.string().nullable().optional(),

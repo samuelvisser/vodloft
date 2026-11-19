@@ -91,7 +91,7 @@ def lists_are_seasons(site: Site | None) -> bool:
 
 def _takes_uploads(collection: Collection) -> bool:
     """Whether the collection lists all of a channel's uploads: its Videos page, which has its Shorts and Live too."""
-    return get_source(collection.source_key).is_channel_page(collection.sharing_url)
+    return collection.sharing_url is not None and get_source(collection.source_key).is_channel_page(collection.sharing_url)
 
 
 def sections_in_library(

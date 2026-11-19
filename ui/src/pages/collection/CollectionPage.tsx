@@ -621,7 +621,7 @@ export default function CollectionPage() {
     },
     ]
 
-  const openOnName = collection.site?.name ?? (sources.get(collection.sourceKey)?.domains.includes('*') ? siteName(collection.sharingUrl) ?? sources.name(collection.sourceKey) : sources.name(collection.sourceKey))
+  const openOnName = collection.site?.name ?? (sources.get(collection.sourceKey)?.domains.includes('*') ? (collection.sharingUrl ? siteName(collection.sharingUrl) : null) ?? sources.name(collection.sourceKey) : sources.name(collection.sourceKey))
 
   return (
     <section className="view collection-view" aria-labelledby="collection-title">

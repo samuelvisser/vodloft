@@ -557,3 +557,24 @@ def test_only_an_import_that_knows_channels_offers_them(tmp_path):
 
     assert _plan(_write(tmp_path, EXAMPLE)).channels is True
     assert ImportPlan(importer="pinchflat").channels is False
+
+
+def test_a_tv_show_collection_of_only_playlists_holds_only_them(tmp_path):
+    plan = _plan(_write(tmp_path, EXAMPLE + """
+    "~Mixed Playlists":
+      s01_name: "Firsts"
+      s01_url: "https://www.youtube.com/playlist?list=PLfirst"
+      s02_url:
+        - "https://www.youtube.com/playlist?list=PLsecond"
+        - "https://www.youtube.com/watch?v=single"
+"""))
+
+    mixed = {collection.title: collection for collection in plan.collections}["Mixed Playlists"]
+    # No channel to make the collection of: it has no link of its own, and every link is a season.
+    assert (mixed.links_only, mixed.url) == (True, "https://www.youtube.com/playlist?list=PLfirst")
+    assert sorted((link.url, link.title, link.season_number) for link in mixed.link_seasons) == [
+        ("https://www.youtube.com/playlist?list=PLfirst", "Firsts", 1),
+        ("https://www.youtube.com/playlist?list=PLsecond", "Season 2", 2),
+        ("https://www.youtube.com/watch?v=single", "Season 2", 2),
+    ]
+    assert not any(warning.subject == "links" for warning in mixed.warnings)

@@ -473,7 +473,7 @@ class YtDlpSource(Source):
         Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
         Feature.FORMAT_CHOICES, Feature.YTDLP_OPTIONS, Feature.METADATA_REFRESH,
-        Feature.PENDING_CHECKS, Feature.CHANNELS, Feature.CHAPTERS,
+        Feature.PENDING_CHECKS, Feature.CHANNELS, Feature.CHAPTERS, Feature.LINK_COLLECTIONS,
     })
     episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.

@@ -96,7 +96,7 @@ export default function EditCollectionPage() {
     initializedCollectionId.current = id
     setForm((prev) => ({
       ...prev,
-      url: collection.sharingUrl,
+      url: collection.sharingUrl ?? '',
       name: collection.title,
       author: collection.authorName,
       ytdlpOptions: collection.ytdlpOptions ?? '',
@@ -116,6 +116,9 @@ export default function EditCollectionPage() {
   const chapters = hasSourceFeature(collection, SourceFeature.CHAPTERS)
   const [cronError, setCronError] = useState<string | null>(null)
   const [typeError, setTypeError] = useState<string | null>(null)
+  const [urlError, setUrlError] = useState<string | null>(null)
+  // A collection that holds only what its links have may go without a link of its own, or change it.
+  const linkOptional = collection?.outsideVideos === 'only'
   const {data: suggestion} = useQuery({
     queryKey: ['collection', id, 'checkSuggestion'],
     enabled: !!id,
@@ -134,7 +137,7 @@ export default function EditCollectionPage() {
     const payload = {
       title: form.name,
       description: collection.description,
-      sharingUrl: form.url,
+      sharingUrl: form.url.trim() || null,
       ...(collection.membershipLevel !== undefined ? {membershipLevel: collection.membershipLevel} : {}),
       authorName: form.author,
       authorHeadshotPath: collection.authorHeadshotPath ?? null,
@@ -167,6 +170,11 @@ export default function EditCollectionPage() {
       const problem = problemAt('ytdlpOptions')
       if (problem) {
         setOptionsError(String(problem.msg).replace(/^Value error, /, ''))
+        return
+      }
+      const urlProblem = problemAt('sharingUrl', 'sharing_url')
+      if (urlProblem) {
+        setUrlError(String(urlProblem.msg).replace(/^Value error, /, ''))
         return
       }
       const typeProblem = problemAt('type')
@@ -293,8 +301,10 @@ export default function EditCollectionPage() {
               inputMode="url"
               placeholder="https://…"
               value={form.url}
-              onChange={(e) => setForm({ ...form, url: e.target.value })}
-              disabled
+              onChange={(e) => { setForm({ ...form, url: e.target.value }); setUrlError(null) }}
+              disabled={!linkOptional}
+              aria-invalid={urlError ? true : undefined}
+              aria-describedby={linkOptional ? 'collection-url-help' : undefined}
             />
             <div className="rss-feed-url-actions">
               <button
@@ -315,6 +325,13 @@ export default function EditCollectionPage() {
               </button>
             </div>
           </div>
+          {urlError && <div className="error" role="alert">{urlError}</div>}
+          {linkOptional && (
+            <div className="help" id="collection-url-help">
+              Optional. This collection holds only what its links have. A channel link here offers that channel's
+              playlists in the Seasons window and finds new ones.
+            </div>
+          )}
         </div>
 
         <CollectionForm

@@ -27,6 +27,7 @@ export const SourceFeature = {
     OWN_STUDIO: 'own_studio',
     CHANNELS: 'channels',
     CHAPTERS: 'chapters',
+    LINK_COLLECTIONS: 'link_collections',
 } as const
 export type SourceFeatureValue = typeof SourceFeature[keyof typeof SourceFeature]
 

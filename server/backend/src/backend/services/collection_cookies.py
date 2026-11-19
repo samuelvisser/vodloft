@@ -17,6 +17,7 @@ from backend.db.models.media_download import MediaDownloadBase
 from backend.types.collection_types import CookiesMode
 from sources import get_source
 from sources.contract import Feature
+from backend.services.sites import episode_site_key
 from sources.cookies import site_cookies
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ def note_failed_download(session: Session, media_download_id: int, error: str) -
     if (
         collection.cookies_mode != CookiesMode.AUTOMATIC
         or not source.has(Feature.OPTIONAL_COOKIES)
-        or site_cookies(collection.site_key) is None
+        or site_cookies(episode_site_key(media)) is None
         or not source.needs_cookies(error)
     ):
         return False

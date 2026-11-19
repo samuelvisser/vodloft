@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from backend.types.link_season_types import OutsideVideos
+
 
 def test_metadata_refresh_interval_parser_normalizes_and_validates():
     from config.settings.submodels import (
@@ -79,7 +81,7 @@ def test_the_refresh_schedule_counts_from_the_safe_final_publication(has_safe_fi
         id=42, source_key="dailywire", source_slug="episode", video_slug="episode", sharing_url="https://example.test/episode",
         metadata_is_final=False, publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         safe_published_final=safe_final if has_safe_final else None, last_known_pending=None,
-        published_date=dailywire_published, metadata_refreshed_at=None, collection=SimpleNamespace(site=None, site_key=None),
+        published_date=dailywire_published, metadata_refreshed_at=None, collection=SimpleNamespace(site=None, site_key=None, outside_videos=OutsideVideos.LEAVE_OUT),
     )
 
     item = _watched_episode(episode)
@@ -101,7 +103,7 @@ def test_the_refresh_schedule_ignores_the_ensure_safe_delay_setting(monkeypatch)
         metadata_is_final=False, publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         safe_published_final=None, last_known_pending=last_known_pending,
         published_date=datetime(2026, 10, 2, 8, tzinfo=timezone.utc), metadata_refreshed_at=None,
-        collection=SimpleNamespace(site=None, site_key=None),
+        collection=SimpleNamespace(site=None, site_key=None, outside_videos=OutsideVideos.LEAVE_OUT),
     )
 
     assert _watched_episode(episode).published == last_known_pending

@@ -1,14 +1,18 @@
 """Adding a Collection to the Library, the same way wherever it comes from."""
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection
 from backend.operations.collections import CollectionIndexOperation, CollectionSyncOperation
 from backend.services.errors import ServiceError
 from backend.services.sites import place_collection
+from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
-from sources import Feature, UnknownSourceError, get_source
+from backend.types.link_season_types import LinkSeasons, OutsideVideos
+from backend.utils.helpers import generate_uuid, slugify
+from sources import Feature, UnknownSourceError, all_sources, get_source
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 
@@ -55,3 +59,29 @@ def index_new_collection(s: Session, collection: Collection) -> None:
     s.flush()
     create_operation(s, CollectionIndexOperation(collection))
     queue_event(s, "collection.added", CollectionAdded(collection))
+
+
+def add_links_only_collection(
+    s: Session, *, title: str, collection_type: CollectionType, added_by_id: int | None = None,
+    episode_identifier: EpisodeIdentifier = EpisodeIdentifier.SEASONAL,
+) -> Collection:
+    """A new Collection without a link of its own, which holds only what the links the user gives it have: each one,
+    such as a playlist, is one of its seasons. It is on no Site until it gets links, and can take them from any Site
+    its Source fetches."""
+    source = next((source for source in all_sources() if source.has(Feature.LINK_COLLECTIONS)), None)
+    if source is None:
+        raise ServiceError("VODLoft has no Source that can hold a collection of links", field="title")
+    base = slugify(title) or "collection"
+    slug, suffix = base, 2
+    while s.scalar(select(Collection.id).where(Collection.slug == slug)) is not None:
+        slug, suffix = f"{base}-{suffix}", suffix + 1
+    collection = Collection(
+        uuid=generate_uuid(), slug=slug, source_key=source.id, title=title.strip(), sharing_url=None,
+        membership_level=DwMembershipLevel.FREE.value, type=collection_type.value,
+        episode_identifier=episode_identifier.value, author_name="", author_slug="",
+        link_seasons=LinkSeasons.ALL.value, outside_videos=OutsideVideos.ONLY.value,
+    )
+    add_collection(s, collection, added_by_id=added_by_id)
+    s.flush()
+    queue_event(s, "collection.added", CollectionAdded(collection))
+    return collection

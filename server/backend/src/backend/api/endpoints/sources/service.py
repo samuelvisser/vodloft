@@ -108,7 +108,7 @@ def get_api_status(s: Session, source: Source) -> ApiStatusAPIRead:
     collections = (
         s.query(Collection.sharing_url, func.count(Episode.id))
         .outerjoin(Episode, Episode.collection_id == Collection.id)
-        .filter(Collection.source_key == source.id)
+        .filter(Collection.source_key == source.id, Collection.sharing_url.is_not(None))
         .group_by(Collection.id)
         .all()
     )

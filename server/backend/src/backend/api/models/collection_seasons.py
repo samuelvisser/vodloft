@@ -42,6 +42,9 @@ class LinkSeasonAPIRead(ResponseBase):
     files and all, when it stops being a season."""
     leaving_with_files: int = 0
     """How many of those have files."""
+    added_by_user: bool = False
+    """A link the user added, which they can remove again, rather than one of the playlists of the collection's
+    channel."""
 
 
 class LinkSeasonNamesAPIRead(ResponseBase):
@@ -55,7 +58,14 @@ class CollectionSeasonsAPIRead(ResponseBase):
     custom_season_order: bool
     """The user put the seasons in their own order; otherwise VODLoft orders them by date."""
     link_seasons_offered: bool
-    """The collection is a whole channel on a Site whose playlists can be seasons."""
+    """The collection is a whole channel on a Site whose playlists can be seasons, or holds only its link seasons."""
+    has_own_link: bool
+    """The collection has a link of its own; one that only holds its link seasons may go without."""
+    lists_playlists: bool
+    """The collection's own link is a whole channel, whose playlists are listed for it."""
+    links_only_offered: bool
+    """The collection can hold only what its link seasons have, with links the user adds from any Site of its
+    Source."""
     link_seasons: LinkSeasons
     new_link_seasons: NewLinkSeasonAction
     loose_videos: LooseVideos
@@ -64,6 +74,10 @@ class CollectionSeasonsAPIRead(ResponseBase):
     """The videos the collection added from its playlists that its own link does not list, which all leave, files and
     all, when it stops adding them or its playlists stop being seasons."""
     outside_with_files: int = 0
+    only_leaving_count: int = 0
+    """The videos that no playlist that is a season has now, which leave, files and all, when the collection is set
+    to hold only what its playlists have."""
+    only_leaving_with_files: int = 0
     names: LinkSeasonNamesAPIRead
     """What the collection's Site calls its link seasons, such as playlists or albums."""
     music: bool = False
@@ -98,3 +112,11 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     loose_videos: LooseVideos = LooseVideos.ONE_SEASON
     outside_videos: OutsideVideos = OutsideVideos.LEAVE_OUT
     playlists: list[LinkSeasonChangeAPIIn] = Field(default_factory=list, max_length=5000)
+    removed_links: list[int] = Field(default_factory=list, max_length=5000)
+    """Links the user added that they remove again, by id."""
+
+
+class LinkSeasonAddAPIIn(RequestBase):
+    """A link the user adds to a collection that holds only its link seasons: a playlist, channel or video."""
+
+    url: str = Field(min_length=1, max_length=2000, pattern=r"^https?://")

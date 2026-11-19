@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from backend.types.link_season_types import OutsideVideos
+
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
 
 
@@ -64,7 +66,7 @@ def test_each_site_can_have_a_download_delay_of_its_own_or_none(site_settings):
 
     def episode(site_key):
         return SimpleNamespace(
-            collection=SimpleNamespace(site_key=site_key), publish_status=EpisodePublishStatus.PUBLISHED_FINAL,
+            collection=SimpleNamespace(site_key=site_key, outside_videos=OutsideVideos.LEAVE_OUT), publish_status=EpisodePublishStatus.PUBLISHED_FINAL,
             published_date=published, safe_published_final=None, recorded_published_final=None,
             went_live_date=None, scheduled_date=None, last_known_pending=None,
         )

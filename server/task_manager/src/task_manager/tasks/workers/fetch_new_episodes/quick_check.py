@@ -21,7 +21,9 @@ from backend.db.models import Episode, Collection
 from config.network import is_no_internet_error
 from sources import Feature, Source, get_source
 from backend.services.notifications.emitters import link_seasons_found
-from backend.services.link_seasons import list_season_links, place_in_link_seasons, link_seasons_on, save_season_links
+from backend.services.link_seasons import (
+    holds_only_link_seasons, list_season_links, place_in_link_seasons, link_seasons_on, save_season_links,
+)
 from ...helpers.listed_collections import (
     add_listed_episodes, index_listed_collection, known_episode_slugs, splits_chapters, with_chapters,
 )
@@ -32,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 # The cron that wakes the quick check does not fire to the second.
 _SLACK = timedelta(minutes=1)
+_LINKS_ONLY_WAIT = timedelta(hours=1)
+"""How long a collection that only holds its link seasons waits between quick checks at least."""
 _last_checked: dict[int, datetime] = {}
 
 
@@ -76,11 +80,14 @@ def _due_collections(s: Session, now: datetime) -> list[tuple[Collection, Source
     for source_key, collections in by_source.items():
         source = get_source(source_key)
         minutes = source.quick_check_minutes([
-            (collection.sharing_url, counts.get(collection.id, 0)) for collection in collections
+            (collection.sharing_url or "", counts.get(collection.id, 0)) for collection in collections
         ])
         for collection in collections:
             last = _last_checked.get(collection.id)
             wait = timedelta(minutes=check_frequency.quick_check_minutes(collection, minutes))
+            if holds_only_link_seasons(collection):
+                # Its check reads every one of its lists again, so it waits longer between checks.
+                wait = max(wait, _LINKS_ONLY_WAIT)
             if last is None or now - last >= wait - _SLACK:
                 due.append((collection, source, counts.get(collection.id, 0)))
     return due
@@ -134,8 +141,9 @@ def run_quick_check(s: Session, *, now: datetime | None = None) -> QuickCheckRes
         _last_checked[collection.id] = now
         collection_id, title = collection.id, collection.title
         try:
-            if count == 0:
+            if count == 0 or holds_only_link_seasons(collection):
                 # A collection that was never indexed gets its full first index, so its numbering follows upload order.
+                # One that only holds its link seasons has no newest videos of its own: its lists are read again.
                 newest = newest_media_item_id(s)
                 added = index_listed_collection(s, collection_id=collection_id, source=source)
                 finish_index(collection_id=collection_id, found=added, newest=newest)

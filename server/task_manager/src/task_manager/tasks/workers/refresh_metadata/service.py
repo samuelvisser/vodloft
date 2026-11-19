@@ -33,13 +33,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from backend.db.datetime_types import utc_datetime
 from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode, Site, Video
 from backend.services.media_access import lock_refused
 from backend.services.removed_downloads import back_at_source, left_source
+from backend.services.sites import episode_site_key
 from backend.services.metadata_refresh import (
     refresh_watch_expired,
     refreshes_one_by_one,
@@ -131,10 +132,14 @@ def _site_name(site: Optional[Site]) -> str:
 
 
 def _watched_episode(episode: Episode) -> _Watched:
+    # In a collection of links from several Sites, each episode follows its own Site.
+    site_key = episode_site_key(episode)
     site = episode.collection.site
+    if site_key != episode.collection.site_key:
+        site = object_session(episode).get(Site, site_key) if site_key else None
     return _Watched(
         Episode, episode.id, episode.source_key, _site_name(site), ItemRef(episode.video_slug, episode.sharing_url),
-        best_effort_published_date(episode), site_refresh_offsets(episode.collection.site_key), refreshes_one_by_one(episode.source_key),
+        best_effort_published_date(episode), site_refresh_offsets(site_key), refreshes_one_by_one(episode.source_key),
         episode.metadata_refreshed_at,
     )
 

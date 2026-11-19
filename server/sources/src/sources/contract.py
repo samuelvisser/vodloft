@@ -82,6 +82,10 @@ class Feature(StrEnum):
     """Listing upcoming and live videos with their publish status, and looking them up again
     with ``check_pending`` until they are published. VODLoft shows them, but never records one
     while it is live."""
+    LINK_COLLECTIONS = "link_collections"
+    """A collection can hold only what lists the user picks have, from any of the Source's Sites, as its link seasons:
+    the Source lists them with ``list_items`` and looks their videos up with ``item_details``, and such a collection
+    needs no link of its own."""
     CHAPTERS = "chapters"
     """A video's chapters come with its details (``VideoDetails.chapters``), and a download can keep one
     stretch of a video, so a collection can split each video into a part per chapter."""

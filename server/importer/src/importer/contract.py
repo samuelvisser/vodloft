@@ -126,6 +126,9 @@ class CollectionPlan:
     channel: bool = False
     """``url`` is a creator's own page, such as a Bandcamp artist: VODLoft adds the creator as a channel, with
     everything on the page in this one collection."""
+    links_only: bool = False
+    """The Collection holds only what its ``link_seasons`` have and has no link of its own: the other program kept
+    only these playlists, of no one channel. ``url`` is the first of them."""
 
 
 FileKind = Literal["file", "suppressed", "missing"]

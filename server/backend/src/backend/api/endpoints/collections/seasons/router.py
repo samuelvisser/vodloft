@@ -4,14 +4,16 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from backend.app import db_session
-from backend.api.models.collection_seasons import CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead
+from backend.api.models.collection_seasons import (
+    CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, LinkSeasonAddAPIIn, MovedEpisodesAPIRead,
+)
 from backend.db.core import run_write_transaction
 from backend.security.access import Area, Level
 from backend.security.deps import requires
 
 from .service import (
-    moved_view,
-    CollectionNotFoundError, look_up_links, links_lookup, save_listed_links, seasons_view, update_seasons,
+    CollectionNotFoundError, link_to_add, look_up_added_link, look_up_links, links_lookup, moved_view, save_added_link,
+    save_listed_links, seasons_view, update_seasons,
 )
 
 router = APIRouter()
@@ -66,3 +68,15 @@ def link_seasons_refresh(collection_slug: str):
         lookup = _found(lambda: links_lookup(s, collection_slug))
     listing = look_up_links(lookup)
     return _found(lambda: run_write_transaction(lambda s: save_listed_links(s, collection_slug, listing)))
+
+
+@router.post(
+    "/{collection_slug}/season-settings/added-links", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CollectionSeasonsAPIRead,
+)
+def link_season_add(collection_slug: str, body: LinkSeasonAddAPIIn):
+    """Add a playlist, channel or video as a link season of a collection that holds only what those have."""
+    with db_session() as s:
+        lookup = _found(lambda: link_to_add(s, collection_slug, body.url))
+    link = look_up_added_link(lookup)
+    return _found(lambda: run_write_transaction(lambda s: save_added_link(s, collection_slug, link)))

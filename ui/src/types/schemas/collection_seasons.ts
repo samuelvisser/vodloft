@@ -3,7 +3,7 @@ import {z} from 'zod'
 export const LinkSeasonModeValues = ['all', 'selected'] as const
 export const NewLinkSeasonValues = ['ask', 'add', 'ignore'] as const
 export const LooseVideosValues = ['one_season', 'by_year'] as const
-export const OutsideVideosValues = ['leave_out', 'add'] as const
+export const OutsideVideosValues = ['leave_out', 'add', 'only'] as const
 
 export const CollectionSeasonReadSchema = z.object({
     id: z.number(),
@@ -34,6 +34,8 @@ export const LinkSeasonReadSchema = z.object({
     /** Videos from outside the collection's own link that only this one lists, which leave with it, files and all. */
     leavingCount: z.number(),
     leavingWithFiles: z.number(),
+    /** A link the user added, which they can remove again, rather than one of the playlists of the channel. */
+    addedByUser: z.boolean().default(false),
 })
 export type LinkSeasonRead = z.infer<typeof LinkSeasonReadSchema>
 
@@ -41,12 +43,21 @@ export const CollectionSeasonsReadSchema = z.object({
     seasons: z.array(CollectionSeasonReadSchema),
     customSeasonOrder: z.boolean(),
     linkSeasonsOffered: z.boolean(),
+    /** The collection has a link of its own; one that holds only what its playlists have may go without. */
+    hasOwnLink: z.boolean().default(true),
+    /** The collection's own link is a whole channel, whose playlists VODLoft lists. */
+    listsPlaylists: z.boolean().default(false),
+    /** The collection can hold only what its playlists have, with links you add from any site. */
+    linksOnlyOffered: z.boolean().default(false),
     linkSeasons: z.enum(['off', ...LinkSeasonModeValues]),
     newLinkSeasons: z.enum(NewLinkSeasonValues),
     looseVideos: z.enum(LooseVideosValues),
     outsideVideos: z.enum(OutsideVideosValues),
     outsideCount: z.number(),
     outsideWithFiles: z.number(),
+    /** The videos no playlist that is a season has now, which leave once the collection holds only what they have. */
+    onlyLeavingCount: z.number().default(0),
+    onlyLeavingWithFiles: z.number().default(0),
     /** What the collection's Site calls them: playlist and Videos, or album and Singles in a Music collection. */
     names: z.object({one: z.string(), many: z.string(), looseSeason: z.string()}),
     /** A Music collection, of an artist's tracks rather than a channel's videos. */
@@ -68,7 +79,16 @@ export const CollectionSeasonsFormSchema = z.object({
     looseVideos: z.enum(LooseVideosValues).default('one_season'),
     outsideVideos: z.enum(OutsideVideosValues).default('leave_out'),
     playlists: z.array(z.object({id: z.number(), enabled: z.boolean()})).default([]),
+    /** Links you added that go when you save. */
+    removedLinks: z.array(z.number()).default([]),
 })
+
+/** A link you add to a collection that holds only what its playlists have. */
+export const LinkSeasonAddFormSchema = z.object({
+    url: z.string().trim().min(1, 'Paste a link').regex(/^https?:\/\//, 'Paste a link starting with https://').default(''),
+})
+export type LinkSeasonAddFormIn = z.input<typeof LinkSeasonAddFormSchema>
+export type LinkSeasonAddFormOut = z.output<typeof LinkSeasonAddFormSchema>
 export type CollectionSeasonsFormIn = z.input<typeof CollectionSeasonsFormSchema>
 export type CollectionSeasonsFormOut = z.output<typeof CollectionSeasonsFormSchema>
 
@@ -82,5 +102,6 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         looseVideos: view.looseVideos,
         outsideVideos: view.outsideVideos,
         playlists: view.playlists.map((playlist) => ({id: playlist.id, enabled: playlist.enabled})),
+        removedLinks: [],
     }
 }
