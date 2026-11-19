@@ -30,9 +30,6 @@
     white-space: pre-line; overflow-wrap: anywhere;
 }
 .creator-description.is-open { display: block; }
-.creator-description-more {
-    padding: 0; border: 0; background: none; color: #3b82f6; font: inherit; font-weight: 600; cursor: pointer;
-}
 .creator-stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; padding: 0; list-style: none; }
 .creator-stats li {
     display: inline-flex; align-items: baseline; gap: 5px; padding: 3px 12px; border-radius: 999px;

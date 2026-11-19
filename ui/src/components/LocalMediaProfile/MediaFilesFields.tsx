@@ -367,7 +367,7 @@ function ClampedText({text, multiline}: {text: string, multiline: boolean}) {
                 {text}
             </span>
             {overflows && (
-                <button type="button" className="metadata-template-example__more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+                <button type="button" className="read-more-toggle metadata-template-example__more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
                     {expanded ? 'Show less' : 'Read more'}
                 </button>
             )}

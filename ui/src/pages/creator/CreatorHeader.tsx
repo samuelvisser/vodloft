@@ -36,8 +36,8 @@ function CreatorDescription({text}: {text: string}) {
         <div className="creator-description-wrap">
             <p ref={ref} className={`creator-description${open ? ' is-open' : ''}`}>{text}</p>
             {(cut || open) && (
-                <button type="button" className="creator-description-more" onClick={() => setOpen(!open)} aria-expanded={open}>
-                    {open ? 'Less' : 'More'}
+                <button type="button" className="read-more-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
+                    {open ? 'Show less' : 'Read more'}
                 </button>
             )}
         </div>
