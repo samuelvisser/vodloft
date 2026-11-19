@@ -56,7 +56,7 @@ from backend.services.notifications.emitters import link_seasons_found
 from backend.services.reassigned import placed_elsewhere, settle_creator
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
-    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, own_feeds, site_list_names, place_in_link_seasons, link_seasons_on,
+    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, own_feeds, list_names, place_in_link_seasons, link_seasons_on,
     save_lists,
 )
 from backend.services.metadata_refresh import new_item_metadata_is_final
@@ -184,7 +184,7 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
     collection = s.get(Collection, collection_id)
     listing = None
     # The Site's own word for its lists, such as playlists on YouTube or albums on Bandcamp.
-    lists = site_list_names(collection).many if collection is not None else "playlists"
+    lists = list_names(collection).many if collection is not None else "playlists"
     if collection is not None and link_seasons_on(collection):
         update_progress(progress, _PLAYLISTS_PROGRESS, f"Listing the {lists} of '{title}' at {source.name}")
         listing = list_lists(s, collection, source, also=frozenset(details.slug for details in found))

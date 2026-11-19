@@ -18,7 +18,7 @@ from backend.utils.helpers import with_article
 from backend.services.new_lists import checked_new_link_seasons
 from backend.services.link_seasons import (
     collection_list_kinds, collection_new_lists,
-    LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists, site_list_names,
+    LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists,
     offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists, active_lists,
 )
 from backend.services.season_moves import queue_season_folder_moves
@@ -329,10 +329,10 @@ def links_lookup(s: Session, collection_slug: str) -> _Lookup:
     """What listing the collection's playlists needs, read before the slow lookup."""
     collection = _collection(s, collection_slug)
     if not lists_playlists(collection):
-        raise ServiceError(f"This collection's link is not a creator with {site_list_names(collection).many}", field="link_seasons")
+        raise ServiceError(f"This collection's link is not a creator with {list_names(collection).many}", field="link_seasons")
     if follows_creator(collection):
         raise ServiceError(
-            f"{collection.creator.title} looks for new {site_list_names(collection).many} itself: check the creator", field="link_seasons",
+            f"{collection.creator.title} looks for new {list_names(collection).many} itself: check the creator", field="link_seasons",
         )
     return _Lookup(collection.source_key, collection.sharing_url)
 
@@ -384,7 +384,7 @@ def link_to_add(s: Session, collection_slug: str, url: str) -> _AddLookup:
     collection = _collection(s, collection_slug)
     if not holds_only_link_seasons(collection):
         raise ServiceError(
-            f"Only a collection that holds only what its {site_list_names(collection).many} have can take links you add", field="url",
+            f"Only a collection that holds only what its {list_names(collection).many} have can take links you add", field="url",
         )
     source = get_source(collection.source_key)
     if not source.handles(url):

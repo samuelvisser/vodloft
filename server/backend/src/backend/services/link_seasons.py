@@ -34,7 +34,7 @@ from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.season_types import SeasonType
 from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 from backend.utils.helpers import slugify
-from sources import CreatorSectionNames, Feature, ItemRef, ListNames, SectionRef, Source, VideoDetails, get_source
+from sources import Feature, ItemRef, ListNames, SectionRef, Source, VideoDetails, get_source
 
 logger = logging.getLogger(__name__)
 
@@ -50,16 +50,6 @@ def list_names(collection: Collection) -> ListNames:
     site = collection_site(collection)
     names = site.list_names if site is not None else ListNames()
     return replace(names, loose_season=names.music_loose_season) if collection.type == CollectionType.MUSIC.value else names
-
-
-def site_list_names(collection: Collection) -> ListNames:
-    """What the collection's Site calls the lists it offers, in the Site's own words whatever the collection's type,
-    such as playlists on YouTube and albums on Bandcamp. A Site that names no lists of its own calls them playlists."""
-    site = collection_site(collection)
-    names = site.creator_sections if site is not None else CreatorSectionNames()
-    if names == CreatorSectionNames():
-        return ListNames()
-    return ListNames(names.one.split(" ", 1)[1], names.many)
 
 
 def link_seasons_on(collection: Collection) -> bool:

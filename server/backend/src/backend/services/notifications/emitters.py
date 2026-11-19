@@ -106,8 +106,8 @@ def link_seasons_found(session: Session, collection: Collection, playlists: list
     one = len(playlists) == 1
     season = CollectionType(collection.type).season_word
     # The Site's own word for what it found, such as playlist on YouTube or album on Bandcamp.
-    from backend.services.link_seasons import site_list_names
-    lists = site_list_names(collection)
+    from backend.services.link_seasons import list_names
+    lists = list_names(collection)
     emit(
         session, Event.CREATOR_SECTIONS_FOUND,
         title=f"New {lists.one} for {collection.title}" if one else f"{len(playlists)} new {lists.many} for {collection.title}",
