@@ -16,8 +16,8 @@ import type {CreatorPageAccountRead, CreatorPageRead, CreatorSectionRead, Sectio
 import type {SectionType} from '../../types/schemas/source'
 
 /** What the section is and holds, in the words of its Site: "Album · 12 tracks", "Playlist · 4 videos". */
-export function sectionFacts(section: CreatorSectionRead, site: {sectionTypes: SectionType[], audio: boolean}) {
-    const noun = site.audio ? ['track', 'tracks'] : ['video', 'videos']
+export function sectionFacts(section: CreatorSectionRead, site: {sectionTypes: SectionType[], audioOnly: boolean}) {
+    const noun = site.audioOnly ? ['track', 'tracks'] : ['video', 'videos']
     return [capitalized(sectionName(site.sectionTypes, section).one), section.itemCount != null ? `${section.itemCount} ${noun[section.itemCount === 1 ? 0 : 1]}` : null]
         .filter(Boolean).join(' · ')
 }

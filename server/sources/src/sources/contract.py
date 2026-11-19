@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
@@ -113,13 +113,25 @@ class UpgradeChecks:
     improvements: tuple[UpgradeImprovement, ...] = ()
     """What can count as a better version, in the order a Download Profile shows them."""
 
+    def for_audio_only(self) -> UpgradeChecks:
+        """The same checks for a Site with sound only, which has no resolution, video codec or subtitles."""
+        video = {UpgradeImprovement.RESOLUTION, UpgradeImprovement.CODEC, UpgradeImprovement.SUBTITLES}
+        return UpgradeChecks(tuple(improvement for improvement in self.improvements if improvement not in video))
+
 
 @dataclass(frozen=True)
 class Names:
-    """A word in its singular and plural forms, in lower case and without an article, such as album and albums."""
+    """A word in its singular and plural forms, in lower case and without an article, such as album and albums.
+    ``article`` is only set where the first letter does not tell it, as for an hour."""
 
     one: str
     many: str
+    article: str = ""
+
+    @property
+    def a(self) -> str:
+        """The word with its article, such as an album or a playlist."""
+        return f"{self.article or ('an' if self.one[:1] in 'aeiou' else 'a')} {self.one}"
 
 
 LIST_TYPE = "list"
@@ -199,6 +211,10 @@ class DownloadOptions:
         """Whether a profile can keep the Site's media as an HLS bundle."""
         return bool(self.hls_heights)
 
+    def for_audio_only(self) -> DownloadOptions:
+        """The same options for a Site with sound only: no resolutions, HLS bundle or subtitles, only its audio."""
+        return replace(self, video_heights=(), hls_heights=(), subtitles=False)
+
     @classmethod
     def combined(cls, options: Iterable[DownloadOptions]) -> DownloadOptions:
         """Everything that at least one of these offers."""
@@ -244,6 +260,13 @@ class EpisodeTag:
     selected_by_default: bool = True
     rss_episode_type: RssEpisodeType = RssEpisodeType.FULL
     main: bool = False
+
+
+VIDEO_TAGS = (EpisodeTag(MAIN_TAG, "Video", "A normal video", "video", "videos", main=True),)
+"""VODLoft's own episode tags: every video is a normal one."""
+TRACK_TAGS = (EpisodeTag(MAIN_TAG, "Track", "A normal track", "track", "tracks", main=True),)
+"""VODLoft's own episode tags on a Site with sound only."""
+_VIDEO_DOWNLOADS = DownloadOptions()
 
 
 class EpisodePublishStatus(StrEnum):
@@ -808,8 +831,13 @@ class Site:
     video_output_help: Mapping[str, str] = field(default_factory=dict, hash=False)
     """What a feed's video output does on this Site, where it differs from the usual explanation, by
     the output's value (``audio_hls``, ``audio_mp4``, ``mp4`` or ``mp4_hls``)."""
-    downloads: DownloadOptions = DownloadOptions()
+    downloads: DownloadOptions = _VIDEO_DOWNLOADS
+    """What a Local Media Profile can choose for the Site's media. Left out on a Site that is ``audio_only``, it
+    offers only audio."""
     upgrade_checks: UpgradeChecks = UpgradeChecks()
+    episode_tags: tuple[EpisodeTag, ...] = VIDEO_TAGS
+    """Every tag the Site gives episodes, the main one first, such as YouTube's Videos, Shorts and Livestreams. Left
+    out, every episode is a normal video, or a track on a Site that is ``audio_only``."""
     settings: SiteSettings = field(default_factory=SiteSettings, hash=False)
     """Which settings the Site shows in Settings and on its Download Profiles, and its presets."""
     takes_cookies: bool = True
@@ -825,9 +853,10 @@ class Site:
     by the keys its Sources tell."""
     creators: bool = False
     """The Site has creators VODLoft can add, through a Source with ``Feature.CREATORS``."""
-    audio: bool = False
-    """The Site has sound only, such as Bandcamp's tracks, so a Music collection on it holds tracks rather than
-    music videos."""
+    audio_only: bool = False
+    """The Site has sound only, such as Bandcamp's tracks. A Music collection on it holds tracks rather than music
+    videos, and what the Site leaves out of ``downloads`` and ``episode_tags`` is for sound: tracks, downloaded as
+    audio."""
     creator_label: str = "creator"
     """What the Site calls a creator, in lower case, such as host on The Daily Wire or artist on Bandcamp. VODLoft
     names the Site's creators by it everywhere."""
@@ -852,6 +881,17 @@ class Site:
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
     videos, it starts hidden. Where a collection is locked as a whole, as on The Daily Wire, hiding it
     would empty the collection."""
+
+    def __post_init__(self) -> None:
+        # What a Site with sound only leaves out is for sound; whatever it sets itself stays as it is.
+        if self.audio_only and self.downloads is _VIDEO_DOWNLOADS:
+            object.__setattr__(self, "downloads", self.downloads.for_audio_only())
+        if self.audio_only and self.episode_tags is VIDEO_TAGS:
+            object.__setattr__(self, "episode_tags", TRACK_TAGS)
+
+    def episode_tag(self, key: str | None) -> EpisodeTag | None:
+        """One of the Site's episode tags by its key."""
+        return next((tag for tag in self.episode_tags if tag.key == key), None)
 
     def types_of(self, *kinds: SectionKind) -> tuple[SectionType, ...]:
         """The Site's section types of these kinds, such as its lists."""
@@ -905,15 +945,20 @@ def on_domain(host: str, domain: str) -> bool:
     return host == domain or host.endswith(f".{domain}")
 
 
+def combined_tags(tag_sets: Iterable[tuple[EpisodeTag, ...]]) -> tuple[EpisodeTag, ...]:
+    """The tags of several Sites, each key once, in their order: the first Site's main tag stays the main one."""
+    tags: dict[str, EpisodeTag] = {}
+    for tag_set in tag_sets:
+        for tag in tag_set:
+            tags.setdefault(tag.key, tag)
+    return tuple(tags.values())
+
+
 class Source(ABC):
     id: ClassVar[str]
     name: ClassVar[str]
     domains: ClassVar[tuple[str, ...]]
     features: ClassVar[frozenset[Feature]]
-    episode_tags: ClassVar[tuple[EpisodeTag, ...]] = (
-        EpisodeTag(MAIN_TAG, "Episode", "An episode of the collection", "episode", "episodes", main=True),
-    )
-    """Every tag the Source gives episodes, the main one first."""
     sites: ClassVar[tuple[Site, ...]] = ()
     """The Sites this Source is made for, such as The Daily Wire, with what this Source offers on
     each. A Source that serves many sites, as yt-dlp does, names none and tells them apart in
@@ -969,11 +1014,12 @@ class Source(ABC):
         return None
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
-        """The tags episodes of the collection at this link can get, or all of them without a link."""
-        return self.episode_tags
-
-    def episode_tag(self, key: str | None) -> EpisodeTag | None:
-        return next((tag for tag in self.episode_tags if tag.key == key), None)
+        """The tags the Site of the collection at this link gives episodes, or without a link, the tags of every Site
+        this Source fetches, each once."""
+        if url is not None:
+            site = self.site_for(url)
+            return site.episode_tags if site is not None else VIDEO_TAGS
+        return combined_tags(site.episode_tags for site in self.sites) or VIDEO_TAGS
 
     @abstractmethod
     def resolve(self, url: str) -> ResolvedLink | None:

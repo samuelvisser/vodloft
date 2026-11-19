@@ -2,7 +2,10 @@ from dataclasses import replace
 from types import MappingProxyType
 
 from ...contract import (
+    VIDEO_TAGS,
     Access,
+    EpisodeTag,
+    RssEpisodeType,
     SiteSetting,
     SiteSettings,
     StreamMethod,
@@ -15,6 +18,16 @@ from .other_sites import CREATOR_PRESETS, MEMBERS_KEY, PREMIUM_KEY, OtherSites
 class YouTube(OtherSites):
     key = "youtube"
     name = "YouTube"
+    # yt-dlp tells YouTube's Shorts and livestreams apart from its videos.
+    episode_tags = (
+        *VIDEO_TAGS,
+        EpisodeTag("short", "Short", "A YouTube Short", "short", "shorts", selected_by_default=False, rss_episode_type=RssEpisodeType.BONUS),
+        EpisodeTag(
+            "livestream", "Livestream",
+            "A livestream: upcoming, live now or finished. Finishing does not change the tag. A premiere is a video.",
+            "livestream", "livestreams",
+        ),
+    )
     # YouTube has its 360p MP4 with sound as one file, and every other resolution as separate H.264 video and M4A
     # audio, which VODLoft lists in an HLS playlist or joins. Above 1080p, YouTube only has VP9 and AV1, which podcast
     # apps often cannot play. Its links play for any address, so apps can be sent straight to them.

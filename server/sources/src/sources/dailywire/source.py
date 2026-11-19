@@ -116,6 +116,18 @@ class DailyWireSource(Source):
             SectionType("show", SectionKind.SHOW, Names("show", "shows")),
             SectionType("movie", SectionKind.ITEM, Names("movie", "movies")),
         ),
+        episode_tags=(
+            EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", "episode", "episodes", main=True),
+            EpisodeTag(
+                "ep-extra", "Ep. Extra", "Extra content for a specific episode", "episode extra", "episode extras", selected_by_default=False,
+                rss_episode_type=RssEpisodeType.BONUS,
+            ),
+            EpisodeTag(
+                "trailer", "Trailer", "A trailer for the show or its extra content", "trailer", "trailers", selected_by_default=False,
+                rss_episode_type=RssEpisodeType.TRAILER,
+            ),
+            EpisodeTag("aux", "Auxiliary", "Extra content for the show", "auxiliary episode", "auxiliary episodes", rss_episode_type=RssEpisodeType.BONUS),
+        ),
         creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show", LinkKind.CREATOR: "Host"})
@@ -131,18 +143,6 @@ class DailyWireSource(Source):
         Feature.OWN_STUDIO,
         Feature.CREATORS,
     })
-    episode_tags = (
-        EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", "episode", "episodes", main=True),
-        EpisodeTag(
-            "ep-extra", "Ep. Extra", "Extra content for a specific episode", "episode extra", "episode extras", selected_by_default=False,
-            rss_episode_type=RssEpisodeType.BONUS,
-        ),
-        EpisodeTag(
-            "trailer", "Trailer", "A trailer for the show or its extra content", "trailer", "trailers", selected_by_default=False,
-            rss_episode_type=RssEpisodeType.TRAILER,
-        ),
-        EpisodeTag("aux", "Auxiliary", "Extra content for the show", "auxiliary episode", "auxiliary episodes", rss_episode_type=RssEpisodeType.BONUS),
-    )
     release_date = ReleaseDate.END
     publish_status_labels = publish_status_labels_with(
         PublishStatusLabel(EpisodePublishStatus.SCHEDULED, "Scheduled", "The Daily Wire has scheduled the episode."),

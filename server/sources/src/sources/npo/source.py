@@ -8,7 +8,7 @@ from types import MappingProxyType
 from urllib.parse import urlsplit
 
 from ..contract import (
-    MIN_NEWEST_EPISODES, Access, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Site, Source,
+    MAIN_TAG, MIN_NEWEST_EPISODES, Access, EpisodeTag, Feature, LinkKind, Playback, PlaybackKind, ResolvedLink, SearchResults, SeasonRef, CollectionDetails, Site, Source,
     CookiesStatus, DownloadOptions, SiteSetting, SiteSettings, SourceProblem, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails,
 )
 from .. import ytdlp_runner as runner
@@ -134,6 +134,8 @@ class NpoSource(Source):
         # Its streams download with yt-dlp, which chooses among their versions. They have no subtitles.
         downloads=DownloadOptions(quality_choices=True, info_file=True),
         settings=SiteSettings(hides=frozenset({SiteSetting.AUTO_SUBTITLES})),
+        # Its programmes are broadcast episodes.
+        episode_tags=(EpisodeTag(MAIN_TAG, "Episode", "An episode of the collection", "episode", "episodes", main=True),),
         cookies_help=(
             "Sign in with your NPO account to download programmes that need NPO Plus. Sign in on npo.nl in a "
             "private browser window, export a cookies.txt file for npo.nl, choose it here, and then close that "

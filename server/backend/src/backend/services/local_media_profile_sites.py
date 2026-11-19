@@ -204,10 +204,12 @@ def offers_format(options: DownloadOptions, preferred_format: PreferredFormat | 
 def format_for_site(site: Site, preferred_format: str) -> str:
     """What a profile downloads from one Site: its own choice where the Site offers it, otherwise the
     nearest video. A profile offered for several Sites can choose what only some of them have, such
-    as The Daily Wire's HLS bundle, whose highest resolution is 1080p."""
+    as The Daily Wire's HLS bundle, whose highest resolution is 1080p. On a Site with sound only, which has no video, it is the sound."""
     options = site.downloads
     if preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY.value or offers_format(options, preferred_format):
         return preferred_format
+    if not options.video_heights:
+        return PreferredFormat.FORMAT_AUDIO_ONLY.value
     wanted = 1080 if preferred_format == PreferredFormat.FORMAT_HLS.value else PREFERRED_FORMAT_HEIGHTS[PreferredFormat(preferred_format)]
     fitting = [height for height in options.video_heights if height <= wanted]
     height = max(fitting) if fitting else min(options.video_heights)

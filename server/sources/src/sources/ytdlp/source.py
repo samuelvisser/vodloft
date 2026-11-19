@@ -18,12 +18,13 @@ from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
     Chapter,
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, CreatorDetails, SectionKind, SectionRef, SectionRole, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, combined_tags, CreatorDetails, SectionKind, SectionRef, SectionRole, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
 from . import artists, sites, thumbnails, youtube_rss, youtube_search
+from .site_contracts import CONTRACTS
 from .youtube_api import ApiKeyError, QuotaExceededError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.client import MAX_RESULTS
@@ -37,16 +38,6 @@ _CACHE_SECONDS = 300
 _LISTING_PAUSE_SECONDS = 1.0
 _YOUTUBE_CHANNEL = re.compile(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)/?$")
 _UNAVAILABLE_TITLES = {"[Private video]", "[Deleted video]"}
-_VIDEO_TAG = EpisodeTag(MAIN_TAG, "Video", "A normal video", "video", "videos", main=True)
-_YOUTUBE_TAGS = (
-    _VIDEO_TAG,
-    EpisodeTag("short", "Short", "A YouTube Short", "short", "shorts", selected_by_default=False, rss_episode_type=RssEpisodeType.BONUS),
-    EpisodeTag(
-        "livestream", "Livestream",
-        "A livestream: upcoming, live now or finished. Finishing does not change the tag. A premiere is a video.",
-        "livestream", "livestreams",
-    ),
-)
 # yt-dlp reports a livestream that is still live, upcoming or long finished alike.
 _LIVE_STATUSES = {"is_live", "is_upcoming", "was_live", "post_live"}
 # Where a video is in its life, as yt-dlp's live_status says. An upcoming video past its start is delayed.
@@ -500,7 +491,6 @@ class YtDlpSource(Source):
         Feature.FORMAT_CHOICES, Feature.YTDLP_OPTIONS, Feature.METADATA_REFRESH,
         Feature.PENDING_CHECKS, Feature.CREATORS, Feature.CHAPTERS, Feature.LINK_COLLECTIONS,
     })
-    episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.
     sites_label = "YouTube, and many more"
     api_key_sites = sites.api_key_sites()
@@ -525,8 +515,11 @@ class YtDlpSource(Source):
         return sites.site_of(site_key)
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
-        """Shorts and livestreams are YouTube's; other sites only have videos."""
-        return _YOUTUBE_TAGS if url is None or _is_youtube(url) else (_VIDEO_TAG,)
+        """The tags of the link's Site, or without a link, of every site with a contract of its own, such as
+        YouTube's Shorts and Livestreams."""
+        if url is not None:
+            return sites.site_for(url).episode_tags
+        return combined_tags(sites.site_of(key).episode_tags for key in CONTRACTS)
 
     def _info(self, url: str) -> dict:
         """The video info for a link. Adding a video right after looking up its link reuses the lookup."""
@@ -726,7 +719,7 @@ class YtDlpSource(Source):
         """A link on a Site of music, such as Bandcamp; an album on YouTube Music; or a YouTube collection whose
         channel has releases on YouTube Music, as a music artist's has (see ``_has_releases``)."""
         site = sites.site_for(url)
-        if site.audio:
+        if site.audio_only:
             return f"It is on {site.name}, a site for music"
         if parse_qs(urlsplit(url).query).get("list", [""])[0].startswith("OLAK5uy_"):
             return "It is an album on YouTube Music"

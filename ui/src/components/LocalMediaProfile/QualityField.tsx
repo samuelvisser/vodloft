@@ -85,7 +85,8 @@ export default function QualityField({form, mode}: Props) {
     // Choosing fewer Sources can take away the chosen download; move to the nearest one they offer.
     useEffect(() => {
         if (!offered || !preferredFormat || offersFormat(offered, preferredFormat)) return
-        const nearest = nearestVideoFormat(offered, preferredFormat)
+        // Sites with sound only offer no video to move to, only the sound.
+        const nearest = nearestVideoFormat(offered, preferredFormat) ?? (offered.audioOnly ? 'format_audio_only' : undefined)
         if (nearest) setValue('preferredFormat', nearest, OPTIONS)
     }, [offered, preferredFormat, setValue])
     const music = useWatch({control, name: 'collectionScope'}) === 'music_tracks'

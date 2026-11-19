@@ -8,7 +8,7 @@ PLAYLIST_LIST = "playlist"
 class SoundCloud(OtherSites):
     key = "soundcloud"
     name = "SoundCloud"
-    audio = True
+    audio_only = True
     creators = True
     creator_label = "artist"
     creator_presets = CREATOR_PRESETS

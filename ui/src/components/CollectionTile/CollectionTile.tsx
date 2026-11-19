@@ -18,7 +18,7 @@ type CollectionTileProps = {
         sourceKey: string
         episodeCount: number
         type?: string | null
-        site?: {audio?: boolean} | null
+        site?: {audioOnly?: boolean} | null
         years?: string | null
         thumbnailSquarePath?: string | null
         thumbnailPortraitPath?: string | null

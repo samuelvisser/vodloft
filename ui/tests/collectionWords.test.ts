@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {collectionWords, wordsFor} from '../src/lib/collectionWords'
+import {collectionWords, setCollectionContracts, wordsFor} from '../src/lib/collectionWords'
+import contracts from './fixtures/collectionContracts.json'
+
+// The words the backend serves (tests/unit/test_collection_contracts.py keeps this copy the same).
+setCollectionContracts(contracts)
 
 test('a podcast or series has seasons and episodes', () => {
     for (const type of ['podcast', 'series', null]) {
@@ -21,9 +25,9 @@ test('a Music collection has albums, and tracks or music videos', () => {
 })
 
 test('a Music collection on a Site with sound only holds tracks', () => {
-    assert.equal(wordsFor({type: 'music', site: {audio: true}}).episode.one, 'track')
-    assert.equal(wordsFor({type: 'music', site: {audio: false}}).episode.one, 'music video')
+    assert.equal(wordsFor({type: 'music', site: {audioOnly: true}}).episode.one, 'track')
+    assert.equal(wordsFor({type: 'music', site: {audioOnly: false}}).episode.one, 'music video')
     // Its files are tracks wherever it is, as Music Local Media Profiles keep sound.
-    assert.equal(wordsFor({type: 'music', site: {audio: false}}, 'audio').episode.one, 'track')
-    assert.equal(wordsFor({type: 'series', site: {audio: true}}).episode.one, 'episode')
+    assert.equal(wordsFor({type: 'music', site: {audioOnly: false}}, 'audio').episode.one, 'track')
+    assert.equal(wordsFor({type: 'series', site: {audioOnly: true}}).episode.one, 'episode')
 })

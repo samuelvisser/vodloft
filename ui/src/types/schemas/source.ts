@@ -192,6 +192,8 @@ export const SectionTypeSchema = z.object({
     kind: z.enum(['feed', 'list', 'show', 'item']),
     one: z.string(),
     many: z.string(),
+    /** One of them with its article, such as "an album". */
+    a: z.string(),
 })
 export type SectionType = z.infer<typeof SectionTypeSchema>
 
@@ -201,7 +203,7 @@ export const SiteReadSchema = z.object({
     /** A collection on the Site shows what VODLoft has no access to until the user hides it. */
     showsLocked: z.boolean().optional().default(true),
     /** The Site has sound only, such as Bandcamp: a Music collection on it holds tracks, not music videos. */
-    audio: z.boolean().optional().default(false),
+    audioOnly: z.boolean().optional().default(false),
     /** What the Site calls a creator, in lower case, such as host on The Daily Wire. */
     creatorLabel: z.string().optional().default('creator'),
     /** What the Site calls a creator with a Music collection, such as artist. */

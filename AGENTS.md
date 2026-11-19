@@ -186,7 +186,7 @@ does differently on a Site lives in that Site's contract, a `Site` from `sources
 - A site without a contract of its own, including a page only yt-dlp's generic extractor handles, gets `OtherSites`.
 - `sites.site_of()` builds each Site once from its contract and keeps it, so contracts are static: no lookups, no
   settings, nothing that changes while VODLoft runs.
-- Code reads what is special about a Site from its contract (`site.audio`, `site.creator_label`,
+- Code reads what is special about a Site from its contract (`site.audio_only`, `site.creator_label`,
   `site.link_seasons`), never by comparing a Site key or domain. Need something new to differ per Site? Add a field
   to `Site` with the generic default, and set it in the contracts that differ. Do not add lookup tables keyed by
   Site key beside the contracts.
@@ -194,6 +194,18 @@ does differently on a Site lives in that Site's contract, a `Site` from `sources
   `SectionType` with a stored `key` and its `Names` (singular and plural, no article). Name sections only from them:
   a combined name such as "albums and playlists" is joined from the types where it is shown, never written into a
   contract or hardcoded. How VODLoft names the seasons it makes itself is `season_names`, apart from sections.
+- A Site's `episode_tags` are the kinds of episode it tells apart, the main one first. A Site with `audio_only` has
+  sound only: what its contract leaves out of `episode_tags`, `downloads` and `upgrade_checks` becomes the sound
+  version (tracks, no video heights, HLS or subtitles). A value the contract sets itself always wins.
+
+### Collection contracts
+What VODLoft does differently per collection type (Podcast, Series, Music) lives in that type's `CollectionContract`
+in `backend.types.collection_contracts`, the way a Site's lives in its Site contract.
+- `CollectionContract`'s field defaults are the fallback for every type; a type's contract sets only what differs.
+- What a collection calls its seasons and episodes comes from there: `collection_contract(type).words_for(audio)` for a
+  type, `collection_words(collection)` in `backend.services.sites` for a collection on its Site. Words are `Names`, with
+  `one`, `many` and `a` (with its article). Do not write season, album, episode or track words into code.
+- The UI gets every contract with the public config and names things only through `ui/src/lib/collectionWords.ts`.
 
 ## Jinja analysis
 Output template analysis lives in the `jinja_analysis` package (`server/jinja_analysis`), which only depends on

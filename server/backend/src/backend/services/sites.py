@@ -8,6 +8,7 @@ the Site's own id for it is unique per Site.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import replace
 from functools import lru_cache
 from typing import Optional
 
@@ -15,10 +16,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Episode, Movie, Site, Video
+from backend.types.collection_contracts import CollectionWords, collection_contract
 from backend.types.collection_types import CollectionType
 from backend.types.link_season_types import OutsideVideos
 from backend.services.local_media_profile_sites import add_upcoming_site
-from sources import Names, SectionKind, Site as SourceSite, collection_on_site, site_for, source_site, sources_for
+from sources import EpisodeTag, Names, SectionKind, Site as SourceSite, collection_on_site, get_source, site_for, source_site, sources_for
 
 
 class CollectionAlreadyAddedError(ValueError):
@@ -88,11 +90,32 @@ def collection_creator_label(collection: Collection) -> str:
     return site.music_creator_label if collection.type == CollectionType.MUSIC.value else site.creator_label
 
 
+def collection_words(collection: Collection, *, audio: bool | None = None) -> CollectionWords:
+    """What a collection calls its seasons and episodes, by its type's contract: the tracks of a Music collection on a
+    Site with sound only, such as Bandcamp, and its music videos elsewhere. Pass ``audio`` where the files are meant,
+    which a profile for Music tracks keeps as sound."""
+    return collection_contract(collection.type).words_for(collection_site(collection).audio_only if audio is None else audio)
+
+
+def collection_episode_tags(collection: Collection) -> tuple[EpisodeTag, ...]:
+    """The tags of a collection's episodes, the main one named as the collection names its episodes
+    (``collection_words``), such as tracks in a Music collection on Bandcamp. Its key stays the Site's, so profiles
+    select it the same everywhere."""
+    episode = collection_words(collection).episode
+    return tuple(
+        replace(tag, label=episode.one.capitalize(), help=f"{episode.a.capitalize()} of the collection",
+                singular=episode.one, plural=episode.many) if tag.main else tag
+        for tag in get_source(collection.source_key).episode_tags_for(collection.sharing_url)
+    )
+
+
 def joined_names(names: Iterable[Names]) -> Names:
     """One name for several section types, such as "album or playlist" and "albums and playlists" for SoundCloud's
     lists, or "album, playlist or list" for three."""
     names = list(names)
-    return Names(_joined([name.one for name in names], "or"), _joined([name.many for name in names], "and"))
+    # "an album or playlist" starts with the first one, and so takes its article.
+    return Names(_joined([name.one for name in names], "or"), _joined([name.many for name in names], "and"),
+                 names[0].article if names else "")
 
 
 def _joined(words: list[str], conjunction: str) -> str:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from backend.api.models.base import ResponseBase
+from backend.api.models.collection_contract import CollectionContractsAPIRead
 
 
 class PublicSessionConfig(ResponseBase):
@@ -22,3 +23,5 @@ class ConfigPublicRead(ResponseBase):
     login_session: PublicSessionConfig
     admin_auth: PublicAdminAuth
     user_accounts: PublicUserAccounts
+    collection_contracts: CollectionContractsAPIRead
+    """What each collection type calls its seasons and episodes, which every page names them by."""
