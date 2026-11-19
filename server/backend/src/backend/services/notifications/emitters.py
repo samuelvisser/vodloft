@@ -4,14 +4,14 @@ Each one records the event in the caller's transaction, so it is only sent once 
 """
 from __future__ import annotations
 
-from backend.types.collection_types import CollectionType
-
 from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 
+from backend.types.collection_types import CollectionType
+from backend.utils.helpers import with_article
 from backend.db.models import Creator, CreatorSection, Collection, CollectionList, DownloadProfile, Episode, User
 
 from .events import Event, emit
@@ -98,10 +98,6 @@ def creator_sections_found(session: Session, creator: Creator, sections: list[Cr
     )
 
 
-def _a(word: str) -> str:
-    return f"{'an' if word[0] in 'aeiou' else 'a'} {word}"
-
-
 def link_seasons_found(session: Session, collection: Collection, playlists: list[CollectionList]) -> None:
     """A collection whose selected playlists are seasons found playlists that wait for the user's choice."""
     if not playlists:
@@ -109,10 +105,13 @@ def link_seasons_found(session: Session, collection: Collection, playlists: list
     names = ", ".join(playlist.title for playlist in playlists[:3]) + (f" and {len(playlists) - 3} more" if len(playlists) > 3 else "")
     one = len(playlists) == 1
     season = CollectionType(collection.type).season_word
+    # The Site's own word for what it found, such as playlist on YouTube or album on Bandcamp.
+    from backend.services.link_seasons import site_list_names
+    lists = site_list_names(collection)
     emit(
         session, Event.CREATOR_SECTIONS_FOUND,
-        title=f"New playlist for {collection.title}" if one else f"{len(playlists)} new playlists for {collection.title}",
-        body=f"{names}. Choose in the collection's {season}s whether {f'it becomes {_a(season)}' if one else f'they become {season}s'}.",
+        title=f"New {lists.one} for {collection.title}" if one else f"{len(playlists)} new {lists.many} for {collection.title}",
+        body=f"{names}. Choose in the collection's {season}s whether {f'it becomes {with_article(season)}' if one else f'they become {season}s'}.",
         url=f"/edit-collection/{collection.id}?seasons=1",
         data={"collection": collection.title, "playlists": [playlist.title for playlist in playlists]},
         dedupe_key=f"collection-playlists:{collection.id}:{','.join(sorted(playlist.ref for playlist in playlists))}",

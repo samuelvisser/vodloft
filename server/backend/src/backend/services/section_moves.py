@@ -156,7 +156,7 @@ def move_section(
     music = account.main_collection is not None and account.main_collection.type == CollectionType.MUSIC.value
     a_season = "an album" if music else "a season"
     if section.kind != SectionKind.LIST or not lists_are_seasons(site):
-        raise ServiceError(f"{section.title} can't move: only a playlist can be {a_season} or a collection of its own", field="target")
+        raise ServiceError(f"{section.title} can't move: only {site.creator_sections.one if lists_are_seasons(site) else 'a playlist'} can be {a_season} or a collection of its own", field="target")
     in_main = _season_of_main(account, ref) is not None
     own = _own_collection(account, section)
     if target is SectionTarget.OWN:
