@@ -171,6 +171,26 @@ live in the `sources` package (`server/sources`), one subpackage each, and regis
   `downloader` package knows nothing about Sources.
 - Collections and media items store their Source's id in `source_key`.
 
+### Site contracts
+A Site is one website as the user knows it (YouTube, The Daily Wire), whichever Source fetches it. What VODLoft
+does differently on a Site lives in that Site's contract, a `Site` from `sources.contract`, and nowhere else.
+- `Site`'s own field defaults are VODLoft's generic fallback. A contract sets only what differs on its Site; never
+  repeat a default in a contract, and never add a default to `Site` just to suit one Source or Site.
+- A Source made for one Site declares it in its `sites` (The Daily Wire, NPO Start).
+- yt-dlp's Sites are classes in `sources/ytdlp/site_contracts/`, one module per Site, registered in `CONTRACTS`
+  there. Each subclasses `OtherSites` and sets only the `Site` fields that differ there, such as Floatplane's name
+  and its name for locked videos. Sites that only need a display name go in `named.py`.
+- `OtherSites` is only for what every yt-dlp site does differently from `Site`'s defaults because yt-dlp does it,
+  such as its quality choices and subtitles. Keep it small: a value that is only true of some yt-dlp sites belongs
+  in their own contracts, and a value true of every site belongs in `Site`.
+- A site without a contract of its own, including a page only yt-dlp's generic extractor handles, gets `OtherSites`.
+- `sites.site_of()` builds each Site once from its contract and keeps it, so contracts are static: no lookups, no
+  settings, nothing that changes while VODLoft runs.
+- Code reads what is special about a Site from its contract (`site.audio`, `site.creator_label`,
+  `site.link_seasons`), never by comparing a Site key or domain. Need something new to differ per Site? Add a field
+  to `Site` with the generic default, and set it in the contracts that differ. Do not add lookup tables keyed by
+  Site key beside the contracts.
+
 ## Jinja analysis
 Output template analysis lives in the `jinja_analysis` package (`server/jinja_analysis`), which only depends on
 jinja2 and never imports VODLoft code; its tests use jinja2 and the package alone.
