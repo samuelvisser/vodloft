@@ -204,11 +204,28 @@ const VARIABLES_BY_MODE: Record<LocalMediaProfileMode, readonly OutputTemplateVa
 /** The numbers VODLoft keeps for every episode, which the template help lists as built-in Indexing values. */
 export const BUILT_IN_INDEXING_VALUES: ReadonlySet<string> = new Set(['episode_index', 'extra_index'])
 
+// What the season variables hold in a Music collection, whose albums are its seasons: told only on a profile for
+// Music tracks or Music videos.
+const MUSIC_SEASON_NOTES: Record<string, string> = {
+    season: 'In a Music collection, each album is a season, so <strong>season</strong> holds the album\'s slug.',
+    season_name: 'In a Music collection, each album is a season, so <strong>season_name</strong> holds the album\'s name, '
+        + 'such as <code>Solar Power</code>. The <strong>album</strong> variable has it too.',
+    season_number: 'In a Music collection, each album is a season, so this is the album\'s number.',
+}
+
+const MUSIC_SCOPES: ReadonlySet<string> = new Set(['music_tracks', 'music_videos'])
+
 export function getOutputTemplateVariables(
     mode: LocalMediaProfileMode,
     customVariables: readonly OutputTemplateVariable[] = [],
+    collectionScope?: string,
 ): readonly OutputTemplateVariable[] {
-    const baseVariables = VARIABLES_BY_MODE[mode]
+    const music = mode === 'collection' && !!collectionScope && MUSIC_SCOPES.has(collectionScope)
+    const baseVariables = VARIABLES_BY_MODE[mode].map((variable) => {
+        const note = music ? MUSIC_SEASON_NOTES[variable.name] : undefined
+        if (!note) return variable
+        return {...variable, readMore: {...variable.readMore, paragraphs: [...(variable.readMore?.paragraphs ?? []), note]}}
+    })
     const merged = new Map(baseVariables.map((variable) => [variable.name, variable]))
     for (const variable of customVariables) merged.set(variable.name, variable)
     return [...merged.values()]

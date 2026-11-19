@@ -1,3 +1,4 @@
+import {collectionWords} from '../../lib/collectionWords'
 import {type FormEvent, useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Controller, useForm, useWatch} from 'react-hook-form'
@@ -192,7 +193,7 @@ export default function EditDownloadProfilePage() {
     const typeLabel = (key: string) => tags?.find((tag) => tag.key === key)?.label ?? key
     const seasonLabel = (slug: string) => seasonsData?.find((season) => season.slug === slug)?.name ?? slug
     const previewFilterText = (index: number) => leftOutByText(
-        fallingOut?.body.filters[index] as Parameters<typeof leftOutByText>[0], typeLabel, seasonLabel, fallingOut?.deleteOlder ?? false,
+        fallingOut?.body.filters[index] as Parameters<typeof leftOutByText>[0], typeLabel, seasonLabel, fallingOut?.deleteOlder ?? false, collectionWords(downloadProfile?.collectionType).season,
     )
 
     const {formState: {isSubmitting}} = form
@@ -291,6 +292,7 @@ export default function EditDownloadProfilePage() {
                         form={form}
                         episodeIdentifier={episodeIdentifier}
                         collectionId={downloadProfile?.collectionId}
+                        collectionType={downloadProfile?.collectionType}
                         seasons={seasonsData}
                         collectionRoot={false}
                     />

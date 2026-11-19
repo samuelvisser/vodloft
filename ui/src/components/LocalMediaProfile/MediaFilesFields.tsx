@@ -406,9 +406,13 @@ function MetadataExample({id, text, error, loading, multiline}: {
 function MetadataTextFields({form}: {form: UseFormReturn<any>}) {
     const {formState: {errors}} = form
     const variableQuery = useLocalMediaProfileTemplateVariables('collection')
+    const collectionScope = useWatch({control: form.control, name: 'collectionScope'}) as string | undefined
     const variables = useMemo(
-        () => [...getOutputTemplateVariables('collection', (variableQuery.data ?? []) as OutputTemplateVariable[]), ...METADATA_VARIABLES],
-        [variableQuery.data],
+        () => [
+            ...getOutputTemplateVariables('collection', (variableQuery.data ?? []) as OutputTemplateVariable[], collectionScope),
+            ...METADATA_VARIABLES,
+        ],
+        [variableQuery.data, collectionScope],
     )
     const completions = useJinjaCompletions(variables, false)
     const example = useExampleEpisode()

@@ -334,7 +334,7 @@ export default function EditCollectionPage() {
           {linkOptional && (
             <div className="help" id="collection-url-help">
               Optional. This collection holds only what its links have. A channel link here offers that channel's
-              playlists in the Seasons window and finds new ones.
+              playlists in the {words.season.Many} window and finds new ones.
             </div>
           )}
         </div>

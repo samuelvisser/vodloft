@@ -66,6 +66,7 @@ export default function DownloadProfileStep({value, onChange, onSubmit: onSubmit
                         seasons={seasons}
                         sourceKey={collection?.sourceKey}
                         collectionUrl={collection?.sharingUrl}
+                        collectionType={collection?.type}
                         newProfile
                     />
 

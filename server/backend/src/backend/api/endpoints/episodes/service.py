@@ -16,7 +16,7 @@ from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cur
 from backend.db.models import Collection, CollectionList, CollectionListItem
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
+from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.services.episode_download_delay import episode_download_delay_ready_at
@@ -524,7 +524,7 @@ def _episode_or_404(s: Session, episode_slug: str) -> Episode:
 
 def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPIRead:
     """Where the episode belongs now that its collection's playlists changed. Reading only: nothing is made."""
-    from backend.services.link_seasons import belongs_elsewhere, list_names
+    from backend.services.link_seasons import belongs_elsewhere, site_list_names
 
     from backend.services.reassigned import reassignment_of
 
@@ -537,7 +537,8 @@ def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPI
     if belonging is None:
         return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False)
     collection = episode.collection
-    kind = list_names(collection).one
+    # The Site's own word for the list, such as playlist on YouTube or album on Bandcamp.
+    kind = site_list_names(collection).one
     if belonging.link is not None:
         season = belonging.link.season
         return EpisodeSeasonPlaceAPIRead(
@@ -580,7 +581,7 @@ def move_episode_to_its_season(s: Session, episode_slug: str) -> dict[str, bool 
 
     episode = _episode_or_404(s, episode_slug)
     if not move_to_where_it_belongs(s, episode):
-        raise HTTPException(status_code=409, detail="The episode is already in the season it belongs in")
+        raise HTTPException(status_code=409, detail=f"The episode is already in the {CollectionType(episode.collection.type).season_word} it belongs in")
     operation_id, queued = queue_season_folder_moves(s, episode.collection, [episode.id])
     s.flush()
     return {"queued": queued, "operation_id": operation_id}

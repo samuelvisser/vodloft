@@ -8,6 +8,11 @@ class CollectionType(Enum):
     """An artist's music: each season an album, each episode a track. Only Music profiles keep it."""
 
     @property
+    def season_word(self) -> str:
+        """What the collection calls a season in what VODLoft tells the user: an album in a Music collection."""
+        return "album" if self is CollectionType.MUSIC else "season"
+
+    @property
     def by_season(self) -> bool:
         """Whether downloads pick the collection's seasons, as for a series or an artist's albums, rather than
         a podcast's newest episodes."""

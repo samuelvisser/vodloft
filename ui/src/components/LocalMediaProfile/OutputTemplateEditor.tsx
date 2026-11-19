@@ -800,8 +800,8 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     const variableQuery = useLocalMediaProfileTemplateVariables(mode)
     const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
     const variables = useMemo(
-        () => getOutputTemplateVariables(mode, customVariables),
-        [customVariables, mode],
+        () => getOutputTemplateVariables(mode, customVariables, collectionScope),
+        [customVariables, mode, collectionScope],
     )
     const metadataNames = useMemo(() => new Set(customVariables.map(({name}) => name)), [customVariables])
     const variableEntries = useMemo(

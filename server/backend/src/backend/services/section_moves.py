@@ -8,6 +8,8 @@ left, and that has nothing left, goes.
 """
 from __future__ import annotations
 
+from backend.types.collection_types import CollectionType
+
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -150,21 +152,24 @@ def move_section(
     if section is None:
         raise ServiceError(f"{creator.title} has no section {ref}", field="target")
     site = get_source(account.source_key).site_of(account.site_key)
+    # What the creator's collection calls a season: an album in an artist's.
+    music = account.main_collection is not None and account.main_collection.type == CollectionType.MUSIC.value
+    a_season = "an album" if music else "a season"
     if section.kind != SectionKind.LIST or not lists_are_seasons(site):
-        raise ServiceError(f"{section.title} can't move: only a playlist can be a season or a collection of its own", field="target")
+        raise ServiceError(f"{section.title} can't move: only {site.creator_sections.one if lists_are_seasons(site) else 'a playlist'} can be {a_season} or a collection of its own", field="target")
     in_main = _season_of_main(account, ref) is not None
     own = _own_collection(account, section)
     if target is SectionTarget.OWN:
         if not in_main:
-            raise ServiceError(f"{section.title} is not a season of {creator.title}'s collection", field="target")
+            raise ServiceError(f"{section.title} is not {a_season} of {creator.title}'s collection", field="target")
         if own is not None:
             raise ServiceError(f"{own.title} is a collection of {section.title} already", field="target")
         return _to_own(s, account, section, added_by_id=added_by_id)
     if target is SectionTarget.MAIN:
         if account.main_collection is None:
-            raise ServiceError(f"{creator.title} has no collection of its own to make it a season of", field="target")
+            raise ServiceError(f"{creator.title} has no collection of its own to make it {a_season} of", field="target")
         if in_main:
-            raise ServiceError(f"{section.title} is a season of {creator.title}'s collection already", field="target")
+            raise ServiceError(f"{section.title} is {a_season} of {creator.title}'s collection already", field="target")
         if own is None:
             raise ServiceError(f"{section.title} is not in your Library; add it from the creator's page", field="target")
         return _to_season(s, account, section, own)

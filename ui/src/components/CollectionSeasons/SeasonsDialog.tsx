@@ -49,11 +49,10 @@ const dialogWords = (collection: CollectionWords, music: boolean, names: Collect
 const capitalized = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
-/** What the dialog calls the Site's lists, such as playlists on YouTube. A Music collection's seasons are albums,
- * but where its content comes from is the Site's lists, so it says playlists for an artist on YouTube and albums on
- * Bandcamp. */
+/** What the dialog calls the Site's lists, in the Site's own words: playlists on YouTube and albums on Bandcamp,
+ * also when the collection's seasons are albums. A Site that names no lists of its own calls them playlists. */
 function siteListNames(view: CollectionSeasonsRead): CollectionSeasonsRead['names'] {
-    if (!view.music) return view.names
+    if (view.sectionNames.many === 'playlists and shows') return view.names
     return {...view.names, one: view.sectionNames.one.replace(/^(a|an) /, ''), many: view.sectionNames.many}
 }
 
@@ -231,7 +230,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
             })), {shouldDirty: true})
         } catch (exc) {
-            toast.error(exc instanceof Error ? exc.message : 'Could not list the playlists')
+            toast.error(exc instanceof Error ? exc.message : `Could not list the ${view ? siteListNames(view).many : 'playlists'}`)
         } finally {
             setRefreshing(false)
         }
