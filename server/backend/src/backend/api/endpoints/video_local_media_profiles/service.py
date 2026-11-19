@@ -5,14 +5,13 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from backend.services.local_media_profile_changes import ensure_unique_profile_settings
+from backend.services import local_media_profile_changes as profile_changes
 from backend.api.endpoints.local_media_profiles.service import delete_local_media_profile_record
 from backend.api.models.video_local_media_profile import (
     VideoLocalMediaProfileAPICreate,
     VideoLocalMediaProfileAPIRead,
     VideoLocalMediaProfileAPIUpdate,
 )
-from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.db.models import VideoLocalMediaProfile
 
 
@@ -45,11 +44,7 @@ def create_video_local_media_profile(
     s: Session,
     body: VideoLocalMediaProfileAPICreate,
 ) -> VideoLocalMediaProfileAPIRead:
-    ensure_unique_profile_settings(s, VideoLocalMediaProfile, body)
-    item = create_database_fields(VideoLocalMediaProfile, body)
-    s.add(item)
-    s.flush()
-    return VideoLocalMediaProfileAPIRead.model_validate(item)
+    return VideoLocalMediaProfileAPIRead.model_validate(profile_changes.create_video_local_media_profile(s, body))
 
 
 def update_video_local_media_profile(
@@ -57,27 +52,9 @@ def update_video_local_media_profile(
     local_media_profile_slug: str,
     body: VideoLocalMediaProfileAPIUpdate,
 ) -> VideoLocalMediaProfileAPIRead:
-    item: Optional[VideoLocalMediaProfile] = (
-        s.query(VideoLocalMediaProfile)
-        .filter_by(slug=local_media_profile_slug)
-        .one_or_none()
+    return VideoLocalMediaProfileAPIRead.model_validate(
+        profile_changes.update_video_local_media_profile(s, local_media_profile_slug, body),
     )
-    if item is None:
-        raise HTTPException(status_code=404, detail="Video Local Media Profile not found")
-
-    ensure_unique_profile_settings(
-        s,
-        VideoLocalMediaProfile,
-        body,
-        exclude_id=item.id,
-    )
-    update_database_fields(
-        item,
-        body,
-        exclude_fields=body.fields_kept_on_update(),
-    )
-    s.flush()
-    return VideoLocalMediaProfileAPIRead.model_validate(item)
 
 
 def delete_video_local_media_profile(

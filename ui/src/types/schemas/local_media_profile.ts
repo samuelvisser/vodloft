@@ -2,11 +2,6 @@ import {z} from 'zod'
 
 import {createServerErrorMapper} from '../../utils/serverMessageMap'
 import {
-    MovieLocalMediaProfileCreateSchema,
-    MovieLocalMediaProfileReadSchema,
-    MovieLocalMediaProfileUpdateSchema,
-} from './movie_local_media_profile'
-import {
     CollectionLocalMediaProfileCreateSchema,
     CollectionLocalMediaProfileReadSchema,
     CollectionLocalMediaProfileUpdateSchema,
@@ -18,7 +13,6 @@ import {
 } from './video_local_media_profile'
 
 export * from './local_media_profile_base'
-export * from './movie_local_media_profile'
 export * from './collection_local_media_profile'
 export * from './video_local_media_profile'
 
@@ -42,18 +36,14 @@ export const COLLECTION_OUTPUT_TEMPLATE_FIELDS = [
     ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 
-export const MOVIE_OUTPUT_TEMPLATE_FIELDS = [
+// A Video profile keeps single videos, and movies with their extras. The movie_ values are empty for a single video.
+export const VIDEO_OUTPUT_TEMPLATE_FIELDS = [
     'movie_slug', 'movie_title', 'movie_extended_title', 'movie_author',
     'movie_mature_rating', 'movie_duration_seconds',
     'movie_date', 'movie_time', 'movie_datetime', 'movie_year', 'movie_month', 'movie_day',
     'movie_hour', 'movie_minute', 'movie_second',
     'slug', 'title', 'extended_title', 'author', 'mature_rating', 'rating',
-    'duration_seconds', 'media_type',
-    ...DATE_OUTPUT_TEMPLATE_FIELDS,
-] as const
-
-export const VIDEO_OUTPUT_TEMPLATE_FIELDS = [
-    'slug', 'title', 'author', 'duration_seconds', 'source',
+    'duration_seconds', 'media_type', 'source',
     ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 
@@ -61,7 +51,6 @@ export const VIDEO_OUTPUT_TEMPLATE_FIELDS = [
 // ---------- Strict request (create/update) ----------
 export const LocalMediaProfileCreateSchema = z.discriminatedUnion('type', [
     CollectionLocalMediaProfileCreateSchema,
-    MovieLocalMediaProfileCreateSchema,
     VideoLocalMediaProfileCreateSchema,
 ])
 export type LocalMediaProfileCreateIn = z.input<typeof LocalMediaProfileCreateSchema>
@@ -69,7 +58,6 @@ export type LocalMediaProfileCreateOut = z.output<typeof LocalMediaProfileCreate
 
 export const LocalMediaProfileUpdateSchema = z.discriminatedUnion('type', [
     CollectionLocalMediaProfileUpdateSchema,
-    MovieLocalMediaProfileUpdateSchema,
     VideoLocalMediaProfileUpdateSchema,
 ])
 export type LocalMediaProfileUpdateIn = z.input<typeof LocalMediaProfileUpdateSchema>
@@ -79,7 +67,6 @@ export type LocalMediaProfileUpdateOut = z.output<typeof LocalMediaProfileUpdate
 // ------------ Lenient response (read) ------------
 export const LocalMediaProfileReadSchema = z.discriminatedUnion('type', [
     CollectionLocalMediaProfileReadSchema,
-    MovieLocalMediaProfileReadSchema,
     VideoLocalMediaProfileReadSchema,
 ])
 export type LocalMediaProfileRead = z.infer<typeof LocalMediaProfileReadSchema>

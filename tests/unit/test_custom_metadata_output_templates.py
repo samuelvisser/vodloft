@@ -126,8 +126,8 @@ def test_nonexistent_collection_metadata_field_renders_as_empty() -> None:
 
 def test_movie_metadata_is_scoped_to_movie_templates() -> None:
     from backend.utils.output_template import (
-        MOVIE_OUTPUT_TEMPLATE_FIELDS,
-        MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        VIDEO_OUTPUT_TEMPLATE_FIELDS,
+        VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
         COLLECTION_OUTPUT_TEMPLATE_FIELDS,
         COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
         movie_output_template_values,
@@ -139,8 +139,8 @@ def test_movie_metadata_is_scoped_to_movie_templates() -> None:
     assert render_output_template(
         "/downloads/{{ meta_movie_collection }}/{{ movie_title }}.ext",
         values,
-        allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
-        allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
     ) == "/downloads/Originals/Run Hide Fight.ext"
 
     with pytest.raises(ValueError, match="Unsupported output template variable"):

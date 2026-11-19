@@ -4,8 +4,8 @@ from typing import NamedTuple
 
 class LocalMediaProfileType(StrEnum):
     COLLECTION = "collection"
-    MOVIE = "movie"
     VIDEO = "video"
+    """Single videos, and movies with their extras."""
 
     # Only used by the polymorphic parent mapper.
     BASE = "base"

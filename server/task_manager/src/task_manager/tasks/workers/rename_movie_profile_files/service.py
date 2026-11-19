@@ -29,8 +29,7 @@ _PHYSICAL_STATUSES = (
 
 # The media types each Local Media Profile type downloads.
 _PROFILE_MEDIA_TYPES = {
-    LocalMediaProfileType.MOVIE.value: (MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value),
-    LocalMediaProfileType.VIDEO.value: (MediaType.VIDEO.value,),
+    LocalMediaProfileType.VIDEO.value: (MediaType.VIDEO.value, MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value),
 }
 
 
@@ -62,7 +61,7 @@ def _plan_renames(
         return TaskResult(summary="Local Media Profile no longer exists")
     media_types = _PROFILE_MEDIA_TYPES.get(profile.type)
     if media_types is None:
-        raise ValueError(f"Local Media Profile {profile.name} is not a Movie or Video profile")
+        raise ValueError(f"Local Media Profile {profile.name} is not a Video profile")
 
     downloads = list(session.scalars(
         select(MediaDownloadBase)

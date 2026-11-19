@@ -252,19 +252,19 @@ def test_movie_sources_include_movies_and_every_extra_with_server_search(db_sess
 
     all_sources = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
         cursor=None,
         limit=2,
     )
     last_source = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
         cursor=all_sources.next_cursor,
         limit=2,
     )
     trailer_search = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
         search="Alpha Trailer",
     )
 
@@ -324,7 +324,7 @@ def test_movie_source_search_ranks_matching_extra_title_by_relevance(db_session)
 
     result = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
         search="Radical Islam is on the",
     )
 
@@ -332,6 +332,33 @@ def test_movie_source_search_ranks_matching_extra_title_by_relevance(db_session)
         "Radical Islam Is On The March",
         "Trump Gets It Right On Radical Islam",
     ]
+
+
+def test_video_profile_examples_hold_movies_and_videos_on_its_sites(db_session):
+    from backend.api.endpoints.local_media_profiles.output_template import get_output_template_source_page
+    from backend.db.models import Movie, Video
+    from backend.types.local_media_profile_types import LocalMediaProfileType
+
+    db_session.add_all([
+        Movie(source_key="dailywire", uuid="m", type="movie", slug="beta-movie", title="Beta Movie", duration=60),
+        Video(
+            source_key="ytdlp", uuid="v", type="video", slug="abc", title="Alpha Video", duration=60,
+            sharing_url="https://www.youtube.com/watch?v=abc", site_key="youtube",
+        ),
+    ])
+    db_session.commit()
+
+    every_site = get_output_template_source_page(db_session, LocalMediaProfileType.VIDEO)
+    assert [(item.label, item.values["media_type"]) for item in every_site.items] == [
+        ("Alpha Video", "video"), ("Beta Movie", "movie"),
+    ]
+    # A single video leaves the movie values empty.
+    assert every_site.items[0].values["movie_title"] == ""
+
+    youtube = get_output_template_source_page(db_session, LocalMediaProfileType.VIDEO, site_keys=["youtube"])
+    assert [item.label for item in youtube.items] == ["Alpha Video"]
+    dailywire = get_output_template_source_page(db_session, LocalMediaProfileType.VIDEO, site_keys=["dailywire"])
+    assert [item.label for item in dailywire.items] == ["Beta Movie"]
 
 
 def test_empty_library_uses_fallback_but_empty_search_does_not(db_session):
@@ -342,17 +369,18 @@ def test_empty_library_uses_fallback_but_empty_search_does_not(db_session):
 
     fallback = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
     )
     search = get_output_template_source_page(
         db_session,
-        LocalMediaProfileType.MOVIE,
+        LocalMediaProfileType.VIDEO,
         search="missing",
     )
 
-    assert len(fallback.items) == 1
-    assert fallback.items[0].fallback is True
-    assert fallback.items[0].values["media_type"] == "movie"
+    # A Video profile shows an example video and an example movie.
+    assert [item.id for item in fallback.items] == ["example:video", "example:movie"]
+    assert all(item.fallback for item in fallback.items)
+    assert [item.values["media_type"] for item in fallback.items] == ["video", "movie"]
     assert search.items == []
     assert search.has_more is False
 

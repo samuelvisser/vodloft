@@ -234,7 +234,6 @@ def _filtered(s: Session, filters: LocalMediaProfileListQuery):
         UsedFor.SERIES: is_collection & scope.in_([
             CollectionLocalMediaProfileScope.SERIES.value, CollectionLocalMediaProfileScope.BOTH.value,
         ]),
-        UsedFor.MOVIE: profile.type == LocalMediaProfileType.MOVIE.value,
         UsedFor.VIDEO: profile.type == LocalMediaProfileType.VIDEO.value,
     }
     has_files = (

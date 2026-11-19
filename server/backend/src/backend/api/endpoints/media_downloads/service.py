@@ -658,7 +658,7 @@ def create_movie_download(
 ) -> MovieMediaDownload:
     """Persist a download target for an indexed movie."""
     _ensure_downloadable(movie)
-    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE, movie_site_key(movie))
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO, movie_site_key(movie))
     # The Daily Wire's isDownloadable only says whether its own apps offer offline downloads.
     # VODLoft downloads the stream its web player uses, so a movie only needs a video.
     if not movie.has_video:
@@ -715,7 +715,7 @@ def create_movie_extra_download(
     body: MediaDownloadAPICreate,
 ) -> MovieExtraMediaDownload:
     """Persist a download target for an extra of an indexed movie."""
-    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.MOVIE, movie_site_key(movie))
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO, movie_site_key(movie))
     movie_extra: Optional[MovieExtra] = (
         s.query(MovieExtra)
         .filter(MovieExtra.movie_id == movie.id, MovieExtra.slug == movie_extra_slug)
@@ -820,8 +820,7 @@ def create_video_download(
 
 _PROFILE_TYPE_LABELS = {
     LocalMediaProfileType.COLLECTION: "Episodes",
-    LocalMediaProfileType.MOVIE: "Movies and movie extras",
-    LocalMediaProfileType.VIDEO: "Videos",
+    LocalMediaProfileType.VIDEO: "Videos, movies and movie extras",
 }
 
 

@@ -128,11 +128,11 @@ def test_episode_index_does_not_require_custom_index_state_or_recount_gaps(monke
 
 def test_episode_index_is_not_available_to_movie_profiles() -> None:
     import pytest
-    from backend.utils.output_template import MOVIE_OUTPUT_TEMPLATE_FIELDS, validate_output_template_fields
+    from backend.utils.output_template import VIDEO_OUTPUT_TEMPLATE_FIELDS, validate_output_template_fields
 
     with pytest.raises(ValueError, match="Unsupported output template variable"):
         validate_output_template_fields(
-            "/downloads/{{ episode_index }}.ext", allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
+            "/downloads/{{ episode_index }}.ext", allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
         )
 
 

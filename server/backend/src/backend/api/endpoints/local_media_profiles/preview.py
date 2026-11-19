@@ -29,6 +29,7 @@ from backend.utils.output_template import (
 from config import get_settings
 
 from .output_template import (
+    EXAMPLE_MOVIE_SOURCE_ID,
     _EXAMPLE_MOVIE_VALUES,
     _EXAMPLE_COLLECTION_VALUES,
     _EXAMPLE_VIDEO_VALUES,
@@ -45,10 +46,11 @@ router = APIRouter()
 def _example_values(session: Session, body: LocalMediaProfilePreviewRequest) -> dict[str, str]:
     """Resolve the selected source metadata, then overlay even explicitly empty edits."""
     source_id = body.source_id
-    if source_id is None or source_id == f"example:{body.type}":
+    if body.type == "video" and source_id == EXAMPLE_MOVIE_SOURCE_ID:
+        original = _EXAMPLE_MOVIE_VALUES
+    elif source_id is None or source_id == f"example:{body.type}":
         original = {
             "collection": _EXAMPLE_COLLECTION_VALUES,
-            "movie": _EXAMPLE_MOVIE_VALUES,
             "video": _EXAMPLE_VIDEO_VALUES,
         }[body.type]
     elif source_id.startswith(EXAMPLE_SOURCE_PREFIX):
@@ -58,8 +60,7 @@ def _example_values(session: Session, body: LocalMediaProfilePreviewRequest) -> 
         kind, separator, identifier = source_id.partition(":")
         models = {
             "collection": {"episode": Episode},
-            "movie": {"movie": Movie, "movie-extra": MovieExtra},
-            "video": {"video": Video},
+            "video": {"video": Video, "movie": Movie, "movie-extra": MovieExtra},
         }[body.type]
         if not separator or kind not in models or not identifier.isascii() or not identifier.isdigit() or int(identifier) <= 0:
             raise ValueError("Select an example that belongs to this Local Media Profile type.")

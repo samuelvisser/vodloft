@@ -198,7 +198,7 @@ def test_missing_or_wrong_source_does_not_mix_in_fallback_values(examples, sourc
 @pytest.mark.parametrize("source,title", [("movie:3", "Saved Movie"), ("movie-extra:4", "Trailer"), ("example:movie", "Example Movie")])
 def test_generic_endpoint_supports_movies_and_extras(examples, source, title):
     result = preview.get_local_media_profile_preview(examples.session, _body(
-        type="movie", source_id=source,
+        type="video", source_id=source,
         output_template="/downloads/Movies/{{ movie_title }}/{{ title }}.ext",
         values={"movie_title": "Edited Movie"},
     ))

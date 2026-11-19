@@ -36,6 +36,7 @@ import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import {isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
 import './MoviePage.css'
 import {apiUrl} from '../../lib/api'
 import {type DownloadStarts, startLabel, useDownloadStarts} from '../../lib/downloadStarts'
@@ -145,9 +146,13 @@ export default function MoviePage() {
         localMovie?.id ?? null,
     )
     const videoProfiles = useMemo(
-        // Movies come from one Site, which every movie profile is offered for.
-        () => profiles?.filter((profile) => profile.type === 'movie') || [],
-        [profiles],
+        // A profile limited to other Sites still shows the download it already made. A movie that is not in the
+        // library yet comes from The Daily Wire, whose Site has its Source's key.
+        () => profiles?.filter((profile) => profile.type === 'video' && (
+            isLocalMediaProfileAvailableForSite(profile, localMovie?.site?.key ?? DAILYWIRE_SOURCE_KEY)
+            || !!downloads?.some((download) => download.localMediaProfileId === profile.id)
+        )) || [],
+        [profiles, localMovie?.site?.key, downloads],
     )
     const videoProfileReg = useMemo(() => {
         const spec: Record<string, {label: string}> = {}
@@ -157,7 +162,7 @@ export default function MoviePage() {
             spec[value] = {label: profile.name}
             values.push(value)
         }
-        return createSelectRegistry('MovieLocalMediaProfile', spec, values)
+        return createSelectRegistry('MovieVideoLocalMediaProfile', spec, values)
     }, [videoProfiles])
     const [profileId, setProfileId] = useState('')
     const [submitting, setSubmitting] = useState<string | null>(null)
@@ -597,7 +602,7 @@ export default function MoviePage() {
                     <p>
                         {isUpcoming
                             ? 'The full movie is not available yet. Published extras can be downloaded now.'
-                            : 'Movies and extras use the same Movie Local Media Profile.'}
+                            : 'A movie and its extras use the same Video Local Media Profile.'}
                     </p>
                     {videoProfiles.length ? (
                         <>
@@ -656,8 +661,8 @@ export default function MoviePage() {
                         </>
                     ) : (
                         <div className="movie-profile-empty">
-                            <p>Create a Movie Local Media Profile before downloading a movie or extra.</p>
-                            <Link className="btn" to="/add-local-media-profile?type=movie">Create profile</Link>
+                            <p>Create a Video Local Media Profile for The Daily Wire before downloading a movie or extra.</p>
+                            <Link className="btn" to="/add-local-media-profile?type=video">Create profile</Link>
                         </div>
                     )}
                 </aside>

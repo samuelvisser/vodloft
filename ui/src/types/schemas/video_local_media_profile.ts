@@ -17,6 +17,11 @@ export const DEFAULT_VIDEO_OUTPUT_TEMPLATE = (
     + '{{ output_date }}{{ title }} [{{ slug }}].ext'
 )
 
+/** A template for a Video profile made for movies: a folder per movie, with its extras beside it. */
+export const DEFAULT_MOVIE_OUTPUT_TEMPLATE = (
+    "/downloads/movies/{{ movie_title }}/{{ title }}{% if media_type != 'movie' %}-{{ media_type }}{% endif %}.ext"
+)
+
 // ---------- Strict request (create/update) ----------
 const VideoLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
     type: z.literal('video').default('video'),

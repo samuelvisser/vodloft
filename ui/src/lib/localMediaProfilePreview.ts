@@ -8,7 +8,7 @@ import {
 import {apiUrl} from './api'
 
 type PreviewRequest = {
-    type: 'collection' | 'movie' | 'video'
+    type: 'collection' | 'video'
     outputTemplate: string
     preferredFormat: string
     filenameRestrictionMode: string

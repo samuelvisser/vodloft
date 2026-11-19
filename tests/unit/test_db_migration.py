@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = VODLOFT_0_9_1_REVISION
+HEAD_REVISION = "409629042e13"
 
 
 @pytest.fixture
@@ -150,16 +150,17 @@ def test_fresh_database_upgrades_to_the_head(migration_database):
         )).mappings().all()
         # The Collection profiles are only for a fresh start: onboarding adds them.
         assert [profile["slug"] for profile in profiles] == ["vodloft-movies", "vodloft-videos"]
-        assert {profile["type"] for profile in profiles} == {"movie", "video"}
+        assert {profile["type"] for profile in profiles} == {"video"}
         assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles_collection"
         )).scalar_one() == 0
         assert connection.execute(text(
-            "SELECT COUNT(*) FROM local_media_profiles_movie"
-        )).scalar_one() == 1
-        assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles_video"
-        )).scalar_one() == 1
+        )).scalar_one() == 2
+        # The movies profile is only for the Sites that have movies.
+        assert connection.execute(text(
+            "SELECT site_keys, include_upcoming_sites FROM local_media_profiles WHERE slug = 'vodloft-movies'"
+        )).one() == ('["dailywire"]', 0)
 
     from backend.db.initial_seed import seed_initial_database
 
@@ -1051,7 +1052,7 @@ def test_local_media_profiles_move_from_sources_to_sites(migration_database):
                 "VALUES (:id, :slug, :slug, :type, '/x/' || :slug || '/{{ title }}.ext', 'format_1080p', '[]', :keys)"
             ), {"id": profile_id, "slug": f"p{profile_id}", "type": profile_type, "keys": source_keys})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_9_0_REVISION)
 
     with engine.connect() as connection:
         rows = connection.execute(text("SELECT id, site_keys, include_upcoming_sites FROM local_media_profiles ORDER BY id")).all()
@@ -1216,6 +1217,47 @@ def test_iptv_migration_gives_each_user_and_the_install_a_stream_token(migration
     assert install and install not in tokens
 
 
+def test_movie_profiles_become_video_profiles_that_keep_their_sites(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, VODLOFT_0_9_0_REVISION)
+    with engine.begin() as connection:
+        profiles = (
+            # id, type, template, Sites
+            (1, "movie", "/downloads/movies/{{ movie_title }}/{{ title }}.ext", '["dailywire"]'),
+            (2, "video", "/downloads/videos/{{ title }} [{{ slug }}].ext", '["youtube"]'),
+            # The same template and format as profile 2.
+            (3, "movie", "/downloads/videos/{{ title }} [{{ slug }}].ext", '["dailywire"]'),
+        )
+        for profile_id, profile_type, path, site_keys in profiles:
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, type, output_template, preferred_format, video_codecs, "
+                "site_keys, include_upcoming_sites) VALUES (:id, :slug, :slug, :type, :path, 'format_1080p', '[]', :keys, 1)"
+            ), {"id": profile_id, "slug": f"p{profile_id}", "type": profile_type, "path": path, "keys": site_keys})
+            connection.execute(text(f"INSERT INTO local_media_profiles_{profile_type} (id) VALUES (:id)"), {"id": profile_id})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        rows = {
+            row.id: row for row in connection.execute(text(
+                "SELECT id, type, output_template, site_keys, include_upcoming_sites FROM local_media_profiles"
+            ))
+        }
+        assert connection.execute(text("SELECT id FROM local_media_profiles_video ORDER BY id")).scalars().all() == [1, 2, 3]
+        assert "local_media_profiles_movie" not in inspect(connection).get_table_names()
+    assert {row.type for row in rows.values()} == {"video"}
+    # Former Movie profiles keep their Sites and stop taking new ones; the Video profile is left as it was.
+    assert [(json.loads(rows[key].site_keys), bool(rows[key].include_upcoming_sites)) for key in (1, 2, 3)] == [
+        (["dailywire"], False), (["youtube"], True), (["dailywire"], False),
+    ]
+    assert rows[1].output_template == "/downloads/movies/{{ movie_title }}/{{ title }}.ext"
+    # A Jinja comment keeps the clashing template apart without naming any file differently.
+    assert rows[3].output_template == "/downloads/videos/{{ title }} [{{ slug }}].ext{# kept apart from p2 #}"
+
+
 def test_a_webdav_folder_name_becomes_the_profiles_title(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
@@ -1242,7 +1284,7 @@ def test_a_webdav_folder_name_becomes_the_profiles_title(migration_database):
                 "VALUES (:id, :folder_name, 'season', 'none')"
             ), {"id": profile_id, "folder_name": folder_name})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
 
     with engine.connect() as connection:
         titles = dict(connection.execute(text("SELECT id, overwrite_collection_title FROM stream_profiles")).all())
@@ -1277,7 +1319,7 @@ def test_webdav_shares_become_downloads_only(migration_database):
             ), {"id": profile_id, "type": profile_type, "token": f"t{profile_id}", "downloads": use_downloads,
                 "stream": use_source_stream})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
 
     with engine.connect() as connection:
         sources = connection.execute(text(
@@ -1319,7 +1361,7 @@ def test_every_collection_numbers_its_extras_in_episode_index_order(migration_da
             ), {"id": episode_id, "collection": collection_id, "season": season_id, "index": index,
                 "identifier": identifier, "slug": f"e{episode_id}"})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, VODLOFT_0_9_1_REVISION)
 
     with engine.connect() as connection:
         numbers = dict(connection.execute(text("SELECT id, extra_index FROM media_items_episode")).all())

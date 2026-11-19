@@ -10,14 +10,13 @@ from config.settings.submodels import FilenameRestrictionMode
 
 
 def test_movie_profile_requires_an_item_specific_variable() -> None:
-    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
+    from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPICreate
 
     with pytest.raises(
         ValidationError,
-        match="Movie and movie-extra downloads could resolve to the same file",
+        match="A movie and its extras could get the same file",
     ) as exc_info:
-        MovieLocalMediaProfileAPICreate.model_validate({
-            "type": "movie",
+        VideoLocalMediaProfileAPICreate.model_validate({
             "name": "Unsafe",
             "outputTemplate": "/downloads/movies/{{ movie_title }}/{{ movie_title }}.ext",
             "preferredFormat": "format_1080p",
@@ -25,8 +24,7 @@ def test_movie_profile_requires_an_item_specific_variable() -> None:
 
     assert exc_info.value.errors(include_url=False)[0]["loc"] == ("outputTemplate",)
 
-    profile = MovieLocalMediaProfileAPICreate(
-        type="movie",
+    profile = VideoLocalMediaProfileAPICreate(
         name="Safe",
         output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
         preferred_format="format_1080p",
@@ -35,10 +33,9 @@ def test_movie_profile_requires_an_item_specific_variable() -> None:
 
 
 def test_movie_profile_accepts_media_type_placeholder_without_suffix() -> None:
-    from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
+    from backend.api.models.video_local_media_profile import VideoLocalMediaProfileAPICreate
 
-    profile = MovieLocalMediaProfileAPICreate(
-        type="movie",
+    profile = VideoLocalMediaProfileAPICreate(
         name="Typed",
         output_template="/downloads/movies/{{ movie_title }}/{{ movie_title }}-{{ media_type }}.ext",
         preferred_format="format_1080p",
@@ -141,7 +138,7 @@ def test_download_view_uses_movie_extra_as_media_identity_and_movie_as_parent() 
     from backend.api.endpoints.media_downloads.service import get_media_downloads_view
     from backend.services.movies import index_dailywire_movie
     from backend.db import Base
-    from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
+    from backend.db.models import Movie, MovieExtra, VideoLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
@@ -150,7 +147,7 @@ def test_download_view_uses_movie_extra_as_media_identity_and_movie_as_parent() 
     Base.metadata.create_all(engine)
     session = Session(engine)
     try:
-        profile = MovieLocalMediaProfile(
+        profile = VideoLocalMediaProfile(
             slug="movies",
             name="Movies",
             output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
@@ -276,7 +273,7 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
     from backend.services.movies import index_dailywire_movie
     from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db import Base
-    from backend.db.models import Movie, MovieExtra, MovieLocalMediaProfile
+    from backend.db.models import Movie, MovieExtra, VideoLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
     from backend.types.media_types import MediaType, MovieExtraType
     from config import get_settings
@@ -288,7 +285,7 @@ def test_movie_extra_download_repairs_legacy_official_trailer_classification(
     Base.metadata.create_all(engine)
     session = Session(engine)
     try:
-        profile = MovieLocalMediaProfile(
+        profile = VideoLocalMediaProfile(
             slug="movies",
             name="Movies",
             output_template="/downloads/movies/{{ movie_title }}/{{ slug }}.ext",

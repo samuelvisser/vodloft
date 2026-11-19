@@ -30,8 +30,7 @@ export const VideoPreferredFormatReg = createSelectRegistry("VideoPreferredForma
 
 export const LocalMediaProfileTypeReg = createSelectRegistry("LocalMediaProfileType", {
   'collection': { label: "Collection", help: "Store downloaded collection episodes" },
-  'movie': { label: "Movie", help: "Store manually downloaded movies" },
-  'video': { label: "Video", help: "Store single videos added on their own" },
+  'video': { label: "Video", help: "Store single videos and movies added on their own" },
 });
 
 export const CollectionLocalMediaProfileScopeReg = createSelectRegistry("CollectionLocalMediaProfileScope", {
@@ -51,7 +50,7 @@ export function effectiveFilenameMode(mode: string | undefined, systemMode: stri
   return mode === 'system' ? systemMode : mode
 }
 
-export type LocalMediaProfileType = 'collection' | 'movie' | 'video'
+export type LocalMediaProfileType = 'collection' | 'video'
 /** The API collection that creates, updates and deletes profiles of one type. */
 export function localMediaProfileEndpoint(type: LocalMediaProfileType | string): string {
     return `${type}-local-media-profiles`

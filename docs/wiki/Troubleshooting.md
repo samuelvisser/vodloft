@@ -142,7 +142,7 @@ Check that:
 - the template ends with `.ext`;
 - variables are available for that profile type;
 - the Jinja syntax is valid;
-- a Movie profile includes an item-specific value such as `{{ title }}` or `{{ media_type }}` so movies and extras cannot use the same path.
+- a Video profile includes an item-specific value such as `{{ title }}` or `{{ media_type }}` so movies and extras cannot use the same path.
 
 Jinja setup statements may appear before `/downloads/` as long as they do not output text.
 

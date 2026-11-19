@@ -60,11 +60,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     is_extra = isinstance(media, MovieExtra)
     if episode is None and movie is None and video is None:
         raise DownloadError("Unsupported media type")
-    expected_type = (
-        LocalMediaProfileType.COLLECTION.value if episode is not None
-        else LocalMediaProfileType.VIDEO.value if video is not None
-        else LocalMediaProfileType.MOVIE.value
-    )
+    expected_type = LocalMediaProfileType.COLLECTION.value if episode is not None else LocalMediaProfileType.VIDEO.value
     if profile.type != expected_type:
         raise DownloadError("The Local Media Profile does not match the media type")
     preferred = profile.preferred_format
@@ -74,10 +70,8 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         # The profile may be offered for Sites that cannot give what it chose, such as an HLS bundle.
         preferred = format_for_site(media_site, preferred)
     audio_only = preferred == PreferredFormat.FORMAT_AUDIO_ONLY.value
-    if movie is not None and preferred in (PreferredFormat.FORMAT_AUDIO_ONLY.value, PreferredFormat.FORMAT_HLS.value):
-        raise DownloadError("Movies and extras require a normal video Local Media Profile")
-    if video is not None and preferred == PreferredFormat.FORMAT_HLS.value:
-        raise DownloadError("Videos cannot be kept as an HLS bundle")
+    if episode is None and preferred == PreferredFormat.FORMAT_HLS.value:
+        raise DownloadError("Videos and movies cannot be kept as an HLS bundle")
 
     # Snapshot configuration before network I/O; later setting edits apply only
     # to later attempts. ORM reads are released before every remote call.
@@ -200,7 +194,11 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
             if playback.metadata.model_fields_set & {"thumbnail_landscape_path", "thumbnail_portrait_path", "thumbnail_square_path", "background_image_path"}:
                 thumbnail = select_thumbnail(playback.metadata)
         tracker.preparing("inspect_stream")
-        source = resolve_download_source(playback.url, preferred_format=preferred, audio_only=False, remux_video_to_mp4=remux, cancellation=tracker.is_canceled)
+        # A movie only comes as video, so an audio only profile keeps the video's sound.
+        source = resolve_download_source(
+            playback.url, preferred_format=preferred, audio_only=audio_only, remux_video_to_mp4=remux,
+            video_fallback_for_audio=audio_only, cancellation=tracker.is_canceled,
+        )
 
     tracker.ensure_active()
     tracker.preparing("plan_outputs")

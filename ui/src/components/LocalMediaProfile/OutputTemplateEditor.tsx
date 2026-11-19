@@ -583,9 +583,8 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     const filenameRestrictionMode = useWatch({control, name: 'filenameRestrictionMode'})
     const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'both'
     const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
-    // Movies are only on The Daily Wire, so a movie profile has no Sites filter.
     const watchedSiteKeys = useWatch({control, name: 'siteKeys'}) as string[] | null | undefined
-    const siteKeys = mode !== 'movie' && Array.isArray(watchedSiteKeys) ? watchedSiteKeys : undefined
+    const siteKeys = Array.isArray(watchedSiteKeys) ? watchedSiteKeys : undefined
     const siteKeysKey = siteKeys ? [...siteKeys].sort().join(',') : null
     const rawLocalMediaProfileId = useWatch({control, name: 'id'})
     const localMediaProfileId = typeof rawLocalMediaProfileId === 'number'
@@ -666,8 +665,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     )
     const usedVariablesKey = usedVariables.map(({name}) => name).join('|')
     const missingMetadataVariables = useMemo(() => {
-        if (mode === 'video') return []
-        const prefix = mode === 'movie' ? 'meta_movie_' : 'meta_collection_'
+        const prefix = mode === 'video' ? 'meta_movie_' : 'meta_collection_'
         const available = new Set(customVariables.map(({name}) => name))
         return [...new Set(
             usedVariableNames.filter((name) => name.startsWith(prefix) && !available.has(name)),
@@ -1058,7 +1056,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                                 <p>{readOnly ? 'Pick an episode to see where its file would go.' : 'Try different values here. Your profile is not changed.'}</p>
                             </div>
                             <label className="template-source-label" htmlFor="template-example-source">
-                                <span>Example episode</span>
+                                <span>{mode === 'collection' ? 'Example episode' : 'Example video or movie'}</span>
                                 <TemplateSourceSelect
                                     mode={mode}
                                     sources={sources}
@@ -1089,7 +1087,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                             <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
                         )}
                         {selectedSource?.fallback && (
-                            <p className="template-preview-status">No {({collection: 'episodes', movie: 'movies', video: 'videos'} as const)[mode]} found yet, so example values are
+                            <p className="template-preview-status">No {({collection: 'episodes', video: 'videos or movies'} as const)[mode]} found yet, so example values are
                                 being used.</p>
                         )}
 
@@ -1198,7 +1196,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                         {metadataEntries.length > 0 && (
                             <>
                                 <hr className="output-template-help-divider" />
-                                <h4>{mode === 'movie' ? 'Movie metadata' : 'Collection metadata'}</h4>
+                                <h4>{mode === 'video' ? 'Video metadata' : 'Collection metadata'}</h4>
                                 <VariableReference entries={metadataEntries} />
                             </>
                         )}

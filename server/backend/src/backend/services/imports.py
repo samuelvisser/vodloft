@@ -47,17 +47,17 @@ from sources.ytdlp_options import check_ytdlp_options
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import (
     Collection, CollectionLocalMediaProfile, DownloadProfile, Episode, ExistingFileScan, ImportLink, ImportRun, ImportStep,
-    LocalMediaProfileBase, MediaDownloadBase, MovieLocalMediaProfile,
+    LocalMediaProfileBase, MediaDownloadBase, VideoLocalMediaProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.adoption import AdoptionError, FoundFile, adopt, download_root, find_file, real_path
 from backend.services.episode_filters import set_profile_filters
 from backend.services.import_filters import filters_from_plan
 from backend.services.local_media_profile_changes import (
-    create_collection_local_media_profile, create_movie_local_media_profile, update_collection_local_media_profile,
+    create_collection_local_media_profile, create_video_local_media_profile, update_collection_local_media_profile,
 )
 from backend.services.local_media_profile_inputs import (
-    CollectionLocalMediaProfileInput, MovieLocalMediaProfileInput, NewCollectionLocalMediaProfile,
+    CollectionLocalMediaProfileInput, VideoLocalMediaProfileInput, NewCollectionLocalMediaProfile,
 )
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.custom_index import (
@@ -1291,14 +1291,15 @@ def _apply_loaded_plan(
 
 
 def _upsert_movie_profile(session: Session, plan: ProfilePlan, links, run: ImportRun, report: _Report) -> LocalMediaProfileBase | None:
-    """A movie Local Media Profile: one that names files the same way is used instead of a copy."""
+    """A movie profile becomes a Video Local Media Profile: one that names files the same way is used instead of a
+    copy."""
     link = links.get(("profile", plan.external_id))
-    existing = session.get(MovieLocalMediaProfile, link.entity_id) if link and link.entity_id else None
+    existing = session.get(VideoLocalMediaProfile, link.entity_id) if link and link.entity_id else None
     if existing is not None:
         return existing
-    reused = session.scalar(select(MovieLocalMediaProfile).where(
-        MovieLocalMediaProfile.output_template == plan.output_template,
-        MovieLocalMediaProfile.preferred_format == plan.settings.get("preferred_format"),
+    reused = session.scalar(select(VideoLocalMediaProfile).where(
+        VideoLocalMediaProfile.output_template == plan.output_template,
+        VideoLocalMediaProfile.preferred_format == plan.settings.get("preferred_format"),
     ).limit(1))
     if reused is not None:
         _remember(session, links, run.importer, "profile", plan.external_id, reused.id, {}, [], run.id)
@@ -1306,7 +1307,7 @@ def _upsert_movie_profile(session: Session, plan: ProfilePlan, links, run: Impor
         return reused
     fields = ("preferred_format", "download_mode", "thumbnail_mode", "metadata_mode", "subtitle_mode")
     try:
-        profile = create_movie_local_media_profile(session, MovieLocalMediaProfileInput.model_validate({
+        profile = create_video_local_media_profile(session, VideoLocalMediaProfileInput.model_validate({
             **{name: plan.settings[name] for name in fields if plan.settings.get(name) is not None},
             "name": _unique_name(session, plan.name), "output_template": plan.output_template,
         }))

@@ -7,7 +7,7 @@ from typing import Union
 from pydantic import Field
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.services.local_media_profile_inputs import IndexingValueDefinition, LocalMediaProfileInput, VideoCodecChoice
+from backend.services.local_media_profile_inputs import IndexingValueDefinition, VideoCodecChoice
 from backend.api.models.pagination import CursorPageRead
 from backend.api.models.source import DownloadOptionsAPIRead
 from backend.types.download_profile_types import AutoSubtitles, SponsorBlockAction
@@ -37,10 +37,6 @@ class VideoCodecChoiceAPIRead(ResponseBase):
 
 class VideoCodecChoiceAPI(RequestBase, VideoCodecChoice):
     """One codec in a Local Media Profile's order, as the UI sends it."""
-
-
-class LocalMediaProfileAPIBaseIn(RequestBase, LocalMediaProfileInput):
-    """Fields shared by all Local Media Profile request models."""
 
 
 class SiteDownloadChoicesAPIRead(ResponseBase):

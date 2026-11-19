@@ -35,8 +35,7 @@ const SIMPLIFY_OUTPUT_PATHS = true
 const USED_FOR_OPTIONS = [
     {value: 'podcast', label: 'Podcasts'},
     {value: 'series', label: 'Series'},
-    {value: 'movie', label: 'Movies'},
-    {value: 'video', label: 'Videos'},
+    {value: 'video', label: 'Videos and movies'},
 ]
 
 const STORAGE_OPTIONS = [

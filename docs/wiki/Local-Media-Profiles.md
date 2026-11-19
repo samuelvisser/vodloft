@@ -2,7 +2,7 @@
 
 A Local Media Profile describes **the local file VODLoft should create**. It controls the preferred format, where the file is stored, and whether incomplete download work is written directly in the library or staged elsewhere first.
 
-Download Profiles use Local Media Profiles for automatic collection downloads. Movies and single videos also use Local Media Profiles, but their downloads are started manually.
+Download Profiles use Local Media Profiles for automatic collection downloads. Movies and single videos use Video Local Media Profiles, and their downloads are started manually.
 
 ## The profile form
 
@@ -29,7 +29,7 @@ have **show and season NFO files** (`tvshow.nfo` and `season.nfo`, for Jellyfin,
 background**, which are saved in the collection root shown under the output template's example. **Date files by
 publish date** gives files the date the episode came out instead of the date it was downloaded.
 
-## Collection, Movie and Video profiles
+## Collection and Video profiles
 
 ### Collection profiles
 
@@ -42,19 +42,17 @@ Collection profiles can use:
 
 A Collection profile also has an **Available for** setting. This controls where VODLoft offers the profile in the interface.
 
-### Movie profiles
-
-Movie profiles can use 4K, 1080p, or 720p video. The same profile can be used for the main movie and its extras, so its output template must keep those items distinct.
-
 ### Video profiles
 
-Video profiles store single videos that you added on their own, outside any collection. They can use 4K, 1080p or 720p video, or audio only. When a site does not offer the chosen quality, VODLoft downloads the best quality below it. New installations start with a **VODLoft Videos** profile; on an existing installation, create one from **Profiles → Local Media Profiles**.
+Video profiles store what you add on its own, outside any collection: single videos, and movies with their extras such as trailers. They can use any video quality from 360p to 8K, or audio only. When a site does not offer the chosen quality, VODLoft downloads the best quality below it.
+
+One profile can hold both videos and movies, but movies usually belong in a folder layout of their own. New installations start with two: **VODLoft Videos** for every site, and **VODLoft Movies**, which is only offered for The Daily Wire's movies. A movie and its extras always use the same profile, so its output template must keep them apart (see [Movies and extras](#movies-and-extras)).
 
 ### Sites
 
 Every profile has a **Sites** setting: the sites, such as YouTube or The Daily Wire, whose media it is offered for. Remove a site to stop offering the profile for media from it; media the profile already downloaded stays where it is.
 
-New profiles start with every site VODLoft knows, plus **Include upcoming sites**. With that option, a site VODLoft sees for the first time, for example when you add a link from a new site, is added to the profile's sites automatically. You can still remove it later. Movie profiles only have The Daily Wire to choose, so they don't show the setting.
+New profiles start with every site VODLoft knows, plus **Include upcoming sites**. With that option, a site VODLoft sees for the first time, for example when you add a link from a new site, is added to the profile's sites automatically. You can still remove it later. A profile meant only for movies leaves it off, so new sites never join it.
 
 ## Download behavior
 
@@ -92,7 +90,7 @@ With **Every language the site offers**, the list is called **Default track lang
 - **Only when there are no real ones** uses an auto-generated subtitle for a language that has no subtitle a person made.
 - **Always** also adds it next to a real one, as its own track marked auto-generated (`Episode.nl.auto.srt` beside the media).
 
-**Movies**, **Series** and Collection profiles available for **Podcasts and Series** start with subtitles beside the media. **Podcast-only** profiles and **Video** profiles start without subtitles.
+**Series** and Collection profiles available for **Podcasts and Series** start with subtitles beside the media, and so does the **VODLoft Movies** profile. **Podcast-only** profiles and new **Video** profiles start without subtitles.
 
 Forced subtitles use names such as `Movie Name.en.forced.srt`, and auto-generated ones `Episode.nl.auto.srt`. The default track beside the media is named like `Episode.en.default.srt`: Jellyfin and Emby pick it by default, while Plex and Kodi go by the subtitle language set in the player. Plex and similar media servers find these files automatically. NPO Start has no subtitles yet, so a profile only for NPO Start has no subtitle settings. A video without subtitles downloads as before, and a subtitle that fails never stops the download. Audio-only downloads never embed subtitles. An HLS bundle keeps embedded subtitles inside it as WebVTT, the format HLS players read, so a podcast app or player streaming the bundle can offer them. Subtitles beside an HLS bundle are ordinary SRT files: the bundle does not refer to them, so deleting one never breaks it.
 
@@ -325,9 +323,9 @@ Once nothing downloaded is left on the old profile and no Download Profile uses 
 
 ## Movies and extras
 
-Movie templates have two groups of values:
+For a movie, a Video profile's template has two groups of values:
 
-- variables beginning with `movie_` always describe the parent movie;
+- variables beginning with `movie_` always describe the parent movie, and are empty for a single video;
 - variables without that prefix describe the actual item being downloaded, which can be either the main movie or a specific movie extra.
 
 This makes it possible to keep all extras inside the movie's folder while giving each item its own filename.
@@ -338,7 +336,7 @@ Example:
 /downloads/Movies/{{ movie_title }}{% if movie_year %} ({{ movie_year }}){% endif %}/{{ media_type }} - {{ title }}.ext
 ```
 
-A movie template must use an item-specific value such as `{{ title }}`, `{{ slug }}`, or `{{ media_type }}` so the main movie and an extra cannot resolve to the same output path.  
+A Video profile's template must use an item-specific value such as `{{ title }}`, `{{ slug }}`, or `{{ media_type }}` so the main movie and an extra cannot resolve to the same output path.  
 VODLoft never overwrites existing files if the same output path is generated for multiple items, but it is
 still a case that should be avoided to make it obvious what content is in a file.
 
@@ -369,6 +367,7 @@ These describe the main movie or the specific extra currently being downloaded:
 | `mature_rating` / `rating` | Item rating when available |
 | `duration_seconds` | Item duration |
 | `media_type` | `movie` for the main feature, or the extra type |
+| `source` | Name of the site the movie comes from |
 | `date`, `time`, `datetime` | Item date/time values |
 | `year`, `month`, `day`, `hour`, `minute`, `second` | Item date/time components |
 
@@ -376,15 +375,16 @@ The Daily Wire does not always provide every field for movie extras. Use conditi
 
 ## Videos
 
-Video templates describe one single video:
+For a single video, a Video profile's template has these values. The `movie_` variables are empty.
 
 | Variable | Meaning |
 | --- | --- |
-| `title` | Video title |
+| `title`, `extended_title` | Video title |
 | `slug` | The site's own id for the video |
 | `author` | Channel or uploader, when the site names one |
 | `source` | Name of the site the video comes from |
 | `duration_seconds` | Video duration in seconds |
+| `media_type` | `video` |
 | `date`, `time`, `datetime` | Upload date/time values |
 | `year`, `month`, `day`, `hour`, `minute`, `second` | Upload date/time components |
 
@@ -426,6 +426,7 @@ A common arrangement is:
 
 - one Collection video profile for Plex/Jellyfin;
 - one Collection audio profile for podcast-style storage or Audiobookshelf;
-- one Movie profile with a conventional movie folder and item-specific extra names.
+- one Video profile for single videos;
+- one Video profile for The Daily Wire's movies, with a conventional movie folder and item-specific extra names.
 
 Local Media Profiles only control files VODLoft creates. Your media server can independently scan whichever subfolders you want.

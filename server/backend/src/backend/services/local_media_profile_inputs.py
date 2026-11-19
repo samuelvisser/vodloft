@@ -42,9 +42,9 @@ from backend.utils.helpers import slugify
 from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    MOVIE_OUTPUT_TEMPLATE_FIELDS,
-    MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    movie_template_has_media_item_field,
+    VIDEO_OUTPUT_TEMPLATE_FIELDS,
+    VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
+    template_has_media_item_field,
     output_template_custom_index_keys,
     validate_output_template_path_requirements,
 )
@@ -271,20 +271,21 @@ class NewCollectionLocalMediaProfile(CollectionLocalMediaProfileInput):
         return self
 
 _MOVIE_EXTRA_COLLISION_MESSAGE = (
-    "Movie and movie-extra downloads could resolve to the same file. Include at least "
-    "one variable that describes the downloaded item, such as {{ title }}, {{ slug }}, "
-    "{{ duration_seconds }}, or {{ media_type }}."
+    "A movie and its extras could get the same file. Include at least one variable that "
+    "describes the downloaded item, such as {{ title }}, {{ slug }}, {{ duration_seconds }} "
+    "or {{ media_type }}."
 )
 
-class MovieLocalMediaProfileInput(LocalMediaProfileInput):
-    type: Literal["movie"] = LocalMediaProfileType.MOVIE.value
-    subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
+class VideoLocalMediaProfileInput(LocalMediaProfileInput):
+    """A Video Local Media Profile's fields. It keeps single videos, and movies with their extras."""
+
+    type: Literal["video"] = LocalMediaProfileType.VIDEO.value
 
     @field_validator("preferred_format")
     @classmethod
-    def _require_video_format(cls, value: PreferredFormat) -> PreferredFormat:
-        if value in {PreferredFormat.FORMAT_AUDIO_ONLY, PreferredFormat.FORMAT_HLS}:
-            raise ValueError("Movie Local Media Profiles require a normal video format")
+    def _reject_hls(cls, value: PreferredFormat) -> PreferredFormat:
+        if value == PreferredFormat.FORMAT_HLS:
+            raise ValueError("Video Local Media Profiles cannot keep an HLS bundle")
         return value
 
     @field_validator("output_template")
@@ -292,11 +293,11 @@ class MovieLocalMediaProfileInput(LocalMediaProfileInput):
     def _validate_output_template(cls, value: str) -> str:
         validate_output_template_path_requirements(
             value,
-            allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
-            allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
+            allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
         )
         if output_template_custom_index_keys(value):
             raise ValueError("custom_index is only available to Collection Local Media Profiles")
-        if not movie_template_has_media_item_field(value):
+        if not template_has_media_item_field(value):
             raise ValueError(_MOVIE_EXTRA_COLLISION_MESSAGE)
         return value
