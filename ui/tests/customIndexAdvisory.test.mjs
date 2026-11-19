@@ -105,7 +105,7 @@ function hookHarness() {
         setTimeout: (callback) => {timers.add(callback); return callback},
         clearTimeout: (callback) => timers.delete(callback),
     }
-    // Only React scheduling and network are mocked. The hook itself is the
+    // Only React scheduling, the API base URL and network are mocked. The hook itself is the
     // production source; response-schema validation has its own API tests.
     const file = resolve(root, 'src/lib/useCustomIndexAdvisory.ts')
     const js = ts.transpileModule(readFileSync(file, 'utf8'), {
@@ -114,6 +114,7 @@ function hookHarness() {
     const exports = {}
     new Function('require', 'exports', 'window', 'fetch', js)((name) => {
         if (name === 'react') return {useState, useEffect}
+        if (name === './api') return {apiUrl: (path = '') => `${window.appConfig.API_URL}${path}`}
         return {CustomIndexAdvisoryResultSchema: {parse: (value) => value}}
     }, exports, window, fetch)
     return {
