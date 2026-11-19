@@ -117,6 +117,12 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         reset(seasonsFormValues(view))
     }, [open, view, reset])
 
+    /** Show what the server answered without resetting the form to it, which would undo the user's unsaved changes.
+     * The cache keeps its own copy of the answer, so that copy is the one the form counts as loaded. */
+    const keepLoaded = (fresh: CollectionSeasonsRead) => {
+        loadedFor.current = queryClient.setQueryData<CollectionSeasonsRead>(queryKey, fresh) ?? fresh
+    }
+
     const words = wordsFor(view?.music ?? false)
     const regs = useMemo(() => view ? registries(view.names, wordsFor(view.music), view) : null, [view])
     const linkSeasonsOn = watch('linkSeasonsOn') ?? false
@@ -200,8 +206,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         try {
             const fresh = await fetch(`${endpoint}/links`, {method: 'POST', credentials: 'include'}).then(readSeasons)
             const choices = new Map((form.getValues('playlists') ?? []).map((choice) => [choice.id, choice]))
-            queryClient.setQueryData(queryKey, fresh)
-            loadedFor.current = fresh
+            keepLoaded(fresh)
             // What the user already switched on or off, or put together, stays.
             setValue('playlists', fresh.playlists.map((playlist) => ({
                 id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
@@ -229,8 +234,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         genericMessage: 'Could not add the link',
         onSuccess: (fresh) => {
             const choices = new Map((form.getValues('playlists') ?? []).map((choice) => [choice.id, choice]))
-            queryClient.setQueryData(queryKey, fresh)
-            loadedFor.current = fresh
+            keepLoaded(fresh)
             // The new link is saved already; what the user changed in the dialog stays.
             setValue('playlists', fresh.playlists.map((playlist) => ({
                 id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
