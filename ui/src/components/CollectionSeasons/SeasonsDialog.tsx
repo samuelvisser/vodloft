@@ -393,9 +393,9 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
                                                     {view.creatorSlug && (
                                                         <p className="seasons-dialog-muted">
-                                                            <Link to={`/creator/${view.creatorSlug}`}>{view.creatorTitle}</Link> looks for
-                                                            new {names.many} once a day and decides what happens with them. Change that
-                                                            on its <Link to={`/edit-creator/${view.creatorSlug}`}>Edit</Link> page.
+                                                            The creator <Link to={`/creator/${view.creatorSlug}`}>{view.creatorTitle}</Link> looks
+                                                            for new {names.many} once a day and decides what happens with them. Change that
+                                                            on the creator's <Link to={`/edit-creator/${view.creatorSlug}`}>Edit</Link> page.
                                                         </p>
                                                     )}
 

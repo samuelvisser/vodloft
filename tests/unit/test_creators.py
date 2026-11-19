@@ -197,6 +197,33 @@ def test_a_youtube_creator_is_read_from_its_tabs_and_playlists_under_the_link_pe
     ]
 
 
+def test_a_youtube_playlist_shows_the_picture_youtube_serves(monkeypatch):
+    from sources import ytdlp_runner as runner
+    from sources.ytdlp.source import YtDlpSource
+
+    signed = "https://i9.ytimg.com/s_p/PLretro/landscape_sddefault.jpg?sqp=abc&rs=def"
+    pages = {
+        "https://www.youtube.com/@workshop/videos": {"channel_id": "UCworkshop", "channel": "Northwind Workshop", "uploader_id": "@workshop", "entries": []},
+        "https://www.youtube.com/@workshop/playlists": {"entries": [{"id": "PLretro", "title": "Retro Tech", "thumbnails": [
+            {"url": "https://i9.ytimg.com/s_p/PLretro/landscape_mqdefault.jpg?sqp=abc&rs=ghi", "width": 320},
+            {"url": signed, "width": 800},
+            # yt-dlp's widest form has no signature, and YouTube answers it with a grey placeholder.
+            {"url": "https://i9.ytimg.com/s_p/PLretro/landscape_maxresdefault.jpg", "width": 2560},
+        ]}]},
+    }
+
+    def run_json(*args, **_kwargs):
+        if args[-1] not in pages:
+            raise runner.YtDlpError("This channel does not have that tab")
+        return pages[args[-1]]
+
+    monkeypatch.setattr(runner, "run_json", run_json)
+
+    details = YtDlpSource().creator_details("https://www.youtube.com/@workshop/videos")
+
+    assert [section.image_url for section in details.sections if section.ref == "PLretro"] == [signed]
+
+
 def test_a_youtube_creator_page_opens_with_its_collections(client, monkeypatch):
     from sources import ytdlp_runner as runner
 
@@ -264,7 +291,7 @@ def test_a_new_playlist_waits_for_a_choice_and_says_so(client, session, tube):
 
     assert [section.ref for section in result.asked] == ["PLbarn"]
     event = session.scalar(select(NotificationEvent))
-    assert (event.title, event.url) == ("New playlist on Northwind Workshop", "/creator/workshop")
+    assert (event.title, event.url) == ("New playlist on Northwind Workshop", "/edit-creator/workshop")
     page = client.get("/api/creators/workshop").json()
     assert next(s for s in page["accounts"][0]["sections"] if s["ref"] == "PLbarn")["status"] == "new"
 

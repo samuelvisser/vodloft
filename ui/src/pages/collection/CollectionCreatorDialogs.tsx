@@ -169,7 +169,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                         : (
                             <ul className="creator-order-note">
                                 <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
-                                {!creator.creatorSlug && <li>The {creatorLabel}'s other playlists and shows start as not in your library, so you can add them from its page.</li>}
+                                {!creator.creatorSlug && <li>The {creatorLabel}'s other playlists and shows start as not in your library, so you can add them from the {creatorLabel}'s Edit page.</li>}
                             </ul>
                         )}
                 </div>

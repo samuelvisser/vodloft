@@ -102,6 +102,7 @@ class CreatorCollectionAPIRead(ResponseBase):
     slug: str
     title: str
     type: str
+    source_key: str
     thumbnail_landscape_path: Optional[str] = None
     episode_count: int = 0
     links: list[str] = Field(default_factory=list)

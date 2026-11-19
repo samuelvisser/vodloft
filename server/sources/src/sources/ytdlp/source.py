@@ -414,10 +414,18 @@ def _count(number: int) -> str:
     return str(number)
 
 
+# A playlist's own picture on YouTube. YouTube serves it only under the signed link it lists it with; yt-dlp adds a
+# widest form without the signature, which YouTube answers with a grey placeholder.
+_UNSIGNED_PLAYLIST_PICTURE = re.compile(r"^https?://i\d?\.ytimg\.com/s_p/[^?]+$")
+
+
 def _thumbnail(info: dict) -> str | None:
     if info.get("thumbnail"):
         return thumbnails.widest_still(info["thumbnail"])
-    candidates = [t for t in info.get("thumbnails") or [] if isinstance(t, dict) and t.get("url")]
+    candidates = [
+        t for t in info.get("thumbnails") or []
+        if isinstance(t, dict) and t.get("url") and not _UNSIGNED_PLAYLIST_PICTURE.match(t["url"])
+    ]
     return thumbnails.widest_still(candidates[-1]["url"]) if candidates else None
 
 

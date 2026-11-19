@@ -104,6 +104,7 @@ export const CreatorPageReadSchema = CreatorReadSchema.extend({
         slug: z.string(),
         title: z.string(),
         type: z.string(),
+        sourceKey: z.string(),
         thumbnailLandscapePath: z.string().nullable(),
         episodeCount: z.number(),
         links: z.array(z.string()),

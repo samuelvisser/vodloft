@@ -1,5 +1,5 @@
 import {useEffect} from 'react'
-import {useNavigate, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useQueryClient} from '@tanstack/react-query'
@@ -13,6 +13,7 @@ import {creatorKindText, newSectionActionReg} from '../../types/creator'
 import {
     CreatorPageReadSchema, CreatorUpdateSchema, type CreatorUpdateIn, type CreatorUpdateOut,
 } from '../../types/schemas/creator'
+import CreatorSectionsEditor from './CreatorSectionsEditor'
 import './CreatorPages.css'
 
 export default function EditCreatorPage() {
@@ -61,8 +62,9 @@ export default function EditCreatorPage() {
         <section className="view creator-view" aria-labelledby="edit-creator-title">
             <PageHeader
                 title="Edit creator" titleId="edit-creator-title"
-                subtitle={<p className="view-description">{creator.title} · {creatorKindText(creator)}</p>}
+                subtitle={<p className="view-description"><Link to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
             />
+            <CreatorSectionsEditor creator={creator} part="new"/>
             <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
                 <div className="form-row creator-membership">
                     <label htmlFor="creator-new-sections">When the {creator.creatorLabel} adds a playlist or show</label>
@@ -99,6 +101,8 @@ export default function EditCreatorPage() {
                     </button>
                 </div>
             </form>
+
+            <CreatorSectionsEditor creator={creator} part="rest"/>
         </section>
     )
 }

@@ -91,7 +91,7 @@ def creator_sections_found(session: Session, creator: Creator, sections: list[Cr
         session, Event.CREATOR_SECTIONS_FOUND,
         title=f"New {what} on {creator.title}" if len(sections) == 1 else f"{len(sections)} new {what} on {creator.title}",
         body=f"{names}. Choose on the {creator_label(creator)}'s page whether to add {'it' if len(sections) == 1 else 'them'}.",
-        url=f"/creator/{creator.slug}", data={"creator": creator.title, "sections": [section.title for section in sections]},
+        url=f"/edit-creator/{creator.slug}", data={"creator": creator.title, "sections": [section.title for section in sections]},
         dedupe_key=f"creator-sections:{creator.id}:{','.join(sorted(section.ref for section in sections))}",
     )
 
