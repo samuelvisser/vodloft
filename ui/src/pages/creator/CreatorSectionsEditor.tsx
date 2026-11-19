@@ -10,6 +10,7 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import {capitalized} from '../../types/creator'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import type {CreatorPageAccountRead, CreatorPageRead, CreatorSectionRead, SectionPlan} from '../../types/schemas/creator'
 
@@ -32,9 +33,15 @@ export function mainTitleOf(creator: CreatorPageRead, account: CreatorPageAccoun
     return creator.collections.find((collection) => collection.slug === account.mainCollectionSlug)?.title ?? creator.title
 }
 
+/** What the collection named after the creator calls a season: an album in a Music collection. */
+export function mainSeasonOf(creator: CreatorPageRead, account: CreatorPageAccountRead): string {
+    return creator.collections.find((collection) => collection.slug === account.mainCollectionSlug)?.type === 'music' ? 'album' : 'season'
+}
+
 /** The ways a section of a creator in the Library can be added, in the words of this creator. */
 export function choices(creator: CreatorPageRead, {account, section}: AccountSection): {label: string, description: string, plan: SectionPlan}[] {
     const mainTitle = mainTitleOf(creator, account)
+    const season = mainSeasonOf(creator, account)
     const main = `the ${creator.creatorLabel}'s main collection`
     const options: {label: string, description: string, plan: SectionPlan}[] = []
     if (isMovie(account, section)) {
@@ -46,7 +53,7 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
     if (section.kind === 'feed') {
         options.push({label: `Add to ${mainTitle}`, description: `Its videos go into ${main}`, plan: {ref: section.ref, target: 'main'}})
     } else if (section.kind === 'list' && account.site.linkSeasons) {
-        options.push({label: `Season of ${mainTitle}`, description: `A season of ${main}`, plan: {ref: section.ref, target: 'main'}})
+        options.push({label: `${capitalized(season)} of ${mainTitle}`, description: `${/^[aeiou]/.test(season) ? 'An' : 'A'} ${season} of ${main}`, plan: {ref: section.ref, target: 'main'}})
     }
     options.push({label: 'Own collection', description: 'A collection of its own in your library', plan: {ref: section.ref, target: 'own'}})
     return options
@@ -55,7 +62,8 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
 type Place = 'main' | 'own' | 'skip'
 
 /** What moving a playlist does, in words, before the user says yes. */
-function moveNote(section: CreatorSectionRead, to: Place, mainTitle: string): string {
+function moveNote(section: CreatorSectionRead, to: Place, mainTitle: string, season: string): string {
+    const a = /^[aeiou]/.test(season) ? 'an' : 'a'
     const noun = (section.kindLabel ?? 'playlist').toLowerCase()
     if (to === 'own') {
         return `${section.title} becomes a collection of its own, and takes its videos out of ${mainTitle}. Downloaded videos `
@@ -63,34 +71,34 @@ function moveNote(section: CreatorSectionRead, to: Place, mainTitle: string): st
             + 'Profiles yet.'
     }
     if (to === 'main') {
-        return `${section.title} becomes a season of ${mainTitle}, and its videos move there. Downloaded videos take their `
+        return `${section.title} becomes ${a} ${season} of ${mainTitle}, and its videos move there. Downloaded videos take their `
             + `files along: renamed when ${mainTitle} downloads them with the same Local Media Profile or not at all, and `
             + `downloaded again there when it uses another one; the old files go once that succeeded. The collection `
             + `${section.collectionTitle ?? section.title} goes once it is empty.`
     }
-    return `${section.title} is no longer a season of ${mainTitle}. Its videos go to the season of videos in no ${noun}, `
+    return `${section.title} is no longer ${a} ${season} of ${mainTitle}. Its videos go to the ${season} of videos in no ${noun}, `
         + `and videos of other creators that only this ${noun} brought in leave ${mainTitle}, files and all. It stays listed `
         + 'on this page, so you can add it again.'
 }
 
 /** The places a playlist in the Library can go, in words. */
-function placeLabels(mainTitle: string): Record<Place, string> {
-    return {main: `Season of ${mainTitle}`, own: 'Collection of its own', skip: 'Not in your library'}
+function placeLabels(mainTitle: string, season: string): Record<Place, string> {
+    return {main: `${capitalized(season)} of ${mainTitle}`, own: 'Collection of its own', skip: 'Not in your library'}
 }
 
 /** Where one of the creator's playlists is, and a select to move it, with its videos, somewhere else. */
-function SectionPlace({section, place, mainTitle, busy, fitLabels, onMove}: {
-    section: CreatorSectionRead, place: Place, mainTitle: string, busy: boolean, fitLabels: readonly string[],
+function SectionPlace({section, place, mainTitle, season, busy, fitLabels, onMove}: {
+    section: CreatorSectionRead, place: Place, mainTitle: string, season: string, busy: boolean, fitLabels: readonly string[],
     onMove: (to: Place) => void,
 }) {
     const registry = useMemo(() => {
-        const labels = placeLabels(mainTitle)
-        return createSelectRegistry(`SectionPlace-${place}-${mainTitle}`, {
+        const labels = placeLabels(mainTitle, season)
+        return createSelectRegistry(`SectionPlace-${place}-${mainTitle}-${season}`, {
             main: {label: labels.main},
             own: {label: labels.own},
             ...(place === 'main' ? {skip: {label: labels.skip}} : {}),
         } as Record<Place, {label: string}>)
-    }, [place, mainTitle])
+    }, [place, mainTitle, season])
     const inputId = `section-place-${section.ref}`
     return (
         <div className="creator-section-place">
@@ -182,7 +190,7 @@ export default function CreatorSectionsEditor({creator, part}: {
     ))
     const placeOf = ({account, section}: AccountSection): Place => section.collectionSlug === account.mainCollectionSlug ? 'main' : 'own'
     // Every select in the list is as wide as the longest choice of any of them, where the row has room for it.
-    const placeChoiceLabels = placed.flatMap((item) => Object.values(placeLabels(mainTitleOf(creator, item.account))))
+    const placeChoiceLabels = placed.flatMap((item) => Object.values(placeLabels(mainTitleOf(creator, item.account), mainSeasonOf(creator, item.account))))
     const found = all.filter(({section}) => section.status === 'new' && !section.collectionSlug)
     const left = all.filter(({section}) => !section.collectionSlug && section.kind !== 'item' && section.status !== 'new')
     const checkedAt = creator.accounts.map((account) => account.checkedAt).filter(Boolean).sort().pop()
@@ -238,6 +246,7 @@ export default function CreatorSectionsEditor({creator, part}: {
                     <div className="creator-section-list">
                         {placed.map((item) => {
                             const mainTitle = mainTitleOf(creator, item.account)
+                            const season = mainSeasonOf(creator, item.account)
                             return (
                                 <div key={sectionKey(item.account, item.section.ref)} className="creator-section-row">
                                     {sectionArt(item.section)}
@@ -247,13 +256,13 @@ export default function CreatorSectionsEditor({creator, part}: {
                                     </div>
                                     {mayManage ? (
                                         <SectionPlace
-                                            section={item.section} place={placeOf(item)} mainTitle={mainTitle} busy={sectionBusy}
+                                            section={item.section} place={placeOf(item)} mainTitle={mainTitle} season={season} busy={sectionBusy}
                                             fitLabels={placeChoiceLabels}
                                             onMove={(to) => setMoving({item, to})}
                                         />
                                     ) : (
                                         <span className="creator-section-note">
-                                            {placeLabels(mainTitle)[placeOf(item) === 'main' ? 'main' : 'own']}
+                                            {placeLabels(mainTitle, season)[placeOf(item) === 'main' ? 'main' : 'own']}
                                         </span>
                                     )}
                                 </div>
@@ -320,7 +329,7 @@ export default function CreatorSectionsEditor({creator, part}: {
                 onDismiss={() => setMoving(null)}
                 confirmButton={{label: sectionBusy ? 'Moving…' : 'Move', onClick: moveSection, disabled: sectionBusy}}
             >
-                {moving && <p>{moveNote(moving.item.section, moving.to, mainTitleOf(creator, moving.item.account))}</p>}
+                {moving && <p>{moveNote(moving.item.section, moving.to, mainTitleOf(creator, moving.item.account), mainSeasonOf(creator, moving.item.account))}</p>}
             </ConfirmDialog>
 
             <ConfirmDialog
@@ -334,7 +343,7 @@ export default function CreatorSectionsEditor({creator, part}: {
                     <ul className="creator-order-note">
                         <li>The account on {splitting.site.name} becomes a creator of its own, named as {splitting.site.name} names them.</li>
                         <li>Its own collection and the collections of its {splitting.site.creatorSections.many} go along. Collections that joined {creator.title} by another link stay.</li>
-                        <li>Collections keep their seasons, episodes, profiles and files. Nothing is indexed again.</li>
+                        <li>Collections keep their {creator.collections.length > 0 && creator.collections.every((collection) => collection.type === 'music') ? 'albums' : 'seasons'}, episodes, profiles and files. Nothing is indexed again.</li>
                     </ul>
                 )}
             </ConfirmDialog>

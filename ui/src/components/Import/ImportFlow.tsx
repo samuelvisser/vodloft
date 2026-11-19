@@ -50,7 +50,7 @@ const DEFAULT_OPTIONS: ImportOptions = {
 }
 
 const AddAsReg = createSelectRegistry('ImportAddAs', {
-    creator: {label: 'As creators', help: 'Each collection joins the creator behind its links, such as a YouTube creator or a Bandcamp artist, which is added to your Library when it is not there yet. An artist\'s albums become the seasons of one collection.'},
+    creator: {label: 'As creators', help: 'Each collection joins the creator behind its links, such as a YouTube creator or a Bandcamp artist, which is added to your Library when it is not there yet. An artist\'s albums or playlists become the albums of one Music collection.'},
     collection: {label: 'As collections', help: 'Each collection is added on its own, with all of its links. You can still add one to its creator later from its Actions menu.'},
 })
 

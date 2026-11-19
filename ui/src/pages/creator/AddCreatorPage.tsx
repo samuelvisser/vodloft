@@ -77,7 +77,7 @@ function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, mus
     }
     const spec: Partial<Record<Choice, {label: string}>> = {}
     if (section.kind === 'feed') spec.main = {label: 'Main collection'}
-    else if (section.kind === 'list' && creator.linkSeasons) spec.main = {label: music ? 'Main collection, as an album' : 'Main collection, as a playlist season'}
+    else if (section.kind === 'list' && creator.linkSeasons) spec.main = {label: music ? 'Main collection, as an album' : 'Main collection, as a season'}
     spec.own = {label: 'A collection of its own'}
     spec.skip = {label: 'Skip'}
     return createSelectRegistry(`CreatorSection-${creator.ref}-${section.ref}-${music}`, spec as Record<Choice, {label: string}>)

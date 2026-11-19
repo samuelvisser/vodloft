@@ -45,7 +45,10 @@ function sectionNote(creator: CollectionCreatorMatch, label: string): string {
 }
 
 /** "Add to creator", in the words of the Site: find the creator behind the collection's link, show what the collection becomes, and add it. */
-export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, onDismiss, findsCreator = true}: DialogProps) {
+export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, seasons, onDismiss, findsCreator = true}: DialogProps & {
+    /** What the collection calls its seasons, such as albums in a Music collection. */
+    seasons: string
+}) {
     const {data: libraryCreators} = useCreators()
     /** ``behind``: the creator behind the collection's link; otherwise the slug of a creator in the Library. */
     const [picked, setTarget] = useState<string | null>(null)
@@ -117,7 +120,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
             {chosen && (
                 <ul className="creator-order-note">
                     <li>{collectionTitle} keeps its own link, so its videos can come from another {creatorLabel} or playlist, such as an artist's music videos on their label's channel.</li>
-                    <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
+                    <li>{seasons.charAt(0).toUpperCase()}{seasons.slice(1)}, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                 </ul>
             )}
             {!chosen && match.isLoading && (
@@ -190,7 +193,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                         ? null
                         : (
                             <ul className="creator-order-note">
-                                <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
+                                <li>{seasons.charAt(0).toUpperCase()}{seasons.slice(1)}, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                                 {!creator.creatorSlug && <li>The {creatorLabel}'s other {creator.sectionNames.many} start as not in your library, so you can add them from the {creatorLabel}'s Edit page.</li>}
                             </ul>
                         )}

@@ -929,6 +929,7 @@ export default function CollectionPage() {
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
         creatorLabel={creatorLabel}
+        seasons={words.season.many}
         onDismiss={() => setCreatorDialog(null)}
       />
       <RemoveFromCreatorDialog
@@ -987,7 +988,7 @@ export default function CollectionPage() {
               {' '}{words.season.one}'s number, also after {words.season.many} were reordered.{' '}
               {collection.type === 'music'
                 ? `In a collection of the artist's albums, downloaded ${fileWords.episode.many} also move to the album they belong in now.`
-                : 'In a collection with playlist seasons, downloaded videos also move to the playlist they belong in now.'}
+                : `In a collection whose ${words.season.many} come from the site's lists, downloaded ${fileWords.episode.many} also move to the ${words.season.one} of the list they belong in now.`}
             </span>
           </span>
         </label>
