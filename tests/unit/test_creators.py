@@ -138,6 +138,24 @@ def test_adding_a_creator_makes_its_collection_with_its_playlists_as_seasons(cli
     assert left["PLmembers"] is None and left["PLtools"] == "PLtools"
 
 
+def test_adding_a_creator_uses_what_its_lookup_found(client, tube, monkeypatch):
+    _steps, found = _lookup(client)
+    asked = []
+    look_up = tube.creator_details
+    monkeypatch.setattr(tube, "creator_details", lambda ref, progress=None: asked.append(ref) or look_up(ref))
+
+    plan = [{"ref": "videos", "target": "main"}]
+    added = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "lookupId": found["lookupId"]})
+
+    assert added.status_code == 201, added.text
+    assert added.json()["title"] == "Northwind Workshop" and asked == []
+    # A lookup id of another link is not used for this one.
+    other = client.post("/api/creators", json={
+        "sourceKey": "tube", "url": f"{ROOT}/videos", "sections": plan, "lookupId": found["lookupId"],
+    })
+    assert asked == [f"{ROOT}/videos"] and other.status_code == 422
+
+
 def test_a_section_already_in_the_library_stays_where_it_is(client, session):
     from backend.db.models import Collection
 
@@ -426,7 +444,7 @@ def _plain_collection(session, slug, url):
     session.commit()
 
 
-def test_adding_a_collection_to_a_creator_adds_the_creator_and_matches_its_link(client, session):
+def test_adding_a_collection_to_a_creator_adds_the_creator_and_matches_its_link(client, session, tube, monkeypatch):
     from backend.db.models import Creator, Collection
 
     _plain_collection(session, "tools", SECTIONS[4].url)
@@ -436,9 +454,12 @@ def test_adding_a_collection_to_a_creator_adds_the_creator_and_matches_its_link(
     assert (match["title"], match["creatorSlug"]) == ("Northwind Workshop", None)
     assert (match["sectionTitle"], match["keptBy"]) == ("Tool Reviews", None)
 
-    response = client.post("/api/collections/tools/creator")
+    # Adding it uses what the lookup found, without asking the Site again.
+    asked = []
+    monkeypatch.setattr(tube, "creator_details", lambda ref, progress=None: asked.append(ref))
+    response = client.post("/api/collections/tools/creator", json={"lookupId": match["lookupId"]})
     assert response.status_code == 200, response.text
-    assert response.json()["creatorSlug"] == "workshop"
+    assert response.json()["creatorSlug"] == "workshop" and asked == []
     creator = session.scalar(select(Creator))
     assert creator.accounts[0].main_collection is None
     page = client.get("/api/creators/workshop").json()

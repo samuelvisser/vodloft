@@ -909,9 +909,11 @@ export function useCollectionCreatorLeave(slug: string, enabled: boolean) {
 }
 
 /** Add a collection to the creator behind its links, or take it out of its creator again. */
-export async function setCollectionCreator(slug: string, inCreator: boolean, moveHere: string[] = []): Promise<void> {
+export async function setCollectionCreator(
+    slug: string, inCreator: boolean, moveHere: string[] = [], lookupId?: string | null,
+): Promise<void> {
     const response = await fetch(collectionCreatorPath(slug), inCreator
-        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moveHere})}
+        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moveHere, lookupId})}
         : {method: 'DELETE', credentials: 'include'})
     if (!response.ok) throw await responseError(response)
 }

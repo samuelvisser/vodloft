@@ -12,6 +12,7 @@ from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, signed_in
 from backend.services.source_requests import asking_source
 
+from . import lookups
 from .service import (
     CreatorNotFoundError, account_link, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, list_creators,
     look_up_creator, lookup_creator_label, move_creator_reassigned, move_creator_section, update_creator,
@@ -38,6 +39,7 @@ def lookup_creator(body: CreatorLookupAPIRequest, access: Access = signed_in()):
         send(step="Checking what is in your library already")
         with db_session() as s:
             found = CreatorLookupAPIRead.model_validate(creator_lookup(s, body.source_key, details))
+        found.lookup_id = lookups.keep(("creator", body.source_key, body.url, body.ref), details)
         return {"creator": found.model_dump(mode="json", by_alias=True)}
 
     return stream_steps(look_up, "Could not look up this creator")
@@ -47,8 +49,10 @@ def lookup_creator(body: CreatorLookupAPIRequest, access: Access = signed_in()):
 def create_creator(body: CreatorAPICreate, access: Access = signed_in()):
     """Add a creator, with a collection for each place its sections go, and start indexing them."""
     access.check_link_at(body.source_key, body.url)
-    with asking_source("Could not look up this creator"):
-        details = look_up_creator(body.source_key, body.url, body.ref)
+    details = lookups.found(body.lookup_id, ("creator", body.source_key, body.url, body.ref))
+    if details is None:
+        with asking_source("Could not look up this creator"):
+            details = look_up_creator(body.source_key, body.url, body.ref)
     return run_write_transaction(lambda s: add_creator(s, body, details, added_by_id=access.user_id))
 
 

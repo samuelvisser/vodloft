@@ -82,7 +82,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
         try {
             await setCollectionCreator(collectionSlug, true, [...moveHere].filter((ref) => (
                 creator.overlaps.some((overlap) => overlap.ref === ref && overlap.canMoveHere)
-            )))
+            )), creator.lookupId)
             await refresh()
             toast.success(`${collectionTitle} is now part of ${creator.title}`)
             onDismiss()
