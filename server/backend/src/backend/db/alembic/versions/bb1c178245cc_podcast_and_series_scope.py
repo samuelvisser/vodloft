@@ -3,7 +3,7 @@
 The Available for choice "Podcasts and Series" was stored as "both". It is now stored as "podcast-and-series".
 
 Revision ID: bb1c178245cc
-Revises: 9c3e1f5a7b20
+Revises: 7d3b9e41a6c2
 Create Date: 2026-11-19
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "bb1c178245cc"
-down_revision = "9c3e1f5a7b20"
+down_revision = "7d3b9e41a6c2"
 branch_labels = None
 depends_on = None
 

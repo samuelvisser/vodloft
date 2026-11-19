@@ -19,7 +19,7 @@ from __future__ import annotations
 import contextvars
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
@@ -29,12 +29,13 @@ from backend.db.models import Collection, CollectionList, CollectionListItem, Ep
 from backend.services.season_order import arrange_seasons, link_first_videos, match_seasons_of_downloaded, season_year
 from backend.services.seasons import create_season_record
 from backend.services.new_lists import ListKind, NewListSetting, list_kinds, new_link_seasons_settings, section_kind
+from backend.services import sites
 from backend.services.sites import collection_site
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.season_types import SeasonType
 from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 from backend.utils.helpers import slugify
-from sources import Feature, ItemRef, ListNames, SectionRef, Source, VideoDetails, get_source
+from sources import Feature, ItemRef, Names, SectionRef, Source, VideoDetails, get_source
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +45,17 @@ _FIRST_YEAR = 1900
 _LISTS_AT_ONCE = 4
 
 
-def list_names(collection: Collection) -> ListNames:
-    """What the collection's Site calls the lists its link seasons come from, such as playlists, with the name of the
-    season of the videos in none of them as this collection calls it: Videos, or Singles in a Music collection."""
-    site = collection_site(collection)
-    names = site.list_names if site is not None else ListNames()
-    return replace(names, loose_season=names.music_loose_season) if collection.type == CollectionType.MUSIC.value else names
+def list_names(collection: Collection) -> Names:
+    """What the collection's Site calls the lists its link seasons come from, such as playlists, or albums and
+    playlists on SoundCloud."""
+    return sites.list_names(collection_site(collection))
+
+
+def loose_season_name(collection: Collection) -> str:
+    """The name of the season of the videos in none of the collection's lists: Videos, or Singles in a Music
+    collection, unless its Site names it otherwise, such as Tracks on Bandcamp."""
+    names = collection_site(collection).season_names
+    return names.music_loose if collection.type == CollectionType.MUSIC.value else names.loose
 
 
 def link_seasons_on(collection: Collection) -> bool:
@@ -371,7 +377,7 @@ class SeasonFinder:
         as Videos, or Singles for an artist."""
         season = next((season for season in self._collection.seasons if season.loose), None)
         if season is None:
-            name = list_names(self._collection).loose_season
+            name = loose_season_name(self._collection)
             season = self.create(slug=name.lower(), name=name, number=self._named_number())
             season.loose = True
             self._s.flush()

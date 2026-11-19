@@ -16,7 +16,7 @@ CREATOR = "https://seasons.example/@creator/videos"
 
 
 def _list(ref: str, title: str) -> SectionRef:
-    return SectionRef(ref, f"https://seasons.example/playlist?list={ref}", title, SectionKind.LIST, kind_label="Playlist")
+    return SectionRef(ref, f"https://seasons.example/playlist?list={ref}", title, SectionKind.LIST)
 
 
 class CreatorSource(ListedSource):
@@ -240,7 +240,7 @@ def test_the_user_renames_and_orders_the_seasons_and_a_new_one_goes_last(source,
 
     view = seasons_view(session, "creator")
     session.rollback()
-    assert (view.names.one, view.names.loose_season, view.link_seasons_offered) == ("playlist", "Videos", True)
+    assert ([t.one for t in view.list_types], view.loose_season, view.link_seasons_offered) == (["playlist"], "Videos", True)
     videos, one = view.seasons
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": one.id, "name": "The One"}, {"id": videos.id, "name": "Uploads"}], custom_season_order=True,
@@ -322,17 +322,19 @@ def test_renaming_files_with_season_folders_moves_downloaded_videos_to_their_pla
 
 
 def test_a_site_can_name_its_link_seasons_itself(source, monkeypatch, session):
-    from backend.services.link_seasons import list_names
-    from sources import ListNames
+    from backend.services.link_seasons import list_names, loose_season_name
+    from sources import Names, SeasonNames, SectionKind, SectionType
 
-    monkeypatch.setattr(type(source), "sites", (replace(source.sites[0], list_names=ListNames("set", "sets", "Loose")),))
+    monkeypatch.setattr(type(source), "sites", (replace(source.sites[0], section_types=(
+        SectionType("set", SectionKind.LIST, Names("set", "sets")), SectionType("mix", SectionKind.LIST, Names("mix", "mixes")),
+    ), season_names=SeasonNames("Loose")),))
     from backend.services import sites
 
     sites._site_of.cache_clear()
     collection = _collection(session)
-    assert list_names(collection) == ListNames("set", "sets", "Loose")
+    assert (list_names(collection), loose_season_name(collection)) == (Names("set or mix", "sets and mixes"), "Loose")
     collection.type = "music"
-    assert list_names(collection) == ListNames("set", "sets", "Singles")
+    assert loose_season_name(collection) == "Singles"
 
 
 def test_a_link_season_keeps_its_sites_order(source, session):

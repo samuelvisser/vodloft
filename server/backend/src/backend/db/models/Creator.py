@@ -111,7 +111,7 @@ class CreatorSection(Base):
     title: Mapped[str]
     kind: Mapped[str] = mapped_column(comment="feed, list, show or item")
     role: Mapped[str] = mapped_column(default="main", server_default="main", comment="main, short or live")
-    kind_label: Mapped[Optional[str]] = mapped_column(comment="What the Site calls it, such as Playlist")
+    type: Mapped[str] = mapped_column(comment="The key of the Site's section type it is, such as feed, list or album")
     item_count: Mapped[Optional[int]]
     image_path: Mapped[Optional[str]]
     description: Mapped[Optional[str]]

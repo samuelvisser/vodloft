@@ -399,12 +399,14 @@ class SearchResultsAPIRead(ResponseBase):
     notice: Optional[SearchNoticeAPIRead] = None
 
 
-class CreatorSectionNamesAPIRead(ResponseBase):
-    """What a Site calls the things its creators add, which VODLoft looks for, in lower case."""
+class SectionTypeAPIRead(ResponseBase):
+    """One type of section a Site's creators have, such as a feed, or an album or a playlist on SoundCloud, and what
+    the Site calls it, in lower case and without an article."""
 
-    one: str
-    """One of them, with its article, such as "a playlist"."""
-    many: str
+    key: str
+    kind: Literal["feed", "list", "show", "item"]
+    one: str = Field(validation_alias=AliasPath("names", "one"))
+    many: str = Field(validation_alias=AliasPath("names", "many"))
 
 
 class ListKindAPIRead(ResponseBase):
@@ -413,7 +415,7 @@ class ListKindAPIRead(ResponseBase):
 
     key: str
     one: str
-    """One of them, with its article, such as "an album"."""
+    """One of them, without an article, such as "album"."""
     many: str
     seasons: bool
     """The lists can be seasons of the creator's own collection."""
@@ -447,9 +449,16 @@ class SiteAPIRead(ResponseBase):
 
     @computed_field
     @property
-    def creator_sections(self) -> CreatorSectionNamesAPIRead:
-        """What the Site calls the things its creators add, such as playlists on YouTube."""
-        return CreatorSectionNamesAPIRead.model_validate(site_of(self.key).creator_sections)
+    def music_creator_label(self) -> str:
+        """What the Site calls a creator with a Music collection, such as artist."""
+        return site_of(self.key).music_creator_label
+
+    @computed_field
+    @property
+    def section_types(self) -> list[SectionTypeAPIRead]:
+        """Every type of section the Site's creators have and what the Site calls it, such as YouTube's feeds and
+        playlists."""
+        return [SectionTypeAPIRead.model_validate(type_) for type_ in site_of(self.key).section_types]
 
     @computed_field
     @property

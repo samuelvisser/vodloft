@@ -185,10 +185,15 @@ export function pluralKindName(name: string): string {
 }
 
 /** The website a collection or video is on, such as YouTube, whichever Source fetches it. */
-/** What a Site calls the things a creator adds there, in lower case: one with its article, such as "a playlist",
- * and many, such as "playlists". */
-export const CreatorSectionNamesSchema = z.object({one: z.string(), many: z.string()})
-export type CreatorSectionNames = z.infer<typeof CreatorSectionNamesSchema>
+/** One type of section a Site's creators have, such as a feed, or an album or a playlist on SoundCloud, and what the
+ * Site calls it, in lower case and without an article: one, such as "playlist", and many, such as "playlists". */
+export const SectionTypeSchema = z.object({
+    key: z.string(),
+    kind: z.enum(['feed', 'list', 'show', 'item']),
+    one: z.string(),
+    many: z.string(),
+})
+export type SectionType = z.infer<typeof SectionTypeSchema>
 
 export const SiteReadSchema = z.object({
     key: z.string(),
@@ -199,8 +204,10 @@ export const SiteReadSchema = z.object({
     audio: z.boolean().optional().default(false),
     /** What the Site calls a creator, in lower case, such as host on The Daily Wire. */
     creatorLabel: z.string().optional().default('creator'),
-    /** What the Site calls the things its creators add, which VODLoft looks for, such as playlists on YouTube. */
-    creatorSections: CreatorSectionNamesSchema.optional().default({one: 'a playlist or show', many: 'playlists and shows'}),
+    /** What the Site calls a creator with a Music collection, such as artist. */
+    musicCreatorLabel: z.string(),
+    /** Every type of section the Site's creators have, such as YouTube's feeds and playlists. */
+    sectionTypes: z.array(SectionTypeSchema),
 })
 export type SiteRead = z.infer<typeof SiteReadSchema>
 

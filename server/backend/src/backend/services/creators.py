@@ -31,7 +31,7 @@ from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
 from backend.utils.helpers import generate_uuid, slugify
 from sources import (
-    CreatorDetails, CreatorPreset, CreatorSectionNames, Feature, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source, site_of,
+    CreatorDetails, CreatorPreset, Feature, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source, site_of,
 )
 
 
@@ -242,10 +242,12 @@ class NewCollectionSettings:
     membership_level: str
 
 
-def _section_record(section: SectionRef, position: int, status: SectionStatus = SectionStatus.KNOWN) -> CreatorSection:
+def _section_record(
+    site: Site, section: SectionRef, position: int, status: SectionStatus = SectionStatus.KNOWN,
+) -> CreatorSection:
     return CreatorSection(
         ref=section.ref, url=section.url, title=section.title, kind=section.kind.value, role=section.role.value,
-        kind_label=section.kind_label, item_count=section.item_count, image_path=section.image_url,
+        type=site.section_type_of(section).key, item_count=section.item_count, image_path=section.image_url,
         description=section.description, access=section.access,
         site_position=position, status=status.value,
     )
@@ -255,7 +257,9 @@ def _new_account(s: Session, creator: Creator, source_key: str, site_key: str, d
     account = CreatorAccount(
         source_key=source_key, site_key=site_key, site_ref=details.ref, url=details.url, handle=details.handle,
     )
-    account.sections = [_section_record(section, position) for position, section in enumerate(details.sections)]
+    account.sections = [
+        _section_record(_site(source_key, site_key), section, position) for position, section in enumerate(details.sections)
+    ]
     creator.accounts.append(account)
     s.flush()
     return account
@@ -314,7 +318,7 @@ def creator_list_kinds(creator: Creator) -> list[ListKind]:
 
 def creator_new_lists(creator: Creator) -> list[NewListSetting]:
     """What the creator does with a new list of each kind of their Sites."""
-    return new_sections_settings(creator_list_kinds(creator), creator.new_lists, creator_label(creator) == ARTIST_LABEL)
+    return new_sections_settings(creator_list_kinds(creator), creator.new_lists, is_music_creator(creator))
 
 
 def new_link_seasons(creator: Creator) -> dict[str, str]:
@@ -526,7 +530,7 @@ def update_creator_settings(s: Session, creator: Creator, settings: CreatorSetti
     ``s`` is a write transaction's session."""
     current = {setting.key: setting.action for setting in creator_new_lists(creator)}
     creator.new_lists = checked_new_sections(
-        creator_list_kinds(creator), {**current, **settings.new_lists}, creator_label(creator) == ARTIST_LABEL,
+        creator_list_kinds(creator), {**current, **settings.new_lists}, is_music_creator(creator),
     )
     for account in creator.accounts:
         if account.main_collection is not None:
@@ -578,14 +582,14 @@ def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails,
     for position, section in enumerate(details.sections):
         record = known.get(section.ref)
         if record is None:
-            record = _section_record(section, position, SectionStatus.NEW)
+            record = _section_record(_site(account.source_key, account.site_key), section, position, SectionStatus.NEW)
             account.sections.append(record)
             found.append(record)
             continue
         for field, value in (
             ("title", section.title), ("url", section.url), ("item_count", section.item_count),
             ("image_path", section.image_url), ("description", section.description), ("site_position", position),
-            ("access", section.access), ("kind_label", section.kind_label),
+            ("access", section.access), ("type", _site(account.source_key, account.site_key).section_type_of(section).key),
         ):
             if getattr(record, field) != value:
                 setattr(record, field, value)
@@ -786,12 +790,8 @@ def delete_creator(s: Session, creator: Creator) -> None:
     s.flush()
 
 
-ARTIST_LABEL = "artist"
-"""What VODLoft calls a creator that has a Music collection."""
-
-
-CREATOR_LABEL = "creator"
-"""What VODLoft calls a creator whose accounts and collections are on more than one Site."""
+_ANY_SITE = Site("", "")
+"""VODLoft's own defaults for any Site, for a creator whose accounts and collections are on more than one Site."""
 
 
 def _site(source_key: str, site_key: str) -> Site:
@@ -803,6 +803,11 @@ def _site(source_key: str, site_key: str) -> Site:
     return site or site_of(site_key)
 
 
+def account_site(account: CreatorAccount) -> Site:
+    """The Site of one of a creator's accounts."""
+    return _site(account.source_key, account.site_key)
+
+
 def _sites(creator: Creator) -> dict[str, Site]:
     """The Sites of the creator's accounts and collections, by key."""
     sites = {account.site_key: _site(account.source_key, account.site_key) for account in creator.accounts}
@@ -812,21 +817,17 @@ def _sites(creator: Creator) -> dict[str, Site]:
     return sites
 
 
+def is_music_creator(creator: Creator) -> bool:
+    """Whether the creator is a music artist: they have a Music collection."""
+    return any(collection.type == CollectionType.MUSIC.value for collection in creator.collections)
+
+
 def creator_label(creator: Creator) -> str:
-    """What the creator is called: an artist when they have a Music collection; otherwise what their Site calls
-    them, when all their accounts and collections are on one Site, such as host on The Daily Wire; and otherwise a
-    creator."""
-    if any(collection.type == CollectionType.MUSIC.value for collection in creator.collections):
-        return ARTIST_LABEL
+    """What the creator is called, as their Site calls them when all their accounts and collections are on one Site,
+    such as host on The Daily Wire, or artist for one with a Music collection; and otherwise as any Site does."""
     sites = list(_sites(creator).values())
-    return sites[0].creator_label if len(sites) == 1 else CREATOR_LABEL
-
-
-def creator_sections(creator: Creator) -> CreatorSectionNames:
-    """What the creator adds, which VODLoft looks for: what their Site calls it, such as playlists on YouTube, when
-    all their accounts and collections are on one Site, and otherwise playlists and shows."""
-    sites = list(_sites(creator).values())
-    return sites[0].creator_sections if len(sites) == 1 else CreatorSectionNames()
+    site = sites[0] if len(sites) == 1 else _ANY_SITE
+    return site.music_creator_label if is_music_creator(creator) else site.creator_label
 
 
 def creator_kind(creator: Creator) -> str:

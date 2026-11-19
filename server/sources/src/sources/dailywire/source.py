@@ -8,7 +8,7 @@ import requests
 from downloader.hls import is_master_playlist, media_playlist_segments, parse_master_playlist
 
 from ..contract import (
-    Access, CreatorDetails, CreatorPreset, CreatorSectionNames, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
+    Access, CreatorDetails, CreatorPreset, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
     DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, SiteSetting, SiteSettings, Source, StreamMethod,
     ReleaseDate, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
@@ -112,7 +112,10 @@ class DailyWireSource(Source):
         # A host has no feed to fold into one show: each of their shows keeps its own seasons.
         creators=True,
         creator_label="host",
-        creator_sections=CreatorSectionNames("a show", "shows"),
+        section_types=(
+            SectionType("show", SectionKind.SHOW, Names("show", "shows")),
+            SectionType("movie", SectionKind.ITEM, Names("movie", "movies")),
+        ),
         creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: "Show", LinkKind.CREATOR: "Host"})
@@ -213,14 +216,14 @@ class DailyWireSource(Source):
         sections = tuple(
             SectionRef(
                 ref=show.slug, url=collection_url(show.slug), title=show.title, kind=SectionKind.SHOW,
-                kind_label="Show", image_url=_first(show.thumbnail_landscape_path, show.background_image_path),
+                image_url=_first(show.thumbnail_landscape_path, show.background_image_path),
                 description=show.description,
             )
             for show in shows
         ) + tuple(
             SectionRef(
                 ref=movie.slug, url=f"https://www.dailywire.com/videos/{movie.slug}", title=movie.title, kind=SectionKind.ITEM,
-                kind_label="Movie", image_url=_first(movie.thumbnail_landscape_path, movie.thumbnail_portrait_path),
+                image_url=_first(movie.thumbnail_landscape_path, movie.thumbnail_portrait_path),
                 description=movie.description,
             )
             for movie in movies

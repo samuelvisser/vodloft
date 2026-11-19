@@ -7,6 +7,7 @@ the Site's own id for it is unique per Site.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from functools import lru_cache
 from typing import Optional
 
@@ -14,9 +15,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Episode, Movie, Site, Video
+from backend.types.collection_types import CollectionType
 from backend.types.link_season_types import OutsideVideos
 from backend.services.local_media_profile_sites import add_upcoming_site
-from sources import Site as SourceSite, collection_on_site, site_for, source_site, sources_for
+from sources import Names, SectionKind, Site as SourceSite, collection_on_site, site_for, source_site, sources_for
 
 
 class CollectionAlreadyAddedError(ValueError):
@@ -77,6 +79,30 @@ def collection_site(collection: Collection) -> SourceSite:
         (link.url for link in sorted(collection.lists, key=lambda link: link.id or 0)), None,
     )
     return _site_of(url, collection.source_key) if url else NO_SITE
+
+
+def collection_creator_label(collection: Collection) -> str:
+    """What the collection's Site calls the creator behind it, such as host on The Daily Wire, or artist when the
+    collection is a Music collection."""
+    site = collection_site(collection)
+    return site.music_creator_label if collection.type == CollectionType.MUSIC.value else site.creator_label
+
+
+def joined_names(names: Iterable[Names]) -> Names:
+    """One name for several section types, such as "album or playlist" and "albums and playlists" for SoundCloud's
+    lists, or "album, playlist or list" for three."""
+    names = list(names)
+    return Names(_joined([name.one for name in names], "or"), _joined([name.many for name in names], "and"))
+
+
+def _joined(words: list[str], conjunction: str) -> str:
+    words = list(dict.fromkeys(words))
+    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} {conjunction} {words[-1]}"
+
+
+def list_names(site: SourceSite) -> Names:
+    """What the Site calls its lists, all its types of list together, such as "albums and playlists" on SoundCloud."""
+    return joined_names(type_.names for type_ in site.types_of(SectionKind.LIST))
 
 
 def episode_site(episode: Episode) -> SourceSite:

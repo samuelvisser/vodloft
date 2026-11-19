@@ -707,7 +707,7 @@ class YtDlpSource(Source):
                 if not listing.get("entries") and tab != "videos":
                     continue
                 sections.append(SectionRef(
-                    ref=tab, url=f"{root}/{tab}", title=title, kind=SectionKind.FEED, role=role, kind_label="Feed",
+                    ref=tab, url=f"{root}/{tab}", title=title, kind=SectionKind.FEED, role=role,
                 ))
             sections += playlists.result()
             has_releases = releases.result()
@@ -766,7 +766,7 @@ class YtDlpSource(Source):
             count = entry.get("playlist_count")
             found.append(SectionRef(
                 ref=str(entry["id"]), url=f"https://www.youtube.com/playlist?list={entry['id']}", title=str(entry["title"]),
-                kind=SectionKind.LIST, kind_label="Playlist", item_count=count if isinstance(count, int) else None,
+                kind=SectionKind.LIST, item_count=count if isinstance(count, int) else None,
                 image_url=image, description=entry.get("description") or None,
             ))
         return found

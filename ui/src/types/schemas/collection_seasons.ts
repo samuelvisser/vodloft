@@ -1,4 +1,5 @@
 import {z} from 'zod'
+import {SectionTypeSchema} from './source'
 
 export const LinkSeasonModeValues = ['all', 'selected'] as const
 export const NewLinkSeasonValues = ['ask', 'add', 'ignore'] as const
@@ -69,7 +70,12 @@ export const CollectionSeasonsReadSchema = z.object({
     onlyLeavingWithFiles: z.number().default(0),
     /** What the collection's Site calls its lists, such as playlists on YouTube, and the season of what is in none
      * of them: Videos, or Singles in a Music collection. */
-    names: z.object({one: z.string(), many: z.string(), looseSeason: z.string()}),
+    /** The types of list of the collection's Site, which its link seasons come from. */
+    listTypes: z.array(SectionTypeSchema),
+    /** The season of the videos in none of the lists, such as Videos, Singles or Tracks. */
+    looseSeason: z.string(),
+    /** What the collection's Site calls the creator behind it, such as artist in a Music collection. */
+    creatorLabel: z.string(),
     /** For a creator's own collection: the creator, which finds its new playlists and decides what happens with them. */
     creatorSlug: z.string().nullable().default(null),
     creatorTitle: z.string().nullable().default(null),

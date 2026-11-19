@@ -7,7 +7,7 @@ import time
 
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from sqlalchemy import and_, func, or_, select
@@ -34,7 +34,7 @@ from backend.services.sites import collection_site
 from backend.types.creator_types import SectionTarget
 from task_manager.scheduler.transactional import queue_task_after_commit
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
-from sources import CreatorDetails, CreatorSectionNames, Feature, SectionRef, get_source
+from sources import CreatorDetails, Feature, SectionRef, SectionType, get_source
 from backend.services.source_requests import asking_source
 
 
@@ -149,7 +149,9 @@ class _Lookup:
     site_key: str
     site_name: str
     creator_label: str
-    creator_sections: CreatorSectionNames
+    music_creator_label: str
+    section_types: tuple[SectionType, ...]
+    audio: bool
     link_seasons: bool
     movies: bool
     sections: list[_Section]
@@ -173,10 +175,13 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
     existing = creators.account_in_library(s, site.key, details.ref)
     return CreatorLookupAPIRead.model_validate(_Lookup(
         details=details, source_key=source_key, site_key=site.key, site_name=site.name,
-        creator_label=site.creator_label, creator_sections=site.creator_sections,
+        creator_label=site.creator_label, music_creator_label=site.music_creator_label, section_types=site.section_types, audio=site.audio,
         link_seasons=creators.lists_are_seasons(site), movies=movies,
         sections=[
-            _Section(section, kept.get(section.ref), titles.get(kept.get(section.ref)), movies_kept.get(section.ref))
+            _Section(
+                replace(section, type=site.section_type_of(section).key), kept.get(section.ref),
+                titles.get(kept.get(section.ref)), movies_kept.get(section.ref),
+            )
             for section in details.sections
         ],
         presets=[
@@ -283,8 +288,8 @@ class _CreatorRead:
         return creators.creator_label(self.creator)
 
     @property
-    def section_names(self):
-        return creators.creator_sections(self.creator)
+    def music(self) -> bool:
+        return creators.is_music_creator(self.creator)
 
     @property
     def kind(self) -> str:
@@ -612,11 +617,12 @@ class _Match:
     details: CreatorDetails
     site_name: str
     creator_label: str
-    section_names: object
+    section_types: object
     section: object | None
     kept_by: str | None
     creator_slug: str | None = None
     overlaps: list = field(default_factory=list)
+    section_type: str | None = None
 
     def __getattr__(self, name):
         return getattr(self.details, name)
@@ -630,10 +636,10 @@ def collection_creator_match(s: Session, collection_slug: str, source_key: str, 
     overlaps = creators.join_overlaps(s, collection, source_key, details, existing)
     movable = keeper is not None and any(overlap.ref == section.ref and overlap.can_move_here for overlap in overlaps)
     return CollectionCreatorMatchAPIRead.model_validate(_Match(
-        details, site.name, site.creator_label, site.creator_sections, section if keeper is None or movable else None,
+        details, site.name, site.creator_label, site.section_types, section if keeper is None or movable else None,
         keeper.title if keeper is not None and not movable else None,
         existing.creator.slug if existing is not None else None,
-        overlaps,
+        overlaps, site.section_type_of(section).key if section is not None else None,
     ))
 
 

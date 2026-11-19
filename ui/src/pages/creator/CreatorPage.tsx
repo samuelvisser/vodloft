@@ -17,7 +17,7 @@ import {PageHeaderAction} from '../../components/common/PageHeader'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import {postReassignedMove, reassignedMoveMessage} from '../../components/Episode/SeasonPlaceNote'
 import {toast} from 'react-hot-toast'
-import {creatorKindText} from '../../types/creator'
+import {creatorKindText, joinedNames} from '../../types/creator'
 import CreatorHeader from './CreatorHeader'
 import CreatorNotInLibrary from './CreatorNotInLibrary'
 import './CreatorPages.css'
@@ -178,7 +178,7 @@ export default function CreatorPage() {
                                 <PageHeaderAction icon={faIcon('fass', 'pen')} label="Edit" variant="secondary" to={`/edit-creator/${creator.slug}`}/>
                                 <ActionMenu items={[{
                                     label: checking ? 'Looking…' : 'Check now',
-                                    description: `Look for new ${creator.sectionNames.many}`,
+                                    description: `Look for new ${joinedNames(creator.newLists).many || 'lists'}`,
                                     icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: checking,
                                     onSelect: () => void check(),
@@ -213,7 +213,7 @@ export default function CreatorPage() {
 
             {checking && (
                 <p className="creator-note" role="status">
-                    VODLoft is looking for new {creator.sectionNames.many}. New ones show under Collections when it is done.
+                    VODLoft is looking for new {joinedNames(creator.newLists).many || 'lists'}. New ones show under Collections when it is done.
                 </p>
             )}
             {actionError && <div className="form-error-card" role="alert">{actionError}</div>}
