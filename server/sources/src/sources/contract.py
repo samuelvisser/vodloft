@@ -77,7 +77,7 @@ class Feature(StrEnum):
     downloads. Without it the studio is left to the media itself."""
     CHANNELS = "channels"
     """Looking up a creator's channel, with ``channel_details``: who they are and the sections
-    their page offers. Only a Site with a ``channel_label`` offers channels."""
+    their page offers. Only a Site with ``channels`` offers them."""
     PENDING_CHECKS = "pending_checks"
     """Listing upcoming and live videos with their publish status, and looking them up again
     with ``check_pending`` until they are published. VODLoft shows them, but never records one
@@ -753,8 +753,11 @@ class Site:
     accesses: tuple[Access, ...] = ()
     """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
     by the keys its Sources tell."""
-    channel_label: str | None = None
-    """What the Site calls a creator's channel, such as channel or host. A Site without one offers no channels."""
+    channels: bool = False
+    """The Site has creators' channels VODLoft can add, through a Source with ``Feature.CHANNELS``."""
+    channel_label: str = "channel"
+    """What the Site calls a creator's channel, in lower case, such as host on The Daily Wire. VODLoft names the
+    Site's channels by it everywhere."""
     channel_presets: tuple[ChannelPreset, ...] = ()
     """The ways the Site offers to keep a channel, the first one the default."""
     shows_locked: bool = True
@@ -939,6 +942,11 @@ class Source(ABC):
 
         A lookup can take a while, so it tells ``progress`` what it is doing, as a short sentence such as
         "Listing the playlists"."""
+        raise NotImplementedError(f"{self.name} has no channels")
+
+    def channel_of(self, url: str) -> str | None:
+        """The channel a collection's link belongs to, as ``channel_details`` takes it, or None when the link is not
+        one channel's. Slow: it may ask the Site. Only Sources with ``Feature.CHANNELS`` implement it."""
         raise NotImplementedError(f"{self.name} has no channels")
 
     def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:

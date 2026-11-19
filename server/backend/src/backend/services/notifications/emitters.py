@@ -9,6 +9,8 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from sources import site_of
+
 from backend.db.models import Channel, ChannelSection, Collection, DownloadProfile, Episode, User
 
 from .events import Event, emit
@@ -87,7 +89,7 @@ def channel_sections_found(session: Session, channel: Channel, sections: list[Ch
     emit(
         session, Event.CHANNEL_SECTIONS_FOUND,
         title=f"New {what} on {channel.title}" if len(sections) == 1 else f"{len(sections)} new {what} on {channel.title}",
-        body=f"{names}. Choose on the channel's page whether to add {'it' if len(sections) == 1 else 'them'}.",
+        body=f"{names}. Choose on the {site_of(channel.site_key).channel_label}'s page whether to add {'it' if len(sections) == 1 else 'them'}.",
         url=f"/channel/{channel.slug}", data={"channel": channel.title, "sections": [section.title for section in sections]},
         dedupe_key=f"channel-sections:{channel.id}:{','.join(sorted(section.ref for section in sections))}",
     )

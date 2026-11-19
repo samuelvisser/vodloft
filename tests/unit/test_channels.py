@@ -30,9 +30,12 @@ class ChannelSource(ListedSource):
     domains = ("tube.example",)
     features = ListedSource.features | {Feature.CHANNELS}
     sites = (Site(
-        "tube", "Tube", ("tube.example",), channel_label="channel",
+        "tube", "Tube", ("tube.example",), channels=True,
         channel_presets=(ChannelPreset.ONE_SHOW, ChannelPreset.PER_LIST, ChannelPreset.PICK),
     ),)
+
+    def channel_of(self, url):
+        return ROOT if url.startswith("https://tube.example/") else None
 
     def channel_details(self, ref, progress=lambda step: None):
         progress("Reading the channel")
@@ -58,7 +61,10 @@ def client(tube, session):
 
     app = FastAPI()
     app.add_exception_handler(ServiceError, lambda _request, exc: JSONResponse(status_code=422, content={"detail": str(exc)}))
+    from backend.api.endpoints.collections import router as collection_router_module
+
     app.include_router(channel_router_module.router, prefix="/api")
+    app.include_router(collection_router_module.router, prefix="/api")
     with TestClient(app) as test_client:
         yield test_client
 
@@ -78,7 +84,7 @@ def _plan(body, preset):
 def test_one_show_folds_feeds_and_playlists_into_one_collection_and_keeps_shorts_apart(client):
     steps, body = _lookup(client)
 
-    assert steps == ["Reading the channel", "Checking what is in your library already"]
+    assert steps == ["Looking the channel up", "Reading the channel", "Checking what is in your library already"]
     assert (body["title"], body["channelLabel"], body["facts"]) == ("Northwind Workshop", "channel", ["1.2M subscribers"])
     assert _plan(body, "one_show") == {
         "videos": ("main", "site_seasons"),
@@ -331,6 +337,90 @@ def test_a_new_section_that_is_already_in_the_library_needs_no_choice(client, se
 
     assert result.asked == [] and result.added == []
 
+
+def _plain_collection(session, slug, url, *, link=None):
+    from backend.db.models import Collection, CollectionLink
+
+    session.add(Collection(
+        uuid=f"uuid-{slug}", slug=slug, source_key="tube", title=f"My {slug}", sharing_url=url,
+        membership_level="FREE", type="series", episode_identifier="seasonal", author_name="x", author_slug="x",
+        links=[CollectionLink(url=link or url)],
+    ))
+    session.commit()
+
+
+def test_adding_a_collection_to_a_channel_adds_the_channel_and_matches_its_link(client, session):
+    from backend.db.models import Channel, Collection
+
+    _plain_collection(session, "tools", SECTIONS[4].url)
+
+    match = client.get("/api/collections/tools/channel/match").json()
+    assert (match["title"], match["channelSlug"]) == ("Northwind Workshop", None)
+    assert [(link["url"], link["sectionTitle"], link["keptBy"]) for link in match["links"]] == [
+        (SECTIONS[4].url, "Tool Reviews", None),
+    ]
+
+    response = client.post("/api/collections/tools/channel")
+    assert response.status_code == 200, response.text
+    assert response.json()["channelSlug"] == "workshop"
+    channel = session.scalar(select(Channel))
+    assert channel.main_collection is None
+    page = client.get("/api/channels/workshop").json()
+    assert [(c["title"], c["links"]) for c in page["collections"]] == [("My tools", ["Tool Reviews"])]
+    # The channel's other sections are not in the library, and nothing asks about them.
+    assert {s["ref"]: (s["collectionSlug"], s["status"]) for s in page["sections"]}["PLcabin"] == (None, "known")
+    assert session.scalar(select(Collection).where(Collection.slug == "tools")).episodes == []
+
+
+def test_a_collection_added_to_a_channel_it_has_takes_its_place_in_the_order(client, session):
+    from backend.db.models import Collection
+
+    client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "shorts", "target": "own"},
+    ]})
+    _plain_collection(session, "tools", SECTIONS[4].url)
+    # Another collection of the same Shorts, added from a link with something after it.
+    _plain_collection(session, "my-shorts", f"{SECTIONS[1].url}?sort=new", link=SECTIONS[1].url)
+
+    assert client.post("/api/collections/tools/channel").status_code == 200
+    order = client.get("/api/channels/workshop").json()["order"]
+    # A list goes above the feeds, which keep their order.
+    assert [entry["ref"] for entry in order] == ["PLtools", "shorts", "videos"]
+
+    # Shorts already has a collection in the channel, so the second one has nothing to match.
+    match = client.get("/api/collections/my-shorts/channel/match").json()
+    assert match["channelSlug"] == "workshop"
+    assert match["links"][0]["keptBy"] == "Northwind Workshop Shorts" and match["links"][0]["sectionTitle"] is None
+    refused = client.post("/api/collections/my-shorts/channel")
+    assert refused.status_code == 422 and "None of the links" in refused.json()["detail"]
+    assert session.scalar(select(Collection.channel_id).where(Collection.slug == "my-shorts")) is None
+
+
+def test_removing_a_collection_from_its_channel_makes_it_plain_again(client, session):
+    from backend.db.models import Channel, Collection, CollectionLink
+
+    client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "PLtools", "target": "own"},
+    ]})
+    leave = client.get("/api/collections/UCworkshop/channel/leave").json()
+    assert leave == {"channelTitle": "Northwind Workshop", "videosKeptElsewhere": 0}
+
+    response = client.delete("/api/collections/UCworkshop/channel")
+    assert response.status_code == 200, response.text
+    assert response.json()["channelSlug"] is None
+    session.expire_all()
+    main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
+    assert [link.channel_section_id for link in main.links] == [None]
+    assert session.scalar(select(Channel)).main_collection_id is None
+    page = client.get("/api/channels/workshop").json()
+    assert [c["title"] for c in page["collections"]] == ["Tool Reviews"]
+    # Its link is still the Videos page, so the channel page shows it kept there.
+    assert next(s for s in page["sections"] if s["ref"] == "videos")["collectionSlug"] == "UCworkshop"
+    assert session.scalar(select(CollectionLink.url).where(CollectionLink.collection_id == main.id)) == SECTIONS[0].url
+
+    # It can join again.
+    assert client.post("/api/collections/UCworkshop/channel").status_code == 200
+
 def test_a_failed_lookup_ends_with_what_went_wrong(client, tube, monkeypatch):
     def refuse(ref, progress=lambda step: None):
         progress("Reading the channel")
@@ -340,6 +430,18 @@ def test_a_failed_lookup_ends_with_what_went_wrong(client, tube, monkeypatch):
     response = client.post("/api/channels/lookup", json={"sourceKey": "tube", "url": ROOT})
 
     assert [json.loads(line) for line in response.text.splitlines()] == [
+        {"step": "Looking the channel up", "channelLabel": "channel"},
         {"step": "Reading the channel"},
         {"error": "Could not look up this channel: This channel does not exist"},
     ]
+
+
+def test_a_site_names_its_channels_in_its_own_words(client, tube, monkeypatch):
+    from dataclasses import replace
+
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], channel_label="host"),))
+    response = client.post("/api/channels/lookup", json={"sourceKey": "tube", "url": ROOT})
+    lines = [json.loads(line) for line in response.text.splitlines()]
+
+    assert lines[0] == {"step": "Looking the host up", "channelLabel": "host"}
+    assert lines[-1]["channel"]["channelLabel"] == "host"

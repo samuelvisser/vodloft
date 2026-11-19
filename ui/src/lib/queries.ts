@@ -24,6 +24,7 @@ import {useFrontendPuller} from './puller'
 import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/siteSettings'
 import {
     ChannelLookupReadSchema, ChannelPageReadSchema, ChannelReadSchema, type ChannelLookupRead, type ChannelPageRead, type ChannelRead,
+    CollectionChannelLeaveSchema, CollectionChannelMatchSchema, type CollectionChannelLeave, type CollectionChannelMatch,
     type SectionPlan,
 } from '../types/schemas/channel'
 import {downloadStatusesForApi} from './downloadStatusFilters'
@@ -765,7 +766,7 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
 /** Look a channel up at its Site. It can take a minute: ``onStep`` hears what the lookup is doing as it goes. */
 export async function lookUpChannel(
     body: {sourceKey: string, url?: string | null, ref?: string | null},
-    onStep: (step: string) => void,
+    onStep: (step: string, channelLabel?: string) => void,
     signal?: AbortSignal,
 ): Promise<ChannelLookupRead> {
     const response = await fetch(`${apiUrl()}/channels/lookup`, {
@@ -785,8 +786,8 @@ export async function lookUpChannel(
         const lines = buffered.split('\n')
         buffered = done ? '' : lines.pop() ?? ''
         for (const line of lines.filter((item) => item.trim())) {
-            const message = JSON.parse(line) as {step?: string, channel?: unknown, error?: string}
-            if (message.step) onStep(message.step)
+            const message = JSON.parse(line) as {step?: string, channelLabel?: string, channel?: unknown, error?: string}
+            if (message.step) onStep(message.step, message.channelLabel)
             else if (message.error) throw new ApiError(message.error, 502)
             else return ChannelLookupReadSchema.parse(message.channel)
         }
@@ -820,6 +821,44 @@ export async function addChannelSections(slug: string, sections: SectionPlan[]):
     })
     if (!response.ok) throw await responseError(response)
     return ChannelPageReadSchema.parse(await response.json())
+}
+
+function collectionChannelPath(slug: string, rest = ''): string {
+    return `${apiUrl()}/collections/${encodeURIComponent(slug)}/channel${rest}`
+}
+
+/** Find the channel behind a collection's links, and which of its sections each link becomes. Slow: asks the site. */
+export function useCollectionChannelMatch(slug: string, enabled: boolean) {
+    return useQuery<CollectionChannelMatch, Error>({
+        queryKey: ['collection-channel-match', slug] as const,
+        enabled,
+        retry: false,
+        staleTime: 60_000,
+        queryFn: async () => {
+            const response = await fetch(collectionChannelPath(slug, '/match'), {credentials: 'include'})
+            if (!response.ok) throw await responseError(response)
+            return CollectionChannelMatchSchema.parse(await response.json())
+        },
+    })
+}
+
+export function useCollectionChannelLeave(slug: string, enabled: boolean) {
+    return useQuery<CollectionChannelLeave, Error>({
+        queryKey: ['collection-channel-leave', slug] as const,
+        enabled,
+        retry: false,
+        queryFn: async () => {
+            const response = await fetch(collectionChannelPath(slug, '/leave'), {credentials: 'include'})
+            if (!response.ok) throw await responseError(response)
+            return CollectionChannelLeaveSchema.parse(await response.json())
+        },
+    })
+}
+
+/** Add a collection to the channel behind its links, or take it out of its channel again. */
+export async function setCollectionChannel(slug: string, inChannel: boolean): Promise<void> {
+    const response = await fetch(collectionChannelPath(slug), {method: inChannel ? 'POST' : 'DELETE', credentials: 'include'})
+    if (!response.ok) throw await responseError(response)
 }
 
 /** Look for the channel's new playlists and shows now. */

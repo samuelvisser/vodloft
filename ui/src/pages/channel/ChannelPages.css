@@ -91,6 +91,12 @@
 }
 .channel-order-actions button:disabled { opacity: .3; cursor: default; }
 .channel-order-actions button:hover:not(:disabled) { background: rgba(100, 116, 139, 0.15); }
+.channel-join { display: flex; flex-direction: column; gap: .75rem; }
+.channel-join-who { display: flex; gap: .75rem; align-items: center; }
+.channel-join-who .channel-identity-copy { display: flex; flex-direction: column; }
+.channel-avatar--small { width: 48px; height: 48px; flex-basis: 48px; font-size: 1.2rem; }
+ul.channel-order-note { padding-left: 1.1rem; display: flex; flex-direction: column; gap: .25rem; }
+
 
 /* While a channel is looked up: what the lookup is doing, over pulsing blocks in the shape of the page. */
 .channel-skeleton { display: flex; flex-direction: column; gap: 1.25rem; }

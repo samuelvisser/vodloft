@@ -18,6 +18,8 @@ import {PreferredFormatReg} from '../../types/local_media_profile'
 import {getEpisodePreviewTotal, loadEpisodePreviewFromStorage} from '../../lib/cache'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import CollectionDownloadAllDialog from './CollectionDownloadAllDialog'
+import {AddToChannelDialog, RemoveFromChannelDialog} from './CollectionChannelDialogs'
+import {hasSourceFeature, SourceFeature} from '../../types/schemas/source'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import './CollectionPage.css'
 import {faIcon} from '../../icons/faIcon'
@@ -143,6 +145,7 @@ export default function CollectionPage() {
   const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
   const [redownloadConfirm, setRedownloadConfirm] = useState(false)
   const [downloadAllConfirm, setDownloadAllConfirm] = useState(false)
+  const [channelDialog, setChannelDialog] = useState<'add' | 'remove' | null>(null)
   const [syncLogOpen, setSyncLogOpen] = useState(false)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
@@ -222,6 +225,7 @@ export default function CollectionPage() {
   // YouTube channel's members-only videos. Episodes the account can watch are never hidden.
   const [storedShowLocked, setShowLocked] = useShowLocked(id)
   const showLocked = storedShowLocked ?? collection?.site?.showsLocked ?? true
+  const channelLabel = collection?.site?.channelLabel ?? 'channel'
   const {
     data: episodePagesData,
     isLoading: episodesLoading,
@@ -541,6 +545,15 @@ export default function CollectionPage() {
       disabled: lockedCheckBusy,
       disabledReason: lockedCheckBusy ? 'The locked videos are being checked again.' : undefined,
       onSelect: () => void checkLockedAgain(),
+    }] : []),
+    ...(collection.channelSlug ? [{
+      label: `Remove from ${channelLabel}`,
+      icon: faIcon('fass', 'link-slash') as [string, string],
+      onSelect: () => setChannelDialog('remove'),
+    }] : hasSourceFeature(collection, SourceFeature.CHANNELS) ? [{
+      label: `Add to ${channelLabel}`,
+      icon: faIcon('fass', 'circle-user') as [string, string],
+      onSelect: () => setChannelDialog('add'),
     }] : []),
     ...(sourceControls(collection).metadataRefresh ? [{
       label: 'Refresh all metadata',
@@ -866,6 +879,21 @@ export default function CollectionPage() {
           onStartingChange={onStartingChange('collection.download_all')}
         />
       )}
+
+      <AddToChannelDialog
+        open={channelDialog === 'add'}
+        collectionSlug={collection.slug}
+        collectionTitle={collection.title}
+        channelLabel={channelLabel}
+        onDismiss={() => setChannelDialog(null)}
+      />
+      <RemoveFromChannelDialog
+        open={channelDialog === 'remove'}
+        collectionSlug={collection.slug}
+        collectionTitle={collection.title}
+        channelLabel={channelLabel}
+        onDismiss={() => setChannelDialog(null)}
+      />
 
       <ActionConfirmDialogue
         open={metadataRefreshConfirm}

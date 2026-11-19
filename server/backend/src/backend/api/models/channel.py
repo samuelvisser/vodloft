@@ -169,3 +169,37 @@ class ChannelSectionsAPIAdd(RequestBase):
     """Add sections of a channel to its collections, or ignore them."""
 
     sections: list[SectionPlanAPIIn] = Field(min_length=1, max_length=500)
+
+
+class ChannelLinkMatchAPIRead(ResponseBase):
+    """One of a collection's links, and the channel's section it becomes."""
+
+    url: str = Field(validation_alias=AliasPath("link", "url"))
+    title: Optional[str] = Field(default=None, validation_alias=AliasPath("link", "title"))
+    section_title: Optional[str] = Field(default=None, validation_alias=AliasPath("section", "title"))
+    section_kind_label: Optional[str] = Field(default=None, validation_alias=AliasPath("section", "kind_label"))
+    kept_by: Optional[str] = None
+    """The title of another of the channel's collections that keeps this section already."""
+
+
+class CollectionChannelMatchAPIRead(ResponseBase):
+    """The channel behind a collection's links, before the collection is added to it."""
+
+    site_name: str
+    channel_label: str
+    ref: str
+    url: Optional[str] = None
+    title: str
+    handle: Optional[str] = None
+    avatar_url: Optional[str] = None
+    channel_slug: Optional[str] = None
+    """The channel's slug, when it is already in the Library."""
+    links: list[ChannelLinkMatchAPIRead]
+
+
+class CollectionChannelLeaveAPIRead(ResponseBase):
+    """What removing a collection from its channel changes."""
+
+    channel_title: str
+    videos_kept_elsewhere: int
+    """Videos the collection's links list that another of the channel's collections keeps; it adds them too after."""

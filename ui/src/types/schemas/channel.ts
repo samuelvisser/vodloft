@@ -130,3 +130,33 @@ export const ChannelUpdateSchema = z.object({
 })
 export type ChannelUpdateIn = z.input<typeof ChannelUpdateSchema>
 export type ChannelUpdateOut = z.output<typeof ChannelUpdateSchema>
+
+export const ChannelLinkMatchSchema = z.object({
+    url: z.string(),
+    title: z.string().nullable().optional(),
+    sectionTitle: z.string().nullable().optional(),
+    sectionKindLabel: z.string().nullable().optional(),
+    /** Another of the channel's collections that keeps this section already. */
+    keptBy: z.string().nullable().optional(),
+})
+export type ChannelLinkMatch = z.infer<typeof ChannelLinkMatchSchema>
+
+/** The channel behind a collection's links, before the collection is added to it. */
+export const CollectionChannelMatchSchema = z.object({
+    siteName: z.string(),
+    channelLabel: z.string(),
+    ref: z.string(),
+    url: z.string().nullable().optional(),
+    title: z.string(),
+    handle: z.string().nullable().optional(),
+    avatarUrl: z.string().nullable().optional(),
+    channelSlug: z.string().nullable().optional(),
+    links: z.array(ChannelLinkMatchSchema),
+})
+export type CollectionChannelMatch = z.infer<typeof CollectionChannelMatchSchema>
+
+export const CollectionChannelLeaveSchema = z.object({
+    channelTitle: z.string(),
+    videosKeptElsewhere: z.number(),
+})
+export type CollectionChannelLeave = z.infer<typeof CollectionChannelLeaveSchema>

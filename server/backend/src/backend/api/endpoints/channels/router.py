@@ -20,7 +20,7 @@ from backend.services.source_requests import SourceRequestError, asking_source
 from config.network import NO_INTERNET_CONNECTION_MESSAGE, is_no_internet_error
 
 from .service import (
-    ChannelNotFoundError, add_channel, add_sections, channel_lookup, channel_page, check_channel, list_channels, look_up_channel,
+    ChannelNotFoundError, add_channel, add_sections, channel_lookup, channel_page, check_channel, list_channels, look_up_channel, lookup_channel_label,
     update_channel,
 )
 
@@ -36,7 +36,8 @@ router = APIRouter(prefix="/channels", tags=["Channels"])
 def lookup_channel(body: ChannelLookupAPIRequest, access: Access = signed_in()):
     """Look a channel up at its Site: who it is, its sections, and what each way of adding it does with them.
 
-    Looking a channel up can take a minute, so the answer is a line of JSON per step: ``{"step": "..."}`` while it
+    Looking a channel up can take a minute, so the answer is a line of JSON per step: first ``{"step": "...",
+    "channelLabel": "..."}`` with what the Site calls a channel, then ``{"step": "..."}`` while it
     works, then ``{"channel": ChannelLookupAPIRead}`` or ``{"error": "..."}``.
     """
     access.check_link_at(body.source_key, body.url)
@@ -47,7 +48,9 @@ def lookup_channel(body: ChannelLookupAPIRequest, access: Access = signed_in()):
 
     def look_up() -> None:
         try:
-            with asking_source("Could not look up this channel"):
+            label = lookup_channel_label(body.source_key, body.url)
+            send(step=f"Looking the {label} up", channelLabel=label)
+            with asking_source(f"Could not look up this {label}"):
                 details = look_up_channel(body.source_key, body.url, body.ref, lambda step: send(step=step))
             send(step="Checking what is in your library already")
             with db_session() as s:

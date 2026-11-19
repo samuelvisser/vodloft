@@ -25,6 +25,7 @@ export const SourceFeature = {
     EPISODE_LOOKUPS: 'episode_lookups',
     PAGE_STREAMS: 'page_streams',
     OWN_STUDIO: 'own_studio',
+    CHANNELS: 'channels',
 } as const
 export type SourceFeatureValue = typeof SourceFeature[keyof typeof SourceFeature]
 
@@ -181,6 +182,8 @@ export const SiteReadSchema = z.object({
     name: z.string(),
     /** A collection on the Site shows what VODLoft has no access to until the user hides it. */
     showsLocked: z.boolean().optional().default(true),
+    /** What the Site calls a creator's channel, in lower case, such as host on The Daily Wire. */
+    channelLabel: z.string().optional().default('channel'),
 })
 export type SiteRead = z.infer<typeof SiteReadSchema>
 

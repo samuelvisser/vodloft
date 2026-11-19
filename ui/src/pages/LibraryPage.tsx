@@ -26,12 +26,20 @@ import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg} from '../types/collection'
 import DurationPill from '../components/common/DurationPill'
 import './LibraryPage.css'
+import {capitalized} from '../types/channel'
 import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SITE_FILTER_STORAGE_KEY = 'librarySiteFilter'
 const LIBRARY_KIND_FILTER_STORAGE_KEY = 'libraryKindFilter'
-const KIND_OPTIONS = [{value: 'channel', label: 'Channels'}, {value: 'collection', label: 'Collections'}]
+const KIND_VALUES = ['channel', 'collection']
+
+/** Channels and collections, with channels named as their Sites call them when they all call them the same. */
+function kindOptions(channelLabels: string[]) {
+    const labels = new Set(channelLabels)
+    const channels = labels.size === 1 ? `${capitalized([...labels][0])}s` : 'Channels'
+    return [{value: 'channel', label: channels}, {value: 'collection', label: 'Collections'}]
+}
 const LIBRARY_COLLECTION_SORT_STORAGE_KEY = 'libraryCollectionSort'
 
 /** The order this browser remembers, for installs without user accounts. */
@@ -195,7 +203,7 @@ export default function LibraryPage() {
     )
     const hasChannels = !!channels?.length
     const activeKindFilter = useMemo(
-        () => hasChannels ? applicableChipFilter(kindFilter, KIND_OPTIONS.map((option) => option.value)) : [],
+        () => hasChannels ? applicableChipFilter(kindFilter, KIND_VALUES) : [],
         [kindFilter, hasChannels],
     )
     // Channels come first. A collection type says nothing about a channel, so choosing one leaves channels out.
@@ -209,8 +217,11 @@ export default function LibraryPage() {
     ), [channels, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords])
     const filteredCollections = useMemo(() => {
         if (!matchesChipFilter('collection', activeKindFilter)) return []
+        // A channel's collections are behind its card, unless a search looks for them or the card is filtered out.
+        const behindCard = new Set(searchWords.length > 0 ? [] : filteredChannels.map((channel) => channel.slug))
         const shown = collections?.filter((collection) => (
-            matchesChipFilter(collection.type, activeCollectionTypeFilter) && matchesSiteFilter(collection, activeSiteFilter)
+            !(collection.channelSlug && behindCard.has(collection.channelSlug))
+            && matchesChipFilter(collection.type, activeCollectionTypeFilter) && matchesSiteFilter(collection, activeSiteFilter)
             && matchesLibrarySearch(collection, searchWords)
         )) ?? []
         // While searching, the best matches come first; the chosen order only settles equal matches.
@@ -218,7 +229,7 @@ export default function LibraryPage() {
         return shown.sort((a, b) => (
             (ranks.get(a.slug) ?? 0) - (ranks.get(b.slug) ?? 0) || compareCollections(a, b, collectionSort)
         ))
-    }, [collections, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords, collectionSort])
+    }, [collections, filteredChannels, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords, collectionSort])
     const filteredMovies = useMemo(
         () => movies?.filter((movie) => (
             matchesSiteFilter(movie, activeSiteFilter) && matchesLibrarySearch(movie, searchWords)
@@ -354,7 +365,7 @@ export default function LibraryPage() {
                     {showChips && (
                         <>
                             {showKindFilter && (
-                                <ChipFilter label="Kind" options={KIND_OPTIONS} selected={activeKindFilter} onChange={setKindFilter}/>
+                                <ChipFilter label="Kind" options={kindOptions((channels ?? []).map((channel) => channel.channelLabel))} selected={activeKindFilter} onChange={setKindFilter}/>
                             )}
                             <ChipFilter label="Site" options={siteOptions} selected={activeSiteFilter} onChange={setSiteFilter}/>
                             {showTypeFilter && (

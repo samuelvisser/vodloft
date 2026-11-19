@@ -507,7 +507,7 @@ def _channel_kind(channel) -> str:
         site = None
     if site is None:
         return "channel"
-    return f"{site.name} {site.channel_label or 'channel'}"
+    return f"{site.name} {site.channel_label}"
 
 
 def _source_name(source_key: str) -> str:
