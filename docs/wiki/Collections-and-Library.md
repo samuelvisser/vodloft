@@ -300,7 +300,7 @@ The same person or group often has a page on more than one site, such as a Daily
 channel. VODLoft keeps them as one creator, with an account for each site. Each account brings its own feeds,
 playlists and shows, and its own main collection; VODLoft looks at every account for new ones once a day.
 
-- When you add a creator, **Add it as** chooses a creator in your Library who is the same person or group. The new
+- When you add a creator, **Add creator as** (**Add host as** on The Daily Wire) chooses a creator in your Library who is the same person or group. The new
   account and its collections join them, and follow their settings.
 - **Combine with another creator** in a creator page's **Actions** menu does the same for two creators you added apart.
   The other creator's accounts and collections move over and they leave your Library as a creator of their own. Their

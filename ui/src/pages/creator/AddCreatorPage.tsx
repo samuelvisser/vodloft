@@ -291,7 +291,7 @@ export default function AddCreatorPage() {
 
                 {(libraryCreators?.length ?? 0) > 0 && (
                     <div className="form-row creator-membership">
-                        <label htmlFor="creator-into">Add it as</label>
+                        <label htmlFor="creator-into">Add {creator.creatorLabel} as</label>
                         <SimpleSelect
                             inputId="creator-into" registry={intoRegistry} value={into}
                             onChange={(value) => setValue('into', value ?? '', {shouldValidate: true})}
