@@ -8,6 +8,7 @@ import time
 
 import requests
 from collections.abc import Callable, Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit, urlunsplit
@@ -419,14 +420,19 @@ def _count(number: int) -> str:
 _UNSIGNED_PLAYLIST_PICTURE = re.compile(r"^https?://i\d?\.ytimg\.com/s_p/[^?]+$")
 
 
-def _thumbnail(info: dict) -> str | None:
+def _picture(info: dict) -> str | None:
+    """The picture yt-dlp names for a video or playlist, as it names it."""
     if info.get("thumbnail"):
-        return thumbnails.widest_still(info["thumbnail"])
+        return info["thumbnail"]
     candidates = [
         t for t in info.get("thumbnails") or []
         if isinstance(t, dict) and t.get("url") and not _UNSIGNED_PLAYLIST_PICTURE.match(t["url"])
     ]
-    return thumbnails.widest_still(candidates[-1]["url"]) if candidates else None
+    return candidates[-1]["url"] if candidates else None
+
+
+def _thumbnail(info: dict) -> str | None:
+    return thumbnails.widest_still(_picture(info))
 
 
 # What yt-dlp says when a video needs someone signed in: a bot check, an age check, members-only videos.
@@ -659,37 +665,40 @@ class YtDlpSource(Source):
     def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
         """A YouTube channel through yt-dlp, which costs no API quota: its details, the Videos, Live and Shorts tabs
         it has, and its playlists. ``ref`` is the channel's link or its ID. A Bandcamp or SoundCloud artist is a
-        channel of their albums."""
+        channel of their albums.
+
+        Each of the channel's pages is a lookup of its own, of a second or more, so they are all looked up at once."""
         if artist := artists.artist_root(ref):
             return artists.artist_details(artist, progress)
         root = channel_root(ref) if ref.startswith("http") else mapping.channel_url(ref)
         if root is None:
             raise runner.YtDlpError("This link is not a YouTube channel")
-        progress("Reading the channel and its videos")
-        info = self._info(f"{root}/videos")
-        channel_id = str(info.get("channel_id") or "")
-        if not channel_id:
-            raise runner.YtDlpError("YouTube did not say which channel this is")
-        handle = info.get("uploader_id") if str(info.get("uploader_id") or "").startswith("@") else None
-        # The handle's link is the one people paste, so a collection added from it before is recognised.
-        root = f"https://www.youtube.com/{handle}" if handle else mapping.channel_url(channel_id)
+        progress("Reading the channel, its videos and its playlists")
+        with ThreadPoolExecutor(max_workers=len(_CHANNEL_FEEDS) + 1, thread_name_prefix="channel-lookup") as pool:
+            tabs = {tab: pool.submit(self._info, f"{root}/{tab}") for tab, _title, _role in _CHANNEL_FEEDS}
+            playlists = pool.submit(self._playlists, root)
+            info = tabs["videos"].result()
+            channel_id = str(info.get("channel_id") or "")
+            if not channel_id:
+                raise runner.YtDlpError("YouTube did not say which channel this is")
+            handle = info.get("uploader_id") if str(info.get("uploader_id") or "").startswith("@") else None
+            # The handle's link is the one people paste, so a collection added from it before is recognised.
+            root = f"https://www.youtube.com/{handle}" if handle else mapping.channel_url(channel_id)
+            sections: list[SectionRef] = []
+            for tab, title, role in _CHANNEL_FEEDS:
+                try:
+                    listing = tabs[tab].result()
+                except runner.YtDlpError as exc:
+                    # A channel without Shorts or livestreams has no such tab.
+                    logger.debug("%s has no %s tab: %s", root, tab, exc)
+                    continue
+                if not listing.get("entries") and tab != "videos":
+                    continue
+                sections.append(SectionRef(
+                    ref=tab, url=f"{root}/{tab}", title=title, kind=SectionKind.FEED, role=role, kind_label="Feed",
+                ))
+            sections += playlists.result()
         pictures = {str(item.get("id")): item.get("url") for item in info.get("thumbnails") or [] if isinstance(item, dict)}
-        sections: list[SectionRef] = []
-        for tab, title, role in _CHANNEL_FEEDS:
-            url = f"{root}/{tab}"
-            if tab != "videos":
-                progress("Looking for livestreams" if role == SectionRole.LIVE else f"Looking for {title}")
-            try:
-                listing = info if tab == "videos" else self._info(url)
-            except runner.YtDlpError as exc:
-                # A channel without Shorts or livestreams has no such tab.
-                logger.debug("%s has no %s tab: %s", root, tab, exc)
-                continue
-            if not listing.get("entries") and tab != "videos":
-                continue
-            sections.append(SectionRef(ref=tab, url=url, title=title, kind=SectionKind.FEED, role=role, kind_label="Feed"))
-        progress("Listing the playlists")
-        sections += self._playlists(root)
         followers = info.get("channel_follower_count")
         return CreatorDetails(
             ref=channel_id, url=root, title=str(info.get("channel") or info.get("uploader") or channel_id),
@@ -708,15 +717,19 @@ class YtDlpSource(Source):
         except runner.YtDlpError as exc:
             logger.info("Not listing the playlists of %s: %s", root, exc)
             return []
+        entries = [
+            entry for entry in playlists.get("entries") or []
+            if isinstance(entry, dict) and entry.get("id") and entry.get("title")
+        ]
+        # A channel may list hundreds of playlists, whose pictures are checked all at once.
+        images = thumbnails.widest_stills([_picture(entry) for entry in entries])
         found = []
-        for entry in playlists.get("entries") or []:
-            if not isinstance(entry, dict) or not entry.get("id") or not entry.get("title"):
-                continue
+        for entry, image in zip(entries, images):
             count = entry.get("playlist_count")
             found.append(SectionRef(
                 ref=str(entry["id"]), url=f"https://www.youtube.com/playlist?list={entry['id']}", title=str(entry["title"]),
                 kind=SectionKind.LIST, kind_label="Playlist", item_count=count if isinstance(count, int) else None,
-                image_url=_thumbnail(entry), description=entry.get("description") or None,
+                image_url=image, description=entry.get("description") or None,
             ))
         return found
 

@@ -16,7 +16,9 @@ it belongs now, and moving it there, or renaming the collection's files with the
 """
 from __future__ import annotations
 
+import contextvars
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -37,6 +39,8 @@ logger = logging.getLogger(__name__)
 
 # Seasons per upload year are numbered by the year, so named seasons stay below it.
 _FIRST_YEAR = 1900
+# How many of a creator's playlists are listed at once.
+_LISTS_AT_ONCE = 4
 
 
 def list_names(collection: Collection) -> ListNames:
@@ -175,11 +179,21 @@ def list_lists(s: Session, collection: Collection, source: Source, also: frozens
         if playlist.ref not in known and adds_new:
             wanted[playlist.ref] = playlist.url
     items: dict[str, tuple[ItemRef, ...]] = {}
-    for ref, playlist_url in wanted.items():
+
+    def list_one(playlist_url: str) -> tuple[ItemRef, ...] | None:
         try:
-            items[ref] = source.list_items(playlist_url)
+            return source.list_items(playlist_url)
         except Exception as exc:
             logger.info("Could not list the playlist %s: %s", playlist_url, exc)
+            return None
+
+    # A creator can have hundreds of playlists, each a lookup of a second or more, so a few are listed at once. Each
+    # runs in a copy of this context, which tells the Source's pacing whose requests they are.
+    with ThreadPoolExecutor(max_workers=_LISTS_AT_ONCE, thread_name_prefix="list-items") as pool:
+        listed = {ref: pool.submit(contextvars.copy_context().run, list_one, playlist_url) for ref, playlist_url in wanted.items()}
+        for ref, future in listed.items():
+            if (found := future.result()) is not None:
+                items[ref] = found
     return LinkListing(playlists, items, _look_up_outside(source, adds_outside, known_slugs, items))
 
 
