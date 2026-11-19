@@ -286,6 +286,11 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
 
+    if collection.creator is not None and body.author_name != collection.author_name:
+        raise ServiceError(
+            f"The author of a collection of {collection.creator.title} is their name: change it on their Edit page",
+            field="authorName",
+        )
     if body.type is not None and body.type != collection.type:
         _check_profiles_suit_type(collection, CollectionType(body.type))
     left_out = {

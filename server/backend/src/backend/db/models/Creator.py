@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import JSON, ForeignKey, UniqueConstraint, func
+from sqlalchemy import JSON, ForeignKey, UniqueConstraint, false as sa_false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -24,6 +24,10 @@ class Creator(Base):
     uuid: Mapped[str] = mapped_column(index=True, unique=True)
     slug: Mapped[str] = mapped_column(index=True, unique=True)
     title: Mapped[str]
+    title_from_user: Mapped[bool] = mapped_column(
+        default=False, server_default=sa_false(),
+        comment="The name was changed in VODLoft, so the Site's name no longer replaces it",
+    )
     description: Mapped[Optional[str]]
     avatar_path: Mapped[Optional[str]]
     banner_path: Mapped[Optional[str]]

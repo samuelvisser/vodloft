@@ -203,6 +203,9 @@ class CreatorSectionMoveAPIIn(RequestBase):
 class CreatorAPIUpdate(RequestBase):
     """Change how VODLoft follows a creator."""
 
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    """The creator's name, which their collections take as author; left out, it stays as it is. A name given here
+    is kept when the Site's name changes."""
     new_sections: NewSectionAction
     genre: Optional[str] = Field(default=None, max_length=200)
     content_rating: Optional[str] = Field(default=None, max_length=50)

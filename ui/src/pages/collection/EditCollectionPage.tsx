@@ -339,6 +339,7 @@ export default function EditCollectionPage() {
         <CollectionForm
           value={form}
           onChange={(v: CollectionFormValue) => setForm((prev) => ({ ...prev, ...v }))}
+          creator={collection?.creatorSlug && collection.creatorTitle ? {slug: collection.creatorSlug, title: collection.creatorTitle} : null}
         />
 
         <div className="form-row">

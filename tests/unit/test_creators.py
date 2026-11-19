@@ -852,3 +852,28 @@ def test_deleting_a_creator_keeps_its_collections_as_plain_ones(client, session)
     collections = session.scalars(select(Collection)).all()
     assert collections and all(c.creator_id is None for c in collections)
     assert client.delete("/api/creators/workshop").status_code == 404
+
+
+def test_a_renamed_creator_keeps_its_name_and_gives_it_to_its_collections_as_author(client, session, tube):
+    from backend.db.models import Collection
+
+    _one_show(client)
+    assert client.patch("/api/creators/workshop", json={"title": "Northwind", "newSections": "ask"}).status_code == 200
+    authors = {collection.author_name for collection in session.scalars(select(Collection))}
+    assert authors == {"Northwind"}
+
+    # The Site's name no longer replaces the one the user gave.
+    _follow(session, tube, SECTIONS)
+    assert client.get("/api/creators/workshop").json()["title"] == "Northwind"
+
+    # A collection of the creator can't have another author.
+    collection = client.get("/api/collections/UCworkshop").json()
+    body = {
+        "title": collection["title"], "membershipLevel": collection["membershipLevel"], "sharingUrl": collection["sharingUrl"],
+        "authorName": "Someone else",
+    }
+    refused = client.patch("/api/collections/UCworkshop", json=body)
+    assert refused.status_code == 422
+    assert "change it on their Edit page" in refused.json()["detail"]
+    assert client.patch("/api/collections/UCworkshop", json={**body, "authorName": "Northwind"}).status_code == 200
+
