@@ -317,6 +317,8 @@ export const CollectionDetailsReadSchema = z.object({
     thumbnailLandscapePath: z.string().nullable(),
     /** The type VODLoft suggests from the collection's name. */
     probableCollectionType: z.string(),
+    /** Why the collection was taken for music, when it was, such as an album on YouTube Music. */
+    musicReason: z.string().nullable().optional(),
     /** The collection's own seasons, oldest first; empty when VODLoft makes a season per upload year. */
     seasons: z.array(z.object({slug: z.string(), name: z.string()})),
 })

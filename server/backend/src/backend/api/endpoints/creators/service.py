@@ -208,7 +208,13 @@ def creator_movies_to_add(body: CreatorAPICreate, details: CreatorDetails) -> li
 
 
 def _plans(body: CreatorAPICreate | CreatorSectionsAPIAdd) -> list[SectionPlan]:
-    return [SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections]
+    return [
+        SectionPlan(
+            plan.ref, SectionTarget(plan.target), CollectionType(plan.type) if plan.type else None,
+            EpisodeIdentifier(plan.episode_identifier) if plan.episode_identifier else None,
+        )
+        for plan in body.sections
+    ]
 
 
 def add_creator(

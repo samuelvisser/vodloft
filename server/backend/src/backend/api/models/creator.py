@@ -101,6 +101,10 @@ class CreatorLookupAPIRead(ResponseBase):
 class SectionPlanAPIIn(RequestBase):
     ref: str
     target: SectionTarget
+    type: Optional[CollectionType] = None
+    """For a section that becomes a collection of its own: its type; left out, the creator's."""
+    episode_identifier: Optional[EpisodeIdentifier] = None
+    """For a section that becomes a collection of its own: how it identifies its episodes; left out, the creator's."""
 
 
 class CreatorAPICreate(RequestBase):
@@ -111,7 +115,9 @@ class CreatorAPICreate(RequestBase):
     ref: Optional[str] = None
     sections: list[SectionPlanAPIIn] = Field(max_length=500)
     type: CollectionType = CollectionType.SERIES
+    """The type of the creator's own collection, and of each collection of its own whose plan gives none."""
     episode_identifier: EpisodeIdentifier = EpisodeIdentifier.SEASONAL
+    """How the creator's own collection identifies its episodes, and each collection whose plan says nothing."""
     membership_level: DwMembershipLevel = DwMembershipLevel.HIGHEST_ALLOWED
     new_sections: NewSectionAction = NewSectionAction.ASK
     lookup_id: Optional[str] = Field(default=None, max_length=64)

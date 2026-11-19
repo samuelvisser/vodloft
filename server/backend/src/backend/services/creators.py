@@ -37,10 +37,13 @@ FOLLOW_TASK_KEY = "follow_creators"
 
 @dataclass(frozen=True)
 class SectionPlan:
-    """Where one section goes."""
+    """Where one section goes. A section that becomes a collection of its own takes ``type`` and
+    ``episode_identifier`` when they are given, and otherwise those every collection of the creator starts with."""
 
     ref: str
     target: SectionTarget
+    type: CollectionType | None = None
+    episode_identifier: EpisodeIdentifier | None = None
 
 
 def creator_site(source_key: str, url_or_site_key: str) -> Site:
@@ -357,7 +360,7 @@ def _place(
         if plan.target is SectionTarget.MAIN and (
             section.kind == SectionKind.SHOW or (section.kind == SectionKind.LIST and not lists_are_seasons(site))
         ):
-            plan = SectionPlan(plan.ref, SectionTarget.OWN)
+            plan = replace(plan, target=SectionTarget.OWN)
         wanted.append(plan)
     main_plans = [plan for plan in wanted if plan.target is SectionTarget.MAIN]
     made, changed = [], []
@@ -393,7 +396,7 @@ def _place(
         own = sections[plan.ref]
         title = own.title if own.kind != SectionKind.FEED else f"{creator.title} {own.title}"
         made.append(_new_collection(
-            s, account, settings, title=title, slug=section_collection_slug(account.site_ref, own), url=own.url,
+            s, account, _own_settings(settings, plan, own), title=title, slug=section_collection_slug(account.site_ref, own), url=own.url,
             description=own.description, image=own.image_path, added_by_id=added_by_id,
         ))
     s.flush()
@@ -417,6 +420,18 @@ def rename_creator(creator: Creator, title: str) -> None:
     creator.title = title
     for collection in creator.collections:
         collection.author_name = title
+
+
+def _own_settings(settings: NewCollectionSettings, plan: SectionPlan, section: CreatorSection) -> NewCollectionSettings:
+    """What a section's collection of its own starts with: the plan's type and identification, where it gives them.
+    An artist's collections always hold music, and only an artist's do."""
+    if settings.type is CollectionType.MUSIC:
+        return settings
+    if plan.type is CollectionType.MUSIC:
+        raise ServiceError(f"{section.title} can only be a Music collection when the creator is a music artist", field="sections")
+    return replace(
+        settings, type=plan.type or settings.type, episode_identifier=plan.episode_identifier or settings.episode_identifier,
+    )
 
 
 def _new_collection(

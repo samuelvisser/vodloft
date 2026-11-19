@@ -121,6 +121,14 @@
     .creator-section-choice, .creator-section-place, .creator-join-overlap-select { max-width: none; }
 }
 .creator-membership { max-width: 360px; }
+/* The settings of each collection the creator adds, side by side where there is room. */
+.creator-new-collections { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 1rem; }
+.creator-new-collection {
+    display: flex; flex-direction: column; gap: .75rem; min-width: 0; padding: 1rem;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, .25)); border-radius: 10px;
+}
+.creator-new-collection > b { overflow-wrap: anywhere; }
+.creator-new-collection .form-row { margin: 0; }
 .creator-setup .actions .btn { white-space: nowrap; }
 
 .creator-note { margin: 0; opacity: .75; font-size: .875rem; }

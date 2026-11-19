@@ -167,6 +167,8 @@ class CollectionDetailsAPIRead(ResponseBase):
     author_slug: str
     thumbnail_landscape_path: Optional[str] = None
     probable_collection_type: CollectionType
+    music_reason: Optional[str] = None
+    """Why the collection was taken for music, when it was."""
     # The collection's own seasons, oldest first; empty for a Source that has none.
     seasons: list[CollectionDetailsSeasonAPIRead] = Field(default_factory=list)
 

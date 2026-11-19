@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
@@ -12,6 +12,8 @@ import {
     type SectionPlan,
 } from '../../types/schemas/creator'
 import {DwMembershipLevelReg} from '../../types/dailywire_user_info'
+import {CollectionTypeReg, EpisodeIdentifierReg, type CollectionTypeValue, type EpisodeIdentifierValue} from '../../types/collection'
+import {useCollectionDefaults} from '../../components/AddCollectionPage/collectionDefaults'
 import {newSectionActionReg} from '../../types/creator'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
@@ -132,6 +134,64 @@ function AddCreatorSkeleton({steps, label}: {steps: string[], label: string}) {
     )
 }
 
+/** The key of the creator's own collection among the new collections' settings; the others go by their section. */
+const MAIN_KEY = '__main__'
+
+/** Only an artist's collections hold music, and those never show these settings. */
+const NewCollectionTypeReg = createSelectRegistry('CreatorNewCollectionType', {
+    podcast: CollectionTypeReg.meta('podcast')!,
+    series: CollectionTypeReg.meta('series')!,
+})
+
+type NewCollection = {key: string, title: string, url: string | null}
+type CollectionSettings = {type: CollectionTypeValue | '', episodeIdentifier: EpisodeIdentifierValue | ''}
+
+/**
+ * The type and episode identification of one collection the creator adds. It starts with what Add collection
+ * suggests for the same link, looked up the same way, until the user chooses.
+ */
+function NewCollectionCard({item, value, onChange}: {
+    item: NewCollection
+    value: CollectionSettings | undefined
+    onChange: (key: string, value: CollectionSettings) => void
+}) {
+    const suggestion = useCollectionDefaults(item.url ?? undefined)
+    const chosen = useRef(false)
+    useEffect(() => {
+        if (chosen.current) return
+        if (suggestion.defaults) onChange(item.key, suggestion.defaults)
+        // Without a suggestion, it starts as every collection of a creator used to.
+        else if (suggestion.error || !item.url) onChange(item.key, {type: 'series', episodeIdentifier: 'seasonal'})
+    }, [suggestion.defaults, suggestion.error, item.key, item.url, onChange])
+    const choose = (next: CollectionSettings) => {
+        chosen.current = true
+        onChange(item.key, next)
+    }
+    const field = (name: keyof CollectionSettings, label: string, registry: typeof NewCollectionTypeReg | typeof EpisodeIdentifierReg) => {
+        const id = `creator-new-collection-${item.key}-${name}`
+        const current = value?.[name] || null
+        return (
+            <div className="form-row">
+                <label htmlFor={id}>{label}</label>
+                <SimpleSelect
+                    inputId={id} registry={registry} value={current}
+                    isDisabled={suggestion.isLoading}
+                    placeholder={suggestion.isLoading ? 'Looking it up…' : 'Choose…'}
+                    onChange={(next) => choose({type: value?.type ?? '', episodeIdentifier: value?.episodeIdentifier ?? '', [name]: next ?? ''})}
+                />
+                {current && <div className="help">{registry.meta(current as never)?.help}</div>}
+            </div>
+        )
+    }
+    return (
+        <div className="creator-new-collection" role="listitem">
+            <b>{item.title}</b>
+            {field('type', 'Collection type', NewCollectionTypeReg)}
+            {field('episodeIdentifier', 'Episode identification', EpisodeIdentifierReg)}
+        </div>
+    )
+}
+
 export default function AddCreatorPage() {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
@@ -143,6 +203,11 @@ export default function AddCreatorPage() {
     const [error, setError] = useState<string | null>(null)
     const [steps, setSteps] = useState<string[]>([])
     const [label, setLabel] = useState('creator')
+    // The type and episode identification of each collection the creator adds, by MAIN_KEY or the section's ref.
+    const [collectionSettings, setCollectionSettings] = useState<Record<string, CollectionSettings>>({})
+    const setSettings = useMemo(() => (key: string, value: CollectionSettings) => {
+        setCollectionSettings((all) => all[key]?.type === value.type && all[key]?.episodeIdentifier === value.episodeIdentifier ? all : {...all, [key]: value})
+    }, [])
 
     const form = useForm<CreatorCreateIn, unknown, CreatorCreateOut>({
         resolver: zodResolver(CreatorCreateSchema),
@@ -220,9 +285,15 @@ export default function AddCreatorPage() {
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-            sourceKey: data.sourceKey, url: data.url, ref: data.ref, lookupId: creator?.lookupId ?? null, sections: data.sections,
+            sourceKey: data.sourceKey, url: data.url, ref: data.ref, lookupId: creator?.lookupId ?? null,
+            // An artist's collections always hold music and are always seasonal, so they take no settings.
+            sections: data.type === 'music' ? data.sections : data.sections.map((plan) => (
+                plan.target === 'own' && collectionSettings[plan.ref] ? {...plan, ...collectionSettings[plan.ref]} : plan
+            )),
             membershipLevel: data.membershipLevel, newSections: data.newSections, into: data.into || null,
-            type: data.type,
+            type: data.type === 'music' ? 'music' : collectionSettings[MAIN_KEY]?.type || 'series',
+            ...(data.type !== 'music' && collectionSettings[MAIN_KEY]?.episodeIdentifier
+                ? {episodeIdentifier: collectionSettings[MAIN_KEY].episodeIdentifier} : {}),
         }),
     }), {
         fallbackField: 'sections',
@@ -290,13 +361,21 @@ export default function AddCreatorPage() {
     const keptMovies = kept.filter((plan) => sectionOf.get(plan.ref)?.kind === 'item')
     const newMovies = keptMovies.filter((plan) => !sectionOf.get(plan.ref)?.movieSlug).map((plan) => sectionOf.get(plan.ref)!.title)
     const joiningMovies = keptMovies.filter((plan) => sectionOf.get(plan.ref)?.movieSlug).map((plan) => sectionOf.get(plan.ref)!.movieTitle ?? sectionOf.get(plan.ref)!.title)
-    const collectionTitles = [
-        ...(kept.some((plan) => plan.target === 'main') ? [intoTitle ?? creator.title] : []),
+    const mainFeed = creator.sections.find((section) => section.kind === 'feed' && section.role === 'main')
+    const newCollections: NewCollection[] = [
+        ...(kept.some((plan) => plan.target === 'main') ? [{key: MAIN_KEY, title: intoTitle ?? creator.title, url: mainFeed?.url ?? creator.url}] : []),
         ...kept.filter((plan) => plan.target === 'own' && sectionOf.get(plan.ref)?.kind !== 'item').map((plan) => {
             const section = sectionOf.get(plan.ref)
-            return section?.kind === 'feed' ? `${creator.title} ${section.title}` : section?.title ?? plan.ref
+            return {
+                key: plan.ref,
+                title: section?.kind === 'feed' ? `${creator.title} ${section.title}` : section?.title ?? plan.ref,
+                url: section?.url ?? null,
+            }
         }),
     ]
+    const collectionTitles = newCollections.map((item) => item.title)
+    // Each new collection needs its settings before the creator can be added.
+    const unsettled = !music && newCollections.some((item) => !collectionSettings[item.key]?.type || !collectionSettings[item.key]?.episodeIdentifier)
     const summaryParts = [
         collectionTitles.length ? `Creates ${collectionTitles.length} ${collectionTitles.length === 1 ? 'collection' : 'collections'}` : null,
         newMovies.length ? `adds ${newMovies.length} ${newMovies.length === 1 ? 'movie' : 'movies'}` : null,
@@ -449,12 +528,23 @@ export default function AddCreatorPage() {
                     </div>
                 )}
 
+                {!music && newCollections.length > 0 && (
+                    <div className="creator-section-group">
+                        <h2>New collections</h2>
+                        <div className="creator-new-collections" role="list" aria-label="New collections">
+                            {newCollections.map((item) => (
+                                <NewCollectionCard key={item.key} item={item} value={collectionSettings[item.key]} onChange={setSettings}/>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {errors.sections && <div className="form-error-card" role="alert">{errors.sections.message ?? errors.sections.root?.message}</div>}
 
                 <div className="actions">
                     <span className="creator-summary">{summary}</span>
                     <button type="button" className="btn" onClick={() => navigate(-1)}>Cancel</button>
-                    <button type="submit" className="btn btn-primary" disabled={isSubmitting || !summaryParts.length}>
+                    <button type="submit" className="btn btn-primary" disabled={isSubmitting || !summaryParts.length || unsettled}>
                         {isSubmitting ? 'Adding…' : into ? `Add to ${intoTitle}` : `Add ${creatorWord}`}
                     </button>
                 </div>

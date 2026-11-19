@@ -77,7 +77,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
     useEffect(() => {
         if (!listed.data) return;
         setValue("membershipLevel", DwMembershipLevelReg.Enum.FREE, {shouldValidate: true});
-        // Suggest the type the backend guessed from the name, and identification to match.
+        // Suggest the type the backend guessed, from the name or because it is music, and identification to match.
         if (lastListedUrlRef.current === listed.data.sharingUrl) return;
         lastListedUrlRef.current = listed.data.sharingUrl;
         const suggested = listedCollectionDefaults(listed.data);
@@ -334,6 +334,9 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                 </div>
                             )}
                             <div className="help" id="collection-type-help">
+                                {listed.data?.musicReason && watch("type") === CollectionTypeReg.Enum.music && (
+                                    <p>{listed.data.musicReason}, so VODLoft took it for music. Pick another type if it isn't.</p>
+                                )}
                                 <ReadMore summary={<span>Why do I need to choose this?</span>}>
                                     <p><b>Podcast</b> collections download and stream episodes from <i>newest</i> to <i>oldest</i>,
                                         which suits most channels.</p>

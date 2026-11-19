@@ -445,6 +445,36 @@ def test_the_collection_lookup_suggests_a_podcast_from_its_name(listed, monkeypa
     assert body["probableCollectionType"] == "podcast"
 
 
+def test_the_collection_lookup_suggests_music_when_the_source_takes_it_for_music(listed, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend.api.endpoints.sources import router as source_router_module
+
+    monkeypatch.setattr(ListedSource, "music_reason", lambda self, url, details: "Its channel has releases", raising=False)
+    app = FastAPI()
+    app.include_router(source_router_module.router, prefix="/api")
+    with TestClient(app) as client:
+        body = client.get("/api/sources/listed/collection", params={"url": "https://listed.example/PL1"}).json()
+    assert (body["probableCollectionType"], body["musicReason"]) == ("music", "Its channel has releases")
+
+
+def test_youtube_takes_albums_artist_channels_and_music_sites_for_music(monkeypatch):
+    from dataclasses import replace
+
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    asked: list[str] = []
+    monkeypatch.setattr(YtDlpSource, "_has_releases", lambda self, root: asked.append(root) or root.endswith("@artist"))
+    playlist = CollectionDetails(slug="PL1", url="https://www.youtube.com/playlist?list=PL1", title="Live", author_url="https://www.youtube.com/@artist")
+    assert source.music_reason("https://www.youtube.com/playlist?list=PL1", playlist) == "Its channel has releases on YouTube Music"
+    assert source.music_reason("https://www.youtube.com/@vlogs/videos", replace(playlist, author_url=None)) is None
+    assert source.music_reason("https://www.youtube.com/playlist?list=OLAK5uy_abc", playlist) == "It is an album on YouTube Music"
+    assert source.music_reason("https://artist.bandcamp.com/album/first", playlist) == "It is on Bandcamp, a site for music"
+    assert asked == ["https://www.youtube.com/@artist", "https://www.youtube.com/@vlogs"]
+
+
 def test_a_collection_bundle_can_use_an_existing_profile(listed, session):
     from backend.api.endpoints.collections.as_bundle.service import create_collection_bundle
     from backend.api.models.collection_as_bundle import CollectionAPICreateBundle

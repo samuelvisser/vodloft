@@ -16,6 +16,7 @@ from backend.types.collection_types import CollectionType
 from backend.services.media_access import access_locked, link_access
 from backend.services.sites import preferred_sources, site_record
 from backend.services.source_requests import asking_source
+from config.network import is_no_internet_error
 from backend.services.users import settings_row
 from backend.utils.helpers import slugify
 from sources import (
@@ -61,6 +62,13 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
     access.check_link(source, url)
     with asking_source(f"{source.name} could not look up this collection"):
         details = source.collection_details(url)
+    try:
+        music = source.music_reason(url, details)
+    except Exception as exc:  # A guess: a failed look leaves the type to the name.
+        if is_no_internet_error(exc):
+            raise
+        logger.info("Could not tell whether %s is music: %s", url, exc)
+        music = None
     author = details.author_name or details.title
     return CollectionDetailsAPIRead(
         source_key=source.id,
@@ -71,7 +79,10 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
         author_name=author,
         author_slug=slugify(author) or details.slug,
         thumbnail_landscape_path=details.image_url,
-        probable_collection_type=CollectionType.PODCAST if names_a_podcast(details.title) else CollectionType.SERIES,
+        probable_collection_type=(
+            CollectionType.MUSIC if music else CollectionType.PODCAST if names_a_podcast(details.title) else CollectionType.SERIES
+        ),
+        music_reason=music,
         seasons=details.seasons,
     )
 

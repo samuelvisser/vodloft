@@ -711,6 +711,19 @@ class YtDlpSource(Source):
             music=has_releases, music_reason="It has releases on YouTube Music" if has_releases else None,
         )
 
+    def music_reason(self, url: str, details: CollectionDetails) -> str | None:
+        """A link on a Site of music, such as Bandcamp; an album on YouTube Music; or a YouTube collection whose
+        channel has releases on YouTube Music, as a music artist's has (see ``_has_releases``)."""
+        site = sites.site_for(url)
+        if site.audio:
+            return f"It is on {site.name}, a site for music"
+        if parse_qs(urlsplit(url).query).get("list", [""])[0].startswith("OLAK5uy_"):
+            return "It is an album on YouTube Music"
+        root = channel_root(collection_url(url)) or (channel_root(details.author_url) if details.author_url else None)
+        if root is not None and self._has_releases(root):
+            return "Its channel has releases on YouTube Music"
+        return None
+
     def _has_releases(self, root: str) -> bool:
         """Whether a YouTube channel has a Releases tab, which only music artists have. yt-dlp can't always list what is
         on it, but says when a channel has none. It is a guess the user can change: a channel can be an artist's and

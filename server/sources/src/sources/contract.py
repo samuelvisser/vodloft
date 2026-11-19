@@ -1008,6 +1008,12 @@ class Source(ABC):
         one creator's. Slow: it may ask the Site. Only Sources with ``Feature.CREATORS`` implement it."""
         raise NotImplementedError(f"{self.name} has no creators")
 
+    def music_reason(self, url: str, details: CollectionDetails) -> str | None:
+        """Why the collection behind a link, looked up as ``details``, is probably music, such as an album or a
+        channel of a music artist, or None when nothing says so. A guess the user can change; it may ask the Site.
+        Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
+        return None
+
     def is_creator_page(self, url: str) -> bool:
         """Whether a collection's link is a creator's own page of all their uploads, such as a YouTube channel, whose
         playlists can be its seasons, rather than one playlist. Told without asking the Site. Only Sources with a Site with ``link_seasons`` implement it."""

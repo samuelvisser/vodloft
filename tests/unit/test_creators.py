@@ -1096,3 +1096,28 @@ def test_a_hosts_movies_leave_with_them_and_stay_in_the_library(client, session,
     assert client.delete(f"/api/creators/{page['slug']}").status_code in (200, 204)
     session.expire_all()
     assert list(session.scalars(select(Movie.slug).where(Movie.creator_id.is_(None)))) == ["harbour"]
+
+
+def test_each_new_collection_takes_the_type_and_identification_chosen_for_it(client, session):
+    from backend.db.models import Collection
+
+    # Only an artist's collections hold music.
+    refused = client.post("/api/creators", json={
+        "sourceKey": "tube", "url": ROOT, "sections": [{"ref": "PLmembers", "target": "own", "type": "music"}],
+    })
+    assert refused.status_code == 422 and "music artist" in refused.text
+    response = client.post("/api/creators", json={
+        "sourceKey": "tube", "url": ROOT, "type": "podcast", "episodeIdentifier": "date_based",
+        "sections": [
+            {"ref": "videos", "target": "main"},
+            {"ref": "PLcabin", "target": "own", "type": "series", "episodeIdentifier": "seasonal"},
+            {"ref": "PLtools", "target": "own"},
+        ],
+    })
+    assert response.status_code == 201, response.text
+    session.expire_all()
+    assert {
+        collection.slug: (collection.type, collection.episode_identifier) for collection in session.scalars(select(Collection))
+    } == {
+        "UCworkshop": ("podcast", "date_based"), "PLcabin": ("series", "seasonal"), "PLtools": ("podcast", "date_based"),
+    }
