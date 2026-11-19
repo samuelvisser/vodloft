@@ -252,6 +252,7 @@ export default function AddDownloadProfilePage() {
                                         audio: selectedCollection?.site?.audio,
                                         format: requestedPreferredFormat,
                                         returnTo: returnHere,
+                                        from: selectedCollection?.title,
                                     })}
                                 >
                                     Create one for {PreferredFormatReg.getLabel(requestedPreferredFormat)}

@@ -20,8 +20,8 @@ import {useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {WithRoot} from '../../types/form'
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
-import {ProfileFitProvider} from '../../components/LocalMediaProfile/ProfileFit'
-import RequestedField, {RequestedFieldsProvider} from '../../components/common/RequestedField'
+import {OriginName, ProfileFitProvider} from '../../components/LocalMediaProfile/ProfileFit'
+import RequestedField, {RequestedFieldsProvider, requestedOrigin} from '../../components/common/RequestedField'
 import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
 import {
     addLocalMediaProfileDraftKey,
@@ -203,7 +203,7 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
                 {mode === 'collection' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
-            <RequestedFieldsProvider mode="create">
+            <RequestedFieldsProvider mode="create" origin={requestedOrigin(searchParams)}>
             <ProfileFitProvider value={fit}>
             <form id={formId} className="form local-media-profile-form" onSubmit={onCreate} noValidate>
                 <div className="form-row">
@@ -217,8 +217,8 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
                         apply={() => setProfileType(explicitType!)}
                         fits={() => profileType === explicitType}
                         incompatible={explicitType && <>
-                            The page you came from needs a {LocalMediaProfileTypeReg.getLabel(explicitType)} profile, so
-                            a {LocalMediaProfileTypeReg.getLabel(profileType)} profile won't be offered there.
+                            A {LocalMediaProfileTypeReg.getLabel(profileType)} profile won't be offered <OriginName prefix="for"/>,
+                            which needs a {LocalMediaProfileTypeReg.getLabel(explicitType)} profile.
                         </>}
                     ><SegmentedOptions
                         name="local-media-profile-mode"

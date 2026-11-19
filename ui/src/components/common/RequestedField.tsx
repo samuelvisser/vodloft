@@ -15,6 +15,24 @@ type RequestedFieldsValue = {
     onApplied: (fields: readonly string[]) => void
     /** Whether the form holds its values yet. An edit form first loads the record. */
     ready: boolean
+    /** What the link came from, such as a collection's title, when it says so. */
+    origin?: string
+}
+
+/** The optional ``from`` parameter of a link that fills in a form: the name of what it came from, such as a
+ *  collection's title, so the notes can name it. A link may leave it out, and the notes then say "where you came
+ *  from". */
+export const ORIGIN_PARAM = 'from'
+
+/** What a form's link came from, as its ``from`` parameter names it. */
+export function requestedOrigin(params: URLSearchParams): string | undefined {
+    const origin = params.get(ORIGIN_PARAM)?.trim()
+    return origin ? origin.slice(0, 200) : undefined
+}
+
+/** What the link that opened this form came from, if it said. */
+export function useRequestedOrigin(): string | undefined {
+    return useContext(RequestedFieldsContext)?.origin
 }
 
 const RequestedFieldsContext = createContext<RequestedFieldsValue | null>(null)
@@ -23,10 +41,11 @@ const RequestedFieldsContext = createContext<RequestedFieldsValue | null>(null)
  * The form a link can fill in. A provider inside another shares its record of what the link set, and adds its own
  * ``onApplied``, such as a form whose sections open for the fields the link changed.
  */
-export function RequestedFieldsProvider({mode, onApplied, ready, children}: {
+export function RequestedFieldsProvider({mode, onApplied, ready, origin, children}: {
     mode?: 'create' | 'edit'
     onApplied?: (fields: readonly string[]) => void
     ready?: boolean
+    origin?: string
     children: ReactNode
 }) {
     const parent = useContext(RequestedFieldsContext)
@@ -35,11 +54,12 @@ export function RequestedFieldsProvider({mode, onApplied, ready, children}: {
         mode: mode ?? parent?.mode ?? 'create',
         store: parent?.store ?? ownStore.current,
         ready: (ready ?? true) && (parent?.ready ?? true),
+        origin: origin ?? parent?.origin,
         onApplied: (fields) => {
             parent?.onApplied(fields)
             onApplied?.(fields)
         },
-    }), [mode, onApplied, ready, parent])
+    }), [mode, onApplied, ready, origin, parent])
     return <RequestedFieldsContext.Provider value={value}>{children}</RequestedFieldsContext.Provider>
 }
 
