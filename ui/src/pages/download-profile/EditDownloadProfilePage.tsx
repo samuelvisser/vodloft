@@ -12,7 +12,7 @@ import {
     DownloadProfileUpdateIn, DownloadProfileUpdateOut, DownloadProfileUpdateSchema,
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
-import Select from '../../components/common/Select'
+import Select from 'react-select'
 import {isCollectionContext, isLocalMediaProfileAvailableForSite, safeReturnPath, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_view";
 import {useQuery, useQueryClient} from "@tanstack/react-query";

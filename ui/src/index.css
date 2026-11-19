@@ -1671,12 +1671,10 @@ div[class$="-option"][aria-disabled="true"]:active,
 /* Normal hover/active for enabled options only */
 div[class$="-option"]:not([aria-disabled="true"]):hover { background: rgba(14, 165, 233, 0.18) !important; }
 div[class$="-option"]:not([aria-disabled="true"]):active { background: rgba(14, 165, 233, 0.26) !important; }
-/* The option the arrow keys moved to (see components/common/Select.tsx) */
-.select--keyboard-navigation div[class$="-option"][class*="__option--is-focused"]:not([aria-disabled="true"]):not([class*="__option--is-selected"]) {
+/* The option react-select highlights for the keyboard: the first result while typing, and
+   wherever the arrow keys move to. Enter chooses it. Needs classNamePrefix="select". */
+div[class$="-option"].select__option--is-focused:not(.select__option--is-disabled):not(.select__option--is-selected) {
   background: rgba(14, 165, 233, 0.18) !important;
-}
-.select--keyboard-navigation div[class$="-option"][class*="__option--is-focused"][class*="__option--is-selected"] {
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
 }
 /* Multi-value (tags) */
 div[class$="-multiValue"] { background: rgba(14, 165, 233, 0.15) !important; }

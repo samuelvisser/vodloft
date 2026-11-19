@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef} from 'react'
 import {type UseFormReturn, useWatch} from 'react-hook-form'
-import Select from '../common/Select'
+import Select from 'react-select'
 
 import {useLocalMediaProfileSites} from '../../lib/queries'
 import {sitesForLocalMediaProfileType, takesUpcomingSites, type LocalMediaProfileType} from '../../types/local_media_profile'

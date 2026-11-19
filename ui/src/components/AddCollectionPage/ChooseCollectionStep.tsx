@@ -14,7 +14,7 @@ import {
     type CollectionCreateFormIn, CollectionCreatePayloadOut, CollectionCreatePayloadIn,
 } from "../../types/schemas/collection";
 import {EpisodeIdentifierReg, CollectionTypeReg} from "../../types/collection";
-import Select from '../common/Select'
+import Select from "react-select";
 import {UseQueryResult} from "@tanstack/react-query";
 import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
 import {DwMembershipLevelReg} from "../../types/dailywire_user_info";
@@ -213,6 +213,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                 name="episodeIdentifier"
                 render={({field}) => (
                     <Select
+                        classNamePrefix="select"
                         inputId="episode-identification"
                         options={EpisodeIdentifierReg.options}
                         value={EpisodeIdentifierReg.options.find(o => o.value === field.value) ?? null}
@@ -315,6 +316,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                 name="type"
                                 render={({field}) => (
                                     <Select
+                                        classNamePrefix="select"
                                         inputId="collection-type"
                                         options={CollectionTypeReg.options}
                                         value={CollectionTypeReg.options.find(o => o.value === field.value) ?? null}
@@ -362,6 +364,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                     name="membershipLevel"
                                     render={({field}) => (
                                         <Select
+                                            classNamePrefix="select"
                                             inputId="membership-level"
                                             options={DwMembershipLevelReg.options}
                                             value={DwMembershipLevelReg.options.find(o => o.value === field.value) ?? null}
@@ -401,6 +404,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                     name="type"
                                     render={({field}) => (
                                         <Select
+                                            classNamePrefix="select"
                                             inputId="collection-type"
                                             options={CollectionTypeReg.options}
                                             value={CollectionTypeReg.options.find(o => o.value === field.value) ?? null}

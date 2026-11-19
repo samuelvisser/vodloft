@@ -1,6 +1,6 @@
 import {useState} from 'react'
 import {useWatch, type UseFormReturn} from 'react-hook-form'
-import Select from '../common/Select'
+import Select from 'react-select'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import {faIcon} from '../../icons/faIcon'

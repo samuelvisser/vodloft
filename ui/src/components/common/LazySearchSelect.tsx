@@ -1,6 +1,5 @@
 import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
-import {components, type GroupBase, type MenuListProps} from 'react-select'
-import Select from './Select'
+import Select, {components, type GroupBase, type MenuListProps} from 'react-select'
 
 export type LazySearchSelectOption = {
     value: string
