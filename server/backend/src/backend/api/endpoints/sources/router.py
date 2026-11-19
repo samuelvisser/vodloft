@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
-    ApiKeyAPIUpdate, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
+    ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
     SiteAddAPIRequest, SiteAddedAPIRead, SiteAuthenticationAPIRead,
 )
@@ -20,9 +20,9 @@ from backend.services.source_options import save_ytdlp_source_options, ytdlp_sou
 from config.settings.site_settings import SiteSettingGroup
 
 from .service import (
-    LinkNotRecognisedError, SourceFeatureMissingError, UnknownSiteError, get_api_status, get_program_status,
+    LinkNotRecognisedError, SourceFeatureMissingError, UnknownSiteError, api_key_notes, get_api_status, put_off_api_key_note, get_program_status,
     list_source_problems, list_source_sites,
-    list_sources, lookup_show_details, resolve_link, search_source, set_site_preference, source_with,
+    list_sources, lookup_show_details, sources_in_use, resolve_link, search_source, set_site_preference, source_with,
     update_source_program,
 )
 from backend.security.access import Access, Area, Level
@@ -46,10 +46,31 @@ def source_list():
     return list_sources()
 
 
+@router.get("/sources/in-use", dependencies=[signed_in()], response_model=list[str])
+def source_in_use_list():
+    """The Sources the Library has media from, so the UI can leave out which Source an item comes from while there is one."""
+    with db_session() as s:
+        return sources_in_use(s)
+
+
 @router.get("/sources/problems", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=list[SourceProblemAPIRead])
 def source_problems():
     """What the user should fix about any Source, such as an API key that stopped working."""
     return list_source_problems()
+
+
+@router.get("/sources/api-key-notes", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=list[ApiKeyNoteAPIRead])
+def get_api_key_notes():
+    """The Sites whose API key would speed up collections or creators in the Library while there is none, for the note
+    on Home that asks for one."""
+    with db_session() as s:
+        return api_key_notes(s)
+
+
+@router.post("/sources/api-key-notes", dependencies=[requires(Area.SOURCES, Level.MANAGE)], status_code=204)
+def put_off_api_key_notes(body: ApiKeyNoteAPIIn):
+    """Remind me later, or never show the note on Home that asks for an API key again."""
+    run_write_transaction(lambda s: put_off_api_key_note(s, body.action), concurrent=True)
 
 
 @router.get("/sources/sites", dependencies=[signed_in()], response_model=list[SourceSiteAPIRead])

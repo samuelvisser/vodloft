@@ -29,6 +29,8 @@ export const SectionPlanSchema = z.object({
 export type SectionPlan = z.infer<typeof SectionPlanSchema>
 
 export const CreatorLookupReadSchema = z.object({
+    /** Adding the creator with it uses what this lookup found, instead of asking the Site again. */
+    lookupId: z.string().nullable().optional(),
     sourceKey: z.string(),
     siteKey: z.string(),
     siteName: z.string(),
@@ -144,6 +146,8 @@ export type CreatorUpdateOut = z.output<typeof CreatorUpdateSchema>
 
 /** The creator behind a collection's link, before the collection is added to it. */
 export const CollectionCreatorMatchSchema = z.object({
+    /** Adding the collection with it uses what this lookup found, instead of asking the Site again. */
+    lookupId: z.string().nullable().optional(),
     siteName: z.string(),
     creatorLabel: z.string(),
     ref: z.string(),

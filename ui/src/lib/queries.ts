@@ -72,7 +72,7 @@ import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
-    ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
+    ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
     ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
     SourceReadSchema,
@@ -450,6 +450,14 @@ export function useSources() {
     })
 }
 
+/** The ids of the Sources the Library has media from. */
+export function useSourcesInUse() {
+    return useQuery<string[], Error, string[], readonly ['sourcesInUse']>({
+        queryKey: ['sourcesInUse'] as const,
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/sources/in-use`, z.string().array(), signal),
+    })
+}
+
 /** The Sources by id, with a name fallback for items whose Source is no longer registered. */
 export function useSourceLookup() {
     const {data: sources} = useSources()
@@ -666,6 +674,24 @@ export function useKeepQuestions() {
 }
 
 /** What the user should fix about any Source, for Needs attention on Home. */
+/** The Sites whose API key would speed up what is in the Library while there is none, for the note on Home. */
+export function useApiKeyNotes() {
+    return useQuery<ApiKeyNoteRead[], Error, ApiKeyNoteRead[], readonly ['apiKeyNotes']>({
+        queryKey: ['apiKeyNotes'] as const,
+        enabled: can('sources', 'manage'),
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/sources/api-key-notes`, ApiKeyNoteReadSchema.array(), signal),
+    })
+}
+
+/** Put the note on Home that asks for an API key off for a week, or never show it again. */
+export async function putOffApiKeyNotes(action: 'later' | 'never'): Promise<void> {
+    const response = await fetch(`${apiUrl()}/sources/api-key-notes`, {
+        method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action}),
+    })
+    if (!response.ok) throw await responseError(response)
+}
+
 export function useSourceProblems() {
     return useQuery<SourceProblemRead[], Error, SourceProblemRead[], readonly ['sourceProblems']>({
         queryKey: ['sourceProblems'] as const,
@@ -909,9 +935,11 @@ export function useCollectionCreatorLeave(slug: string, enabled: boolean) {
 }
 
 /** Add a collection to the creator behind its links, or take it out of its creator again. */
-export async function setCollectionCreator(slug: string, inCreator: boolean, moveHere: string[] = []): Promise<void> {
+export async function setCollectionCreator(
+    slug: string, inCreator: boolean, moveHere: string[] = [], lookupId?: string | null,
+): Promise<void> {
     const response = await fetch(collectionCreatorPath(slug), inCreator
-        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moveHere})}
+        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moveHere, lookupId})}
         : {method: 'DELETE', credentials: 'include'})
     if (!response.ok) throw await responseError(response)
 }

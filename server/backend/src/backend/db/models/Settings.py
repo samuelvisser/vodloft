@@ -34,6 +34,14 @@ class Settings(Base):
         String(64), default=generate_stream_profile_token,
         comment="Secret in the addresses of the playlist and guide with every channel, for an install without user accounts",
     )
+    api_key_note_after: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(), nullable=True,
+        comment="Until when Home does not ask for an API key, after Remind me later",
+    )
+    api_key_note_off: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False,
+        comment="Home never asks for an API key",
+    )
     alembic_version_num: Mapped[Optional[str]] = mapped_column(
         String(32),
         nullable=True,

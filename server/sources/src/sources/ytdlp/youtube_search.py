@@ -5,6 +5,7 @@ answered; the notice above the results says which one did, and why.
 """
 from __future__ import annotations
 
+import html
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -71,8 +72,17 @@ def _facts(*facts: str | None) -> tuple[str, ...]:
 
 # ---- The YouTube Data API ----
 
+def _snippet(item: dict) -> dict:
+    """The item's snippet. search.list escapes its text as HTML, such as ``Here&#39;s``; it is read as text."""
+    snippet = dict(item.get("snippet") or {})
+    for key in ("title", "description", "channelTitle"):
+        if isinstance(snippet.get(key), str):
+            snippet[key] = html.unescape(snippet[key])
+    return snippet
+
+
 def _api_channel(item: dict, channel: dict | None) -> ResolvedLink:
-    snippet = item.get("snippet") or {}
+    snippet = _snippet(item)
     channel_id = item["id"]["channelId"]
     stats = (channel or {}).get("statistics") or {}
     subscribers = None if stats.get("hiddenSubscriberCount") else _plural(stats.get("subscriberCount"), "subscriber")
@@ -85,7 +95,7 @@ def _api_channel(item: dict, channel: dict | None) -> ResolvedLink:
 
 
 def _api_playlist(item: dict, playlist: dict | None) -> ResolvedLink:
-    snippet = item.get("snippet") or {}
+    snippet = _snippet(item)
     playlist_id = item["id"]["playlistId"]
     count = ((playlist or {}).get("contentDetails") or {}).get("itemCount")
     return ResolvedLink(
@@ -97,7 +107,7 @@ def _api_playlist(item: dict, playlist: dict | None) -> ResolvedLink:
 
 
 def _api_video(item: dict, video: dict | None) -> ResolvedLink:
-    snippet = item.get("snippet") or {}
+    snippet = _snippet(item)
     video_id = item["id"]["videoId"]
     if video is not None and mapping.is_pending(video):
         when = "Live now" if (video.get("snippet") or {}).get("liveBroadcastContent") == "live" else "Upcoming"

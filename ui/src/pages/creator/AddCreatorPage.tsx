@@ -176,7 +176,7 @@ export default function AddCreatorPage() {
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-            sourceKey: data.sourceKey, url: data.url, ref: data.ref, sections: data.sections,
+            sourceKey: data.sourceKey, url: data.url, ref: data.ref, lookupId: creator?.lookupId ?? null, sections: data.sections,
             membershipLevel: data.membershipLevel, newSections: data.newSections, into: data.into || null,
         }),
     }), {

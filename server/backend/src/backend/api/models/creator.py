@@ -54,6 +54,9 @@ class CreatorPresetAPIRead(ResponseBase):
 class CreatorLookupAPIRead(ResponseBase):
     """A creator at its Site, before it is added: who it is, its sections and what each preset does with them."""
 
+    lookup_id: Optional[str] = None
+    """Adding the creator with this id uses what this lookup found, instead of asking the Site again."""
+
     source_key: str
     site_key: str
     site_name: str
@@ -93,6 +96,8 @@ class CreatorAPICreate(RequestBase):
     episode_identifier: EpisodeIdentifier = EpisodeIdentifier.SEASONAL
     membership_level: DwMembershipLevel = DwMembershipLevel.HIGHEST_ALLOWED
     new_sections: NewSectionAction = NewSectionAction.ASK
+    lookup_id: Optional[str] = Field(default=None, max_length=64)
+    """The lookup's id, to use what it found instead of asking the Site again."""
     into: Optional[str] = Field(default=None, max_length=255)
     """The slug of a creator in the Library whose account this is too, such as a host's YouTube channel: the account
     joins that creator instead of becoming a creator of its own."""
@@ -193,6 +198,9 @@ class CreatorSectionsAPIAdd(RequestBase):
 class CollectionCreatorMatchAPIRead(ResponseBase):
     """The creator behind a collection's link, before the collection is added to it."""
 
+    lookup_id: Optional[str] = None
+    """Adding the collection with this id uses what this lookup found, instead of asking the Site again."""
+
     site_name: str
     creator_label: str
     ref: str
@@ -220,6 +228,8 @@ class JoinOverlapAPIRead(ResponseBase):
 
 
 class CollectionCreatorJoinAPIIn(RequestBase):
+    lookup_id: Optional[str] = Field(default=None, max_length=64)
+    """The match's id, to use what it found instead of asking the Site again."""
     move_here: list[str] = Field(default_factory=list, max_length=5000)
     """The lists, by ref, that leave the creator's own collection for the joining one."""
     creator_slug: Optional[str] = Field(default=None, max_length=255)

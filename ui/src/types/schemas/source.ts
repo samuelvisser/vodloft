@@ -148,6 +148,8 @@ export const SearchResultReadSchema = z.object({
     facts: z.array(z.string()).optional(),
     access: z.string().nullable().optional(),
     accessLabel: z.string().nullable().optional(),
+    /** What the Site calls a creator, when the result is a creator's own page that can be added as one. */
+    creatorLabel: z.string().nullable().optional(),
 })
 export type SearchResultRead = z.infer<typeof SearchResultReadSchema>
 
@@ -236,6 +238,13 @@ export type PublishStatusLabelRead = z.infer<typeof PublishStatusLabelReadSchema
 export function episodeTagLabel(tags: readonly EpisodeTagRead[] | undefined, key: string): string {
     return tags?.find((tag) => tag.key === key)?.label ?? key
 }
+
+/** A Site whose API key would speed up collections or creators in the Library, while there is none. */
+export const ApiKeyNoteReadSchema = z.object({
+    sourceKey: z.string(),
+    siteName: z.string(),
+})
+export type ApiKeyNoteRead = z.infer<typeof ApiKeyNoteReadSchema>
 
 export const ApiStatusReadSchema = z.object({
     /** The last characters of the key, or null when no key is set. */

@@ -46,25 +46,23 @@ def lookup_creator_label(source_key: str, url: str | None) -> str:
     return next((site.creator_label for site in source.sites if site.creators), "creator")
 
 
-# A creator's lookup takes seconds, so what it found is kept for a while. Adding the creator, or a collection to it,
-# takes the creator the user just saw from the last minutes. Looking a creator up again takes one only from the last
-# minute, such as the lookup VODLoft starts when a pasted link turns out to be a creator, or one still running.
-_REUSE_SECONDS = 15 * 60
+# A creator's lookup takes seconds. Looking a creator up takes what a lookup of the same creator started in the last
+# minute found, such as the lookup VODLoft starts when a pasted link turns out to be a creator, or waits for it while
+# it runs. Adding the creator uses its lookup's id instead, see ``lookups``.
 _FRESH_SECONDS = 60
 _lookups: dict[tuple[str, str], tuple[float, Future]] = {}
 _lookups_lock = threading.Lock()
 _ahead = ThreadPoolExecutor(max_workers=2, thread_name_prefix="creator-lookup")
 
 
-def _shared(key: tuple[str, str], within: float, work: Callable[[], CreatorDetails]) -> CreatorDetails:
-    """What ``work`` finds, or what a lookup of the same creator started less than ``within`` seconds ago found or
-    will find."""
+def _shared(key: tuple[str, str], work: Callable[[], CreatorDetails]) -> CreatorDetails:
+    """What ``work`` finds, or what a lookup of the same creator started in the last minute found or will find."""
     now = time.monotonic()
     with _lookups_lock:
-        for old in [old for old, (at, _future) in _lookups.items() if now - at >= _REUSE_SECONDS]:
+        for old in [old for old, (at, future) in _lookups.items() if now - at >= _FRESH_SECONDS and future.done()]:
             del _lookups[old]
         found = _lookups.get(key)
-        if found is not None and now - found[0] < within:
+        if found is not None and now - found[0] < _FRESH_SECONDS:
             future, mine = found[1], False
         else:
             future, mine = Future(), True
@@ -85,19 +83,14 @@ def _shared(key: tuple[str, str], within: float, work: Callable[[], CreatorDetai
 
 
 def look_up_creator(
-    source_key: str, url: str | None, ref: str | None, progress: Callable[[str], None] = lambda step: None, *,
-    reuse: bool = False,
+    source_key: str, url: str | None, ref: str | None, progress: Callable[[str], None] = lambda step: None,
 ) -> CreatorDetails:
-    """Ask the Source for the creator, telling ``progress`` what it is doing. Slow: call it outside a transaction.
-    With ``reuse``, a creator looked up in the last minutes is taken as it was found then."""
+    """Ask the Source for the creator, telling ``progress`` what it is doing. Slow: call it outside a transaction."""
     if url:
         creators.creator_site(source_key, url)
     elif not ref:
         raise ServiceError("Give the creator's link", field="url")
-    return _shared(
-        (source_key, url or ref), _REUSE_SECONDS if reuse else _FRESH_SECONDS,
-        lambda: get_source(source_key).creator_details(url or ref, progress),
-    )
+    return _shared((source_key, url or ref), lambda: get_source(source_key).creator_details(url or ref, progress))
 
 
 def look_up_creator_ahead(source_key: str, url: str) -> None:
@@ -425,26 +418,22 @@ def collection_link(s: Session, collection_slug: str) -> CollectionLink:
 
 
 def look_up_collection_creator(
-    link: CollectionLink, progress: Callable[[str], None] = lambda step: None, *, reuse: bool = False,
+    link: CollectionLink, progress: Callable[[str], None] = lambda step: None,
 ) -> CreatorDetails:
     """The creator behind the collection's link, asked of its Source, telling ``progress`` what it is doing. Slow: call
-    it outside a transaction. With ``reuse``, a creator looked up in the last minutes is taken as it was found then."""
+    it outside a transaction."""
     source = get_source(link.source_key)
     if not source.has(Feature.CREATORS):
         raise ServiceError(f"{source.name} has no creators")
     site = source.site_for(link.url)
     label = site.creator_label if site is not None else "creator"
-
-    def look_up() -> CreatorDetails:
-        progress(f"Finding the {label} behind the link")
-        with asking_source(f"Could not look up the {label}"):
-            ref = source.creator_of(link.url)
-        if ref is None:
-            raise ServiceError(f"VODLoft found no {label} behind the link of {link.title}")
-        with asking_source(f"Could not look up the {label}"):
-            return source.creator_details(ref, progress)
-
-    return _shared((link.source_key, f"behind:{link.url}"), _REUSE_SECONDS if reuse else 0, look_up)
+    progress(f"Finding the {label} behind the link")
+    with asking_source(f"Could not look up the {label}"):
+        ref = source.creator_of(link.url)
+    if ref is None:
+        raise ServiceError(f"VODLoft found no {label} behind the link of {link.title}")
+    with asking_source(f"Could not look up the {label}"):
+        return source.creator_details(ref, progress)
 
 
 @dataclass
