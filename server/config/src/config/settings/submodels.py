@@ -436,6 +436,12 @@ class DownloadSettings(SubmodelBase):
             "Delay in minutes after episode publication before a delayed download may start (unless explicitly bypassed)"
         ),
     )
+    daily_download_limit: int = Field(
+        default=0,
+        ge=0,
+        le=10000,
+        description="Automatic downloads a Site may start in 24 hours; 0 for no limit. Downloads started by hand don't count",
+    )
     ensure_safe_delay: bool = Field(
         default=False,
         description=(

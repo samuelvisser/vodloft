@@ -43,6 +43,7 @@ _LOCAL_MEDIA_PROFILE_FIELDS = {
     SiteSetting.AUTO_SUBTITLES: "auto_subtitles",
     SiteSetting.SPONSORBLOCK: "sponsorblock_enabled",
     SiteSetting.SPONSORBLOCK_SEGMENTS: "sponsorblock_segments",
+    SiteSetting.CHAPTERS: "keep_chapters",
 }
 """The Local Media Profile field each local media profile setting gives its starting value."""
 
@@ -118,6 +119,7 @@ def local_media_profile_defaults() -> dict[str, Any]:
     values["sponsorblock_enabled"] = (
         bool(values["sponsorblock_enabled"]) and sponsorblock_changes_anything(values["sponsorblock_segments"])
     )
+    values["keep_chapters"] = bool(values["keep_chapters"])
     return values
 
 
@@ -128,6 +130,8 @@ def local_media_profile_site_choices(profile, site: Site) -> dict[str, Any]:
         "auto_subtitles": profile.auto_subtitles if offers(site, SiteSetting.AUTO_SUBTITLES) else "never",
         "sponsorblock_enabled": bool(profile.sponsorblock_enabled) and offers(site, SiteSetting.SPONSORBLOCK),
         "sponsorblock_segments": dict(profile.sponsorblock_segments or {}),
+        "keep_chapters": bool(profile.keep_chapters) and offers(site, SiteSetting.CHAPTERS),
+        "cut_chapters": list(profile.cut_chapters or []) if offers(site, SiteSetting.CHAPTERS) else [],
     }
 
 

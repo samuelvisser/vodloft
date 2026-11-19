@@ -7,6 +7,7 @@ from jinja2.exceptions import TemplateError
 from sqlalchemy.orm import Session
 
 from backend.api.models.local_media_profile_preview import (
+    LocalMediaProfileMetadataPreview,
     LocalMediaProfileOutputPreview,
     LocalMediaProfilePreviewPlan,
     LocalMediaProfilePreviewRequest,
@@ -18,6 +19,8 @@ from backend.db.models import Episode, Movie, MovieExtra, CollectionLocalMediaPr
 from backend.services.custom_index_preview import plan_custom_index_preview
 from backend.services.collection_assets import get_collection_asset_root_preview
 from backend.utils.custom_index import indexing_value_definition_keys
+from backend.utils.metadata_template import render_metadata_template, validate_metadata_template
+from backend.utils.name_length import tracking_output_names
 from backend.utils.output_template import (
     _finish_output_path,
     episode_output_template_values,
@@ -42,6 +45,9 @@ from backend.security.deps import requires_any
 
 router = APIRouter()
 
+_EXAMPLE_DESCRIPTION = "The hosts open the first episode with the story so far."
+"""The example episode's description, for the metadata title and description templates."""
+
 
 def _example_values(session: Session, body: LocalMediaProfilePreviewRequest) -> dict[str, str]:
     """Resolve the selected source metadata, then overlay even explicitly empty edits."""
@@ -50,7 +56,7 @@ def _example_values(session: Session, body: LocalMediaProfilePreviewRequest) -> 
         original = _EXAMPLE_MOVIE_VALUES
     elif source_id is None or source_id == f"example:{body.type}":
         original = {
-            "collection": _EXAMPLE_COLLECTION_VALUES,
+            "collection": {**_EXAMPLE_COLLECTION_VALUES, "description": _EXAMPLE_DESCRIPTION},
             "video": _EXAMPLE_VIDEO_VALUES,
         }[body.type]
     elif source_id.startswith(EXAMPLE_SOURCE_PREFIX):
@@ -68,7 +74,7 @@ def _example_values(session: Session, body: LocalMediaProfilePreviewRequest) -> 
         if source is None:
             raise ValueError("The selected example no longer exists. Select another example.")
         if kind == "episode":
-            original = episode_output_template_values(source)
+            original = {**episode_output_template_values(source), "description": source.description or ""}
         elif kind == "movie-extra":
             original = movie_output_template_values(source.movie, source)
         elif kind == "video":
@@ -168,16 +174,22 @@ def get_local_media_profile_preview(
     try:
         # Keep test-value controls available even when rendering has an error.
         result.output.used_variables = sorted(output_template_fields(draft.output_template))
-        rendered = get_output_template_preview(session, draft)
-        result.output = LocalMediaProfileOutputPreview.model_validate(rendered)
-        # Use the same concrete filesystem root and filename policy as collection art,
-        # rather than mixing a logical /downloads path with a real collection path.
-        result.output.output_path = str(_finish_output_path(
-            rendered.output_path, extension=Path(rendered.output_path).suffix, mode=effective_filename_mode(draft),
-        ))
+        with tracking_output_names() as names:
+            rendered = get_output_template_preview(session, draft)
+            result.output = LocalMediaProfileOutputPreview.model_validate(rendered)
+            # Use the same concrete filesystem root and filename policy as collection art,
+            # rather than mixing a logical /downloads path with a real collection path.
+            result.output.output_path = str(_finish_output_path(
+                rendered.output_path, extension=Path(rendered.output_path).suffix,
+                mode=effective_filename_mode(draft),
+            ))
+        result.output.shortened_names = names.shortened
     except (TemplateError, ValueError, TypeError, ArithmeticError) as exc:
         result.output.output_path = None
         result.output.error = str(exc)
+
+    if body.type == "collection":
+        result.metadata = _metadata_preview(body, values)
 
     if result.collection_root is not None:
         try:
@@ -189,6 +201,28 @@ def get_local_media_profile_preview(
             result.collection_root.reason = str(exc)
             result.collection_root.collection_title = values.get("collection_title")
     return result
+
+
+def _metadata_preview(body: LocalMediaProfilePreviewRequest, values: dict[str, str]) -> LocalMediaProfileMetadataPreview:
+    """The example episode's title and description as the profile's templates would write them.
+
+    Like a download, an empty template or one that renders empty keeps the site's text. A template that can't
+    render shows why, where a download would keep the site's text.
+    """
+    def render(template: str | None, site_text: str, one_line: bool) -> tuple[str, str | None]:
+        if not template:
+            return site_text, None
+        try:
+            text = render_metadata_template(validate_metadata_template(template), values)
+        except ValueError as exc:
+            return site_text, str(exc)
+        return (" ".join(text.split()) if one_line else text) or site_text, None
+
+    title, title_error = render(body.episode_title_template, values.get("title", ""), True)
+    description, description_error = render(body.episode_description_template, values.get("description", ""), False)
+    return LocalMediaProfileMetadataPreview(
+        title=title, title_error=title_error, description=description, description_error=description_error,
+    )
 
 
 @router.post("/preview", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfilePreviewResult)

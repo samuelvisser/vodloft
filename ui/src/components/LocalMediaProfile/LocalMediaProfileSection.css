@@ -346,3 +346,57 @@
 .sponsorblock-dialog .help {
     margin-top: 12px;
 }
+
+/* An episode's own title and description: Jinja, in the output path's editor, each with its example. The editor
+   is short, so its suggestions open outside it instead of being cut off; its own corners stay rounded. */
+.output-template-code-editor.metadata-template-editor {
+    overflow: visible;
+}
+
+.output-template-code-editor.metadata-template-editor .cm-editor {
+    border-radius: 11px;
+}
+
+.output-template-code-editor.metadata-template-editor .cm-scroller {
+    border-radius: inherit;
+}
+
+.output-template-code-editor.metadata-template-editor .cm-scroller {
+    min-height: 0;
+}
+
+.output-template-code-editor.metadata-template-editor--multiline .cm-scroller {
+    min-height: 72px;
+}
+
+.metadata-template-example {
+    margin-top: 8px;
+}
+
+.metadata-template-example__text--multiline {
+    white-space: pre-line;
+}
+
+.metadata-template-example__text--clamped {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+}
+
+.metadata-template-example__more {
+    justify-self: start;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.metadata-template-example-source {
+    margin: 0 0 4px;
+}

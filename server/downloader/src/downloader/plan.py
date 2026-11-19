@@ -6,6 +6,7 @@ facts (a response's actual size, a collision-resolved name) do not change policy
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -61,6 +62,22 @@ class YtdlpSponsorBlock:
 
 
 @dataclass(frozen=True)
+class YtdlpChapters:
+    """What yt-dlp does with the chapters a video comes with."""
+    keep: bool = False
+    """Write them into the file."""
+    cut: tuple[str, ...] = ()
+    """Regular expressions: a chapter whose title matches one is cut out of the file."""
+
+    def __post_init__(self) -> None:
+        for pattern in self.cut:
+            try:
+                re.compile(pattern)
+            except re.error as error:
+                raise DownloadError(f"{pattern!r} is not a valid regular expression: {error}") from error
+
+
+@dataclass(frozen=True)
 class ResolvedDownloadSource:
     url: str
     format_downloaded: str
@@ -76,6 +93,7 @@ class ResolvedDownloadSource:
     """When set, yt-dlp downloads ``url`` (a web page) with this command line."""
     ytdlp_subtitles: YtdlpSubtitles = YtdlpSubtitles()
     ytdlp_sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock()
+    ytdlp_chapters: YtdlpChapters = YtdlpChapters()
     ytdlp_throttle_guard: bool = False
     """Refuse a video yt-dlp only got in a throttled resolution (``ThrottledError``) instead of keeping it."""
 
@@ -100,7 +118,8 @@ class SidecarSpec:
     attempts: int = 3
     allowed_extensions: tuple[str, ...] = ()
     source_format: Literal["direct", "hls_webvtt", "ytdlp"] = "direct"
-    """``ytdlp``: the subtitles yt-dlp writes while it downloads the media, one file per language."""
+    """``ytdlp``: what yt-dlp writes while it downloads the media: the subtitles, one file per language, or the
+    video's info file."""
     language: str | None = None
     forced: bool = False
     title: str | None = None
@@ -130,9 +149,9 @@ class SidecarSpec:
         ):
             raise ValueError("HLS WebVTT assets must be remote subtitle playlists converted to SRT")
         if self.source_format == "ytdlp" and (
-            self.url is None or self.extension != "srt" or self.kind != "subtitle"
+            self.url is None or (self.kind, self.extension) not in (("subtitle", "srt"), ("info_json", "json"))
         ):
-            raise ValueError("yt-dlp subtitles are remote pages whose subtitles are saved as SRT")
+            raise ValueError("yt-dlp writes a remote page's subtitles as SRT, or its info file as JSON")
 
 
 @dataclass(frozen=True)
@@ -277,7 +296,7 @@ def build_download_plan(
     if source.ytdlp_command and (source.use_hls or source.remux_to_mp4 or source.convert_video_to_m4a):
         raise DownloadError("yt-dlp downloads produce their final format themselves")
     if any(asset.source_format == "ytdlp" for asset in assets) and not source.ytdlp_command:
-        raise ValueError("Only a yt-dlp download writes yt-dlp subtitles")
+        raise ValueError("Only a yt-dlp download writes yt-dlp subtitles and info files")
     if len(set(subtitle_asset_ids)) != len(subtitle_asset_ids) or any(
         not any(asset.id == asset_id and asset.kind == "subtitle" for asset in assets)
         for asset_id in subtitle_asset_ids
@@ -317,7 +336,7 @@ def build_download_plan(
         stages.append(StageSpec(
             f"acquire:{asset.id}", "generate_sidecar" if asset.content is not None else "download_sidecar",
             "transferring", "sidecar", weight=weight, asset_id=asset.id,
-            # yt-dlp writes its subtitles during the media transfer.
+            # yt-dlp writes its subtitles and info file during the media transfer.
             depends_on=("media",) if asset.source_format == "ytdlp" else ("prepare",),
         ))
     # Dependencies and deadlines are policy, not runtime decisions. Auxiliary

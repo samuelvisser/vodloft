@@ -69,9 +69,11 @@ _SITE_UPGRADE_CHECKS = {"youtube": UpgradeChecks((
     UpgradeImprovement.RESOLUTION, UpgradeImprovement.SPONSORBLOCK, UpgradeImprovement.SUBTITLES, UpgradeImprovement.CODEC,
     UpgradeImprovement.LENGTH,
 ))}
+# yt-dlp reads the chapters a video comes with on every site that has them.
+_SETTINGS = SiteSettings(shows=frozenset({SiteSetting.CHAPTERS}))
 _SITE_SETTINGS = {"youtube": SiteSettings(
     # SponsorBlock only has YouTube's videos.
-    shows=frozenset({SiteSetting.SPONSORBLOCK, SiteSetting.SPONSORBLOCK_SEGMENTS}),
+    shows=frozenset({SiteSetting.CHAPTERS, SiteSetting.SPONSORBLOCK, SiteSetting.SPONSORBLOCK_SEGMENTS}),
     presets=MappingProxyType({
         # Creators keep changing titles and thumbnails for days, and YouTube tests them for up to two weeks.
         SiteSetting.METADATA_REFRESH: "30m,2h,6h,24h,3d,7d,14d",
@@ -147,7 +149,7 @@ def site_of(key: str, host: str | None = None) -> Site:
         stream_video_heights=_STREAM_VIDEO_HEIGHTS.get(key, ()), stream_file_height=_STREAM_FILE_HEIGHTS.get(key),
         stream_proxy_choice=key in _STREAM_PROXY_CHOICE, video_output_help=_VIDEO_OUTPUT_HELP.get(key, {}),
         downloads=_downloads(key), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
-        settings=_SITE_SETTINGS.get(key, SiteSettings()), accesses=_accesses(key),
+        settings=_SITE_SETTINGS.get(key, _SETTINGS), accesses=_accesses(key),
         takes_api_key=key in _API_KEY_SITES, shows_locked=key not in _HIDES_LOCKED,
         channels=key in _CHANNEL_SITES, channel_label=_CHANNEL_LABELS.get(key, "channel"),
         channel_presets=_CHANNEL_PRESETS if key in _CHANNEL_SITES else (), link_seasons=key in _LINK_SEASON_SITES,
@@ -168,7 +170,7 @@ def _accesses(key: str) -> tuple[Access, ...]:
 def _downloads(key: str) -> DownloadOptions:
     # yt-dlp chooses among every version a site has, so each one has the quality choices, and it gets the
     # subtitles of any site.
-    return DownloadOptions(hls_heights=_HLS_DOWNLOADS.get(key, ()), subtitles=True, quality_choices=True)
+    return DownloadOptions(hls_heights=_HLS_DOWNLOADS.get(key, ()), subtitles=True, quality_choices=True, info_file=True)
 
 
 def download_options() -> DownloadOptions:

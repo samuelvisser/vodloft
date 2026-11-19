@@ -38,6 +38,7 @@ from ..paths import PathMap, map_path, template_root
 from ..uploads import UploadFile
 from ..ytdlp_templates import (
     ConversionOptions,
+    FieldValue,
     convert_ytdl_sub,
     expand_ytdl_sub,
     render_ytdl_sub,
@@ -46,6 +47,8 @@ from .archive import ArchiveEntry, archive_names, read_archive
 from .presets import (
     DOWNLOAD_HELPERS,
     MUSIC_GENRE_DEFAULT,
+    MUSIC_VIDEO_GENRE_DEFAULT,
+    MUSIC_VIDEO_VALUES,
     MUSIC_PRESET_VALUES,
     MUSIC_TRACK_VALUES,
     TV_SHOW_CONTENT_RATING_DEFAULT,
@@ -75,7 +78,17 @@ _COLLECTION_EPISODES = {
     "release-year-month-day": ("{release_year_truncated}{release_month_padded}{release_day_padded}{upload_date_index_padded}", "day"),
     "playlist-index": ("{playlist_index_padded6}", "playlist"),
 }
-_REVERSED = "{ %concat(upload_day_of_year_reversed, upload_date_index_reversed_padded) }"
+# ytdl-sub's backwards numbers, so the newest episode sorts first.
+_REVERSED_EPISODES = {
+    "upload-month-day-reversed": ("{upload_day_of_year_reversed_padded}{upload_date_index_reversed_padded}", "day"),
+    "release-month-day-reversed": ("{release_day_of_year_reversed_padded}{upload_date_index_reversed_padded}", "day"),
+    "upload-year-month-day-reversed": (
+        "{upload_year_truncated_reversed}{upload_day_of_year_reversed_padded}{upload_date_index_reversed_padded}", "day",
+    ),
+    "release-year-month-day-reversed": (
+        "{release_year_truncated_reversed}{release_day_of_year_reversed_padded}{upload_date_index_reversed_padded}", "day",
+    ),
+}
 _EPISODE_NUMBER = re.compile(r"\.e(\d+) - ")
 
 _HEIGHTS = ((4320, "format_8k"), (2160, "format_4k"), (1440, "format_1440p"), (1080, "format_1080p"),
@@ -135,12 +148,8 @@ def _layout(sub: Subscription, kind: str | None) -> _Layout:
             layout.computed.update(season_number=_SEASONS[season], season_number_padded=_SEASONS[season])
         if episode in _BY_DATE_EPISODES:
             layout.computed["episode_number_padded"], layout.index = _BY_DATE_EPISODES[episode]
-        elif episode.endswith("-reversed"):
-            layout.computed["episode_number_padded"] = _REVERSED
-            layout.warnings.append(ImportWarning(
-                "tv_show_by_date_episode_ordering",
-                f"VODLoft can't number episodes backwards ({episode}), so new episodes get no episode number",
-            ))
+        elif episode in _REVERSED_EPISODES:
+            layout.computed["episode_number_padded"], layout.index = _REVERSED_EPISODES[episode]
         release = "release" in season
     elif kind == "tv_show_collection":
         layout.computed.update(
@@ -149,11 +158,13 @@ def _layout(sub: Subscription, kind: str | None) -> _Layout:
         episode = str(overrides.get("tv_show_collection_episode_ordering", "")).lower()
         if episode in _COLLECTION_EPISODES:
             layout.computed["episode_number_padded"], layout.index = _COLLECTION_EPISODES[episode]
+        elif episode in _REVERSED_EPISODES:
+            layout.computed["episode_number_padded"], layout.index = _REVERSED_EPISODES[episode]
         elif episode.endswith("-reversed"):
-            layout.computed["episode_number_padded"] = _REVERSED
+            layout.computed["episode_number_padded"] = "{playlist_index_reversed_padded6}"
             layout.warnings.append(ImportWarning(
                 "tv_show_collection_episode_ordering",
-                f"VODLoft can't number episodes backwards ({episode}), so new episodes get no episode number",
+                f"VODLoft can't number a playlist's videos backwards ({episode}), so new episodes get no episode number",
             ))
         release = "release" in episode
     else:
@@ -311,6 +322,8 @@ def _profile_settings(sub: Subscription, player: str | None, warnings: list[Impo
     embedded = bool(config.get("embed_thumbnail"))
     settings["thumbnail_mode"] = ("embed_and_sidecar" if thumbnail and embedded else "embed" if embedded
                                   else "sidecar" if thumbnail else "no_thumbnail")
+    # ytdl-sub's base preset saves the info file; a preset can turn it off with an empty name.
+    settings["save_info_json"] = bool((config.get("output_options") or {}).get("info_json_name"))
     settings["collection_scope"] = "both"
     overrides = sub.overrides
     settings["download_collection_assets"] = bool(overrides.get("tv_show_poster_file_name") or overrides.get("tv_show_fanart_file_name"))
@@ -326,11 +339,13 @@ def _option_warnings(sub: Subscription) -> list[ImportWarning]:
     ) or override_list(sub.overrides.get("resolution_assert_ignore_titles")):
         warnings.append(ImportWarning(
             "throttle_protection", "VODLoft paces its own requests to YouTube, so ytdl-sub's throttle settings "
-            f"{'(' + ', '.join(throttle) + ') ' if throttle else ''}are not imported", "close",
+            f"{'(' + ', '.join(throttle) + ') ' if throttle else ''}are not imported. To start fewer downloads, "
+            "set Automatic downloads per day for the Site in Settings", "close",
         ))
     if "max_downloads" in options:
         warnings.append(ImportWarning(
-            "Chunk Downloads", "VODLoft downloads in its own queue, a few at a time, so it needs no chunks", "close",
+            "Chunk Downloads", "VODLoft downloads in its own queue, a few at a time, so it needs no chunks. "
+            "Automatic downloads per day in Settings limits how many a Site starts in a day", "close",
         ))
     for key in sorted(options):
         if key in _HANDLED_OPTIONS or key in _THROTTLE_OPTIONS:
@@ -386,8 +401,33 @@ def _episode_types(url: str) -> list[str]:
     return {"shorts": ["short"], "streams": ["livestream"], "videos": ["ep"]}.get(tab, ["ep", "short", "livestream"])
 
 
-def _sponsorblock(sub: Subscription) -> dict[str, object]:
-    chapters = sub.config.get("chapters") if isinstance(sub.config.get("chapters"), dict) else {}
+def _chapters(sub: Subscription, warnings: list[ImportWarning]) -> dict[str, object]:
+    """The chapters plugin: SponsorBlock, keeping the video's own chapters and cutting out chapters by title."""
+    chapters = sub.config.get("chapters") if isinstance(sub.config.get("chapters"), dict) else None
+    if chapters is None:
+        return {**sponsorblock({}), "keep_chapters": False, "cut_chapters": []}
+    removed_titles = chapters.get("remove_chapters_regex")
+    cut = [_render(sub, str(pattern)) for pattern in removed_titles] if isinstance(removed_titles, list) else []
+    if chapters.get("allow_chapters_from_comments"):
+        warnings.append(ImportWarning(
+            "allow_chapters_from_comments", "VODLoft only keeps the chapters a video has itself, not ones from its comments",
+        ))
+    patterns = []
+    for pattern in filter(None, cut):
+        try:
+            re.compile(pattern)
+        except re.error:
+            warnings.append(ImportWarning("remove_chapters_regex", f"VODLoft can't read the regular expression {pattern}"))
+        else:
+            patterns.append(pattern)
+    return {
+        **_sponsorblock(sub, chapters),
+        "keep_chapters": bool(chapters.get("embed_chapters", True)),
+        "cut_chapters": patterns,
+    }
+
+
+def _sponsorblock(sub: Subscription, chapters: dict) -> dict[str, object]:
     def categories(value: object) -> set[str]:
         if value == "all":
             return set(SPONSORBLOCK_CATEGORIES)
@@ -413,8 +453,18 @@ def _download_profile(sub: Subscription, url: str, auto_subtitles: str, warnings
             limits["download_starting_from"] = starting.isoformat()
         else:
             warnings.append(ImportWarning("date_range", f"VODLoft can't read the date {after}"))
-    if date_range.get("before"):
-        warnings.append(ImportWarning("date_range", "VODLoft downloads new videos, so it has no date to stop at"))
+    before = _render(sub, date_range["before"]) if date_range.get("before") else None
+    if before:
+        until = _absolute(before)
+        if until is None:
+            warnings.append(ImportWarning("date_range", f"VODLoft only stops at a fixed date, not at {before}"))
+        elif limits["download_days_in_past"]:
+            warnings.append(ImportWarning(
+                "date_range", f"VODLoft limits by days or by dates, not both; the last {limits['download_days_in_past']} "
+                              f"days win over {before}", "close",
+            ))
+        else:
+            limits["download_until"] = until.isoformat()
     output = sub.config.get("output_options") or {}
     if output.get("keep_files_after"):
         limits["delete_older_episodes"] = True
@@ -435,7 +485,7 @@ def _download_profile(sub: Subscription, url: str, auto_subtitles: str, warnings
         "seasons": [], "include_upcoming_seasons": True,
         "rules": rules,
         "auto_subtitles": auto_subtitles,
-        **_sponsorblock(sub),
+        **_chapters(sub, warnings),
         **limits,
     }
 
@@ -456,13 +506,19 @@ def _music_overrides(sub: Subscription) -> dict[str, str]:
             if str(sub.overrides.get(name, "")) in MUSIC_PRESET_VALUES[name]}
 
 
-def _template(sub: Subscription, layout: _Layout, folder: str, path_map: PathMap, collection_type: str, music: bool = False):
+def _template(
+    sub: Subscription, layout: _Layout, folder: str, path_map: PathMap, collection_type: str, music: bool = False,
+    music_videos: bool = False,
+):
     """The converted Local Media Profile template, and a warning when it starts outside ytdl-sub's folder."""
     output = sub.config.get("output_options") or {}
     directory, file_name = output.get("output_directory"), output.get("file_name")
     original = f"{directory}/{file_name}"
     # The Collection is named after the show, so the template reads the show's name as the Collection's title.
-    overrides = {**sub.overrides, "tv_show_name": "{subscription_name}", **(_music_overrides(sub) if music else {})}
+    overrides = {
+        **sub.overrides, "tv_show_name": "{subscription_name}", **(_music_overrides(sub) if music else {}),
+        **(_music_video_overrides(sub) if music_videos else {}),
+    }
     expansion = expand_ytdl_sub(original, overrides, layout.computed)
     prefix = folder.rstrip("/").replace("%", "%%") + "/" if folder != "/" else "/"
     template = expansion.template
@@ -480,11 +536,46 @@ def _template(sub: Subscription, layout: _Layout, folder: str, path_map: PathMap
     return report, problem or warning
 
 
+_METADATA_TEMPLATES = (("episode_title", "episode_title_template"), ("episode_plot", "episode_description_template"))
+
+
+def _metadata_templates(sub: Subscription, layout: _Layout, warnings: list[ImportWarning]) -> dict[str, object]:
+    """ytdl-sub's own episode title and plot for the NFO and the file's tags, as the profile's templates."""
+    templates: dict[str, object] = {}
+    for override, setting in _METADATA_TEMPLATES:
+        if override not in sub.overrides:
+            continue
+        original = str(sub.overrides[override])
+        # The path converter does the work: the text sits between its root and the extension.
+        expansion = expand_ytdl_sub(f"{original}.{{ext}}", sub.overrides, layout.computed)
+        report = convert_ytdl_sub(expansion, original, ConversionOptions(
+            na_placeholder="", root="/", extra_fields={"description": FieldValue("description", always=True)},
+        ))
+        converted = report.output_template
+        if converted is None or report.support == "unsupported":
+            warnings.append(ImportWarning(override, f"VODLoft can't convert {original}, so it keeps the site's text"))
+            continue
+        templates[setting] = converted.removeprefix("/").removesuffix(".ext")
+    return templates
+
+
 _MUSIC_SETTINGS: dict[str, object] = {
     "type": "music", "collection_scope": "music", "metadata_mode": "embed", "thumbnail_mode": "embed",
     "show_nfo": False, "kodi_safe_nfo": False, "download_collection_assets": False,
 }
 """A Music Local Media Profile: tags and a square cover in each file, as ytdl-sub's music presets write them."""
+
+
+_MUSIC_VIDEO_SETTINGS: dict[str, object] = {
+    "episode_nfo": "music_video", "show_nfo": False, "download_collection_assets": False,
+}
+"""A Collection profile of music videos: a musicvideo NFO by the channel's artist, and no show or season files."""
+
+
+def _music_video_overrides(sub: Subscription) -> dict[str, str]:
+    """The artist as ytdl-sub's music video presets set it, as the artist VODLoft's template reads."""
+    return {name: value for name, value in MUSIC_VIDEO_VALUES.items()
+            if str(sub.overrides.get(name, "")) == "{subscription_name}"}
 
 
 def _music_refusal(sub: Subscription) -> str | None:
@@ -525,8 +616,9 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
     kind, player = _kind_and_player(sub)
     if sub.unknown:
         return None, [ImportWarning(sub.name, f"Not imported: VODLoft doesn't know the preset {', '.join(sub.unknown)}")]
-    if kind == "music_video" or sub.map:
-        return None, [ImportWarning(sub.name, "Not imported: VODLoft has no profiles for music videos")]
+    if sub.map:
+        return None, [ImportWarning(sub.name, "Not imported: VODLoft adds an artist's music videos from one link; "
+                                              "add the others to the artist's channel as collections of their own")]
     if kind == "music":
         refused = _music_refusal(sub)
         if refused:
@@ -545,6 +637,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
     profile_warnings: list[ImportWarning] = []
     settings, audio, auto_subtitles = _profile_settings(sub, player, profile_warnings)
     music = kind == "music"
+    music_videos = kind == "music_video"
     full_albums = music and "YouTube Full Albums" in set(sub.applied)
     if music:
         # Every album of the artist is a season of the artist's collection, so only another artist's links are left out.
@@ -554,13 +647,21 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
                 "links", f"VODLoft adds the artist at {links.url}; left out: {', '.join(others)}", "close",
             ))
         settings.update(_MUSIC_SETTINGS)
+    elif music_videos:
+        settings.update(_MUSIC_VIDEO_SETTINGS)
+        if links.left_out:
+            warnings.append(ImportWarning(
+                "links", f"VODLoft adds the music videos at {links.url}; add the others to the artist's channel as "
+                f"collections of their own: {', '.join(links.left_out)}", "close",
+            ))
     elif links.left_out:
         warnings.append(ImportWarning(
             "links", f"A VODLoft collection has one link, {links.url}; left out: {', '.join(links.left_out)}", "close",
         ))
     primary = links.url
     collection_type = _collection_type(primary)
-    report, problem = _template(sub, layout, folder, path_map, collection_type, music)
+    settings.update(_metadata_templates(sub, layout, profile_warnings))
+    report, problem = _template(sub, layout, folder, path_map, collection_type, music, music_videos)
     if problem:
         profile_warnings.append(ImportWarning("output template", problem, "close"))
     if report.output_template is None:
@@ -579,6 +680,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         # Each video is an album, and each of its chapters a track.
         custom["split_chapters"] = True
     metadata = ((("genre", "track_genre", MUSIC_GENRE_DEFAULT),) if music else
+                (("genre", "music_video_genre", MUSIC_VIDEO_GENRE_DEFAULT),) if music_videos else
                 (("genre", "tv_show_genre", TV_SHOW_GENRE_DEFAULT),
                  ("content_rating", "tv_show_content_rating", TV_SHOW_CONTENT_RATING_DEFAULT)))
     for name, key, default in metadata:
@@ -586,7 +688,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         if value:
             custom[name] = value
     assets: list[tuple[str, str]] = []
-    if directory and not music:
+    if directory and not music and not music_videos:
         names = [(kind_, _render(sub, sub.overrides[name]) if sub.overrides.get(name) else None)
                  for kind_, name in (("poster", "tv_show_poster_file_name"), ("fanart", "tv_show_fanart_file_name"))]
         if settings["show_nfo"]:
@@ -605,7 +707,8 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         link_seasons=tuple(links.playlists),
         loose_season=links.channel_season if links.playlists else None,
         links_only=links.links_only,
-        channel=music and not full_albums,
+        # The artist's channel names the artist of its music videos.
+        channel=(music and not full_albums) or music_videos,
     )
     signature = (report.output_template, report.original, repr(sorted(settings.items())))
     return _Planned(sub, chain, profile, signature, collection, directory, layout.index), []
@@ -619,7 +722,7 @@ def _folder(subscriptions: tuple[Subscription, ...]) -> str:
         rendered = _render(sub, directory) if directory else None
         if rendered and rendered.startswith("/"):
             # A TV show's folder is in the download folder; the music presets write into it, a folder per artist.
-            music = _kind_and_player(sub)[0] == "music"
+            music = _kind_and_player(sub)[0] in ("music", "music_video")
             parents.append(rendered.rstrip("/") or "/" if music else posixpath.dirname(rendered.rstrip("/")) or "/")
     return posixpath.commonpath(parents) if parents else "/downloads"
 

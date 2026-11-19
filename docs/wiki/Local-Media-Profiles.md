@@ -26,8 +26,28 @@ The grid at the top chooses where the **thumbnail** and the **metadata** (title,
 **inside the media**, **beside the media** (an image file, or an NFO file next to the media), both, or neither. With an
 NFO file, **Kodi-safe NFO text** replaces emoji and other characters Kodi cannot show with □. Collection profiles also
 have **show and season NFO files** (`tvshow.nfo` and `season.nfo`, for Jellyfin, Emby and Kodi) and the **poster and
-background**, which are saved in the collection root shown under the output template's example. **Date files by
-publish date** gives files the date the episode came out instead of the date it was downloaded.
+background**, which are saved in the collection root shown under the output template's example, together with a
+poster for each season a playlist fills (see [[Collection-Artwork]]). **Date files by publish date** gives files the
+date the episode came out instead of the date it was downloaded.
+
+**Save the site's info file** keeps everything yt-dlp knows about a video as an `.info.json` file beside the media,
+for other programs that read it. The form only offers it when the profile is for a site VODLoft downloads with yt-dlp,
+such as YouTube or NPO Start.
+
+A Collection profile that writes NFO files also chooses what **each episode is**: an **episode of a show**, or a
+**music video**. A music video gets a `musicvideo` NFO with its artist and title instead of a show, season and episode
+number, so Jellyfin, Emby and Kodi keep it in a Music Videos library. The artist is the name of the collection's
+channel, so put an artist's music video collection in the artist's channel (see
+[[Collections-and-Library#music-videos]]).
+
+### Your own title and description
+
+A Collection profile can give every episode a **title** and **description** of its own in its NFO file and in the
+metadata inside the media. Both are templates with the same variables as the output path, plus `description` for the
+site's own description. `{{ date }} - {{ title }}` puts the date in front of every title, for example. Leave them empty to
+keep what the site gives. They change the metadata only, not the file name, and a template that comes out empty keeps
+the site's text. They are written in the same editor as the output path, which suggests variables as you type, and each
+shows what it gives the example episode picked under **Output path**.
 
 ## Collection, Music and Video profiles
 
@@ -133,6 +153,20 @@ The types are Sponsor, Self-promotion, Interaction reminder, Intro, Outro, Previ
 A new profile makes chapters of sponsors, intros, outros and the highlight, and keeps everything else. Saving a profile that keeps every type turns SponsorBlock off, and a new profile starts with it off when your defaults for YouTube keep every type.
 
 Most parts are submitted in the days after a video comes out, so a download made right after upload may find few of them. When a download found parts, the episode page shows them on a timeline: each part, whether it became a chapter or was cut out, and how much shorter the file is.
+
+## Chapters
+
+Many videos split themselves into named chapters, such as "Intro" or "Q&A". On sites VODLoft downloads with yt-dlp,
+such as YouTube, a profile has two chapter settings:
+
+- **Keep the video's chapters** writes them into the file, so your player can jump between them. MP4, MKV and M4A
+  files can hold chapters. It is on for a new profile.
+- **Cut out chapters by title** removes every chapter whose title matches one of your lines from the file. Each line is
+  a regular expression, matched anywhere in the title: `^Sponsor` cuts chapters whose title starts with "Sponsor", and
+  `(?i)` at the start ignores upper and lower case. Cutting is final, like cutting with SponsorBlock.
+
+A file that is shorter because chapters were cut out doesn't count as a different length for the upgrade check. An HLS
+bundle keeps every chapter as it is.
 
 ## Quality
 
@@ -292,6 +326,15 @@ For example, to keep only the part of a title before ` | `, and leave the title 
 
 VODLoft preserves The Daily Wire's episode number for full episodes and attached episode extras. It only invents collection-wide numbers for auxiliary content and standalone collection trailers. Extras seasons use `season_type == 'extra'` and `season_number == 0`, which is handy if you want specials to end up in a different 'Specials' directory, for example.
 
+Two more date variables number days within the year: `day_of_year` is `001` on 1 January, and
+`day_of_year_reversed` counts down to `001` on the last day, so the newest episode sorts first.
+
+### Long names
+
+Most file systems allow at most 255 bytes in one file or folder name. When a value such as a long title would make a
+name longer than that, VODLoft shortens that value, and keeps the rest of the name and the extension as they are. The
+editor's preview warns when a name will be shortened.
+
 ### The extra index
 
 An extra is an episode of an Extras season, or an episode of any type other than `ep`: auxiliary episodes, trailers, episode extras, YouTube Shorts and livestreams. VODLoft numbers every extra of a collection in one count, in episode order, and keeps that number in `extra_index`. So no two extras share a number, which is what a media server's Specials season needs. The Media Server presets use it:
@@ -440,6 +483,13 @@ A file name with nothing ASCII left, such as a Japanese title, becomes `no_ascii
 Use this only when another application or filesystem needs very simple filenames.
 
 Files you already have keep their names until you rename a profile's files.
+
+## Media server presets
+
+**Start from a preset** above a Collection profile's output template fills in a layout that a media server reads well,
+together with the matching metadata and NFO choices: **Plex**, **Jellyfin and Emby**, **Kodi**, **Audiobookshelf** for
+audio, **Music library** for a Music profile, and **Music videos**, which files each video as `Artist/Title` with a
+`musicvideo` NFO. You can change everything afterwards.
 
 ## Suggested layouts
 

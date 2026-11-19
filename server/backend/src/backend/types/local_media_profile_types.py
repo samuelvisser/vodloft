@@ -58,6 +58,14 @@ class LocalMediaProfileSubtitleMode(StrEnum):
     EMBED_AND_SIDECAR = "embed_and_sidecar"
 
 
+class EpisodeNfo(StrEnum):
+    """What an episode's NFO file and embedded metadata call it."""
+    EPISODE = "episode"
+    """An episode of a show."""
+    MUSIC_VIDEO = "music_video"
+    """A music video by the collection's artist, which media servers keep in a Music Videos library."""
+
+
 class CollectionLocalMediaProfileScope(StrEnum):
     BOTH = "both"
     """Podcasts and series."""

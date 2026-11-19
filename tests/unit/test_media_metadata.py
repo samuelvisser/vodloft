@@ -194,3 +194,43 @@ def test_remove_download_artifacts_removes_tracked_nfo(tmp_path):
 
     assert not media.exists()
     assert not nfo.exists()
+
+
+def test_a_profiles_title_and_description_templates_replace_the_sites_text(monkeypatch):
+    from backend.services.download_metadata import build_episode_metadata
+    from backend.utils import metadata_template
+
+    episode, collection = _episode()
+    episode.id = 1
+    monkeypatch.setattr(metadata_template, "episode_output_template_values",
+                        lambda item: {"title": item.title, "date": "2026-09-28", "collection_title": collection.title})
+    profile = SimpleNamespace(
+        episode_title_template="{{ date }} - {{ title }}",
+        episode_description_template="{{ description }}\n\n{{ collection_title }}",
+    )
+    metadata = build_episode_metadata(episode, collection, profile)
+    assert (metadata.title, metadata.description) == (
+        "2026-09-28 - An Episode", "Episode description\n\nThe Example Show",
+    )
+    # A template that renders nothing, or can't render, keeps the site's text.
+    profile = SimpleNamespace(episode_title_template="{% if false %}x{% endif %}", episode_description_template="{{ 1 / 0 }}")
+    metadata = build_episode_metadata(episode, collection, profile)
+    assert (metadata.title, metadata.description) == ("An Episode", "Episode description")
+
+
+def test_a_music_video_profile_writes_a_musicvideo_nfo_by_the_channels_artist():
+    from backend.services.download_metadata import build_episode_metadata
+    from downloader.metadata import render_nfo
+
+    episode, collection = _episode()
+    collection.channel = SimpleNamespace(title="The Artist")
+    profile = SimpleNamespace(episode_nfo="music_video", episode_title_template=None, episode_description_template=None)
+    metadata = build_episode_metadata(episode, collection, profile)
+    root = ET.fromstring(render_nfo(metadata))
+    assert root.tag == "musicvideo"
+    assert root.findtext("title") == "An Episode"
+    assert [element.text for element in root.findall("artist")] == ["The Artist"]
+    assert root.findtext("year") == "2026"
+    # A music video is no episode of a show.
+    assert root.find("showtitle") is None and root.find("season") is None and root.find("episode") is None
+    assert metadata.ffmpeg_tags()["artist"] == "The Artist" and "show" not in metadata.ffmpeg_tags()

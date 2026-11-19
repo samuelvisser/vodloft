@@ -65,6 +65,12 @@ ENTRY_VARIABLES: dict[str, tuple[str, str | None]] = {
     # ytdl-sub's own numbers, kept as VODLoft's Custom Indexes.
     "upload_date_index": (f"{PSEUDO_FIELD_PREFIX}upload_date_index", None),
     "upload_date_index_padded": (f"{PSEUDO_FIELD_PREFIX}upload_date_index_padded", None),
+    "upload_date_index_reversed_padded": (f"{PSEUDO_FIELD_PREFIX}upload_date_index_reversed_padded", None),
+    # Counted back, so the newest sorts first.
+    **{f"{kind}_day_of_year_reversed{padded}": (f"{PSEUDO_FIELD_PREFIX}day_of_year_reversed", None)
+       for kind in ("upload", "release") for padded in ("", "_padded")},
+    **{f"{kind}_year_truncated_reversed": (f"{PSEUDO_FIELD_PREFIX}year_truncated_reversed", None)
+       for kind in ("upload", "release")},
     "download_index": (f"{PSEUDO_FIELD_PREFIX}download_index", None),
     "download_index_padded6": (f"{PSEUDO_FIELD_PREFIX}download_index_padded6", None),
     "playlist_index_padded6": (f"{PSEUDO_FIELD_PREFIX}playlist_index_padded6", None),
@@ -88,6 +94,18 @@ YTDL_SUB_FIELDS: dict[str, FieldValue] = {
     ),
     f"{PSEUDO_FIELD_PREFIX}upload_date_index_padded": FieldValue(
         "'%02d' | format('day' | custom_index(per=date))", always=True, support="close", reason=_INDEX_REASON,
+    ),
+    f"{PSEUDO_FIELD_PREFIX}upload_date_index_reversed_padded": FieldValue(
+        "'%02d' | format('day' | custom_index(per=date, start=99, step=-1))", always=True, support="close",
+        reason="Imported numbers are kept; new days start at 99 like ytdl-sub, and a second upload that day gets 98",
+    ),
+    f"{PSEUDO_FIELD_PREFIX}day_of_year_reversed": FieldValue(
+        "day_of_year_reversed", always=True, support="close",
+        reason="VODLoft uses the upload date; a premiere's release date can differ",
+    ),
+    f"{PSEUDO_FIELD_PREFIX}year_truncated_reversed": FieldValue(
+        "'%02d' | format(100 - (year | int) % 100)", always=True, support="close",
+        reason="VODLoft uses the upload date; a premiere's release date can differ",
     ),
     f"{PSEUDO_FIELD_PREFIX}download_index": FieldValue(
         "'autonumber' | custom_index", "index", always=True, support="close", reason=_INDEX_REASON,

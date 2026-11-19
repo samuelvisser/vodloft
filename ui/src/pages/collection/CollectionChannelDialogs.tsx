@@ -3,7 +3,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'
-import {setCollectionChannel, useCollectionChannelLeave, useCollectionChannelMatch} from '../../lib/queries'
+import {addCollectionToChannel, setCollectionChannel, useChannels, useCollectionChannelLeave, useCollectionChannelMatch} from '../../lib/queries'
 import type {CollectionChannelMatch} from '../../types/schemas/channel'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -43,14 +43,37 @@ function sectionNote(channel: CollectionChannelMatch, label: string): string {
 
 /** "Add to channel", in the words of the Site: find the channel behind the collection's link, show what the collection becomes, and add it. */
 export function AddToChannelDialog({open, collectionSlug, collectionTitle, channelLabel, onDismiss}: DialogProps) {
-    const match = useCollectionChannelMatch(collectionSlug, open)
+    /** ``behind``: the channel behind the collection's link; otherwise the slug of a channel in the Library. */
+    const [target, setTarget] = useState('behind')
+    const {data: libraryChannels} = useChannels()
+    const targets = useMemo(() => createSelectRegistry(`JoinChannelTarget-${collectionSlug}`, {
+        behind: {label: `The ${channelLabel} behind its link`},
+        ...Object.fromEntries((libraryChannels ?? []).map((other) => [
+            other.slug, {label: `${other.title} (${other.site.name} ${other.channelLabel})`},
+        ])),
+    }), [collectionSlug, channelLabel, libraryChannels])
+    const chosen = libraryChannels?.find((other) => other.slug === target)
+    const match = useCollectionChannelMatch(collectionSlug, open && target === 'behind')
     const refresh = useRefresh(collectionSlug)
     const channel = match.data
     const matched = !!channel?.sectionTitle
     /** The overlapping playlists the user moves here; the rest stay where they are. */
     const [moveHere, setMoveHere] = useState<Set<string>>(new Set())
 
+    const addElsewhere = async () => {
+        if (!chosen) return
+        try {
+            await addCollectionToChannel(collectionSlug, chosen.slug)
+            await refresh()
+            toast.success(`${collectionTitle} is now part of ${chosen.title}`)
+            onDismiss()
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : `Could not add the collection to ${chosen.title}`)
+        }
+    }
+
     const add = async () => {
+        if (chosen) return addElsewhere()
         if (!channel) return
         try {
             await setCollectionChannel(collectionSlug, true, [...moveHere].filter((ref) => (
@@ -71,14 +94,31 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, chann
             icon={faIcon('fass', 'circle-user')}
             onDismiss={onDismiss}
             confirmButton={{
-                label: channel ? `Add to ${channel.title}` : `Add to ${channelLabel}`,
+                label: chosen ? `Add to ${chosen.title}` : channel ? `Add to ${channel.title}` : `Add to ${channelLabel}`,
                 onClick: add,
-                disabled: !channel || !matched,
+                disabled: chosen ? false : !channel || !matched,
             }}
         >
-            {match.isLoading && <p>Looking up the {channelLabel} behind this collection's link…</p>}
-            {match.error && <p className="text-danger">{match.error.message}</p>}
-            {channel && (
+            {(libraryChannels?.length ?? 0) > 0 && (
+                <div className="form-row">
+                    <label htmlFor="join-channel-target">Add it to</label>
+                    <SimpleSelect
+                        inputId="join-channel-target" registry={targets} value={target}
+                        menuPortalTarget={document.body} menuPlacement="auto"
+                        styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                        onChange={setTarget}
+                    />
+                </div>
+            )}
+            {chosen && (
+                <ul className="channel-order-note">
+                    <li>{collectionTitle} keeps its own link, so its videos can come from another {channelLabel} or playlist, such as an artist's music videos on their label's channel.</li>
+                    <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
+                </ul>
+            )}
+            {!chosen && match.isLoading && <p>Looking up the {channelLabel} behind this collection's link…</p>}
+            {!chosen && match.error && <p className="text-danger">{match.error.message}</p>}
+            {!chosen && channel && (
                 <div className="channel-join">
                     <div className="channel-join-who">
                         {channel.avatarUrl

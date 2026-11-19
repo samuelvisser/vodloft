@@ -10,6 +10,7 @@ export const LocalMediaProfilePreviewSchema = z.object({
         provisionalIndexingValues: z.array(z.string()),
         filenameMode: z.string().default(''),
         replacedTypedCharacters: z.array(z.string()).default([]),
+        shortenedNames: z.array(z.string()).default([]),
     }),
     collectionRoot: z.object({
         path: z.string().nullable(),
@@ -17,6 +18,12 @@ export const LocalMediaProfilePreviewSchema = z.object({
         collectionTitle: z.string().nullable(),
         systemEnabled: z.boolean(),
     }).nullable(),
+    metadata: z.object({
+        title: z.string(),
+        titleError: z.string().nullable(),
+        description: z.string(),
+        descriptionError: z.string().nullable(),
+    }).nullable().default(null),
 })
 export type LocalMediaProfilePreview = z.infer<typeof LocalMediaProfilePreviewSchema>
 

@@ -85,6 +85,27 @@ _MUSIC_BASE = Builtin(config={
 })
 """ytdl-sub's music presets: a folder per artist, a folder per album, a file per track."""
 MUSIC_GENRE_DEFAULT = "Unset"
+_MUSIC_VIDEO_BASE = Builtin(config={
+    "output_options": {
+        "output_directory": "{music_video_directory}",
+        "file_name": "{music_video_artist_sanitized}/{music_video_title_sanitized}.{ext}",
+        "thumbnail_name": "{music_video_artist_sanitized}/{music_video_title_sanitized}.jpg",
+        "maintain_download_archive": True,
+    },
+    "overrides": {
+        "music_video_genre_default": "ytdl-sub",
+        "subscription_indent_1": "{music_video_genre_default}",
+        "music_video_artist": "{subscription_name}",
+        "music_video_title": "{title}",
+        "music_video_genre": "{subscription_indent_1}",
+    },
+})
+"""ytdl-sub's music video presets: a folder per artist, named after the subscription, with a file per video."""
+MUSIC_VIDEO_VALUES = {"music_video_artist": "{music_artist}"}
+"""The artist ytdl-sub's music video presets name the folder after: the subscription, which VODLoft's Music Videos
+collection gets as its channel's name."""
+MUSIC_VIDEO_GENRE_DEFAULT = "ytdl-sub"
+
 MUSIC_TRACK_VALUES = {
     # A track split from a full album's video is an episode of its own, titled after its chapter.
     "track_title": "{title}",
@@ -225,9 +246,11 @@ BUILTINS: dict[str, Builtin] = {
         "track_year": "{sc_track_year}",
     }}, kind="music"),
     "Single": Builtin(("_music_base",), kind="music"),
-    **{name: Builtin(kind="music_video") for name in (
-        "Jellyfin Music Videos", "Emby Music Videos", "Kodi Music Videos", "Plex Music Videos",
-        "Jellyfin Music Videos with Extras", "Kodi Music Videos with Extras", "Plex Music Videos with Extras",
+    "_music_video_base": _MUSIC_VIDEO_BASE,
+    **{name: Builtin(("_music_video_base",), kind="music_video", player=player) for name, player in (
+        ("Jellyfin Music Videos", "jellyfin"), ("Emby Music Videos", "emby"), ("Kodi Music Videos", "kodi"),
+        ("Plex Music Videos", "plex"), ("Jellyfin Music Videos with Extras", "jellyfin"),
+        ("Kodi Music Videos with Extras", "kodi"), ("Plex Music Videos with Extras", "plex"),
     )},
 }
 """ytdl-sub's prebuilt presets by name."""

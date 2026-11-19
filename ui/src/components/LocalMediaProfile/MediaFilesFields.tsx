@@ -1,10 +1,22 @@
+import {useLayoutEffect, useMemo, useRef, useState} from 'react'
+import CodeMirror from '@uiw/react-codemirror'
+import type {Extension} from '@codemirror/state'
+import {EditorView} from '@codemirror/view'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import {useLibraryDefaults} from '../../lib/settings'
-import {type LocalMediaProfileType} from '../../types/local_media_profile'
+import {EpisodeNfoReg, profileSitesOffering, type LocalMediaProfileType} from '../../types/local_media_profile'
+import {useLocalMediaProfileSites} from '../../lib/queries'
 import ReadMore from '../../utils/ReadMore'
+import SimpleSelect from '../common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import {useLocalMediaProfileTemplateVariables} from '../../lib/localMediaProfileTemplateSources'
 import {FollowCheck, FollowsSettingsBadge, FollowsSettingsSelect} from './FollowsSettings'
+import {useExampleEpisode} from './ExampleEpisodeContext'
+import {useJinjaCompletions} from './OutputTemplateEditor'
+import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
+import {getOutputTemplateVariables, type OutputTemplateVariable} from './outputTemplateVariables'
+import './OutputTemplateEditor.css'
 
 /** A mode that says whether something is saved inside the media, beside it, both or neither. */
 type InsideBeside = {none: string, inside: string, beside: string, both: string}
@@ -21,6 +33,15 @@ export function isBeside(modes: InsideBeside, value: string | undefined): boolea
 
 function combine(modes: InsideBeside, inside: boolean, beside: boolean): string {
     return inside ? (beside ? modes.both : modes.inside) : (beside ? modes.beside : modes.none)
+}
+
+/** Whether one of the profile's Sites is downloaded by a program that writes an info file, as yt-dlp does. */
+export function useOffersInfoFile(form: UseFormReturn<any>, mode: LocalMediaProfileType): boolean {
+    const [siteKeys, includeUpcomingSites] = useWatch({control: form.control, name: ['siteKeys', 'includeUpcomingSites']}) as [string[] | null, boolean]
+    const {data: sites} = useLocalMediaProfileSites()
+    if (!sites) return false
+    const withInfoFile = profileSitesOffering(sites, mode, siteKeys, includeUpcomingSites, (options) => options.infoFile)
+    return withInfoFile.sites.length > 0 || withInfoFile.upcoming
 }
 
 const DOWNLOAD_MODE_LABELS = {direct: 'Save directly to downloads', temporary: 'Save to temporary folder first'} as const
@@ -117,8 +138,9 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
     const {data: defaults} = useLibraryDefaults()
     const [metadataMode, showNfo] = useWatch({control, name: ['metadataMode', 'showNfo']}) as [string | undefined, boolean | undefined]
     const effectiveMetadata = (metadataMode ?? 'system') === 'system' ? defaults?.metadataMode : metadataMode
+    const offersInfoFile = useOffersInfoFile(form, mode)
     const writesNfo = isBeside(METADATA, effectiveMetadata) || (mode === 'collection' && !!showNfo)
-    const fieldErrors = ['thumbnailMode', 'metadataMode', 'kodiSafeNfo', 'showNfo', 'downloadCollectionAssets', 'fileDateFromPublishDate']
+    const fieldErrors = ['thumbnailMode', 'metadataMode', 'kodiSafeNfo', 'showNfo', 'downloadCollectionAssets', 'fileDateFromPublishDate', 'saveInfoJson']
         .map((name) => errors[name]?.message)
         .filter(Boolean)
 
@@ -144,6 +166,26 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                 />
             </div>
 
+            {writesNfo && mode === 'collection' && (
+                <div className="form-row media-files-checks--indented">
+                    <label htmlFor="local-media-episode-nfo">Each episode is</label>
+                    <Controller
+                        control={control}
+                        name="episodeNfo"
+                        render={({field}) => (
+                            <SimpleSelect
+                                inputId="local-media-episode-nfo" registry={EpisodeNfoReg} value={field.value ?? 'episode'}
+                                onChange={(value) => field.onChange(value)}
+                            />
+                        )}
+                    />
+                    <div className="help">
+                        Music videos get a musicvideo NFO with the channel's artist, which Jellyfin, Emby and Kodi keep in a Music Videos library.
+                    </div>
+                    {errors.episodeNfo && <div className="error" role="alert">{String(errors.episodeNfo.message)}</div>}
+                </div>
+            )}
+
             {writesNfo && (
                 <div className="media-files-checks media-files-checks--indented">
                     <PlainCheck
@@ -152,6 +194,8 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                     />
                 </div>
             )}
+
+            {mode === 'collection' && <MetadataTextFields form={form}/>}
 
             {mode === 'collection' && (
                 <>
@@ -184,7 +228,7 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                                                 />
                                             </span>
                                         )}
-                                        description="Saved in the collection root that Output path shows. Artwork you added yourself is kept."
+                                        description="Saved in the collection root that Output path shows, with a poster for each season a playlist fills. Artwork you added yourself is kept."
                                     />
                                 )
                             }}
@@ -198,6 +242,12 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                     form={form} name="fileDateFromPublishDate" id="local-media-file-date" label="Date files by publish date"
                     description="So players and file browsers sort episodes in the order they aired. An old episode you download today then does not show up under Recently added."
                 />
+                {offersInfoFile && (
+                    <PlainCheck
+                        form={form} name="saveInfoJson" id="local-media-info-json" label="Save the site's info file"
+                        description="Everything yt-dlp knows about the video, as an .info.json file beside the media, for other programs that read it. Only for sites VODLoft downloads with yt-dlp."
+                    />
+                )}
             </div>
 
             {fieldErrors.map((message) => (
@@ -226,6 +276,175 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                     </ReadMore>
                 )}
             />
+        </>
+    )
+}
+
+
+const METADATA_VARIABLES: readonly OutputTemplateVariable[] = [
+    {name: 'description', description: "The episode's description as the site gives it"},
+]
+
+const metadataEditorExtensions = [
+    ...outputTemplateSyntaxExtensions,
+    EditorView.lineWrapping,
+    EditorView.theme({
+        '&': {fontSize: '16px'},
+        '.cm-content': {fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'},
+    }),
+]
+
+/** A Jinja template with the output path editor's colours and completions, empty when it keeps the site's text. */
+function MetadataTemplateEditor({form, name, id, label, placeholder, completions, multiline}: {
+    form: UseFormReturn<any>
+    name: 'episodeTitleTemplate' | 'episodeDescriptionTemplate'
+    id: string
+    label: string
+    placeholder: string
+    completions: Extension[]
+    multiline: boolean
+}) {
+    const extensions = useMemo(() => [...metadataEditorExtensions, ...completions], [completions])
+    const error = form.formState.errors[name]
+    return (
+        <Controller
+            control={form.control}
+            name={name}
+            render={({field}) => (
+                <CodeMirror
+                    id={id}
+                    className={`output-template-code-editor metadata-template-editor${multiline ? ' metadata-template-editor--multiline' : ''}`}
+                    value={field.value ?? ''}
+                    placeholder={placeholder}
+                    extensions={extensions}
+                    basicSetup={{
+                        lineNumbers: false,
+                        foldGutter: false,
+                        highlightActiveLine: false,
+                        highlightActiveLineGutter: false,
+                        autocompletion: false,
+                    }}
+                    onChange={(value) => {
+                        field.onChange(value.trim() === '' ? null : value)
+                        form.clearErrors(name)
+                    }}
+                    onBlur={field.onBlur}
+                    aria-label={label}
+                    aria-invalid={!!error}
+                    aria-describedby={`${id}-example`}
+                />
+            )}
+        />
+    )
+}
+
+/** Text cut at four lines, with Read more when there is more, as a long YouTube description has. */
+function ClampedText({text, multiline}: {text: string, multiline: boolean}) {
+    const ref = useRef<HTMLSpanElement>(null)
+    const [expanded, setExpanded] = useState(false)
+    const [overflows, setOverflows] = useState(false)
+    useLayoutEffect(() => {
+        const element = ref.current
+        if (!element) return
+        // Measured while cut, and again whenever the box changes width.
+        const measure = () => setOverflows(element.classList.contains('metadata-template-example__text--clamped')
+            ? element.scrollHeight > element.clientHeight + 1
+            : true)
+        measure()
+        const observer = new ResizeObserver(measure)
+        observer.observe(element)
+        return () => observer.disconnect()
+    }, [text, expanded])
+    return (
+        <>
+            <span
+                ref={ref}
+                className={[
+                    multiline ? 'metadata-template-example__text--multiline' : '',
+                    expanded ? '' : 'metadata-template-example__text--clamped',
+                ].filter(Boolean).join(' ') || undefined}
+            >
+                {text}
+            </span>
+            {overflows && (
+                <button type="button" className="metadata-template-example__more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+                    {expanded ? 'Show less' : 'Read more'}
+                </button>
+            )}
+        </>
+    )
+}
+
+/** What the template gives the example episode, or why it can't render. */
+function MetadataExample({id, text, error, loading, multiline}: {
+    id: string
+    text: string | undefined
+    error: string | null | undefined
+    loading: boolean
+    multiline: boolean
+}) {
+    return (
+        <div id={id} className={`template-preview-output metadata-template-example${error ? ' has-error' : ''}`} aria-live="polite">
+            <span className="template-preview-output-label">Example output</span>
+            {error
+                ? <span className="error">{error}</span>
+                : text === undefined
+                    ? <code>{loading ? 'Rendering…' : 'Pick an example episode under Output path.'}</code>
+                    : text
+                        ? <ClampedText text={text} multiline={multiline}/>
+                        : <code>The site gives this episode none.</code>}
+        </div>
+    )
+}
+
+/** An episode's own title and description in its NFO and embedded metadata, as Jinja templates. */
+function MetadataTextFields({form}: {form: UseFormReturn<any>}) {
+    const {formState: {errors}} = form
+    const variableQuery = useLocalMediaProfileTemplateVariables('collection')
+    const variables = useMemo(
+        () => [...getOutputTemplateVariables('collection', (variableQuery.data ?? []) as OutputTemplateVariable[]), ...METADATA_VARIABLES],
+        [variableQuery.data],
+    )
+    const completions = useJinjaCompletions(variables, false)
+    const example = useExampleEpisode()
+    const metadata = example.metadata
+    return (
+        <>
+            <div className="media-files-subheading">Title and description in the metadata</div>
+            <div className="form-row">
+                <label htmlFor="local-media-title-template">Title</label>
+                <MetadataTemplateEditor
+                    form={form} name="episodeTitleTemplate" id="local-media-title-template" label="Title"
+                    placeholder="{{ title }}" completions={completions} multiline={false}
+                />
+                {errors.episodeTitleTemplate && <div className="error" role="alert">{String(errors.episodeTitleTemplate.message)}</div>}
+                <MetadataExample
+                    id="local-media-title-template-example" text={metadata?.title} error={metadata?.titleError}
+                    loading={example.loading} multiline={false}
+                />
+            </div>
+            <div className="form-row">
+                <label htmlFor="local-media-description-template">Description</label>
+                <MetadataTemplateEditor
+                    form={form} name="episodeDescriptionTemplate" id="local-media-description-template" label="Description"
+                    placeholder="{{ description }}" completions={completions} multiline
+                />
+                {errors.episodeDescriptionTemplate && <div className="error" role="alert">{String(errors.episodeDescriptionTemplate.message)}</div>}
+                <MetadataExample
+                    id="local-media-description-template-example" text={metadata?.description} error={metadata?.descriptionError}
+                    loading={example.loading} multiline
+                />
+                <div className="help">
+                    {example.label && <p className="metadata-template-example-source">The examples are for {example.label}, the example episode under Output path.</p>}
+                    <ReadMore summary="{{ title }} and {{ description }} are the title and description the site gives each episode.">
+                        <p>They take the same variables as the output path, such as <code>{'{{ title }}'}</code> and <code>{'{{ date }}'}</code>,
+                            and <code>{'{{ description }}'}</code> for the site's description. Type <code>{'{{'}</code> to pick one.
+                            A field you leave empty keeps the site's text too.
+                            {' '}<code>{'{{ date }} - {{ title }}'}</code> puts the date before each title, as ytdl-sub does.
+                            They change the NFO file and the title inside the media, not the file name.</p>
+                    </ReadMore>
+                </div>
+            </div>
         </>
     )
 }

@@ -113,15 +113,21 @@ def test_a_local_media_profiles_choices_apply_where_a_site_has_the_setting(site_
     defaults = local_media_profile_defaults()
     assert set(defaults["sponsorblock_segments"].values()) == {"keep"} and defaults["sponsorblock_enabled"] is False
 
-    profile = SimpleNamespace(auto_subtitles="always", sponsorblock_enabled=True, sponsorblock_segments={"sponsor": "cut"})
+    profile = SimpleNamespace(
+        auto_subtitles="always", sponsorblock_enabled=True, sponsorblock_segments={"sponsor": "cut"},
+        keep_chapters=True, cut_chapters=["^Intro$"],
+    )
     youtube = local_media_profile_site_choices(profile, site_of("youtube"))
     assert (youtube["auto_subtitles"], youtube["sponsorblock_enabled"], youtube["sponsorblock_segments"]) == ("always", True, {"sponsor": "cut"})
     vimeo = local_media_profile_site_choices(profile, site_of("generic:vimeo.com"))
     assert (vimeo["auto_subtitles"], vimeo["sponsorblock_enabled"]) == ("always", False)
+    # Every site yt-dlp downloads from has the video's own chapters.
+    assert (vimeo["keep_chapters"], vimeo["cut_chapters"]) == (True, ["^Intro$"])
     # What a Site does not show stays off.
     for key in ("dailywire", "npo"):
         choices = local_media_profile_site_choices(profile, site_of(key))
         assert (choices["auto_subtitles"], choices["sponsorblock_enabled"]) == ("never", False)
+        assert (choices["keep_chapters"], choices["cut_chapters"]) == (False, [])
 
 
 def test_a_new_download_profile_starts_with_the_check_off_when_nothing_counts_as_better(site_settings):

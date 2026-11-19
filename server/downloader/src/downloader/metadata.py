@@ -45,6 +45,10 @@ class MediaServerMetadata:
     def is_track(self) -> bool:
         return self.kind == "track"
 
+    @property
+    def is_music_video(self) -> bool:
+        return self.kind == "musicvideo"
+
     def ffmpeg_tags(self) -> dict[str, str]:
         tags: dict[str, str] = {"title": self.title}
         if self.description:
@@ -131,7 +135,7 @@ def write_nfo(media_path: str, metadata: MediaServerMetadata) -> str:
 
 
 # The root element of each kind of NFO file; movies, their extras and videos are all a "movie".
-_NFO_ROOTS = {"episode": "episodedetails", "tvshow": "tvshow", "season": "season"}
+_NFO_ROOTS = {"episode": "episodedetails", "tvshow": "tvshow", "season": "season", "musicvideo": "musicvideo"}
 
 
 def _nfo_root(metadata: MediaServerMetadata) -> ET.Element:
@@ -148,6 +152,8 @@ def _nfo_root(metadata: MediaServerMetadata) -> ET.Element:
     _text(root, "premiered", metadata.release_date)
     if metadata.release_date:
         _text(root, "year", metadata.release_date.year)
+    elif metadata.is_music_video and metadata.aired:
+        _text(root, "year", metadata.aired.year)
     if metadata.duration_seconds and metadata.duration_seconds > 0:
         _text(root, "runtime", max(1, round(metadata.duration_seconds / 60)))
     _text(root, "mpaa", metadata.content_rating)
@@ -166,7 +172,8 @@ def _nfo_root(metadata: MediaServerMetadata) -> ET.Element:
     for value in metadata.studios:
         _text(root, "studio", value)
     for value in metadata.authors:
-        _text(root, "credits", value)
+        # A music video's artist is who media servers file it under.
+        _text(root, "artist" if metadata.is_music_video else "credits", value)
     for value in metadata.cast:
         actor = ET.SubElement(root, "actor")
         _text(actor, "name", value)

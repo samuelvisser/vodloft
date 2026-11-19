@@ -5,11 +5,11 @@ from types import SimpleNamespace
 
 
 def line(action, field, *, pattern=None, duration_operator=None, duration_seconds=None, episode_types=None,
-         season_slugs=None, include_upcoming=False, days=None, count=None, starting_from=None):
+         season_slugs=None, include_upcoming=False, days=None, count=None, starting_from=None, until=None):
     return SimpleNamespace(
         action=action, field=field, pattern=pattern, duration_operator=duration_operator,
         duration_seconds=duration_seconds, episode_types=episode_types, season_slugs=season_slugs,
-        include_upcoming=include_upcoming, days=days, count=count, starting_from=starting_from,
+        include_upcoming=include_upcoming, days=days, count=count, starting_from=starting_from, until=until,
     )
 
 
@@ -29,8 +29,8 @@ def published_days(days, action="only"):
     return line(action, "published", days=days)
 
 
-def published_since(day):
-    return line("only", "published", starting_from=day)
+def published_since(day, until=None):
+    return line("only", "published", starting_from=day, until=until)
 
 
 def downloaded_days(days, action="only"):

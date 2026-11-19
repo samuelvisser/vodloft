@@ -876,6 +876,16 @@ export async function setCollectionChannel(slug: string, inChannel: boolean, mov
     if (!response.ok) throw await responseError(response)
 }
 
+/** Add a collection to a channel in the Library that its link is not on, such as an artist whose music videos are
+ * on their label's channel. */
+export async function addCollectionToChannel(slug: string, channelSlug: string): Promise<void> {
+    const response = await fetch(collectionChannelPath(slug), {
+        method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({channelSlug}),
+    })
+    if (!response.ok) throw await responseError(response)
+}
+
 /** Look for the channel's new playlists and shows now. */
 export async function checkChannel(slug: string): Promise<void> {
     const response = await fetch(`${apiUrl()}/channels/${encodeURIComponent(slug)}/check`, {method: 'POST', credentials: 'include'})

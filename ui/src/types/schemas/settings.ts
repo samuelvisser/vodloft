@@ -87,6 +87,7 @@ const DownloadSettingsSchema = z.object({
     maxConcurrentDownloads: z.number(),
     maxDownloadAttempts: z.number(),
     episodeDownloadDelayMinutes: z.number(),
+    dailyDownloadLimit: z.number(),
     ensureSafeDelay: z.boolean(),
     downloadTimeoutSeconds: z.number(),
     downloadRoot: z.string(),
@@ -191,6 +192,7 @@ const SiteSettingValuesSchema = z.object({
     lookupMinutes: orDefault(LookupMinutesSchema),
     downloadWithCountdown: z.boolean().nullish(),
     downloadDelayMinutes: orDefault(z.number()),
+    dailyDownloadLimit: orDefault(z.number()),
     upgradeCheck: orDefault(z.boolean()),
     upgradeAfterDays: orDefault(z.number()),
     upgradeRepeat: orDefault(z.enum(UpgradeRepeatValues)),
@@ -199,6 +201,7 @@ const SiteSettingValuesSchema = z.object({
     autoSubtitles: orDefault(z.enum(AutoSubtitlesValues)),
     sponsorblock: z.boolean().nullish(),
     sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])).nullish(),
+    chapters: z.boolean().nullish(),
 })
 export type SiteSettingValues = z.infer<typeof SiteSettingValuesSchema>
 export type SiteSettingKey = keyof SiteSettingValues
@@ -273,6 +276,7 @@ const wholeNumber = (min: number, max: number, unit: string) => requiredNumber()
 const upgradeAfterDays = wholeNumber(1, 365, 'days')
 const upgradeLengthMinutes = wholeNumber(1, 600, 'minutes')
 const downloadDelayMinutes = wholeNumber(0, 7 * 24 * 60, 'minutes')
+const dailyDownloadLimit = wholeNumber(0, 10000, 'downloads')
 
 const SiteSettingValuesFormSchema = SiteSettingValuesSchema.extend({
     metadataRefresh: z.string().nullish().refine(
@@ -286,6 +290,7 @@ const SiteSettingValuesFormSchema = SiteSettingValuesSchema.extend({
         live: pendingMinutes(60),
     })),
     downloadDelayMinutes: orDefault(downloadDelayMinutes),
+    dailyDownloadLimit: orDefault(dailyDownloadLimit),
     upgradeAfterDays: orDefault(upgradeAfterDays),
     upgradeLengthMinutes: orDefault(upgradeLengthMinutes),
 })
@@ -329,6 +334,7 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         maxConcurrentDownloads: requiredNumber().int().min(1, 'Must be at least 1.'),
         maxDownloadAttempts: requiredNumber().int().min(1, 'Must be at least 1.'),
         episodeDownloadDelayMinutes: requiredNumber().int().min(0, 'Must be 0 minutes or greater.'),
+        dailyDownloadLimit: dailyDownloadLimit,
         downloadTimeoutSeconds: requiredNumber().int().min(1, 'Must be at least 1 second.'),
         downloadRoot: z.string().trim().min(1, 'A download root is required.'),
         temporaryDownloadRoot: z.string().trim().min(1, 'A temporary download folder is required.'),
@@ -429,6 +435,7 @@ export const SETTINGS_FIELD_PATHS = [
     'downloadSettings.maxConcurrentDownloads',
     'downloadSettings.maxDownloadAttempts',
     'downloadSettings.episodeDownloadDelayMinutes',
+    'downloadSettings.dailyDownloadLimit',
     'downloadSettings.ensureSafeDelay',
     'downloadSettings.downloadTimeoutSeconds',
     'downloadSettings.downloadRoot',

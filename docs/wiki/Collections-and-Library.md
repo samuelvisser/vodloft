@@ -211,6 +211,18 @@ An artist's collections are **Music** collections. **One discography** puts ever
 
 Looking up an artist reads each album once, so an artist with many albums takes a minute; the page shows how far it is. YouTube's Releases tab cannot be read yet.
 
+A channel with a Music collection is called an **artist**, on its page and in the Library.
+
+### Music videos
+
+An artist's music videos are a collection of their own in the artist's channel, beside the albums: they go to a Music
+Videos library, not a Music library. Give the collection a Collection profile made from the **Music videos** preset
+(see [[Local-Media-Profiles#media-server-presets]]), which files each video under the artist's name with a
+`musicvideo` NFO.
+
+Official videos are often on another channel than the albums, such as the artist's label. A collection can join any
+channel in your Library, whatever its link: see [Adding a collection to a channel](#adding-a-collection-to-a-channel-and-removing-it).
+
 ### Full albums: splitting videos by chapter
 
 Some channels upload a whole album as one long video, with a chapter per track. Set **Videos with chapters** to **A part per chapter** on the collection's Edit page, and each new video with chapters becomes a season of its own, named after the video, with an episode per chapter. In a Music collection that makes each video an album and each chapter a track, with its own title, length, track number and file.
@@ -268,6 +280,11 @@ Videos that are not downloaded just move. Downloaded videos move their files the
 A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its channel later. Choose **Add to channel** (**Add to host** for a Daily Wire show) in the collection's **Actions** menu. VODLoft finds the channel or host behind the collection's links, adds the channel to your Library if it is not there yet, and shows which of the channel's playlists or shows the collection becomes. The collection keeps its seasons, episode numbers, profiles and files; nothing is indexed again. A collection that another of the channel's collections already covers can't join.
 
 When some of the collection's playlists are already somewhere else in the channel, the window lists them, because once the collection joins each playlist is in one place only. A playlist that is a season of the channel's main collection can stay there or move to the joining collection, as you choose. A playlist that is a collection of its own stays where it is and leaves the joining collection.
+
+**Add it to** at the top of that window can also choose another channel or artist in your Library. The collection then
+joins it with its own link, for example an artist's music videos that are on their label's channel. The channel's
+daily look for new playlists leaves such a collection alone, and its name is the `channel_title` and `artist` of the
+collection's episodes. A collection of one of the channel's own playlists joins through its link instead.
 
 **Remove from channel** in the same menu makes it a plain collection again. It keeps its episodes, profiles, files, genre and content rating.
 

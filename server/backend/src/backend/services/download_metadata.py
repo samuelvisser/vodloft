@@ -7,6 +7,8 @@ from typing import Iterable
 from backend.db.models.media_item import Episode
 from backend.services.thumbnails import own_thumbnail_file
 from backend.types.collection_types import EpisodeIdentifier
+from backend.types.local_media_profile_types import EpisodeNfo
+from backend.utils.metadata_template import episode_metadata_text
 from downloader.metadata import MediaServerMetadata
 from sources import Feature, UnknownSourceError, get_source
 
@@ -19,8 +21,13 @@ def _studios(source_key: str) -> tuple[str, ...]:
     return (source.name,) if source.has(Feature.OWN_STUDIO) else ()
 
 
-def build_episode_metadata(episode: Episode, collection) -> MediaServerMetadata:
+
+def build_episode_metadata(episode: Episode, collection, profile=None) -> MediaServerMetadata:
+    """``profile``, a Collection Local Media Profile, can give the episode a title and description of its own."""
+    title, description = episode_metadata_text(episode, profile) if profile is not None else (None, None)
     published = episode.published_date or episode.went_live_date or episode.scheduled_date
+    if getattr(profile, "episode_nfo", None) == EpisodeNfo.MUSIC_VIDEO.value:
+        return _music_video_metadata(episode, collection, title, description, published)
     season_number: int | None = None
     episode_number: int | None = None
     if collection.episode_identifier != EpisodeIdentifier.DATE_BASED.value:
@@ -34,8 +41,8 @@ def build_episode_metadata(episode: Episode, collection) -> MediaServerMetadata:
 
     return MediaServerMetadata(
         kind="episode",
-        title=episode.title,
-        description=episode.description,
+        title=title or episode.title,
+        description=description or episode.description,
         unique_id=episode.source_slug,
         unique_id_type=episode.source_key,
         source_url=episode.sharing_url,
@@ -53,15 +60,38 @@ def build_episode_metadata(episode: Episode, collection) -> MediaServerMetadata:
     )
 
 
-def build_track_metadata(episode: Episode, collection) -> MediaServerMetadata:
+def _music_video_metadata(episode: Episode, collection, title, description, published) -> MediaServerMetadata:
+    """A music video by the collection's artist: no show, season or episode number, which media servers keep in a
+    Music Videos library."""
+    from backend.utils.music import collection_artist
+
+    return MediaServerMetadata(
+        kind="musicvideo",
+        title=title or episode.title,
+        description=description or episode.description,
+        unique_id=episode.source_slug,
+        unique_id_type=episode.source_key,
+        source_url=episode.sharing_url,
+        aired=_as_date(published),
+        duration_seconds=episode.duration,
+        authors=_strings((collection_artist(collection),)),
+        studios=_studios(episode.source_key),
+        genres=_strings((collection.genre,)),
+        content_rating=collection.content_rating,
+        media_type="musicvideo",
+    )
+
+
+def build_track_metadata(episode: Episode, collection, profile=None) -> MediaServerMetadata:
     """An episode kept by a Music profile: a track, tagged with its artist, album and number on the album."""
     from backend.utils.music import music_track
 
+    title, _description = episode_metadata_text(episode, profile) if profile is not None else (None, None)
     track = music_track(episode)
     published = episode.published_date or episode.went_live_date or episode.scheduled_date
     return MediaServerMetadata(
         kind="track",
-        title=episode.title,
+        title=title or episode.title,
         unique_id=episode.source_slug,
         unique_id_type=episode.source_key,
         source_url=episode.sharing_url,

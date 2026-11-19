@@ -46,13 +46,15 @@ def checks_profile(site: Site, profile: DownloadProfile) -> bool:
 
 
 def kept_length(download: EpisodeMediaDownload) -> float | None:
-    """The length of the video the download was made from: the file's, with the SponsorBlock segments it cut out."""
+    """The length of the video the download was made from: the file's, with the SponsorBlock segments and the
+    chapters it cut out."""
     if not download.duration:
         return None
     cut = sorted(
         (float(segment["start"]), float(segment["end"])) for segment in download.sponsorblock_segments or ()
         if isinstance(segment, dict) and segment.get("action") == "cut" and "start" in segment and "end" in segment
-    )
+    ) + [(float(chapter["start"]), float(chapter["end"])) for chapter in download.cut_chapters or ()]
+    cut.sort()
     removed, reached = 0.0, 0.0
     for start, end in cut:
         # Segments can overlap; each second counts once.

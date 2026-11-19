@@ -165,6 +165,13 @@ const DEFINITIONS: Record<SiteSettingKey, Definition> = {
         summary: (value: number) => value === 0 ? 'None' : `${value} ${value === 1 ? 'minute' : 'minutes'}`,
         control: (props) => <NumberControl {...props} min={0} max={7 * 24 * 60} unit="minutes"/>,
     },
+    dailyDownloadLimit: {
+        label: 'Automatic downloads per day',
+        kind: 'value',
+        system: (draft) => draft.downloadSettings.dailyDownloadLimit,
+        summary: (value: number) => value === 0 ? 'No limit' : `${value} a day`,
+        control: (props) => <NumberControl {...props} min={0} max={10000} unit="a day"/>,
+    },
     upgradeCheck: {
         label: 'Upgrade check',
         kind: 'toggle',
@@ -217,6 +224,11 @@ const DEFINITIONS: Record<SiteSettingKey, Definition> = {
     },
     sponsorblock: {
         label: 'SponsorBlock',
+        kind: 'toggle',
+        summary: onOff,
+    },
+    chapters: {
+        label: "Keep the video's chapters",
         kind: 'toggle',
         summary: onOff,
     },

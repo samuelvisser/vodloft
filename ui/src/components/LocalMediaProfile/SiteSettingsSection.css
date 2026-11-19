@@ -142,3 +142,29 @@
 .site-settings-section .help a {
     color: inherit;
 }
+
+/* Chapters cut out by title: one line per regular expression. */
+.cut-chapters {
+    display: grid;
+    gap: 6px;
+    max-width: 520px;
+}
+
+.cut-chapters__row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    align-items: center;
+}
+
+.cut-chapters__row .field-error {
+    grid-column: 1 / -1;
+}
+
+.cut-chapters__input {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.cut-chapters__add {
+    justify-self: start;
+}

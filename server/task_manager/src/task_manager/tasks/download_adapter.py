@@ -207,6 +207,8 @@ def _record_download(
     download.format_downloaded = execution.format_downloaded
     segments = execution.result.sponsorblock
     download.sponsorblock_segments = None if segments is None else [segment._asdict() for segment in segments]
+    cut = execution.result.cut_chapters
+    download.cut_chapters = None if cut is None else [chapter._asdict() for chapter in cut]
     video = execution.result.video
     download.video_height, download.video_codec = (video.height, video.codec) if video is not None else (None, None)
     download.duration = duration

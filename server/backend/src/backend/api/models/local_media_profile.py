@@ -45,6 +45,7 @@ class SiteDownloadChoicesAPIRead(ResponseBase):
     auto_subtitles: AutoSubtitles
     sponsorblock_enabled: bool
     sponsorblock_segments: dict[str, SponsorBlockAction]
+    keep_chapters: bool
 
 
 class LocalMediaProfileAPIBaseOut(ResponseBase):
@@ -62,6 +63,7 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     kodi_safe_nfo: bool
     filename_restriction_mode: LocalMediaProfileFilenameMode
     file_date_from_publish_date: bool
+    save_info_json: bool
     subtitle_mode: Union[LocalMediaProfileSubtitleMode, str] = LocalMediaProfileSubtitleMode.SIDECAR
     subtitle_languages: list[str]
     subtitle_language_mode: Union[SubtitleLanguageMode, str]
@@ -77,6 +79,8 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     auto_subtitles: AutoSubtitles
     sponsorblock_enabled: bool
     sponsorblock_segments: dict[str, SponsorBlockAction]
+    keep_chapters: bool
+    cut_chapters: list[str]
     created_at: datetime
     updated_at: datetime
 
@@ -144,3 +148,5 @@ class LocalMediaProfileTemplatePreviewResult(ResponseBase):
     # The filename mode, and the characters typed in the template that it replaces.
     filename_mode: str = ""
     replaced_typed_characters: list[str] = Field(default_factory=list)
+    # File and folder names too long for the filesystem, as they were before VODLoft shortened them.
+    shortened_names: list[str] = Field(default_factory=list)

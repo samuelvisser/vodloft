@@ -22,7 +22,8 @@ _MOVIE_ALIASES = {
     "author": "movie_author", "mature_rating": "movie_mature_rating", "rating": "movie_mature_rating",
     "duration_seconds": "movie_duration_seconds",
     **{name: f"movie_{name}" for name in (
-        "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second",
+        "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second", "day_of_year",
+        "day_of_year_reversed",
     )},
 }
 
@@ -31,7 +32,8 @@ _EMPTY_FOR_VIDEOS = {
     name: "" for name in (
         "movie_slug", "movie_title", "movie_extended_title", "movie_author", "movie_mature_rating",
         "movie_duration_seconds", "mature_rating", "rating",
-        *(f"movie_{field}" for field in ("date", "time", "datetime", "year", "month", "day", "hour", "minute", "second")),
+        *(f"movie_{field}" for field in ("date", "time", "datetime", "year", "month", "day", "hour", "minute", "second", "day_of_year",
+                                              "day_of_year_reversed")),
     )
 }
 

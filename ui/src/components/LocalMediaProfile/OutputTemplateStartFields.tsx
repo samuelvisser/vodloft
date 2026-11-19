@@ -145,6 +145,12 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
                                         show and season NFO files.
                                     </p>
                                     <p><strong>Kodi</strong>: like Jellyfin, with NFO files Kodi can read.</p>
+                                    {!audioOnly && (
+                                        <p>
+                                            <strong>Music videos</strong>: <code>Artist/Title</code>, with a musicvideo NFO for a Music
+                                            Videos library in Jellyfin, Emby, Kodi or Plex. The artist is the channel's name.
+                                        </p>
+                                    )}
                                     {audioOnly && (
                                         <p><strong>Audiobookshelf</strong>: <code>Podcast/Date - Title</code>.</p>
                                     )}

@@ -65,6 +65,7 @@ from backend.utils.custom_index import (
     set_episode_index_assignment,
 )
 from backend.utils.custom_metadata import CUSTOM_METADATA_DB_PREFIX, custom_metadata_storage_key, get_custom_metadata
+from backend.utils.name_length import tracking_output_names
 from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS, COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES, _date_substitutions,
     _sanitize_rendered_path, prepare_output_template, rendering_with_filename_mode, replace_output_extension,
@@ -82,10 +83,11 @@ _PROFILE_FIELDS = (
     "output_template", "preferred_format", "subtitle_mode", "thumbnail_mode", "metadata_mode",
     "collection_scope", "download_collection_assets", "indexing_values",
     "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs", "container", "audio_codec",
-    "audio_language", "audio_format", "show_nfo", "kodi_safe_nfo",
+    "audio_language", "audio_format", "show_nfo", "kodi_safe_nfo", "save_info_json", "episode_nfo",
+    "episode_title_template", "episode_description_template",
 )
 _DOWNLOAD_PROFILE_FIELDS = ("delete_older_episodes",)
-_SITE_CHOICE_FIELDS = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments")
+_SITE_CHOICE_FIELDS = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments", "keep_chapters", "cut_chapters")
 """What the other program had per Download Profile, which VODLoft keeps on the Local Media Profile per Site."""
 _OPTIONAL_DOWNLOAD_PROFILE_FIELDS = ("upgrade_check", "upgrade_after_days", "upgrade_repeat")
 """Download Profile fields an importer only sends when the other program had the setting."""
@@ -493,11 +495,11 @@ def path_proof(
         }
         extension = PurePosixPath(file.path).suffix.removeprefix(".")
         try:
-            with rendering_with_filename_mode(mode):
+            with rendering_with_filename_mode(mode), tracking_output_names():
                 rendered = prepared.render(
                     values, custom_index_resolver=lambda key, _group=(), file=file: file.custom_index_values.get(key, 1),
                 )
-            rendered = _sanitize_rendered_path(replace_output_extension(rendered, extension), mode=mode, extension=extension)
+                rendered = _sanitize_rendered_path(replace_output_extension(rendered, extension), mode=mode, extension=extension)
         except ValueError as exc:
             rendered = f"(could not render: {exc})"
         rendered = rendered.replace(_UPLOADER, "(uploader)")
@@ -1340,7 +1342,7 @@ def _upsert_download_profile(
 
 
 def _keep_site_choices(profile: CollectionLocalMediaProfile, fields: dict) -> None:
-    """Keep what the other program had for auto-generated subtitles and SponsorBlock on the profile, unless the
+    """Keep what the other program had for auto-generated subtitles, SponsorBlock and chapters on the profile, unless the
     profile already downloads a collection: the first collection it gets decides."""
     had = {name: fields[name] for name in _SITE_CHOICE_FIELDS if fields.get(name) is not None}
     if not had or profile.download_profiles:

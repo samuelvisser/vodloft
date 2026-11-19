@@ -57,6 +57,7 @@ export const SiteDownloadChoicesSchema = z.object({
     autoSubtitles: z.enum(['never', 'fallback', 'always']),
     sponsorblockEnabled: z.boolean(),
     sponsorblockSegments: z.record(z.string(), z.enum(['keep', 'chapter', 'cut'])),
+    keepChapters: z.boolean(),
 })
 export type SiteDownloadChoices = z.infer<typeof SiteDownloadChoicesSchema>
 export type SponsorBlockSegments = SiteDownloadChoices['sponsorblockSegments']
@@ -70,6 +71,8 @@ export const LocalMediaProfileSchemaRequest = z.object({
     kodiSafeNfo: z.boolean().default(false),
     filenameRestrictionMode: LocalMediaProfileFilenameModeSchema.default('system'),
     fileDateFromPublishDate: z.boolean().default(false),
+    /** The site's info file, which yt-dlp writes, is saved beside the media. */
+    saveInfoJson: z.boolean().default(false),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     /** The Sites the profile is offered for; null until the form fills in every Site VODLoft knows. */
     siteKeys: z.array(z.string()).nullable().default(null),
@@ -79,6 +82,9 @@ export const LocalMediaProfileSchemaRequest = z.object({
     autoSubtitles: SiteDownloadChoicesSchema.shape.autoSubtitles.optional(),
     sponsorblockEnabled: z.boolean().optional(),
     sponsorblockSegments: SiteDownloadChoicesSchema.shape.sponsorblockSegments.optional(),
+    keepChapters: z.boolean().optional(),
+    /** Regular expressions: a chapter whose title matches one is cut out. */
+    cutChapters: z.array(z.string().trim().min(1, 'Fill in a title, or remove this line').max(200)).max(20).default([]),
     ...QualityAndLanguageFields,
 })
 
@@ -117,11 +123,14 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     kodiSafeNfo: z.boolean().default(false),
     filenameRestrictionMode: LocalMediaProfileFilenameModeSchema.default('system'),
     fileDateFromPublishDate: z.boolean().default(false),
+    /** The site's info file, which yt-dlp writes, is saved beside the media. */
+    saveInfoJson: z.boolean().default(false),
     subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
     ...QualityAndLanguageFields,
     siteKeys: z.array(z.string()).default([]),
     includeUpcomingSites: z.boolean().default(true),
     ...SiteDownloadChoicesSchema.shape,
+    cutChapters: z.array(z.string()).default([]),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })

@@ -512,3 +512,36 @@ def test_the_seasons_window_of_a_channels_collection_follows_the_channel(client,
     saved = client.put("/api/collections/UCworkshop/season-settings", json={**body, "linkSeasons": "selected"}).json()
     # What happens with a new playlist stays the channel's choice.
     assert saved["newLinkSeasons"] == "ask"
+
+
+def test_an_artists_channel_is_called_an_artist(client, tube, session, monkeypatch):
+    from dataclasses import replace
+
+    details = tube.channel_details(ROOT)
+    monkeypatch.setattr(tube, "channel_details", lambda ref, progress=lambda step: None: replace(details, music=True))
+    client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": [{"ref": "PLcabin", "target": "main"}]})
+
+    assert client.get("/api/channels/workshop").json()["channelLabel"] == "artist"
+    assert [channel["channelLabel"] for channel in client.get("/api/channels").json()] == ["artist"]
+
+
+def test_a_collection_from_another_link_can_join_a_channel_in_the_library(client, session):
+    from backend.db.models import Collection
+
+    client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": [{"ref": "videos", "target": "main"}]})
+    # Such as an artist's music videos on their label's channel.
+    _plain_collection(session, "music-videos", "https://tube.test/@label/playlist/PLvideos")
+
+    response = client.post("/api/collections/music-videos/channel", json={"channelSlug": "workshop"})
+    assert response.status_code == 200, response.text
+    assert response.json()["channelSlug"] == "workshop"
+    page = client.get("/api/channels/workshop").json()
+    assert {c["title"] for c in page["collections"]} == {"Northwind Workshop", "My music-videos"}
+    session.expire_all()
+    assert session.scalar(select(Collection.sharing_url).where(Collection.slug == "music-videos")).endswith("PLvideos")
+
+    # A collection of one of the channel's own sections joins through its link instead.
+    _plain_collection(session, "tools", SECTIONS[4].url)
+    refused = client.post("/api/collections/tools/channel", json={"channelSlug": "workshop"})
+    assert refused.status_code == 422 and "behind its link" in refused.text
+    assert "not in the Library" in client.post("/api/collections/tools/channel", json={"channelSlug": "nowhere"}).text
