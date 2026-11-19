@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Episode, Movie, Site, Video
+from backend.types.collection_types import CollectionType
 from backend.types.link_season_types import OutsideVideos
 from backend.services.local_media_profile_sites import add_upcoming_site
 from sources import Site as SourceSite, collection_on_site, site_for, source_site, sources_for
@@ -77,6 +78,13 @@ def collection_site(collection: Collection) -> SourceSite:
         (link.url for link in sorted(collection.lists, key=lambda link: link.id or 0)), None,
     )
     return _site_of(url, collection.source_key) if url else NO_SITE
+
+
+def collection_creator_label(collection: Collection) -> str:
+    """What the collection's Site calls the creator behind it, such as host on The Daily Wire, or artist when the
+    collection is a Music collection."""
+    site = collection_site(collection)
+    return site.music_creator_label if collection.type == CollectionType.MUSIC.value else site.creator_label
 
 
 def episode_site(episode: Episode) -> SourceSite:

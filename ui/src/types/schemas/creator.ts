@@ -68,6 +68,8 @@ export const CreatorLookupReadSchema = z.object({
     siteKey: z.string(),
     siteName: z.string(),
     creatorLabel: z.string(),
+    /** What the Site calls the creator when they are added as a music artist. */
+    musicCreatorLabel: z.string(),
     /** What the Site calls the things its creators add, such as shows on The Daily Wire. */
     creatorSections: CreatorSectionNamesSchema,
     /** The creator's lists can be seasons of its own collection. */
@@ -125,8 +127,10 @@ export type CreatorAccountRead = z.infer<typeof CreatorAccountReadSchema>
 export const CreatorReadSchema = z.object({
     id: z.number(),
     slug: z.string(),
-    /** Artist, the word of their one Site, such as host, or creator. */
+    /** The word of their one Site, such as host, or artist for a music artist. */
     creatorLabel: z.string(),
+    /** A music artist: they have a Music collection. */
+    music: z.boolean(),
     /** What VODLoft looks for: what their one Site calls it, such as playlists, or playlists and shows. */
     sectionNames: CreatorSectionNamesSchema,
     /** The label with their Site, when they are on one only, such as "The Daily Wire host". */

@@ -40,12 +40,12 @@ type Leaving = {episodes: number, withFiles: number, asked?: boolean}
 /** A creator's videos, or an artist's tracks or music videos, and what the collection calls its seasons. In a Music
  * collection an artist's albums are albums here too, so ``here`` tells them apart where both are meant. */
 type Words = {creator: string, video: string, videos: string, creators: string, season: Noun, here: string}
-const dialogWords = (collection: CollectionWords, music: boolean, names: CollectionSeasonsRead['names'] | undefined): Words => ({
-    ...(music
-        ? {creator: 'artist', creators: 'artists', video: collection.episode.one, videos: collection.episode.many}
-        : {creator: 'creator', creators: 'creators', video: 'video', videos: 'videos'}),
+const dialogWords = (collection: CollectionWords, music: boolean, view: CollectionSeasonsRead | undefined): Words => ({
+    // What the collection's Site calls its creator, such as artist in a Music collection.
+    creator: view?.creatorLabel ?? 'creator', creators: `${view?.creatorLabel ?? 'creator'}s`,
+    ...(music ? {video: collection.episode.one, videos: collection.episode.many} : {video: 'video', videos: 'videos'}),
     season: collection.season,
-    here: names?.one === collection.season.one ? ' here' : '',
+    here: view?.names.one === collection.season.one ? ' here' : '',
 })
 
 const capitalized = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
@@ -136,7 +136,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
     // What the Site calls its lists, such as playlists on YouTube, also in a Music collection, whose seasons are albums.
     const names = view?.names
-    const words = dialogWords(collectionWordsGiven ?? collectionWords(view?.music ? 'music' : null), view?.music ?? false, names)
+    const words = dialogWords(collectionWordsGiven ?? collectionWords(view?.music ? 'music' : null), view?.music ?? false, view)
     const {season} = words
     const regs = useMemo(() => view && names ? registries(names, words, view) : null, [view, names, words])
     const linkSeasonsOn = watch('linkSeasonsOn') ?? false

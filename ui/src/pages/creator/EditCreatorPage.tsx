@@ -109,7 +109,7 @@ export default function EditCreatorPage() {
                     <h2>New {listKindNames(creator.newLists)}</h2>
                     <NewListSettings
                         kinds={creator.newLists} values={newLists} fallback="ask" idPrefix="creator-new-lists"
-                        registryFor={(kind) => newListActionReg(creator.creatorLabel, kind, creator.creatorLabel === 'artist')}
+                        registryFor={(kind) => newListActionReg(creator.creatorLabel, kind, creator.music)}
                         onChange={(key, value) => setValue('newLists', {...newLists, [key]: value as NewSectionAction}, {shouldDirty: true})}
                     />
                     {errors.newLists && <div className="error" role="alert">{(errors.newLists as {message?: string}).message}</div>}

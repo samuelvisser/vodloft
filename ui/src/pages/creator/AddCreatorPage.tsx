@@ -219,7 +219,7 @@ export default function AddCreatorPage() {
     const into = watch('into') ?? ''
     // A music artist is called an artist everywhere on the page, whatever their site calls its creators.
     const music = watch('type') === 'music'
-    const creatorWord = creator && music ? 'artist' : label
+    const creatorWord = creator && music ? creator.musicCreatorLabel : label
     const intoRegistry = useMemo(() => createSelectRegistry(`AddCreatorInto-${(libraryCreators ?? []).length}-${creatorWord}`, {
         '': {label: `A new ${creatorWord} in your library`},
         ...Object.fromEntries((libraryCreators ?? []).map((other) => [

@@ -95,6 +95,8 @@ class CollectionSeasonsAPIRead(ResponseBase):
     creator_title: Optional[str] = None
     """What the collection's Site calls its link seasons, such as playlists or albums."""
     music: bool = False
+    creator_label: str
+    """What the collection's Site calls the creator behind it, such as artist in a Music collection."""
     """A Music collection, of an artist's tracks rather than a creator's videos."""
     playlists: list[CollectionListAPIRead]
 

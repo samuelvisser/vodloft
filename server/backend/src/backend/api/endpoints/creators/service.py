@@ -149,6 +149,7 @@ class _Lookup:
     site_key: str
     site_name: str
     creator_label: str
+    music_creator_label: str
     creator_sections: CreatorSectionNames
     link_seasons: bool
     movies: bool
@@ -173,7 +174,7 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
     existing = creators.account_in_library(s, site.key, details.ref)
     return CreatorLookupAPIRead.model_validate(_Lookup(
         details=details, source_key=source_key, site_key=site.key, site_name=site.name,
-        creator_label=site.creator_label, creator_sections=site.creator_sections,
+        creator_label=site.creator_label, music_creator_label=site.music_creator_label, creator_sections=site.creator_sections,
         link_seasons=creators.lists_are_seasons(site), movies=movies,
         sections=[
             _Section(section, kept.get(section.ref), titles.get(kept.get(section.ref)), movies_kept.get(section.ref))
@@ -281,6 +282,10 @@ class _CreatorRead:
     @property
     def creator_label(self) -> str:
         return creators.creator_label(self.creator)
+
+    @property
+    def music(self) -> bool:
+        return creators.is_music_creator(self.creator)
 
     @property
     def section_names(self):

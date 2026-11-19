@@ -21,6 +21,7 @@ from backend.services.link_seasons import (
     LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists,
     offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists, active_lists,
 )
+from backend.services.sites import collection_creator_label
 from backend.services.season_moves import queue_season_folder_moves
 from backend.services.season_order import (
     arrange_seasons, link_first_videos, lists_by_season, match_seasons_of_downloaded, renumber_seasons,
@@ -72,6 +73,7 @@ class _View:
     link_seasons_offered: bool
     names: object
     music: bool
+    creator_label: str
     playlists: list
     outside_count: int
     outside_with_files: int
@@ -141,6 +143,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         link_seasons_offered=offers_link_seasons(collection),
         names=list_names(collection),
         music=music,
+        creator_label=collection_creator_label(collection),
         playlists=[_Playlist(playlist, firsts.get(playlist.id), *leaving.get(playlist.id, (0, 0))) for playlist in playlists],
         outside_count=len(outside), outside_with_files=len(with_files),
         has_own_link=collection.sharing_url is not None, lists_playlists=lists_playlists(collection),

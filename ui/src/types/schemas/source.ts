@@ -199,6 +199,8 @@ export const SiteReadSchema = z.object({
     audio: z.boolean().optional().default(false),
     /** What the Site calls a creator, in lower case, such as host on The Daily Wire. */
     creatorLabel: z.string().optional().default('creator'),
+    /** What the Site calls a creator with a Music collection, such as artist. */
+    musicCreatorLabel: z.string(),
     /** What the Site calls the things its creators add, which VODLoft looks for, such as playlists on YouTube. */
     creatorSections: CreatorSectionNamesSchema.optional().default({one: 'a playlist or show', many: 'playlists and shows'}),
 })

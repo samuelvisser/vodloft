@@ -238,7 +238,7 @@ export default function CollectionPage() {
   const [storedShowLocked, setShowLocked] = useShowLocked(id)
   const showLocked = storedShowLocked ?? collection?.site?.showsLocked ?? true
   // A Music collection's creator is an artist, as VODLoft calls any creator with Music collections.
-  const creatorLabel = collection?.type === 'music' ? 'artist' : collection?.site?.creatorLabel ?? 'creator'
+  const creatorLabel = (collection?.type === 'music' ? collection?.site?.musicCreatorLabel : collection?.site?.creatorLabel) ?? 'creator'
   const {data: libraryCreators} = useCreators()
   const {
     data: episodePagesData,

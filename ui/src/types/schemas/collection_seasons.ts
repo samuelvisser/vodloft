@@ -70,6 +70,8 @@ export const CollectionSeasonsReadSchema = z.object({
     /** What the collection's Site calls its lists, such as playlists on YouTube, and the season of what is in none
      * of them: Videos, or Singles in a Music collection. */
     names: z.object({one: z.string(), many: z.string(), looseSeason: z.string()}),
+    /** What the collection's Site calls the creator behind it, such as artist in a Music collection. */
+    creatorLabel: z.string(),
     /** For a creator's own collection: the creator, which finds its new playlists and decides what happens with them. */
     creatorSlug: z.string().nullable().default(null),
     creatorTitle: z.string().nullable().default(null),

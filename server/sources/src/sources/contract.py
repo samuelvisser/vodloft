@@ -830,6 +830,9 @@ class Site:
     creator_label: str = "creator"
     """What the Site calls a creator, in lower case, such as host on The Daily Wire or artist on Bandcamp. VODLoft
     names the Site's creators by it everywhere."""
+    music_creator_label: str = "artist"
+    """What VODLoft calls a creator with a Music collection on the Site, in lower case, whatever ``creator_label``
+    says."""
     creator_presets: tuple[CreatorPreset, ...] = ()
     """The ways the Site offers to keep a creator, the first one the default."""
     creator_sections: CreatorSectionNames = CreatorSectionNames()

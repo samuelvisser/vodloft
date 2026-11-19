@@ -314,7 +314,7 @@ def creator_list_kinds(creator: Creator) -> list[ListKind]:
 
 def creator_new_lists(creator: Creator) -> list[NewListSetting]:
     """What the creator does with a new list of each kind of their Sites."""
-    return new_sections_settings(creator_list_kinds(creator), creator.new_lists, creator_label(creator) == ARTIST_LABEL)
+    return new_sections_settings(creator_list_kinds(creator), creator.new_lists, is_music_creator(creator))
 
 
 def new_link_seasons(creator: Creator) -> dict[str, str]:
@@ -526,7 +526,7 @@ def update_creator_settings(s: Session, creator: Creator, settings: CreatorSetti
     ``s`` is a write transaction's session."""
     current = {setting.key: setting.action for setting in creator_new_lists(creator)}
     creator.new_lists = checked_new_sections(
-        creator_list_kinds(creator), {**current, **settings.new_lists}, creator_label(creator) == ARTIST_LABEL,
+        creator_list_kinds(creator), {**current, **settings.new_lists}, is_music_creator(creator),
     )
     for account in creator.accounts:
         if account.main_collection is not None:
@@ -786,12 +786,8 @@ def delete_creator(s: Session, creator: Creator) -> None:
     s.flush()
 
 
-ARTIST_LABEL = "artist"
-"""What VODLoft calls a creator that has a Music collection."""
-
-
-CREATOR_LABEL = "creator"
-"""What VODLoft calls a creator whose accounts and collections are on more than one Site."""
+_ANY_SITE = Site("", "")
+"""VODLoft's own defaults for any Site, for a creator whose accounts and collections are on more than one Site."""
 
 
 def _site(source_key: str, site_key: str) -> Site:
@@ -812,21 +808,24 @@ def _sites(creator: Creator) -> dict[str, Site]:
     return sites
 
 
+def is_music_creator(creator: Creator) -> bool:
+    """Whether the creator is a music artist: they have a Music collection."""
+    return any(collection.type == CollectionType.MUSIC.value for collection in creator.collections)
+
+
 def creator_label(creator: Creator) -> str:
-    """What the creator is called: an artist when they have a Music collection; otherwise what their Site calls
-    them, when all their accounts and collections are on one Site, such as host on The Daily Wire; and otherwise a
-    creator."""
-    if any(collection.type == CollectionType.MUSIC.value for collection in creator.collections):
-        return ARTIST_LABEL
+    """What the creator is called, as their Site calls them when all their accounts and collections are on one Site,
+    such as host on The Daily Wire, or artist for one with a Music collection; and otherwise as any Site does."""
     sites = list(_sites(creator).values())
-    return sites[0].creator_label if len(sites) == 1 else CREATOR_LABEL
+    site = sites[0] if len(sites) == 1 else _ANY_SITE
+    return site.music_creator_label if is_music_creator(creator) else site.creator_label
 
 
 def creator_sections(creator: Creator) -> CreatorSectionNames:
     """What the creator adds, which VODLoft looks for: what their Site calls it, such as playlists on YouTube, when
     all their accounts and collections are on one Site, and otherwise playlists and shows."""
     sites = list(_sites(creator).values())
-    return sites[0].creator_sections if len(sites) == 1 else CreatorSectionNames()
+    return (sites[0] if len(sites) == 1 else _ANY_SITE).creator_sections
 
 
 def creator_kind(creator: Creator) -> str:

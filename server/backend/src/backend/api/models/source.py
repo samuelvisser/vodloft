@@ -447,6 +447,12 @@ class SiteAPIRead(ResponseBase):
 
     @computed_field
     @property
+    def music_creator_label(self) -> str:
+        """What the Site calls a creator with a Music collection, such as artist."""
+        return site_of(self.key).music_creator_label
+
+    @computed_field
+    @property
     def creator_sections(self) -> CreatorSectionNamesAPIRead:
         """What the Site calls the things its creators add, such as playlists on YouTube."""
         return CreatorSectionNamesAPIRead.model_validate(site_of(self.key).creator_sections)
