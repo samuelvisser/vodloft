@@ -1,3 +1,4 @@
+import type {CollectionWords} from '../../lib/collectionWords'
 import {useMemo, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
@@ -45,9 +46,10 @@ function sectionNote(creator: CollectionCreatorMatch, label: string): string {
 }
 
 /** "Add to creator", in the words of the Site: find the creator behind the collection's link, show what the collection becomes, and add it. */
-export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, seasons, onDismiss, findsCreator = true}: DialogProps & {
-    /** What the collection calls its seasons, such as albums in a Music collection. */
-    seasons: string
+export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, words, onDismiss, findsCreator = true}: DialogProps & {
+    /** What the collection calls its seasons and numbers its episodes by, such as albums and tracks in a Music
+     *  collection. */
+    words: CollectionWords
 }) {
     const {data: libraryCreators} = useCreators()
     /** ``behind``: the creator behind the collection's link; otherwise the slug of a creator in the Library. */
@@ -120,7 +122,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
             {chosen && (
                 <ul className="creator-order-note">
                     <li>{collectionTitle} keeps its own link, so its videos can come from another {creatorLabel} or playlist, such as an artist's music videos on their label's channel.</li>
-                    <li>{seasons.charAt(0).toUpperCase()}{seasons.slice(1)}, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
+                    <li>{words.season.Many}, {words.episode.one} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                 </ul>
             )}
             {!chosen && match.isLoading && (
@@ -193,7 +195,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                         ? null
                         : (
                             <ul className="creator-order-note">
-                                <li>{seasons.charAt(0).toUpperCase()}{seasons.slice(1)}, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
+                                <li>{words.season.Many}, {words.episode.one} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                                 {!creator.creatorSlug && <li>The {creatorLabel}'s other {creator.sectionNames.many} start as not in your library, so you can add them from the {creatorLabel}'s Edit page.</li>}
                             </ul>
                         )}

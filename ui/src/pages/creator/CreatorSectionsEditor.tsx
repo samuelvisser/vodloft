@@ -343,7 +343,7 @@ export default function CreatorSectionsEditor({creator, part}: {
                     <ul className="creator-order-note">
                         <li>The account on {splitting.site.name} becomes a creator of its own, named as {splitting.site.name} names them.</li>
                         <li>Its own collection and the collections of its {splitting.site.creatorSections.many} go along. Collections that joined {creator.title} by another link stay.</li>
-                        <li>Collections keep their {creator.collections.length > 0 && creator.collections.every((collection) => collection.type === 'music') ? 'albums' : 'seasons'}, episodes, profiles and files. Nothing is indexed again.</li>
+                        <li>Collections keep their {creator.collections.length > 0 && creator.collections.every((collection) => collection.type === 'music') ? 'albums, tracks' : 'seasons, episodes'}, profiles and files. Nothing is indexed again.</li>
                     </ul>
                 )}
             </ConfirmDialog>

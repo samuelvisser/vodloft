@@ -35,7 +35,7 @@ import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
 import LockedEpisodesFilter from '../../components/Episode/LockedEpisodesFilter'
 import {apiFetch, apiUrl, publicAddress} from '../../lib/api'
-import {fileWordsFor, wordsFor} from '../../lib/collectionWords'
+import {collectionWords, fileWordsFor, wordsFor} from '../../lib/collectionWords'
 import {isCollectionLocalMediaProfileAvailableFor} from '../../types/local_media_profile'
 
 const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
@@ -929,7 +929,8 @@ export default function CollectionPage() {
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
         creatorLabel={creatorLabel}
-        seasons={words.season.many}
+        // A Music collection numbers its music videos as tracks too.
+        words={collectionWords(collection.type, 'audio')}
         onDismiss={() => setCreatorDialog(null)}
       />
       <RemoveFromCreatorDialog
