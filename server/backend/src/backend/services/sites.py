@@ -8,6 +8,7 @@ the Site's own id for it is unique per Site.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import replace
 from functools import lru_cache
 from typing import Optional
 
@@ -18,7 +19,7 @@ from backend.db.models import Collection, Episode, Movie, Site, Video
 from backend.types.collection_types import CollectionType
 from backend.types.link_season_types import OutsideVideos
 from backend.services.local_media_profile_sites import add_upcoming_site
-from sources import Names, SectionKind, Site as SourceSite, collection_on_site, site_for, source_site, sources_for
+from sources import EpisodeTag, Names, SectionKind, Site as SourceSite, collection_on_site, get_source, site_for, source_site, sources_for
 
 
 class CollectionAlreadyAddedError(ValueError):
@@ -86,6 +87,23 @@ def collection_creator_label(collection: Collection) -> str:
     collection is a Music collection."""
     site = collection_site(collection)
     return site.music_creator_label if collection.type == CollectionType.MUSIC.value else site.creator_label
+
+
+def collection_episode_tags(collection: Collection) -> tuple[EpisodeTag, ...]:
+    """The tags of a collection's episodes, the main one named as the collection names its episodes: tracks in a
+    Music collection on a Site with sound only, music videos in any other Music collection, and episodes in a
+    Podcast or Series. Its key stays the Site's, so profiles select it the same everywhere."""
+    site = collection_site(collection)
+    if collection.type == CollectionType.MUSIC.value:
+        main = ("Track", "A track of the artist", "track", "tracks") if site.audio_only else (
+            "Music video", "A music video of the artist", "music video", "music videos")
+    else:
+        main = ("Episode", "An episode of the collection", "episode", "episodes")
+    label, help_, singular, plural = main
+    return tuple(
+        replace(tag, label=label, help=help_, singular=singular, plural=plural) if tag.main else tag
+        for tag in get_source(collection.source_key).episode_tags_for(collection.sharing_url)
+    )
 
 
 def joined_names(names: Iterable[Names]) -> Names:

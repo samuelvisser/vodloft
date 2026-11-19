@@ -81,7 +81,7 @@ class CreatorLookupAPIRead(ResponseBase):
     """What the Site calls the creator when they are added as a music artist."""
     section_types: list[SectionTypeAPIRead]
     """Every type of section the Site's creators have, such as playlists on YouTube or shows on The Daily Wire."""
-    audio: bool = False
+    audio_only: bool = False
     """The Site has sound only, such as Bandcamp, so what its lists hold are tracks."""
     link_seasons: bool = False
     """The creator's lists can be seasons of its own collection."""

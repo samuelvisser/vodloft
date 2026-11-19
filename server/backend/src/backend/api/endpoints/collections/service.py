@@ -21,12 +21,11 @@ from backend.services.errors import ServiceError
 from backend.services.access_checks import ask_for_check, refused_media
 from backend.services.media_access import locked_clause
 from backend.services.local_media_profile_sites import profile_offered_for_site
-from backend.services.sites import collection_site_key, place_collection
+from backend.services.sites import collection_episode_tags, collection_site_key, place_collection
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
 from backend.api.endpoints.media_downloads.service import create_new_episode_download
 from config import get_settings
-from sources import get_source
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.services.metadata_refresh import refreshes_metadata
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -242,14 +241,15 @@ def get_collection(s: Session, collection_slug: str) -> CollectionAPIRead:
 
 
 def get_collection_episode_tags(s: Session, collection_slug: str) -> list[EpisodeTagAPIRead]:
-    """The tags of the collection's Source that at least one of its episodes has, in the Source's order."""
+    """The tags of the collection's Site that at least one of its episodes has, in the Site's order, named as the
+    collection names its episodes (see ``collection_episode_tags``)."""
     collection = s.scalar(select(Collection).where(Collection.slug == collection_slug))
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
 
     return [
         EpisodeTagAPIRead.model_validate(tag)
-        for tag in get_source(collection.source_key).episode_tags_for(collection.sharing_url)
+        for tag in collection_episode_tags(collection)
         if s.scalar(select(exists().where(
             Episode.collection_id == collection.id,
             episode_identifier_type_predicate(Episode.episode_identifier, {tag.key}),

@@ -87,7 +87,7 @@ export default function LocalMediaProfileFitNote({profiles, selectedId, used, co
                         to={addLocalMediaProfilePath({
                             collectionType: collection.type,
                             siteKey: collection.site?.key,
-                            audio: collection.site?.audio,
+                            audio: collection.site?.audioOnly,
                             format,
                             returnTo,
                             from: collection.title,

@@ -76,6 +76,11 @@ def site_of(key: str, host: str | None = None) -> Site:
     contract = CONTRACTS.get(key, OtherSites)
     values = {name: getattr(contract, name) for name in SITE_FIELDS if hasattr(contract, name)}
     values["accesses"] = _accesses(contract)
+    if values.get("audio_only"):
+        # On a site with sound only, what yt-dlp offers every site is for sound, unless its contract says otherwise.
+        for name in ("downloads", "upgrade_checks"):
+            if values[name] is getattr(OtherSites, name):
+                values[name] = values[name].for_audio_only()
     return Site(key, contract.name or host or key, (host,) if host else (), **values)
 
 

@@ -437,9 +437,9 @@ class SiteAPIRead(ResponseBase):
 
     @computed_field
     @property
-    def audio(self) -> bool:
+    def audio_only(self) -> bool:
         """The Site has sound only, such as Bandcamp: a Music collection on it holds tracks, not music videos."""
-        return site_of(self.key).audio
+        return site_of(self.key).audio_only
 
     @computed_field
     @property

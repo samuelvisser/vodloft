@@ -91,7 +91,7 @@ function isMovie(creator: CreatorLookupRead, section: CreatorSectionRead) {
 
 /** What the section is and holds, in the words of its Site: "Album · 2016 · 12 tracks". */
 function sectionFacts(creator: CreatorLookupRead, section: CreatorSectionRead): string {
-    const noun = creator.audio ? ['track', 'tracks'] : ['video', 'videos']
+    const noun = creator.audioOnly ? ['track', 'tracks'] : ['video', 'videos']
     return [
         capitalize(sectionName(creator.sectionTypes, section).one),
         section.year,

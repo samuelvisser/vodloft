@@ -151,7 +151,7 @@ class _Lookup:
     creator_label: str
     music_creator_label: str
     section_types: tuple[SectionType, ...]
-    audio: bool
+    audio_only: bool
     link_seasons: bool
     movies: bool
     sections: list[_Section]
@@ -175,7 +175,7 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
     existing = creators.account_in_library(s, site.key, details.ref)
     return CreatorLookupAPIRead.model_validate(_Lookup(
         details=details, source_key=source_key, site_key=site.key, site_name=site.name,
-        creator_label=site.creator_label, music_creator_label=site.music_creator_label, section_types=site.section_types, audio=site.audio,
+        creator_label=site.creator_label, music_creator_label=site.music_creator_label, section_types=site.section_types, audio_only=site.audio_only,
         link_seasons=creators.lists_are_seasons(site), movies=movies,
         sections=[
             _Section(
@@ -188,7 +188,7 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
             _Preset(
                 preset.value, creators.preset_plan(details, preset, movies=movies, movies_in_library=movies_kept),
                 # A music artist on a site with videos keeps their albums, not all of their uploads.
-                creators.preset_plan(details, preset, feeds=site.audio, movies=movies, movies_in_library=movies_kept),
+                creators.preset_plan(details, preset, feeds=site.audio_only, movies=movies, movies_in_library=movies_kept),
             )
             for preset in site.creator_presets
         ],

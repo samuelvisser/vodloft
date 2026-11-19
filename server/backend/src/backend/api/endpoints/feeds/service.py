@@ -9,7 +9,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from fastapi import Request
 from sqlalchemy.orm import Session
 
-from backend.services.sites import collection_site
+from backend.services.sites import collection_site, episode_site
 from backend.services.thumbnails import is_own_thumbnail
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.db.datetime_types import utc_datetime
@@ -97,9 +97,9 @@ def _append_identifier_episode_number(item: Element, episode: Episode) -> None:
 
 
 def _episode_tag(episode: Episode, key: str | None) -> EpisodeTag | None:
-    """The tag the episode's Source declares for it, such as a YouTube Short."""
+    """The tag the episode's Site declares for it, such as a YouTube Short."""
     try:
-        return get_source(episode.source_key).episode_tag(key)
+        return episode_site(episode).episode_tag(key)
     except UnknownSourceError:
         return None
 

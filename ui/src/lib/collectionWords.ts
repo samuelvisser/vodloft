@@ -56,7 +56,7 @@ export function collectionWords(type: string | null | undefined, kind: MediaKind
 
 interface WordedCollection {
     type?: string | null
-    site?: { audio?: boolean } | null
+    site?: { audioOnly?: boolean } | null
 }
 
 /** The words for the files of a collection, kept by the Local Media Profiles it is offered, each by what it is
@@ -71,5 +71,5 @@ export function fileWordsFor(collection: WordedCollection | null | undefined, pr
  *  such as Bandcamp, are tracks. Pass ``audio`` where the files are meant, which a profile for Music tracks
  *  keeps as sound. */
 export function wordsFor(collection: WordedCollection | null | undefined, kind?: MediaKind): CollectionWords {
-    return collectionWords(collection?.type, kind ?? (collection?.site?.audio ? 'audio' : 'video'))
+    return collectionWords(collection?.type, kind ?? (collection?.site?.audioOnly ? 'audio' : 'video'))
 }
