@@ -23,20 +23,25 @@ import LookupSteps from './LookupSteps'
 import './CreatorPages.css'
 
 /** The starting points, in the words of what this creator has: playlists on YouTube, shows on The Daily Wire. */
-function presetText(key: CreatorCreateIn['preset'], lists: string, hasFeeds: boolean, music: boolean) {
-    if (music) {
+function presetText(key: CreatorCreateIn['preset'], lists: string, hasFeeds: boolean, creator: CreatorLookupRead) {
+    // What the Site calls everything a creator adds there, such as shows on The Daily Wire.
+    const skipped = {
+        label: 'Only what I pick',
+        help: `All ${hasFeeds ? `feeds and ${creator.creatorSections.many}` : creator.creatorSections.many} start skipped.`,
+    }
+    if (creator.music) {
         if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with each album as a season${hasFeeds ? ' and the other tracks by year' : ''}.`}
         if (key === 'per_list') return {label: 'A collection per album', help: 'Each album is a Music collection of its own.'}
-        return {label: 'Only what I pick', help: 'Everything starts skipped.'}
+        return skipped
     }
-    if (key === 'one_show') return {label: 'One show', help: `Videos and livestreams by year, ${lists} as named seasons, Shorts apart.`}
+    if (key === 'one_show') return {label: 'One collection', help: `Videos and livestreams by year, with the ${lists} as named seasons.`}
     if (key === 'per_list') {
         return {
             label: `A collection per ${lists.replace(/s$/, '')}`,
             help: hasFeeds ? `Each of the ${lists} is a collection of its own, plus one for the other videos.` : `Each of the ${lists} is a collection of its own.`,
         }
     }
-    return {label: 'Only what I pick', help: 'Everything starts skipped.'}
+    return skipped
 }
 
 type Choice = 'main' | 'own' | 'skip'
@@ -228,9 +233,12 @@ export default function AddCreatorPage() {
     const listsTitle = listLabel === 'Album' ? 'Albums' : listLabel ? 'Playlists' : hasShows ? 'Shows' : 'Playlists'
     const lists = listsTitle.toLowerCase()
     const hasFeeds = creator.sections.some((section) => section.kind === 'feed')
+    // A Daily Wire host has no collection of their own: each show is one.
+    const hasMain = [...registries.values()].some((registry) => registry.options.some((option) => option.value === 'main'))
     const groups: [string, CreatorSectionRead[]][] = [
         ['Feeds', creator.sections.filter((section) => section.kind === 'feed')],
-        [listsTitle, creator.sections.filter((section) => section.kind === 'list')],
+        // A creator with shows but no lists, such as a Daily Wire host, has its shows here.
+        [listsTitle, creator.sections.filter((section) => section.kind === (listLabel || !hasShows ? 'list' : 'show'))],
         ...(listLabel && hasShows ? [['Shows', creator.sections.filter((section) => section.kind === 'show')]] as [string, CreatorSectionRead[]][] : []),
         [creator.music ? 'Singles' : 'Movies', creator.sections.filter((section) => section.kind === 'item')],
     ]
@@ -251,9 +259,9 @@ export default function AddCreatorPage() {
                 <div>
                     <h1 id="add-creator-title">Add {creator.creatorLabel}</h1>
                     <p className="view-description">
-                        Choose where each part of this {creator.creatorLabel} goes. The main collection is called
-                        {' '}{creator.title}; anything you give a collection of its own gets one. A {creator.music ? 'track' : 'video'} that is in several
-                        places is kept once.
+                        Choose where each part of this {creator.creatorLabel} goes.
+                        {hasMain ? ` The main collection is called ${creator.title}; anything you give a collection of its own gets one.` : ''}
+                        {' '}A {creator.music ? 'track' : 'video'} that is in several places is kept once.
                     </p>
                 </div>
             </div>
@@ -270,8 +278,8 @@ export default function AddCreatorPage() {
                         {creator.presets.map((item) => (
                             <label key={item.key} className={`creator-preset${preset === item.key ? ' is-on' : ''}`}>
                                 <input type="radio" name="preset" checked={preset === item.key} onChange={() => choosePreset(item.key)}/>
-                                <b>{presetText(item.key, lists, hasFeeds, creator.music).label}</b>
-                                <span>{presetText(item.key, lists, hasFeeds, creator.music).help}</span>
+                                <b>{presetText(item.key, lists, hasFeeds, creator).label}</b>
+                                <span>{presetText(item.key, lists, hasFeeds, creator).help}</span>
                             </label>
                         ))}
                     </fieldset>

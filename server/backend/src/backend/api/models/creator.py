@@ -63,6 +63,8 @@ class CreatorLookupAPIRead(ResponseBase):
     site_key: str
     site_name: str
     creator_label: str
+    creator_sections: CreatorSectionNamesAPIRead
+    """What the Site calls the things its creators add, such as playlists on YouTube or shows on The Daily Wire."""
     link_seasons: bool = False
     """The creator's lists can be seasons of its own collection."""
     ref: str

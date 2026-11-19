@@ -31,7 +31,7 @@ from backend.services.sites import collection_site
 from backend.types.creator_types import NewSectionAction, SectionTarget
 from task_manager.scheduler.transactional import queue_task_after_commit
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
-from sources import CreatorDetails, Feature, SectionRef, get_source
+from sources import CreatorDetails, CreatorSectionNames, Feature, SectionRef, get_source
 from backend.services.source_requests import asking_source
 
 
@@ -131,6 +131,7 @@ class _Lookup:
     site_key: str
     site_name: str
     creator_label: str
+    creator_sections: CreatorSectionNames
     link_seasons: bool
     sections: list[_Section]
     presets: list[_Preset]
@@ -149,7 +150,8 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
     existing = creators.account_in_library(s, site.key, details.ref)
     return CreatorLookupAPIRead.model_validate(_Lookup(
         details=details, source_key=source_key, site_key=site.key, site_name=site.name,
-        creator_label=site.creator_label, link_seasons=creators.lists_are_seasons(site),
+        creator_label=site.creator_label, creator_sections=site.creator_sections,
+        link_seasons=creators.lists_are_seasons(site),
         sections=[
             _Section(section, kept.get(section.ref), titles.get(kept.get(section.ref)))
             for section in details.sections

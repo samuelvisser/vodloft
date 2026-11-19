@@ -208,7 +208,7 @@ With a YouTube Data API key, a search goes through the API and collections subsc
 
 A creator is whoever makes the work you follow: the person or group behind a YouTube channel, a host on The Daily Wire, or an artist on Bandcamp or SoundCloud. Adding the creator, instead of one of their links, lets you decide in one go what happens with their videos, livestreams, Shorts and playlists, and the creator gets a card and a page of their own in your Library. Their collections are on that page rather than next to it in the Library, though a search still finds them. The page shows only what is in your Library; the playlists and shows you did not add, new ones waiting for a choice and the creator's accounts are on the creator's **Edit** page. VODLoft calls a creator what their site calls them, so on The Daily Wire every button and page says host instead, and for music it says artist.
 
-Paste a link to a YouTube channel in **Add media** and choose **Add the creator**; **Only its videos** adds its uploads as one collection, as described above. For The Daily Wire, open **Browse**, group the shows by host and choose the link next to a host's name.
+Paste a link to a YouTube channel in **Add media** and choose **Add the creator**; **Only its videos** adds its uploads as one collection, as described above. For The Daily Wire, paste the link to a host's page, such as `https://www.dailywire.com/hosts/jordan-b-peterson`, and choose **Add the host**, or open **Browse**, group the shows by host and choose the link next to a host's name.
 
 The Add creator page lists the YouTube channel's feeds (Videos, Live and Shorts on YouTube) and its playlists or shows. For each one you choose where it goes:
 
@@ -216,7 +216,7 @@ The Add creator page lists the YouTube channel's feeds (Videos, Live and Shorts 
 - **A collection of its own**: the part becomes a separate collection, for example Shorts that you want to keep apart from the rest.
 - **Skip**: nothing is added. The part stays listed on the creator's **Edit** page, so you can add it later.
 
-Three starting points fill these choices in for you: **One show** (YouTube only) puts the videos, livestreams and playlists in the main collection and gives Shorts their own; **A show per playlist** gives every playlist or show its own collection; **Only what I pick** starts with everything skipped. A playlist or show that is already in your Library stays where it is.
+Starting points fill these choices in for you: **One collection** (YouTube only) puts the videos, livestreams and playlists in the main collection, with the playlists as named seasons; **A collection per playlist** (or per show) gives every playlist or show its own collection; **Only what I pick** starts with all feeds and playlists, or all shows, skipped. A playlist or show that is already in your Library stays where it is.
 
 A video that appears in more than one place is kept once, and a playlist is always in one place only: a season of the main collection or a collection of its own. In the main collection a video in a playlist season is in that season and not in the season of videos in no playlist. The creator decides which playlists are seasons of its main collection, so that collection's Seasons window doesn't look for new playlists itself; it still lets you name, order and group the seasons, and turn a playlist season off.
 

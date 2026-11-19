@@ -39,6 +39,8 @@ export const CreatorLookupReadSchema = z.object({
     siteKey: z.string(),
     siteName: z.string(),
     creatorLabel: z.string(),
+    /** What the Site calls the things its creators add, such as shows on The Daily Wire. */
+    creatorSections: CreatorSectionNamesSchema,
     /** The creator's lists can be seasons of its own collection. */
     linkSeasons: z.boolean().default(false),
     ref: z.string(),

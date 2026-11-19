@@ -109,7 +109,8 @@ export function sourceHas(source: SourceRead | null | undefined, feature: Source
 
 export const ResolvedLinkReadSchema = z.object({
     source: SourceReadSchema,
-    kind: z.enum(['collection', 'movie', 'episode', 'video']),
+    /** A creator link, such as a Daily Wire host's page, is added as a creator only. */
+    kind: z.enum(['collection', 'movie', 'episode', 'video', 'creator']),
     slug: z.string(),
     url: z.string(),
     collectionSlug: z.string().nullable(),

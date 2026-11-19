@@ -115,7 +115,7 @@ class DailyWireSource(Source):
         creator_sections=CreatorSectionNames("a show", "shows"),
         creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)
-    kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
+    kind_names = MappingProxyType({LinkKind.COLLECTION: "Show", LinkKind.CREATOR: "Host"})
     features = frozenset({
         Feature.COLLECTIONS,
         Feature.MOVIES,
@@ -196,9 +196,13 @@ class DailyWireSource(Source):
         return next((show.author_slug for show in catalog.collections if show.slug == slug and show.author_slug), None)
 
     def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
-        """A host, by the slug The Daily Wire gives them: their shows and movies from the Browse page.
-
-        The Daily Wire has no page of its own for a host, so a host has no link."""
+        """A host, by the slug The Daily Wire gives them or by the link to their page, such as
+        https://www.dailywire.com/hosts/ben-shapiro: their shows and movies from the Browse page."""
+        if ref.startswith("http"):
+            parsed = parse_link(ref)
+            if parsed is None or parsed[0] is not LinkKind.CREATOR:
+                raise ValueError("This is not a link to a host on The Daily Wire")
+            ref = parsed[1]
         progress("Reading The Daily Wire's shows and movies")
         catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
         shows = [show for show in catalog.collections if show.author_slug == ref]

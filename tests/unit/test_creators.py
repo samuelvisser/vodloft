@@ -604,6 +604,18 @@ def test_a_site_names_its_creators_in_its_own_words(client, tube, monkeypatch):
     assert lines[-1]["creator"]["creatorLabel"] == "host"
 
 
+def test_a_creator_lookup_says_what_its_site_calls_the_creators_sections(client, tube, monkeypatch):
+    from dataclasses import replace
+
+    from sources import CreatorSectionNames
+
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], creator_sections=CreatorSectionNames("a show", "shows")),))
+    response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
+    found = json.loads(response.text.splitlines()[-1])["creator"]
+
+    assert found["creatorSections"] == {"one": "a show", "many": "shows"}
+
+
 def test_a_creator_names_what_vodloft_looks_for_in_the_words_of_its_site(client, tube, monkeypatch):
     from dataclasses import replace
 

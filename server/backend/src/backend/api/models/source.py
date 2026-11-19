@@ -340,7 +340,7 @@ class CookiesAPIUpdate(RequestBase):
 
 class ResolvedLinkAPIRead(ResponseBase):
     source: SourceAPIRead
-    kind: Literal["collection", "movie", "episode", "video"]
+    kind: Literal["collection", "movie", "episode", "video", "creator"]
     slug: str
     url: str
     collection_slug: Optional[str] = None

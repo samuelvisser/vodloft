@@ -119,8 +119,27 @@ def test_daily_wire_links_are_parsed_by_path():
     assert parse_link("https://www.dailywire.com/show/the-ben-shapiro-show") == (LinkKind.COLLECTION, "the-ben-shapiro-show")
     assert parse_link("https://www.dailywire.com/videos/run-hide-fight/") == (LinkKind.MOVIE, "run-hide-fight")
     assert parse_link("https://www.dailywire.com/episode/ep-1?x=1") == (LinkKind.EPISODE, "ep-1")
+    assert parse_link("https://www.dailywire.com/hosts/jordan-b-peterson") == (LinkKind.CREATOR, "jordan-b-peterson")
     assert parse_link("https://www.dailywire.com/") is None
     assert parse_link("https://www.dailywire.com/about/team") is None
+
+
+def test_a_daily_wire_host_link_is_their_creator(monkeypatch):
+    from types import SimpleNamespace
+
+    from sources.dailywire import links
+
+    show = SimpleNamespace(slug="the-jordan-b-peterson-podcast", author_slug="jordan-b-peterson",
+                           author_name="Jordan B Peterson", author_headshot_path="https://img/jbp.jpg")
+    catalog = SimpleNamespace(collections=[show], movies=[])
+    monkeypatch.setattr(links, "_access_token", lambda: None)
+    monkeypatch.setattr(links.MiddlewareClient, "get_catalog", lambda self: catalog)
+
+    found = links.resolve_link("https://www.dailywire.com/hosts/jordan-b-peterson")
+    assert (found.kind, found.slug, found.title) == (LinkKind.CREATOR, "jordan-b-peterson", "Jordan B Peterson")
+    assert found.creator_url == "https://www.dailywire.com/hosts/jordan-b-peterson"
+    assert found.creator_label == "host"
+    assert links.resolve_link("https://www.dailywire.com/hosts/nobody") is None
 
 
 def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
