@@ -273,7 +273,10 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
     if body.type is not None and body.type != collection.type:
         _check_profiles_suit_type(collection, CollectionType(body.type))
     left_out = {
-        name for name in ("membership_level", "type", "ytdlp_options", "cookies_mode", "episode_order", "check_frequency", "check_cron")
+        name for name in (
+            "membership_level", "type", "ytdlp_options", "cookies_mode", "split_chapters", "episode_order", "check_frequency",
+            "check_cron",
+        )
         if getattr(body, name) is None
     } | {name for name in ("genre", "content_rating") if name not in body.model_fields_set}
     update_database_fields(collection, body, exclude_fields=left_out or None)

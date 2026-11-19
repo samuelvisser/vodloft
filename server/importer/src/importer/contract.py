@@ -150,6 +150,8 @@ class FilePlan:
     title: str | None = None
     published: str | None = None
     kept: bool = False
+    part: int | None = None
+    """The file is this chapter of the video, counted from 1, for a collection that splits videos by chapter."""
     episode_values: dict[str, str] = field(default_factory=dict)
     """Template values the other program saved for the item, such as ``episode_uploader``, by VODLoft variable."""
     """The other program was told never to delete this file."""

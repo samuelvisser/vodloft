@@ -3,7 +3,8 @@ from typing import Optional, TYPE_CHECKING
 
 from .MediaItemBase import MediaItemBase
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Boolean, ForeignKey, Index, PrimaryKeyConstraint, UniqueConstraint, text
+from sqlalchemy import Boolean, ForeignKey, Index, PrimaryKeyConstraint, UniqueConstraint, func, text
+from sqlalchemy.ext.hybrid import hybrid_property
 
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
@@ -106,11 +107,26 @@ class Episode(
     went_live_date: Mapped[Optional[datetime]]
     published_date: Mapped[Optional[datetime]]
     scheduled_date: Mapped[Optional[datetime]]
+    part_of: Mapped[Optional[str]] = mapped_column(
+        comment="The Source's slug of the video the episode is one part of, when its collection splits videos by chapter",
+    )
+    part_start: Mapped[Optional[float]] = mapped_column(comment="Where the part starts in its video, in seconds")
+    part_end: Mapped[Optional[float]] = mapped_column(comment="Where the part ends in its video, in seconds")
 
     # Relationships
     collection: Mapped["Collection"] = relationship(back_populates="episodes")
     season: Mapped["Season"] = relationship(back_populates="episodes")
     collection_link: Mapped[Optional["CollectionLink"]] = relationship()
+
+    @hybrid_property
+    def video_slug(self) -> str:
+        """The Source's slug of the video the episode comes from: the whole video's, for a part of one."""
+        return self.part_of or self.source_slug
+
+    @video_slug.inplace.expression
+    @classmethod
+    def _video_slug_expression(cls):
+        return func.coalesce(cls.part_of, cls.source_slug)
 
     @property
     def safe_live_ended(self) -> datetime | None:

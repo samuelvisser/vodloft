@@ -258,7 +258,32 @@ def test_a_discography_becomes_an_artist_channel_with_a_music_profile(tmp_path):
     )
     assert collections["UKNOWY"].profile_external_id == "preset:SoundCloud Discography"
     assert plan.download_folder == "/music"
-    assert any(warning.subject == "Game Chops" and "split a video into tracks" in warning.message for warning in plan.warnings)
+    assert not any(warning.subject == "Game Chops" for warning in plan.warnings)
+
+
+def test_full_albums_are_split_into_tracks_by_their_chapters(tmp_path):
+    downloads = tmp_path / "downloads"
+    # A music preset's archive sits in the music folder, beside every artist's folder.
+    (downloads / "music").mkdir(parents=True)
+    (downloads / "music" / ".ytdl-sub-Game Chops-download-archive.json").write_text(json.dumps({
+        "album-1": {"upload_date": "2020-05-01", "extractor": "youtube", "file_names": [
+            "Game Chops/[2020] Lofi Album/02 - Second.mp3", "Game Chops/[2020] Lofi Album/folder.jpg",
+            "Game Chops/[2020] Lofi Album/01 - First.mp3",
+        ]},
+    }))
+    plan = _plan(_write(tmp_path / "config", MUSIC), ("/music", "/downloads/music"), downloads)
+
+    albums = next(collection for collection in plan.collections if collection.title == "Game Chops")
+    assert (albums.channel, albums.links, albums.settings["type"], albums.settings["split_chapters"]) == (False, (), "music", True)
+    profile = next(profile for profile in plan.profiles if profile.external_id == albums.profile_external_id)
+    assert profile.output_template == (
+        "/downloads/music/{{ artist }}/[{{ year }}] {{ album }}/{{ track_number_padded }} - {{ title }}.ext"
+    )
+    # Each track is a part of the album's video, in the order the tracks play in.
+    assert [(file.media_site_id, file.part, file.path.rsplit("/", 1)[1]) for file in plan.files
+            if file.collection_external_id == albums.external_id] == [
+        ("album-1", 1, "01 - First.mp3"), ("album-1", 2, "02 - Second.mp3"),
+    ]
 
 
 def test_download_archives_give_every_file_by_video_id_and_find_the_folder(tmp_path):

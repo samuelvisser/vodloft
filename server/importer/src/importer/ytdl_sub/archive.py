@@ -29,7 +29,12 @@ class ArchiveEntry:
     @property
     def media_file(self) -> str | None:
         """The video or audio file the entry wrote; its thumbnail, NFO and info file are left out."""
-        return next((name for name in self.file_names if PurePosixPath(name).suffix.lower() in MEDIA_EXTENSIONS), None)
+        return next(iter(self.media_files), None)
+
+    @property
+    def media_files(self) -> tuple[str, ...]:
+        """Every video or audio file the entry wrote, such as each track of a full album split by its chapters."""
+        return tuple(name for name in self.file_names if PurePosixPath(name).suffix.lower() in MEDIA_EXTENSIONS)
 
 
 def archive_names(subscription: str) -> tuple[str, ...]:

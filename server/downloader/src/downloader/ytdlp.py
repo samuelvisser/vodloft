@@ -166,6 +166,11 @@ def ytdlp_sponsorblock_options(sponsorblock: YtdlpSponsorBlock) -> tuple[str, ..
     return options
 
 
+def ytdlp_section_options(start: float, end: float) -> tuple[str, ...]:
+    """yt-dlp options that download only the video's stretch from ``start`` to ``end`` seconds."""
+    return ("--download-sections", f"*{start:.3f}-{end:.3f}")
+
+
 def resolve_ytdlp_source(
     url: str,
     *,
@@ -178,8 +183,11 @@ def resolve_ytdlp_source(
     custom_options: tuple[str, ...] = (),
     ffmpeg_path: str = "ffmpeg",
     throttle_guard: bool = False,
+    section: tuple[float, float] | None = None,
 ) -> ResolvedDownloadSource:
     """``custom_options`` are the user's own yt-dlp options; VODLoft's own come after them and win.
+
+    With ``section``, the start and end of one stretch of the video in seconds, only that stretch is downloaded.
 
     With ``throttle_guard``, a video download that asks for more than ``THROTTLED_HEIGHT`` refuses a throttled
     file: see ``download_ytdlp``.
@@ -189,6 +197,8 @@ def resolve_ytdlp_source(
     hls = preferred_format == "format_hls"
     if hls and audio_only:
         raise DownloadError("HLS media format cannot be used for an audio-only download")
+    if hls and section is not None:
+        raise DownloadError("A part of a video cannot be kept as an HLS bundle")
     if hls:
         # Parts cut from separate video and audio files would no longer line up, so an HLS bundle only marks them.
         sponsorblock = YtdlpSponsorBlock(chapter=(*sponsorblock.chapter, *sponsorblock.cut))
@@ -196,6 +206,9 @@ def resolve_ytdlp_source(
         *custom_options,
         *(ytdlp_hls_options(quality.audio_language) if hls else ytdlp_format_options(preferred_format, audio_only=audio_only, quality=quality)),
         *ytdlp_sponsorblock_options(sponsorblock),
+        # A video part starts on a keyframe of its own, so it begins exactly where its chapter does.
+        *(ytdlp_section_options(*section) if section is not None else ()),
+        *(("--force-keyframes-at-cuts",) if section is not None and not audio_only else ()),
     )
     if os.sep in ffmpeg_path:
         options += ("--ffmpeg-location", ffmpeg_path)

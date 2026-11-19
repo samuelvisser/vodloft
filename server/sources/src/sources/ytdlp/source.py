@@ -16,6 +16,7 @@ from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
+    Chapter,
     ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, ChannelDetails, SectionKind, SectionRef, SectionRole, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
@@ -431,6 +432,18 @@ _ACCESS_BY_AVAILABILITY = {"subscriber_only": sites.MEMBERS_KEY, "premium_only":
 _OPEN_AVAILABILITIES = frozenset({"public", "unlisted"})
 
 
+def _chapters(info: dict) -> tuple[Chapter, ...] | None:
+    """The chapters of a video yt-dlp looked up. A listing's entry has no formats and says nothing about them."""
+    if "chapters" not in info and not info.get("formats"):
+        return None
+    chapters = []
+    for number, chapter in enumerate(info.get("chapters") or [], start=1):
+        start, end = chapter.get("start_time"), chapter.get("end_time")
+        if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
+            chapters.append(Chapter(title=str(chapter.get("title") or f"Chapter {number}"), start=float(start), end=float(end)))
+    return tuple(chapters)
+
+
 def _access(info: dict) -> str | None:
     """yt-dlp marks a video only the channel's members can watch as ``subscriber_only``, and one only
     the site's paying subscribers can watch as ``premium_only``."""
@@ -460,7 +473,7 @@ class YtDlpSource(Source):
         Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
         Feature.FORMAT_CHOICES, Feature.YTDLP_OPTIONS, Feature.METADATA_REFRESH,
-        Feature.PENDING_CHECKS, Feature.CHANNELS,
+        Feature.PENDING_CHECKS, Feature.CHANNELS, Feature.CHAPTERS,
     })
     episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.
@@ -744,6 +757,7 @@ class YtDlpSource(Source):
             tag=_tag(info, url),
             publish_status=_publish_status(info),
             scheduled_at=_scheduled_at(info),
+            chapters=_chapters(info),
         )
 
     @staticmethod

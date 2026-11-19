@@ -129,7 +129,7 @@ def _site_name(site: Optional[Site]) -> str:
 def _watched_episode(episode: Episode) -> _Watched:
     site = episode.collection.site
     return _Watched(
-        Episode, episode.id, episode.source_key, _site_name(site), ItemRef(episode.source_slug, episode.sharing_url),
+        Episode, episode.id, episode.source_key, _site_name(site), ItemRef(episode.video_slug, episode.sharing_url),
         best_effort_published_date(episode), site_refresh_offsets(episode.collection.site_key), refreshes_one_by_one(episode.source_key),
         episode.metadata_refreshed_at,
     )
@@ -250,7 +250,8 @@ def _store(w: Session, item: _Watched, answer: _Answers | None, now: datetime) -
         elif (details := answer.details.get(item.ref.slug)) is not None or item.ref.slug in answer.refused:
             row.removed_from_source = False
             row.metadata_refreshed_at = now
-            if details is not None:
+            # A part of a split video keeps its chapter's title and length.
+            if details is not None and not (isinstance(row, Episode) and row.part_of is not None):
                 counts.updated += apply_refreshed_details(row, details, now=now)
                 if isinstance(row, Episode):
                     check_upgrades_after_refresh(w, row)

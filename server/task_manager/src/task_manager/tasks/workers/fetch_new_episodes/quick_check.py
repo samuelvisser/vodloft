@@ -21,7 +21,7 @@ from backend.db.models import Episode, Collection
 from config.network import is_no_internet_error
 from sources import Feature, Source, get_source
 from ...helpers.listed_collections import (
-    add_listed_episodes, claim_listed_items, collection_links, index_listed_collection, known_episode_slugs, link_item_slugs,
+    add_listed_episodes, claim_listed_items, collection_links, index_listed_collection, known_episode_slugs, link_item_slugs, splits_chapters, with_chapters,
 )
 from backend.services.thumbnails import newest_media_item_id
 from .service import finish_index
@@ -88,6 +88,7 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
     """Look at the newest videos of each of the collection's links, and add the ones it does not have yet."""
     collection_id = collection.id
     collection_known = known_episode_slugs(s, collection)
+    split = splits_chapters(collection)
     links = [(link_id, url, link_item_slugs(s, link_id)) for link_id, url in collection_links(s, collection_id)]
     # No transaction stays open while the Source looks videos up.
     s.rollback()
@@ -102,6 +103,8 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
         shared = {item.slug for item in latest if item.slug in collection_known}
         new = [item for item in latest if item.slug not in collection_known]
         found = [details for details in source.item_details(new).values() if details is not None] if new else []
+        if split:
+            found = [with_chapters(source, details) for details in found]
 
         def save(w: Session) -> int:
             claim_listed_items(w, collection_id=collection_id, link_id=link_id, slugs=shared)

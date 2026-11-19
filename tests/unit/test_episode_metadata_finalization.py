@@ -76,7 +76,7 @@ def test_the_refresh_schedule_counts_from_the_safe_final_publication(has_safe_fi
     dailywire_published = datetime(2026, 10, 2, 8, tzinfo=timezone.utc)
     safe_final = datetime(2026, 10, 2, 9, 3, tzinfo=timezone.utc)
     episode = SimpleNamespace(
-        id=42, source_key="dailywire", source_slug="episode", sharing_url="https://example.test/episode",
+        id=42, source_key="dailywire", source_slug="episode", video_slug="episode", sharing_url="https://example.test/episode",
         metadata_is_final=False, publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         safe_published_final=safe_final if has_safe_final else None, last_known_pending=None,
         published_date=dailywire_published, metadata_refreshed_at=None, collection=SimpleNamespace(site=None, site_key=None),
@@ -97,7 +97,7 @@ def test_the_refresh_schedule_ignores_the_ensure_safe_delay_setting(monkeypatch)
     monkeypatch.setattr(get_settings().download_settings, "ensure_safe_delay", True)
     last_known_pending = datetime(2026, 10, 2, 9, tzinfo=timezone.utc)
     episode = SimpleNamespace(
-        id=42, source_key="dailywire", source_slug="episode", sharing_url="https://example.test/episode",
+        id=42, source_key="dailywire", source_slug="episode", video_slug="episode", sharing_url="https://example.test/episode",
         metadata_is_final=False, publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         safe_published_final=None, last_known_pending=last_known_pending,
         published_date=datetime(2026, 10, 2, 8, tzinfo=timezone.utc), metadata_refreshed_at=None,

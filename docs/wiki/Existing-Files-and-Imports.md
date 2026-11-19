@@ -168,12 +168,13 @@ What comes along:
 - A **Bandcamp** or **SoundCloud Discography** subscription adds the artist. All of the artist's albums go
   into one Music collection, each album a season, with a Music Local Media Profile that keeps ytdl-sub's folder per
   artist and per album. The genre you give with `= Lofi` becomes the artist's genre, which new albums get too.
+- A **YouTube Full Albums** subscription becomes a Music collection that splits videos by chapter: each video is an
+  album and each chapter a track, as in ytdl-sub. The tracks ytdl-sub already saved are adopted one by one.
 
 What does not come along is listed in the report: scripts that compute values (VODLoft's templates are Jinja, see
 [[Local-Media-Profiles]]), throttle settings (VODLoft has a guard of its own, see
-[[Downloads-and-File-Integrity#when-youtube-only-offers-360p]]), chunked downloads, music videos, *YouTube Releases* and *YouTube Full Albums*
-(VODLoft can't read YouTube's Releases tab or split a video into tracks yet), and yt-dlp options VODLoft has no
-setting for.
+[[Downloads-and-File-Integrity#when-youtube-only-offers-360p]]), chunked downloads, music videos, *YouTube Releases*
+(VODLoft can't read YouTube's Releases tab yet), and yt-dlp options VODLoft has no setting for.
 
 Stop ytdl-sub's cron job before you turn on the imported Download Profiles, or both will download the same videos.
 

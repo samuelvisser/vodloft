@@ -176,6 +176,12 @@ An artist's collections are **Music** collections. **One discography** puts ever
 
 Looking up an artist reads each album once, so an artist with many albums takes a minute; the page shows how far it is. YouTube's Releases tab cannot be read yet.
 
+### Full albums: splitting videos by chapter
+
+Some channels upload a whole album as one long video, with a chapter per track. Set **Videos with chapters** to **A part per chapter** on the collection's Edit page, and each new video with chapters becomes a season of its own, named after the video, with an episode per chapter. In a Music collection that makes each video an album and each chapter a track, with its own title, length, track number and file.
+
+Each part downloads only its own stretch of the video, so it works with everything else in VODLoft: Download Profiles, retention, upgrade checks and RSS feeds treat it like any other episode. A feed only offers a part once it is downloaded, because the site itself only has the whole video. A video without chapters stays one episode, and videos already in the collection when you turn this on stay as they are.
+
 ### Following a channel
 
 Once a day VODLoft looks at each channel for playlists or shows it did not have before. **Check now** on the channel's page looks right away. What happens with a new one is up to you, under **When the channel adds a playlist or show** on the Add channel page or in the channel's **Edit** page:

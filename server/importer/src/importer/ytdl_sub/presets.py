@@ -86,6 +86,8 @@ _MUSIC_BASE = Builtin(config={
 """ytdl-sub's music presets: a folder per artist, a folder per album, a file per track."""
 MUSIC_GENRE_DEFAULT = "Unset"
 MUSIC_TRACK_VALUES = {
+    # A track split from a full album's video is an episode of its own, titled after its chapter.
+    "track_title": "{title}",
     "track_artist": "{music_artist}",
     "track_album": "{music_album}",
     "track_number": "{music_track_number}",
@@ -95,6 +97,7 @@ MUSIC_TRACK_VALUES = {
 }
 """What ytdl-sub's music presets read from each album and track, as the values VODLoft's Music profiles keep."""
 MUSIC_PRESET_VALUES = {
+    "track_title": {"{title}", "{chapter_title}"},
     "track_artist": {"{subscription_name}"},
     "track_album": {"{title}", "{playlist_title}", "{sc_track_album}"},
     "track_number": {"1", "{playlist_index}", "{chapter_index}", "{sc_track_number}"},
