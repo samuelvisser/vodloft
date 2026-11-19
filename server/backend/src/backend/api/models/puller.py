@@ -16,5 +16,7 @@ class FrontendPullAPIRead(ResponseBase):
     """One generic execution snapshot and the cadence the frontend should use next."""
 
     app_version: str
+    build_id: str = ""
+    """The Docker build running, which an open page compares with its own to reload after a new deploy."""
     mode: Literal["slow", "fast"]
     data: FrontendPullData

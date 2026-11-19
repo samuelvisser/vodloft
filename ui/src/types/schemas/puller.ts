@@ -4,6 +4,8 @@ import {TaskOperationReadSchema} from './operation'
 
 export const FrontendPullVersionSchema = z.object({
   appVersion: z.string(),
+  /** The Docker build running; empty outside one. */
+  buildId: z.string().default(''),
 })
 
 export const FrontendPullDataSchema = z.object({
