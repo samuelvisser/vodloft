@@ -26,6 +26,7 @@ import {useLocalMediaProfileSites} from '../../lib/queries'
 import {
     FORMAT_HEIGHTS,
     nearestVideoFormat,
+    PreferredFormatReg,
     offersFormat,
     profileDownloadOptions,
     profileSitesOffering,
@@ -145,6 +146,11 @@ export default function QualityField({form, mode}: Props) {
                     value={preferredFormat}
                     fields={['preferredFormat']}
                     apply={() => setValue('preferredFormat', fit.format, OPTIONS)}
+                    fits={() => preferredFormat === fit.format}
+                    incompatible={fit.format && <>
+                        This profile no longer downloads {PreferredFormatReg.getLabelLoose(fit.format)}, the format the
+                        link you followed asked for.
+                    </>}
                 >
                 <Select<DownloadOption, false>
                     inputId="quality-download"

@@ -223,7 +223,7 @@ export default function VideoPage() {
                     {!locked && !downloadStateError && profiles !== undefined && !videoProfiles?.length && (
                         <p>
                             No Video Local Media Profiles yet.{' '}
-                            <Link to={addLocalMediaProfilePath({video: 'videos', siteKey: video.site?.key})}>Add one</Link> to download this video.
+                            <Link to={addLocalMediaProfilePath({video: 'videos', siteKey: video.site?.key, from: video.title})}>Add one</Link> to download this video.
                         </p>
                     )}
                     {!locked && !downloadStateError && !!videoProfiles?.length && (

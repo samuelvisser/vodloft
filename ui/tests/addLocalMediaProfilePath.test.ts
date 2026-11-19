@@ -19,4 +19,6 @@ test('a new profile fits what it is added for', () => {
     assert.equal(addLocalMediaProfilePath({collectionType: null}), '/add-local-media-profile?type=collection')
     assert.equal(addLocalMediaProfilePath({video: 'movies', siteKey: 'dailywire'}), '/add-local-media-profile?type=video&for=movies&site=dailywire')
     assert.equal(addLocalMediaProfilePath({siteKey: 'dailywire'}), '/add-local-media-profile?type=video&site=dailywire')
+    // The form names what the link came from, when it says.
+    assert.equal(addLocalMediaProfilePath({collectionType: 'series', from: 'Marques Brownlee'}), '/add-local-media-profile?type=collection&for=series&from=Marques+Brownlee')
 })

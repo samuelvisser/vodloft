@@ -124,6 +124,8 @@ export type LocalMediaProfileFit = {
     /** The page to go back to once the profile is created or the form is cancelled, such as the Download Profile
      *  form the user came from. The new profile's id is added to it as ``localMediaProfile``. */
     returnTo?: string
+    /** The name of what the link comes from, such as the collection's title, which the form's notes name. */
+    from?: string | null
 }
 
 /** A page of VODLoft to return to, from a link: a path on this site, never another site. */
@@ -135,7 +137,7 @@ export function safeReturnPath(value: string | null | undefined): string | undef
  *  collection, for Music tracks when it is a Music collection on a Site with sound only and for Music videos when it is
  *  another Music collection, and a Video profile for a video or movie. The rest starts as broad as it can, for every
  *  Site, for both podcasts and series, and for both videos and movies. */
-export function addLocalMediaProfilePath({collectionType, video, siteKey, audio = false, format, returnTo}: LocalMediaProfileFit = {}): string {
+export function addLocalMediaProfilePath({collectionType, video, siteKey, audio = false, format, returnTo, from}: LocalMediaProfileFit = {}): string {
     const params = new URLSearchParams()
     if (collectionType === undefined) {
         params.set('type', 'video')
@@ -149,6 +151,7 @@ export function addLocalMediaProfilePath({collectionType, video, siteKey, audio 
     if (siteKey) params.set('site', siteKey)
     if (format) params.set('format', format)
     if (returnTo) params.set('returnTo', returnTo)
+    if (from) params.set('from', from)
     return `/add-local-media-profile?${params}`
 }
 

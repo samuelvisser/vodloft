@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef} from 'react'
 import {Controller, useForm, useWatch} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {Link, useNavigate, useSearchParams} from 'react-router-dom'
+import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionEpisodeTags, useCollectionSeasons, useCollections} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
@@ -9,7 +9,7 @@ import {
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
-import {addLocalMediaProfilePath, isCollectionContext, safeReturnPath, isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {safeReturnPath, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {SelectRegistry} from "../../utils/selectRegistry";
 import {buildCollectionSelectRegistry, EpisodeIdentifierReg} from "../../types/collection";
 import {useQueryClient} from "@tanstack/react-query";
@@ -18,6 +18,7 @@ import ReadMore from "../../utils/ReadMore";
 import {apiUrl} from '../../lib/api'
 import {PreferredFormatReg} from '../../types/local_media_profile'
 import RequestedField, {RequestedFieldsProvider} from '../../components/common/RequestedField'
+import LocalMediaProfileFitNote, {useLocalMediaProfileFits} from '../../components/DownloadProfile/LocalMediaProfileFitNote'
 import './AddDownloadProfilePage.css'
 
 export default function AddDownloadProfilePage() {
@@ -45,12 +46,8 @@ export default function AddDownloadProfilePage() {
         [collections, collectionId],
     )
     const episodeIdentifier = selectedCollection?.episodeIdentifier
-    const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(
-        mediaProfiles,
-        'collection',
-        isCollectionContext(selectedCollection?.type) ? selectedCollection.type : undefined,
-        selectedCollection?.site?.key,
-    )
+    // Every Collection profile can be chosen; one that doesn't fit the collection says so under the field.
+    const mediaProfileReg: SelectRegistry = useLocalMediaProfileSelectRegistry(mediaProfiles, 'collection')
 
     const selectCollection = useCallback((id: number) => {
         setValue('collectionId', id, {shouldDirty: true, shouldValidate: true})
@@ -143,31 +140,23 @@ export default function AddDownloadProfilePage() {
             .map((profile) => profile.localMediaProfileId),
     ), [collectionProfiles, selectedCollection?.id])
 
-    // The profiles this collection can still take that download the format a link asks for.
-    const matchingProfile = selectedCollection && requestedPreferredFormat ? mediaProfiles?.find((profile) => (
-        profile.preferredFormat === requestedPreferredFormat
-        && isCollectionLocalMediaProfileAvailableFor(profile, selectedCollection.type)
-        && isLocalMediaProfileAvailableForSite(profile, selectedCollection.site?.key)
-        && !usedLocalMediaProfiles.has(profile.id)
-    )) : undefined
-    // None does yet: the user can add one, for this collection and the format, and come back.
-    const noMatchingProfile = !!selectedCollection && !!requestedPreferredFormat && Array.isArray(mediaProfiles)
-        && !!collectionProfiles && !matchingProfile
-    // Where a profile created from here sends the user back to: this form, as the link opened it.
+    // The profile this collection can still take that fits it and downloads the format a link asks for.
+    const profileFits = useLocalMediaProfileFits(selectedCollection, requestedPreferredFormat)
+    const matchingProfile = selectedCollection && requestedPreferredFormat
+        ? mediaProfiles?.find((profile) => profileFits(profile) && !usedLocalMediaProfiles.has(profile.id))
+        : undefined
+    // Where a profile created from here sends the user back to: this form, as the link opened it, for this collection.
     const returnHere = useMemo(() => {
         const params = new URLSearchParams(searchParams)
         params.delete('localMediaProfile')
+        if (selectedCollection) params.set('collection', selectedCollection.slug)
         return `/add-download-profile?${params}`
-    }, [searchParams])
+    }, [searchParams, selectedCollection])
     const applyRequestedFormat = () => {
         if (!selectedCollection || !Array.isArray(mediaProfiles) || !collectionProfiles) return false
         // The list can still be the one from before the profile was created, until it loads again.
         if (requestedProfileId && !mediaProfiles.some((profile) => profile.id === requestedProfileId)) return false
-        const created = mediaProfiles.find((profile) => profile.id === requestedProfileId && (
-            isCollectionLocalMediaProfileAvailableFor(profile, selectedCollection.type)
-            && isLocalMediaProfileAvailableForSite(profile, selectedCollection.site?.key)
-            && !usedLocalMediaProfiles.has(profile.id)
-        ))
+        const created = mediaProfiles.find((profile) => profile.id === requestedProfileId && !usedLocalMediaProfiles.has(profile.id))
         if (created) setValue('localMediaProfileId', created.id, {shouldDirty: false, shouldValidate: true})
         else if (matchingProfile) setValue('localMediaProfileId', matchingProfile.id, {shouldDirty: false, shouldValidate: true})
     }
@@ -179,9 +168,6 @@ export default function AddDownloadProfilePage() {
             : [],
     ), [mediaProfiles, requestedPreferredFormat])
     const localMediaProfileId = watch('localMediaProfileId')
-    const selectedMediaProfile = mediaProfiles?.find((profile) => profile.id === localMediaProfileId)
-    const otherFormatSelected = !!requestedPreferredFormat && !!selectedMediaProfile
-        && !requestedFormatProfiles.has(selectedMediaProfile.id)
 
     return (
         <section className="view" aria-labelledby="add-download-profile-title">
@@ -240,26 +226,6 @@ export default function AddDownloadProfilePage() {
                         requested={requestedPreferredFormat ?? requestedProfileId}
                         value={localMediaProfileId}
                         apply={applyRequestedFormat}
-                        fits={() => !otherFormatSelected && !noMatchingProfile}
-                        incompatible={requestedPreferredFormat && (noMatchingProfile ? (
-                            <span className="requested-note__with-action">
-                                <span>No Local Media Profile for this collection downloads {PreferredFormatReg.getLabel(requestedPreferredFormat)} yet.</span>
-                                <Link
-                                    className="btn btn-small"
-                                    to={addLocalMediaProfilePath({
-                                        collectionType: selectedCollection?.type ?? null,
-                                        siteKey: selectedCollection?.site?.key,
-                                        audio: selectedCollection?.site?.audio,
-                                        format: requestedPreferredFormat,
-                                        returnTo: returnHere,
-                                    })}
-                                >
-                                    Create one for {PreferredFormatReg.getLabel(requestedPreferredFormat)}
-                                </Link>
-                            </span>
-                        ) : selectedMediaProfile && <>
-                            This Local Media Profile downloads {PreferredFormatReg.getLabelLoose(selectedMediaProfile.preferredFormat)}, not the requested {PreferredFormatReg.getLabel(requestedPreferredFormat)}.
-                        </>)}
                     >
                     <Controller
                         control={form.control}
@@ -294,6 +260,14 @@ export default function AddDownloadProfilePage() {
                         )}
                     />
                     </RequestedField>
+                    <LocalMediaProfileFitNote
+                        profiles={mediaProfiles}
+                        selectedId={localMediaProfileId}
+                        used={usedLocalMediaProfiles}
+                        collection={selectedCollection}
+                        format={requestedPreferredFormat}
+                        returnTo={returnHere}
+                    />
                     {errors.localMediaProfileId && (
                         <div id="local-media-profile-errors" className="error" role="alert" aria-live="polite">
                             {errors.localMediaProfileId.message as string}

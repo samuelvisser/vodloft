@@ -1,6 +1,6 @@
 import {createContext, type ReactNode, useContext} from 'react'
 
-import RequestedField from '../common/RequestedField'
+import RequestedField, {useRequestedOrigin} from '../common/RequestedField'
 import type {LocalMediaProfileType} from '../../types/local_media_profile'
 
 /** What a profile form was opened for, from a link on the page of a collection, video or movie: the profile type,
@@ -23,15 +23,20 @@ export function useProfileFit(mode: LocalMediaProfileType): ProfileFit {
     return !fit.type || fit.type === mode ? fit : {}
 }
 
-/** What each Available for a link asks for is, the choices that fit it, and how a profile for the other kinds
- *  starts out when the link widens it. */
-const SCOPE_FITS: Record<string, {subject: string, fits: readonly string[], needs: string}> = {
-    podcast: {subject: 'podcast', fits: ['podcast', 'both'], needs: 'Podcasts, or Podcasts and Series'},
-    series: {subject: 'series', fits: ['series', 'both'], needs: 'Series, or Podcasts and Series'},
-    music_tracks: {subject: 'Music collection', fits: ['music_tracks'], needs: 'Music tracks'},
-    music_videos: {subject: 'Music collection', fits: ['music_videos'], needs: 'Music videos'},
-    videos: {subject: 'video', fits: ['videos', 'both'], needs: 'Videos, or Videos and movies'},
-    movies: {subject: 'movie', fits: ['movies', 'both'], needs: 'Movies, or Videos and movies'},
+/** The choices of Available for that fit what a link asks for, broadest last, and how to name them. */
+const SCOPE_FITS: Record<string, {fits: readonly string[], needs: string}> = {
+    podcast: {fits: ['podcast', 'both'], needs: 'Podcasts, or Podcasts and Series'},
+    series: {fits: ['series', 'both'], needs: 'Series, or Podcasts and Series'},
+    music_tracks: {fits: ['music_tracks'], needs: 'Music tracks'},
+    music_videos: {fits: ['music_videos'], needs: 'Music videos'},
+    videos: {fits: ['videos', 'both'], needs: 'Videos, or Videos and movies'},
+    movies: {fits: ['movies', 'both'], needs: 'Movies, or Videos and movies'},
+}
+
+/** Where the user came from, for a note: the name the link gives, or "where you came from". */
+export function OriginName({prefix}: {prefix: string}) {
+    const origin = useRequestedOrigin()
+    return origin ? <>{prefix} <strong>{origin}</strong></> : <>where you came from</>
 }
 
 /** Whether a profile available for ``scope`` is offered for what the link asks for. */
@@ -72,7 +77,7 @@ export function ScopeRequestedField({mode, scope, apply, children}: {
                 return next === (scope ?? 'both') ? [] : apply(next)
             }}
             fits={() => scopeFits(fit.scope, scope)}
-            incompatible={wanted && <>This profile won't be offered for the {wanted.subject} you came from, which needs {wanted.needs}.</>}
+            incompatible={wanted && <>This profile won't be offered <OriginName prefix="for"/>, which needs {wanted.needs}.</>}
         >
             {children}
         </RequestedField>

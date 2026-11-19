@@ -29,7 +29,7 @@ import {
     loadLocalMediaProfileDraft,
     saveLocalMediaProfileDraft,
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
-import {RequestedFieldsProvider} from '../../components/common/RequestedField'
+import {RequestedFieldsProvider, requestedOrigin} from '../../components/common/RequestedField'
 import {ProfileFitProvider} from '../../components/LocalMediaProfile/ProfileFit'
 import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
 import {apiUrl} from '../../lib/api'
@@ -233,7 +233,7 @@ export default function EditLocalMediaProfilePage() {
                     <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(profile.type)}</div>
                 </div>
 
-                <RequestedFieldsProvider mode="edit" ready={draftReady}>
+                <RequestedFieldsProvider mode="edit" ready={draftReady} origin={requestedOrigin(searchParams)}>
                     <ProfileFitProvider value={{type: profile.type, scope: searchParams.get('for'), site: searchParams.get('site')}}>
                         <LocalMediaProfileForm form={form} mode={profileMode(profile.type)} isCreating={false}/>
                     </ProfileFitProvider>

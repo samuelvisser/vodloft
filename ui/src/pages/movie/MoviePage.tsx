@@ -663,7 +663,7 @@ export default function MoviePage() {
                     ) : (
                         <div className="movie-profile-empty">
                             <p>Create a Video Local Media Profile for The Daily Wire before downloading a movie or extra.</p>
-                            <Link className="btn" to={addLocalMediaProfilePath({video: 'movies', siteKey: localMovie?.site?.key ?? DAILYWIRE_SOURCE_KEY})}>Create profile</Link>
+                            <Link className="btn" to={addLocalMediaProfilePath({video: 'movies', siteKey: localMovie?.site?.key ?? DAILYWIRE_SOURCE_KEY, from: movie.title})}>Create profile</Link>
                         </div>
                     )}
                 </aside>

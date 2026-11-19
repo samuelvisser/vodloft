@@ -8,7 +8,7 @@ import {createSelectRegistry} from '../../utils/selectRegistry'
 import ReadMore from '../../utils/ReadMore'
 import SelectAllLabel from '../common/SelectAllLabel'
 import RequestedField from '../common/RequestedField'
-import {useProfileFit} from './ProfileFit'
+import {OriginName, useProfileFit} from './ProfileFit'
 
 const UPCOMING_SITES = '__upcoming__'
 
@@ -73,7 +73,7 @@ export default function LocalMediaProfileSitesField({form, mode}: {
                     if (!current.includes(fit.site!)) setValue('siteKeys', [...current, fit.site!], {shouldDirty: true, shouldValidate: true})
                 }}
                 fits={() => !siteKeys || siteKeys.includes(fit.site!)}
-                incompatible={<>This profile won't be offered for {available.find((site) => site.key === fit.site)?.name}, where you came from.</>}
+                incompatible={<>Without {available.find((site) => site.key === fit.site)?.name}, this profile won't be offered <OriginName prefix="for"/>.</>}
             >
                 <Select
                     inputId="mp-sites"
