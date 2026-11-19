@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.episode import *
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor, keyset_after, KeysetField
-from backend.db.models import Collection, LinkSeason, LinkSeasonItem
+from backend.db.models import Collection, CollectionList, CollectionListItem
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
@@ -133,9 +133,9 @@ def _episode_view_stmt(
     if season_id is not None:
         # A link season shows its videos in its Site's order, as its playlist or album lists them.
         position = (
-            select(LinkSeasonItem.position)
-            .join(LinkSeason, LinkSeason.id == LinkSeasonItem.link_season_id)
-            .where(LinkSeason.season_id == season_id, LinkSeasonItem.source_slug == Episode.source_slug)
+            select(CollectionListItem.position)
+            .join(CollectionList, CollectionList.id == CollectionListItem.list_id)
+            .where(CollectionList.season_id == season_id, CollectionListItem.source_slug == Episode.source_slug)
             .scalar_subquery()
         )
         stmt = stmt.where(Episode.season_id == season_id)
@@ -518,14 +518,14 @@ def _episode_or_404(s: Session, episode_slug: str) -> Episode:
 
 def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPIRead:
     """Where the episode belongs now that its collection's playlists changed. Reading only: nothing is made."""
-    from backend.services.link_seasons import belongs_elsewhere, link_season_names
+    from backend.services.link_seasons import belongs_elsewhere, list_names
 
     episode = _episode_or_404(s, episode_slug)
     belonging = belongs_elsewhere(s, episode)
     if belonging is None:
         return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False)
     collection = episode.collection
-    kind = link_season_names(collection).one
+    kind = list_names(collection).one
     if belonging.link is not None:
         season = belonging.link.season
         return EpisodeSeasonPlaceAPIRead(

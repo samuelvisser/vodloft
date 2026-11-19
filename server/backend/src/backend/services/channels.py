@@ -14,7 +14,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Channel, ChannelSection, Collection, LinkSeason
+from backend.db.models import Channel, ChannelSection, Collection, CollectionList
 from backend.services.link_seasons import is_season
 from backend.services.collections import add_collection, index_new_collection, reindex_collection
 from backend.services.errors import ServiceError
@@ -22,7 +22,7 @@ from backend.services.sites import collection_site, site_record
 from backend.types.channel_types import NewSectionAction, SectionStatus, SectionTarget
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
-from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, LinkSeasonStatus
+from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus
 from backend.utils.helpers import generate_uuid, slugify
 from sources import (
     ChannelDetails, ChannelPreset, Feature, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source,
@@ -117,7 +117,7 @@ def sections_in_library(
     if main is not None:
         uploads = _takes_uploads(main)
         on = main.link_seasons != LinkSeasons.OFF.value
-        seasons = {link.ref for link in main.season_links if on and is_season(main, link)}
+        seasons = {link.ref for link in main.lists if on and is_season(main, link)}
         for section in sections:
             if (section.kind == SectionKind.FEED and uploads) or section.ref in seasons:
                 # A collection of its own, such as one of the channel's Shorts, keeps it before the channel's.
@@ -239,19 +239,19 @@ def _make_seasons(channel: Channel, main: Collection, refs: set[str]) -> None:
         every = lists <= refs and NewSectionAction(channel.new_sections) is NewSectionAction.MAIN
         main.link_seasons = (LinkSeasons.ALL if every else LinkSeasons.SELECTED).value
         main.new_link_seasons = _new_link_seasons(channel).value
-    known = {playlist.ref: playlist for playlist in main.season_links}
+    known = {playlist.ref: playlist for playlist in main.lists}
     for section in channel.sections:
         if section.kind != SectionKind.LIST:
             continue
         playlist = known.get(section.ref)
         if playlist is None:
-            main.season_links.append(LinkSeason(
+            main.lists.append(CollectionList(
                 ref=section.ref, url=section.url, title=section.title, image_path=section.image_path,
                 item_count=section.item_count, site_position=section.site_position, enabled=section.ref in refs,
-                status=LinkSeasonStatus.KNOWN.value,
+                status=ListStatus.KNOWN.value,
             ))
         elif section.ref in refs:
-            playlist.enabled, playlist.status = True, LinkSeasonStatus.KNOWN.value
+            playlist.enabled, playlist.status = True, ListStatus.KNOWN.value
 
 
 def _place(

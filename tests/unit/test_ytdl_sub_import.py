@@ -441,7 +441,7 @@ def test_an_imported_tv_show_collection_has_its_playlists_as_seasons_in_ytdl_sub
 
     guitar = session.scalar(select(Collection).where(Collection.title == "Beyond the Guitar"))
     assert guitar.sharing_url == "https://www.youtube.com/c/BeyondTheGuitar"
-    assert [(link.url, link.season.season_number, link.season.name) for link in guitar.season_links] == [
+    assert [(link.url, link.season.season_number, link.season.name) for link in guitar.lists] == [
         ("https://www.youtube.com/playlist?list=PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W", 2, "Music Videos"),
     ]
     # Its files are named by ytdl-sub's numbers, so those stay.
@@ -493,7 +493,7 @@ def test_an_imported_discography_adds_the_artist_with_each_album_a_season(instal
     assert (collection.channel_id, collection.type) == (channel.id, "music")
     # The artist's page is the collection, and each album a link season of it.
     assert collection.sharing_url == "https://emilyharpist.bandcamp.com"
-    assert [(link.title, link.enabled) for link in collection.season_links] == [("Harp", True)]
+    assert [(link.title, link.enabled) for link in collection.lists] == [("Harp", True)]
     assert session.scalar(select(LocalMediaProfileBase.type).where(LocalMediaProfileBase.name == "Bandcamp")) == "music"
 
 
@@ -548,7 +548,7 @@ def test_an_imported_collection_joins_the_channel_behind_its_link(installation, 
     guitar = session.scalar(select(Collection))
     assert (guitar.channel_id, channel.main_collection_id) == (channel.id, guitar.id)
     # The playlist is no section of the channel's here, but it stays a season of the collection.
-    assert [link.ref for link in guitar.season_links] == ["PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W"]
+    assert [link.ref for link in guitar.lists] == ["PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W"]
 
 
 def test_only_an_import_that_knows_channels_offers_them(tmp_path):

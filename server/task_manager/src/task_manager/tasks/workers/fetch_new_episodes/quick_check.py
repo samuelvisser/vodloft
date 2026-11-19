@@ -22,7 +22,7 @@ from config.network import is_no_internet_error
 from sources import Feature, Source, get_source
 from backend.services.notifications.emitters import link_seasons_found
 from backend.services.link_seasons import (
-    holds_only_link_seasons, list_season_links, place_in_link_seasons, link_seasons_on, save_season_links,
+    holds_only_link_seasons, list_lists, place_in_link_seasons, link_seasons_on, save_lists,
 )
 from ...helpers.listed_collections import (
     add_listed_episodes, index_listed_collection, known_episode_slugs, splits_chapters, with_chapters,
@@ -116,14 +116,14 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
     listing = None
     if playlists:
         collection = s.get(Collection, collection_id)
-        listing = list_season_links(s, collection, source) if collection is not None else None
+        listing = list_lists(s, collection, source) if collection is not None else None
         s.rollback()
 
     def save(w: Session) -> int:
         added = add_listed_episodes(w, collection_id=collection_id, found=found)
         collection = w.get(Collection, collection_id)
         if collection is not None and listing is not None:
-            link_seasons_found(w, collection, save_season_links(w, collection, listing))
+            link_seasons_found(w, collection, save_lists(w, collection, listing))
             place_in_link_seasons(w, collection)
         return added
 

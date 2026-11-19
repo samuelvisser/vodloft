@@ -22,7 +22,7 @@ class NewLinkSeasonAction(StrEnum):
     """Leave it off."""
 
 
-class LinkSeasonStatus(StrEnum):
+class ListStatus(StrEnum):
     KNOWN = "known"
     NEW = "new"
     """Found after the collection was set up, waiting for the user's choice."""

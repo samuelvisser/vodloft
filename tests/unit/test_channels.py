@@ -124,7 +124,7 @@ def test_adding_a_channel_makes_its_collection_with_its_playlists_as_seasons(cli
     assert CollectionAPIRead.model_validate(main).channel_slug == "workshop"
     # Every playlist of the channel is known to it, and the ones picked are its seasons.
     assert main.link_seasons == "selected"
-    assert [(link.ref, link.enabled) for link in main.season_links] == [
+    assert [(link.ref, link.enabled) for link in main.lists] == [
         ("PLcabin", True), ("PLtools", False), ("PLmembers", False),
     ]
     # The section nobody keeps stays on the channel page.

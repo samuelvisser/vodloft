@@ -69,7 +69,7 @@
 .seasons-dialog-link-copy,
 .seasons-dialog-season-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .seasons-dialog-link-copy > span,
-.seasons-dialog-season-copy > span:not(.error) { opacity: .75; font-size: .875rem; }
+.seasons-dialog-season-copy > span:not(.error):not(.seasons-dialog-season-lists) { opacity: .75; font-size: .875rem; }
 
 .seasons-dialog-badge {
     display: inline-block;
@@ -113,3 +113,46 @@
 .seasons-dialog-added.is-removed b { text-decoration: line-through; opacity: .6; }
 .seasons-dialog-add-link { display: flex; gap: .5rem; align-items: center; }
 .seasons-dialog-add-link .input { flex: 1 1 auto; min-width: 0; }
+
+.seasons-dialog-season-lists {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+}
+
+.seasons-dialog-list-names {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.seasons-dialog-list-name {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.seasons-dialog-join {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.seasons-dialog-join > div {
+    flex: 1;
+    min-width: 0;
+    max-width: 22rem;
+}
+
+.seasons-dialog-joins {
+    font-size: 0.85rem;
+    font-style: italic;
+    color: var(--muted);
+}
+
+.seasons-dialog-list-name .btn { white-space: nowrap; }

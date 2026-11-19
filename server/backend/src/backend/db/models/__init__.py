@@ -18,7 +18,7 @@ from .user import User, UserAccess, UserSourceAccess
 from .Collection import Collection
 from .CollectionLocalAsset import CollectionLocalAsset
 from .Channel import Channel, ChannelSection
-from .LinkSeason import LinkSeason, LinkSeasonItem
+from .CollectionList import CollectionList, CollectionListItem
 from .Metadata import Metadata
 from .CustomIndexState import CustomIndexState
 from .ExistingFileScan import ExistingFileScan

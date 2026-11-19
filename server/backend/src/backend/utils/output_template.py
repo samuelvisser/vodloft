@@ -492,10 +492,7 @@ def _channel_values(episode: "Episode") -> dict[str, str]:
     """The episode's channel, and which of the channel's sections it is in: the playlist that is its season, or the
     section the collection is made from."""
     collection = episode.collection
-    playlist = next(
-        (playlist for playlist in collection.season_links if episode.season_id is not None and playlist.season_id == episode.season_id),
-        None,
-    )
+    playlist = _episode_list(episode)
     if playlist is not None:
         title, kind = playlist.title, "list"
     else:
@@ -510,6 +507,28 @@ def _channel_values(episode: "Episode") -> dict[str, str]:
         "section_title": title,
         "section_kind": kind,
     }
+
+
+def _episode_list(episode: "Episode"):
+    """The list of the episode's season that has it: the season's own list, or, in a season of several lists, the
+    first of them that has the episode."""
+    links = [link for link in episode.collection.lists if episode.season_id is not None and link.season_id == episode.season_id]
+    if len(links) <= 1:
+        return links[0] if links else None
+    from sqlalchemy import select
+    from sqlalchemy.orm import object_session
+
+    from backend.db.models import CollectionListItem
+    from backend.services.season_order import lists_by_season
+
+    s = object_session(episode)
+    if s is None:
+        return links[0]
+    holding = set(s.scalars(select(CollectionListItem.list_id).where(
+        CollectionListItem.list_id.in_([link.id for link in links]), CollectionListItem.source_slug == episode.source_slug,
+    )))
+    ordered = lists_by_season(s, episode.collection).get(episode.season_id, links)
+    return next((link for link in ordered if link.id in holding), ordered[0])
 
 
 def _music_values(episode: "Episode") -> dict[str, str]:

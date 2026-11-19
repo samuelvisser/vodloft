@@ -55,8 +55,8 @@ from backend.services.media_access import lock_refused
 from backend.services.notifications.emitters import link_seasons_found
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
-    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_season_links, place_in_link_seasons, link_seasons_on,
-    save_season_links,
+    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, place_in_link_seasons, link_seasons_on,
+    save_lists,
 )
 from backend.services.metadata_refresh import new_item_metadata_is_final
 from backend.services.pending_episodes import site_follows_pending
@@ -205,7 +205,7 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
     listing = None
     if collection is not None and link_seasons_on(collection):
         update_progress(progress, _PLAYLISTS_PROGRESS, f"Listing the playlists of '{title}' at {source.name}")
-        listing = list_season_links(s, collection, source, also=frozenset(details.slug for details in found))
+        listing = list_lists(s, collection, source, also=frozenset(details.slug for details in found))
     s.rollback()
     if found:
         update_progress(progress, _SAVING_PROGRESS, f"Saving {len(found)} new episodes of '{title}'")
@@ -226,7 +226,7 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
         if collection is None:
             return added
         if listing is not None:
-            link_seasons_found(w, collection, save_season_links(w, collection, listing))
+            link_seasons_found(w, collection, save_lists(w, collection, listing))
         place_in_link_seasons(w, collection)
         return added
 
