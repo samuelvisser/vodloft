@@ -291,7 +291,9 @@ class CollectionIdentificationChangeAPIRequest(RequestBase):
     """The order the collection lists its episodes in from now on; left out, it keeps its own."""
 
 
-class CollectionIdentificationExampleAPIRead(ResponseBase):
+class CollectionIdentificationChangeItemAPIRead(ResponseBase):
+    """One episode that gets a new number."""
+
     title: str
     before: str
     after: str
@@ -317,7 +319,8 @@ class CollectionIdentificationPreviewAPIRead(ResponseBase):
     episode_identifier: EpisodeIdentifier = Field(validation_alias="identification")
     episodes: int
     episodes_renumbered: int
-    examples: list[CollectionIdentificationExampleAPIRead]
+    changes: list[CollectionIdentificationChangeItemAPIRead]
+    """Every episode that gets a new number, newest first."""
     become_auxiliary: int
     profiles: list[CollectionIdentificationProfileFilesAPIRead]
     download_profiles: list[CollectionIdentificationDownloadProfileAPIRead]

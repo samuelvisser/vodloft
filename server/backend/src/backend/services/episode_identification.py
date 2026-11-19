@@ -64,7 +64,6 @@ _IDENTIFIER_FIELDS = frozenset({
     "episode_identifier", "episode_label", "episode_number", "episode_sub_number", "episode_type",
     "episode_extra_type",
 })
-_EXAMPLES = 3
 _EARLIEST = datetime.min.replace(tzinfo=timezone.utc)
 
 
@@ -80,7 +79,9 @@ class IdentificationPlan:
 
 
 @dataclass(frozen=True)
-class IdentificationExample:
+class IdentificationChange:
+    """One episode that gets a new identifier."""
+
     title: str
     before: str
     after: str
@@ -112,7 +113,8 @@ class IdentificationPreview:
     identification: EpisodeIdentifier
     episodes: int
     episodes_renumbered: int
-    examples: list[IdentificationExample]
+    changes: list[IdentificationChange]
+    """Every episode that gets a new identifier, newest first."""
     become_auxiliary: int
     """Main episodes that get an auxiliary number, because their Source gives them none under this identification."""
     profiles: list[ProfileFilesChange]
@@ -333,11 +335,11 @@ def preview_identification(
     episodes = {episode.id: episode for episode in _episodes(s, collection)}
     changed = [episodes[episode_id] for episode_id in plan.identifiers]
     newest_first = sorted(changed, key=lambda episode: (_published(episode), episode.id), reverse=True)
-    examples = [
-        IdentificationExample(
+    changes = [
+        IdentificationChange(
             title=episode.title, before=_label(episode.episode_identifier), after=_label(plan.identifiers[episode.id]),
         )
-        for episode in newest_first[:_EXAMPLES]
+        for episode in newest_first
     ]
     become_auxiliary = sum(
         1 for episode in changed
@@ -361,7 +363,7 @@ def preview_identification(
 
     download_profiles = _download_profile_changes(s, collection, list(episodes.values()), plan)
     return IdentificationPreview(
-        identification=identification, episodes=len(episodes), episodes_renumbered=len(changed), examples=examples,
+        identification=identification, episodes=len(episodes), episodes_renumbered=len(changed), changes=changes,
         become_auxiliary=become_auxiliary, profiles=profiles, download_profiles=download_profiles,
         busy=busy,
     )

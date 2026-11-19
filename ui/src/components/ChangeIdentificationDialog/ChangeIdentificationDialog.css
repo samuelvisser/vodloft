@@ -46,3 +46,21 @@
     gap: 10px;
     padding: 12px 0;
 }
+
+/* Opened up, the list holds every renumbered episode and scrolls on its own. */
+.change-identification-dialog .change-identification-examples.is-all {
+    max-height: min(50vh, 420px);
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.change-identification-dialog .change-identification-end {
+    min-height: 1px;
+}
+
+.change-identification-dialog .change-identification-show-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 12px;
+}

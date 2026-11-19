@@ -214,7 +214,8 @@ def test_the_preview_counts_files_to_rename_and_downloads_the_filters_would_leav
 
     assert preview.episodes == 4
     assert preview.episodes_renumbered == 3
-    assert [(example.before, example.after) for example in preview.examples][0] == (
+    assert len(preview.changes) == 3
+    assert [(example.before, example.after) for example in preview.changes][0] == (
         (START + timedelta(days=3)).strftime("%Y-%m-%d %H:%M"), "101",
     )
     assert [(item.name, item.files_renamed) for item in preview.profiles] == [("Plex", 2)]

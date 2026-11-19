@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {useCallback, useEffect, useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import Switch from 'react-switch'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
@@ -9,13 +9,17 @@ import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {EpisodeIdentifierReg, EpisodeOrderReg, type EpisodeIdentifierValue, type EpisodeOrderValue} from '../../types/collection'
+import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
 import './ChangeIdentificationDialog.css'
+
+type IdentificationChange = {title: string; before: string; after: string}
 
 type Preview = {
     episodeIdentifier: EpisodeIdentifierValue
     episodes: number
     episodesRenumbered: number
-    examples: {title: string; before: string; after: string}[]
+    /** Every episode that gets a new number, newest first. */
+    changes: IdentificationChange[]
     becomeAuxiliary: number
     profiles: {name: string; filesRenamed: number}[]
     downloadProfiles: {name: string; removed: number; noLongerWanted: number; newlyWanted: number}[]
@@ -33,6 +37,42 @@ type Props = {
     onDismiss: () => void
     /** The change started: its operation shows on the collection page. */
     onStarted: () => void
+}
+
+// Shown before the list is opened up.
+const EXAMPLES = 3
+// Rows added each time the end of the opened list scrolls into view.
+const PAGE = 50
+
+/** A few renumbered episodes, which open up into a list of all of them that renders more as it scrolls. */
+function ChangeList({changes}: {changes: IdentificationChange[]}) {
+    const [shown, setShown] = useState(EXAMPLES)
+    const all = shown > EXAMPLES
+    const more = useCallback(() => setShown((current) => Math.min(changes.length, current + PAGE)), [changes.length])
+    const {rootRef, endRef} = useLoadMoreOnScroll<HTMLUListElement, HTMLLIElement>(all && shown < changes.length, more)
+    return (
+        <>
+            <ul ref={rootRef} className={`change-identification-examples${all ? ' is-all' : ''}`}>
+                {changes.slice(0, shown).map((change, index) => (
+                    <li key={index}>
+                        <span className="change-identification-numbers">
+                            <span>{change.before}</span>
+                            <span aria-label="becomes"> → </span>
+                            <b>{change.after}</b>
+                        </span>
+                        <span className="change-identification-title">{change.title}</span>
+                    </li>
+                ))}
+                {all && shown < changes.length && <li ref={endRef} className="change-identification-end" aria-hidden="true"/>}
+            </ul>
+            {!all && changes.length > EXAMPLES && (
+                <button type="button" className="btn change-identification-show-all" aria-expanded={false} onClick={more}>
+                    Show all {changes.length.toLocaleString()}
+                    <FontAwesomeIcon icon={faIcon('fass', 'chevron-down')}/>
+                </button>
+            )}
+        </>
+    )
 }
 
 const HOW: Record<EpisodeIdentifierValue, string> = {
@@ -137,22 +177,9 @@ export default function ChangeIdentificationDialog({
                     <p>
                         {preview.episodesRenumbered === 0
                             ? `The episodes of ${collectionTitle} keep their numbers.`
-                            : `${count(preview.episodesRenumbered, 'episode')} of ${preview.episodes} get a new number${preview.examples.length ? ', for example:' : '.'}`}
+                            : `${count(preview.episodesRenumbered, 'episode')} of ${preview.episodes} get a new number${preview.changes.length ? ', for example:' : '.'}`}
                     </p>
-                    {preview.examples.length > 0 && (
-                        <ul className="change-identification-examples">
-                            {preview.examples.map((example) => (
-                                <li key={`${example.before}-${example.after}`}>
-                                    <span className="change-identification-numbers">
-                                        <span>{example.before}</span>
-                                        <span aria-label="becomes"> → </span>
-                                        <b>{example.after}</b>
-                                    </span>
-                                    <span className="change-identification-title">{example.title}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
+                    {preview.changes.length > 0 && <ChangeList changes={preview.changes}/>}
                     {preview.becomeAuxiliary > 0 && (
                         <p>
                             {count(preview.becomeAuxiliary, 'episode has', 'episodes have')} no number of its own to
