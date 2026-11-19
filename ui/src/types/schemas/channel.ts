@@ -89,6 +89,8 @@ export const ChannelPageReadSchema = ChannelReadSchema.extend({
     })),
     sections: z.array(ChannelSectionReadSchema),
     mainCollectionSlug: z.string().nullable(),
+    /** Downloaded episodes the channel places in another of its collections than the one they are in. */
+    reassignedCount: z.number().default(0),
 })
 export type ChannelPageRead = z.infer<typeof ChannelPageReadSchema>
 

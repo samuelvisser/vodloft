@@ -96,6 +96,33 @@ class MovedEpisodesAPIRead(ResponseBase):
     """The episodes that belong in another season now, by slug."""
 
 
+class ReassignedEpisodeAPIRead(ResponseBase):
+    """A downloaded video that its channel places in another of its collections now."""
+
+    episode_slug: str = Field(validation_alias=AliasPath("episode", "slug"))
+    collection_slug: str = Field(validation_alias=AliasPath("target", "collection", "slug"))
+    collection_title: str = Field(validation_alias=AliasPath("target", "collection", "title"))
+
+
+class ReassignedEpisodesAPIRead(ResponseBase):
+    episodes: list[ReassignedEpisodeAPIRead]
+
+
+class ReassignedMoveAPIRead(ResponseBase):
+    """What moving reassigned videos did."""
+
+    episodes: int
+    renamed: int
+    """Downloads whose files move to their new collection."""
+    downloading: int
+    """Downloads that the new collection makes again with its own Local Media Profile; the old files go once they
+    succeed."""
+    operation_ids: list[str]
+    episode_slug: Optional[str] = None
+    """For one episode: the episode in its new collection."""
+    collection_slug: Optional[str] = None
+
+
 class SeasonChangeAPIIn(RequestBase):
     id: int
     name: str = Field(min_length=1, max_length=200)

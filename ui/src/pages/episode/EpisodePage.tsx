@@ -19,7 +19,7 @@ import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge} from '../../components/common/RemovedFromSource'
-import SeasonPlaceNote, {MovedBadge, useMoveToSeason, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
+import SeasonPlaceNote, {MovedBadge, ReassignedBadge, useMoveToCollection, useMoveToSeason, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
 import {can} from '../../lib/access'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
 import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
@@ -116,6 +116,8 @@ export default function EpisodePage() {
     const {data: seasonPlace} = useSeasonPlace(episodeId)
     const moved = !!seasonPlace?.belongsElsewhere
     const {move: moveToSeason, moving: movingToSeason} = useMoveToSeason(episodeId ?? '', collectionId)
+    const reassignedTo = seasonPlace?.collectionTitle ?? null
+    const {move: moveToCollection, moving: movingToCollection} = useMoveToCollection(episodeId ?? '', collectionId)
     const collectionProfiles = profiles?.filter((profile) => (
         isCollectionLocalMediaProfileAvailableFor(profile, collection?.type)
         // A profile limited to other Sites still shows the download it already made.
@@ -267,6 +269,13 @@ export default function EpisodePage() {
                                     operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),
                                 }] : []),
+                                ...(reassignedTo && can('library', 'manage') ? [{
+                                    label: `Move to ${reassignedTo}`,
+                                    description: 'Moves the episode to the collection its channel places it in now, with its files',
+                                    icon: faIcon('fass', 'arrow-right-from-bracket'),
+                                    disabled: movingToCollection,
+                                    onSelect: () => void moveToCollection(),
+                                }] : []),
                                 ...(moved && can('library', 'manage') ? [{
                                     label: 'Move to its new season',
                                     description: 'Moves the episode and renames its files to match',
@@ -299,6 +308,7 @@ export default function EpisodePage() {
                         {episode.drmProtected && <DrmBadge asText/>}
                         <ItemAccessBadge item={episode} asText/>
                         {episode.removedFromSource && <RemovedBadge asText/>}
+                        {reassignedTo && <ReassignedBadge collectionTitle={reassignedTo} asText/>}
                         {moved && <MovedBadge asText/>}
                         <span className={`episode-status${isLive ? ' is-live' : ''}`} title={sourceStatus?.help}>
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}

@@ -138,6 +138,8 @@ class ChannelPageAPIRead(ChannelAPIRead):
     collections: list[ChannelCollectionAPIRead]
     sections: list[ChannelSectionAPIRead]
     main_collection_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("main_collection", "slug"))
+    reassigned_count: int = 0
+    """The downloaded videos that the channel places in another of its collections than the one they are in."""
 
 
 class ChannelAPIUpdate(RequestBase):

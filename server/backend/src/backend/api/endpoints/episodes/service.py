@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.episode import *
+from backend.api.models.collection_seasons import ReassignedMoveAPIRead
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor, keyset_after, KeysetField
 from backend.db.models import Collection, CollectionList, CollectionListItem
 from backend.db.models.media_item import Episode
@@ -520,7 +521,13 @@ def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPI
     """Where the episode belongs now that its collection's playlists changed. Reading only: nothing is made."""
     from backend.services.link_seasons import belongs_elsewhere, list_names
 
+    from backend.services.reassigned import reassignment_of
+
     episode = _episode_or_404(s, episode_slug)
+    reassigned = reassignment_of(s, episode)
+    if reassigned is not None:
+        target = reassigned.target.collection
+        return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False, collection_slug=target.slug, collection_title=target.title)
     belonging = belongs_elsewhere(s, episode)
     if belonging is None:
         return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False)
@@ -539,6 +546,24 @@ def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPI
         str(episode.published_date.year) if not belonging.loose and episode.published_date else None
     )
     return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=True, season_name=name, link_kind=kind)
+
+
+def move_episode_to_its_collection(s: Session, episode_slug: str):
+    """Move a reassigned episode to the collection its channel places it in now, with its files.
+
+    ``s`` is a write transaction's session."""
+    from backend.services.reassigned import move_and_rename, reassignment_of
+
+    reassigned = reassignment_of(s, _episode_or_404(s, episode_slug))
+    if reassigned is None:
+        raise HTTPException(status_code=409, detail="The episode is already in the collection it belongs in")
+    target = reassigned.target.slug, reassigned.target.collection.slug
+    result, operations = move_and_rename(s, [reassigned])
+    s.flush()
+    return ReassignedMoveAPIRead(
+        episodes=result.episodes, renamed=result.renamed, downloading=result.downloading, operation_ids=operations,
+        episode_slug=target[0], collection_slug=target[1],
+    )
 
 
 def move_episode_to_its_season(s: Session, episode_slug: str) -> dict[str, bool | str]:

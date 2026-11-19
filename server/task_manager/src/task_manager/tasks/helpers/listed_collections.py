@@ -53,6 +53,7 @@ from backend.db.models import Collection, Episode, Season
 from backend.db.core import run_write_transaction
 from backend.services.media_access import lock_refused
 from backend.services.notifications.emitters import link_seasons_found
+from backend.services.reassigned import placed_elsewhere, settle_channel
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
     SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, place_in_link_seasons, link_seasons_on,
@@ -146,7 +147,9 @@ def date_based_identifier(s: Session, episode: Episode, published_at: datetime) 
 
 
 def known_episode_slugs(s: Session, collection: Collection) -> frozenset[str]:
-    return frozenset(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id)))
+    """The videos the collection has, and the ones it does not add because another collection of its channel holds
+    them by a list."""
+    return frozenset(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id))) | placed_elsewhere(s, collection)
 
 
 def splits_chapters(collection: Collection) -> bool:
@@ -228,6 +231,7 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
         if listing is not None:
             link_seasons_found(w, collection, save_lists(w, collection, listing))
         place_in_link_seasons(w, collection)
+        settle_channel(w, collection)
         return added
 
     return run_write_transaction(save)
@@ -336,6 +340,8 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
         return 0
 
     known = set(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id, Episode.video_slug.in_(listed))))
+    # A list of another collection of the channel holds it, so it belongs there.
+    known |= placed_elsewhere(s, collection) & set(listed)
     ordered = sorted((details for slug, details in listed.items() if slug not in known), key=lambda details: _order_key(details, now))
 
     placer = _Placer(s, collection, now)

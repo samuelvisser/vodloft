@@ -7,7 +7,7 @@ import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {DrmBadge} from '../common/DrmProtected'
 import {AccessBadge} from '../common/AccessLocked'
 import {RemovedBadge} from '../common/RemovedFromSource'
-import {MovedBadge} from './SeasonPlaceNote'
+import {MovedBadge, ReassignedBadge} from './SeasonPlaceNote'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../common/DurationPill'
 import EpisodeTypePill from './EpisodeTypePill'
@@ -105,10 +105,12 @@ type Props = {
     downloads?: MediaDownloadViewRead[]
     /** Belongs in another season now, and waits for the user to move it there. */
     moved?: boolean
+    /** The collection its channel places the downloaded episode in now, when that is another one. */
+    reassignedTo?: string
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads, moved = false}: Props) {
+export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, reassignedTo}: Props) {
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -152,6 +154,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
                     // Media the account may watch only shows its open lock on its own page.
                     : ep.access && !ep.accessGranted ? <AccessBadge label={ep.accessLabel} description={ep.accessDescription} onCover/>
                     : ep.removedFromSource ? <RemovedBadge onCover/>
+                    : reassignedTo ? <ReassignedBadge collectionTitle={reassignedTo} onCover/>
                     : moved && <MovedBadge onCover/>}
                 {isLive && (
                     <span style={LIVE_BADGE_STYLE} aria-label="Episode is live">

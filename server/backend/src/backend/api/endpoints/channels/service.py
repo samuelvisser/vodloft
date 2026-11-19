@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from backend.api.models.collection_seasons import ReassignedMoveAPIRead
+from backend.services.reassigned import move_and_rename, reassigned_in_channel
 from backend.api.models.channel import (
     ChannelAPICreate, ChannelAPIRead, ChannelAPIUpdate, ChannelLookupAPIRead, ChannelPageAPIRead, ChannelSectionsAPIAdd,
     CollectionChannelLeaveAPIRead, CollectionChannelMatchAPIRead,
@@ -133,6 +135,7 @@ class _ChannelRead:
     episode_count: int
     collections: list = field(default_factory=list)
     sections: list = field(default_factory=list)
+    reassigned_count: int = 0
 
     def __getattr__(self, name):
         return getattr(self.channel, name)
@@ -187,8 +190,19 @@ def channel_page(s: Session, slug: str) -> ChannelPageAPIRead:
     sections = [_Section(section, kept.get(section.ref), titles.get(kept.get(section.ref))) for section in channel.sections]
     return ChannelPageAPIRead.model_validate(_ChannelRead(
         channel, _label(channel), collections_count.get(channel.id, 0), episodes.get(channel.id, 0),
-        collections=collections, sections=sections,
+        collections=collections, sections=sections, reassigned_count=len(reassigned_in_channel(s, channel)),
     ))
+
+
+def move_channel_reassigned(s: Session, slug: str) -> ReassignedMoveAPIRead:
+    """Move every reassigned video of the channel to the collection it belongs in now, with its files.
+
+    ``s`` is a write transaction's session."""
+    result, operations = move_and_rename(s, reassigned_in_channel(s, _channel(s, slug)))
+    s.flush()
+    return ReassignedMoveAPIRead(
+        episodes=result.episodes, renamed=result.renamed, downloading=result.downloading, operation_ids=operations,
+    )
 
 
 def _channel(s: Session, slug: str) -> Channel:
