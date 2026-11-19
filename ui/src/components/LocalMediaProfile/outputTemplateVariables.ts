@@ -30,8 +30,25 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
     {name: 'collection_title', description: 'Collection title'},
     {name: 'collection_author', description: 'Collection author, host or channel name'},
     {name: 'collection_site_id', description: 'The id the site gives the collection, such as a YouTube channel or playlist id'},
-    {name: 'season', description: 'Season URL slug'},
-    {name: 'season_name', description: 'Season name'},
+    {
+        name: 'season',
+        description: 'Season URL slug',
+        readMore: {
+            paragraphs: [
+                'In a Music collection, each album is a season, so <strong>season</strong> holds the album\'s slug.',
+            ],
+        },
+    },
+    {
+        name: 'season_name',
+        description: 'Season name',
+        readMore: {
+            paragraphs: [
+                'In a Music collection, each album is a season, so <strong>season_name</strong> holds the album\'s name, ' +
+                'such as <code>Solar Power</code>. The <strong>album</strong> variable has it too.',
+            ],
+        },
+    },
     {name: 'season_index', description: 'VODLoft internal season index'},
     {
         name: 'season_type',
@@ -52,6 +69,7 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
             paragraphs: [
                 'Normal seasons use their stable media-facing season number, while every extras season uses 0.',
                 'Unlike the internal season_index, this value is designed for media-server paths and is not affected by where extras seasons appear in the source\'s season list.',
+                'In a Music collection, each album is a season, so this is the album\'s number.',
             ],
         },
     },
