@@ -192,6 +192,145 @@ def test_a_youtube_channel_is_read_from_its_tabs_and_playlists_under_the_link_pe
     ]
 
 
+NEW_LIST = SectionRef(
+    "PLbarn", "https://tube.example/playlist?list=PLbarn", "Timber Frame Barn", SectionKind.LIST, kind_label="Playlist", item_count=4,
+)
+
+
+def _one_show(client):
+    plan = [
+        {"ref": "videos", "target": "main"}, {"ref": "streams", "target": "main"},
+        {"ref": "PLcabin", "target": "main", "placement": "one_season"}, {"ref": "shorts", "target": "own"},
+    ]
+    assert client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": plan}).status_code == 201
+
+
+def _follow(session, tube, sections):
+    from backend.db.models import Channel
+    from backend.services.channels import follow_channel
+    from datetime import datetime, timezone
+
+    channel = session.scalar(select(Channel))
+    details = tube.channel_details(ROOT)
+    from dataclasses import replace
+
+    result = follow_channel(session, channel, replace(details, sections=sections), now=datetime.now(timezone.utc))
+    session.commit()
+    return result
+
+
+def test_a_new_playlist_waits_for_a_choice_and_says_so(client, session, tube):
+    from backend.db.models import NotificationEvent
+    from backend.services.notifications.emitters import channel_sections_found
+
+    _one_show(client)
+    result = _follow(session, tube, (NEW_LIST, *SECTIONS))
+    channel_sections_found(session, result.asked[0].channel, result.asked)
+    session.commit()
+
+    assert [section.ref for section in result.asked] == ["PLbarn"]
+    event = session.scalar(select(NotificationEvent))
+    assert (event.title, event.url) == ("New playlist on Northwind Workshop", "/channel/workshop")
+    page = client.get("/api/channels/workshop").json()
+    assert next(s for s in page["sections"] if s["ref"] == "PLbarn")["status"] == "new"
+
+    # Adding it as a season puts it first in the channel's order, in the channel's own collection.
+    page = client.post("/api/channels/workshop/sections", json={"sections": [
+        {"ref": "PLbarn", "target": "main", "placement": "one_season"},
+    ]}).json()
+    assert [entry["ref"] for entry in page["order"]] == ["PLbarn", "PLcabin", "streams", "shorts", "videos"]
+    assert next(c for c in page["collections"] if c["slug"] == page["mainCollectionSlug"])["links"] == [
+        "Timber Frame Barn", "Building the Cabin", "Live", "Videos",
+    ]
+    assert next(s for s in page["sections"] if s["ref"] == "PLbarn")["status"] == "known"
+
+
+def test_a_channel_set_to_add_new_playlists_as_collections_adds_them(client, session, tube):
+    _one_show(client)
+    assert client.patch("/api/channels/workshop", json={"newSections": "own", "genre": "DIY"}).status_code == 200
+
+    result = _follow(session, tube, (NEW_LIST, *SECTIONS))
+
+    assert [section.ref for section in result.added] == ["PLbarn"]
+    page = client.get("/api/channels/workshop").json()
+    barn = next(c for c in page["collections"] if c["slug"] == "PLbarn")
+    assert barn["links"] == ["Timber Frame Barn"]
+    from backend.db.models import Collection
+
+    assert session.scalar(select(Collection.genre).where(Collection.slug == "PLbarn")) == "DIY"
+
+
+def test_ignoring_a_new_playlist_keeps_it_on_the_channel_page(client, session, tube):
+    _one_show(client)
+    _follow(session, tube, (NEW_LIST, *SECTIONS))
+
+    page = client.post("/api/channels/workshop/sections", json={"sections": [{"ref": "PLbarn", "target": "skip"}]}).json()
+
+    assert next(s for s in page["sections"] if s["ref"] == "PLbarn")["status"] == "ignored"
+    # The next look does not ask again.
+    assert _follow(session, tube, (NEW_LIST, *SECTIONS)).asked == []
+
+
+def test_the_channels_genre_follows_to_collections_that_had_it(client, session):
+    from backend.db.models import Collection
+
+    _one_show(client)
+    session.execute(Collection.__table__.update().where(Collection.slug == "UCworkshop-shorts").values(genre="Shorts"))
+    session.commit()
+
+    client.patch("/api/channels/workshop", json={"newSections": "ask", "genre": "Woodworking", "contentRating": "TV-G"})
+
+    session.expire_all()
+    genres = dict(session.execute(select(Collection.slug, Collection.genre)).all())
+    assert genres == {"UCworkshop": "Woodworking", "UCworkshop-shorts": "Shorts"}
+
+
+def test_reordering_a_channel_checks_every_section_is_named_once(client):
+    _one_show(client)
+    page = client.get("/api/channels/workshop").json()
+    order = [entry["ref"] for entry in page["order"]]
+    assert order == ["PLcabin", "streams", "shorts", "videos"]
+
+    assert client.patch("/api/channels/workshop", json={"newSections": "ask", "order": ["videos"]}).status_code == 422
+    page = client.patch("/api/channels/workshop", json={"newSections": "ask", "order": ["shorts", "PLcabin", "streams", "videos"]}).json()
+    assert [entry["ref"] for entry in page["order"]] == ["shorts", "PLcabin", "streams", "videos"]
+
+
+def test_the_daily_look_finds_new_playlists_on_every_channel_and_asks_about_them(client, session, tube, monkeypatch):
+    from dataclasses import replace
+
+    from backend.db.models import Channel, NotificationEvent
+    from task_manager.tasks.workers.follow_channels.service import run_follow_channels
+
+    _one_show(client)
+    details = tube.channel_details(ROOT)
+    monkeypatch.setattr(tube, "channel_details", lambda _ref: replace(details, sections=(NEW_LIST, *SECTIONS), facts=("1.3M subscribers",)))
+
+    result = run_follow_channels(session)
+
+    assert result.data["found"] == 1 and result.data["added"] == 0
+    session.expire_all()
+    channel = session.scalar(select(Channel))
+    assert channel.facts == ["1.3M subscribers"] and channel.checked_at is not None
+    assert session.scalar(select(NotificationEvent.title)) == "New playlist on Northwind Workshop"
+    # Looking again finds nothing new and does not ask twice.
+    assert run_follow_channels(session).data["found"] == 0
+
+
+def test_a_new_section_that_is_already_in_the_library_needs_no_choice(client, session, tube):
+    from backend.db.models import Collection
+
+    _one_show(client)
+    session.add(Collection(
+        uuid="uuid-barn", slug="barn", source_key="tube", title="My barn", sharing_url=NEW_LIST.url,
+        membership_level="FREE", type="series", episode_identifier="seasonal", author_name="x", author_slug="x",
+    ))
+    session.commit()
+
+    result = _follow(session, tube, (NEW_LIST, *SECTIONS))
+
+    assert result.asked == [] and result.added == []
+
 def test_a_failed_lookup_ends_with_what_went_wrong(client, tube, monkeypatch):
     def refuse(ref, progress=lambda step: None):
         progress("Reading the channel")

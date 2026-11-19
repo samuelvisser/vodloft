@@ -7,13 +7,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.api.models.channel import (
-    ChannelAPICreate, ChannelAPIRead, ChannelLookupAPIRead, ChannelPageAPIRead,
+    ChannelAPICreate, ChannelAPIRead, ChannelAPIUpdate, ChannelLookupAPIRead, ChannelPageAPIRead, ChannelSectionsAPIAdd,
 )
-from backend.db.models import Channel, Collection, CollectionLink, Episode
+from backend.db.models import Channel, Collection, CollectionLink, CollectionLinkItem, Episode
 from backend.services import channels
 from backend.services.channels import NewCollectionSettings, SectionPlan
 from backend.services.errors import ServiceError
-from backend.types.channel_types import SectionTarget
+from backend.types.channel_types import NewSectionAction, SectionTarget
+from task_manager.scheduler.transactional import queue_task_after_commit
 from backend.types.collection_link_types import LinkPlacement
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from sources import ChannelDetails, SectionRef, get_source
@@ -93,7 +94,7 @@ def add_channel(s: Session, body: ChannelAPICreate, details: ChannelDetails, *, 
         s, source_key=body.source_key, details=details,
         plans=[SectionPlan(plan.ref, SectionTarget(plan.target), LinkPlacement(plan.placement)) for plan in body.sections],
         settings=NewCollectionSettings(CollectionType(body.type), EpisodeIdentifier(body.episode_identifier), body.membership_level),
-        added_by_id=added_by_id,
+        added_by_id=added_by_id, new_sections=NewSectionAction(body.new_sections),
     )
     s.flush()
     return channel_page(s, channel.slug)
@@ -118,6 +119,7 @@ class _ChannelRead:
     episode_count: int
     collections: list = field(default_factory=list)
     sections: list = field(default_factory=list)
+    order: list = field(default_factory=list)
 
     def __getattr__(self, name):
         return getattr(self.channel, name)
@@ -178,7 +180,10 @@ def channel_page(s: Session, slug: str) -> ChannelPageAPIRead:
     collections = [
         _CollectionRead(
             collection, per_collection.get(collection.id, 0),
-            [titles[link.channel_section_id] for link in collection.links if link.channel_section_id in titles],
+            [
+                titles[link.channel_section_id] for link in sorted(collection.links, key=lambda link: (link.position, link.id))
+                if link.channel_section_id in titles
+            ],
         )
         for collection in sorted(channel.collections, key=lambda c: c.created_at or c.id)
     ]
@@ -186,7 +191,81 @@ def channel_page(s: Session, slug: str) -> ChannelPageAPIRead:
         _Section(section, *kept.get(section.id, (None, None)))
         for section in channel.sections
     ]
+    links = channels.channel_order(channel)
+    listed = dict(s.execute(
+        select(CollectionLinkItem.link_id, func.count()).where(CollectionLinkItem.link_id.in_([link.id for link in links]))
+        .group_by(CollectionLinkItem.link_id)
+    ).all())
+    order = [_OrderEntry(link, listed.get(link.id, 0)) for link in links if link.section is not None]
     return ChannelPageAPIRead.model_validate(_ChannelRead(
         channel, _label(channel), collections_count.get(channel.id, 0), episodes.get(channel.id, 0),
-        collections=collections, sections=sections,
+        collections=collections, sections=sections, order=order,
     ))
+
+
+@dataclass(frozen=True)
+class _OrderEntry:
+    link: CollectionLink
+    video_count: int
+
+    @property
+    def ref(self) -> str:
+        return self.link.section.ref
+
+    @property
+    def title(self) -> str:
+        return self.link.section.title
+
+    @property
+    def kind(self) -> str:
+        return self.link.section.kind
+
+    @property
+    def kind_label(self) -> str | None:
+        return self.link.section.kind_label
+
+    @property
+    def collection_slug(self) -> str:
+        return self.link.collection.slug
+
+    @property
+    def collection_title(self) -> str:
+        return self.link.collection.title
+
+    @property
+    def placement(self) -> str:
+        return self.link.placement
+
+
+def _channel(s: Session, slug: str) -> Channel:
+    channel = s.scalar(select(Channel).where(Channel.slug == slug))
+    if channel is None:
+        raise ChannelNotFoundError(f"Channel '{slug}' not found")
+    return channel
+
+
+def update_channel(s: Session, slug: str, body: ChannelAPIUpdate) -> ChannelPageAPIRead:
+    channel = _channel(s, slug)
+    channels.update_channel_settings(s, channel, channels.ChannelSettings(
+        NewSectionAction(body.new_sections), body.genre, body.content_rating,
+    ))
+    if body.order is not None:
+        channels.set_channel_order(s, channel, body.order)
+    s.flush()
+    return channel_page(s, slug)
+
+
+def add_sections(s: Session, slug: str, body: ChannelSectionsAPIAdd, *, added_by_id: int | None) -> ChannelPageAPIRead:
+    channel = _channel(s, slug)
+    channels.place_sections(
+        s, channel, [SectionPlan(plan.ref, SectionTarget(plan.target), LinkPlacement(plan.placement)) for plan in body.sections],
+        added_by_id=added_by_id,
+    )
+    s.flush()
+    return channel_page(s, slug)
+
+
+def check_channel(s: Session, slug: str) -> None:
+    """Look for the channel's new sections now, as the daily look does."""
+    channel = _channel(s, slug)
+    queue_task_after_commit(s, def_key=channels.FOLLOW_TASK_KEY, resource_type="channel", resource_id=channel.id)

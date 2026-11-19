@@ -97,7 +97,7 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
 
     # Relationships
     site: Mapped[Optional["Site"]] = relationship(lazy="joined")
-    channel: Mapped[Optional["Channel"]] = relationship(back_populates="collections")
+    channel: Mapped[Optional["Channel"]] = relationship(back_populates="collections", foreign_keys=[channel_id])
     episodes: Mapped[list["Episode"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan", order_by="desc(Episode.index)"
     )

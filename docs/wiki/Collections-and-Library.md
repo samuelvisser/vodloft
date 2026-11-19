@@ -158,6 +158,27 @@ A video that appears in more than one place is kept once. It goes to the first p
 
 Collections made from a channel start without Download Profiles; add them on each collection as usual. In the Library, channels show with a round picture next to your collections; the **Kind** filter shows only channels or only collections.
 
+### Following a channel
+
+Once a day VODLoft looks at each channel for playlists or shows it did not have before. **Check now** on the channel's page looks right away. What happens with a new one is up to you, under **When the channel adds a playlist or show** on the Add channel page or in the channel's **Edit** page:
+
+- **Ask me** (the default): VODLoft sends a message and shows the new playlist or show at the top of the channel's page, where you choose to add it to the main collection as a season, give it a collection of its own, or ignore it.
+- **Add to the main collection**: a new playlist becomes a season of the channel's main collection, and a new Daily Wire show keeps its own seasons there.
+- **Add as its own collection**: each new playlist or show becomes a collection.
+- **Ignore**: nothing is added, and you are not asked.
+
+Playlists or shows you skipped stay under **Not in your library** on the channel's page, each with an **Add** button.
+
+### Editing a channel
+
+The channel's **Edit** page holds:
+
+- **When a video is in more than one place**: the order described above, for this channel. Drag the parts, or use the arrows, to put a playlist or Shorts higher. VODLoft then moves the videos that are not downloaded yet to the place that now comes first.
+- **When the channel adds a playlist or show**: the choice described under Following a channel.
+- **Genre** and **Content rating**: written to the NFO file of each of the channel's collections that has none of its own. Changing them here changes the collections that still had the old value.
+
+Output templates can use the channel too: `channel_title`, `channel_handle` and `channel_kind`, and for a video that came from a playlist or show, `section_title` and `section_kind`. See [Local Media Profiles](Local-Media-Profiles#collection-template-variable-reference).
+
 ## NPO Start
 
 Series and programmes from NPO Start (npo.nl) can be added without an NPO account. **Search NPO Start** on the Add media page finds series and programmes by name, or paste a link to a series, season or episode. A series is added as a collection with NPO's own seasons. By default it is a Series identified by season, with NPO's episode numbers, such as S02E05; the Add Collection wizard lets you identify episodes by date or number instead. A programme outside a series is added as a single video.

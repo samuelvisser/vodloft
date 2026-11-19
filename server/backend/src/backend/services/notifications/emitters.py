@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Collection, DownloadProfile, Episode, User
+from backend.db.models import Channel, ChannelSection, Collection, DownloadProfile, Episode, User
 
 from .events import Event, emit
 
@@ -73,4 +73,21 @@ def quick_download_finished(session: Session, *, owner: str | None, title: str) 
     emit(
         session, Event.QUICK_DOWNLOAD_FINISHED, title=f"Ready to save: {title}",
         body="Your Quick download finished.", user_id=user_id, url="/quick-download",
+    )
+
+
+def channel_sections_found(session: Session, channel: Channel, sections: list[ChannelSection]) -> None:
+    """The daily look found sections of a channel that wait for a choice: add them, or ignore them."""
+    if not sections:
+        return
+    names = ", ".join(section.title for section in sections[:3]) + (f" and {len(sections) - 3} more" if len(sections) > 3 else "")
+    labels = {(section.kind_label or "").lower() for section in sections}
+    label = labels.pop() if len(labels) == 1 and "" not in labels else "section"
+    what = label if len(sections) == 1 else f"{label}s"
+    emit(
+        session, Event.CHANNEL_SECTIONS_FOUND,
+        title=f"New {what} on {channel.title}" if len(sections) == 1 else f"{len(sections)} new {what} on {channel.title}",
+        body=f"{names}. Choose on the channel's page whether to add {'it' if len(sections) == 1 else 'them'}.",
+        url=f"/channel/{channel.slug}", data={"channel": channel.title, "sections": [section.title for section in sections]},
+        dedupe_key=f"channel-sections:{channel.id}:{','.join(sorted(section.ref for section in sections))}",
     )

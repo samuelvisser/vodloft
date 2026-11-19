@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.source import SiteAPIRead
-from backend.types.channel_types import SectionTarget
+from backend.types.channel_types import NewSectionAction, SectionTarget
 from backend.types.collection_link_types import LinkPlacement
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -37,6 +37,8 @@ class ChannelSectionAPIRead(ResponseBase):
     collection_slug: Optional[str] = None
     """The collection that keeps the section, when one does."""
     collection_title: Optional[str] = None
+    status: Literal["known", "new", "ignored"] = "known"
+    """For a channel in the Library: "new" when the daily look found it and it waits for a choice."""
 
 
 class SectionPlanAPIRead(ResponseBase):
@@ -90,6 +92,7 @@ class ChannelAPICreate(RequestBase):
     type: CollectionType = CollectionType.SERIES
     episode_identifier: EpisodeIdentifier = EpisodeIdentifier.SEASONAL
     membership_level: DwMembershipLevel = DwMembershipLevel.HIGHEST_ALLOWED
+    new_sections: NewSectionAction = NewSectionAction.ASK
 
 
 class ChannelCollectionAPIRead(ResponseBase):
@@ -122,6 +125,25 @@ class ChannelAPIRead(ResponseBase):
     created_at: datetime
     collection_count: int = 0
     episode_count: int = 0
+    new_sections: NewSectionAction
+    genre: Optional[str] = None
+    content_rating: Optional[str] = None
+    checked_at: Optional[datetime] = None
+    """When VODLoft last looked for new sections."""
+
+
+class ChannelOrderEntryAPIRead(ResponseBase):
+    """A section a collection of the channel takes, in the channel's order."""
+
+    ref: str
+    title: str
+    kind: Literal["feed", "list", "item"]
+    kind_label: Optional[str] = None
+    collection_slug: str
+    collection_title: str
+    placement: LinkPlacement
+    video_count: int = 0
+    """How many videos the section lists."""
 
 
 class ChannelPageAPIRead(ChannelAPIRead):
@@ -129,3 +151,21 @@ class ChannelPageAPIRead(ChannelAPIRead):
 
     collections: list[ChannelCollectionAPIRead]
     sections: list[ChannelSectionAPIRead]
+    order: list[ChannelOrderEntryAPIRead]
+    main_collection_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("main_collection", "slug"))
+
+
+class ChannelAPIUpdate(RequestBase):
+    """Change how VODLoft follows a channel."""
+
+    new_sections: NewSectionAction
+    genre: Optional[str] = Field(default=None, max_length=200)
+    content_rating: Optional[str] = Field(default=None, max_length=50)
+    order: Optional[list[str]] = Field(default=None, max_length=500)
+    """The refs of the sections the channel's collections take, highest first."""
+
+
+class ChannelSectionsAPIAdd(RequestBase):
+    """Add sections of a channel to its collections, or ignore them."""
+
+    sections: list[SectionPlanAPIIn] = Field(min_length=1, max_length=500)

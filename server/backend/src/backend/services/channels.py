@@ -9,21 +9,28 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Channel, ChannelSection, Collection, CollectionLink
-from backend.services.collections import add_collection, index_new_collection
+from backend.services.collections import add_collection, index_new_collection, reindex_collection
 from backend.services.errors import ServiceError
 from backend.services.sites import site_record
-from backend.types.channel_types import SectionTarget
+from backend.types.channel_types import NewSectionAction, SectionStatus, SectionTarget
+from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_link_types import LinkPlacement
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.utils.helpers import generate_uuid, slugify
+from task_manager.scheduler.transactional import queue_task_after_commit
 from sources import (
     ChannelDetails, ChannelPreset, Feature, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source,
 )
+
+
+RECLAIM_TASK_KEY = "reclaim_channel_videos"
+FOLLOW_TASK_KEY = "follow_channels"
 
 
 @dataclass(frozen=True)
@@ -122,16 +129,25 @@ def _unique_slug(s: Session, model, wanted: str) -> str:
 
 @dataclass(frozen=True)
 class NewCollectionSettings:
-    """What every collection made while adding a channel starts with."""
+    """What every collection made from a channel starts with."""
 
     type: CollectionType
     episode_identifier: EpisodeIdentifier
     membership_level: str
 
 
+def _section_record(section: SectionRef, position: int, status: SectionStatus = SectionStatus.KNOWN) -> ChannelSection:
+    return ChannelSection(
+        ref=section.ref, url=section.url, title=section.title, kind=section.kind.value, role=section.role.value,
+        kind_label=section.kind_label, item_count=section.item_count, image_path=section.image_url,
+        description=section.description, access=section.access, has_seasons=section.has_seasons,
+        site_position=position, status=status.value,
+    )
+
+
 def add_channel(
     s: Session, *, source_key: str, details: ChannelDetails, plans: list[SectionPlan], settings: NewCollectionSettings,
-    added_by_id: int | None = None,
+    added_by_id: int | None = None, new_sections: NewSectionAction = NewSectionAction.ASK,
 ) -> tuple[Channel, list[Collection]]:
     """Put a channel in the Library with the collections its sections go to, and start indexing them.
 
@@ -149,62 +165,250 @@ def add_channel(
         uuid=generate_uuid(), slug=_unique_slug(s, Channel, slugify(details.handle or details.title) or details.ref), source_key=source_key,
         site_key=record.key, site_ref=details.ref, url=details.url, title=details.title, handle=details.handle,
         description=details.description, avatar_path=details.avatar_url, banner_path=details.banner_url,
-        links=list(details.links), facts=list(details.facts), added_by_id=added_by_id,
+        links=list(details.links), facts=list(details.facts), added_by_id=added_by_id, new_sections=new_sections.value,
     )
-    channel.sections = [
-        ChannelSection(
-            ref=section.ref, url=section.url, title=section.title, kind=section.kind.value, role=section.role.value,
-            kind_label=section.kind_label, item_count=section.item_count, image_path=section.image_url,
-            description=section.description, access=section.access, has_seasons=section.has_seasons,
-            site_position=position,
-        )
-        for position, section in enumerate(details.sections)
-    ]
+    channel.sections = [_section_record(section, position) for position, section in enumerate(details.sections)]
     s.add(channel)
     s.flush()
-    sections = {section.ref: section for section in channel.sections}
-    kept = sections_in_library(s, source_key, details.ref, details.sections)
     order = {ref: position for position, ref in enumerate(claim_order(list(details.sections)))}
-    wanted = [plan for plan in plans if plan.target is not SectionTarget.SKIP and plan.ref not in kept]
+    collections = _place(s, channel, plans, order, settings, added_by_id=added_by_id)
+    return channel, collections
 
-    groups: list[tuple[SectionRef | None, list[SectionPlan]]] = []
+
+def _place(
+    s: Session, channel: Channel, plans: list[SectionPlan], order: dict[str, int], settings: NewCollectionSettings, *,
+    added_by_id: int | None,
+) -> list[Collection]:
+    """Give the channel's sections to the collections the plans say, with links at ``order`` in the channel's order:
+    the channel's own collection, made when it has none yet, or a new collection each. Starts indexing what changed.
+    Returns the collections it made."""
+    sections = {section.ref: section for section in channel.sections}
+    kept = sections_in_library(s, channel.source_key, channel.site_ref, list(sections.values()))
+    wanted = [plan for plan in plans if plan.target is not SectionTarget.SKIP and plan.ref not in kept]
+    groups: list[tuple[ChannelSection | None, list[SectionPlan]]] = []
     main = [plan for plan in wanted if plan.target is SectionTarget.MAIN]
     if main:
         groups.append((None, main))
-    groups += [(by_ref[plan.ref], [plan]) for plan in wanted if plan.target is SectionTarget.OWN]
+    groups += [(sections[plan.ref], [plan]) for plan in wanted if plan.target is SectionTarget.OWN]
 
-    collections = []
+    def link(plan: SectionPlan) -> CollectionLink:
+        section = sections[plan.ref]
+        section.status = SectionStatus.KNOWN.value
+        return CollectionLink(
+            url=section.url, title=section.title, placement=plan.placement.value, position=order[plan.ref], section=section,
+        )
+
+    made, changed = [], []
     for own, group in groups:
         group = sorted(group, key=lambda plan: order[plan.ref])
-        first = by_ref[group[0].ref]
+        if own is None and channel.main_collection is not None:
+            channel.main_collection.links.extend(link(plan) for plan in group)
+            changed.append(channel.main_collection)
+            continue
+        first = sections[group[0].ref]
         if own is None:
             # The collection is the channel's own uploads, when it takes them.
-            feeds = [by_ref[plan.ref] for plan in group if by_ref[plan.ref].kind is SectionKind.FEED]
-            main_feed = next((feed for feed in feeds if feed.role is SectionRole.MAIN), feeds[0] if feeds else first)
-            title, slug, url, description = details.title, details.ref, main_feed.url, details.description
-            image = details.avatar_url
+            feeds = [sections[plan.ref] for plan in group if sections[plan.ref].kind == SectionKind.FEED]
+            main_feed = next((feed for feed in feeds if feed.role == SectionRole.MAIN), feeds[0] if feeds else first)
+            title, slug, url, description = channel.title, channel.site_ref, main_feed.url, channel.description
+            image = channel.avatar_path
         else:
-            title = own.title if own.kind is not SectionKind.FEED else f"{details.title} {own.title}"
-            slug, url, description, image = section_collection_slug(details.ref, own), own.url, own.description, own.image_url
+            title = own.title if own.kind != SectionKind.FEED else f"{channel.title} {own.title}"
+            slug, url, description, image = section_collection_slug(channel.site_ref, own), own.url, own.description, own.image_path
         collection = Collection(
-            uuid=generate_uuid(), slug=_unique_slug(s, Collection, slug), source_key=source_key, title=title,
+            uuid=generate_uuid(), slug=_unique_slug(s, Collection, slug), source_key=channel.source_key, title=title,
             description=description, sharing_url=url, membership_level=settings.membership_level,
-            type=settings.type.value, episode_identifier=settings.episode_identifier.value, author_name=details.title,
-            author_slug=slugify(details.handle or details.title) or details.ref, thumbnail_landscape_path=image,
-            links=[
-                CollectionLink(
-                    url=by_ref[plan.ref].url, title=by_ref[plan.ref].title, placement=plan.placement.value,
-                    position=order[plan.ref], section=sections[plan.ref],
-                )
-                for plan in group
-            ],
+            type=settings.type.value, episode_identifier=settings.episode_identifier.value, author_name=channel.title,
+            author_slug=slugify(channel.handle or channel.title) or channel.site_ref, thumbnail_landscape_path=image,
+            genre=channel.genre, content_rating=channel.content_rating,
+            links=[link(plan) for plan in group],
         )
-        collection.channel = channel
         add_collection(s, collection, added_by_id=added_by_id)
-        collections.append(collection)
-    for collection in collections:
+        collection.channel = channel
+        if own is None:
+            channel.main_collection = collection
+        made.append(collection)
+    s.flush()
+    for collection in made:
         index_new_collection(s, collection)
-    return channel, collections
+    for collection in changed:
+        reindex_collection(s, collection)
+    return made
+
+
+def _settings_of(channel: Channel) -> NewCollectionSettings:
+    """What a collection added to the channel later starts with: the same as the channel's own collection."""
+    model = channel.main_collection or next(iter(channel.collections), None)
+    if model is None:
+        return NewCollectionSettings(CollectionType.SERIES, EpisodeIdentifier.SEASONAL, DwMembershipLevel.HIGHEST_ALLOWED.value)
+    return NewCollectionSettings(CollectionType(model.type), EpisodeIdentifier(model.episode_identifier), model.membership_level)
+
+
+def channel_order(channel: Channel) -> list[CollectionLink]:
+    """The links of the channel's sections, in the channel's order."""
+    links = [link for collection in channel.collections for link in collection.links if link.channel_section_id is not None]
+    return sorted(links, key=lambda link: (link.position, link.id or 0))
+
+
+def place_sections(s: Session, channel: Channel, plans: list[SectionPlan], *, added_by_id: int | None = None) -> list[Collection]:
+    """Add sections of a channel that is in the Library to its collections, or ignore them. A list goes above
+    everything in the channel's order, as the newest list; a feed goes to its place among the feeds.
+
+    ``s`` is a write transaction's session."""
+    sections = {section.ref: section for section in channel.sections}
+    unknown = [plan.ref for plan in plans if plan.ref not in sections]
+    if unknown:
+        raise ServiceError(f"{channel.title} has no section {unknown[0]}", field="sections")
+    for plan in plans:
+        if plan.target is SectionTarget.SKIP:
+            sections[plan.ref].status = SectionStatus.IGNORED.value
+    adding = [plan for plan in plans if plan.target is not SectionTarget.SKIP]
+    if not adding:
+        return []
+    # Renumber the channel's order with the new sections in it.
+    existing = channel_order(channel)
+    placed = {link.channel_section_id for link in existing}
+    new_refs = [ref for ref in claim_order([_as_ref(sections[plan.ref]) for plan in adding]) if sections[ref].id not in placed]
+    new_lists = [ref for ref in new_refs if sections[ref].kind != SectionKind.FEED]
+    new_feeds = [ref for ref in new_refs if sections[ref].kind == SectionKind.FEED]
+    entries: list[CollectionLink | str] = [*new_lists, *existing]
+    for ref in new_feeds:
+        rank = _FEED_ORDER[SectionRole(sections[ref].role)]
+        at = next(
+            (index for index, entry in enumerate(entries) if isinstance(entry, CollectionLink) and entry.section is not None
+             and entry.section.kind == SectionKind.FEED and _FEED_ORDER[SectionRole(entry.section.role)] > rank),
+            len(entries),
+        )
+        entries.insert(at, ref)
+    order: dict[str, int] = {}
+    for position, entry in enumerate(entries):
+        if isinstance(entry, str):
+            order[entry] = position
+        else:
+            entry.position = position
+    return _place(s, channel, [plan for plan in adding if plan.ref in order], order, _settings_of(channel), added_by_id=added_by_id)
+
+
+def _as_ref(section: ChannelSection) -> SectionRef:
+    return SectionRef(
+        ref=section.ref, url=section.url, title=section.title, kind=SectionKind(section.kind), role=SectionRole(section.role),
+    )
+
+
+def set_channel_order(s: Session, channel: Channel, refs: list[str]) -> None:
+    """Put the channel's sections that are in its collections in the order ``refs`` gives, which decides which
+    collection and link keep a video several of them list. Videos with files stay where they are.
+
+    ``s`` is a write transaction's session."""
+    links = channel_order(channel)
+    by_ref = {link.section.ref: link for link in links if link.section is not None}
+    if sorted(refs) != sorted(by_ref):
+        raise ServiceError("The order must name each section the channel keeps exactly once", field="order")
+    if [link.section.ref for link in links if link.section is not None] == refs:
+        return
+    for position, ref in enumerate(refs):
+        by_ref[ref].position = position
+    s.flush()
+    # The videos the links already list move to the link that keeps them now.
+    queue_task_after_commit(s, def_key=RECLAIM_TASK_KEY, resource_type="channel", resource_id=channel.id)
+
+
+@dataclass(frozen=True)
+class ChannelSettings:
+    new_sections: NewSectionAction
+    genre: str | None
+    content_rating: str | None
+
+
+def update_channel_settings(s: Session, channel: Channel, settings: ChannelSettings) -> None:
+    """Change what happens with the channel's new sections, and the genre and rating its collections get. A
+    collection that had the channel's old genre or rating gets the new one; one with its own keeps it.
+
+    ``s`` is a write transaction's session."""
+    channel.new_sections = settings.new_sections.value
+    for field in ("genre", "content_rating"):
+        old, new = getattr(channel, field), getattr(settings, field) or None
+        if old == new:
+            continue
+        for collection in channel.collections:
+            if getattr(collection, field) in (old, None):
+                setattr(collection, field, new)
+        setattr(channel, field, new)
+
+
+@dataclass(frozen=True)
+class FollowResult:
+    """What the daily look found on a channel."""
+
+    asked: list[ChannelSection]
+    added: list[ChannelSection]
+    ignored: list[ChannelSection]
+
+
+def follow_channel(s: Session, channel: Channel, details: ChannelDetails, *, now: datetime) -> FollowResult:
+    """Take in what the Site says about a channel now: its name, pictures and facts, its sections' titles and counts,
+    and the sections it did not have before, which the channel's setting adds, ignores or asks about. Sections the Site
+    no longer lists stay, with what they hold.
+
+    ``details`` was looked up before the write transaction; ``s`` is a write transaction's session."""
+    for field, value in (
+        ("title", details.title), ("handle", details.handle), ("description", details.description),
+        ("avatar_path", details.avatar_url), ("banner_path", details.banner_url),
+        ("links", list(details.links)), ("facts", list(details.facts)),
+    ):
+        if value and getattr(channel, field) != value:
+            setattr(channel, field, value)
+    channel.checked_at = now
+    known = {section.ref: section for section in channel.sections}
+    found: list[ChannelSection] = []
+    for position, section in enumerate(details.sections):
+        record = known.get(section.ref)
+        if record is None:
+            record = _section_record(section, position, SectionStatus.NEW)
+            channel.sections.append(record)
+            found.append(record)
+            continue
+        for field, value in (
+            ("title", section.title), ("url", section.url), ("item_count", section.item_count),
+            ("image_path", section.image_url), ("description", section.description), ("site_position", position),
+            ("access", section.access), ("kind_label", section.kind_label),
+        ):
+            if getattr(record, field) != value:
+                setattr(record, field, value)
+    s.flush()
+    # A section that is already in the library, such as a show added before the channel, needs no choice, and a
+    # single item, such as a movie, is added from its own page.
+    kept = sections_in_library(s, channel.source_key, channel.site_ref, found)
+    for record in found:
+        if record.ref in kept or record.kind == SectionKind.ITEM:
+            record.status = SectionStatus.KNOWN.value
+    found = [record for record in found if record.ref not in kept and record.kind != SectionKind.ITEM]
+    if not found:
+        return FollowResult([], [], [])
+    action = NewSectionAction(channel.new_sections)
+    # A single item, or a section only some members can watch, is never added by itself.
+    addable = [record for record in found if _usable(_as_ref(record)) and record.access is None]
+    if action is NewSectionAction.IGNORE:
+        for record in found:
+            record.status = SectionStatus.IGNORED.value
+        return FollowResult([], [], found)
+    if action is NewSectionAction.ASK or not addable:
+        return FollowResult(found, [], [])
+    target = SectionTarget.OWN if action is NewSectionAction.OWN else SectionTarget.MAIN
+    plans = [
+        SectionPlan(
+            record.ref, target if record.kind != SectionKind.FEED or target is SectionTarget.OWN else SectionTarget.MAIN,
+            LinkPlacement.ONE_SEASON if target is SectionTarget.MAIN and record.kind == SectionKind.LIST and not record.has_seasons
+            else LinkPlacement.SITE_SEASONS,
+        )
+        for record in addable
+    ]
+    if target is SectionTarget.MAIN:
+        # A show with its own seasons keeps them, so it becomes a collection of its own.
+        seasons = {record.ref for record in addable if record.has_seasons}
+        plans = [SectionPlan(plan.ref, SectionTarget.OWN, plan.placement) if plan.ref in seasons else plan for plan in plans]
+    place_sections(s, channel, plans)
+    return FollowResult([record for record in found if record not in addable], addable, [])
 
 
 def _site_key_of(source_key: str) -> str:

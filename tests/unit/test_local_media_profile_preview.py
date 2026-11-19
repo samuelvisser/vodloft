@@ -46,7 +46,7 @@ def examples(monkeypatch, tmp_path):
     collections = [SimpleNamespace(
         id=number, title=f"Saved Show {number}", slug=f"collection-{number}",
         seasons=[SimpleNamespace(slug="season-1", name="First season", index=1, season_number=1)],
-        meta_items=[SimpleNamespace(key="custom.folder", value="Saved Folder")],
+        meta_items=[SimpleNamespace(key="custom.folder", value="Saved Folder")], channel=None,
     ) for number in (1, 2)]
     episodes = [SimpleNamespace(id=number, collection=collection, values={
         "collection": collection.slug, "collection_title": collection.title,
@@ -265,3 +265,17 @@ def test_item_specific_directory_segment_has_no_shared_collection_root(examples)
     )
     assert result.collection_root.path is None
     assert "No shared collection-specific directory" in result.collection_root.reason
+
+
+def test_a_folder_per_channel_is_above_the_collections_own_folder(examples):
+    channel = SimpleNamespace(title="Northwind Workshop", handle="@northwind", source_key="ytdlp", site_key="youtube")
+    collection = SimpleNamespace(
+        title="Tool Reviews", slug="tool-reviews", seasons=[], meta_items=[], channel=channel,
+    )
+
+    resolution = collection_assets.resolve_collection_media_directory(
+        collection, "/downloads/YouTube/{{ channel_title }}/{{ collection_title }}/{{ season_name }}/{{ title }}.ext",
+        filename_mode=FilenameRestrictionMode.WINDOWS,
+    )
+
+    assert resolution.path == str(examples.root / "YouTube" / "Northwind Workshop" / "Tool Reviews")

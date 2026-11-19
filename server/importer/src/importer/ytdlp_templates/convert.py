@@ -169,6 +169,7 @@ VODLOFT_VARIABLES = frozenset({
     "episode_number", "episode_sub_number", "episode_label", "episode_identifier", "episode_published_date",
     "episode_published_time", "episode_published_datetime", "episode_index", "extra_index",
     "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
+    "channel_title", "channel_handle", "channel_kind", "section_title", "section_kind",
     "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second",
 })
 _MATCH = "ytdlp_match"

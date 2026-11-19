@@ -4,7 +4,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection
-from backend.operations.collections import CollectionIndexOperation
+from backend.operations.collections import CollectionIndexOperation, CollectionSyncOperation
 from backend.services.errors import ServiceError
 from backend.services.sites import place_collection
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -42,6 +42,12 @@ def add_collection(s: Session, collection: Collection, *, added_by_id: int | Non
         collection.membership_level = DwMembershipLevel.FREE.value
     place_collection(s, collection)
     s.add(collection)
+
+
+def reindex_collection(s: Session, collection: Collection) -> None:
+    """List a Collection again, as Sync now does, after its links changed."""
+    s.flush()
+    create_operation(s, CollectionSyncOperation(collection))
 
 
 def index_new_collection(s: Session, collection: Collection) -> None:
