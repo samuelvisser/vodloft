@@ -23,11 +23,6 @@ export function joinedNames(names: Names[]): Names {
     return {one, many: joined(names.map((name) => name.many), 'and'), a: `${article}${one}`}
 }
 
-/** The Site's section type a section is: the one it names, or else the Site's first of its kind. */
-export function sectionTypeOf<T extends {key: string, kind: string}>(types: T[], section: {type?: string | null, kind: string}): T | undefined {
-    return types.find((type) => type.key === section.type) ?? types.find((type) => type.kind === section.kind)
-}
-
 /** What the Site calls its lists, all its types of list together, such as "albums and playlists" on SoundCloud. */
 export function listNames(types: (Names & {kind: string})[]): Names {
     return joinedNames(types.filter((type) => type.kind === 'list'))
@@ -37,12 +32,6 @@ export function listNames(types: (Names & {kind: string})[]): Names {
  * on YouTube or "shows" on The Daily Wire. */
 export function growingNames(types: (Names & {kind: string})[]): Names {
     return joinedNames(types.filter((type) => type.kind === 'list' || type.kind === 'show'))
-}
-
-/** What the Site calls a section, by its type, such as album; VODLoft's own word for its kind where the Site names
- * none. */
-export function sectionName(types: (Names & {key: string, kind: string})[], section: {type?: string | null, kind: string}): Names {
-    return sectionTypeOf(types, section) ?? (section.kind === 'item' ? {one: 'video', many: 'videos', a: 'a video'} : {one: section.kind, many: `${section.kind}s`, a: `a ${section.kind}`})
 }
 
 /** What a creator is, for a label: "YouTube creator" on one Site, "Creator on YouTube and The Daily Wire" on several. */

@@ -74,7 +74,6 @@ def test_a_profile_for_podcasts_and_series_is_not_offered_for_music():
     assert CollectionLocalMediaProfileScope.PODCAST_AND_SERIES.collection_types() == ("podcast", "series")
     assert CollectionLocalMediaProfileScope.MUSIC_TRACKS.collection_types() == ("music",)
     assert CollectionLocalMediaProfileScope.MUSIC_VIDEOS.collection_types() == ("music",)
-    assert CollectionType.MUSIC.by_season and CollectionType.SERIES.by_season and not CollectionType.PODCAST.by_season
 
 
 def test_a_collection_becomes_music_only_when_its_download_profiles_suit_it():

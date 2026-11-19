@@ -44,13 +44,14 @@ function words(names: {season: BackendNames, episode: BackendNames}): Collection
 }
 
 const STORAGE_KEY = 'vodloft.collectionContracts'
-let contracts: {fallback: CollectionWords, types: Map<string, Record<MediaKind, CollectionWords>>} | undefined
+type Contract = Record<MediaKind, CollectionWords> & {downloadsBySeason: boolean}
+let contracts: {fallback: CollectionWords, types: Map<string, Contract>} | undefined
 
 /** Keep the collection contracts the backend gave, which every function here names things from. */
 export function setCollectionContracts(loaded: CollectionContracts) {
     contracts = {
         fallback: words(loaded.words),
-        types: new Map(loaded.types.map((type) => [type.type, {video: words(type.words), audio: words(type.audioWords)}])),
+        types: new Map(loaded.types.map((type) => [type.type, {video: words(type.words), audio: words(type.audioWords), downloadsBySeason: type.downloadsBySeason}])),
     }
 }
 
@@ -72,6 +73,14 @@ export function loadCollectionContracts(loaded: CollectionContracts | undefined)
 export function collectionWords(type: string | null | undefined, kind: MediaKind = 'video'): CollectionWords {
     if (!contracts) throw new Error('The collection contracts are not loaded yet')
     return (type ? contracts.types.get(type)?.[kind] : undefined) ?? contracts.fallback
+}
+
+/** Whether downloads of a collection type pick its seasons, as for a series or an artist's albums, rather than its
+ *  newest episodes, as for a podcast. */
+export function downloadsBySeason(type: string): boolean {
+    const contract = contracts?.types.get(type)
+    if (!contract) throw new Error(`No collection contract for ${type}`)
+    return contract.downloadsBySeason
 }
 
 interface WordedCollection {

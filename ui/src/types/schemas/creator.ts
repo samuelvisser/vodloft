@@ -3,7 +3,7 @@ import {DwMembershipLevelReg} from '../dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg} from '../collection'
 import {ApiDateTimeSchema} from './datetime'
 import {EpisodeReadViewSchema} from './episode'
-import {SectionTypeSchema} from './source'
+import {NamesSchema, SectionTypeSchema} from './source'
 
 export const SectionTargetValues = ['main', 'own', 'skip'] as const
 export const CreatorPresetValues = ['one_show', 'per_list', 'pick'] as const
@@ -16,6 +16,8 @@ export const CreatorSectionReadSchema = z.object({
     role: z.string(),
     /** The key of the Site's section type the section is, such as album. */
     type: z.string(),
+    /** What the Site calls the section's type, or VODLoft's own word for its kind where the Site names none. */
+    names: NamesSchema,
     itemCount: z.number().nullable(),
     imageUrl: z.string().nullable(),
     description: z.string().nullable(),
@@ -76,6 +78,8 @@ export const CreatorLookupReadSchema = z.object({
     sectionTypes: z.array(SectionTypeSchema),
     /** The Site has sound only, such as Bandcamp, so what its lists hold are tracks. */
     audioOnly: z.boolean().default(false),
+    /** What the Site calls one of its videos: a video, or a track on a Site with sound only. */
+    mediaNames: NamesSchema,
     /** The creator's lists can be seasons of its own collection. */
     linkSeasons: z.boolean().default(false),
     /** The creator's single items are movies, which VODLoft adds to the Library and joins to the creator. */
@@ -107,9 +111,11 @@ export const CreatorLookupReadSchema = z.object({
 export type CreatorLookupRead = z.infer<typeof CreatorLookupReadSchema>
 
 const SiteSchema = z.object({
-    key: z.string(), name: z.string(), creatorLabel: z.string().default('creator'), linkSeasons: z.boolean().default(false),
+    key: z.string(), name: z.string(), creatorLabel: z.string(), linkSeasons: z.boolean().default(false),
     /** The Site has sound only, such as Bandcamp. */
     audioOnly: z.boolean().default(false),
+    /** What the Site calls one of its videos: a video, or a track on a Site with sound only. */
+    mediaNames: NamesSchema,
     /** Every type of section the Site's creators have, such as feeds and playlists on YouTube. */
     sectionTypes: z.array(SectionTypeSchema),
 })

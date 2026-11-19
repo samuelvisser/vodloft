@@ -34,7 +34,7 @@ from backend.services.sites import collection_site
 from backend.types.creator_types import SectionTarget
 from task_manager.scheduler.transactional import queue_task_after_commit
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
-from sources import CreatorDetails, Feature, SectionRef, SectionType, get_source
+from sources import CreatorDetails, Feature, SectionRef, SectionType, Site, get_source
 from backend.services.source_requests import asking_source
 
 
@@ -118,6 +118,8 @@ class _Section:
     collection_title: str | None = None
     movie: Movie | None = None
     creator_id: int | None = None
+    section_type: SectionType | None = None
+    """The Site's type of the section, which names it."""
 
     @property
     def movie_slug(self) -> str | None:
@@ -158,6 +160,7 @@ class _Lookup:
     presets: list[_Preset]
     new_lists: list
     music_new_lists: list
+    site: Site
     creator_slug: str | None = None
     links: list[str] = field(default_factory=list)
     facts: list[str] = field(default_factory=list)
@@ -180,7 +183,7 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
         sections=[
             _Section(
                 replace(section, type=site.section_type_of(section).key), kept.get(section.ref),
-                titles.get(kept.get(section.ref)), movies_kept.get(section.ref),
+                titles.get(kept.get(section.ref)), movies_kept.get(section.ref), section_type=site.section_type_of(section),
             )
             for section in details.sections
         ],
@@ -194,6 +197,7 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
         ],
         new_lists=new_sections_settings(list_kinds([site]), None, music=False),
         music_new_lists=new_sections_settings(list_kinds([site]), None, music=True),
+        site=site,
         creator_slug=existing.creator.slug if existing is not None else None,
         links=list(details.links), facts=list(details.facts),
     ))
@@ -383,6 +387,7 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
             _Section(
                 section, kept[account.id].get(section.ref), titles.get(kept[account.id].get(section.ref)),
                 movies_kept[account.id].get(section.ref), creator.id,
+                section_type=creators.account_site(account).section_type_of(section),
             )
             for section in account.sections
         ], creators.takes_movies(account.source_key))

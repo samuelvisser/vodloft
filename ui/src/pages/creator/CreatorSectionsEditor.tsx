@@ -10,15 +10,16 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import {capitalized, growingNames, joinedNames, sectionName} from '../../types/creator'
+import {capitalized, growingNames, joinedNames} from '../../types/creator'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import type {CreatorPageAccountRead, CreatorPageRead, CreatorSectionRead, SectionPlan} from '../../types/schemas/creator'
-import type {SectionType} from '../../types/schemas/source'
+import type {Names} from '../../types/schemas/source'
+import {collectionWords, type Noun} from '../../lib/collectionWords'
 
 /** What the section is and holds, in the words of its Site: "Album · 12 tracks", "Playlist · 4 videos". */
-export function sectionFacts(section: CreatorSectionRead, site: {sectionTypes: SectionType[], audioOnly: boolean}) {
-    const noun = site.audioOnly ? ['track', 'tracks'] : ['video', 'videos']
-    return [capitalized(sectionName(site.sectionTypes, section).one), section.itemCount != null ? `${section.itemCount} ${noun[section.itemCount === 1 ? 0 : 1]}` : null]
+export function sectionFacts(section: CreatorSectionRead, site: {mediaNames: Names}) {
+    const media = site.mediaNames
+    return [capitalized(section.names.one), section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? media.one : media.many}` : null]
         .filter(Boolean).join(' · ')
 }
 
@@ -36,8 +37,8 @@ export function mainTitleOf(creator: CreatorPageRead, account: CreatorPageAccoun
 }
 
 /** What the collection named after the creator calls a season: an album in a Music collection. */
-export function mainSeasonOf(creator: CreatorPageRead, account: CreatorPageAccountRead): string {
-    return creator.collections.find((collection) => collection.slug === account.mainCollectionSlug)?.type === 'music' ? 'album' : 'season'
+export function mainSeasonOf(creator: CreatorPageRead, account: CreatorPageAccountRead): Noun {
+    return collectionWords(creator.collections.find((collection) => collection.slug === account.mainCollectionSlug)?.type).season
 }
 
 /** The ways a section of a creator in the Library can be added, in the words of this creator. */
@@ -55,7 +56,7 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
     if (section.kind === 'feed') {
         options.push({label: `Add to ${mainTitle}`, description: `Its videos go into ${main}`, plan: {ref: section.ref, target: 'main'}})
     } else if (section.kind === 'list' && account.site.linkSeasons) {
-        options.push({label: `${capitalized(season)} of ${mainTitle}`, description: `${/^[aeiou]/.test(season) ? 'An' : 'A'} ${season} of ${main}`, plan: {ref: section.ref, target: 'main'}})
+        options.push({label: `${season.One} of ${mainTitle}`, description: `${capitalized(season.a)} of ${main}`, plan: {ref: section.ref, target: 'main'}})
     }
     options.push({label: 'Own collection', description: 'A collection of its own in your library', plan: {ref: section.ref, target: 'own'}})
     return options
@@ -64,38 +65,37 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
 type Place = 'main' | 'own' | 'skip'
 
 /** What moving a playlist does, in words, before the user says yes. */
-function moveNote({account, section}: AccountSection, to: Place, mainTitle: string, season: string): string {
-    const a = /^[aeiou]/.test(season) ? 'an' : 'a'
-    const noun = sectionName(account.site.sectionTypes, section).one
+function moveNote({section}: AccountSection, to: Place, mainTitle: string, season: Noun): string {
+    const noun = section.names.one
     if (to === 'own') {
         return `${section.title} becomes a collection of its own, and takes its videos out of ${mainTitle}. Downloaded videos `
             + 'take their files along, renamed into the new collection as manual downloads, since it has no Download '
             + 'Profiles yet.'
     }
     if (to === 'main') {
-        return `${section.title} becomes ${a} ${season} of ${mainTitle}, and its videos move there. Downloaded videos take their `
+        return `${section.title} becomes ${season.a} of ${mainTitle}, and its videos move there. Downloaded videos take their `
             + `files along: renamed when ${mainTitle} downloads them with the same Local Media Profile or not at all, and `
             + `downloaded again there when it uses another one; the old files go once that succeeded. The collection `
             + `${section.collectionTitle ?? section.title} goes once it is empty.`
     }
-    return `${section.title} is no longer ${a} ${season} of ${mainTitle}. Its videos go to the ${season} of videos in no ${noun}, `
+    return `${section.title} is no longer ${season.a} of ${mainTitle}. Its videos go to the ${season.one} of videos in no ${noun}, `
         + `and videos of other creators that only this ${noun} brought in leave ${mainTitle}, files and all. It stays listed `
         + 'on this page, so you can add it again.'
 }
 
 /** The places a playlist in the Library can go, in words. */
-function placeLabels(mainTitle: string, season: string): Record<Place, string> {
-    return {main: `${capitalized(season)} of ${mainTitle}`, own: 'Collection of its own', skip: 'Not in your library'}
+function placeLabels(mainTitle: string, season: Noun): Record<Place, string> {
+    return {main: `${season.One} of ${mainTitle}`, own: 'Collection of its own', skip: 'Not in your library'}
 }
 
 /** Where one of the creator's playlists is, and a select to move it, with its videos, somewhere else. */
 function SectionPlace({section, place, mainTitle, season, busy, fitLabels, onMove}: {
-    section: CreatorSectionRead, place: Place, mainTitle: string, season: string, busy: boolean, fitLabels: readonly string[],
+    section: CreatorSectionRead, place: Place, mainTitle: string, season: Noun, busy: boolean, fitLabels: readonly string[],
     onMove: (to: Place) => void,
 }) {
     const registry = useMemo(() => {
         const labels = placeLabels(mainTitle, season)
-        return createSelectRegistry(`SectionPlace-${place}-${mainTitle}-${season}`, {
+        return createSelectRegistry(`SectionPlace-${place}-${mainTitle}-${season.one}`, {
             main: {label: labels.main},
             own: {label: labels.own},
             ...(place === 'main' ? {skip: {label: labels.skip}} : {}),
@@ -247,7 +247,7 @@ export default function CreatorSectionsEditor({creator, part}: {
 
             {part === 'rest' && placed.length > 0 && (
                 <div className="creator-section-group">
-                    <h2>Where the {joinedNames(placed.map(({account, section}) => sectionName(account.site.sectionTypes, section))).many} go</h2>
+                    <h2>Where the {joinedNames(placed.map(({section}) => section.names)).many} go</h2>
                     <div className="creator-section-list">
                         {placed.map((item) => {
                             const mainTitle = mainTitleOf(creator, item.account)

@@ -10,7 +10,6 @@ import CollectionTileArt from '../../components/CollectionTileArt/CollectionTile
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import type {CreatorPageRead, SectionPlan} from '../../types/schemas/creator'
 import {choices, isMovie, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
-import {sectionName} from '../../types/creator'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 
 // Tiles shown before "Show all": two rows on a computer, two on a phone.
@@ -54,8 +53,8 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     // What is not in the library, by the type of section in the words of its Site: "3 more feeds", "1 more show", or
     // "4 more feeds, albums and playlists".
     const counts = new Map<string, {count: number, one: string, many: string}>()
-    for (const {account, section} of items) {
-        const names = sectionName(account.site.sectionTypes, section)
+    for (const {section} of items) {
+        const names = section.names
         const known = counts.get(names.many) ?? {count: 0, ...names}
         counts.set(names.many, {...known, count: known.count + 1})
     }

@@ -1,7 +1,5 @@
 import {z} from 'zod'
-
-/** A word as the backend names it: one, many, and one with its article, such as album, albums and an album. */
-export const NamesSchema = z.object({one: z.string(), many: z.string(), a: z.string()})
+import {NamesSchema} from './source'
 
 export const CollectionWordsSchema = z.object({season: NamesSchema, episode: NamesSchema})
 
@@ -10,6 +8,8 @@ export const CollectionContractSchema = z.object({
     type: z.string(),
     words: CollectionWordsSchema,
     audioWords: CollectionWordsSchema,
+    /** Downloads pick the collection's seasons; otherwise its newest episodes, by days or a number of episodes. */
+    downloadsBySeason: z.boolean(),
 })
 
 /** Every collection type's contract, and VODLoft's own words where no type is meant. */

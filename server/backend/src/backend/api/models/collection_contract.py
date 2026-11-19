@@ -3,15 +3,8 @@ the same way."""
 from __future__ import annotations
 
 from backend.api.models.base import ResponseBase
+from backend.api.models.source import NamesAPIRead
 from backend.types.collection_types import CollectionType
-
-
-class NamesAPIRead(ResponseBase):
-    """A word in lower case: one, many, and one with its article, such as album, albums and an album."""
-
-    one: str
-    many: str
-    a: str
 
 
 class CollectionWordsAPIRead(ResponseBase):
@@ -28,6 +21,8 @@ class CollectionContractAPIRead(ResponseBase):
     type: CollectionType
     words: CollectionWordsAPIRead
     audio_words: CollectionWordsAPIRead
+    downloads_by_season: bool
+    """Downloads pick the collection's seasons; otherwise its newest episodes, by days or a number of episodes."""
 
 
 class CollectionContractsAPIRead(ResponseBase):

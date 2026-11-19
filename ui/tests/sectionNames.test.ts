@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {growingNames, joinedNames, listNames, sectionName} from '../src/types/creator'
+import {growingNames, joinedNames, listNames} from '../src/types/creator'
 
 const soundcloud = [
     {key: 'feed', kind: 'feed', one: 'feed', many: 'feeds', a: 'a feed'},
@@ -18,10 +18,4 @@ test('several section types are named together', () => {
     assert.deepEqual(growingNames([{kind: 'show', one: 'show', many: 'shows', a: 'a show'}, {kind: 'item', one: 'movie', many: 'movies', a: 'a movie'}]), {
         one: 'show', many: 'shows', a: 'a show',
     })
-})
-
-test('a section is named by its type, or by the first type of its kind', () => {
-    assert.equal(sectionName(soundcloud, {type: 'playlist', kind: 'list'}).one, 'playlist')
-    assert.equal(sectionName(soundcloud, {type: null, kind: 'list'}).a, 'an album')
-    assert.equal(sectionName(soundcloud, {kind: 'show'}).many, 'shows')
 })
