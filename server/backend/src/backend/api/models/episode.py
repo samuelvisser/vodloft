@@ -158,3 +158,15 @@ class EpisodeIndexedActivityAPIRead(ResponseBase):
     collection_title: str
     collection_slug: str
     indexed_at: datetime
+
+
+class EpisodeSeasonPlaceAPIRead(ResponseBase):
+    """Whether a video with files is in another season than its collection's playlists put it in now."""
+
+    belongs_elsewhere: bool
+    season_name: Optional[str] = None
+    """The season it belongs in now, when it is made already."""
+    link_title: Optional[str] = None
+    """The playlist it belongs in now; None when it belongs with the videos in no playlist."""
+    link_kind: str = "playlist"
+    """What the collection's Site calls one of its link seasons, such as playlist, or album in a Music collection."""

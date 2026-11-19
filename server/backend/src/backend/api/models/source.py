@@ -397,6 +397,12 @@ class SiteAPIRead(ResponseBase):
         """What the Site calls a creator's channel, in lower case, such as host on The Daily Wire."""
         return site_of(self.key).channel_label
 
+    @computed_field
+    @property
+    def link_seasons(self) -> bool:
+        """A creator's playlists or albums at the Site can be seasons of the creator's collection."""
+        return site_of(self.key).link_seasons
+
 
 class SourceSiteAPIRead(ResponseBase):
     key: str

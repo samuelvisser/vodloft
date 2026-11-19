@@ -5,6 +5,9 @@ only copy left. The Home page then asks whether to keep the download. Until the 
 answers, retention never deletes it, whatever the Download Profile's date lines say.
 Keep marks the download as kept by hand; Don't keep only records the answer, so retention
 treats it like any other download from then on.
+
+A video a collection only had because one of its link seasons listed it, which the creator then took out of that
+playlist, is asked about the same way. Don't keep then removes it from the collection, files and all.
 """
 from __future__ import annotations
 
@@ -66,4 +69,14 @@ def answer_keep_question(s: Session, episode_ids: Iterable[int], *, keep: bool) 
         if keep:
             download.kept = True
     s.flush()
+    if not keep:
+        _remove_left(s, {download.media.collection_id for download in downloads if download.media.from_link_season})
     return len(downloads)
+
+
+def _remove_left(s: Session, collection_ids: set[int]) -> None:
+    """Let the videos that left these collections' link seasons go, now that the user doesn't keep their files."""
+    from task_manager.scheduler.transactional import queue_task_after_commit
+
+    for collection_id in sorted(collection_ids):
+        queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=collection_id)

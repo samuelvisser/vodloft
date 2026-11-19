@@ -1,8 +1,10 @@
 import {sourceControls} from '../../lib/sourceControls'
+import {useMovedEpisodes} from '../../components/Episode/SeasonPlaceNote'
 import {addedByLabel, can} from '../../lib/access'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import Switch from 'react-switch'
 import { useCollectionDownloadProfilesView, useCollectionStreamProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionEpisodeDownloads, useCollectionDownloadedLocalMediaProfiles, useCollectionSeasons, useEpisodeTagsInCollection, useSourceLookup, useCollectionLocked } from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
 import { toast } from 'react-hot-toast'
@@ -115,6 +117,7 @@ const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
 
 export default function CollectionPage() {
   const { id } = useParams()
+  const {data: movedEpisodes} = useMovedEpisodes(id)
   const startOperation = useStartOperation()
   const controlOperation = useControlOperation()
   const {isStarting, onStartingChange} = useStartingOperations()
@@ -136,6 +139,7 @@ export default function CollectionPage() {
   const [syncStarting, setSyncStarting] = useState(false)
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
   const [fileRenameConfirm, setFileRenameConfirm] = useState(false)
+  const [renameSeasonFolders, setRenameSeasonFolders] = useState(true)
   const [fileRenameProfileId, setFileRenameProfileId] = useState<number | undefined>(undefined)
   const [searchParams, setSearchParams] = useSearchParams()
   const existingFilesParam = Number(searchParams.get('existingFiles'))
@@ -813,6 +817,7 @@ export default function CollectionPage() {
             {visibleItems.map((ep: any) => (
               <EpisodeCard
                 key={ep.id} ep={ep} collectionSlug={id} downloads={downloadsBySlug.get(ep.slug)}
+                moved={movedEpisodes?.has(ep.slug)}
               />
             ))}
           </div>
@@ -924,10 +929,27 @@ export default function CollectionPage() {
         scope_by_local_media_profile
         localMediaProfiles={actionLocalMediaProfiles}
         initialLocalMediaProfileId={fileRenameProfileId}
+        extraBody={{seasonFolders: renameSeasonFolders}}
       >
         <p>
           Rename existing episode files in "{collection.title}" so their paths match the current Local Media Profile output templates.
         </p>
+        <label className="rename-season-folders">
+          <Switch
+            checked={renameSeasonFolders}
+            onChange={setRenameSeasonFolders}
+            onColor="#0ea5e9" offColor="#d1d5db" uncheckedIcon={false} checkedIcon={false}
+            height={18} width={34} handleDiameter={14}
+          />
+          <span>
+            <b>Rename season folders too</b>
+            <span className="help">
+              Episodes move into the folders of the seasons they are in now, with their season's number, also after
+              seasons were reordered. In a collection with playlist seasons, downloaded videos also move to the
+              playlist they belong in now.
+            </span>
+          </span>
+        </label>
       </ActionConfirmDialogue>
 
       <ActionConfirmDialogue

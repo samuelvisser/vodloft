@@ -1,0 +1,47 @@
+from enum import StrEnum
+
+
+class LinkSeasons(StrEnum):
+    """Whether a collection made from a channel turns the channel's playlists into seasons."""
+
+    OFF = "off"
+    ALL = "all"
+    """Every playlist is a season, also the ones the channel adds later."""
+    SELECTED = "selected"
+    """Only the playlists the user keeps on; ``NewLinkSeasonAction`` says what happens with new ones."""
+
+
+class NewLinkSeasonAction(StrEnum):
+    """What happens with a playlist the channel adds later, when only selected playlists are seasons."""
+
+    ASK = "ask"
+    """Send a message, and show the playlist in the collection's Seasons dialog to turn on."""
+    ADD = "add"
+    """Make it a season."""
+    IGNORE = "ignore"
+    """Leave it off."""
+
+
+class LinkSeasonStatus(StrEnum):
+    KNOWN = "known"
+    NEW = "new"
+    """Found after the collection was set up, waiting for the user's choice."""
+
+
+class OutsideVideos(StrEnum):
+    """What a collection does with the videos of its link seasons that its own link does not list, such as another
+    creator's video in a playlist."""
+
+    LEAVE_OUT = "leave_out"
+    ADD = "add"
+    """Add them to the collection, in their link season. They leave again, files and all, once no link season that is
+    on lists them."""
+
+
+class LooseVideos(StrEnum):
+    """Where a collection whose playlists are seasons puts the videos that are in none of them."""
+
+    ONE_SEASON = "one_season"
+    """All in one season, named as the Site calls it, such as Videos, shown before the playlists."""
+    BY_YEAR = "by_year"
+    """A season per upload year, between the playlists by date."""

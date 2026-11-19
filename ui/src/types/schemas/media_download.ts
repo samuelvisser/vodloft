@@ -138,5 +138,7 @@ export const KeepQuestionReadSchema = z.object({
     localMediaProfileName: z.string(),
     downloadedAt: ApiDateTimeSchema.nullable(),
     siteName: z.string(),
+    /** The season of the playlist the creator took the video out of, for a video the collection only had from it. */
+    leftLink: z.string().nullable().default(null),
 })
 export type KeepQuestionRead = z.infer<typeof KeepQuestionReadSchema>

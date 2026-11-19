@@ -111,6 +111,17 @@ class UpgradeChecks:
 
 
 @dataclass(frozen=True)
+class LinkSeasonNames:
+    """What a Site calls its link seasons, and the one season of a collection's videos in none of them."""
+
+    one: str = "playlist"
+    """One link season, in lower case, such as playlist or album."""
+    many: str = "playlists"
+    loose_season: str = "Videos"
+    """The name of the one season of the videos in none of the link seasons."""
+
+
+@dataclass(frozen=True)
 class SiteSettings:
     """Which of the settings in ``config.settings.site_settings`` a Site shows, and what it starts with.
 
@@ -606,17 +617,12 @@ class ItemRefresh:
     may watch now. An item in none of them could not be checked this time and
     stays as it is, and a detail that leaves out the access it needs says nothing
     about whether it is open.
-
-    ``listed`` holds the items the link still lists, such as the videos still in a
-    playlist, when the Source read the link's whole listing; None when it could not
-    tell. An item it leaves out may still be at the Source on another link.
     """
 
     details: dict[str, VideoDetails] = field(default_factory=dict)
     removed: frozenset[str] = frozenset()
     refused: dict[str, str] = field(default_factory=dict)
     open: frozenset[str] = frozenset()
-    listed: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -781,6 +787,13 @@ class Site:
     Site's channels by it everywhere."""
     channel_presets: tuple[ChannelPreset, ...] = ()
     """The ways the Site offers to keep a channel, the first one the default."""
+    link_seasons: bool = False
+    """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
+    link seasons, through its Source's ``is_channel_page``, ``season_lists`` and ``list_items``."""
+    link_season_names: LinkSeasonNames = field(default_factory=lambda: LinkSeasonNames())
+    """What link seasons are called in a collection on the Site, other than a Music collection."""
+    music_link_season_names: LinkSeasonNames = field(default_factory=lambda: LinkSeasonNames("album", "albums", "Singles"))
+    """What link seasons are called in a Music collection on the Site."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
@@ -969,6 +982,21 @@ class Source(ABC):
         """The channel a collection's link belongs to, as ``channel_details`` takes it, or None when the link is not
         one channel's. Slow: it may ask the Site. Only Sources with ``Feature.CHANNELS`` implement it."""
         raise NotImplementedError(f"{self.name} has no channels")
+
+    def is_channel_page(self, url: str) -> bool:
+        """Whether a collection's link is a creator's whole channel, whose playlists can be its seasons, rather than
+        one playlist. Told without asking the Site. Only Sources with a Site with ``link_seasons`` implement it."""
+        return False
+
+    def season_lists(self, url: str) -> list[SectionRef]:
+        """The playlists of the channel at ``url``, as the Site lists them, newest first. Only Sources with a Site with
+        ``link_seasons`` implement it."""
+        raise NotImplementedError(f"{self.name} has no playlists to make seasons of")
+
+    def list_items(self, url: str) -> tuple[ItemRef, ...]:
+        """The videos a playlist lists, in the playlist's own order, such as an album's track order. Only Sources with
+        a Site with ``link_seasons`` implement it, and their ``item_details`` looks the videos up."""
+        raise NotImplementedError(f"{self.name} has no playlists to make seasons of")
 
     def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
         """The collection's episodes whose slugs are not in ``known``.

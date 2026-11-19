@@ -208,6 +208,9 @@ class KeepQuestionAPIRead(ResponseBase):
     local_media_profile_name: str = Field(validation_alias=AliasPath("download", "local_media_profile", "name"))
     downloaded_at: Optional[datetime] = Field(validation_alias=AliasPath("download", "downloaded_at"))
     site_name: str
+    left_link: Optional[str] = None
+    """For a video the collection only had from one of its playlists: the season of the playlist the creator took it
+    out of. Don't keep removes it from the collection."""
 
 
 class KeepQuestionAnswerAPIRead(ResponseBase):

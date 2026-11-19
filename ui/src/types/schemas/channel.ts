@@ -2,7 +2,6 @@ import {z} from 'zod'
 import {DwMembershipLevelReg} from '../dailywire_user_info'
 
 export const SectionTargetValues = ['main', 'own', 'skip'] as const
-export const LinkPlacementValues = ['site_seasons', 'one_season', 'specials'] as const
 export const ChannelPresetValues = ['one_show', 'per_list', 'pick'] as const
 
 export const ChannelSectionReadSchema = z.object({
@@ -27,7 +26,6 @@ export type ChannelSectionRead = z.infer<typeof ChannelSectionReadSchema>
 export const SectionPlanSchema = z.object({
     ref: z.string(),
     target: z.enum(SectionTargetValues),
-    placement: z.enum(LinkPlacementValues).default('site_seasons'),
 })
 export type SectionPlan = z.infer<typeof SectionPlanSchema>
 
@@ -36,6 +34,8 @@ export const ChannelLookupReadSchema = z.object({
     siteKey: z.string(),
     siteName: z.string(),
     channelLabel: z.string(),
+    /** The channel's lists can be seasons of its own collection. */
+    linkSeasons: z.boolean().default(false),
     ref: z.string(),
     url: z.string().nullable(),
     title: z.string(),
@@ -46,7 +46,6 @@ export const ChannelLookupReadSchema = z.object({
     links: z.array(z.string()),
     facts: z.array(z.string()),
     sections: z.array(ChannelSectionReadSchema),
-    claimOrder: z.array(z.string()),
     presets: z.array(z.object({key: z.enum(ChannelPresetValues), plan: z.array(SectionPlanSchema)})),
     channelSlug: z.string().nullable(),
     music: z.boolean().default(false),
@@ -55,23 +54,11 @@ export type ChannelLookupRead = z.infer<typeof ChannelLookupReadSchema>
 
 export const NewSectionActionValues = ['ask', 'main', 'own', 'ignore'] as const
 
-export const ChannelOrderEntrySchema = z.object({
-    ref: z.string(),
-    title: z.string(),
-    kind: z.enum(['feed', 'list', 'item']),
-    kindLabel: z.string().nullable(),
-    collectionSlug: z.string(),
-    collectionTitle: z.string(),
-    placement: z.enum(LinkPlacementValues),
-    videoCount: z.number(),
-})
-export type ChannelOrderEntry = z.infer<typeof ChannelOrderEntrySchema>
-
 export const ChannelReadSchema = z.object({
     id: z.number(),
     slug: z.string(),
     sourceKey: z.string(),
-    site: z.object({key: z.string(), name: z.string()}),
+    site: z.object({key: z.string(), name: z.string(), linkSeasons: z.boolean().default(false)}),
     channelLabel: z.string(),
     siteRef: z.string(),
     url: z.string().nullable(),
@@ -102,7 +89,6 @@ export const ChannelPageReadSchema = ChannelReadSchema.extend({
         links: z.array(z.string()),
     })),
     sections: z.array(ChannelSectionReadSchema),
-    order: z.array(ChannelOrderEntrySchema),
     mainCollectionSlug: z.string().nullable(),
 })
 export type ChannelPageRead = z.infer<typeof ChannelPageReadSchema>
@@ -128,22 +114,11 @@ export const ChannelUpdateSchema = z.object({
     newSections: z.enum(NewSectionActionValues).default('ask'),
     genre: z.string().trim().max(200).default(''),
     contentRating: z.string().trim().max(50).default(''),
-    order: z.array(z.string()).default([]),
 })
 export type ChannelUpdateIn = z.input<typeof ChannelUpdateSchema>
 export type ChannelUpdateOut = z.output<typeof ChannelUpdateSchema>
 
-export const ChannelLinkMatchSchema = z.object({
-    url: z.string(),
-    title: z.string().nullable().optional(),
-    sectionTitle: z.string().nullable().optional(),
-    sectionKindLabel: z.string().nullable().optional(),
-    /** Another of the channel's collections that keeps this section already. */
-    keptBy: z.string().nullable().optional(),
-})
-export type ChannelLinkMatch = z.infer<typeof ChannelLinkMatchSchema>
-
-/** The channel behind a collection's links, before the collection is added to it. */
+/** The channel behind a collection's link, before the collection is added to it. */
 export const CollectionChannelMatchSchema = z.object({
     siteName: z.string(),
     channelLabel: z.string(),
@@ -153,12 +128,15 @@ export const CollectionChannelMatchSchema = z.object({
     handle: z.string().nullable().optional(),
     avatarUrl: z.string().nullable().optional(),
     channelSlug: z.string().nullable().optional(),
-    links: z.array(ChannelLinkMatchSchema),
+    /** The channel's section the collection is, when it is one. */
+    sectionTitle: z.string().nullable().optional(),
+    sectionKindLabel: z.string().nullable().optional(),
+    /** Another of the channel's collections that keeps this section already. */
+    keptBy: z.string().nullable().optional(),
 })
 export type CollectionChannelMatch = z.infer<typeof CollectionChannelMatchSchema>
 
 export const CollectionChannelLeaveSchema = z.object({
     channelTitle: z.string(),
-    videosKeptElsewhere: z.number(),
 })
 export type CollectionChannelLeave = z.infer<typeof CollectionChannelLeaveSchema>

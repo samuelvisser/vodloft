@@ -10,12 +10,13 @@ from backend.db.mixins.MediaContentMetadataMixin import PICTURE_PATH_COMMENT
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.collection_types import EpisodeOrder
+from backend.types.link_season_types import LooseVideos, NewLinkSeasonAction, LinkSeasons, OutsideVideos
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
     from backend.db.models import Season, DownloadProfile, Site
-    from backend.db.models import Channel, CustomIndexState, CollectionLink
+    from backend.db.models import Channel, CustomIndexState, LinkSeason
 
 
 def _default_episode_order(context) -> str:
@@ -46,6 +47,26 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     ytdlp_options: Mapped[str] = mapped_column(
         Text, default="", server_default="",
         comment="Your own yt-dlp options for this Collection, added after the yt-dlp Source's",
+    )
+    link_seasons: Mapped[str] = mapped_column(
+        default=LinkSeasons.OFF.value, server_default=LinkSeasons.OFF.value,
+        comment="Whether the channel's playlists are seasons: off, all or selected",
+    )
+    new_link_seasons: Mapped[str] = mapped_column(
+        default=NewLinkSeasonAction.ASK.value, server_default=NewLinkSeasonAction.ASK.value,
+        comment="What happens with a playlist the channel adds, when only selected playlists are seasons: ask, add or ignore",
+    )
+    loose_videos: Mapped[str] = mapped_column(
+        default=LooseVideos.ONE_SEASON.value, server_default=LooseVideos.ONE_SEASON.value,
+        comment="Where the videos in none of the playlists that are seasons go: one_season or by_year",
+    )
+    outside_videos: Mapped[str] = mapped_column(
+        default=OutsideVideos.LEAVE_OUT.value, server_default=OutsideVideos.LEAVE_OUT.value,
+        comment="What happens with the videos of the playlists that are seasons that the collection's own link does not list: leave_out or add",
+    )
+    custom_season_order: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="The user put the seasons in their own order, so a new season goes last instead of where its date puts it",
     )
     split_chapters: Mapped[bool] = mapped_column(
         default=False, server_default="0",
@@ -117,17 +138,9 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     custom_index_states: Mapped[list["CustomIndexState"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan"
     )
-    links: Mapped[list["CollectionLink"]] = relationship(
-        back_populates="collection", cascade="all, delete-orphan", order_by="CollectionLink.position",
+    season_links: Mapped[list["LinkSeason"]] = relationship(
+        back_populates="collection", cascade="all, delete-orphan", order_by="LinkSeason.site_position",
     )
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if not self.links and self.sharing_url:
-            # A collection starts with the link it was added with as its only link.
-            from backend.db.models.CollectionLink import CollectionLink
-
-            self.links.append(CollectionLink(url=self.sharing_url))
 
     def __repr__(self) -> str:
         return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

@@ -683,8 +683,14 @@ def request_collection_file_rename(
         s: Session,
         collection_slug: str,
         local_media_profile_id: int | None,
+        *,
+        season_folders: bool = True,
 ) -> dict[str, bool | int | str]:
-    """Rename existing collection artifacts using collision-safe profile-wide plans."""
+    """Rename existing collection artifacts using collision-safe profile-wide plans. With ``season_folders`` the
+    videos with files first move to the playlist seasons they belong in now, and take their season's number."""
+    from backend.services.link_seasons import place_in_link_seasons
+    from backend.services.season_order import match_seasons_of_downloaded
+
     collection = (
         s.query(Collection)
         .filter_by(slug=collection_slug)
@@ -692,6 +698,9 @@ def request_collection_file_rename(
     )
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
+    if season_folders:
+        place_in_link_seasons(s, collection, with_files=True)
+        match_seasons_of_downloaded(s, collection)
 
     rename_scope = _select_collection_episode_download_scope(
         s,
@@ -706,6 +715,7 @@ def request_collection_file_rename(
         CollectionFileRenameOperation(
             collection,
             local_media_profile_ids=profile_ids,
+            season_folders=season_folders,
         ),
     )
     if not profile_ids:

@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "34b2dd5c2fe8"
+HEAD_REVISION = "63dbd1de00d8"
 
 
 @pytest.fixture
@@ -1290,7 +1290,7 @@ def test_every_collection_gets_its_own_link_and_its_episodes_belong_to_it(migrat
                 "'published_final', 'https://example.test', :slug)"
             ), {"id": episode_id, "collection": collection_id, "identifier": f"ep.{episode_id}", "slug": f"e{episode_id}"})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, "34b2dd5c2fe8")
 
     with engine.connect() as connection:
         links = connection.execute(text(
@@ -1304,6 +1304,55 @@ def test_every_collection_gets_its_own_link_and_its_episodes_belong_to_it(migrat
         assert [tuple(row) for row in episodes] == [(10, link_of[1]), (11, link_of[1]), (12, link_of[2])]
         items = connection.execute(text("SELECT link_id, source_slug FROM collection_link_items ORDER BY source_slug")).all()
         assert [tuple(row) for row in items] == [(link_of[1], "e10"), (link_of[1], "e11"), (link_of[2], "e12")]
+
+
+def test_playlist_and_album_links_become_link_seasons_and_an_artist_takes_their_page(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "34b2dd5c2fe8")
+    with engine.begin() as connection:
+        for collection_id, url in ((1, "https://www.youtube.com/@workshop/videos"), (2, "https://gamechops.bandcamp.com/album/one")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order) VALUES (:id, :uuid, :slug, 'A', :url, 'free', 'series', "
+                "'seasonal', 'Host', 'host', 'ytdlp', 'newest_first')"
+            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": f"c{collection_id}", "url": url})
+        connection.execute(text(
+            "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+            "VALUES (5, 1, 1, 'cabin', 'Building the Cabin', 'normal', 1)"
+        ))
+        links = (
+            (1, 1, "https://www.youtube.com/@workshop/videos", "Videos", "site_seasons", None),
+            (2, 1, "https://www.youtube.com/playlist?list=PLcabin", "Building the Cabin", "one_season", 5),
+            (3, 2, "https://gamechops.bandcamp.com/album/one", "One", "one_season", None),
+            (4, 2, "https://gamechops.bandcamp.com/album/two", "Two", "one_season", None),
+        )
+        for link_id, collection_id, url, title, placement, season_id in links:
+            connection.execute(text(
+                "INSERT INTO collection_links (id, collection_id, url, title, position, placement, season_id) "
+                "VALUES (:id, :collection, :url, :title, :id, :placement, :season)"
+            ), {"id": link_id, "collection": collection_id, "url": url, "title": title, "placement": placement, "season": season_id})
+        connection.execute(text("INSERT INTO collection_link_items (link_id, source_slug) VALUES (2, 'v1'), (2, 'v2'), (4, 't1')"))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        seasons = connection.execute(text(
+            "SELECT collection_id, ref, title, season_id, enabled FROM link_seasons ORDER BY id"
+        )).all()
+        assert [tuple(row) for row in seasons] == [
+            (1, "PLcabin", "Building the Cabin", 5, True), (2, "album/one", "One", None, True), (2, "album/two", "Two", None, True),
+        ]
+        items = connection.execute(text("SELECT source_slug FROM link_season_items ORDER BY source_slug")).scalars().all()
+        assert items == ["t1", "v1", "v2"]
+        collections = connection.execute(text("SELECT id, sharing_url, link_seasons FROM collections ORDER BY id")).all()
+        # The artist's collection is their whole page now, so new albums come in too.
+        assert [tuple(row) for row in collections] == [
+            (1, "https://www.youtube.com/@workshop/videos", "selected"), (2, "https://gamechops.bandcamp.com", "selected"),
+        ]
+        assert "collection_links" not in inspect(connection).get_table_names()
 
 
 def test_a_channel_knows_its_own_collection_and_installations_get_the_new_sections_rule(migration_database):

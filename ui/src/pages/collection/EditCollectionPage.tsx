@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import {Link, useNavigate, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams, useSearchParams} from 'react-router-dom'
 import CollectionForm, { CollectionFormValue, defaultCollectionFormValue } from '../../components/CollectionForm'
 import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
 import { useQueryClient } from '@tanstack/react-query'
@@ -19,6 +19,7 @@ import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../l
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
 import {CollectionTypeReg, CollectionTypeValue, EpisodeIdentifierReg, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
 import {apiUrl} from '../../lib/api'
+import SeasonsDialog from '../../components/CollectionSeasons/SeasonsDialog'
 
 const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
   default: {label: 'Like other Collections'},
@@ -60,6 +61,15 @@ export default function EditCollectionPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [metadataOpen, setMetadataOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  // A message about new playlists opens the Seasons dialog straight away.
+  const seasonsOpen = searchParams.get('seasons') === '1'
+  const setSeasonsOpen = (next: boolean) => setSearchParams((params) => {
+    const changed = new URLSearchParams(params)
+    if (next) changed.set('seasons', '1')
+    else changed.delete('seasons')
+    return changed
+  }, {replace: true})
   const [urlCopied, setUrlCopied] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [optionsError, setOptionsError] = useState<string | null>(null)
@@ -261,9 +271,14 @@ export default function EditCollectionPage() {
       <div className="view-header">
         <h1 id="edit-collection-title">Edit collection</h1>
         {collection && (
-          <button type="button" className="btn" onClick={() => setMetadataOpen(true)}>
-            Metadata
-          </button>
+          <div className="actions" style={{margin: 0}}>
+            <button type="button" className="btn" onClick={() => setSeasonsOpen(true)}>
+              Seasons
+            </button>
+            <button type="button" className="btn" onClick={() => setMetadataOpen(true)}>
+              Metadata
+            </button>
+          </div>
         )}
       </div>
 
@@ -520,6 +535,13 @@ export default function EditCollectionPage() {
           <button type="button" className="btn btn-primary" onClick={onSave} disabled={!collection}>Save changes</button>
         </div>
       </form>
+
+      <SeasonsDialog
+        open={seasonsOpen && !!collection}
+        collectionSlug={id}
+        collectionTitle={collection?.title ?? id}
+        onDismiss={() => setSeasonsOpen(false)}
+      />
 
       <CustomMetadataEditor
         open={metadataOpen}

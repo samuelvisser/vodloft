@@ -25,6 +25,7 @@ _WORKER_EXPORTS = {
     "rename_movie_profile_files": ".workers.rename_movie_profile_files",
     "move_collection_profile_episodes": ".workers.move_collection_profile_episodes",
     "delete_collection_downloads_worker": ".workers.delete_collection_downloads_worker",
+    "remove_left_episodes": ".workers.remove_left_episodes",
     "media_download_bulk_action_worker": ".workers.media_download_bulk_action_worker",
     "media_download_attach_retries": ".workers.media_download_attach_retries",
     "fetch_new_episodes": ".workers.fetch_new_episodes",
@@ -42,7 +43,6 @@ _WORKER_EXPORTS = {
     "check_locked_media": ".workers.check_locked_media",
     "rescan_quick_checked_collections": ".workers.quick_check_new_videos",
     "follow_channels": ".workers.follow_channels",
-    "reclaim_channel_videos": ".workers.follow_channels",
 }
 
 

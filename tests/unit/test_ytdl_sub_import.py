@@ -129,12 +129,12 @@ def test_subscriptions_become_collections_with_genre_rating_and_filters(tmp_path
     assert (news["download_days_in_past"], news["delete_older_episodes"]) == (60, True)
     assert collections["BBC News"].warnings[0].message == "today-2months becomes the last 60 days"
     assert collections["NOVA PBS"].download_profile["ep_id_type_list"] == ["ep", "short", "livestream"]
-    # A subscription with several links is one Collection with all of them, the first one keeping a shared video.
-    assert collections["Rick Beato"].url == "https://www.youtube.com/@RickBeato"
-    assert [(link.url, link.placement) for link in collections["Rick Beato"].links] == [
-        ("https://www.youtube.com/@RickBeato", "site_seasons"), ("https://www.youtube.com/@rickbeato240", "site_seasons"),
-    ]
-    assert collections["NOVA PBS"].links == ()
+    # A subscription with several links is the first channel's, with each other link a link season: nothing is left out.
+    beato = collections["Rick Beato"]
+    assert beato.url == "https://www.youtube.com/@RickBeato"
+    assert [(link.url, link.title, link.season_number) for link in beato.link_seasons] == [("https://www.youtube.com/@rickbeato240", "@rickbeato240", None)]
+    assert not any(warning.subject == "links" for warning in beato.warnings)
+    assert collections["NOVA PBS"].link_seasons == ()
 
 
 def test_a_tv_show_collection_keeps_its_seasons_and_the_highest_keeps_a_shared_video(tmp_path):
@@ -148,16 +148,20 @@ def test_a_tv_show_collection_keeps_its_seasons_and_the_highest_keeps_a_shared_v
 """))
 
     collections = {collection.title: collection for collection in plan.collections}
+    # The channel is the collection; its own playlists are link seasons, the highest season first.
     guitar = collections["Beyond the Guitar"]
     assert guitar.url == "https://www.youtube.com/c/BeyondTheGuitar"
-    assert [(link.title, link.placement, link.season_number) for link in guitar.links] == [
-        ("Music Videos", "one_season", 2), ("Videos", "one_season", 1),
-    ]
+    assert [(link.title, link.season_number) for link in guitar.link_seasons] == [("Music Videos", 2)]
+    # The channel's own season keeps its videos in none of the playlists.
+    assert (guitar.loose_season.title, guitar.loose_season.season_number) == ("Videos", 1)
     specials = collections["Guitar Specials"]
-    assert [(link.title, link.placement, link.season_number) for link in specials.links] == [
-        ("Season 2", "one_season", 2), ("Season 2", "one_season", 2), ("Season 1", "one_season", 1),
-        ("Specials", "specials", 0),
+    assert specials.url == "https://www.youtube.com/c/BeyondTheGuitar"
+    assert [(link.url, link.title, link.season_number) for link in specials.link_seasons] == [
+        ("https://www.youtube.com/playlist?list=PLone", "Season 2", 2), ("https://www.youtube.com/playlist?list=PLtwo", "Season 2", 2),
+        # A single video is a season of its own too, so nothing the subscription had is left out.
+        ("https://www.youtube.com/watch?v=special", "Specials", 0),
     ]
+    assert not any(warning.subject == "links" for warning in specials.warnings)
 
 
 def test_custom_presets_convert_simple_variables_and_report_scripts(tmp_path):
@@ -274,7 +278,7 @@ def test_full_albums_are_split_into_tracks_by_their_chapters(tmp_path):
     plan = _plan(_write(tmp_path / "config", MUSIC), ("/music", "/downloads/music"), downloads)
 
     albums = next(collection for collection in plan.collections if collection.title == "Game Chops")
-    assert (albums.channel, albums.links, albums.settings["type"], albums.settings["split_chapters"]) == (False, (), "music", True)
+    assert (albums.channel, albums.link_seasons, albums.settings["type"], albums.settings["split_chapters"]) == (False, (), "music", True)
     profile = next(profile for profile in plan.profiles if profile.external_id == albums.profile_external_id)
     assert profile.output_template == (
         "/downloads/music/{{ artist }}/[{{ year }}] {{ album }}/{{ track_number_padded }} - {{ title }}.ext"
@@ -425,7 +429,7 @@ def test_an_import_finds_the_folder_adopts_the_archive_and_keeps_the_genre(insta
     assert download is not None and download.file_path.endswith("tv/NOVA PBS/Season 2021/s2021.e031701 - First.mp4")
 
 
-def test_an_imported_tv_show_collection_has_every_link_and_ytdl_subs_seasons(installation):
+def test_an_imported_tv_show_collection_has_its_playlists_as_seasons_in_ytdl_subs_numbers(installation):
     from backend.db.models import Collection
     from backend.services import imports
 
@@ -437,10 +441,11 @@ def test_an_imported_tv_show_collection_has_every_link_and_ytdl_subs_seasons(ins
 
     guitar = session.scalar(select(Collection).where(Collection.title == "Beyond the Guitar"))
     assert guitar.sharing_url == "https://www.youtube.com/c/BeyondTheGuitar"
-    assert [(link.url, link.placement, link.season.season_number, link.season.name) for link in guitar.links] == [
-        ("https://www.youtube.com/playlist?list=PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W", "one_season", 2, "Music Videos"),
-        ("https://www.youtube.com/c/BeyondTheGuitar", "one_season", 1, "Videos"),
+    assert [(link.url, link.season.season_number, link.season.name) for link in guitar.season_links] == [
+        ("https://www.youtube.com/playlist?list=PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W", 2, "Music Videos"),
     ]
+    # Its files are named by ytdl-sub's numbers, so those stay.
+    assert (guitar.link_seasons, guitar.custom_season_order) == ("selected", True)
 
 
 def _artist_import(monkeypatch):
@@ -458,7 +463,7 @@ def _artist_import(monkeypatch):
     class Artists(type(ytdlp)):
         domains = ("bandcamp.com",)
         features = ytdlp.features | {Feature.CHANNELS}
-        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), channels=True, channel_label="artist"),)
+        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), channels=True, channel_label="artist", link_seasons=True),)
 
         def channel_details(self, ref, progress=lambda step: None):
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
@@ -486,7 +491,9 @@ def test_an_imported_discography_adds_the_artist_with_each_album_a_season(instal
     assert (channel.title, channel.genre) == ("Emily Hopkins", "Lofi")
     collection = session.scalar(select(Collection))
     assert (collection.channel_id, collection.type) == (channel.id, "music")
-    assert [(link.title, link.placement) for link in collection.links] == [("Harp", "one_season"), ("One", "one_season")]
+    # The artist's page is the collection, and each album a link season of it.
+    assert collection.sharing_url == "https://emilyharpist.bandcamp.com"
+    assert [(link.title, link.enabled) for link in collection.season_links] == [("Harp", True)]
     assert session.scalar(select(LocalMediaProfileBase.type).where(LocalMediaProfileBase.name == "Bandcamp")) == "music"
 
 
@@ -506,10 +513,11 @@ def test_an_import_without_channels_makes_the_artist_one_plain_collection(instal
     assert session.scalar(select(Channel)) is None
     collection = session.scalar(select(Collection))
     assert (collection.title, collection.type, collection.channel_id) == ("Emily Hopkins", "music", None)
-    assert [(link.title, link.placement) for link in collection.links] == [("Harp", "one_season"), ("One", "one_season")]
+    # Every album is a season, the ones to come too.
+    assert (collection.sharing_url, collection.link_seasons) == ("https://emilyharpist.bandcamp.com", "all")
 
 
-def test_an_imported_collection_joins_the_channel_behind_its_links(installation, monkeypatch):
+def test_an_imported_collection_joins_the_channel_behind_its_link(installation, monkeypatch):
     from backend.db.models import Channel, Collection
     from backend.services import imports
     from sources import registry
@@ -539,11 +547,8 @@ def test_an_imported_collection_joins_the_channel_behind_its_links(installation,
     channel = session.scalar(select(Channel))
     guitar = session.scalar(select(Collection))
     assert (guitar.channel_id, channel.main_collection_id) == (channel.id, guitar.id)
-    # The playlist is no section of the channel's here, so it stays a link of the collection only.
-    assert {link.url: link.channel_section_id is not None for link in guitar.links} == {
-        "https://www.youtube.com/c/BeyondTheGuitar": True,
-        "https://www.youtube.com/playlist?list=PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W": False,
-    }
+    # The playlist is no section of the channel's here, but it stays a season of the collection.
+    assert [link.ref for link in guitar.season_links] == ["PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W"]
 
 
 def test_only_an_import_that_knows_channels_offers_them(tmp_path):

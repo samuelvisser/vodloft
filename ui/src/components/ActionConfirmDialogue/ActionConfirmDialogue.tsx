@@ -66,6 +66,8 @@ type ActionConfirmDialogueProps = {
     localMediaProfiles?: readonly ActionConfirmDialogueLocalMediaProfile[]
     /** The Local Media Profile selected when the dialogue opens, instead of all of them. */
     initialLocalMediaProfileId?: number
+    /** More of the request's body, such as a choice the dialogue's content offers. */
+    extraBody?: Record<string, unknown>
 }
 
 export default function ActionConfirmDialogue({
@@ -87,6 +89,7 @@ export default function ActionConfirmDialogue({
     showDeleteOlderThan = false,
     localMediaProfiles = [],
     initialLocalMediaProfileId,
+    extraBody,
 }: ActionConfirmDialogueProps) {
     const startOperation = useStartOperation()
     const selectorId = `action-confirm-dialogue-local-media-profile-${useId()}`
@@ -154,12 +157,13 @@ export default function ActionConfirmDialogue({
         try {
             const base = apiUrl()
             const request: RequestInit = {method}
-            if (scope_by_local_media_profile) {
+            if (scope_by_local_media_profile || extraBody) {
                 request.headers = {'Content-Type': 'application/json'}
                 request.body = JSON.stringify({
-                    localMediaProfileId: localMediaProfileId === 'all'
-                        ? null
-                        : Number(localMediaProfileId),
+                    ...extraBody,
+                    ...(scope_by_local_media_profile ? {
+                        localMediaProfileId: localMediaProfileId === 'all' ? null : Number(localMediaProfileId),
+                    } : {}),
                     ...(showDeleteOlderThan && ageFilter ? (
                         ageFilter.deleteOlderThan === 'days'
                             ? {

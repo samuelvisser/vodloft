@@ -11,14 +11,13 @@ from backend.api.models.channel import (
     CollectionChannelLeaveAPIRead, CollectionChannelMatchAPIRead,
 )
 from backend.api.models.collection import CollectionAPIRead
-from backend.db.models import Channel, Collection, CollectionLink, CollectionLinkItem, Episode
+from backend.db.models import Channel, Collection, Episode
 from backend.services import channels
 from backend.services.channels import NewCollectionSettings, SectionPlan
 from backend.services.errors import ServiceError
 from backend.services.sites import collection_site
 from backend.types.channel_types import NewSectionAction, SectionTarget
 from task_manager.scheduler.transactional import queue_task_after_commit
-from backend.types.collection_link_types import LinkPlacement
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from sources import ChannelDetails, Feature, SectionRef, get_source
 from backend.services.source_requests import asking_source
@@ -71,8 +70,8 @@ class _Lookup:
     site_key: str
     site_name: str
     channel_label: str
+    link_seasons: bool
     sections: list[_Section]
-    claim_order: list[str]
     presets: list[_Preset]
     channel_slug: str | None = None
     links: list[str] = field(default_factory=list)
@@ -89,12 +88,11 @@ def channel_lookup(s: Session, source_key: str, details: ChannelDetails) -> Chan
     existing = channels.channel_in_library(s, site.key, details.ref)
     return ChannelLookupAPIRead.model_validate(_Lookup(
         details=details, source_key=source_key, site_key=site.key, site_name=site.name,
-        channel_label=site.channel_label,
+        channel_label=site.channel_label, link_seasons=channels.lists_are_seasons(site),
         sections=[
             _Section(section, kept.get(section.ref), titles.get(kept.get(section.ref)))
             for section in details.sections
         ],
-        claim_order=channels.claim_order(list(details.sections)),
         presets=[_Preset(preset.value, channels.preset_plan(details, preset)) for preset in site.channel_presets],
         channel_slug=existing.slug if existing is not None else None,
         links=list(details.links), facts=list(details.facts),
@@ -104,7 +102,7 @@ def channel_lookup(s: Session, source_key: str, details: ChannelDetails) -> Chan
 def add_channel(s: Session, body: ChannelAPICreate, details: ChannelDetails, *, added_by_id: int | None) -> ChannelPageAPIRead:
     channel, _collections = channels.add_channel(
         s, source_key=body.source_key, details=details,
-        plans=[SectionPlan(plan.ref, SectionTarget(plan.target), LinkPlacement(plan.placement)) for plan in body.sections],
+        plans=[SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections],
         # An artist's collections hold their music.
         settings=NewCollectionSettings(
             CollectionType.MUSIC if details.music else CollectionType(body.type), EpisodeIdentifier(body.episode_identifier),
@@ -135,7 +133,6 @@ class _ChannelRead:
     episode_count: int
     collections: list = field(default_factory=list)
     sections: list = field(default_factory=list)
-    order: list = field(default_factory=list)
 
     def __getattr__(self, name):
         return getattr(self.channel, name)
@@ -178,79 +175,20 @@ def channel_page(s: Session, slug: str) -> ChannelPageAPIRead:
         select(Episode.collection_id, func.count()).where(Episode.collection_id.in_([c.id for c in channel.collections]))
         .group_by(Episode.collection_id)
     ).all())
-    kept: dict[int, tuple[str, str]] = {}
-    for section_id, collection_slug, collection_title in s.execute(
-        select(CollectionLink.channel_section_id, Collection.slug, Collection.title)
-        .join(Collection, Collection.id == CollectionLink.collection_id)
-        .where(CollectionLink.channel_section_id.in_([section.id for section in channel.sections]))
-    ):
-        kept[section_id] = (collection_slug, collection_title)
-    # A section that was in the library before the channel was added stays in its own collection.
-    others = [section for section in channel.sections if section.id not in kept]
-    elsewhere = channels.sections_in_library(s, channel.source_key, channel.site_ref, others)
-    titles_elsewhere = dict(s.execute(select(Collection.slug, Collection.title).where(Collection.slug.in_(elsewhere.values()))).all())
-    for section in others:
-        if section.ref in elsewhere:
-            kept[section.id] = (elsewhere[section.ref], titles_elsewhere.get(elsewhere[section.ref]))
-    titles = {section.id: section.title for section in channel.sections}
+    kept = channels.sections_in_library(s, channel.source_key, channel.site_ref, channel.sections, channel.main_collection)
+    titles = dict(s.execute(select(Collection.slug, Collection.title).where(Collection.slug.in_(kept.values()))).all())
     collections = [
         _CollectionRead(
             collection, per_collection.get(collection.id, 0),
-            [
-                titles[link.channel_section_id] for link in sorted(collection.links, key=lambda link: (link.position, link.id))
-                if link.channel_section_id in titles
-            ],
+            [section.title for section in channel.sections if kept.get(section.ref) == collection.slug],
         )
         for collection in sorted(channel.collections, key=lambda c: c.created_at or c.id)
     ]
-    sections = [
-        _Section(section, *kept.get(section.id, (None, None)))
-        for section in channel.sections
-    ]
-    links = channels.channel_order(channel)
-    listed = dict(s.execute(
-        select(CollectionLinkItem.link_id, func.count()).where(CollectionLinkItem.link_id.in_([link.id for link in links]))
-        .group_by(CollectionLinkItem.link_id)
-    ).all())
-    order = [_OrderEntry(link, listed.get(link.id, 0)) for link in links if link.section is not None]
+    sections = [_Section(section, kept.get(section.ref), titles.get(kept.get(section.ref))) for section in channel.sections]
     return ChannelPageAPIRead.model_validate(_ChannelRead(
         channel, _label(channel), collections_count.get(channel.id, 0), episodes.get(channel.id, 0),
-        collections=collections, sections=sections, order=order,
+        collections=collections, sections=sections,
     ))
-
-
-@dataclass(frozen=True)
-class _OrderEntry:
-    link: CollectionLink
-    video_count: int
-
-    @property
-    def ref(self) -> str:
-        return self.link.section.ref
-
-    @property
-    def title(self) -> str:
-        return self.link.section.title
-
-    @property
-    def kind(self) -> str:
-        return self.link.section.kind
-
-    @property
-    def kind_label(self) -> str | None:
-        return self.link.section.kind_label
-
-    @property
-    def collection_slug(self) -> str:
-        return self.link.collection.slug
-
-    @property
-    def collection_title(self) -> str:
-        return self.link.collection.title
-
-    @property
-    def placement(self) -> str:
-        return self.link.placement
 
 
 def _channel(s: Session, slug: str) -> Channel:
@@ -265,8 +203,6 @@ def update_channel(s: Session, slug: str, body: ChannelAPIUpdate) -> ChannelPage
     channels.update_channel_settings(s, channel, channels.ChannelSettings(
         NewSectionAction(body.new_sections), body.genre, body.content_rating,
     ))
-    if body.order is not None:
-        channels.set_channel_order(s, channel, body.order)
     s.flush()
     return channel_page(s, slug)
 
@@ -274,7 +210,7 @@ def update_channel(s: Session, slug: str, body: ChannelAPIUpdate) -> ChannelPage
 def add_sections(s: Session, slug: str, body: ChannelSectionsAPIAdd, *, added_by_id: int | None) -> ChannelPageAPIRead:
     channel = _channel(s, slug)
     channels.place_sections(
-        s, channel, [SectionPlan(plan.ref, SectionTarget(plan.target), LinkPlacement(plan.placement)) for plan in body.sections],
+        s, channel, [SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections],
         added_by_id=added_by_id,
     )
     s.flush()
@@ -299,32 +235,31 @@ def _collection(s: Session, slug: str) -> Collection:
 
 
 @dataclass(frozen=True)
-class CollectionLinks:
+class CollectionLink:
     source_key: str
     title: str
-    urls: list[str]
+    url: str
 
 
-def collection_links(s: Session, collection_slug: str) -> CollectionLinks:
+def collection_link(s: Session, collection_slug: str) -> CollectionLink:
     """What looking up the channel behind a collection needs, read before the slow lookup."""
     collection = _collection(s, collection_slug)
     if collection.channel_id is not None:
         raise ServiceError(f"{collection.title} is already in {collection.channel.title}")
-    urls = [link.url for link in sorted(collection.links, key=lambda link: (link.position, link.id))]
-    return CollectionLinks(collection.source_key, collection.title, urls)
+    return CollectionLink(collection.source_key, collection.title, collection.sharing_url)
 
 
-def look_up_collection_channel(links: CollectionLinks) -> ChannelDetails:
-    """The channel behind the collection's links, asked of its Source. Slow: call it outside a transaction."""
-    source = get_source(links.source_key)
+def look_up_collection_channel(link: CollectionLink) -> ChannelDetails:
+    """The channel behind the collection's link, asked of its Source. Slow: call it outside a transaction."""
+    source = get_source(link.source_key)
     if not source.has(Feature.CHANNELS):
         raise ServiceError(f"{source.name} has no channels")
-    site = source.site_for(links.urls[0]) if links.urls else None
+    site = source.site_for(link.url)
     label = site.channel_label if site is not None else "channel"
     with asking_source(f"Could not look up the {label}"):
-        ref = next((found for found in map(source.channel_of, links.urls) if found), None)
+        ref = source.channel_of(link.url)
     if ref is None:
-        raise ServiceError(f"VODLoft found no {label} behind the links of {links.title}")
+        raise ServiceError(f"VODLoft found no {label} behind the link of {link.title}")
     with asking_source(f"Could not look up the {label}"):
         return source.channel_details(ref)
 
@@ -334,7 +269,8 @@ class _Match:
     details: ChannelDetails
     site_name: str
     channel_label: str
-    links: list
+    section: object | None
+    kept_by: str | None
     channel_slug: str | None = None
 
     def __getattr__(self, name):
@@ -345,10 +281,9 @@ def collection_channel_match(s: Session, collection_slug: str, source_key: str, 
     collection = _collection(s, collection_slug)
     site = channels.channel_site(source_key, details.url or collection.site_key or get_source(source_key).sites[0].key)
     existing = channels.channel_in_library(s, site.key, details.ref)
+    section, kept_by = channels.collection_section(s, collection, source_key, details, existing)
     return CollectionChannelMatchAPIRead.model_validate(_Match(
-        details, site.name, site.channel_label,
-        channels.match_links(s, collection, source_key, details, existing),
-        existing.slug if existing is not None else None,
+        details, site.name, site.channel_label, section, kept_by, existing.slug if existing is not None else None,
     ))
 
 
@@ -366,9 +301,7 @@ def collection_channel_leave(s: Session, collection_slug: str) -> CollectionChan
     collection = _collection(s, collection_slug)
     if collection.channel is None:
         raise ServiceError(f"{collection.title} is not in a {collection_site(collection).channel_label}")
-    return CollectionChannelLeaveAPIRead(
-        channel_title=collection.channel.title, videos_kept_elsewhere=channels.videos_kept_elsewhere(s, collection),
-    )
+    return CollectionChannelLeaveAPIRead(channel_title=collection.channel.title)
 
 
 def leave_collection_channel(s: Session, collection_slug: str) -> CollectionAPIRead:

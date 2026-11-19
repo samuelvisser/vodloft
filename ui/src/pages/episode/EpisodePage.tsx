@@ -22,6 +22,8 @@ import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge} from '../../components/common/RemovedFromSource'
+import SeasonPlaceNote, {MovedBadge, useMoveToSeason, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
+import {can} from '../../lib/access'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
 import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
 import {apiUrl} from '../../lib/api'
@@ -117,6 +119,10 @@ export default function EpisodePage() {
         hasDomainData: hasDownloadState,
     } = useEpisodeDownloads(episodeId)
     const settingsQuery = useLibraryDefaults()
+    // Its collection's playlists put it in another season, where it waits for the user to move it.
+    const {data: seasonPlace} = useSeasonPlace(episodeId)
+    const moved = !!seasonPlace?.belongsElsewhere
+    const {move: moveToSeason, moving: movingToSeason} = useMoveToSeason(episodeId ?? '', collectionId)
     const collectionProfiles = profiles?.filter((profile) => (
         isCollectionLocalMediaProfileAvailableFor(profile, collection?.type)
         // A profile limited to other Sites still shows the download it already made.
@@ -308,6 +314,13 @@ export default function EpisodePage() {
                                     operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),
                                 }] : []),
+                                ...(moved && can('library', 'manage') ? [{
+                                    label: 'Move to its new season',
+                                    description: 'Moves the episode and renames its files to match',
+                                    icon: faIcon('fass', 'arrow-right-arrow-left'),
+                                    disabled: movingToSeason,
+                                    onSelect: () => void moveToSeason(),
+                                }] : []),
                                 ...(earlyDeleteAvailable ? [{
                                     label: 'Early Delete',
                                     icon: faIcon('fass', 'trash') as [string, string],
@@ -343,6 +356,7 @@ export default function EpisodePage() {
                         {episode.drmProtected && <DrmBadge asText/>}
                         <ItemAccessBadge item={episode} asText/>
                         {episode.removedFromSource && <RemovedBadge asText/>}
+                        {moved && <MovedBadge asText/>}
                         <span className={`episode-status${isLive ? ' is-live' : ''}`} title={sourceStatus?.help}>
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
                             {statusLabel}
@@ -376,6 +390,8 @@ export default function EpisodePage() {
                         )}
                     </div>
                 </header>
+
+                <SeasonPlaceNote episodeSlug={episode.slug} collectionSlug={collectionId} canManage={can('library', 'manage')}/>
 
                 {!!episode.description?.trim() && (
                     <section className="episode-description" aria-labelledby="episode-description-title">

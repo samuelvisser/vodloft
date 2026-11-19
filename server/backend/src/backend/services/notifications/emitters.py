@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from sources import site_of
 
-from backend.db.models import Channel, ChannelSection, Collection, DownloadProfile, Episode, User
+from backend.db.models import Channel, ChannelSection, Collection, LinkSeason, DownloadProfile, Episode, User
 
 from .events import Event, emit
 
@@ -92,4 +92,20 @@ def channel_sections_found(session: Session, channel: Channel, sections: list[Ch
         body=f"{names}. Choose on the {site_of(channel.site_key).channel_label}'s page whether to add {'it' if len(sections) == 1 else 'them'}.",
         url=f"/channel/{channel.slug}", data={"channel": channel.title, "sections": [section.title for section in sections]},
         dedupe_key=f"channel-sections:{channel.id}:{','.join(sorted(section.ref for section in sections))}",
+    )
+
+
+def link_seasons_found(session: Session, collection: Collection, playlists: list[LinkSeason]) -> None:
+    """A collection whose selected playlists are seasons found playlists that wait for the user's choice."""
+    if not playlists:
+        return
+    names = ", ".join(playlist.title for playlist in playlists[:3]) + (f" and {len(playlists) - 3} more" if len(playlists) > 3 else "")
+    one = len(playlists) == 1
+    emit(
+        session, Event.CHANNEL_SECTIONS_FOUND,
+        title=f"New playlist for {collection.title}" if one else f"{len(playlists)} new playlists for {collection.title}",
+        body=f"{names}. Choose in the collection's seasons whether {'it becomes a season' if one else 'they become seasons'}.",
+        url=f"/edit-collection/{collection.id}?seasons=1",
+        data={"collection": collection.title, "playlists": [playlist.title for playlist in playlists]},
+        dedupe_key=f"collection-playlists:{collection.id}:{','.join(sorted(playlist.ref for playlist in playlists))}",
     )

@@ -31,8 +31,11 @@ class ChannelSource(ListedSource):
     features = ListedSource.features | {Feature.CHANNELS}
     sites = (Site(
         "tube", "Tube", ("tube.example",), channels=True,
-        channel_presets=(ChannelPreset.ONE_SHOW, ChannelPreset.PER_LIST, ChannelPreset.PICK),
+        channel_presets=(ChannelPreset.ONE_SHOW, ChannelPreset.PER_LIST, ChannelPreset.PICK), link_seasons=True,
     ),)
+
+    def is_channel_page(self, url):
+        return url in (ROOT, f"{ROOT}/videos")
 
     def channel_of(self, url):
         return ROOT if url.startswith("https://tube.example/") else None
@@ -78,45 +81,39 @@ def _lookup(client):
 
 def _plan(body, preset):
     plan = next(item["plan"] for item in body["presets"] if item["key"] == preset)
-    return {item["ref"]: (item["target"], item["placement"]) for item in plan}
+    return {item["ref"]: item["target"] for item in plan}
 
 
-def test_one_show_folds_feeds_and_playlists_into_one_collection_and_keeps_shorts_apart(client):
+def test_one_show_folds_feeds_and_playlists_into_one_collection(client):
     steps, body = _lookup(client)
 
     assert steps == ["Looking the channel up", "Reading the channel", "Checking what is in your library already"]
     assert (body["title"], body["channelLabel"], body["facts"]) == ("Northwind Workshop", "channel", ["1.2M subscribers"])
+    # The channel's own collection lists its Shorts and Live too, and its playlists are seasons of it.
     assert _plan(body, "one_show") == {
-        "videos": ("main", "site_seasons"),
-        "shorts": ("own", "site_seasons"),
-        "streams": ("main", "site_seasons"),
-        "PLcabin": ("main", "one_season"),
-        "PLtools": ("main", "one_season"),
+        "videos": "main", "shorts": "main", "streams": "main", "PLcabin": "main", "PLtools": "main",
         # Only members can watch it, so it is left for the user to pick.
-        "PLmembers": ("skip", "site_seasons"),
+        "PLmembers": "skip",
     }
-    assert _plan(body, "per_list")["PLtools"] == ("own", "site_seasons")
-    assert set(_plan(body, "pick").values()) == {("skip", "site_seasons")}
-    # Lists first as the Site lists them, then Live, Shorts and Videos, which holds all of the channel's uploads.
-    assert body["claimOrder"] == ["PLcabin", "PLtools", "PLmembers", "streams", "shorts", "videos"]
+    assert _plan(body, "per_list")["PLtools"] == "own"
+    assert set(_plan(body, "pick").values()) == {"skip"}
 
 
-def test_adding_a_channel_makes_its_collections_with_their_links_in_the_channels_order(client, session):
+def test_adding_a_channel_makes_its_collection_with_its_playlists_as_seasons(client, session):
     from backend.db.models import Collection
 
     plan = [
-        {"ref": "videos", "target": "main"}, {"ref": "streams", "target": "main"},
-        {"ref": "PLcabin", "target": "main", "placement": "one_season"},
-        {"ref": "shorts", "target": "own"}, {"ref": "PLtools", "target": "own"},
-        {"ref": "PLmembers", "target": "skip"},
+        {"ref": "videos", "target": "main"}, {"ref": "streams", "target": "main"}, {"ref": "PLcabin", "target": "main"},
+        {"ref": "shorts", "target": "own"}, {"ref": "PLtools", "target": "own"}, {"ref": "PLmembers", "target": "skip"},
     ]
     response = client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": plan})
 
     assert response.status_code == 201, response.text
     page = response.json()
     assert page["slug"] == "workshop"
+    # Its Videos page lists the Shorts too, so the Shorts collection of their own is the user's extra choice.
     assert [(c["title"], c["links"]) for c in page["collections"]] == [
-        ("Northwind Workshop", ["Building the Cabin", "Live", "Videos"]),
+        ("Northwind Workshop", ["Videos", "Live", "Building the Cabin"]),
         ("Northwind Workshop Shorts", ["Shorts"]),
         ("Tool Reviews", ["Tool Reviews"]),
     ]
@@ -125,8 +122,10 @@ def test_adding_a_channel_makes_its_collections_with_their_links_in_the_channels
     from backend.api.models.collection import CollectionAPIRead
 
     assert CollectionAPIRead.model_validate(main).channel_slug == "workshop"
-    assert [(link.title, link.placement, link.position) for link in main.links] == [
-        ("Building the Cabin", "one_season", 0), ("Live", "site_seasons", 3), ("Videos", "site_seasons", 5),
+    # Every playlist of the channel is known to it, and the ones picked are its seasons.
+    assert main.link_seasons == "selected"
+    assert [(link.ref, link.enabled) for link in main.season_links] == [
+        ("PLcabin", True), ("PLtools", False), ("PLmembers", False),
     ]
     # The section nobody keeps stays on the channel page.
     left = {section["ref"]: section["collectionSlug"] for section in page["sections"]}
@@ -204,10 +203,7 @@ NEW_LIST = SectionRef(
 
 
 def _one_show(client):
-    plan = [
-        {"ref": "videos", "target": "main"}, {"ref": "streams", "target": "main"},
-        {"ref": "PLcabin", "target": "main", "placement": "one_season"}, {"ref": "shorts", "target": "own"},
-    ]
+    plan = [{"ref": "videos", "target": "main"}, {"ref": "streams", "target": "main"}, {"ref": "shorts", "target": "own"}]
     assert client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": plan}).status_code == 201
 
 
@@ -240,15 +236,23 @@ def test_a_new_playlist_waits_for_a_choice_and_says_so(client, session, tube):
     page = client.get("/api/channels/workshop").json()
     assert next(s for s in page["sections"] if s["ref"] == "PLbarn")["status"] == "new"
 
-    # Adding it as a season puts it first in the channel's order, in the channel's own collection.
-    page = client.post("/api/channels/workshop/sections", json={"sections": [
-        {"ref": "PLbarn", "target": "main", "placement": "one_season"},
-    ]}).json()
-    assert [entry["ref"] for entry in page["order"]] == ["PLbarn", "PLcabin", "streams", "shorts", "videos"]
+    # Adding it to the channel's own collection makes it a season of it.
+    page = client.post("/api/channels/workshop/sections", json={"sections": [{"ref": "PLbarn", "target": "main"}]}).json()
     assert next(c for c in page["collections"] if c["slug"] == page["mainCollectionSlug"])["links"] == [
-        "Timber Frame Barn", "Building the Cabin", "Live", "Videos",
+        "Timber Frame Barn", "Videos", "Live",
     ]
     assert next(s for s in page["sections"] if s["ref"] == "PLbarn")["status"] == "known"
+
+
+def test_a_new_playlist_of_a_collection_with_playlist_seasons_is_the_collections_to_add(client, session, tube):
+    _one_show(client)
+    _follow(session, tube, SECTIONS)
+    client.post("/api/channels/workshop/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
+
+    result = _follow(session, tube, (NEW_LIST, *SECTIONS))
+
+    # The collection's own setting asks, adds or ignores it when it lists its playlists.
+    assert result.asked == [] and result.added == []
 
 
 def test_a_channel_set_to_add_new_playlists_as_collections_adds_them(client, session, tube):
@@ -291,17 +295,6 @@ def test_the_channels_genre_follows_to_collections_that_had_it(client, session):
     assert genres == {"UCworkshop": "Woodworking", "UCworkshop-shorts": "Shorts"}
 
 
-def test_reordering_a_channel_checks_every_section_is_named_once(client):
-    _one_show(client)
-    page = client.get("/api/channels/workshop").json()
-    order = [entry["ref"] for entry in page["order"]]
-    assert order == ["PLcabin", "streams", "shorts", "videos"]
-
-    assert client.patch("/api/channels/workshop", json={"newSections": "ask", "order": ["videos"]}).status_code == 422
-    page = client.patch("/api/channels/workshop", json={"newSections": "ask", "order": ["shorts", "PLcabin", "streams", "videos"]}).json()
-    assert [entry["ref"] for entry in page["order"]] == ["shorts", "PLcabin", "streams", "videos"]
-
-
 def test_the_daily_look_finds_new_playlists_on_every_channel_and_asks_about_them(client, session, tube, monkeypatch):
     from dataclasses import replace
 
@@ -338,13 +331,12 @@ def test_a_new_section_that_is_already_in_the_library_needs_no_choice(client, se
     assert result.asked == [] and result.added == []
 
 
-def _plain_collection(session, slug, url, *, link=None):
-    from backend.db.models import Collection, CollectionLink
+def _plain_collection(session, slug, url):
+    from backend.db.models import Collection
 
     session.add(Collection(
         uuid=f"uuid-{slug}", slug=slug, source_key="tube", title=f"My {slug}", sharing_url=url,
         membership_level="FREE", type="series", episode_identifier="seasonal", author_name="x", author_slug="x",
-        links=[CollectionLink(url=link or url)],
     ))
     session.commit()
 
@@ -356,9 +348,7 @@ def test_adding_a_collection_to_a_channel_adds_the_channel_and_matches_its_link(
 
     match = client.get("/api/collections/tools/channel/match").json()
     assert (match["title"], match["channelSlug"]) == ("Northwind Workshop", None)
-    assert [(link["url"], link["sectionTitle"], link["keptBy"]) for link in match["links"]] == [
-        (SECTIONS[4].url, "Tool Reviews", None),
-    ]
+    assert (match["sectionTitle"], match["keptBy"]) == ("Tool Reviews", None)
 
     response = client.post("/api/collections/tools/channel")
     assert response.status_code == 200, response.text
@@ -372,51 +362,44 @@ def test_adding_a_collection_to_a_channel_adds_the_channel_and_matches_its_link(
     assert session.scalar(select(Collection).where(Collection.slug == "tools")).episodes == []
 
 
-def test_a_collection_added_to_a_channel_it_has_takes_its_place_in_the_order(client, session):
+def test_a_collection_of_a_section_another_collection_keeps_cannot_join(client, session):
     from backend.db.models import Collection
 
     client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": [
         {"ref": "videos", "target": "main"}, {"ref": "shorts", "target": "own"},
     ]})
     _plain_collection(session, "tools", SECTIONS[4].url)
-    # Another collection of the same Shorts, added from a link with something after it.
-    _plain_collection(session, "my-shorts", f"{SECTIONS[1].url}?sort=new", link=SECTIONS[1].url)
+    _plain_collection(session, "my-videos", ROOT)
 
     assert client.post("/api/collections/tools/channel").status_code == 200
-    order = client.get("/api/channels/workshop").json()["order"]
-    # A list goes above the feeds, which keep their order.
-    assert [entry["ref"] for entry in order] == ["PLtools", "shorts", "videos"]
-
-    # Shorts already has a collection in the channel, so the second one has nothing to match.
-    match = client.get("/api/collections/my-shorts/channel/match").json()
+    # The channel's own collection keeps all its uploads already.
+    match = client.get("/api/collections/my-videos/channel/match").json()
     assert match["channelSlug"] == "workshop"
-    assert match["links"][0]["keptBy"] == "Northwind Workshop Shorts" and match["links"][0]["sectionTitle"] is None
-    refused = client.post("/api/collections/my-shorts/channel")
-    assert refused.status_code == 422 and "None of the links" in refused.json()["detail"]
-    assert session.scalar(select(Collection.channel_id).where(Collection.slug == "my-shorts")) is None
+    assert (match["keptBy"], match["sectionTitle"]) == ("Northwind Workshop", None)
+    refused = client.post("/api/collections/my-videos/channel")
+    assert refused.status_code == 422 and "already keeps" in refused.json()["detail"]
+    assert session.scalar(select(Collection.channel_id).where(Collection.slug == "my-videos")) is None
 
 
 def test_removing_a_collection_from_its_channel_makes_it_plain_again(client, session):
-    from backend.db.models import Channel, Collection, CollectionLink
+    from backend.db.models import Channel, Collection
 
     client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": [
         {"ref": "videos", "target": "main"}, {"ref": "PLtools", "target": "own"},
     ]})
     leave = client.get("/api/collections/UCworkshop/channel/leave").json()
-    assert leave == {"channelTitle": "Northwind Workshop", "videosKeptElsewhere": 0}
+    assert leave == {"channelTitle": "Northwind Workshop"}
 
     response = client.delete("/api/collections/UCworkshop/channel")
     assert response.status_code == 200, response.text
     assert response.json()["channelSlug"] is None
     session.expire_all()
     main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
-    assert [link.channel_section_id for link in main.links] == [None]
-    assert session.scalar(select(Channel)).main_collection_id is None
+    assert main.channel_id is None and session.scalar(select(Channel)).main_collection_id is None
     page = client.get("/api/channels/workshop").json()
     assert [c["title"] for c in page["collections"]] == ["Tool Reviews"]
     # Its link is still the Videos page, so the channel page shows it kept there.
     assert next(s for s in page["sections"] if s["ref"] == "videos")["collectionSlug"] == "UCworkshop"
-    assert session.scalar(select(CollectionLink.url).where(CollectionLink.collection_id == main.id)) == SECTIONS[0].url
 
     # It can join again.
     assert client.post("/api/collections/UCworkshop/channel").status_code == 200
@@ -447,7 +430,7 @@ def test_an_artists_collections_hold_music(client, tube, session, monkeypatch):
     assert body["music"] is True
 
     response = client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": [
-        {"ref": "PLcabin", "target": "main", "placement": "one_season"}, {"ref": "PLtools", "target": "own"},
+        {"ref": "PLcabin", "target": "main"}, {"ref": "PLtools", "target": "own"},
     ]})
     assert response.status_code == 201, response.text
     assert set(session.scalars(select(Collection.type))) == {"music"}

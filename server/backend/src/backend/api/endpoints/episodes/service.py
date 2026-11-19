@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.episode import *
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor, keyset_after, KeysetField
-from backend.db.models import Collection
+from backend.db.models import Collection, LinkSeason, LinkSeasonItem
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
@@ -132,10 +132,17 @@ def _episode_view_stmt(
         stmt = stmt.where(~without_access_clause(Episode))
     newest_first = order == EpisodeOrder.NEWEST_FIRST
     if season_id is not None:
+        # A link season shows its videos in its Site's order, as its playlist or album lists them.
+        position = (
+            select(LinkSeasonItem.position)
+            .join(LinkSeason, LinkSeason.id == LinkSeasonItem.link_season_id)
+            .where(LinkSeason.season_id == season_id, LinkSeasonItem.source_slug == Episode.source_slug)
+            .scalar_subquery()
+        )
         stmt = stmt.where(Episode.season_id == season_id)
         if newest_first:
-            return stmt.order_by(Episode.index.desc(), Episode.id.desc())
-        return stmt.order_by(Episode.index.asc(), Episode.id.asc())
+            return stmt.order_by(position.desc().nulls_first(), Episode.index.desc(), Episode.id.desc())
+        return stmt.order_by(position.asc().nulls_last(), Episode.index.asc(), Episode.id.asc())
     if newest_first:
         return stmt.order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
     return stmt.order_by(Episode.published_date.asc().nulls_last(), Episode.id.asc())
@@ -553,3 +560,50 @@ def delete_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
     s.delete(episode)
     s.flush()
     return payload
+
+
+def _episode_or_404(s: Session, episode_slug: str) -> Episode:
+    episode = s.query(Episode).filter_by(slug=episode_slug).one_or_none()
+    if episode is None:
+        raise HTTPException(status_code=404, detail="Episode not found")
+    return episode
+
+
+def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPIRead:
+    """Where the episode belongs now that its collection's playlists changed. Reading only: nothing is made."""
+    from backend.services.link_seasons import belongs_elsewhere, link_season_names
+
+    episode = _episode_or_404(s, episode_slug)
+    belonging = belongs_elsewhere(s, episode)
+    if belonging is None:
+        return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False)
+    collection = episode.collection
+    kind = link_season_names(collection).one
+    if belonging.link is not None:
+        season = belonging.link.season
+        return EpisodeSeasonPlaceAPIRead(
+            belongs_elsewhere=True, season_name=season.name if season else belonging.link.title,
+            link_title=belonging.link.title, link_kind=kind,
+        )
+    season = next((season for season in collection.seasons if season.loose), None) if belonging.loose else None
+    if season is None and not belonging.loose and episode.published_date is not None:
+        season = next((x for x in collection.seasons if x.slug == str(episode.published_date.year)), None)
+    name = season.name if season is not None else (
+        str(episode.published_date.year) if not belonging.loose and episode.published_date else None
+    )
+    return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=True, season_name=name, link_kind=kind)
+
+
+def move_episode_to_its_season(s: Session, episode_slug: str) -> dict[str, bool | str]:
+    """Move the episode to the season its collection's playlists put it in now, and its files to that season's folder.
+
+    ``s`` is a write transaction's session."""
+    from backend.services.link_seasons import move_to_where_it_belongs
+    from backend.services.season_moves import queue_season_folder_moves
+
+    episode = _episode_or_404(s, episode_slug)
+    if not move_to_where_it_belongs(s, episode):
+        raise HTTPException(status_code=409, detail="The episode is already in the season it belongs in")
+    operation_id, queued = queue_season_folder_moves(s, episode.collection, [episode.id])
+    s.flush()
+    return {"queued": queued, "operation_id": operation_id}

@@ -231,7 +231,7 @@ def test_collection_file_rename_operation_targets_selected_local_media_profile(t
         assert target.task_key == "rename_collection_profile_files"
         assert target.resource_type == "collection"
         assert target.resource_id == collection.id
-        assert target.task_kwargs == {"local_media_profile_id": local_profile.id}
+        assert target.task_kwargs == {"local_media_profile_id": local_profile.id, "season_folders": True}
 
         unused_profile = LocalMediaProfile(
             slug="unused",

@@ -58,7 +58,7 @@ def test_a_bandcamp_artist_lists_albums_newest_first_and_tracks_on_their_own_as_
 def test_a_soundcloud_artist_has_its_albums_and_a_feed_of_all_its_tracks(monkeypatch):
     def soundcloud(*args, cookies=None):
         url = args[-1]
-        if url.endswith("/albums"):
+        if url.endswith("/sets"):
             return {"entries": [{"url": "https://soundcloud.com/flume/sets/palaces"}]}
         return {"_type": "playlist", "title": "Palaces", "album_artist": "Flume", "release_date": "20220520", "playlist_count": 13}
 

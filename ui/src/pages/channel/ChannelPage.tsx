@@ -29,11 +29,11 @@ function choices(channel: ChannelPageRead, section: ChannelSectionRead): {label:
     const mainTitle = main?.title ?? channel.title
     const options: {label: string, plan: SectionPlan}[] = []
     if (section.kind === 'feed') {
-        options.push({label: `Add to ${mainTitle}`, plan: {ref: section.ref, target: 'main', placement: 'site_seasons'}})
-    } else if (!section.hasSeasons) {
-        options.push({label: `As a season of ${mainTitle}`, plan: {ref: section.ref, target: 'main', placement: 'one_season'}})
+        options.push({label: `Add to ${mainTitle}`, plan: {ref: section.ref, target: 'main'}})
+    } else if (channel.site.linkSeasons) {
+        options.push({label: `As a season of ${mainTitle}`, plan: {ref: section.ref, target: 'main'}})
     }
-    options.push({label: 'As its own collection', plan: {ref: section.ref, target: 'own', placement: 'site_seasons'}})
+    options.push({label: 'As its own collection', plan: {ref: section.ref, target: 'own'}})
     return options
 }
 
@@ -127,7 +127,7 @@ export default function ChannelPage() {
                                 </button>
                             ))}
                             <button type="button" className="btn btn-link" disabled={busy !== null}
-                                    onClick={() => void place({ref: section.ref, target: 'skip', placement: 'site_seasons'})}>
+                                    onClick={() => void place({ref: section.ref, target: 'skip'})}>
                                 Ignore
                             </button>
                         </div>

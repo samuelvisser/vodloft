@@ -112,6 +112,9 @@ class CollectionFileRenameAPIRequest(RequestBase):
     """Select one Local Media Profile, or every profile with existing episode media."""
 
     local_media_profile_id: Optional[int] = Field(default=None, gt=0)
+    season_folders: bool = True
+    """Files move to their season's folder too. Without it each file keeps its folder and only its name changes.
+    With it, a video with files also moves to the playlist season it belongs in now first."""
 
 
 class CollectionDownloadAllAPIRequest(RequestBase):

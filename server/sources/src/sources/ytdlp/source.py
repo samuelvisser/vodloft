@@ -681,21 +681,7 @@ class YtDlpSource(Source):
                 continue
             sections.append(SectionRef(ref=tab, url=url, title=title, kind=SectionKind.FEED, role=role, kind_label="Feed"))
         progress("Listing the playlists")
-        try:
-            # A page YouTube refuses part way still leaves the playlists of the pages before it.
-            playlists = runner.run_json("--flat-playlist", "--ignore-errors", f"{root}/playlists", cookies=sites.cookies_for(root))
-        except runner.YtDlpError as exc:
-            logger.info("Not listing the playlists of %s: %s", root, exc)
-            playlists = {}
-        for entry in playlists.get("entries") or []:
-            if not isinstance(entry, dict) or not entry.get("id") or not entry.get("title"):
-                continue
-            count = entry.get("playlist_count")
-            sections.append(SectionRef(
-                ref=str(entry["id"]), url=f"https://www.youtube.com/playlist?list={entry['id']}", title=str(entry["title"]),
-                kind=SectionKind.LIST, kind_label="Playlist", item_count=count if isinstance(count, int) else None,
-                image_url=_thumbnail(entry), description=entry.get("description") or None,
-            ))
+        sections += self._playlists(root)
         followers = info.get("channel_follower_count")
         return ChannelDetails(
             ref=channel_id, url=root, title=str(info.get("channel") or info.get("uploader") or channel_id),
@@ -704,6 +690,60 @@ class YtDlpSource(Source):
             facts=(f"{_count(followers)} subscribers",) if isinstance(followers, int) else (),
             sections=tuple(sections),
         )
+
+    @staticmethod
+    def _playlists(root: str) -> list[SectionRef]:
+        """The playlists a YouTube channel lists, newest first."""
+        try:
+            # A page YouTube refuses part way still leaves the playlists of the pages before it.
+            playlists = runner.run_json("--flat-playlist", "--ignore-errors", f"{root}/playlists", cookies=sites.cookies_for(root))
+        except runner.YtDlpError as exc:
+            logger.info("Not listing the playlists of %s: %s", root, exc)
+            return []
+        found = []
+        for entry in playlists.get("entries") or []:
+            if not isinstance(entry, dict) or not entry.get("id") or not entry.get("title"):
+                continue
+            count = entry.get("playlist_count")
+            found.append(SectionRef(
+                ref=str(entry["id"]), url=f"https://www.youtube.com/playlist?list={entry['id']}", title=str(entry["title"]),
+                kind=SectionKind.LIST, kind_label="Playlist", item_count=count if isinstance(count, int) else None,
+                image_url=_thumbnail(entry), description=entry.get("description") or None,
+            ))
+        return found
+
+    def is_channel_page(self, url: str) -> bool:
+        """A YouTube channel's own link or its Videos tab, which stand for all its uploads, or a Bandcamp or SoundCloud
+        artist's page of all their music. Not one playlist or album, nor only a channel's Shorts or Live tab."""
+        if artists.artist_root(url):
+            return artists.lists_all_music(url)
+        ref = mapping.youtube_ref(collection_url(url))
+        return ref is not None and ref.kind != "playlist" and ref.tab == "videos" and channel_root(collection_url(url)) is not None
+
+    def season_lists(self, url: str) -> list[SectionRef]:
+        """A YouTube channel's playlists, or an artist's albums, newest first."""
+        if artist := artists.artist_root(url):
+            return artists.albums(artist)
+        root = channel_root(collection_url(url))
+        if root is None:
+            raise runner.YtDlpError("This link is not a YouTube channel")
+        return self._playlists(root)
+
+    def list_items(self, url: str) -> tuple[ItemRef, ...]:
+        """A playlist's or album's videos; a channel's uploads, for a link that is another channel; or the video
+        itself, for a link to one video."""
+        items: dict[str, ItemRef] = {}
+        for listing_url in _listing_urls(url) if self.is_channel_page(url) else [url]:
+            listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
+            if listing.get("_type") != "playlist" and listing.get("id"):
+                slug = video_slug(listing)
+                return (ItemRef(slug, listing.get("webpage_url") or url),)
+            for entry in listing.get("entries") or []:
+                if isinstance(entry, dict) and entry.get("id"):
+                    # A video a playlist lists twice keeps its first place.
+                    slug = video_slug(entry)
+                    items.setdefault(slug, ItemRef(slug, entry.get("webpage_url") or entry.get("url") or mapping.video_url(entry["id"])))
+        return tuple(items.values())
 
     def video_details(self, url: str) -> VideoDetails:
         info = self._info(url)
@@ -913,6 +953,11 @@ class YtDlpSource(Source):
         turns into a date when asked: the only date a video it cannot look up has.
         """
         entries: dict[str, dict] = {}
+        if artists.artist_root(url) and artists.lists_all_music(url):
+            for entry in artists.all_tracks(url):
+                if video_slug(entry) not in known:
+                    entries.setdefault(video_slug(entry), entry)
+            return entries
         for index, listing_url in enumerate(_listing_urls(url)):
             try:
                 listing = runner.run_json(
@@ -996,6 +1041,12 @@ class YtDlpSource(Source):
         ]
 
     def _latest_with_ytdlp(self, url: str) -> list[ItemRef]:
+        if artists.artist_root(url) and artists.lists_all_music(url):
+            # An artist's newest music is on their newest album.
+            return [
+                ItemRef(video_slug(entry), entry["url"])
+                for entry in artists.all_tracks(url, newest_albums=1)[:_LATEST_COUNT] if entry.get("url")
+            ]
         items: dict[str, ItemRef] = {}
         for index, listing_url in enumerate(_listing_urls(url)):
             try:
@@ -1038,7 +1089,7 @@ class YtDlpSource(Source):
         """
         details: dict[str, VideoDetails] = {}
         missing: list[ItemRef] = []
-        listing, listed_open, still_listed = self._refresh_from_listing(url, frozenset(item.slug for item in items))
+        listing, listed_open = self._refresh_from_listing(url, frozenset(item.slug for item in items))
         youtube = [item.slug for item in items if _is_youtube(item.url)]
         catalogue = self._catalogue(adding=False) if youtube else None
         listed = [item.slug for item in items] if catalogue is None else [item.slug for item in items if not _is_youtube(item.url)]
@@ -1062,7 +1113,7 @@ class YtDlpSource(Source):
         checked = self._missing_from_api(missing)
         return ItemRefresh(
             details=details | checked.details, removed=checked.removed, refused=checked.refused,
-            open=listed_open | checked.open, listed=still_listed,
+            open=listed_open | checked.open,
         )
 
     def _missing_from_api(self, items: Sequence[ItemRef]) -> ItemRefresh:
@@ -1151,37 +1202,26 @@ class YtDlpSource(Source):
             open=frozenset(looked_open) | checked.open,
         )
 
-    def _refresh_from_listing(
-        self, url: str, wanted: frozenset[str],
-    ) -> tuple[dict[str, VideoDetails], frozenset[str], frozenset[str] | None]:
+    def _refresh_from_listing(self, url: str, wanted: frozenset[str]) -> tuple[dict[str, VideoDetails], frozenset[str]]:
         """Titles from the collection's flat listing, which takes one request a page instead of one a video.
 
         The listing has no reliable description or picture, so those are kept. It
         has the length of most YouTube videos, the uploader when the site says, and
         the badge YouTube shows on a video only members or paying subscribers can watch.
-        Returns those details, which of the videos the listing says are open, and
-        which of them it lists at all. That last one is None for a channel, whose
-        tabs may leave a video out, or when a page could not be read.
+        Returns those details, and which of the videos the listing says are open.
         """
         details: dict[str, VideoDetails] = {}
         listed_open: set[str] = set()
-        ref = mapping.youtube_ref(collection_url(url))
-        seen: set[str] | None = set() if ref is None or ref.kind == "playlist" else None
         for listing_url in _listing_urls(url):
             try:
                 listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
             except runner.YtDlpError as exc:
                 logger.info("Not refreshing from %s: %s", listing_url, exc)
-                seen = None
                 continue
             for entry in listing.get("entries") or []:
-                if not isinstance(entry, dict) or not entry.get("id"):
+                if not isinstance(entry, dict) or not entry.get("id") or not entry.get("title"):
                     continue
                 slug = video_slug(entry)
-                if seen is not None and slug in wanted:
-                    seen.add(slug)
-                if not entry.get("title"):
-                    continue
                 entry_url = entry.get("url") or entry.get("webpage_url")
                 if slug in wanted and entry_url and entry["title"] not in _UNAVAILABLE_TITLES:
                     duration = entry.get("duration")
@@ -1193,7 +1233,7 @@ class YtDlpSource(Source):
                     ))
                     if _listed_open(entry):
                         listed_open.add(slug)
-        return details, frozenset(listed_open), frozenset(seen) if seen is not None else None
+        return details, frozenset(listed_open)
 
     def search(self, query: str) -> SearchResults:
         """YouTube through the API while the search share has room, else through yt-dlp."""

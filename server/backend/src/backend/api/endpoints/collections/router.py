@@ -3,9 +3,10 @@ from fastapi import APIRouter, HTTPException, Query, status
 from .as_bundle import collection_as_bundle_router
 from .as_view import collection_view_router
 from .existing_files.router import router as existing_files_router
+from .seasons.router import router as collection_seasons_router
 from .sync_log import collection_scans
 from backend.api.endpoints.channels.service import (
-    CollectionNotFoundError, collection_channel_leave, collection_channel_match, collection_links, join_collection_channel,
+    CollectionNotFoundError, collection_channel_leave, collection_channel_match, collection_link, join_collection_channel,
     leave_collection_channel, look_up_collection_channel,
 )
 from backend.api.models.channel import CollectionChannelLeaveAPIRead, CollectionChannelMatchAPIRead
@@ -58,6 +59,7 @@ router = APIRouter(prefix="/collections", tags=["Collections"])
 router.include_router(collection_view_router)
 router.include_router(collection_as_bundle_router)
 router.include_router(existing_files_router)
+router.include_router(collection_seasons_router)
 
 @router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[CollectionAPIRead])
 def collection_list():
@@ -142,6 +144,7 @@ def collection_rename_files(collection_slug: str, body: CollectionFileRenameAPIR
             s,
             collection_slug,
             body.local_media_profile_id,
+            season_folders=body.season_folders,
         )
         return result
 
@@ -306,8 +309,8 @@ def _collection_found(work):
 
 def _channel_behind(collection_slug: str):
     with db_session() as s:
-        links = _collection_found(lambda: collection_links(s, collection_slug))
-    return links.source_key, look_up_collection_channel(links)
+        link = _collection_found(lambda: collection_link(s, collection_slug))
+    return link.source_key, look_up_collection_channel(link)
 
 
 @router.get(
@@ -316,7 +319,7 @@ def _channel_behind(collection_slug: str):
     response_model=CollectionChannelMatchAPIRead,
 )
 def collection_channel_match_get(collection_slug: str):
-    """Find the channel behind the collection's links, and which section each link becomes."""
+    """Find the channel behind the collection's link, and which of its sections the collection is."""
     source_key, details = _channel_behind(collection_slug)
     with db_session() as s:
         return _collection_found(lambda: collection_channel_match(s, collection_slug, source_key, details))

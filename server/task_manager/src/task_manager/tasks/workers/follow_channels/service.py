@@ -1,4 +1,4 @@
-"""Following channels: the daily look for new sections, and moving videos after the channel's order changed."""
+"""Following channels: the daily look for new sections."""
 from __future__ import annotations
 
 import logging
@@ -8,12 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.core import run_write_transaction
-from backend.db.models import Channel, CollectionLink, Collection
+from backend.db.models import Channel
 from backend.services.channels import follow_channel
 from backend.services.notifications.emitters import channel_sections_found
 from sources import ChannelDetails, get_source
 from task_manager.scheduler.results import TaskResult
-from task_manager.tasks.helpers.listed_collections import claim_listed_items, link_item_slugs
 
 logger = logging.getLogger(__name__)
 
@@ -63,23 +62,3 @@ def run_follow_channels(s: Session, *, channel_id: int | None = None) -> TaskRes
     if failed:
         summary += f"; {len(failed)} could not be reached"
     return TaskResult(summary=summary, data={"channels": len(ids), "found": found, "added": added, "failed": failed})
-
-
-def run_reclaim_channel_videos(s: Session, *, channel_id: int | None) -> TaskResult:
-    if channel_id is None:
-        return TaskResult(summary="No channel given", data={})
-    # Lowest in the order first, so the link highest in the order is the last to claim a video, and keeps it.
-    links = [(link_id, collection_id) for link_id, collection_id in s.execute(
-        select(CollectionLink.id, CollectionLink.collection_id)
-        .join(Collection, Collection.id == CollectionLink.collection_id)
-        .where(Collection.channel_id == channel_id)
-        .order_by(CollectionLink.position.desc(), CollectionLink.id.desc())
-    )]
-    for link_id, collection_id in links:
-        slugs = set(link_item_slugs(s, link_id))
-        s.rollback()
-        if slugs:
-            run_write_transaction(lambda w, link_id=link_id, collection_id=collection_id, slugs=slugs: claim_listed_items(
-                w, collection_id=collection_id, link_id=link_id, slugs=slugs,
-            ))
-    return TaskResult(summary=f"Put the videos of {len(links)} links in the channel's order", data={"links": len(links)})
