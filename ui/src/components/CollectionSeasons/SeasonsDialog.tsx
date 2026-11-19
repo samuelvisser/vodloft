@@ -32,11 +32,11 @@ type Props = {
 /** What saving removes: ``asked`` when the ones with files stay until Home asks about them. */
 type Leaving = {episodes: number, withFiles: number, asked?: boolean}
 
-/** A channel's videos, or an artist's tracks. */
+/** A creator's videos, or an artist's tracks. */
 type Words = {creator: string, video: string, videos: string, creators: string}
 const wordsFor = (music: boolean): Words => music
     ? {creator: 'artist', creators: 'artists', video: 'track', videos: 'tracks'}
-    : {creator: 'channel', creators: 'channels', video: 'video', videos: 'videos'}
+    : {creator: 'creator', creators: 'creators', video: 'video', videos: 'videos'}
 
 const capitalized = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
@@ -76,14 +76,14 @@ function registries(names: CollectionSeasonsRead['names'], words: Words, view: C
         }),
         outside: createSelectRegistry(
             `OutsideVideos-${names.many}-${view.listsPlaylists}-${view.linksOnlyOffered}`,
-            // The choice is only offered for a channel's collection; holding only the playlists is offered where the
+            // The choice is only offered for a creator's collection; holding only the playlists is offered where the
             // Source can hold a collection of links.
             (view.linksOnlyOffered ? outside : {leave_out: outside.leave_out, add: outside.add}) as typeof outside,
         ),
     }
 }
 
-/** The Seasons dialog: rename and reorder a collection's seasons, and choose which of its channel's playlists are seasons. */
+/** The Seasons dialog: rename and reorder a collection's seasons, and choose which of its creator's playlists are seasons. */
 export default function SeasonsDialog({open, collectionSlug, collectionTitle, onDismiss}: Props) {
     const queryClient = useQueryClient()
     const titleId = `seasons-dialog-title-${useId()}`
@@ -327,7 +327,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
                                             {(linkSeasonsOn || only) && (
                                                 <>
-                                                    {view.listsPlaylists && !view.channelSlug && <div className="form-row">
+                                                    {view.listsPlaylists && !view.creatorSlug && <div className="form-row">
                                                         <label htmlFor="seasons-link-mode">Which {names.many}</label>
                                                         <SimpleSelect
                                                             inputId="seasons-link-mode" registry={regs.mode} value={mode}
@@ -348,7 +348,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                     />
                                                                     <span>{allEnabled ? 'Deselect all' : 'Select all'}</span>
                                                                 </label>
-                                                                {!view.channelSlug && (
+                                                                {!view.creatorSlug && (
                                                                     <button type="button" className="btn btn-small" onClick={() => void refreshPlaylists()} disabled={refreshing || !view.listsPlaylists}>
                                                                         <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} spin={refreshing} aria-hidden="true"/>
                                                                         <span>{refreshing ? 'Looking…' : `Look for new ${names.many}`}</span>
@@ -391,15 +391,15 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         </div>
                                                     )}
 
-                                                    {view.channelSlug && (
+                                                    {view.creatorSlug && (
                                                         <p className="seasons-dialog-muted">
-                                                            <Link to={`/channel/${view.channelSlug}`}>{view.channelTitle}</Link> looks for
+                                                            <Link to={`/creator/${view.creatorSlug}`}>{view.creatorTitle}</Link> looks for
                                                             new {names.many} once a day and decides what happens with them. Change that
-                                                            on its <Link to={`/edit-channel/${view.channelSlug}`}>Edit</Link> page.
+                                                            on its <Link to={`/edit-creator/${view.creatorSlug}`}>Edit</Link> page.
                                                         </p>
                                                     )}
 
-                                                    {mode === 'selected' && view.listsPlaylists && !view.channelSlug && (
+                                                    {mode === 'selected' && view.listsPlaylists && !view.creatorSlug && (
                                                         <div className="form-row">
                                                             <label htmlFor="seasons-new-links">When the {words.creator} adds {/^[aeiou]/.test(names.one) ? 'an' : 'a'} {names.one}</label>
                                                             <SimpleSelect

@@ -1,4 +1,4 @@
-"""Bandcamp artists and SoundCloud accounts as channels: an artist whose sections are their albums, or a SoundCloud
+"""Bandcamp artists and SoundCloud accounts as creators: an artist whose sections are their albums, or a SoundCloud
 account, which may be a musician or a podcast, whose sections are its albums and playlists."""
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlsplit
 
-from ..contract import ChannelDetails, SectionKind, SectionRef, SectionRole
+from ..contract import CreatorDetails, SectionKind, SectionRef, SectionRole
 from .. import ytdlp_runner as runner
 from . import sites, thumbnails
 
@@ -100,7 +100,7 @@ def _album_tracks(url: str, cookies) -> list[dict]:
     return [entry for entry in listing.get("entries") or [] if isinstance(entry, dict) and entry.get("id")]
 
 
-def artist_details(root: str, progress: Callable[[str], None]) -> ChannelDetails:
+def artist_details(root: str, progress: Callable[[str], None]) -> CreatorDetails:
     """The artist and their albums. Bandcamp lists albums and loose tracks; SoundCloud lists albums and, as a feed,
     all of the artist's tracks, so the tracks on no album have a place too."""
     bandcamp = "bandcamp.com" in root
@@ -134,7 +134,7 @@ def artist_details(root: str, progress: Callable[[str], None]) -> ChannelDetails
     handle = root.rstrip("/").rsplit("/", 1)[-1] if not bandcamp else urlsplit(root).hostname.split(".", 1)[0]
     lists = sum(1 for section in sections if section.kind is SectionKind.LIST)
     word = ("album" if lists == 1 else "albums") if bandcamp else ("playlist" if lists == 1 else "playlists")
-    return ChannelDetails(
+    return CreatorDetails(
         ref=handle, url=root, title=str(name or handle), facts=(f"{lists} {word}",),
         # Bandcamp only has music; a SoundCloud account may as well be a podcast.
         sections=tuple(sections), music=bandcamp,

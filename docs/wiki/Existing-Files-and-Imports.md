@@ -170,16 +170,16 @@ What comes along:
   number and name; a video that is in more than one season stays in the one that comes first.
 - A **TV Show Collection** made only of playlists becomes a collection of only those playlists (see
   [[Collections-and-Library#collections-of-only-playlists]]), so the channel's other videos are not added.
-- **Add the collections** in the preview chooses how they arrive. *As channels*, the default, adds each collection to
-  the channel behind its links, such as a YouTube channel, and adds the channel when it is not in your Library yet.
-  *As collections* adds each one on its own; you can still add it to its channel later. Pinchflat imports always
+- **Add the collections** in the preview chooses how they arrive. *As creators*, the default, adds each collection to
+  the creator behind its links, such as the maker of a YouTube channel, and adds the creator when they are not in your
+  Library yet. *As collections* adds each one on its own; you can still add it to its creator later. Pinchflat imports always
   arrive as collections.
 - A **Bandcamp** or **SoundCloud Discography** subscription adds the artist. All of the artist's albums go
   into one Music collection, each album a season, with a Music Local Media Profile that keeps ytdl-sub's folder per
   artist and per album. The genre you give with `= Lofi` becomes the artist's genre, which new albums get too.
 - A **YouTube Full Albums** subscription becomes a Music collection that splits videos by chapter: each video is an
   album and each chapter a track, as in ytdl-sub. The tracks ytdl-sub already saved are adopted one by one.
-- A **Music Videos** subscription (for Plex, Jellyfin, Emby or Kodi) becomes a collection of the artist's channel,
+- A **Music Videos** subscription (for Plex, Jellyfin, Emby or Kodi) becomes a collection of the artist,
   with a Collection profile that keeps ytdl-sub's folder per artist and writes `musicvideo` NFO files. One whose
   categories list several links per artist is not imported; add those as collections of the artist instead (see
   [[Collections-and-Library#music-videos]]).

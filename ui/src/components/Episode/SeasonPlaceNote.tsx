@@ -16,7 +16,7 @@ const SeasonPlaceSchema = z.object({
     seasonName: z.string().nullable().optional(),
     linkTitle: z.string().nullable().optional(),
     linkKind: z.string().default('playlist'),
-    /** Reassigned: the collection of its channel that the episode belongs in now. */
+    /** Reassigned: the collection of its creator that the episode belongs in now. */
     collectionSlug: z.string().nullable().optional(),
     collectionTitle: z.string().nullable().optional(),
 })
@@ -65,7 +65,7 @@ export function useMovedEpisodes(collectionSlug: string | undefined) {
     })
 }
 
-/** A collection's downloaded episodes that its channel places in another collection now: the title of that
+/** A collection's downloaded episodes that its creator places in another collection now: the title of that
  * collection, by episode slug. */
 export function useReassignedEpisodes(collectionSlug: string | undefined) {
     return useQuery({
@@ -92,7 +92,7 @@ export function reassignedMoveMessage(result: ReassignedMove): string {
     return `Moving ${result.episodes} ${result.episodes === 1 ? 'episode' : 'episodes'}${parts.length ? `: ${parts.join(', and ')}` : ''}`
 }
 
-/** Move reassigned episodes to the collections their channel places them in now. */
+/** Move reassigned episodes to the collections their creator places them in now. */
 export async function postReassignedMove(path: string): Promise<ReassignedMove> {
     const response = await fetch(`${apiUrl()}${path}`, {method: 'POST', credentials: 'include'})
     if (!response.ok) {
@@ -176,7 +176,7 @@ export function MovedBadge({onCover = false, asText = false}: {onCover?: boolean
     )
 }
 
-/** Marks a downloaded episode that its channel places in another collection now. */
+/** Marks a downloaded episode that its creator places in another collection now. */
 export function ReassignedBadge({collectionTitle, onCover = false, asText = false}: {collectionTitle: string, onCover?: boolean, asText?: boolean}) {
     return (
         <span
@@ -189,7 +189,7 @@ export function ReassignedBadge({collectionTitle, onCover = false, asText = fals
     )
 }
 
-/** A note on a downloaded episode that its collection's link seasons now put in another season, or that its channel
+/** A note on a downloaded episode that its collection's link seasons now put in another season, or that its creator
  * places in another collection, with a way to move it. */
 export default function SeasonPlaceNote({episodeSlug, collectionSlug, canManage}: {episodeSlug: string, collectionSlug?: string, canManage: boolean}) {
     const {data: place} = useSeasonPlace(episodeSlug)
@@ -200,7 +200,7 @@ export default function SeasonPlaceNote({episodeSlug, collectionSlug, canManage}
             <div className="season-place-note" role="note">
                 <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-from-bracket')} aria-hidden="true"/>
                 <p>
-                    <strong>Reassigned.</strong> Its channel places this episode in{' '}
+                    <strong>Reassigned.</strong> Its creator places this episode in{' '}
                     <Link to={`/collection/${place.collectionSlug}`}>{place.collectionTitle}</Link> now. It is downloaded,
                     so it stays here, files and all, until you move it. Moving it renames its files into that collection,
                     or downloads it again there when that collection downloads it with another Local Media Profile; the

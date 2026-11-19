@@ -172,18 +172,18 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     }
 
     const image = toImageUrl(link?.preview.imageUrl)
-    // A channel's videos can become a collection of their own, or the channel can be added with its playlists.
-    const channelChoice = !!link?.channelUrl && !localCollection && !onCollection
-    const addChannel = () => {
-        if (!link?.channelUrl) return
-        navigate(`/add-channel?source=${encodeURIComponent(link.source.id)}&url=${encodeURIComponent(link.channelUrl)}`)
+    // A creator's videos can become a collection of their own, or the creator can be added with its playlists.
+    const creatorChoice = !!link?.creatorUrl && !localCollection && !onCollection
+    const addCreator = () => {
+        if (!link?.creatorUrl) return
+        navigate(`/add-creator?source=${encodeURIComponent(link.source.id)}&url=${encodeURIComponent(link.creatorUrl)}`)
     }
     const actionLabel = (() => {
         if (!target) return null
         if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding video…' : 'Add this video'
         if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Continue with this movie'
         if (localCollection) return 'Open collection'
-        if (channelChoice) return 'Only its videos'
+        if (creatorChoice) return 'Only its videos'
         return link?.kind === 'episode' ? 'Add its collection' : 'Continue with this collection'
     })()
 
@@ -267,16 +267,16 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                         {!link.drmProtected && link.accessLocked && <AccessNotice item={link}/>}
                         {target ? (
                             <div className="add-media-preview-actions">
-                                {channelChoice && (
-                                    <button className="btn btn-primary" type="button" onClick={addChannel}
-                                            title={link.channelLabel === 'artist'
+                                {creatorChoice && (
+                                    <button className="btn btn-primary" type="button" onClick={addCreator}
+                                            title={link.creatorLabel === 'artist'
                                                 ? 'Add their albums, and choose where each goes'
                                                 : 'Add its videos, livestreams and playlists, and choose where each goes'}>
-                                        Add the {link.channelLabel ?? 'channel'}
+                                        Add the {link.creatorLabel ?? 'creator'}
                                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                                     </button>
                                 )}
-                                <button className={`btn${channelChoice ? '' : ' btn-primary'}`} type="button" onClick={proceed} disabled={addingVideo}>
+                                <button className={`btn${creatorChoice ? '' : ' btn-primary'}`} type="button" onClick={proceed} disabled={addingVideo}>
                                     {actionLabel}
                                     <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                                 </button>
@@ -290,7 +290,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                             </div>
                         ) : collectionsUnsupported ? (
                             <p role="alert">
-                                VODLoft cannot add channels or playlists from {link.source.name} yet. Paste the link to one video instead.
+                                VODLoft cannot add creators or playlists from {link.source.name} yet. Paste the link to one video instead.
                             </p>
                         ) : (
                             <p role="alert">
@@ -319,7 +319,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                 <div className="add-media-browse">
                     <h2>Or start empty</h2>
                     <p className="view-description">
-                        Make a collection of your own from playlists, channels and videos on any site.
+                        Make a collection of your own from playlists, creators and videos on any site.
                     </p>
                     <div className="add-media-browse-list">
                         <button className="btn" type="button" onClick={() => setEmptyOpen(true)}>

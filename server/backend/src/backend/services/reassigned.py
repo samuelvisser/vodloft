@@ -1,7 +1,7 @@
-"""Reassigned: a video that the channel now places in another of its collections.
+"""Reassigned: a video that the creator now places in another of its collections.
 
-A channel keeps each of its creator's videos in one of its collections. A list, such as a playlist, beats a feed:
-a video is in the collection whose lists hold it, which is the channel's own collection for the playlists that are its
+A creator keeps each of its videos in one of its collections. A list, such as a playlist, beats a feed:
+a video is in the collection whose lists hold it, which is the creator's own collection for the playlists that are its
 seasons and a collection of its own for a playlist that is one. A video that a list of another collection holds, and
 no list of its own collection, belongs there. One that is not downloaded simply moves: the collection it is in leaves
 it, and a collection that does not hold it by a list does not add it. One with downloads stays where it is, files and
@@ -28,33 +28,33 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Channel, Collection, DownloadProfile, Episode, MediaDownloadBase
+from backend.db.models import Creator, Collection, DownloadProfile, Episode, MediaDownloadBase
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.link_seasons import _holders, active_lists, link_seasons_on, remove_left_episode
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from sources import SectionKind
 
 
-def _list_collection_ids(channel: Channel, seasons: frozenset[str] = frozenset()) -> set[int]:
-    """The channel's collections of their own made from one of its lists. One whose list the channel placed in its
+def _list_collection_ids(creator: Creator, seasons: frozenset[str] = frozenset()) -> set[int]:
+    """The creator's collections of their own made from one of its lists. One whose list the creator placed in its
     own collection as a season, ``seasons``, is left over from before, and holds nothing any more."""
-    lists = [section for section in channel.sections if section.kind == SectionKind.LIST and section.ref not in seasons]
+    lists = [section for section in creator.sections if section.kind == SectionKind.LIST and section.ref not in seasons]
     urls = {section.url for section in lists}
     refs = {section.ref for section in lists}
     return {
-        collection.id for collection in channel.collections
-        if collection.id != channel.main_collection_id and (collection.sharing_url in urls or collection.slug in refs)
+        collection.id for collection in creator.collections
+        if collection.id != creator.main_collection_id and (collection.sharing_url in urls or collection.slug in refs)
     }
 
 
-def _main_seasons(s: Session, channel: Channel) -> frozenset[str]:
-    main = channel.main_collection
+def _main_seasons(s: Session, creator: Creator) -> frozenset[str]:
+    main = creator.main_collection
     return frozenset(link.ref for link in active_lists(s, main)) if main is not None else frozenset()
 
 
 @dataclass
-class ChannelPlaces:
-    """Which videos each of a channel's collections holds by a list, and which videos each one has."""
+class CreatorPlaces:
+    """Which videos each of a creator's collections holds by a list, and which videos each one has."""
 
     order: list[Collection]
     held: dict[int, set[str]]
@@ -81,17 +81,17 @@ class ChannelPlaces:
         )
 
 
-def channel_places(s: Session, channel: Channel) -> ChannelPlaces:
-    order = sorted(channel.collections, key=lambda collection: (collection.id != channel.main_collection_id, collection.id))
-    lists = _list_collection_ids(channel, _main_seasons(s, channel))
-    places = ChannelPlaces(order=order, held={})
+def creator_places(s: Session, creator: Creator) -> CreatorPlaces:
+    order = sorted(creator.collections, key=lambda collection: (collection.id != creator.main_collection_id, collection.id))
+    lists = _list_collection_ids(creator, _main_seasons(s, creator))
+    places = CreatorPlaces(order=order, held={})
     ids = [collection.id for collection in order]
     for collection in order:
         places.episodes[collection.id] = {}
     for episode in s.scalars(select(Episode).where(Episode.collection_id.in_(ids), Episode.part_of.is_(None))):
         places.episodes[episode.collection_id][episode.source_slug] = episode
     for collection in order:
-        if collection.id == channel.main_collection_id:
+        if collection.id == creator.main_collection_id:
             places.held[collection.id] = set(_holders(s, active_lists(s, collection))) if link_seasons_on(collection) else set()
         elif collection.id in lists:
             # Its own link is the list: every video it has that the list still lists.
@@ -115,7 +115,7 @@ class Reassignment:
     """The same video in the collection it belongs in now."""
 
 
-def _reassigned(places: ChannelPlaces, collections: Iterable[Collection]) -> list[Reassignment]:
+def _reassigned(places: CreatorPlaces, collections: Iterable[Collection]) -> list[Reassignment]:
     found = []
     for collection in collections:
         for slug, episode in places.episodes.get(collection.id, {}).items():
@@ -128,24 +128,24 @@ def _reassigned(places: ChannelPlaces, collections: Iterable[Collection]) -> lis
 
 
 def reassigned_episodes(s: Session, collection: Collection) -> list[Reassignment]:
-    """The collection's downloaded videos that its channel places in another of its collections now."""
-    if collection.channel is None:
+    """The collection's downloaded videos that its creator places in another of its collections now."""
+    if collection.creator is None:
         return []
-    return _reassigned(channel_places(s, collection.channel), [collection])
+    return _reassigned(creator_places(s, collection.creator), [collection])
 
 
-def reassigned_in_channel(s: Session, channel: Channel) -> list[Reassignment]:
-    places = channel_places(s, channel)
+def reassigned_in_creator(s: Session, creator: Creator) -> list[Reassignment]:
+    places = creator_places(s, creator)
     return _reassigned(places, places.order)
 
 
 def reassignment_of(s: Session, episode: Episode, *, downloaded: bool = True) -> Reassignment | None:
-    """Where a downloaded video belongs now, when its channel places it in another collection. With ``downloaded``
+    """Where a downloaded video belongs now, when its creator places it in another collection. With ``downloaded``
     False also for a video without downloads, such as one whose old files were just removed."""
-    channel = episode.collection.channel
-    if channel is None or episode.part_of is not None:
+    creator = episode.collection.creator
+    if creator is None or episode.part_of is not None:
         return None
-    places = channel_places(s, channel)
+    places = creator_places(s, creator)
     if downloaded and episode.id not in places.downloaded:
         return None
     target = places.place(episode.collection_id, episode.source_slug)
@@ -153,23 +153,23 @@ def reassignment_of(s: Session, episode: Episode, *, downloaded: bool = True) ->
 
 
 def placed_elsewhere(s: Session, collection: Collection) -> frozenset[str]:
-    """The videos a collection does not add, because a list of another collection of its channel holds them. A
+    """The videos a collection does not add, because a list of another collection of its creator holds them. A
     collection made from a list adds every video of its list."""
-    channel = collection.channel
-    if channel is None or collection.id in _list_collection_ids(channel, _main_seasons(s, channel)):
+    creator = collection.creator
+    if creator is None or collection.id in _list_collection_ids(creator, _main_seasons(s, creator)):
         return frozenset()
-    return channel_places(s, channel).elsewhere(collection.id)
+    return creator_places(s, creator).elsewhere(collection.id)
 
 
-def settle_channel(s: Session, collection: Collection) -> int:
-    """Let each of the channel's collections leave the videos that are not downloaded and that another collection
+def settle_creator(s: Session, collection: Collection) -> int:
+    """Let each of the creator's collections leave the videos that are not downloaded and that another collection
     holds by a list now. Returns how many left.
 
     ``s`` is a write transaction's session."""
-    channel = collection.channel
-    if channel is None:
+    creator = collection.creator
+    if creator is None:
         return 0
-    places = channel_places(s, channel)
+    places = creator_places(s, creator)
     leaving = [
         episode
         for other in places.order
@@ -182,12 +182,12 @@ def settle_channel(s: Session, collection: Collection) -> int:
 
 
 def awaiting_move(s: Session, collection: Collection) -> set[int]:
-    """The ids of the collection's videos that are still downloaded in another collection of the channel, as
+    """The ids of the collection's videos that are still downloaded in another collection of the creator, as
     Reassigned: its Download Profiles leave them until they are moved."""
-    channel = collection.channel
-    if channel is None:
+    creator = collection.creator
+    if creator is None:
         return set()
-    places = channel_places(s, channel)
+    places = creator_places(s, creator)
     waiting = {
         item.target.id for item in _reassigned(places, places.order) if item.target.collection_id == collection.id
     }
@@ -318,10 +318,10 @@ def after_download(s: Session, episode: Episode) -> None:
     ``s`` is a write transaction's session."""
     from task_manager.scheduler.transactional import queue_task_after_commit
 
-    channel = episode.collection.channel
-    if channel is None or episode.part_of is not None:
+    creator = episode.collection.creator
+    if creator is None or episode.part_of is not None:
         return
-    places = channel_places(s, channel)
+    places = creator_places(s, creator)
     for collection_id in sorted({
         item.episode.collection_id for item in _reassigned(places, places.order) if item.target.id == episode.id
     }):

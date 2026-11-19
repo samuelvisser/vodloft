@@ -17,7 +17,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from ..contract import (
-    Access, ChannelPreset, DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
+    Access, CreatorPreset, DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
 )
 from ..cookies import site_cookies
 from ..registry import named_site_for
@@ -50,14 +50,14 @@ _VIDEO_OUTPUT_HELP = {
 # resolutions.
 _HLS_DOWNLOADS = {"youtube": (360, 720, 1080)}
 _API_KEY_SITES = {"youtube"}
-# The Sites whose channels VODLoft can look up.
-_CHANNEL_SITES = {"youtube", "bandcamp", "soundcloud"}
-# What a Site calls a channel, where that is not "channel".
-_CHANNEL_LABELS = {"bandcamp": "artist", "soundcloud": "artist"}
+# The Sites whose creators VODLoft can look up.
+_CREATOR_SITES = {"youtube", "bandcamp", "soundcloud"}
+# What a Site calls a creator, where that is not "creator".
+_CREATOR_LABELS = {"bandcamp": "artist", "soundcloud": "artist"}
 # Sites whose channels' playlists can be the seasons of a collection made from the channel.
 # An artist's albums are their playlists.
 _LINK_SEASON_SITES = {"youtube", "bandcamp", "soundcloud"}
-_CHANNEL_PRESETS = (ChannelPreset.ONE_SHOW, ChannelPreset.PER_LIST, ChannelPreset.PICK)
+_CREATOR_PRESETS = (CreatorPreset.ONE_SHOW, CreatorPreset.PER_LIST, CreatorPreset.PICK)
 # A channel's members-only videos sit among its open ones, so its collections start without them.
 _HIDES_LOCKED = {"youtube"}
 """The Sites yt-dlp's API key is for: the YouTube Data API key."""
@@ -151,8 +151,8 @@ def site_of(key: str, host: str | None = None) -> Site:
         downloads=_downloads(key), upgrade_checks=_SITE_UPGRADE_CHECKS.get(key, _UPGRADE_CHECKS),
         settings=_SITE_SETTINGS.get(key, _SETTINGS), accesses=_accesses(key),
         takes_api_key=key in _API_KEY_SITES, shows_locked=key not in _HIDES_LOCKED,
-        channels=key in _CHANNEL_SITES, channel_label=_CHANNEL_LABELS.get(key, "channel"),
-        channel_presets=_CHANNEL_PRESETS if key in _CHANNEL_SITES else (), link_seasons=key in _LINK_SEASON_SITES,
+        creators=key in _CREATOR_SITES, creator_label=_CREATOR_LABELS.get(key, "creator"),
+        creator_presets=_CREATOR_PRESETS if key in _CREATOR_SITES else (), link_seasons=key in _LINK_SEASON_SITES,
     )
 
 

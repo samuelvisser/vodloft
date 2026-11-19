@@ -15,7 +15,7 @@ from backend.db.models import MediaDownloadBase
 from backend.services.collections import reindex_collection
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import (
-    LinkListing, follows_channel, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists,
+    LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists,
     offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists, active_lists,
 )
 from backend.services.season_moves import queue_season_folder_moves
@@ -77,8 +77,8 @@ class _View:
     links_only_offered: bool
     only_leaving_count: int
     only_leaving_with_files: int
-    channel_slug: str | None
-    channel_title: str | None
+    creator_slug: str | None
+    creator_title: str | None
 
     def __getattr__(self, name):
         return getattr(self.collection, name)
@@ -90,7 +90,7 @@ def moved_view(s: Session, collection_slug: str) -> MovedEpisodesAPIRead:
     from backend.services.reassigned import reassigned_episodes
 
     collection = _collection(s, collection_slug)
-    # A video its channel places in another collection is Reassigned, not Moved.
+    # A video its creator places in another collection is Reassigned, not Moved.
     reassigned = {item.episode.id for item in reassigned_episodes(s, collection)}
     return MovedEpisodesAPIRead(episode_slugs=[
         episode.slug for episode in moved_episodes(s, collection) if episode.id not in reassigned
@@ -98,7 +98,7 @@ def moved_view(s: Session, collection_slug: str) -> MovedEpisodesAPIRead:
 
 
 def reassigned_view(s: Session, collection_slug: str) -> ReassignedEpisodesAPIRead:
-    """The collection's downloaded videos that its channel places in another collection now. Reading only."""
+    """The collection's downloaded videos that its creator places in another collection now. Reading only."""
     from backend.services.reassigned import reassigned_episodes
 
     return ReassignedEpisodesAPIRead.model_validate({"episodes": reassigned_episodes(s, _collection(s, collection_slug))})
@@ -142,8 +142,8 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         has_own_link=collection.sharing_url is not None, lists_playlists=lists_playlists(collection),
         links_only_offered=get_source(collection.source_key).has(Feature.LINK_COLLECTIONS),
         only_leaving_count=len(only_leaving), only_leaving_with_files=len(only_with_files),
-        channel_slug=collection.channel.slug if follows_channel(collection) else None,
-        channel_title=collection.channel.title if follows_channel(collection) else None,
+        creator_slug=collection.creator.slug if follows_creator(collection) else None,
+        creator_title=collection.creator.title if follows_creator(collection) else None,
     ))
 
 
@@ -165,7 +165,7 @@ def _left_by_only(s: Session, collection: Collection) -> list[int]:
 
 
 def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate) -> CollectionSeasonsAPIRead:
-    """Rename and order the collection's seasons, and set how its channel's playlists are seasons. Videos without files
+    """Rename and order the collection's seasons, and set how its creator's playlists are seasons. Videos without files
     move to where they belong now; the playlists are listed again when that changed.
 
     ``s`` is a write transaction's session."""
@@ -179,7 +179,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     if unknown:
         raise ServiceError(f"{collection.title} has no playlist {unknown[0]}", field="playlists")
     if any(not playlists[link_id].added_by_user for link_id in body.removed_links):
-        raise ServiceError("Only a link you added can be removed; switch a playlist of the channel off instead", field="playlists")
+        raise ServiceError("Only a link you added can be removed; switch a playlist of the creator off instead", field="playlists")
     only = body.outside_videos == OutsideVideos.ONLY
     if only and body.link_seasons == LinkSeasons.OFF:
         raise ServiceError(
@@ -196,9 +196,9 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
             "Remove the links you added first: only a collection that holds what its playlists have can keep them",
             field="outside_videos",
         )
-    if follows_channel(collection) and body.link_seasons == LinkSeasons.ALL:
+    if follows_creator(collection) and body.link_seasons == LinkSeasons.ALL:
         raise ServiceError(
-            f"{collection.channel.title} decides which of its playlists come in; switch them on or off here",
+            f"{collection.creator.title} decides which of its playlists come in; switch them on or off here",
             field="link_seasons",
         )
     if body.link_seasons != LinkSeasons.OFF and not only and not lists_playlists(collection):
@@ -230,8 +230,8 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         s.delete(playlists.pop(link_id))
     collection.link_seasons = body.link_seasons
     collection.outside_videos = body.outside_videos
-    if not follows_channel(collection):
-        # A channel's own collection follows what the channel does with a new playlist.
+    if not follows_creator(collection):
+        # A creator's own collection follows what the creator does with a new playlist.
         collection.new_link_seasons = body.new_link_seasons
     collection.loose_videos = body.loose_videos
     collection.list_layout = body.list_layout
@@ -315,20 +315,20 @@ def links_lookup(s: Session, collection_slug: str) -> _Lookup:
     """What listing the collection's playlists needs, read before the slow lookup."""
     collection = _collection(s, collection_slug)
     if not lists_playlists(collection):
-        raise ServiceError("This collection's link is not a channel with playlists", field="link_seasons")
-    if follows_channel(collection):
-        raise ServiceError(f"{collection.channel.title} looks for new playlists itself: check the channel", field="link_seasons")
+        raise ServiceError("This collection's link is not a creator with playlists", field="link_seasons")
+    if follows_creator(collection):
+        raise ServiceError(f"{collection.creator.title} looks for new playlists itself: check the creator", field="link_seasons")
     return _Lookup(collection.source_key, collection.sharing_url)
 
 
 def look_up_links(lookup: _Lookup) -> LinkListing:
-    """The channel's playlists, asked of its Source. Slow: call it outside a transaction."""
+    """The creator's playlists, asked of its Source. Slow: call it outside a transaction."""
     with asking_source("Could not list the playlists"):
         return LinkListing(get_source(lookup.source_key).season_lists(lookup.url))
 
 
 def save_listed_links(s: Session, collection_slug: str, listing: LinkListing) -> CollectionSeasonsAPIRead:
-    """Store the playlists the channel has now, before the user picks which are seasons. A playlist listed for the
+    """Store the playlists the creator has now, before the user picks which are seasons. A playlist listed for the
     first time is on, as when the collection is set up.
 
     ``s`` is a write transaction's session."""

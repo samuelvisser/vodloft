@@ -11,7 +11,7 @@ the rest are reported. A TV Show Collection of a channel and its own playlists b
 whose playlists are seasons, each with its season's number and name, and a video several of them list stays in the
 highest one, as in ytdl-sub.
 
-A Bandcamp or SoundCloud discography becomes the artist's channel, its albums the seasons of one Music
+A Bandcamp or SoundCloud discography becomes the artist, a creator, with its albums the seasons of one Music
 collection, with a Music Local Media Profile that keeps ytdl-sub's folder per artist and per album.
 """
 from __future__ import annotations
@@ -569,7 +569,7 @@ _MUSIC_SETTINGS: dict[str, object] = {
 _MUSIC_VIDEO_SETTINGS: dict[str, object] = {
     "episode_nfo": "music_video", "show_nfo": False, "download_collection_assets": False,
 }
-"""A Collection profile of music videos: a musicvideo NFO by the channel's artist, and no show or season files."""
+"""A Collection profile of music videos: a musicvideo NFO by the creator as artist, and no show or season files."""
 
 
 def _music_video_overrides(sub: Subscription) -> dict[str, str]:
@@ -579,7 +579,7 @@ def _music_video_overrides(sub: Subscription) -> dict[str, str]:
 
 
 def _music_refusal(sub: Subscription) -> str | None:
-    """Why a music subscription is not imported, or None for an artist VODLoft adds as a channel, or for full albums,
+    """Why a music subscription is not imported, or None for an artist VODLoft adds as a creator, or for full albums,
     which VODLoft splits into tracks by their chapters."""
     applied = set(sub.applied)
     if "YouTube Full Albums" in applied:
@@ -618,7 +618,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         return None, [ImportWarning(sub.name, f"Not imported: VODLoft doesn't know the preset {', '.join(sub.unknown)}")]
     if sub.map:
         return None, [ImportWarning(sub.name, "Not imported: VODLoft adds an artist's music videos from one link; "
-                                              "add the others to the artist's channel as collections of their own")]
+                                              "add the others to the artist as collections of their own")]
     if kind == "music":
         refused = _music_refusal(sub)
         if refused:
@@ -651,7 +651,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         settings.update(_MUSIC_VIDEO_SETTINGS)
         if links.left_out:
             warnings.append(ImportWarning(
-                "links", f"VODLoft adds the music videos at {links.url}; add the others to the artist's channel as "
+                "links", f"VODLoft adds the music videos at {links.url}; add the others to the artist as "
                 f"collections of their own: {', '.join(links.left_out)}", "close",
             ))
     elif links.left_out:
@@ -707,8 +707,8 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         link_seasons=tuple(links.playlists),
         loose_season=links.channel_season if links.playlists else None,
         links_only=links.links_only,
-        # The artist's channel names the artist of its music videos.
-        channel=(music and not full_albums) or music_videos,
+        # The artist names the artist of its music videos.
+        creator=(music and not full_albums) or music_videos,
     )
     signature = (report.output_template, report.original, repr(sorted(settings.items())))
     return _Planned(sub, chain, profile, signature, collection, directory, layout.index), []
@@ -840,7 +840,7 @@ def plan_import(data: YtdlSubData, location: ImportLocation) -> ImportPlan:
         warnings=tuple(warnings),
         download_folder=folder,
         probes=probes,
-        channels=True,
+        creators=True,
     )
 
 

@@ -23,9 +23,9 @@ class MusicTrack:
 
 
 def collection_artist(collection) -> str:
-    """Who a collection's music is by: its channel, else its author, else the collection itself."""
-    channel = getattr(collection, "channel", None)
-    return (channel.title if channel is not None else None) or collection.author_name or collection.title
+    """Who a collection's music is by: its creator, else its author, else the collection itself."""
+    creator = getattr(collection, "creator", None)
+    return (creator.title if creator is not None else None) or collection.author_name or collection.title
 
 
 def music_track(episode: "Episode") -> MusicTrack:

@@ -17,7 +17,7 @@ from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
     Chapter,
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, ChannelDetails, SectionKind, SectionRef, SectionRole, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, CreatorDetails, SectionKind, SectionRef, SectionRole, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
@@ -473,7 +473,7 @@ class YtDlpSource(Source):
         Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH, Feature.COSTLY_SEARCH,
         Feature.FORMAT_CHOICES, Feature.YTDLP_OPTIONS, Feature.METADATA_REFRESH,
-        Feature.PENDING_CHECKS, Feature.CHANNELS, Feature.CHAPTERS, Feature.LINK_COLLECTIONS,
+        Feature.PENDING_CHECKS, Feature.CREATORS, Feature.CHAPTERS, Feature.LINK_COLLECTIONS,
     })
     episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.
@@ -599,16 +599,16 @@ class YtDlpSource(Source):
     def resolve(self, url: str) -> ResolvedLink | None:
         url = collection_url(url)
         youtube = mapping.youtube_ref(url)
-        # A channel's Videos tab is the whole channel too, which can be added as a channel instead.
+        # A channel's Videos tab is the whole channel too, which can be added as a creator instead.
         channel = channel_root(url) if youtube is not None and youtube.kind != "playlist" and youtube.tab == "videos" else None
         if artists.is_artist_page(url):
             channel = artists.artist_root(url)
-        channel_label = sites.site_for(channel).channel_label if channel else None
+        creator_label = sites.site_for(channel).creator_label if channel else None
         if collection := self._api_collection(url):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site="YouTube", channel_url=channel, channel_label=channel_label,
+                site="YouTube", creator_url=channel, creator_label=creator_label,
             )
         try:
             info = self._info(url)
@@ -622,7 +622,7 @@ class YtDlpSource(Source):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site=site, channel_url=channel, channel_label=channel_label,
+                site=site, creator_url=channel, creator_label=creator_label,
             )
         return ResolvedLink(
             kind=LinkKind.VIDEO,
@@ -637,7 +637,7 @@ class YtDlpSource(Source):
             access=_access(info),
         )
 
-    def channel_of(self, url: str) -> str | None:
+    def creator_of(self, url: str) -> str | None:
         """A channel's tab is the channel; a playlist belongs to the channel that made it, and an album to its artist."""
         if root := artists.artist_root(url):
             return root
@@ -648,7 +648,7 @@ class YtDlpSource(Source):
         author = self.collection_details(url).author_url
         return channel_root(author) if author else None
 
-    def channel_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> ChannelDetails:
+    def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
         """A YouTube channel through yt-dlp, which costs no API quota: its details, the Videos, Live and Shorts tabs
         it has, and its playlists. ``ref`` is the channel's link or its ID. A Bandcamp or SoundCloud artist is a
         channel of their albums."""
@@ -683,7 +683,7 @@ class YtDlpSource(Source):
         progress("Listing the playlists")
         sections += self._playlists(root)
         followers = info.get("channel_follower_count")
-        return ChannelDetails(
+        return CreatorDetails(
             ref=channel_id, url=root, title=str(info.get("channel") or info.get("uploader") or channel_id),
             handle=handle, description=info.get("description") or None,
             avatar_url=pictures.get("avatar_uncropped"), banner_url=pictures.get("banner_uncropped"),
@@ -712,7 +712,7 @@ class YtDlpSource(Source):
             ))
         return found
 
-    def is_channel_page(self, url: str) -> bool:
+    def is_creator_page(self, url: str) -> bool:
         """A YouTube channel's own link or its Videos tab, which stand for all its uploads, or a Bandcamp or SoundCloud
         artist's page of all their music. Not one playlist or album, nor only a channel's Shorts or Live tab."""
         if artists.artist_root(url):
@@ -733,7 +733,7 @@ class YtDlpSource(Source):
         """A playlist's or album's videos; a channel's uploads, for a link that is another channel; or the video
         itself, for a link to one video."""
         items: dict[str, ItemRef] = {}
-        for listing_url in _listing_urls(url) if self.is_channel_page(url) else [url]:
+        for listing_url in _listing_urls(url) if self.is_creator_page(url) else [url]:
             listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
             if listing.get("_type") != "playlist" and listing.get("id"):
                 slug = video_slug(listing)

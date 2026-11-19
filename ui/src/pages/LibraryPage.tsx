@@ -20,25 +20,25 @@ import CollectionSort, {
     isCollectionSortOrder,
 } from '../components/CollectionSort/CollectionSort'
 import {
-    useChannels, useLibraryCounts, useLibraryDownloads, useLibraryPreferences, useMovies, useCollectionsView, useSaveLibraryPreferences, useVideos,
+    useCreators, useLibraryCounts, useLibraryDownloads, useLibraryPreferences, useMovies, useCollectionsView, useSaveLibraryPreferences, useVideos,
 } from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg} from '../types/collection'
 import DurationPill from '../components/common/DurationPill'
 import './LibraryPage.css'
-import {capitalized} from '../types/channel'
+import {capitalized} from '../types/creator'
 import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SITE_FILTER_STORAGE_KEY = 'librarySiteFilter'
 const LIBRARY_KIND_FILTER_STORAGE_KEY = 'libraryKindFilter'
-const KIND_VALUES = ['channel', 'collection']
+const KIND_VALUES = ['creator', 'collection']
 
-/** Channels and collections, with channels named as their Sites call them when they all call them the same. */
-function kindOptions(channelLabels: string[]) {
-    const labels = new Set(channelLabels)
-    const channels = labels.size === 1 ? `${capitalized([...labels][0])}s` : 'Channels'
-    return [{value: 'channel', label: channels}, {value: 'collection', label: 'Collections'}]
+/** Creators and collections, with creators named as their Sites call them when they all call them the same. */
+function kindOptions(creatorLabels: string[]) {
+    const labels = new Set(creatorLabels)
+    const creators = labels.size === 1 ? `${capitalized([...labels][0])}s` : 'Creators'
+    return [{value: 'creator', label: creators}, {value: 'collection', label: 'Collections'}]
 }
 const LIBRARY_COLLECTION_SORT_STORAGE_KEY = 'libraryCollectionSort'
 
@@ -158,7 +158,7 @@ export default function LibraryPage() {
     const [search, setSearch] = useState('')
     const searchWords = useMemo(() => foldForSearch(search).split(/\s+/).filter(Boolean), [search])
     const {data: collections, isLoading: collectionsLoading, error: collectionsError} = useCollectionsView()
-    const {data: channels} = useChannels()
+    const {data: creators} = useCreators()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
     const {data: videos, isLoading: videosLoading, error: videosError} = useVideos()
     const {data: downloads} = useLibraryDownloads()
@@ -201,26 +201,26 @@ export default function LibraryPage() {
         () => applicableChipFilter(collectionTypeFilter, CollectionTypeReg.values),
         [collectionTypeFilter],
     )
-    const hasChannels = !!channels?.length
+    const hasCreators = !!creators?.length
     const activeKindFilter = useMemo(
-        () => hasChannels ? applicableChipFilter(kindFilter, KIND_VALUES) : [],
-        [kindFilter, hasChannels],
+        () => hasCreators ? applicableChipFilter(kindFilter, KIND_VALUES) : [],
+        [kindFilter, hasCreators],
     )
-    // Channels come first. A collection type says nothing about a channel, so choosing one leaves channels out.
-    const filteredChannels = useMemo(() => (
-        matchesChipFilter('channel', activeKindFilter) && activeCollectionTypeFilter.length === 0
-            ? channels?.filter((channel) => (
-                matchesSiteFilter(channel, activeSiteFilter)
-                && matchesLibrarySearch({title: channel.title, authorName: channel.handle}, searchWords)
+    // Creators come first. A collection type says nothing about a creator, so choosing one leaves creators out.
+    const filteredCreators = useMemo(() => (
+        matchesChipFilter('creator', activeKindFilter) && activeCollectionTypeFilter.length === 0
+            ? creators?.filter((creator) => (
+                matchesSiteFilter(creator, activeSiteFilter)
+                && matchesLibrarySearch({title: creator.title, authorName: creator.handle}, searchWords)
             )) ?? []
             : []
-    ), [channels, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords])
+    ), [creators, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords])
     const filteredCollections = useMemo(() => {
         if (!matchesChipFilter('collection', activeKindFilter)) return []
-        // A channel's collections are behind its card, unless a search looks for them or the card is filtered out.
-        const behindCard = new Set(searchWords.length > 0 ? [] : filteredChannels.map((channel) => channel.slug))
+        // A creator's collections are behind its card, unless a search looks for them or the card is filtered out.
+        const behindCard = new Set(searchWords.length > 0 ? [] : filteredCreators.map((creator) => creator.slug))
         const shown = collections?.filter((collection) => (
-            !(collection.channelSlug && behindCard.has(collection.channelSlug))
+            !(collection.creatorSlug && behindCard.has(collection.creatorSlug))
             && matchesChipFilter(collection.type, activeCollectionTypeFilter) && matchesSiteFilter(collection, activeSiteFilter)
             && matchesLibrarySearch(collection, searchWords)
         )) ?? []
@@ -229,7 +229,7 @@ export default function LibraryPage() {
         return shown.sort((a, b) => (
             (ranks.get(a.slug) ?? 0) - (ranks.get(b.slug) ?? 0) || compareCollections(a, b, collectionSort)
         ))
-    }, [collections, filteredChannels, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords, collectionSort])
+    }, [collections, filteredCreators, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords, collectionSort])
     const filteredMovies = useMemo(
         () => movies?.filter((movie) => (
             matchesSiteFilter(movie, activeSiteFilter) && matchesLibrarySearch(movie, searchWords)
@@ -311,11 +311,11 @@ export default function LibraryPage() {
     const showSort = activeType === 'collections' && hasCollections
     const showTypeFilter = activeType === 'collections' && hasCollections
     const showChips = siteOptions.length > 1 || showTypeFilter
-    const showKindFilter = showTypeFilter && hasChannels
+    const showKindFilter = showTypeFilter && hasCreators
     const activeFilterCount = (activeSiteFilter.length > 0 ? 1 : 0) + (showTypeFilter && activeCollectionTypeFilter.length > 0 ? 1 : 0)
         + (showKindFilter && activeKindFilter.length > 0 ? 1 : 0)
     const filtered = activeFilterCount > 0 || searchWords.length > 0
-    const matchingCount = activeType === 'collections' ? filteredChannels.length + filteredCollections.length
+    const matchingCount = activeType === 'collections' ? filteredCreators.length + filteredCollections.length
         : activeType === 'movies' ? filteredMovies.length
             : filteredVideos.length
     const resetFilters = () => {
@@ -331,7 +331,7 @@ export default function LibraryPage() {
                 className="library-header"
                 title="Library"
                 titleId="library-title"
-                subtitle={<p className="view-description">{hasChannels ? 'Collections, channels, movies and videos' : 'Collections, movies and videos'} indexed by VODLoft.</p>}
+                subtitle={<p className="view-description">{hasCreators ? 'Collections, creators, movies and videos' : 'Collections, movies and videos'} indexed by VODLoft.</p>}
                 actions={can('add_media') && <PageHeaderAction icon={faIcon('fass', 'plus')} label="Add media" to="/add"/>}
             >
                 {showTabs && (
@@ -365,7 +365,7 @@ export default function LibraryPage() {
                     {showChips && (
                         <>
                             {showKindFilter && (
-                                <ChipFilter label="Kind" options={kindOptions((channels ?? []).map((channel) => channel.channelLabel))} selected={activeKindFilter} onChange={setKindFilter}/>
+                                <ChipFilter label="Kind" options={kindOptions((creators ?? []).map((creator) => creator.creatorLabel))} selected={activeKindFilter} onChange={setKindFilter}/>
                             )}
                             <ChipFilter label="Site" options={siteOptions} selected={activeSiteFilter} onChange={setSiteFilter}/>
                             {showTypeFilter && (
@@ -394,25 +394,25 @@ export default function LibraryPage() {
             ) : activeType === 'videos' && hasVideos && !videos ? (
                 <LibraryTypeLoading what="videos" error={videosError}/>
             ) : activeType === 'collections' && hasCollections ? (
-                filteredChannels.length + filteredCollections.length > 0 ? (
+                filteredCreators.length + filteredCollections.length > 0 ? (
                     <div className="library-collection-grid" role="list" aria-label="Collections">
-                        {filteredChannels.map((channel) => {
-                            const avatar = toImageUrl(channel.avatarUrl)
-                            const banner = toImageUrl(channel.bannerUrl)
+                        {filteredCreators.map((creator) => {
+                            const avatar = toImageUrl(creator.avatarUrl)
+                            const banner = toImageUrl(creator.bannerUrl)
                             return (
-                                <Link className="library-tile library-tile--channel" to={`/channel/${channel.slug}`} key={`channel-${channel.slug}`} role="listitem">
+                                <Link className="library-tile library-tile--creator" to={`/creator/${creator.slug}`} key={`creator-${creator.slug}`} role="listitem">
                                     <span className="library-tile-art" style={banner ? {backgroundImage: `url("${banner}")`} : undefined}>
                                         {avatar
-                                            ? <img className="library-channel-avatar" src={avatar} alt="" loading="lazy" decoding="async"/>
-                                            : <span className="library-channel-avatar library-channel-avatar--empty" aria-hidden="true">{channel.title.slice(0, 2).toUpperCase()}</span>}
-                                        <SourceBadge sourceKey={channel.sourceKey} className="library-tile-source"/>
+                                            ? <img className="library-creator-avatar" src={avatar} alt="" loading="lazy" decoding="async"/>
+                                            : <span className="library-creator-avatar library-creator-avatar--empty" aria-hidden="true">{creator.title.slice(0, 2).toUpperCase()}</span>}
+                                        <SourceBadge sourceKey={creator.sourceKey} className="library-tile-source"/>
                                     </span>
                                     <span className="library-tile-copy">
-                                        <span className="library-tile-title">{channel.title}</span>
-                                        <span className="library-tile-author">{channel.site.name} {channel.channelLabel}</span>
+                                        <span className="library-tile-title">{creator.title}</span>
+                                        <span className="library-tile-author">{creator.site.name} {creator.creatorLabel}</span>
                                         <span className="library-tile-meta">
-                                            <span>{channel.collectionCount} {channel.collectionCount === 1 ? 'collection' : 'collections'}</span>
-                                            <span>{channel.episodeCount} videos</span>
+                                            <span>{creator.collectionCount} {creator.collectionCount === 1 ? 'collection' : 'collections'}</span>
+                                            <span>{creator.episodeCount} videos</span>
                                         </span>
                                     </span>
                                 </Link>
@@ -423,7 +423,7 @@ export default function LibraryPage() {
                             const image = toImageUrl(
                                 collection.thumbnailSquarePath || collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.logoImagePath || collection.authorHeadshotPath,
                             )
-                            // A yt-dlp channel's author is usually the channel itself: do not say its name twice.
+                            // A yt-dlp creator's author is usually the creator itself: do not say its name twice.
                             const showAuthor = !!collection.authorName && !sameName(collection.authorName, collection.title)
                             return (
                                 <Link className="library-tile" to={`/collection/${collection.slug}`} key={collection.slug} role="listitem">

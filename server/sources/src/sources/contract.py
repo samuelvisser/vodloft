@@ -75,9 +75,9 @@ class Feature(StrEnum):
     OWN_STUDIO = "own_studio"
     """The service makes its own shows and movies, so VODLoft names it as the studio of what it
     downloads. Without it the studio is left to the media itself."""
-    CHANNELS = "channels"
-    """Looking up a creator's channel, with ``channel_details``: who they are and the sections
-    their page offers. Only a Site with ``channels`` offers them."""
+    CREATORS = "creators"
+    """Looking up a creator, with ``creator_details``: who they are and the sections
+    their page offers. Only a Site with ``creators`` offers them."""
     PENDING_CHECKS = "pending_checks"
     """Listing upcoming and live videos with their publish status, and looking them up again
     with ``check_pending`` until they are published. VODLoft shows them, but never records one
@@ -361,11 +361,11 @@ class LinkKind(StrEnum):
     MOVIE = "movie"
     EPISODE = "episode"
     VIDEO = "video"
-    CHANNEL = "channel"
+    CREATOR = "creator"
 
 
 class SectionKind(StrEnum):
-    """What one part of a channel is, whatever the Site calls it."""
+    """What one part of a creator is, whatever the Site calls it."""
 
     FEED = "feed"
     """Grows forever, ordered by date: Videos, Shorts, Live, Reels."""
@@ -380,7 +380,7 @@ class SectionKind(StrEnum):
 
 
 class SectionRole(StrEnum):
-    """What a section holds, which only steers the defaults when a channel is added."""
+    """What a section holds, which only steers the defaults when a creator is added."""
 
     MAIN = "main"
     SHORT = "short"
@@ -389,7 +389,7 @@ class SectionRole(StrEnum):
 
 @dataclass(frozen=True)
 class SectionRef:
-    """One section of a channel. ``ref`` is the Site's own id for it, which stays the same when it is renamed."""
+    """One section of a creator. ``ref`` is the Site's own id for it, which stays the same when it is renamed."""
 
     ref: str
     url: str
@@ -409,10 +409,10 @@ class SectionRef:
 
 
 @dataclass(frozen=True)
-class ChannelDetails:
-    """A creator's channel on one Site: who they are, and the sections their page offers.
+class CreatorDetails:
+    """A creator on one Site: who they are, and the sections their page offers.
 
-    ``ref`` is the Site's own id for the channel. ``url`` is None for a channel the Site has no page of its own for,
+    ``ref`` is the Site's own id for the creator. ``url`` is None for a creator the Site has no page of its own for,
     such as a Daily Wire host, which is only found through VODLoft's Browse page.
     """
 
@@ -469,10 +469,10 @@ class ResolvedLink:
     """What the Source calls this kind of result, such as Channel or Playlist for a collection."""
     facts: tuple[str, ...] = ()
     """Short facts for a search result, such as "412 videos" or "19:05"."""
-    channel_url: str | None = None
-    """The creator's channel this link is, on a Site with channels, so it can be added as a channel instead."""
-    channel_label: str | None = None
-    """What the Site calls that channel, such as channel or artist."""
+    creator_url: str | None = None
+    """The creator this link is, on a Site with creators, so it can be added as a creator instead."""
+    creator_label: str | None = None
+    """What the Site calls that creator, such as creator or artist."""
 
 
 @dataclass(frozen=True)
@@ -734,8 +734,8 @@ class ApiKeyRejected(ValueError):
 ANY_DOMAIN = "*"
 
 
-class ChannelPreset(StrEnum):
-    """A starting point for what to keep of a channel. Each one only fills in where its sections go."""
+class CreatorPreset(StrEnum):
+    """A starting point for what to keep of a creator. Each one only fills in where its sections go."""
 
     ONE_SHOW = "one_show"
     """Its feeds by year and its lists as named seasons, in one collection."""
@@ -785,16 +785,16 @@ class Site:
     accesses: tuple[Access, ...] = ()
     """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
     by the keys its Sources tell."""
-    channels: bool = False
-    """The Site has creators' channels VODLoft can add, through a Source with ``Feature.CHANNELS``."""
-    channel_label: str = "channel"
-    """What the Site calls a creator's channel, in lower case, such as host on The Daily Wire. VODLoft names the
-    Site's channels by it everywhere."""
-    channel_presets: tuple[ChannelPreset, ...] = ()
-    """The ways the Site offers to keep a channel, the first one the default."""
+    creators: bool = False
+    """The Site has creators VODLoft can add, through a Source with ``Feature.CREATORS``."""
+    creator_label: str = "creator"
+    """What the Site calls a creator, in lower case, such as host on The Daily Wire or artist on Bandcamp. VODLoft
+    names the Site's creators by it everywhere."""
+    creator_presets: tuple[CreatorPreset, ...] = ()
+    """The ways the Site offers to keep a creator, the first one the default."""
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
-    link seasons, through its Source's ``is_channel_page``, ``season_lists`` and ``list_items``."""
+    link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
     list_names: ListNames = field(default_factory=lambda: ListNames())
     """What link seasons are called in a collection on the Site, other than a Music collection."""
     music_link_season_names: ListNames = field(default_factory=lambda: ListNames("album", "albums", "Singles"))
@@ -975,22 +975,22 @@ class Source(ABC):
         """Look up a collection. Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
         raise NotImplementedError(f"{self.name} does not list episodes")
 
-    def channel_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> ChannelDetails:
-        """Look up a channel by its link, or by the ``ref`` it had before. Only Sources with ``Feature.CHANNELS``
+    def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
+        """Look up a creator by its link, or by the ``ref`` it had before. Only Sources with ``Feature.CREATORS``
         implement it.
 
         A lookup can take a while, so it tells ``progress`` what it is doing, as a short sentence such as
         "Listing the playlists"."""
-        raise NotImplementedError(f"{self.name} has no channels")
+        raise NotImplementedError(f"{self.name} has no creators")
 
-    def channel_of(self, url: str) -> str | None:
-        """The channel a collection's link belongs to, as ``channel_details`` takes it, or None when the link is not
-        one channel's. Slow: it may ask the Site. Only Sources with ``Feature.CHANNELS`` implement it."""
-        raise NotImplementedError(f"{self.name} has no channels")
+    def creator_of(self, url: str) -> str | None:
+        """The creator a collection's link belongs to, as ``creator_details`` takes it, or None when the link is not
+        one creator's. Slow: it may ask the Site. Only Sources with ``Feature.CREATORS`` implement it."""
+        raise NotImplementedError(f"{self.name} has no creators")
 
-    def is_channel_page(self, url: str) -> bool:
-        """Whether a collection's link is a creator's whole channel, whose playlists can be its seasons, rather than
-        one playlist. Told without asking the Site. Only Sources with a Site with ``link_seasons`` implement it."""
+    def is_creator_page(self, url: str) -> bool:
+        """Whether a collection's link is a creator's own page of all their uploads, such as a YouTube channel, whose
+        playlists can be its seasons, rather than one playlist. Told without asking the Site. Only Sources with a Site with ``link_seasons`` implement it."""
         return False
 
     def season_lists(self, url: str) -> list[SectionRef]:

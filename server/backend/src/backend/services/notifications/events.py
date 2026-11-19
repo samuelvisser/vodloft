@@ -26,7 +26,7 @@ class Event(StrEnum):
     DISK_ALMOST_FULL = "disk_almost_full"
     UPDATE_AVAILABLE = "update_available"
     QUICK_DOWNLOAD_FINISHED = "quick_download_finished"
-    CHANNEL_SECTIONS_FOUND = "channel_sections_found"
+    CREATOR_SECTIONS_FOUND = "creator_sections_found"
     EVERYTHING = "everything"
     """Only for a daily summary: everything that happened that day."""
 
@@ -63,7 +63,7 @@ EVENTS: tuple[EventDefinition, ...] = (
     EventDefinition(Event.DISK_ALMOST_FULL, "the disk is almost full", Tone.FAILURE, False, False, False, True),
     EventDefinition(Event.UPDATE_AVAILABLE, "a VODLoft update is out", Tone.INFO, False, False, False),
     EventDefinition(Event.QUICK_DOWNLOAD_FINISHED, "my Quick download finishes", Tone.SUCCESS, False, False, True),
-    EventDefinition(Event.CHANNEL_SECTIONS_FOUND, "a channel adds a playlist or show", Tone.INFO, False, False, True),
+    EventDefinition(Event.CREATOR_SECTIONS_FOUND, "a creator adds a playlist or show", Tone.INFO, False, False, True),
     EventDefinition(Event.EVERYTHING, "anything happens", Tone.INFO, True, False, True),
 )
 DEFINITIONS = {definition.event: definition for definition in EVENTS}

@@ -10,7 +10,7 @@ from jinja2 import Environment, TemplateError, nodes
 from jinja_analysis import UnknownOutput, analyze_template, expression_dependencies
 from jinja_analysis.expressions import analysis_environment
 
-from backend.utils.output_template import CHANNEL_OUTPUT_TEMPLATE_FIELDS
+from backend.utils.output_template import CREATOR_OUTPUT_TEMPLATE_FIELDS
 
 _ITEM_MARK, _COLLECTION_START, _COLLECTION_END = "\x01", "\x02", "\x03"
 _SEASON_FOLDER = re.compile(r"^(?:s(?:eason)?[\W_]?\d+|specials|extras|trailers|featurettes)$", re.I)
@@ -70,10 +70,10 @@ def infer_collection_media_directory(
         if any(tree.find_all((nodes.Include, nodes.Import, nodes.FromImport, nodes.Extends))):
             raise ValueError("Collection root cannot be inferred from an external template.")
         _trim_straight_line_filename(tree)
-        # A collection's channel is the same for each of its episodes, so a folder per channel is above the collection's.
+        # A collection's creator is the same for each of its episodes, so a folder per creator is above the collection's.
         collection_fields = {
             name for name in values
-            if name in {"collection", "collection_title", "artist"} | CHANNEL_OUTPUT_TEMPLATE_FIELDS or name.startswith("meta_collection_")
+            if name in {"collection", "collection_title", "artist"} | CREATOR_OUTPUT_TEMPLATE_FIELDS or name.startswith("meta_collection_")
         }
         analysis = analyze_template(tree, environment=environment, variables=values,
                                     known_values={name: values[name] for name in collection_fields})

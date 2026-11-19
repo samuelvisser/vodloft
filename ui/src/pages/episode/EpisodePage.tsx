@@ -271,7 +271,7 @@ export default function EpisodePage() {
                                 }] : []),
                                 ...(reassignedTo && can('library', 'manage') ? [{
                                     label: `Move to ${reassignedTo}`,
-                                    description: 'Moves the episode to the collection its channel places it in now, with its files',
+                                    description: 'Moves the episode to the collection its creator places it in now, with its files',
                                     icon: faIcon('fass', 'arrow-right-from-bracket'),
                                     disabled: movingToCollection,
                                     onSelect: () => void moveToCollection(),

@@ -51,7 +51,7 @@ def _options(body: ImportOptionsAPIRequest, request: Request) -> ImportOptions:
         merge_profiles=body.merge_profiles,
         templates=body.templates,
         feed_base_url=request_base_url(request),
-        as_channels=body.as_channels,
+        as_creators=body.as_creators,
     )
 
 

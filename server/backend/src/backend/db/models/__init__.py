@@ -17,7 +17,7 @@ from .QuickDownloadHistory import QuickDownloadHistory
 from .user import User, UserAccess, UserSourceAccess
 from .Collection import Collection
 from .CollectionLocalAsset import CollectionLocalAsset
-from .Channel import Channel, ChannelSection
+from .Creator import Creator, CreatorSection
 from .CollectionList import CollectionList, CollectionListItem
 from .Metadata import Metadata
 from .CustomIndexState import CustomIndexState

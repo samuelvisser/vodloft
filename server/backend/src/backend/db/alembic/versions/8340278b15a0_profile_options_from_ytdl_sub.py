@@ -1,4 +1,4 @@
-"""VODLoft 0.10.1's additions.
+"""Profile options from ytdl-sub.
 
 A Local Media Profile can keep the chapters a video comes with, cut out chapters by their title, and save the
 site's info file beside the media. A Collection profile can give episodes a title and description of its own

@@ -105,7 +105,7 @@ type Props = {
     downloads?: MediaDownloadViewRead[]
     /** Belongs in another season now, and waits for the user to move it there. */
     moved?: boolean
-    /** The collection its channel places the downloaded episode in now, when that is another one. */
+    /** The collection its creator places the downloaded episode in now, when that is another one. */
     reassignedTo?: string
 }
 

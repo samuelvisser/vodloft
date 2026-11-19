@@ -46,12 +46,12 @@ const SUPPORT_LABELS: Record<ImportSupport, string> = {
 }
 
 const DEFAULT_OPTIONS: ImportOptions = {
-    enableDownloadProfiles: false, matchExistingFiles: false, renameExistingFiles: false, asChannels: true, templates: {},
+    enableDownloadProfiles: false, matchExistingFiles: false, renameExistingFiles: false, asCreators: true, templates: {},
 }
 
 const AddAsReg = createSelectRegistry('ImportAddAs', {
-    channel: {label: 'As channels', help: 'Each collection joins the channel behind its links, such as a YouTube channel or a Bandcamp artist, which is added to your Library when it is not there yet. An artist\'s albums become the seasons of one collection.'},
-    collection: {label: 'As collections', help: 'Each collection is added on its own, with all of its links. You can still add one to its channel later from its Actions menu.'},
+    creator: {label: 'As creators', help: 'Each collection joins the creator behind its links, such as a YouTube creator or a Bandcamp artist, which is added to your Library when it is not there yet. An artist\'s albums become the seasons of one collection.'},
+    collection: {label: 'As collections', help: 'Each collection is added on its own, with all of its links. You can still add one to its creator later from its Actions menu.'},
 })
 
 function settingLabel(key: string): string {
@@ -603,14 +603,14 @@ function PreviewStep({importer, onReplace, onFinished, onRunStatus}: {
                 </div>
             </div>
 
-            {preview.channels && collections.length > 0 && (
+            {preview.creators && collections.length > 0 && (
                 <div className="settings-field settings-field--wide">
                     <label htmlFor={`import-add-as-${importer.key}`}>Add the collections</label>
                     <SimpleSelect
-                        inputId={`import-add-as-${importer.key}`} registry={AddAsReg} value={options.asChannels ? 'channel' : 'collection'}
-                        onChange={(value) => setOptions({...options, asChannels: value === 'channel'})}
+                        inputId={`import-add-as-${importer.key}`} registry={AddAsReg} value={options.asCreators ? 'creator' : 'collection'}
+                        onChange={(value) => setOptions({...options, asCreators: value === 'creator'})}
                     />
-                    <div className="settings-field__help">{AddAsReg.meta(options.asChannels ? 'channel' : 'collection')?.help}</div>
+                    <div className="settings-field__help">{AddAsReg.meta(options.asCreators ? 'creator' : 'collection')?.help}</div>
                 </div>
             )}
 

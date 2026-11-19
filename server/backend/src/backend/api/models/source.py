@@ -342,10 +342,10 @@ class ResolvedLinkAPIRead(ResponseBase):
     access_locked: bool = False
     """VODLoft does not have that access, so it cannot download the video."""
     preview: ResolvedLinkPreviewAPIRead
-    channel_url: Optional[str] = None
-    """The creator's channel this link is, on a Site with channels, so it can be added as a channel instead."""
-    channel_label: Optional[str] = None
-    """What the Site calls that channel, such as channel or artist."""
+    creator_url: Optional[str] = None
+    """The creator this link is, on a Site with creators, so it can be added as a creator instead."""
+    creator_label: Optional[str] = None
+    """What the Site calls that creator, such as creator or artist."""
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
 
@@ -394,9 +394,9 @@ class SiteAPIRead(ResponseBase):
 
     @computed_field
     @property
-    def channel_label(self) -> str:
-        """What the Site calls a creator's channel, in lower case, such as host on The Daily Wire."""
-        return site_of(self.key).channel_label
+    def creator_label(self) -> str:
+        """What the Site calls a creator, in lower case, such as host on The Daily Wire."""
+        return site_of(self.key).creator_label
 
     @computed_field
     @property

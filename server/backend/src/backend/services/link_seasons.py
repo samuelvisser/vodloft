@@ -1,5 +1,5 @@
 """Link seasons: a collection of a creator's whole channel, on a Site with ``link_seasons``, can make the
-channel's lists, its playlists, its seasons, every list or the ones the user keeps on. An artist's albums are their
+creator's lists, its playlists, its seasons, every list or the ones the user keeps on. An artist's albums are their
 lists. Each list has a season of its own, or shares one with other lists the user put together with it.
 
 A playlist only takes videos the collection itself lists, so a video of another creator in it stays out, unless the
@@ -48,7 +48,7 @@ def list_names(collection: Collection) -> ListNames:
 
 
 def link_seasons_on(collection: Collection) -> bool:
-    """Whether the collection makes playlists of its channel its seasons: it is set to, its Site offers it, and its
+    """Whether the collection makes playlists of its creator its seasons: it is set to, its Site offers it, and its
     link is the creator's whole channel rather than one playlist. A collection that only holds its link seasons
     always has them on."""
     if collection.link_seasons == LinkSeasons.OFF.value:
@@ -68,14 +68,14 @@ def lists_playlists(collection: Collection) -> bool:
     if collection.sharing_url is None:
         return False
     site = collection_site(collection)
-    return site.link_seasons and get_source(collection.source_key).is_channel_page(collection.sharing_url)
+    return site.link_seasons and get_source(collection.source_key).is_creator_page(collection.sharing_url)
 
 
-def follows_channel(collection: Collection) -> bool:
-    """Whether the collection is its channel's own collection, whose lists the channel finds and places: the
-    collection does not look for new lists itself, and takes the ones the channel gives it."""
-    channel = collection.channel
-    return channel is not None and channel.main_collection_id == collection.id
+def follows_creator(collection: Collection) -> bool:
+    """Whether the collection is its creator's own collection, whose lists the creator finds and places: the
+    collection does not look for new lists itself, and takes the ones the creator gives it."""
+    creator = collection.creator
+    return creator is not None and creator.main_collection_id == collection.id
 
 
 def offers_link_seasons(collection: Collection) -> bool:
@@ -135,10 +135,10 @@ def adds_outside_videos(collection: Collection) -> bool:
 
 @dataclass(frozen=True)
 class LinkListing:
-    """What the Source says about the playlists of a collection's channel, asked before the write transaction."""
+    """What the Source says about the playlists of a collection's creator, asked before the write transaction."""
 
     playlists: list[SectionRef] | None
-    """Every playlist of the channel, newest first; None when they could not be listed."""
+    """Every playlist of the creator, newest first; None when they could not be listed."""
     items: dict[str, tuple[ItemRef, ...]] = field(default_factory=dict)
     """The videos of each playlist that is a season, in its order, by its ref. A playlist that could not be listed is
     left out."""
@@ -152,11 +152,11 @@ def known_video_slugs(s: Session, collection: Collection, also: frozenset[str] =
 
 
 def list_lists(s: Session, collection: Collection, source: Source, also: frozenset[str] = frozenset()) -> LinkListing:
-    """Ask the Source for the channel's playlists and the videos of those that are seasons, and for a collection
+    """Ask the Source for the creator's playlists and the videos of those that are seasons, and for a collection
     that adds them, look up the videos it has not got that are neither in ``also``, the ones its own link just
     listed. Slow, so no transaction stays open."""
-    # The channel's daily look finds the lists of its own collection; the collection only lists their videos.
-    url = collection.sharing_url if lists_playlists(collection) and not follows_channel(collection) else None
+    # The creator's daily look finds the lists of its own collection; the collection only lists their videos.
+    url = collection.sharing_url if lists_playlists(collection) and not follows_creator(collection) else None
     every = collection.link_seasons == LinkSeasons.ALL.value
     adds_new = every or collection.new_link_seasons == NewLinkSeasonAction.ADD.value or not collection.lists
     known = {playlist.ref: (playlist.url, playlist.enabled and playlist.status == ListStatus.KNOWN.value)
@@ -201,7 +201,7 @@ def _look_up_outside(
 
 
 def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list[CollectionList]:
-    """Store the channel's playlists and what the seasons among them hold. A playlist the channel added since the
+    """Store the creator's playlists and what the seasons among them hold. A playlist the creator added since the
     collection was set up is a season, is left off, or waits for the user's choice, as the collection says. Returns
     the ones that wait. A playlist the Site no longer lists stays, with what it held.
 
@@ -214,7 +214,7 @@ def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list
     for position, found in enumerate(listing.playlists or ()):
         playlist = known.get(found.ref)
         if playlist is None:
-            # The playlists the channel had when the collection was set up are all seasons to begin with.
+            # The playlists the creator had when the collection was set up are all seasons to begin with.
             asks = not first and not every and action is NewLinkSeasonAction.ASK
             playlist = CollectionList(
                 ref=found.ref, url=found.url, title=found.title, image_path=found.image_url, item_count=found.item_count,

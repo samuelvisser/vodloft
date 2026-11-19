@@ -23,10 +23,10 @@ import {
 import {useFrontendPuller} from './puller'
 import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/siteSettings'
 import {
-    ChannelLookupReadSchema, ChannelPageReadSchema, ChannelReadSchema, type ChannelLookupRead, type ChannelPageRead, type ChannelRead,
-    CollectionChannelLeaveSchema, CollectionChannelMatchSchema, type CollectionChannelLeave, type CollectionChannelMatch,
+    CreatorLookupReadSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorLookupRead, type CreatorPageRead, type CreatorRead,
+    CollectionCreatorLeaveSchema, CollectionCreatorMatchSchema, type CollectionCreatorLeave, type CollectionCreatorMatch,
     type SectionPlan,
-} from '../types/schemas/channel'
+} from '../types/schemas/creator'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -763,13 +763,13 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
 }
 
 /** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
-/** Look a channel up at its Site. It can take a minute: ``onStep`` hears what the lookup is doing as it goes. */
-export async function lookUpChannel(
+/** Look a creator up at its Site. It can take a minute: ``onStep`` hears what the lookup is doing as it goes. */
+export async function lookUpCreator(
     body: {sourceKey: string, url?: string | null, ref?: string | null},
-    onStep: (step: string, channelLabel?: string) => void,
+    onStep: (step: string, creatorLabel?: string) => void,
     signal?: AbortSignal,
-): Promise<ChannelLookupRead> {
-    const response = await fetch(`${apiUrl()}/channels/lookup`, {
+): Promise<CreatorLookupRead> {
+    const response = await fetch(`${apiUrl()}/creators/lookup`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
@@ -777,7 +777,7 @@ export async function lookUpChannel(
         signal,
     })
     if (!response.ok || !response.body) throw await responseError(response)
-    // One line of JSON per step, and then the channel or what went wrong.
+    // One line of JSON per step, and then the creator or what went wrong.
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
     let buffered = ''
     for (;;) {
@@ -786,109 +786,109 @@ export async function lookUpChannel(
         const lines = buffered.split('\n')
         buffered = done ? '' : lines.pop() ?? ''
         for (const line of lines.filter((item) => item.trim())) {
-            const message = JSON.parse(line) as {step?: string, channelLabel?: string, channel?: unknown, error?: string}
-            if (message.step) onStep(message.step, message.channelLabel)
+            const message = JSON.parse(line) as {step?: string, creatorLabel?: string, creator?: unknown, error?: string}
+            if (message.step) onStep(message.step, message.creatorLabel)
             else if (message.error) throw new ApiError(message.error, 502)
-            else return ChannelLookupReadSchema.parse(message.channel)
+            else return CreatorLookupReadSchema.parse(message.creator)
         }
-        if (done) throw new ApiError('The channel lookup stopped before it was done', 502)
+        if (done) throw new ApiError('The creator lookup stopped before it was done', 502)
     }
 }
 
-export function useChannels() {
-    return useQuery<ChannelRead[], Error, ChannelRead[], readonly ['channels']>({
-        queryKey: ['channels'] as const,
+export function useCreators() {
+    return useQuery<CreatorRead[], Error, CreatorRead[], readonly ['creators']>({
+        queryKey: ['creators'] as const,
         enabled: can('library'),
-        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/channels`, ChannelReadSchema.array(), signal),
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/creators`, CreatorReadSchema.array(), signal),
     })
 }
 
-export function useChannel(slug: string | undefined) {
-    return useQuery<ChannelPageRead, Error, ChannelPageRead, readonly ['channel', string | undefined]>({
-        queryKey: ['channel', slug] as const,
+export function useCreator(slug: string | undefined) {
+    return useQuery<CreatorPageRead, Error, CreatorPageRead, readonly ['creator', string | undefined]>({
+        queryKey: ['creator', slug] as const,
         enabled: !!slug && can('library'),
-        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/channels/${encodeURIComponent(slug ?? '')}`, ChannelPageReadSchema, signal),
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/creators/${encodeURIComponent(slug ?? '')}`, CreatorPageReadSchema, signal),
     })
 }
 
-/** Add sections of a channel to its collections, or ignore them. Answers with the channel's page. */
-export async function addChannelSections(slug: string, sections: SectionPlan[]): Promise<ChannelPageRead> {
-    const response = await fetch(`${apiUrl()}/channels/${encodeURIComponent(slug)}/sections`, {
+/** Add sections of a creator to its collections, or ignore them. Answers with the creator's page. */
+export async function addCreatorSections(slug: string, sections: SectionPlan[]): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/sections`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({sections}),
     })
     if (!response.ok) throw await responseError(response)
-    return ChannelPageReadSchema.parse(await response.json())
+    return CreatorPageReadSchema.parse(await response.json())
 }
 
-/** Move one of the channel's playlists, with its videos and their files: a season of its own collection, a collection
+/** Move one of the creator's playlists, with its videos and their files: a season of its own collection, a collection
  * of its own, or out of the Library. */
-export async function moveChannelSection(slug: string, ref: string, target: 'main' | 'own' | 'skip'): Promise<ChannelPageRead> {
-    const response = await fetch(`${apiUrl()}/channels/${encodeURIComponent(slug)}/sections/${encodeURIComponent(ref)}/move`, {
+export async function moveCreatorSection(slug: string, ref: string, target: 'main' | 'own' | 'skip'): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/sections/${encodeURIComponent(ref)}/move`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({target}),
     })
     if (!response.ok) throw await responseError(response)
-    return ChannelPageReadSchema.parse(await response.json())
+    return CreatorPageReadSchema.parse(await response.json())
 }
 
-function collectionChannelPath(slug: string, rest = ''): string {
-    return `${apiUrl()}/collections/${encodeURIComponent(slug)}/channel${rest}`
+function collectionCreatorPath(slug: string, rest = ''): string {
+    return `${apiUrl()}/collections/${encodeURIComponent(slug)}/creator${rest}`
 }
 
-/** Find the channel behind a collection's links, and which of its sections each link becomes. Slow: asks the site. */
-export function useCollectionChannelMatch(slug: string, enabled: boolean) {
-    return useQuery<CollectionChannelMatch, Error>({
-        queryKey: ['collection-channel-match', slug] as const,
+/** Find the creator behind a collection's links, and which of its sections each link becomes. Slow: asks the site. */
+export function useCollectionCreatorMatch(slug: string, enabled: boolean) {
+    return useQuery<CollectionCreatorMatch, Error>({
+        queryKey: ['collection-creator-match', slug] as const,
         enabled,
         retry: false,
         staleTime: 60_000,
         queryFn: async () => {
-            const response = await fetch(collectionChannelPath(slug, '/match'), {credentials: 'include'})
+            const response = await fetch(collectionCreatorPath(slug, '/match'), {credentials: 'include'})
             if (!response.ok) throw await responseError(response)
-            return CollectionChannelMatchSchema.parse(await response.json())
+            return CollectionCreatorMatchSchema.parse(await response.json())
         },
     })
 }
 
-export function useCollectionChannelLeave(slug: string, enabled: boolean) {
-    return useQuery<CollectionChannelLeave, Error>({
-        queryKey: ['collection-channel-leave', slug] as const,
+export function useCollectionCreatorLeave(slug: string, enabled: boolean) {
+    return useQuery<CollectionCreatorLeave, Error>({
+        queryKey: ['collection-creator-leave', slug] as const,
         enabled,
         retry: false,
         queryFn: async () => {
-            const response = await fetch(collectionChannelPath(slug, '/leave'), {credentials: 'include'})
+            const response = await fetch(collectionCreatorPath(slug, '/leave'), {credentials: 'include'})
             if (!response.ok) throw await responseError(response)
-            return CollectionChannelLeaveSchema.parse(await response.json())
+            return CollectionCreatorLeaveSchema.parse(await response.json())
         },
     })
 }
 
-/** Add a collection to the channel behind its links, or take it out of its channel again. */
-export async function setCollectionChannel(slug: string, inChannel: boolean, moveHere: string[] = []): Promise<void> {
-    const response = await fetch(collectionChannelPath(slug), inChannel
+/** Add a collection to the creator behind its links, or take it out of its creator again. */
+export async function setCollectionCreator(slug: string, inCreator: boolean, moveHere: string[] = []): Promise<void> {
+    const response = await fetch(collectionCreatorPath(slug), inCreator
         ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moveHere})}
         : {method: 'DELETE', credentials: 'include'})
     if (!response.ok) throw await responseError(response)
 }
 
-/** Add a collection to a channel in the Library that its link is not on, such as an artist whose music videos are
+/** Add a collection to a creator in the Library that its link is not on, such as an artist whose music videos are
  * on their label's channel. */
-export async function addCollectionToChannel(slug: string, channelSlug: string): Promise<void> {
-    const response = await fetch(collectionChannelPath(slug), {
+export async function addCollectionToCreator(slug: string, creatorSlug: string): Promise<void> {
+    const response = await fetch(collectionCreatorPath(slug), {
         method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({channelSlug}),
+        body: JSON.stringify({creatorSlug}),
     })
     if (!response.ok) throw await responseError(response)
 }
 
-/** Look for the channel's new playlists and shows now. */
-export async function checkChannel(slug: string): Promise<void> {
-    const response = await fetch(`${apiUrl()}/channels/${encodeURIComponent(slug)}/check`, {method: 'POST', credentials: 'include'})
+/** Look for the creator's new playlists and shows now. */
+export async function checkCreator(slug: string): Promise<void> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/check`, {method: 'POST', credentials: 'include'})
     if (!response.ok) throw await responseError(response)
 }
 

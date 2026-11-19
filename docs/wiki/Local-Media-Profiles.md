@@ -37,7 +37,7 @@ such as YouTube or NPO Start.
 A Collection profile that writes NFO files also chooses what **each episode is**: an **episode of a show**, or a
 **music video**. A music video gets a `musicvideo` NFO with its artist and title instead of a show, season and episode
 number, so Jellyfin, Emby and Kodi keep it in a Music Videos library. The artist is the name of the collection's
-channel, so put an artist's music video collection in the artist's channel (see
+creator, so put an artist's music video collection under the artist (see
 [[Collections-and-Library#music-videos]]).
 
 ### Your own title and description
@@ -67,7 +67,7 @@ A Collection profile also has an **Available for** setting. This controls where 
 Music profiles store the tracks of **Music** collections, and Music collections take no other kind of profile. A Music profile downloads audio only, as M4A, Opus, MP3 or FLAC, and tags every file the way music players expect:
 
 - the **album** is the episode's season, such as a playlist or album the collection holds, or else the collection's title;
-- the **artist** and **album artist** are the channel the collection belongs to, or else its author;
+- the **artist** and **album artist** are the creator the collection belongs to, or else its author;
 - the **track number** is the episode's number in its season.
 
 The thumbnail goes inside the file as its cover art, cut to a square from the middle. Opus files take tags but no cover art. A new Music profile starts with the **Music library** layout, `Artist/Album/01 - Title`, which Plex, Jellyfin, Navidrome and most music players read; the `artist`, `album`, `track_number` and `track_number_padded` variables let you build your own.
@@ -281,12 +281,12 @@ For example, to keep only the part of a title before ` | `, and leave the title 
 | `collection_title` | Collection title |
 | `collection_author` | Collection author, host or channel name |
 | `collection_site_id` | The id the site gives the collection, such as a YouTube channel or playlist id |
-| `channel_title` | Name of the channel the collection belongs to, or empty when it belongs to none |
-| `channel_handle` | The channel's handle, such as `@kurzgesagt`, when the site has one |
-| `channel_kind` | What the site calls a channel, such as `YouTube channel` or `The Daily Wire host` |
-| `section_title` | The playlist or show of the channel that the episode came from, such as `Shorts`; empty otherwise |
+| `creator_title` | Name of the creator the collection belongs to, or empty when it belongs to none |
+| `creator_handle` | The creator's handle, such as `@kurzgesagt`, when the site has one |
+| `creator_kind` | What the site calls a creator, such as `YouTube creator` or `The Daily Wire host` |
+| `section_title` | The playlist or show of the creator that the episode came from, such as `Shorts`; empty otherwise |
 | `section_kind` | `feed` for Videos, Live or Shorts, `list` for a playlist or show, `item` for a single movie; empty otherwise |
-| `artist` | Who the music is by: the channel's name, else the collection's author |
+| `artist` | Who the music is by: the creator's name, else the collection's author |
 | `album` | The episode's season when it holds one playlist or album, else the collection's title |
 | `track_number` | The episode's number on its album, such as `3` |
 | `track_number_padded` | The track number with two digits, such as `03` |

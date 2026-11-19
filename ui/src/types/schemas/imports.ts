@@ -130,7 +130,7 @@ export const ImportPreviewSchema = z.looseObject({
         })),
     }).nullish(),
     lastRun: ImportRunSummarySchema.nullish(),
-    channels: z.boolean().default(false),
+    creators: z.boolean().default(false),
     mergeProfiles: z.boolean().default(false),
     counts: z.looseObject({collections: z.int(), files: z.int()}),
 })
@@ -171,8 +171,8 @@ export type ImportOptions = {
     enableDownloadProfiles: boolean
     matchExistingFiles: boolean
     renameExistingFiles: boolean
-    /** Add each new collection to the channel behind its links, instead of on its own. */
-    asChannels: boolean
+    /** Add each new collection to the creator behind its links, instead of on its own. */
+    asCreators: boolean
     /** Leave out to do what the last import did. */
     mergeProfiles?: boolean | null
     templates: Record<string, string>

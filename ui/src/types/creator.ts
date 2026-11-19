@@ -1,6 +1,6 @@
 import {createSelectRegistry} from '../utils/selectRegistry'
 
-/** A Site's word for a channel, such as host, at the start of a sentence or a label. */
+/** A Site's word for a creator, such as host, at the start of a sentence or a label. */
 export function capitalized(label: string): string {
     return label.slice(0, 1).toUpperCase() + label.slice(1)
 }
@@ -16,7 +16,7 @@ function makeNewSectionActionReg(label: string) {
     })
 }
 
-/** What to do when a channel adds a playlist, show or album, in the words of its Site, such as host on The Daily Wire. */
+/** What to do when a creator adds a playlist, show or album, in the words of its Site, such as host on The Daily Wire. */
 export function newSectionActionReg(label: string) {
     let registry = newSectionActionRegs.get(label)
     if (!registry) {

@@ -1,4 +1,4 @@
-"""Bandcamp and SoundCloud artists as channels: their albums are the sections, and their collections hold music."""
+"""Bandcamp and SoundCloud artists as creators: their albums are the sections, and their collections hold music."""
 from __future__ import annotations
 
 import pytest

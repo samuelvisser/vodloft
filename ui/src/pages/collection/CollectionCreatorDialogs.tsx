@@ -3,18 +3,18 @@ import {useQueryClient} from '@tanstack/react-query'
 import {toast} from 'react-hot-toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'
-import {addCollectionToChannel, setCollectionChannel, useChannels, useCollectionChannelLeave, useCollectionChannelMatch} from '../../lib/queries'
-import type {CollectionChannelMatch} from '../../types/schemas/channel'
+import {addCollectionToCreator, setCollectionCreator, useCreators, useCollectionCreatorLeave, useCollectionCreatorMatch} from '../../lib/queries'
+import type {CollectionCreatorMatch} from '../../types/schemas/creator'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import '../channel/ChannelPages.css'
+import '../creator/CreatorPages.css'
 
 type DialogProps = {
     open: boolean
     collectionSlug: string
     collectionTitle: string
-    /** What the collection's Site calls a channel, such as host on The Daily Wire. */
-    channelLabel: string
+    /** What the collection's Site calls a creator, such as host on The Daily Wire. */
+    creatorLabel: string
     onDismiss: () => void
 }
 
@@ -24,46 +24,46 @@ function useRefresh(collectionSlug: string) {
         await Promise.all([
             queryClient.invalidateQueries({queryKey: ['collection', collectionSlug]}),
             queryClient.invalidateQueries({queryKey: ['collections']}),
-            queryClient.invalidateQueries({queryKey: ['channels']}),
-            queryClient.invalidateQueries({queryKey: ['channel']}),
-            queryClient.removeQueries({queryKey: ['collection-channel-match', collectionSlug]}),
-            queryClient.removeQueries({queryKey: ['collection-channel-leave', collectionSlug]}),
+            queryClient.invalidateQueries({queryKey: ['creators']}),
+            queryClient.invalidateQueries({queryKey: ['creator']}),
+            queryClient.removeQueries({queryKey: ['collection-creator-match', collectionSlug]}),
+            queryClient.removeQueries({queryKey: ['collection-creator-leave', collectionSlug]}),
         ])
     }
 }
 
-function sectionNote(channel: CollectionChannelMatch, label: string): string {
-    if (channel.sectionTitle) {
-        const kind = channel.sectionKindLabel ? `${channel.sectionKindLabel} · ` : ''
-        return `${kind}becomes the ${label}'s ${channel.sectionTitle} section`
+function sectionNote(creator: CollectionCreatorMatch, label: string): string {
+    if (creator.sectionTitle) {
+        const kind = creator.sectionKindLabel ? `${creator.sectionKindLabel} · ` : ''
+        return `${kind}becomes the ${label}'s ${creator.sectionTitle} section`
     }
-    if (channel.keptBy) return `The ${label}'s ${channel.keptBy} has this already, so this collection can't join it`
+    if (creator.keptBy) return `The ${label}'s ${creator.keptBy} has this already, so this collection can't join it`
     return `Not a playlist, show or the videos of this ${label}, so it can't join it`
 }
 
-/** "Add to channel", in the words of the Site: find the channel behind the collection's link, show what the collection becomes, and add it. */
-export function AddToChannelDialog({open, collectionSlug, collectionTitle, channelLabel, onDismiss}: DialogProps) {
-    /** ``behind``: the channel behind the collection's link; otherwise the slug of a channel in the Library. */
+/** "Add to creator", in the words of the Site: find the creator behind the collection's link, show what the collection becomes, and add it. */
+export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, onDismiss}: DialogProps) {
+    /** ``behind``: the creator behind the collection's link; otherwise the slug of a creator in the Library. */
     const [target, setTarget] = useState('behind')
-    const {data: libraryChannels} = useChannels()
-    const targets = useMemo(() => createSelectRegistry(`JoinChannelTarget-${collectionSlug}`, {
-        behind: {label: `The ${channelLabel} behind its link`},
-        ...Object.fromEntries((libraryChannels ?? []).map((other) => [
-            other.slug, {label: `${other.title} (${other.site.name} ${other.channelLabel})`},
+    const {data: libraryCreators} = useCreators()
+    const targets = useMemo(() => createSelectRegistry(`JoinCreatorTarget-${collectionSlug}`, {
+        behind: {label: `The ${creatorLabel} behind its link`},
+        ...Object.fromEntries((libraryCreators ?? []).map((other) => [
+            other.slug, {label: `${other.title} (${other.site.name} ${other.creatorLabel})`},
         ])),
-    }), [collectionSlug, channelLabel, libraryChannels])
-    const chosen = libraryChannels?.find((other) => other.slug === target)
-    const match = useCollectionChannelMatch(collectionSlug, open && target === 'behind')
+    }), [collectionSlug, creatorLabel, libraryCreators])
+    const chosen = libraryCreators?.find((other) => other.slug === target)
+    const match = useCollectionCreatorMatch(collectionSlug, open && target === 'behind')
     const refresh = useRefresh(collectionSlug)
-    const channel = match.data
-    const matched = !!channel?.sectionTitle
+    const creator = match.data
+    const matched = !!creator?.sectionTitle
     /** The overlapping playlists the user moves here; the rest stay where they are. */
     const [moveHere, setMoveHere] = useState<Set<string>>(new Set())
 
     const addElsewhere = async () => {
         if (!chosen) return
         try {
-            await addCollectionToChannel(collectionSlug, chosen.slug)
+            await addCollectionToCreator(collectionSlug, chosen.slug)
             await refresh()
             toast.success(`${collectionTitle} is now part of ${chosen.title}`)
             onDismiss()
@@ -74,36 +74,36 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, chann
 
     const add = async () => {
         if (chosen) return addElsewhere()
-        if (!channel) return
+        if (!creator) return
         try {
-            await setCollectionChannel(collectionSlug, true, [...moveHere].filter((ref) => (
-                channel.overlaps.some((overlap) => overlap.ref === ref && overlap.canMoveHere)
+            await setCollectionCreator(collectionSlug, true, [...moveHere].filter((ref) => (
+                creator.overlaps.some((overlap) => overlap.ref === ref && overlap.canMoveHere)
             )))
             await refresh()
-            toast.success(`${collectionTitle} is now part of ${channel.title}`)
+            toast.success(`${collectionTitle} is now part of ${creator.title}`)
             onDismiss()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : `Could not add the collection to the ${channelLabel}`)
+            toast.error(error instanceof Error ? error.message : `Could not add the collection to the ${creatorLabel}`)
         }
     }
 
     return (
         <ConfirmDialog
             open={open}
-            title={`Add ${collectionTitle} to a ${channelLabel}`}
+            title={`Add ${collectionTitle} to a ${creatorLabel}`}
             icon={faIcon('fass', 'circle-user')}
             onDismiss={onDismiss}
             confirmButton={{
-                label: chosen ? `Add to ${chosen.title}` : channel ? `Add to ${channel.title}` : `Add to ${channelLabel}`,
+                label: chosen ? `Add to ${chosen.title}` : creator ? `Add to ${creator.title}` : `Add to ${creatorLabel}`,
                 onClick: add,
-                disabled: chosen ? false : !channel || !matched,
+                disabled: chosen ? false : !creator || !matched,
             }}
         >
-            {(libraryChannels?.length ?? 0) > 0 && (
+            {(libraryCreators?.length ?? 0) > 0 && (
                 <div className="form-row">
-                    <label htmlFor="join-channel-target">Add it to</label>
+                    <label htmlFor="join-creator-target">Add it to</label>
                     <SimpleSelect
-                        inputId="join-channel-target" registry={targets} value={target}
+                        inputId="join-creator-target" registry={targets} value={target}
                         menuPortalTarget={document.body} menuPlacement="auto"
                         styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                         onChange={setTarget}
@@ -111,42 +111,42 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, chann
                 </div>
             )}
             {chosen && (
-                <ul className="channel-order-note">
-                    <li>{collectionTitle} keeps its own link, so its videos can come from another {channelLabel} or playlist, such as an artist's music videos on their label's channel.</li>
+                <ul className="creator-order-note">
+                    <li>{collectionTitle} keeps its own link, so its videos can come from another {creatorLabel} or playlist, such as an artist's music videos on their label's channel.</li>
                     <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                 </ul>
             )}
-            {!chosen && match.isLoading && <p>Looking up the {channelLabel} behind this collection's link…</p>}
+            {!chosen && match.isLoading && <p>Looking up the {creatorLabel} behind this collection's link…</p>}
             {!chosen && match.error && <p className="text-danger">{match.error.message}</p>}
-            {!chosen && channel && (
-                <div className="channel-join">
-                    <div className="channel-join-who">
-                        {channel.avatarUrl
-                            ? <img className="channel-avatar channel-avatar--small" src={channel.avatarUrl} alt="" loading="lazy"/>
-                            : <span className="channel-avatar channel-avatar--small channel-avatar--empty" aria-hidden="true">{channel.title.slice(0, 1)}</span>}
-                        <div className="channel-identity-copy">
-                            <span className="channel-kind">{channel.siteName} {channel.channelLabel}</span>
-                            <strong>{channel.title}</strong>
-                            <span className="channel-section-note">
-                                {channel.channelSlug ? 'In your library.' : 'Not in your library yet. It will be added.'}
+            {!chosen && creator && (
+                <div className="creator-join">
+                    <div className="creator-join-who">
+                        {creator.avatarUrl
+                            ? <img className="creator-avatar creator-avatar--small" src={creator.avatarUrl} alt="" loading="lazy"/>
+                            : <span className="creator-avatar creator-avatar--small creator-avatar--empty" aria-hidden="true">{creator.title.slice(0, 1)}</span>}
+                        <div className="creator-identity-copy">
+                            <span className="creator-kind">{creator.siteName} {creator.creatorLabel}</span>
+                            <strong>{creator.title}</strong>
+                            <span className="creator-section-note">
+                                {creator.creatorSlug ? 'In your library.' : 'Not in your library yet. It will be added.'}
                             </span>
                         </div>
                     </div>
-                    <div className="channel-section-list">
-                        <div className="channel-section-row">
-                            <div className="channel-section-copy">
+                    <div className="creator-section-list">
+                        <div className="creator-section-row">
+                            <div className="creator-section-copy">
                                 <strong>{collectionTitle}</strong>
-                                <span>{sectionNote(channel, channelLabel)}</span>
+                                <span>{sectionNote(creator, creatorLabel)}</span>
                             </div>
                         </div>
                     </div>
-                    {matched && channel.overlaps.length > 0 && (
-                        <div className="channel-join-overlaps">
+                    {matched && creator.overlaps.length > 0 && (
+                        <div className="creator-join-overlaps">
                             <p>
                                 These playlists of {collectionTitle} are also somewhere else in
-                                the {channelLabel}. Once it joins, each is in one place only.
+                                the {creatorLabel}. Once it joins, each is in one place only.
                             </p>
-                            {channel.overlaps.map((overlap) => (
+                            {creator.overlaps.map((overlap) => (
                                 <OverlapChoice
                                     key={overlap.ref} title={overlap.title} keptBy={overlap.keptBy}
                                     collectionTitle={collectionTitle} canMoveHere={overlap.canMoveHere}
@@ -164,9 +164,9 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, chann
                     {!matched
                         ? null
                         : (
-                            <ul className="channel-order-note">
+                            <ul className="creator-order-note">
                                 <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
-                                {!channel.channelSlug && <li>The {channelLabel}'s other playlists and shows start as not in your library, so you can add them from its page.</li>}
+                                {!creator.creatorSlug && <li>The {creatorLabel}'s other playlists and shows start as not in your library, so you can add them from its page.</li>}
                             </ul>
                         )}
                 </div>
@@ -175,7 +175,7 @@ export function AddToChannelDialog({open, collectionSlug, collectionTitle, chann
     )
 }
 
-/** Where one playlist that is in two places goes once the collection joins its channel. */
+/** Where one playlist that is in two places goes once the collection joins its creator. */
 function OverlapChoice({title, keptBy, collectionTitle, canMoveHere, movesHere, onChange}: {
     title: string, keptBy: string, collectionTitle: string, canMoveHere: boolean, movesHere: boolean,
     onChange: (here: boolean) => void,
@@ -186,13 +186,13 @@ function OverlapChoice({title, keptBy, collectionTitle, canMoveHere, movesHere, 
     }), [keptBy, collectionTitle])
     const inputId = `join-overlap-${title}`
     return (
-        <div className="channel-section-row">
-            <div className="channel-section-copy">
+        <div className="creator-section-row">
+            <div className="creator-section-copy">
                 <strong>{title}</strong>
                 {!canMoveHere && <span>Stays in {keptBy}, a collection of its own. It leaves {collectionTitle}.</span>}
             </div>
             {canMoveHere && (
-                <div className="channel-join-overlap-select">
+                <div className="creator-join-overlap-select">
                     <label className="sr-only" htmlFor={inputId}>Where {title} goes</label>
                     <SimpleSelect
                         inputId={inputId} registry={registry} value={movesHere ? 'here' : 'stays'}
@@ -206,31 +206,31 @@ function OverlapChoice({title, keptBy, collectionTitle, canMoveHere, movesHere, 
     )
 }
 
-/** "Remove from channel", in the words of the Site: the collection becomes a plain one again. */
-export function RemoveFromChannelDialog({open, collectionSlug, collectionTitle, channelLabel, onDismiss}: DialogProps) {
-    const leave = useCollectionChannelLeave(collectionSlug, open)
+/** "Remove from creator", in the words of the Site: the collection becomes a plain one again. */
+export function RemoveFromCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, onDismiss}: DialogProps) {
+    const leave = useCollectionCreatorLeave(collectionSlug, open)
     const refresh = useRefresh(collectionSlug)
     const info = leave.data
 
     const remove = async () => {
         try {
-            await setCollectionChannel(collectionSlug, false)
+            await setCollectionCreator(collectionSlug, false)
             await refresh()
             toast.success(`${collectionTitle} is a plain collection now`)
             onDismiss()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : `Could not remove the collection from its ${channelLabel}`)
+            toast.error(error instanceof Error ? error.message : `Could not remove the collection from its ${creatorLabel}`)
         }
     }
 
     return (
         <ConfirmDialog
             open={open}
-            title={info ? `Remove from ${info.channelTitle}?` : `Remove from ${channelLabel}?`}
+            title={info ? `Remove from ${info.creatorTitle}?` : `Remove from ${creatorLabel}?`}
             icon={faIcon('fass', 'link-slash')}
             iconTone="danger"
             onDismiss={onDismiss}
-            confirmButton={{label: `Remove from ${channelLabel}`, onClick: remove, className: 'btn btn-danger', disabled: !info}}
+            confirmButton={{label: `Remove from ${creatorLabel}`, onClick: remove, className: 'btn btn-danger', disabled: !info}}
         >
             {leave.error && <p className="text-danger">{leave.error.message}</p>}
             <p>

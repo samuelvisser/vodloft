@@ -12,15 +12,15 @@ from sqlalchemy import select
 from sources import Feature, ItemRef, SectionKind, SectionRef, Site
 from test_ytdlp_collections import ListedSource, _video, session  # noqa: F401
 
-CHANNEL = "https://seasons.example/@creator/videos"
+CREATOR = "https://seasons.example/@creator/videos"
 
 
 def _list(ref: str, title: str) -> SectionRef:
     return SectionRef(ref, f"https://seasons.example/playlist?list={ref}", title, SectionKind.LIST, kind_label="Playlist")
 
 
-class ChannelSource(ListedSource):
-    """A Site whose channels' playlists can be seasons."""
+class CreatorSource(ListedSource):
+    """A Site whose creators' playlists can be seasons."""
 
     id = "seasons"
     domains = ("seasons.example",)
@@ -36,8 +36,8 @@ class ChannelSource(ListedSource):
     def site_for(self, url):
         return self.sites[0]
 
-    def is_channel_page(self, url):
-        return url == CHANNEL
+    def is_creator_page(self, url):
+        return url == CREATOR
 
     def season_lists(self, url):
         return list(self.lists)
@@ -56,11 +56,11 @@ def source(monkeypatch):
 
     monkeypatch.setattr(registry, "_sources", dict(registry._sources))
     sites._site_of.cache_clear()
-    yield registry.register(ChannelSource())
+    yield registry.register(CreatorSource())
     sites._site_of.cache_clear()
 
 
-def _collection(session, *, mode="all", loose="one_season", identifier="seasonal", url=CHANNEL, music=False):
+def _collection(session, *, mode="all", loose="one_season", identifier="seasonal", url=CREATOR, music=False):
     from backend.db.models import Collection
 
     collection = Collection(
@@ -114,7 +114,7 @@ def _give_files(session, *slugs):
     session.commit()
 
 
-def test_playlists_are_seasons_after_the_videos_in_none_and_take_only_the_channels_videos(source, session):
+def test_playlists_are_seasons_after_the_videos_in_none_and_take_only_the_creators_videos(source, session):
     source.videos = [_video("a", 2023, 3), _video("b", 2024, 5), _video("c", 2025, 2), _video("d", 2025, 6)]
     source.lists = [_list("PLnew", "Newest Builds"), _list("PLold", "First Builds")]
     # A playlist may hold another creator's video, which the collection does not list.
@@ -164,7 +164,7 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
     _index(session, collection, source)
     _give_files(session, "b")
 
-    # The channel adds the downloaded video to its playlist.
+    # The creator adds the downloaded video to its playlist.
     source.items = {"PLone": ("a", "b")}
     _index(session, collection, source)
     assert _seasons(session) == [("Videos", 1, ["b"]), ("One", 2, ["a"])]
@@ -215,7 +215,7 @@ def test_an_artists_albums_are_named_as_music(source, session):
     assert _seasons(session) == [("Singles", 1, ["t2"]), ("Harp", 2, ["t1"])]
 
 
-def test_a_single_playlist_is_no_channel_and_keeps_a_season_per_year(source, session):
+def test_a_single_playlist_is_no_creator_and_keeps_a_season_per_year(source, session):
     source.videos = [_video("a", 2024)]
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",)}
@@ -282,7 +282,7 @@ def test_turning_link_seasons_off_puts_the_videos_back_in_a_season_per_year(sour
     assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [("2024", ["a"]), ("2025", ["b"])]
 
 
-def test_only_a_whole_channel_can_turn_link_seasons_on(source, session):
+def test_only_a_whole_creator_can_turn_link_seasons_on(source, session):
     from backend.api.endpoints.collections.seasons.service import update_seasons
     from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
     from backend.db.core import run_write_transaction
@@ -366,7 +366,7 @@ def test_a_link_season_keeps_its_sites_order(source, session):
     assert numbered == {"b": "ep.S01E01", "c": "ep.S01E03", "a": "ep.S01E02"}
 
 
-def test_an_imported_channel_keeps_the_other_programs_seasons_for_its_playlists_and_other_videos(source, session):
+def test_an_imported_creator_keeps_the_other_programs_seasons_for_its_playlists_and_other_videos(source, session):
     from backend.services.imports import _add_link_seasons
     from importer.contract import CollectionPlan, PlaylistSeasonPlan
 
@@ -375,9 +375,9 @@ def test_an_imported_channel_keeps_the_other_programs_seasons_for_its_playlists_
     source.items = {"PLone": ("a",)}
     collection = _collection(session, mode="off")
     plan = CollectionPlan(
-        external_id="subscription:creator", url=CHANNEL, title="The Creator",
+        external_id="subscription:creator", url=CREATOR, title="The Creator",
         link_seasons=(PlaylistSeasonPlan("https://seasons.example/playlist?list=PLone", "Builds", 2),),
-        loose_season=PlaylistSeasonPlan(CHANNEL, "Uploads", 1),
+        loose_season=PlaylistSeasonPlan(CREATOR, "Uploads", 1),
     )
     assert _add_link_seasons(session, collection, plan) == 1
     session.commit()
@@ -413,7 +413,7 @@ def test_an_artists_albums_follow_the_artists_order_and_can_be_reordered(source,
     assert [name for name, _number, _episodes in _seasons(session)] == ["Latest", "Debut", "Singles"]
 
 
-def test_videos_of_other_channels_in_a_playlist_join_the_collection_when_it_adds_them(source, session):
+def test_videos_of_other_creators_in_a_playlist_join_the_collection_when_it_adds_them(source, session):
     from backend.db.models import Episode
 
     source.videos = [_video("a", 2024)]
@@ -468,7 +468,7 @@ def test_a_video_from_outside_with_files_leaves_with_its_files(source, session, 
     assert (playlist.leaving_count, playlist.leaving_with_files) == (1, 1)
     assert (view.outside_count, view.outside_with_files) == (1, 1)
 
-    # Turning the playlist off: the guest's video leaves, the channel's own one goes where a new video would.
+    # Turning the playlist off: the guest's video leaves, the creator's own one goes where a new video would.
     seasons = session.scalars(select(Season).order_by(Season.index)).all()
     link_id = session.scalar(select(CollectionList.id))
     body = CollectionSeasonsAPIUpdate(
@@ -530,9 +530,9 @@ def test_an_imported_single_video_is_a_season_of_its_own_and_joins_the_collectio
     source.outside = {"special": _video("special", 2023)}
     collection = _collection(session, mode="off")
     plan = CollectionPlan(
-        external_id="subscription:creator", url=CHANNEL, title="The Creator",
+        external_id="subscription:creator", url=CREATOR, title="The Creator",
         link_seasons=(PlaylistSeasonPlan("https://seasons.example/watch?v=special", "Specials", 0),),
-        loose_season=PlaylistSeasonPlan(CHANNEL, "Videos", 1),
+        loose_season=PlaylistSeasonPlan(CREATOR, "Videos", 1),
     )
     assert _add_link_seasons(session, collection, plan) == 1
     session.commit()
@@ -643,10 +643,10 @@ def test_a_kept_video_stays_and_is_back_when_the_playlist_lists_it_again(source,
     assert _seasons(session) == [("Videos", 1, ["a"]), ("Collabs", 2, ["guest"])]
 
 
-class LinksSource(ChannelSource):
+class LinksSource(CreatorSource):
     """A Source that can hold a collection of only the links the user picks."""
 
-    features = ChannelSource.features | {Feature.LINK_COLLECTIONS}
+    features = CreatorSource.features | {Feature.LINK_COLLECTIONS}
 
     def list_items(self, url):
         return tuple(ItemRef(slug, f"https://seasons.example/watch?v={slug}") for slug in self.items[url.rsplit("=", 1)[1]])
@@ -682,7 +682,7 @@ def _update(session, slug="creator", **changes):
     return run_write_transaction(lambda s: update_seasons(s, slug, CollectionSeasonsAPIUpdate(**body)))
 
 
-def test_a_collection_that_holds_only_its_playlists_leaves_the_channels_other_videos_out(links_source, session):
+def test_a_collection_that_holds_only_its_playlists_leaves_the_creators_other_videos_out(links_source, session):
     from backend.db.models import Episode
 
     source = links_source
@@ -696,7 +696,7 @@ def test_a_collection_that_holds_only_its_playlists_leaves_the_channels_other_vi
 
     _index(session, collection, source)
 
-    # No season of videos in no playlist: only what the playlist has, also another channel's video.
+    # No season of videos in no playlist: only what the playlist has, also another creator's video.
     assert _seasons(session) == [("Best Of", 1, ["a", "guest"])]
     assert all(session.scalars(select(Episode.from_link_season)).all())
 
@@ -901,7 +901,7 @@ def test_lists_laid_out_by_year_still_decide_what_is_in(source, session):
 
     _update(session, list_layout="by_year")
 
-    # The playlist's videos and the others share the year seasons; the other channel's video stays out. The
+    # The playlist's videos and the others share the year seasons; the other creator's video stays out. The
     # downloaded one stays where it is until it is moved, as with any season change.
     assert _seasons(session) == [("Videos", 1, ["d"]), ("2023", 2, ["a"]), ("2024", 3, ["b", "c"])]
     assert [episode.source_slug for episode in moved_episodes(session, collection)] == ["d"]
@@ -912,7 +912,7 @@ def test_lists_laid_out_by_year_still_decide_what_is_in(source, session):
 
 def test_an_episode_of_a_list_laid_out_by_year_names_its_list_in_templates(source, session):
     from backend.db.models import Episode
-    from backend.utils.output_template import _channel_values
+    from backend.utils.output_template import _creator_values
 
     source.videos = [_video("a", 2023), _video("b", 2024)]
     source.lists = [_list("PLtour", "The Tour")]
@@ -923,7 +923,7 @@ def test_an_episode_of_a_list_laid_out_by_year_names_its_list_in_templates(sourc
     session.expire_all()
 
     titles = {
-        slug: _channel_values(session.scalar(select(Episode).where(Episode.source_slug == slug)))["section_title"]
+        slug: _creator_values(session.scalar(select(Episode).where(Episode.source_slug == slug)))["section_title"]
         for slug in ("a", "b")
     }
     assert titles == {"a": "The Tour", "b": ""}
