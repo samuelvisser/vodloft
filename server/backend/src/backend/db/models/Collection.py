@@ -10,7 +10,7 @@ from backend.db.mixins.MediaContentMetadataMixin import PICTURE_PATH_COMMENT
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.collection_types import EpisodeOrder
-from backend.types.link_season_types import LooseVideos, NewLinkSeasonAction, LinkSeasons, OutsideVideos
+from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, OutsideVideos
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
@@ -57,6 +57,10 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     new_link_seasons: Mapped[str] = mapped_column(
         default=NewLinkSeasonAction.ASK.value, server_default=NewLinkSeasonAction.ASK.value,
         comment="What happens with a playlist the channel adds, when only selected playlists are seasons: ask, add or ignore",
+    )
+    list_layout: Mapped[str] = mapped_column(
+        default=ListLayout.SEASON_EACH.value, server_default=ListLayout.SEASON_EACH.value,
+        comment="How the lists that are seasons are laid out: season_each, or by_year in a season per upload year",
     )
     loose_videos: Mapped[str] = mapped_column(
         default=LooseVideos.ONE_SEASON.value, server_default=LooseVideos.ONE_SEASON.value,

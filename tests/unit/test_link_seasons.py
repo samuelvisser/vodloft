@@ -886,3 +886,44 @@ def test_a_list_only_joins_a_season_of_the_collections_lists(source, session):
 
     with pytest.raises(ServiceError, match="can only join a season that holds one of the collection's lists"):
         _put_together(session, {"PLone": videos})
+
+
+def test_lists_laid_out_by_year_still_decide_what_is_in(source, session):
+    from backend.services.link_seasons import moved_episodes
+
+    source.videos = [_video("a", 2023), _video("b", 2024), _video("c", 2024, 6), _video("d", 2025)]
+    source.lists = [_list("PLtour", "The Tour")]
+    source.items = {"PLtour": ("b", "a", "guest")}
+    collection = _collection(session)
+    _index(session, collection, source)
+    _give_files(session, "d")
+    assert _seasons(session) == [("Videos", 1, ["c", "d"]), ("The Tour", 2, ["a", "b"])]
+
+    _update(session, list_layout="by_year")
+
+    # The playlist's videos and the others share the year seasons; the other channel's video stays out. The
+    # downloaded one stays where it is until it is moved, as with any season change.
+    assert _seasons(session) == [("Videos", 1, ["d"]), ("2023", 2, ["a"]), ("2024", 3, ["b", "c"])]
+    assert [episode.source_slug for episode in moved_episodes(session, collection)] == ["d"]
+
+    _update(session, list_layout="season_each")
+    assert _seasons(session) == [("Videos", 1, ["c", "d"]), ("The Tour", 2, ["a", "b"])]
+
+
+def test_an_episode_of_a_list_laid_out_by_year_names_its_list_in_templates(source, session):
+    from backend.db.models import Episode
+    from backend.utils.output_template import _channel_values
+
+    source.videos = [_video("a", 2023), _video("b", 2024)]
+    source.lists = [_list("PLtour", "The Tour")]
+    source.items = {"PLtour": ("a",)}
+    collection = _collection(session)
+    _index(session, collection, source)
+    _update(session, list_layout="by_year")
+    session.expire_all()
+
+    titles = {
+        slug: _channel_values(session.scalar(select(Episode).where(Episode.source_slug == slug)))["section_title"]
+        for slug in ("a", "b")
+    }
+    assert titles == {"a": "The Tour", "b": ""}

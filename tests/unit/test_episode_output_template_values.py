@@ -188,6 +188,7 @@ def test_an_episode_of_a_channels_collection_knows_its_channel_and_section() -> 
     )
     episode.season_id = 7
     episode.collection.lists = [SimpleNamespace(title="Tool Reviews", season_id=7)]
+    episode.collection.list_layout = "season_each"
 
     values = episode_output_template_values(episode)
 

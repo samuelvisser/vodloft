@@ -29,7 +29,7 @@ from backend.services.seasons import create_season_record
 from backend.services.sites import collection_site
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.season_types import SeasonType
-from backend.types.link_season_types import LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
+from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 from backend.utils.helpers import slugify
 from sources import Feature, ItemRef, ListNames, SectionRef, Source, VideoDetails, get_source
 
@@ -77,6 +77,17 @@ def offers_link_seasons(collection: Collection) -> bool:
     if holds_only_link_seasons(collection):
         return get_source(collection.source_key).has(Feature.LINK_COLLECTIONS)
     return lists_playlists(collection)
+
+
+def lists_by_year(collection: Collection) -> bool:
+    """Whether the collection lays its lists out in seasons per upload year, rather than a season each."""
+    return collection.list_layout == ListLayout.BY_YEAR.value and link_seasons_on(collection)
+
+
+def loose_in_one_season(collection: Collection) -> bool:
+    """Whether the videos in none of the lists go to one season of their own. With the lists laid out by year, they
+    join the year seasons."""
+    return collection.loose_videos == LooseVideos.ONE_SEASON.value and collection.list_layout != ListLayout.BY_YEAR.value
 
 
 def is_season(collection: Collection, playlist: CollectionList) -> bool:
@@ -262,7 +273,7 @@ class SeasonFinder:
         self._by_slug = {season.slug: season for season in collection.seasons}
         self._by_year = {season_year(season): season for season in collection.seasons if season_year(season) is not None}
         self.numbers = SeasonNumbers(s)
-        self._loose_one = link_seasons_on(collection) and collection.loose_videos == LooseVideos.ONE_SEASON.value
+        self._loose_one = link_seasons_on(collection) and loose_in_one_season(collection)
 
     def create(self, *, slug: str, name: str, number: int) -> Season:
         collection = self._collection
@@ -362,7 +373,8 @@ class _Places:
         on = link_seasons_on(collection)
         self.holders = _holders(s, active_lists(s, collection)) if on else {}
         playlist_ids = {playlist.season_id for playlist in collection.lists if playlist.season_id is not None}
-        self.loose_one = on and collection.loose_videos == LooseVideos.ONE_SEASON.value
+        self.loose_one = on and loose_in_one_season(collection)
+        self.by_year = lists_by_year(collection)
         # A collection that only holds its link seasons has no season of videos in none of them: those leave.
         self.only = holds_only_link_seasons(collection)
         self.loose_ids = {season.id for season in collection.seasons if season.loose}
@@ -376,6 +388,9 @@ class _Places:
         if episode.part_of is not None or episode.season_id not in self.movable:
             return None
         holder = self.holders.get(episode.source_slug)
+        if holder is not None and self.by_year:
+            # The list decides that the video is in; its date decides the season.
+            return None if season_is_year(episode.season) and episode.season_id not in self.loose_ids else Belonging()
         if holder is not None:
             return None if holder.season_id is not None and holder.season_id == episode.season_id else Belonging(holder)
         if self.only:

@@ -65,6 +65,10 @@ function registries(names: CollectionSeasonsRead['names'], words: Words, view: C
             add: {label: 'Make it a season', help: `A new ${names.one} becomes a season right away.`},
             ignore: {label: 'Leave it off', help: `A new ${names.one} stays off. You can switch it on here.`},
         }),
+        layout: createSelectRegistry(`ListLayout-${names.many}`, {
+            season_each: {label: `A season per ${names.one}`, help: `Each ${names.one} is a season, or shares one with the ${names.many} you put together below.`},
+            by_year: {label: 'Together in seasons by year', help: `The ${names.many} still decide which ${words.videos} are in, but every ${words.video} goes to the season of its year, as do the ${words.videos} in no ${names.one}. Downloaded ${words.videos} stay where they are, marked Moved, until you move them.`},
+        }),
         loose: createSelectRegistry(`LooseVideos-${names.looseSeason}`, {
             one_season: {label: `One season, ${names.looseSeason}`, help: `They share one season, shown before the ${names.many}.`},
             by_year: {label: 'A season per year', help: `They get a season per upload year, with the ${names.many} between them by date.`},
@@ -118,6 +122,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const mode = watch('linkSeasonMode') ?? 'all'
     const playlistChoices = watch('playlists') ?? []
     const looseVideos = watch('looseVideos') ?? 'one_season'
+    const listLayout = watch('listLayout') ?? 'season_each'
     const outsideVideos = watch('outsideVideos') ?? 'leave_out'
     const newLinkSeasons = watch('newLinkSeasons') ?? 'ask'
     const customOrder = watch('customSeasonOrder') ?? false
@@ -154,6 +159,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             linkSeasons: data.linkSeasonsOn || data.outsideVideos === 'only' ? data.linkSeasonMode : 'off',
             newLinkSeasons: data.newLinkSeasons,
             looseVideos: data.looseVideos,
+            listLayout: data.listLayout,
             outsideVideos: data.outsideVideos,
             playlists: data.playlists,
             removedLinks: data.removedLinks,
@@ -393,7 +399,16 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         </div>
                                                     )}
 
-                                                    {!only && <div className="form-row">
+                                                    <div className="form-row">
+                                                        <label htmlFor="seasons-layout">{capitalized(names.many)}</label>
+                                                        <SimpleSelect
+                                                            inputId="seasons-layout" registry={regs.layout} value={listLayout}
+                                                            onChange={(value) => setValue('listLayout', value as CollectionSeasonsFormIn['listLayout'], {shouldDirty: true})}
+                                                        />
+                                                        <div className="help">{regs.layout.getHelp(listLayout)}</div>
+                                                    </div>
+
+                                                    {!only && listLayout !== 'by_year' && <div className="form-row">
                                                         <label htmlFor="seasons-loose">{capitalized(words.videos)} in no {names.one}</label>
                                                         <SimpleSelect
                                                             inputId="seasons-loose" registry={regs.loose} value={looseVideos}
@@ -531,7 +546,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                 {plural(season?.episodeCount ?? 0, 'episode', 'episodes')}
                                                                 {season?.loose ? ` · ${capitalized(words.videos)} in no ${names.one}` : null}
                                                             </span>
-                                                            {season && listSeasonIds.includes(season.id) && (
+                                                            {season && listLayout !== 'by_year' && listSeasonIds.includes(season.id) && (
                                                                 <SeasonLists
                                                                     season={field.id} names={names} lists={listsIn(field.id)}
                                                                     titles={playlistsById} joinRegistry={joinRegistry(field.id)}
