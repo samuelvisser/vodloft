@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "ad2922b7ff06"
+HEAD_REVISION = "a91a97a6c374"
 
 
 @pytest.fixture
@@ -1662,3 +1662,40 @@ def test_every_collection_numbers_its_extras_in_episode_index_order(migration_da
     with engine.connect() as connection:
         numbers = dict(connection.execute(text("SELECT id, extra_index FROM media_items_episode")).all())
     assert numbers == {10: 3, 11: None, 12: 1, 13: 2, 14: None, 15: 1}
+
+
+def test_music_profiles_become_collection_profiles_and_video_profiles_say_what_they_are_for(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "ad2922b7ff06")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        for profile_id, slug, kind in (
+            (1, "tracks", "music"), (2, "music-videos", "collection"), (3, "shows", "collection"),
+            (4, "vodloft-movies", "video"), (5, "vodloft-videos", "video"), (6, "own", "video"),
+        ):
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
+                "VALUES (:id, :slug, :slug, '/downloads/' || :slug || '.ext', 'format_1080p', '[]', :kind)"
+            ), {"id": profile_id, "slug": slug, "kind": kind})
+        for profile_id, scope in ((1, "music"), (2, "music"), (3, "both")):
+            connection.execute(text(
+                "INSERT INTO local_media_profiles_collection (id, collection_scope) VALUES (:id, :scope)"
+            ), {"id": profile_id, "scope": scope})
+        for profile_id in (4, 5, 6):
+            connection.execute(text("INSERT INTO local_media_profiles_video (id) VALUES (:id)"), {"id": profile_id})
+        # The seeded Videos profile already holds a movie, so it stays available for movies too.
+        connection.execute(text("INSERT INTO media_downloads (id, type, local_media_profile_id, media_item_id, file_path) VALUES (1, 'movie', 5, 1, '/downloads/movie.mp4')"))
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT p.slug, p.type, c.collection_scope FROM local_media_profiles p "
+            "JOIN local_media_profiles_collection c ON c.id = p.id ORDER BY p.id"
+        )).all() == [("tracks", "collection", "music_tracks"), ("music-videos", "collection", "music_videos"), ("shows", "collection", "both")]
+        assert connection.execute(text(
+            "SELECT p.slug, v.video_scope FROM local_media_profiles p JOIN local_media_profiles_video v ON v.id = p.id ORDER BY p.id"
+        )).all() == [("vodloft-movies", "movies"), ("vodloft-videos", "both"), ("own", "both")]

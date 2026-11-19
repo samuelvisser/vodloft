@@ -71,9 +71,9 @@ Every collection is a **Podcast**, a **Series** or **Music**. You choose when ad
 
 - A **Podcast** downloads its newest episodes, by date or by number.
 - A **Series** downloads by season.
-- **Music** is an artist's music: each season is an album, and each episode a track. It downloads by season, like a Series, and takes Music profiles for its tracks and Collection profiles for its music videos (see [[Local-Media-Profiles#music-profiles]]). VODLoft uses those words everywhere for it: its pages, menus and windows say album instead of season, and track instead of episode. On a site with videos, such as YouTube, what the collection lists are called music videos.
+- **Music** is an artist's music: each season is an album, and each episode a track. It downloads by season, like a Series, and takes Collection profiles available for Music tracks or Music videos (see [[Local-Media-Profiles#music-tracks-and-music-videos]]). VODLoft uses those words everywhere for it: its pages, menus and windows say album instead of season, and track instead of episode. On a site with videos, such as YouTube, what the collection lists are called music videos.
 
-A collection can only change to a type its Download Profiles suit. To make a Series into Music, remove its Download Profiles first, and add new ones with a Music profile.
+A collection can only change to a type its Download Profiles suit. To make a Series into Music, remove its Download Profiles first, and add new ones with a profile for Music tracks or Music videos.
 
 ### Changing how episodes are numbered
 
@@ -226,7 +226,7 @@ Collections made from a creator start without Download Profiles; add them on eac
 
 A musician on **Bandcamp** or **SoundCloud** can be added the same way: paste a link to the artist's page, such as `https://artist.bandcamp.com` or `https://soundcloud.com/artist`, and choose **Add the artist**. Their albums are listed newest first, with the year each came out. On SoundCloud a **Tracks** feed holds everything the artist uploaded, so tracks that are on no album have a place too. A Bandcamp track released on its own is listed as a single, which you add from its own page.
 
-An artist's collections are **Music** collections. **One discography** puts every album in one collection, with each album as a season named after it and the other tracks under **Singles**; **A collection per album** gives each album its own. Download them with a Music profile (see [[Local-Media-Profiles#music-profiles]]), which tags every track with its album, artist and track number, such as 3/10.
+An artist's collections are **Music** collections. **One discography** puts every album in one collection, with each album as a season named after it and the other tracks under **Singles**; **A collection per album** gives each album its own. Download them with a profile for Music tracks (see [[Local-Media-Profiles#music-tracks-and-music-videos]]), which tags every track with its album, artist and track number, such as 3/10.
 
 Looking up an artist reads each album once, so an artist with many albums takes a minute; the page shows how far it is. YouTube's Releases tab cannot be read yet.
 

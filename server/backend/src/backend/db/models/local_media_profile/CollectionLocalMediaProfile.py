@@ -44,9 +44,3 @@ class CollectionLocalMediaProfile(LocalMediaProfileBase, HasMetadataMixin):
         from backend.utils.custom_index import get_indexing_value_definitions
         return get_indexing_value_definitions(self)
 
-
-class MusicLocalMediaProfile(CollectionLocalMediaProfile):
-    """A Collection profile that keeps episodes as music: an audio file per track, tagged with the artist, the
-    album (the episode's season) and the track number. It shares the Collection profile's table."""
-
-    __mapper_args__ = {"polymorphic_identity": LocalMediaProfileType.MUSIC.value}

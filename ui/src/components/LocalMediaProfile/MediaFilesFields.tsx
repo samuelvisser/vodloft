@@ -137,9 +137,9 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
     const {control, formState: {errors}} = form
     const {data: defaults} = useLibraryDefaults()
     const [metadataMode, showNfo] = useWatch({control, name: ['metadataMode', 'showNfo']}) as [string | undefined, boolean | undefined]
-    const [collectionScope, profileType] = useWatch({control, name: ['collectionScope', 'type']}) as [string | undefined, string | undefined]
-    // A Collection profile for the music videos of Music collections calls each one a music video.
-    const musicVideos = collectionScope === 'music' && profileType !== 'music'
+    const collectionScope = useWatch({control, name: 'collectionScope'}) as string | undefined
+    // A profile for the music videos of Music collections calls each one a music video.
+    const musicVideos = collectionScope === 'music_videos'
     const effectiveMetadata = (metadataMode ?? 'system') === 'system' ? defaults?.metadataMode : metadataMode
     const offersInfoFile = useOffersInfoFile(form, mode)
     const writesNfo = isBeside(METADATA, effectiveMetadata) || (mode === 'collection' && !!showNfo)

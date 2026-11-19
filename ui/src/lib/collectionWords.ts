@@ -21,7 +21,7 @@ export interface CollectionWords {
     count: (count: number, noun?: Noun) => string
 }
 
-/** Whether what is meant is sound only, such as the files of a Music Local Media Profile or the tracks on Bandcamp,
+/** Whether what is meant is sound only, such as the files of a profile for Music tracks or the tracks on Bandcamp,
  *  or video, such as the videos of a YouTube channel. */
 export type MediaKind = 'audio' | 'video'
 
@@ -59,15 +59,16 @@ interface WordedCollection {
     site?: { audio?: boolean } | null
 }
 
-/** The words for the files of a collection, kept by the Local Media Profiles of these types that it is offered:
- *  tracks when only Music profiles, which keep sound, are, and otherwise what the collection holds. */
-export function fileWordsFor(collection: WordedCollection | null | undefined, profileTypes: readonly string[] | undefined): CollectionWords {
-    const audio = !!profileTypes?.length && profileTypes.every((type) => type === 'music')
+/** The words for the files of a collection, kept by the Local Media Profiles it is offered, each by what it is
+ *  available for: tracks when only profiles for Music tracks, which keep sound, are, and otherwise what the
+ *  collection holds. */
+export function fileWordsFor(collection: WordedCollection | null | undefined, profileScopes: readonly string[] | undefined): CollectionWords {
+    const audio = !!profileScopes?.length && profileScopes.every((scope) => scope === 'music_tracks')
     return wordsFor(collection, audio ? 'audio' : undefined)
 }
 
 /** The words for a collection, as its Site has it: the episodes of a Music collection on a Site with sound only,
- *  such as Bandcamp, are tracks. Pass ``audio`` where the files are meant, which a Music Local Media Profile
+ *  such as Bandcamp, are tracks. Pass ``audio`` where the files are meant, which a profile for Music tracks
  *  keeps as sound. */
 export function wordsFor(collection: WordedCollection | null | undefined, kind?: MediaKind): CollectionWords {
     return collectionWords(collection?.type, kind ?? (collection?.site?.audio ? 'audio' : 'video'))

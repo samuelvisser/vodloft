@@ -2,7 +2,6 @@
 from .local_media_profile import (
     LocalMediaProfileBase,
     CollectionLocalMediaProfile,
-    MusicLocalMediaProfile,
     VideoLocalMediaProfile,
 )
 

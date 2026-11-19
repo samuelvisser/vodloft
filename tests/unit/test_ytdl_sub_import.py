@@ -257,7 +257,7 @@ def test_a_discography_becomes_an_artist_creator_with_a_music_profile(tmp_path):
     plan = _plan(_write(tmp_path, MUSIC), ("/music", "/downloads/music"))
 
     profile = next(profile for profile in plan.profiles if profile.name == "Bandcamp")
-    assert (profile.name, profile.settings["type"], profile.settings["collection_scope"]) == ("Bandcamp", "music", "music")
+    assert (profile.name, profile.settings.get("type", "collection"), profile.settings["collection_scope"]) == ("Bandcamp", "collection", "music_tracks")
     assert profile.settings["preferred_format"] == "format_audio_only"
     assert profile.output_template == (
         "/downloads/music/{{ artist }}/[{{ year }}] {{ album }}/{{ track_number_padded }} - {{ title }}.ext"
@@ -484,7 +484,7 @@ def _artist_import(monkeypatch):
 
 
 def test_an_imported_discography_adds_the_artist_with_each_album_a_season(installation, monkeypatch):
-    from backend.db.models import Creator, Collection, LocalMediaProfileBase
+    from backend.db.models import Creator, Collection, CollectionLocalMediaProfile
     from backend.services import imports
 
     session = installation
@@ -501,7 +501,7 @@ def test_an_imported_discography_adds_the_artist_with_each_album_a_season(instal
     # The artist's page is the collection, and each album a link season of it.
     assert collection.sharing_url == "https://emilyharpist.bandcamp.com"
     assert [(link.title, link.enabled) for link in collection.lists] == [("Harp", True)]
-    assert session.scalar(select(LocalMediaProfileBase.type).where(LocalMediaProfileBase.name == "Bandcamp")) == "music"
+    assert session.scalar(select(CollectionLocalMediaProfile.collection_scope).where(CollectionLocalMediaProfile.name == "Bandcamp")) == "music_tracks"
 
 
 def test_an_import_without_creators_makes_the_artist_one_plain_collection(installation, monkeypatch):
@@ -682,7 +682,7 @@ def test_an_artists_music_videos_become_a_collection_of_their_creator(tmp_path):
     assert not any(warning.subject == "Rick Astley" for warning in plan.warnings)
     videos = next(collection for collection in plan.collections if collection.title == "Rick Astley")
     assert (videos.url, videos.creator, videos.settings["type"], videos.settings["genre"]) == (
-        "https://www.youtube.com/@RickAstleyYT", True, "series", "Pop",
+        "https://www.youtube.com/@RickAstleyYT", True, "music", "Pop",
     )
     profile = next(profile for profile in plan.profiles if profile.external_id == videos.profile_external_id)
     assert profile.output_template == "/downloads/music_videos/{{ artist }}/{{ title }}.ext"

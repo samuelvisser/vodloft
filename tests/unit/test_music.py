@@ -27,30 +27,53 @@ def _new_session() -> Session:
 MUSIC = {"name": "Music", "output_template": "/downloads/music/{{ artist }}/{{ album }}/{{ track_number_padded }} - {{ title }}.ext"}
 
 
-def test_a_music_profile_keeps_audio_for_music_collections_only():
+def test_a_profile_for_music_tracks_keeps_audio_and_one_for_music_videos_video():
     from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPICreate
     from backend.services.local_media_profile_changes import create_collection_local_media_profile
 
-    music = CollectionLocalMediaProfileAPICreate(type="music", preferred_format="format_audio_only", audio_format="flac", **MUSIC)
-    assert music.collection_scope == CollectionLocalMediaProfileScope.MUSIC
-
-    with pytest.raises(ValidationError, match="A Music profile downloads audio only"):
-        CollectionLocalMediaProfileAPICreate(type="music", preferred_format="format_1080p", **MUSIC)
-    # FLAC and the Music collections are for Music profiles.
-    with pytest.raises(ValidationError, match="FLAC is for Music profiles"):
+    tracks = CollectionLocalMediaProfileAPICreate(
+        collection_scope="music_tracks", preferred_format="format_audio_only", audio_format="flac", **MUSIC,
+    )
+    with pytest.raises(ValidationError, match="A profile for Music tracks downloads audio only"):
+        CollectionLocalMediaProfileAPICreate(collection_scope="music_tracks", preferred_format="format_1080p", **MUSIC)
+    # FLAC is for Music tracks.
+    with pytest.raises(ValidationError, match="FLAC is for profiles for Music tracks"):
         CollectionLocalMediaProfileAPICreate(preferred_format="format_audio_only", audio_format="flac", **MUSIC)
-    # A Collection profile keeps a Music collection's music videos, as music videos.
-    videos = CollectionLocalMediaProfileAPICreate(preferred_format="format_1080p", collection_scope="music", **MUSIC)
-    assert (videos.collection_scope, videos.episode_nfo) == (CollectionLocalMediaProfileScope.MUSIC, "music_video")
+    # A profile for Music videos calls each one a music video.
+    videos = CollectionLocalMediaProfileAPICreate(preferred_format="format_1080p", collection_scope="music_videos", **MUSIC)
+    assert (videos.collection_scope, videos.episode_nfo) == (CollectionLocalMediaProfileScope.MUSIC_VIDEOS, "music_video")
 
     session = _new_session()
-    profile = create_collection_local_media_profile(session, music)
-    assert (type(profile).__name__, profile.type, profile.collection_scope) == ("MusicLocalMediaProfile", "music", "music")
+    profile = create_collection_local_media_profile(session, tracks)
+    assert (type(profile).__name__, profile.type, profile.collection_scope) == (
+        "CollectionLocalMediaProfile", "collection", "music_tracks",
+    )
+
+
+def test_a_profile_with_downloads_does_not_switch_to_or_from_music_tracks():
+    from backend.api.models.collection_local_media_profile import CollectionLocalMediaProfileAPIUpdate
+    from backend.services.local_media_profile_changes import _refuse_tracks_switch_with_downloads
+
+    def change(saved, wanted, downloads=True):
+        session = SimpleNamespace(scalar=lambda _statement: 1 if downloads else None)
+        fields = CollectionLocalMediaProfileAPIUpdate(
+            collection_scope=wanted, preferred_format="format_audio_only", **MUSIC,
+        )
+        _refuse_tracks_switch_with_downloads(session, SimpleNamespace(id=1, collection_scope=saved), fields)
+
+    change("both", "music_videos")
+    change("music_videos", "music_tracks", downloads=False)
+    with pytest.raises(ServiceError, match="already has downloads, so it can't be changed to Music tracks") as refused:
+        change("music_videos", "music_tracks")
+    assert refused.value.field == "collectionScope"
+    with pytest.raises(ServiceError, match="already has downloaded music tracks"):
+        change("music_tracks", "podcast")
 
 
 def test_a_profile_for_podcasts_and_series_is_not_offered_for_music():
     assert CollectionLocalMediaProfileScope.BOTH.collection_types() == ("podcast", "series")
-    assert CollectionLocalMediaProfileScope.MUSIC.collection_types() == ("music",)
+    assert CollectionLocalMediaProfileScope.MUSIC_TRACKS.collection_types() == ("music",)
+    assert CollectionLocalMediaProfileScope.MUSIC_VIDEOS.collection_types() == ("music",)
     assert CollectionType.MUSIC.by_season and CollectionType.SERIES.by_season and not CollectionType.PODCAST.by_season
 
 
@@ -62,7 +85,7 @@ def test_a_collection_becomes_music_only_when_its_download_profiles_suit_it():
             SimpleNamespace(local_media_profile=SimpleNamespace(name=f"Profile {scope}", collection_scope=scope)) for scope in scopes
         ])
 
-    _check_profiles_suit_type(collection("music"), CollectionType.MUSIC)
+    _check_profiles_suit_type(collection("music_tracks", "music_videos"), CollectionType.MUSIC)
     _check_profiles_suit_type(collection("both", "series"), CollectionType.SERIES)
     with pytest.raises(ServiceError, match="Profile both, which is not offered for music collections") as refused:
         _check_profiles_suit_type(collection("both"), CollectionType.MUSIC)

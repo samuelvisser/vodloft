@@ -22,7 +22,6 @@ from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, Lo
 # keeps single videos, and movies with their extras.
 _PROFILE_TYPE_FEATURES = {
     LocalMediaProfileType.COLLECTION: (Feature.COLLECTIONS,),
-    LocalMediaProfileType.MUSIC: (Feature.COLLECTIONS,),
     LocalMediaProfileType.VIDEO: (Feature.VIDEOS, Feature.MOVIES),
 }
 

@@ -29,8 +29,7 @@ export const VideoPreferredFormatReg = createSelectRegistry("VideoPreferredForma
 });
 
 export const LocalMediaProfileTypeReg = createSelectRegistry("LocalMediaProfileType", {
-  'collection': { label: "Collection", help: "Store downloaded collection episodes" },
-  'music': { label: "Music", help: "Store music collections as tagged audio tracks, an album per season" },
+  'collection': { label: "Collection", help: "Store the episodes of podcasts and series, and the tracks or music videos of music" },
   'video': { label: "Video", help: "Store single videos and movies added on their own" },
 });
 
@@ -38,22 +37,21 @@ export const CollectionLocalMediaProfileScopeReg = createSelectRegistry("Collect
   'both': { label: "Podcasts and Series", help: "Offer this profile for both Podcasts and Series" },
   'podcast': { label: "Podcasts", help: "Offer this profile only for Podcasts" },
   'series': { label: "Series", help: "Offer this profile only for Series" },
-  'music': { label: "Music videos", help: "The music videos of Music collections, kept as video" },
+  'music_tracks': { label: "Music tracks", help: "The tracks of Music collections, kept as tagged audio with an album per season" },
+  'music_videos': { label: "Music videos", help: "The music videos of Music collections, kept as video" },
+});
+
+/** What a Video profile is offered for: single videos, movies with their extras, or both. */
+export const VideoLocalMediaProfileScopeReg = createSelectRegistry("VideoLocalMediaProfileScope", {
+  'both': { label: "Videos and movies", help: "Offer this profile for both single videos and movies" },
+  'videos': { label: "Videos", help: "Offer this profile only for single videos" },
+  'movies': { label: "Movies", help: "Offer this profile only for movies and their extras" },
 });
 
 /** What each episode's NFO file and embedded metadata call it. */
 export const EpisodeNfoReg = createSelectRegistry("EpisodeNfo", {
   'episode': { label: "Episodes of a show", help: "Show, season and episode number, for a TV Shows library" },
   'music_video': { label: "Music videos", help: "The artist and title, for a Music Videos library" },
-});
-
-/** The scopes a Collection profile can choose: for a Music collection it keeps the music videos, and a Music
- *  profile the tracks. */
-export const CollectionProfileScopeChoiceReg = createSelectRegistry("CollectionLocalMediaProfileScope", {
-  'both': CollectionLocalMediaProfileScopeReg.spec.both,
-  'podcast': CollectionLocalMediaProfileScopeReg.spec.podcast,
-  'series': CollectionLocalMediaProfileScopeReg.spec.series,
-  'music': CollectionLocalMediaProfileScopeReg.spec.music,
 });
 
 export const FilenameRestrictionModeReg = createSelectRegistry("FilenameRestrictionMode", {
@@ -67,11 +65,10 @@ export function effectiveFilenameMode(mode: string | undefined, systemMode: stri
   return mode === 'system' ? systemMode : mode
 }
 
-export type LocalMediaProfileType = 'collection' | 'music' | 'video'
-/** The API collection that creates, updates and deletes profiles of one type. A Music profile is a kind of
- *  Collection profile. */
+export type LocalMediaProfileType = 'collection' | 'video'
+/** The API collection that creates, updates and deletes profiles of one type. */
 export function localMediaProfileEndpoint(type: LocalMediaProfileType | string): string {
-    return `${type === 'music' ? 'collection' : type}-local-media-profiles`
+    return `${type}-local-media-profiles`
 }
 
 export type CollectionLocalMediaProfileScope = (typeof CollectionLocalMediaProfileScopeReg)["values"][number]
@@ -79,19 +76,30 @@ export type CollectionLocalMediaProfileContext = 'podcast' | 'series' | 'music'
 export function isCollectionContext(value: string | null | undefined): value is CollectionLocalMediaProfileContext {
     return value === 'podcast' || value === 'series' || value === 'music'
 }
+export type VideoLocalMediaProfileScope = (typeof VideoLocalMediaProfileScopeReg)["values"][number]
+
+/** Whether a profile keeps the tracks of Music collections: audio only, tagged for music players. */
+export function keepsTracks(profile: LocalMediaProfileRead | {collectionScope?: string | null} | null | undefined): boolean {
+    return !!profile && 'collectionScope' in profile && profile.collectionScope === 'music_tracks'
+}
+
+/** Whether a Video profile is offered for single videos or for movies. */
+export function videoProfileKeeps(profile: {videoScope?: string | null}, kind: 'videos' | 'movies'): boolean {
+    return (profile.videoScope ?? 'both') === 'both' || profile.videoScope === kind
+}
 
 export function defaultSubtitleModeForProfile(
     type: LocalMediaProfileType,
     collectionScope: CollectionLocalMediaProfileScope = 'both',
 ): LocalMediaProfileSubtitleMode {
     // New Video profiles start without subtitles; they can be turned on like any other profile.
-    if (type === 'video' || type === 'music') return 'no_subtitles'
-    return type === 'collection' && collectionScope === 'podcast' ? 'no_subtitles' : 'sidecar'
+    if (type === 'video') return 'no_subtitles'
+    return collectionScope === 'podcast' || collectionScope === 'music_tracks' ? 'no_subtitles' : 'sidecar'
 }
 
-/** Collection and Music profiles both store the episodes of collections. */
+/** Collection profiles store the episodes of collections. */
 export function isCollectionProfileType(type: LocalMediaProfileType | string | undefined): boolean {
-    return type === 'collection' || type === 'music'
+    return type === 'collection'
 }
 
 export function isCollectionLocalMediaProfileAvailableFor(
@@ -101,26 +109,37 @@ export function isCollectionLocalMediaProfileAvailableFor(
     if (!isCollectionProfileType(profile.type)) return false
     if (collectionType !== 'podcast' && collectionType !== 'series' && collectionType !== 'music') return true
     const scope = profile.collectionScope ?? 'both'
-    return scope === collectionType || (scope === 'both' && collectionType !== 'music')
+    if (collectionType === 'music') return scope === 'music_tracks' || scope === 'music_videos'
+    return scope === collectionType || scope === 'both'
 }
 
 /** What a new Local Media Profile has to fit: a collection of a type, or a video or movie, on a Site. */
-export type LocalMediaProfileFit = {collectionType?: string | null, siteKey?: string | null, audio?: boolean}
+export type LocalMediaProfileFit = {
+    collectionType?: string | null
+    video?: 'videos' | 'movies'
+    siteKey?: string | null
+    audio?: boolean
+    /** The download format asked for, such as the one a Stream Profile streams. */
+    format?: string | null
+}
 
-/** Where to add a Local Media Profile that fits a collection, a video or a movie: a Music profile for the tracks of
- *  a Music collection on a Site with sound only, a Collection profile for any other collection (for a Music collection
- *  one for its music videos), and a Video profile for a video or movie. The rest starts as broad as it can, for every
- *  Site and, for a podcast or series, for both. */
-export function addLocalMediaProfilePath({collectionType, siteKey, audio = false}: LocalMediaProfileFit = {}): string {
+/** Where to add a Local Media Profile that fits a collection, a video or a movie: a Collection profile for a
+ *  collection, for Music tracks when it is a Music collection on a Site with sound only and for Music videos when it is
+ *  another Music collection, and a Video profile for a video or movie. The rest starts as broad as it can, for every
+ *  Site, for both podcasts and series, and for both videos and movies. */
+export function addLocalMediaProfilePath({collectionType, video, siteKey, audio = false, format}: LocalMediaProfileFit = {}): string {
     const params = new URLSearchParams()
-    if (collectionType === undefined) params.set('type', 'video')
-    // A Music collection on a Site with sound only holds tracks, which a Music profile keeps.
-    else if (collectionType === 'music' && audio) params.set('type', 'music')
+    if (collectionType === undefined) {
+        params.set('type', 'video')
+        if (video) params.set('for', video)
+    }
     else {
         params.set('type', 'collection')
-        if (isCollectionContext(collectionType)) params.set('for', collectionType)
+        if (collectionType === 'music') params.set('for', audio ? 'music_tracks' : 'music_videos')
+        else if (isCollectionContext(collectionType)) params.set('for', collectionType)
     }
     if (siteKey) params.set('site', siteKey)
+    if (format) params.set('format', format)
     return `/add-local-media-profile?${params}`
 }
 

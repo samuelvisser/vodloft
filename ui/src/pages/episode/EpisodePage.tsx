@@ -101,10 +101,10 @@ export default function EpisodePage() {
         isFetching: isEpisodeFetching,
     } = useEpisode(episodeId)
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
-    // A Music collection's files are tracks while only Music Local Media Profiles, which keep sound, are offered for it.
+    // A Music collection's files are tracks while only profiles for Music tracks, which keep sound, are offered for it.
     const fileWords = fileWordsFor(collection, profiles
         ?.filter((profile) => isCollectionLocalMediaProfileAvailableFor(profile, collection?.type))
-        .map((profile) => profile.type))
+        .map((profile) => profile.type === 'collection' ? profile.collectionScope : 'video'))
     const {data: waitingForCountdown} = useWaitingForCountdown(
         collection?.id,
         String(episode?.publishStatus) === 'published_preliminary',

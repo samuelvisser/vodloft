@@ -11,7 +11,7 @@ import './TemplateSourceSelect.css'
 
 type Props = {
     mode: LocalMediaProfileTemplateSourceMode
-    /** What the example is, such as Example track for a Music profile. */
+    /** What the example is, such as Example track for a profile for Music tracks. */
     label?: string
     sources: LocalMediaProfileTemplateSource[]
     selectedSource: LocalMediaProfileTemplateSource | null

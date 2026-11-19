@@ -32,7 +32,7 @@ import {formatBytes} from '../../utils/formatting'
 import {can} from '../../lib/access'
 import {downloadProfilesUrlForLocalMediaProfile} from '../../lib/downloadProfileFilters'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
-import {localMediaProfileEndpoint, sitesForLocalMediaProfileType, takesUpcomingSites} from '../../types/local_media_profile'
+import {keepsTracks, localMediaProfileEndpoint, sitesForLocalMediaProfileType, takesUpcomingSites} from '../../types/local_media_profile'
 import './LocalMediaProfilePage.css'
 import {apiUrl} from '../../lib/api'
 import {collectionWords} from '../../lib/collectionWords'
@@ -107,8 +107,8 @@ export default function LocalMediaProfilePage() {
         )
     }
 
-    // What the profile keeps: a Music profile keeps tracks.
-    const kept = collectionWords(profile.type === 'music' ? 'music' : null, 'audio').episode
+    // What the profile keeps: a profile for Music tracks keeps tracks.
+    const kept = collectionWords(keepsTracks(profile) ? 'music' : null, 'audio').episode
     const actionBusy = Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation || moveOperation)
     const runningActionReason = renameOperation
         ? 'A file rename operation is running for this profile.'

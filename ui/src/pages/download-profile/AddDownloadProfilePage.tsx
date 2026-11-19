@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef} from 'react'
-import {Controller, useForm} from 'react-hook-form'
+import {Controller, useForm, useWatch} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {useNavigate, useSearchParams} from 'react-router-dom'
+import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionEpisodeTags, useCollectionSeasons, useCollections} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
@@ -9,7 +9,7 @@ import {
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
-import {isCollectionContext, isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {addLocalMediaProfilePath, isCollectionContext, isCollectionLocalMediaProfileAvailableFor, isLocalMediaProfileAvailableForSite, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {SelectRegistry} from "../../utils/selectRegistry";
 import {buildCollectionSelectRegistry, EpisodeIdentifierReg} from "../../types/collection";
 import {useQueryClient} from "@tanstack/react-query";
@@ -17,6 +17,7 @@ import {getZodDefaults} from "../../utils/defaultZod";
 import ReadMore from "../../utils/ReadMore";
 import {apiUrl} from '../../lib/api'
 import {PreferredFormatReg} from '../../types/local_media_profile'
+import RequestedField, {RequestedFieldsProvider} from '../../components/common/RequestedField'
 import './AddDownloadProfilePage.css'
 
 export default function AddDownloadProfilePage() {
@@ -56,8 +57,6 @@ export default function AddDownloadProfilePage() {
         // Filters name the seasons and episode types of one collection; the new one gets its own starting filters.
         setValue('filters', [])
     }, [setValue])
-    const prefillApplied = useRef(false)
-    const mediaProfilePrefillApplied = useRef(false)
     const requestedCollectionSlug = searchParams.get('collection')
     const requestedPreferredFormat = PreferredFormatReg.normalize(searchParams.get('preferredFormat'))
     const requestedEpisodeTypes = useMemo(
@@ -72,14 +71,11 @@ export default function AddDownloadProfilePage() {
         ? parsedDownloadEpisodeCount
         : undefined
 
-    useEffect(() => {
-        if (prefillApplied.current || !requestedCollectionSlug || !Array.isArray(collections)) return
+    const applyRequestedCollection = () => {
+        if (!Array.isArray(collections)) return false
         const requestedCollection = collections.find((collection) => collection.slug === requestedCollectionSlug)
-        if (!requestedCollection) return
-
-        selectCollection(requestedCollection.id)
-        prefillApplied.current = true
-    }, [requestedCollectionSlug, selectCollection, collections])
+        if (requestedCollection) selectCollection(requestedCollection.id)
+    }
 
     const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
 
@@ -119,14 +115,22 @@ export default function AddDownloadProfilePage() {
         if (filtersDefaultedFor.current === selectedCollection.id) return
         filtersDefaultedFor.current = selectedCollection.id
         const latestSeason = [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)[0]
-        // A link from a Stream Profile asks for the episode types and the number of episodes it streams.
-        const filters = defaultEpisodeFilters(episodeIdentifier, episodeTags, latestSeason?.slug).map((filter) => {
+        setValue('filters', defaultEpisodeFilters(episodeIdentifier, episodeTags, latestSeason?.slug))
+    }, [selectedCollection, episodeTags, seasonal, seasonsData, episodeIdentifier, setValue])
+    const filters = useWatch({control: form.control, name: 'filters'})
+    // A link from a Stream Profile asks for the episode types and the number of episodes it streams, once the
+    // collection's own starting filters are in.
+    const requestedFilters = requestedEpisodeTypes.length > 0 || requestedDownloadEpisodeCount !== undefined
+        ? {episodeTypes: requestedEpisodeTypes, count: requestedDownloadEpisodeCount}
+        : undefined
+    const applyRequestedFilters = () => {
+        if (!selectedCollection || filtersDefaultedFor.current !== selectedCollection.id || !filters?.length) return false
+        setValue('filters', filters.map((filter) => {
             if (filter.field === 'types' && requestedEpisodeTypes.length > 0) return {...filter, episodeTypes: requestedEpisodeTypes}
             if (filter.field === 'published' && requestedDownloadEpisodeCount !== undefined) return {...filter, count: requestedDownloadEpisodeCount}
             return filter
-        })
-        setValue('filters', filters)
-    }, [selectedCollection, episodeTags, seasonal, seasonsData, episodeIdentifier, requestedEpisodeTypes, requestedDownloadEpisodeCount, setValue])
+        }), {shouldDirty: true})
+    }
 
     // A collection has one Download Profile per Local Media Profile.
     const usedLocalMediaProfiles = useMemo(() => new Set(
@@ -135,34 +139,20 @@ export default function AddDownloadProfilePage() {
             .map((profile) => profile.localMediaProfileId),
     ), [collectionProfiles, selectedCollection?.id])
 
-    useEffect(() => {
-        if (
-            mediaProfilePrefillApplied.current
-            || !requestedPreferredFormat
-            || !selectedCollection
-            || !Array.isArray(mediaProfiles)
-        ) return
-
-        const matchingProfile = mediaProfiles.find((profile) => (
-            profile.preferredFormat === requestedPreferredFormat
-            && isCollectionLocalMediaProfileAvailableFor(profile, selectedCollection.type)
-            && isLocalMediaProfileAvailableForSite(profile, selectedCollection.site?.key)
-            && !usedLocalMediaProfiles.has(profile.id)
-        ))
-        if (!matchingProfile) return
-
-        setValue('localMediaProfileId', matchingProfile.id, {
-            shouldDirty: false,
-            shouldValidate: true,
-        })
-        mediaProfilePrefillApplied.current = true
-    }, [
-        setValue,
-        mediaProfiles,
-        requestedPreferredFormat,
-        selectedCollection,
-        usedLocalMediaProfiles,
-    ])
+    // The profiles this collection can still take that download the format a link asks for.
+    const matchingProfile = selectedCollection && requestedPreferredFormat ? mediaProfiles?.find((profile) => (
+        profile.preferredFormat === requestedPreferredFormat
+        && isCollectionLocalMediaProfileAvailableFor(profile, selectedCollection.type)
+        && isLocalMediaProfileAvailableForSite(profile, selectedCollection.site?.key)
+        && !usedLocalMediaProfiles.has(profile.id)
+    )) : undefined
+    // None does yet: the user can add one, for this collection and the format, and come back.
+    const noMatchingProfile = !!selectedCollection && !!requestedPreferredFormat && Array.isArray(mediaProfiles)
+        && !!collectionProfiles && !matchingProfile
+    const applyRequestedFormat = () => {
+        if (!selectedCollection || !Array.isArray(mediaProfiles) || !collectionProfiles) return false
+        if (matchingProfile) setValue('localMediaProfileId', matchingProfile.id, {shouldDirty: false, shouldValidate: true})
+    }
 
     // A link from a Stream Profile asks for a format: the profiles that download it stand out, and another choice says so.
     const requestedFormatProfiles = useMemo(() => new Set(
@@ -181,6 +171,7 @@ export default function AddDownloadProfilePage() {
                 <h1 id="add-download-profile-title">Add download profile</h1>
             </div>
 
+            <RequestedFieldsProvider mode="create">
             <form className="form" onSubmit={onSubmit} noValidate>
 
                 {errors.root && (
@@ -192,6 +183,7 @@ export default function AddDownloadProfilePage() {
                 {/* Show */}
                 <div className="form-row">
                     <label htmlFor="collection-id">Collection</label>
+                    <RequestedField id="collection" requested={requestedCollectionSlug} value={collectionId} apply={applyRequestedCollection}>
                     <Controller
                         control={form.control}
                         name="collectionId"
@@ -214,6 +206,7 @@ export default function AddDownloadProfilePage() {
                             />
                         )}
                     />
+                    </RequestedField>
                     {errors.collectionId && (
                         <div id="collection-errors" className="error" role="alert" aria-live="polite">
                             {errors.collectionId.message as string}
@@ -224,6 +217,31 @@ export default function AddDownloadProfilePage() {
                 {/* Local Media Profile */}
                 <div className="form-row">
                     <label htmlFor="local-media-profile">Local Media Profile</label>
+                    <RequestedField
+                        id="localMediaProfile"
+                        requested={requestedPreferredFormat}
+                        value={localMediaProfileId}
+                        apply={applyRequestedFormat}
+                        fits={() => !otherFormatSelected && !noMatchingProfile}
+                        incompatible={requestedPreferredFormat && (noMatchingProfile ? (
+                            <span className="requested-note__with-action">
+                                <span>No Local Media Profile for this collection downloads {PreferredFormatReg.getLabel(requestedPreferredFormat)} yet.</span>
+                                <Link
+                                    className="btn btn-small"
+                                    to={addLocalMediaProfilePath({
+                                        collectionType: selectedCollection?.type ?? null,
+                                        siteKey: selectedCollection?.site?.key,
+                                        audio: selectedCollection?.site?.audio,
+                                        format: requestedPreferredFormat,
+                                    })}
+                                >
+                                    Create one for {PreferredFormatReg.getLabel(requestedPreferredFormat)}
+                                </Link>
+                            </span>
+                        ) : selectedMediaProfile && <>
+                            This Local Media Profile downloads {PreferredFormatReg.getLabelLoose(selectedMediaProfile.preferredFormat)}, not the requested {PreferredFormatReg.getLabel(requestedPreferredFormat)}.
+                        </>)}
+                    >
                     <Controller
                         control={form.control}
                         name="localMediaProfileId"
@@ -256,14 +274,10 @@ export default function AddDownloadProfilePage() {
                             />
                         )}
                     />
+                    </RequestedField>
                     {errors.localMediaProfileId && (
                         <div id="local-media-profile-errors" className="error" role="alert" aria-live="polite">
                             {errors.localMediaProfileId.message as string}
-                        </div>
-                    )}
-                    {otherFormatSelected && (
-                        <div className="requested-format-note" role="status">
-                            This Local Media Profile downloads {PreferredFormatReg.getLabelLoose(selectedMediaProfile.preferredFormat)}, not the requested {PreferredFormatReg.getLabel(requestedPreferredFormat)}.
                         </div>
                     )}
                     <div className="help" id="local-media-profile-help">
@@ -274,20 +288,23 @@ export default function AddDownloadProfilePage() {
                     </div>
                 </div>
 
-                <DownloadProfileForm
-                    form={form}
-                    episodeIdentifier={episodeIdentifier}
-                    collectionId={selectedCollection?.id}
-                    seasons={seasonsData}
-                    collectionRoot={false}
-                    newProfile
-                />
+                <RequestedField id="filters" requested={requestedFilters} value={filters} apply={applyRequestedFilters}>
+                    <DownloadProfileForm
+                        form={form}
+                        episodeIdentifier={episodeIdentifier}
+                        collectionId={selectedCollection?.id}
+                        seasons={seasonsData}
+                        collectionRoot={false}
+                        newProfile
+                    />
+                </RequestedField>
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>
                     <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting || !collectionId}/>
                 </div>
             </form>
+            </RequestedFieldsProvider>
         </section>
     )
 }

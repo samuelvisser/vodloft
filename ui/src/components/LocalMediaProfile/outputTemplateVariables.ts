@@ -145,7 +145,7 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
         description: 'Who the music is by: the creator, else the collection\'s author',
         readMore: {
             paragraphs: [
-                'Meant for Music profiles, such as {{ artist }}/{{ year }} - {{ album }}/{{ track_number_padded }} - {{ title }}.',
+                'Meant for profiles for Music tracks, such as {{ artist }}/{{ year }} - {{ album }}/{{ track_number_padded }} - {{ title }}.',
             ],
         },
     },

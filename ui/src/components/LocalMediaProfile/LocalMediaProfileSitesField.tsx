@@ -7,6 +7,8 @@ import {sitesForLocalMediaProfileType, takesUpcomingSites, type LocalMediaProfil
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import ReadMore from '../../utils/ReadMore'
 import SelectAllLabel from '../common/SelectAllLabel'
+import RequestedField from '../common/RequestedField'
+import {useProfileFit} from './ProfileFit'
 
 const UPCOMING_SITES = '__upcoming__'
 
@@ -21,6 +23,7 @@ export default function LocalMediaProfileSitesField({form, mode}: {
     const [siteKeys, includeUpcomingSites] = useWatch({control, name: ['siteKeys', 'includeUpcomingSites']}) as [string[] | null, boolean]
     const available = useMemo(() => sitesForLocalMediaProfileType(sites, mode), [sites, mode])
     const upcoming = takesUpcomingSites(sites, mode)
+    const fit = useProfileFit(mode)
 
     // A new profile starts with every Site VODLoft knows, again when the user picks another profile type.
     const startedFor = useRef<LocalMediaProfileType | null>(null)
@@ -59,24 +62,38 @@ export default function LocalMediaProfileSitesField({form, mode}: {
             >
                 Sites
             </SelectAllLabel>
-            <Select
-                inputId="mp-sites"
-                isMulti
-                isSearchable={siteReg.values.length > 8}
-                isClearable
-                closeMenuOnSelect={false}
-                classNamePrefix="select"
-                placeholder="Choose at least one Site"
-                options={siteReg.options}
-                value={siteReg.options.filter((option) => chosen.includes(option.value))}
-                onChange={(options) => {
-                    const picked = options.map((option) => option.value)
-                    if (upcoming) setValue('includeUpcomingSites', picked.includes(UPCOMING_SITES), {shouldDirty: true})
-                    setValue('siteKeys', picked.filter((value) => value !== UPCOMING_SITES), {shouldDirty: true, shouldValidate: true})
+            <RequestedField
+                id="siteKeys"
+                requested={fit.site && available.some((site) => site.key === fit.site) ? fit.site : undefined}
+                value={siteKeys}
+                fields={['siteKeys']}
+                apply={() => {
+                    const current = getValues('siteKeys') as string[] | null
+                    if (current == null) return false
+                    if (!current.includes(fit.site!)) setValue('siteKeys', [...current, fit.site!], {shouldDirty: true, shouldValidate: true})
                 }}
-                aria-invalid={!!error}
-                aria-describedby={error ? 'mp-sites-error' : 'mp-sites-help'}
-            />
+                fits={() => !siteKeys || siteKeys.includes(fit.site!)}
+                incompatible={<>This profile won't be offered for {available.find((site) => site.key === fit.site)?.name}, where you came from.</>}
+            >
+                <Select
+                    inputId="mp-sites"
+                    isMulti
+                    isSearchable={siteReg.values.length > 8}
+                    isClearable
+                    closeMenuOnSelect={false}
+                    classNamePrefix="select"
+                    placeholder="Choose at least one Site"
+                    options={siteReg.options}
+                    value={siteReg.options.filter((option) => chosen.includes(option.value))}
+                    onChange={(options) => {
+                        const picked = options.map((option) => option.value)
+                        if (upcoming) setValue('includeUpcomingSites', picked.includes(UPCOMING_SITES), {shouldDirty: true})
+                        setValue('siteKeys', picked.filter((value) => value !== UPCOMING_SITES), {shouldDirty: true, shouldValidate: true})
+                    }}
+                    aria-invalid={!!error}
+                    aria-describedby={error ? 'mp-sites-error' : 'mp-sites-help'}
+                />
+            </RequestedField>
             {error && (
                 <div id="mp-sites-error" className="error" role="alert" aria-live="polite">
                     {String(error.message)}

@@ -30,7 +30,7 @@ from backend.services.source_options import ytdlp_source_options
 from backend.services.throttle_guard import refuses_throttled
 from backend.services.movies import update_movie_extra_source_metadata
 from backend.types.dailywire_user_info import DwMembershipLevel
-from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat
+from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat, keeps_tracks
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path, resolve_video_output_path
 from config import get_settings
 from config.network import is_no_internet_error
@@ -98,7 +98,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     default_languages = default_subtitle_languages(profile)
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
     output_template, filename_mode = profile.output_template, effective_filename_mode(profile)
-    music = profile.type == LocalMediaProfileType.MUSIC.value
+    music = keeps_tracks(profile)
     file_date_from_publish_date = profile.file_date_from_publish_date
     save_info_json = profile.save_info_json
     title, slug, media_id = media.title, media.slug, media.id

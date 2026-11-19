@@ -1,6 +1,6 @@
 import {z} from 'zod'
 
-import {VideoPreferredFormatReg} from '../local_media_profile'
+import {VideoLocalMediaProfileScopeReg, VideoPreferredFormatReg} from '../local_media_profile'
 import {
     LocalMediaProfileCreateBaseSchema,
     LocalMediaProfileOutputTemplateSchema,
@@ -25,6 +25,7 @@ export const DEFAULT_MOVIE_OUTPUT_TEMPLATE = (
 // ---------- Strict request (create/update) ----------
 const VideoLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
     type: z.literal('video').default('video'),
+    videoScope: z.enum(VideoLocalMediaProfileScopeReg.values).default('both'),
     outputTemplate: LocalMediaProfileOutputTemplateSchema.default(DEFAULT_VIDEO_OUTPUT_TEMPLATE),
     preferredFormat: z.enum(VideoPreferredFormatReg.values).default('format_1080p'),
 })
@@ -47,5 +48,6 @@ export type VideoLocalMediaProfileUpdateOut = z.output<typeof VideoLocalMediaPro
 // ------------ Lenient response (read) ------------
 export const VideoLocalMediaProfileReadSchema = LocalMediaProfileSchemaResponse.safeExtend({
     type: z.literal('video'),
+    videoScope: z.enum(VideoLocalMediaProfileScopeReg.values).default('both'),
 })
 export type VideoLocalMediaProfileRead = z.infer<typeof VideoLocalMediaProfileReadSchema>

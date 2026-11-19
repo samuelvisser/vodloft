@@ -143,10 +143,10 @@ def test_the_sites_listing_says_which_profile_types_each_site_takes() -> None:
     session, engine = _new_session()
     read = LocalMediaProfileSitesAPIRead.model_validate(profile_sites(session)).model_dump(by_alias=True)
     by_key = {site["key"]: site for site in read["sites"]}
-    assert by_key["dailywire"]["profileTypes"] == ["collection", "music", "video"]
-    assert by_key["youtube"]["profileTypes"] == ["collection", "music", "video"]
+    assert by_key["dailywire"]["profileTypes"] == ["collection", "video"]
+    assert by_key["youtube"]["profileTypes"] == ["collection", "video"]
     assert by_key["youtube"]["downloadOptions"]["hlsBundle"] is True
-    assert read["upcomingProfileTypes"] == ["collection", "music", "video"]
+    assert read["upcomingProfileTypes"] == ["collection", "video"]
 
     session.close()
     engine.dispose()

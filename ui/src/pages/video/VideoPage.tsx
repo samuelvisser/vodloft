@@ -19,7 +19,7 @@ import '../episode/EpisodePage.css'
 import {siteName} from '../../lib/siteName'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
-import {isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
+import {isLocalMediaProfileAvailableForSite, videoProfileKeeps} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../../components/common/DurationPill'
 import {addLocalMediaProfilePath} from '../../types/local_media_profile'
@@ -52,7 +52,7 @@ export default function VideoPage() {
     if (!video) return <section className="view episode-view" aria-busy="true"><p>Loading video…</p></section>
 
     // A profile limited to other Sites still shows the download it already made.
-    const videoProfiles = profiles?.filter((profile) => profile.type === 'video' && (
+    const videoProfiles = profiles?.filter((profile) => profile.type === 'video' && videoProfileKeeps(profile, 'videos') && (
         isLocalMediaProfileAvailableForSite(profile, video.site?.key)
         || !!downloads?.some((download) => download.localMediaProfileId === profile.id)
     ))
@@ -223,7 +223,7 @@ export default function VideoPage() {
                     {!locked && !downloadStateError && profiles !== undefined && !videoProfiles?.length && (
                         <p>
                             No Video Local Media Profiles yet.{' '}
-                            <Link to={addLocalMediaProfilePath({siteKey: video.site?.key})}>Add one</Link> to download this video.
+                            <Link to={addLocalMediaProfilePath({video: 'videos', siteKey: video.site?.key})}>Add one</Link> to download this video.
                         </p>
                     )}
                     {!locked && !downloadStateError && !!videoProfiles?.length && (

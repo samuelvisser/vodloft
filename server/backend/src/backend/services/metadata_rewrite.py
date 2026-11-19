@@ -24,7 +24,7 @@ from backend.db.models.media_download import EpisodeMediaDownload, MediaDownload
 from backend.services.download_metadata import build_episode_metadata, build_track_metadata
 from backend.services.download_options import effective_metadata_mode
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from backend.types.local_media_profile_types import LocalMediaProfileType
+from backend.types.local_media_profile_types import keeps_tracks
 from config.settings.submodels import MetadataMode
 from downloader.ffmpeg import embed_metadata
 from downloader.metadata import render_nfo
@@ -132,7 +132,7 @@ def plan_metadata_rewrites(
     mode = effective_metadata_mode(profile)
     if mode is MetadataMode.NO_METADATA:
         return [], 0
-    build = build_track_metadata if profile.type == LocalMediaProfileType.MUSIC.value else build_episode_metadata
+    build = build_track_metadata if keeps_tracks(profile) else build_episode_metadata
     downloads = s.scalars(
         select(EpisodeMediaDownload)
         .options(joinedload(EpisodeMediaDownload.assets))

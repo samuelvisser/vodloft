@@ -560,14 +560,15 @@ def _metadata_templates(sub: Subscription, layout: _Layout, warnings: list[Impor
 
 
 _MUSIC_SETTINGS: dict[str, object] = {
-    "type": "music", "collection_scope": "music", "metadata_mode": "embed", "thumbnail_mode": "embed",
+    "collection_scope": "music_tracks", "metadata_mode": "embed", "thumbnail_mode": "embed",
     "show_nfo": False, "kodi_safe_nfo": False, "download_collection_assets": False,
 }
-"""A Music Local Media Profile: tags and a square cover in each file, as ytdl-sub's music presets write them."""
+"""A Local Media Profile for Music tracks: tags and a square cover in each file, as ytdl-sub's music presets write
+them."""
 
 
 _MUSIC_VIDEO_SETTINGS: dict[str, object] = {
-    "episode_nfo": "music_video", "show_nfo": False, "download_collection_assets": False,
+    "collection_scope": "music_videos", "episode_nfo": "music_video", "show_nfo": False, "download_collection_assets": False,
 }
 """A Collection profile of music videos: a musicvideo NFO by the creator as artist, and no show or season files."""
 
@@ -675,7 +676,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
     warnings += _option_warnings(sub)
     directory = _render(sub, output["output_directory"])
     title = _render(sub, sub.overrides.get("tv_show_name", "{subscription_name}")) or sub.name
-    custom: dict[str, object] = {"type": "music" if music else "podcast" if audio else "series", "episode_identifier": "date_based"}
+    custom: dict[str, object] = {"type": "music" if music or music_videos else "podcast" if audio else "series", "episode_identifier": "date_based"}
     if full_albums:
         # Each video is an album, and each of its chapters a track.
         custom["split_chapters"] = True

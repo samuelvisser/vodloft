@@ -363,7 +363,7 @@ def test_manual_downloads_reject_the_wrong_local_media_profile_type() -> None:
     session.add_all([collection_profile, movie_profile, collection, season, episode])
     session.commit()
 
-    with pytest.raises(HTTPException, match="Collection or Music Local Media Profile") as episode_error:
+    with pytest.raises(HTTPException, match="Collection Local Media Profile") as episode_error:
         create_episode_download(
             session,
             episode.slug,

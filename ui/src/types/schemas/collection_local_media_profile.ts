@@ -37,14 +37,14 @@ export const CollectionLocalMediaProfileIndexingValuesSchema = z.array(IndexingV
 /** The templates that give each episode the title and description the site gives it. */
 export const SITE_TITLE_TEMPLATE = '{{ title }}'
 export const SITE_DESCRIPTION_TEMPLATE = '{{ description }}'
+/** Where a new Collection profile puts its episodes. */
+export const DEFAULT_COLLECTION_OUTPUT_TEMPLATE = '/downloads/shows/{{ collection }}/{{ episode_title }}.ext'
 
 // ---------- Strict request (create/update) ----------
 const CollectionLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
-    type: z.enum(['collection', 'music']).default('collection'),
+    type: z.literal('collection').default('collection'),
     collectionScope: z.enum(CollectionLocalMediaProfileScopeReg.values).default('both'),
-    outputTemplate: LocalMediaProfileOutputTemplateSchema.default(
-        '/downloads/shows/{{ collection }}/{{ episode_title }}.ext',
-    ),
+    outputTemplate: LocalMediaProfileOutputTemplateSchema.default(DEFAULT_COLLECTION_OUTPUT_TEMPLATE),
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
     downloadCollectionAssets: z.boolean().nullable().default(null),
     showNfo: z.boolean().default(false),
@@ -72,7 +72,7 @@ export type CollectionLocalMediaProfileUpdateOut = z.output<typeof CollectionLoc
 
 // ------------ Lenient response (read) ------------
 export const CollectionLocalMediaProfileReadSchema = LocalMediaProfileSchemaResponse.safeExtend({
-    type: z.enum(['collection', 'music']),
+    type: z.literal('collection'),
     collectionScope: z.enum(CollectionLocalMediaProfileScopeReg.values)
         .nullable()
         .optional()

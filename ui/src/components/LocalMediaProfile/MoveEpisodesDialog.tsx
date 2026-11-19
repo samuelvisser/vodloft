@@ -11,7 +11,7 @@ import DownloadLogDialog from '../MediaDownload/DownloadLogDialog'
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import {useEpisodeDownloads, useLocalMediaProfiles} from '../../lib/queries'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
-import {useLocalMediaProfileSelectRegistry} from '../../types/local_media_profile'
+import {keepsTracks, useLocalMediaProfileSelectRegistry} from '../../types/local_media_profile'
 import {
     type EpisodeMoveOutcome,
     type LocalMediaProfileMoveCollection,
@@ -24,7 +24,7 @@ import {apiUrl} from '../../lib/api'
 import {collectionWords, Noun} from '../../lib/collectionWords'
 
 type Props = {
-    profile: {id: number, slug: string, name: string, type?: string | null}
+    profile: {id: number, slug: string, name: string, type?: string | null, collectionScope?: string | null}
     /** Nothing downloaded is left on the profile and no Download Profile uses it. */
     sourceEmpty: boolean
     onDeleteProfile: () => void
@@ -217,8 +217,8 @@ function CollectionCard({collection, choice, setChoice, source, target, disabled
 
 /** Move a Collection Local Media Profile's downloaded episodes, and their files, to another profile. */
 export default function MoveEpisodesDialog({profile, sourceEmpty, onDeleteProfile, onClose}: Props) {
-    // A Music profile keeps tracks.
-    const noun = collectionWords(profile.type === 'music' ? 'music' : null, 'audio').episode
+    // A profile for Music tracks keeps tracks.
+    const noun = collectionWords(keepsTracks(profile) ? 'music' : null, 'audio').episode
     const queryClient = useQueryClient()
     const startOperation = useStartOperation()
     const {data: profiles} = useLocalMediaProfiles()

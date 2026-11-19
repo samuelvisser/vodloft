@@ -742,10 +742,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const filenameRestrictionMode = useWatch({control, name: 'filenameRestrictionMode'})
     const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'both'
-    // A Music profile keeps tracks.
-    const music = useWatch({control, name: 'type' as any}) === 'music'
-    const sourceLabel = mode !== 'collection' ? 'Example video or movie'
-        : music ? 'Example track' : collectionScope === 'music' ? 'Example music video' : 'Example episode'
+    const videoScope = useWatch({control, name: 'videoScope' as any}) ?? 'both'
+    const sourceLabel = mode !== 'collection'
+        ? ({videos: 'Example video', movies: 'Example movie'} as Record<string, string>)[videoScope] ?? 'Example video or movie'
+        : collectionScope === 'music_tracks' ? 'Example track' : collectionScope === 'music_videos' ? 'Example music video' : 'Example episode'
     const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
     const watchedSiteKeys = useWatch({control, name: 'siteKeys'}) as string[] | null | undefined
     const siteKeys = Array.isArray(watchedSiteKeys) ? watchedSiteKeys : undefined
