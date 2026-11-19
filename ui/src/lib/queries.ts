@@ -450,6 +450,14 @@ export function useSources() {
     })
 }
 
+/** The ids of the Sources the Library has media from. */
+export function useSourcesInUse() {
+    return useQuery<string[], Error, string[], readonly ['sourcesInUse']>({
+        queryKey: ['sourcesInUse'] as const,
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/sources/in-use`, z.string().array(), signal),
+    })
+}
+
 /** The Sources by id, with a name fallback for items whose Source is no longer registered. */
 export function useSourceLookup() {
     const {data: sources} = useSources()

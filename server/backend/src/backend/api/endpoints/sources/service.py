@@ -10,7 +10,7 @@ from backend.api.models.source import (
     ApiKeyNoteAPIRead, ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
     SourceAPIRead, SourceSiteAPIRead,
 )
-from backend.db.models import Collection, CreatorAccount, Episode, Settings
+from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase, Settings
 from backend.security.access import Access
 from backend.types.collection_types import CollectionType
 from backend.services.media_access import access_locked, link_access
@@ -32,6 +32,14 @@ class LinkNotRecognisedError(LookupError):
 
 def list_sources() -> list[SourceAPIRead]:
     return [SourceAPIRead.model_validate(source) for source in all_sources()]
+
+
+def sources_in_use(s: Session) -> list[str]:
+    """The ids of the Sources the Library has collections, creators, movies or videos from."""
+    return sorted(s.scalars(
+        select(Collection.source_key)
+        .union(select(CreatorAccount.source_key), select(MediaItemBase.source_key))
+    ).all())
 
 
 class SourceFeatureMissingError(LookupError):
