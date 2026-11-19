@@ -1,6 +1,7 @@
 import {useEffect, useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import Switch from 'react-switch'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {toast} from 'react-hot-toast'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
@@ -124,7 +125,12 @@ export default function ChangeIdentificationDialog({
                 disabled: !preview || !!preview.busy,
             }}
         >
-            {isLoading && <p className="help">Looking at what changes…</p>}
+            {isLoading && (
+                <p className="change-identification-loading" role="status">
+                    <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                    Looking at what changes…
+                </p>
+            )}
             {isError && <p className="error" role="alert">VODLoft could not look up what the change does.</p>}
             {preview && target && (
                 <>

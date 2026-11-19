@@ -39,3 +39,10 @@
     display: grid;
     gap: 2px;
 }
+
+.change-identification-dialog .change-identification-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+}
