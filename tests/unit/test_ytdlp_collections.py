@@ -688,7 +688,7 @@ def test_a_music_collection_has_a_setting_for_new_albums_and_one_for_new_playlis
     def listed(ref, album):
         return SectionRef(
             ref, f"https://soundcloud.com/artist/sets/{ref}", ref.title(), SectionKind.LIST,
-            list_type="album" if album else "playlist",
+            type="album" if album else "playlist",
         )
 
     # On the first look every list is a season, as the collection skips no kind.

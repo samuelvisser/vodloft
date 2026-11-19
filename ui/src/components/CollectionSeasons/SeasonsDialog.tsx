@@ -15,7 +15,7 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry, type SelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
 import NewListSettings from '../common/NewListSettings'
-import type {ListKind} from '../../types/creator'
+import {type ListKind, listNames, withArticle} from '../../types/creator'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {
     CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, seasonsFormValues,
@@ -45,8 +45,13 @@ const dialogWords = (collection: CollectionWords, music: boolean, view: Collecti
     creator: view?.creatorLabel ?? 'creator', creators: `${view?.creatorLabel ?? 'creator'}s`,
     ...(music ? {video: collection.episode.one, videos: collection.episode.many} : {video: 'video', videos: 'videos'}),
     season: collection.season,
-    here: view?.names.one === collection.season.one ? ' here' : '',
+    here: view && namesOf(view).one === collection.season.one ? ' here' : '',
 })
+
+/** What the collection's Site calls its lists, all its types of list together, such as "albums and playlists" on
+ * SoundCloud, and the season of the videos in none of them. */
+type ListNames = {one: string, many: string, looseSeason: string}
+const namesOf = (view: CollectionSeasonsRead): ListNames => ({...listNames(view.listTypes), looseSeason: view.looseSeason})
 
 const capitalized = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
@@ -60,9 +65,9 @@ async function readSeasons(response: Response): Promise<CollectionSeasonsRead> {
 }
 
 /** The registries of the dialog's selects, in the words of the collection's Site. */
-function registries(names: CollectionSeasonsRead['names'], words: Words, view: CollectionSeasonsRead) {
+function registries(names: ListNames, words: Words, view: CollectionSeasonsRead) {
     const outside = {
-        leave_out: {label: 'Only include media already in the collection', help: `A ${names.one} only takes the ${words.videos} the collection's own link has.`},
+        leave_out: {label: 'Only include media already in the collection', help: `${capitalized(withArticle(names.one))} only takes the ${words.videos} the collection's own link has.`},
         add: {label: 'Include media that is not in the collection', help: `They join the collection in their ${names.one}'s ${words.season.one}${words.here}. Switching a ${names.one} or this setting off removes them again, files and all. When the ${words.creator} takes a downloaded one out, Home asks whether to keep it.`},
         only: {label: `Include only what the ${names.many} contain`, help: `The collection holds nothing but the ${words.videos} of its ${names.many}, also other ${words.creators}', and you can add links of your own, from any site. Its own ${words.videos} in no ${names.one} leave.`},
     }
@@ -73,9 +78,9 @@ function registries(names: CollectionSeasonsRead['names'], words: Words, view: C
         }),
         // One for each kind of list of the Site, such as a SoundCloud artist's albums and their playlists.
         newLinks: (kind: ListKind) => createSelectRegistry(`NewLinkSeasons-${kind.key}-${kind.one}-${words.season.a}${words.here}`, {
-            ask: {label: 'Ask me', help: `VODLoft sends a message, and the new ${kind.one.replace(/^an? /, '')} waits here for you to switch it on.`},
-            add: {label: `Make it ${words.season.a}${words.here}`, help: `A new ${kind.one.replace(/^an? /, '')} becomes ${words.season.a}${words.here} right away.`},
-            ignore: {label: 'Always skip it', help: `A new ${kind.one.replace(/^an? /, '')} stays off. You can switch it on here.`},
+            ask: {label: 'Ask me', help: `VODLoft sends a message, and the new ${kind.one} waits here for you to switch it on.`},
+            add: {label: `Make it ${words.season.a}${words.here}`, help: `A new ${kind.one} becomes ${words.season.a}${words.here} right away.`},
+            ignore: {label: 'Always skip it', help: `A new ${kind.one} stays off. You can switch it on here.`},
         }),
         layout: createSelectRegistry(`ListLayout-${names.many}`, {
             season_each: {label: words.here ? `Each ${names.one} on its own` : `A ${words.season.one} per ${names.one}`, help: `Each ${names.one} is ${words.season.a}${words.here}, or shares one with the ${names.many} you put together below.`},
@@ -135,7 +140,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     }
 
     // What the Site calls its lists, such as playlists on YouTube, also in a Music collection, whose seasons are albums.
-    const names = view?.names
+    const names = useMemo(() => view ? namesOf(view) : undefined, [view])
     const words = dialogWords(collectionWordsGiven ?? collectionWords(view?.music ? 'music' : null), view?.music ?? false, view)
     const {season} = words
     const regs = useMemo(() => view && names ? registries(names, words, view) : null, [view, names, words])
@@ -227,7 +232,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
             })), {shouldDirty: true})
         } catch (exc) {
-            toast.error(exc instanceof Error ? exc.message : `Could not list the ${view ? view.names.many : 'playlists'}`)
+            toast.error(exc instanceof Error ? exc.message : `Could not list the ${names ? names.many : 'playlists'}`)
         } finally {
             setRefreshing(false)
         }
@@ -420,7 +425,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
                                                     {mode === 'selected' && view.listsPlaylists && !view.creatorSlug && (
                                                         <div className="form-row">
-                                                            <label>When the {words.creator} adds {/^[aeiou]/.test(names.one) ? 'an' : 'a'} {names.one}</label>
+                                                            <label>When the {words.creator} adds {withArticle(names.one)}</label>
                                                             <NewListSettings
                                                                 kinds={view.newLists} values={newLists}
                                                                 fallback="ask" idPrefix="seasons-new-links" registryFor={regs.newLinks}
@@ -672,7 +677,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 /** The lists of one season in the Seasons dialog: which playlists it holds, and putting it together with another. */
 function SeasonLists({season, names, words, lists, titles, joinRegistry, onJoin, onOwn, joinsName}: {
     season: number
-    names: CollectionSeasonsRead['names']
+    names: ListNames
     words: Words
     lists: {id: number, seasonId: number | null}[]
     titles: Map<number, CollectionListRead>

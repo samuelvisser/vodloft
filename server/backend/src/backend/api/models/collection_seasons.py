@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.api.models.source import ListKindAPIRead
+from backend.api.models.source import ListKindAPIRead, SectionTypeAPIRead
 from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 
 
@@ -50,12 +50,6 @@ class CollectionListAPIRead(ResponseBase):
     creator."""
 
 
-class ListNamesAPIRead(ResponseBase):
-    one: str
-    many: str
-    loose_season: str
-
-
 class CollectionNewListAPIRead(ListKindAPIRead):
     """What the collection does with a new list of one kind, when only selected lists are seasons."""
 
@@ -89,7 +83,11 @@ class CollectionSeasonsAPIRead(ResponseBase):
     """The videos that no playlist that is a season has now, which leave, files and all, when the collection is set
     to hold only what its playlists have."""
     only_leaving_with_files: int = 0
-    names: ListNamesAPIRead
+    list_types: list[SectionTypeAPIRead]
+    """The types of list of the collection's Site, which its link seasons come from, such as playlists, or albums and
+    playlists on SoundCloud."""
+    loose_season: str
+    """The name of the season of the videos in none of the lists, such as Videos, Singles or Tracks."""
     creator_slug: Optional[str] = None
     """For a creator's own collection: the creator, which finds its new lists and decides what happens with them."""
     creator_title: Optional[str] = None

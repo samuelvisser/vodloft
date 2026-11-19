@@ -3,7 +3,7 @@ import {DwMembershipLevelReg} from '../dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg} from '../collection'
 import {ApiDateTimeSchema} from './datetime'
 import {EpisodeReadViewSchema} from './episode'
-import {CreatorSectionNamesSchema} from './source'
+import {SectionTypeSchema} from './source'
 
 export const SectionTargetValues = ['main', 'own', 'skip'] as const
 export const CreatorPresetValues = ['one_show', 'per_list', 'pick'] as const
@@ -14,7 +14,8 @@ export const CreatorSectionReadSchema = z.object({
     title: z.string(),
     kind: z.enum(['feed', 'list', 'show', 'item']),
     role: z.string(),
-    kindLabel: z.string().nullable(),
+    /** The key of the Site's section type the section is, such as album. */
+    type: z.string(),
     itemCount: z.number().nullable(),
     imageUrl: z.string().nullable(),
     description: z.string().nullable(),
@@ -70,8 +71,10 @@ export const CreatorLookupReadSchema = z.object({
     creatorLabel: z.string(),
     /** What the Site calls the creator when they are added as a music artist. */
     musicCreatorLabel: z.string(),
-    /** What the Site calls the things its creators add, such as shows on The Daily Wire. */
-    creatorSections: CreatorSectionNamesSchema,
+    /** Every type of section the Site's creators have, such as shows and movies on The Daily Wire. */
+    sectionTypes: z.array(SectionTypeSchema),
+    /** The Site has sound only, such as Bandcamp, so what its lists hold are tracks. */
+    audio: z.boolean().default(false),
     /** The creator's lists can be seasons of its own collection. */
     linkSeasons: z.boolean().default(false),
     /** The creator's single items are movies, which VODLoft adds to the Library and joins to the creator. */
@@ -106,8 +109,8 @@ const SiteSchema = z.object({
     key: z.string(), name: z.string(), creatorLabel: z.string().default('creator'), linkSeasons: z.boolean().default(false),
     /** The Site has sound only, such as Bandcamp. */
     audio: z.boolean().default(false),
-    /** What the Site calls the things its creators add, such as playlists on YouTube. */
-    creatorSections: CreatorSectionNamesSchema,
+    /** Every type of section the Site's creators have, such as feeds and playlists on YouTube. */
+    sectionTypes: z.array(SectionTypeSchema),
 })
 
 /** A creator's account on one Site, such as their YouTube channel. */
@@ -131,8 +134,6 @@ export const CreatorReadSchema = z.object({
     creatorLabel: z.string(),
     /** A music artist: they have a Music collection. */
     music: z.boolean(),
-    /** What VODLoft looks for: what their one Site calls it, such as playlists, or playlists and shows. */
-    sectionNames: CreatorSectionNamesSchema,
     /** The label with their Site, when they are on one only, such as "The Daily Wire host". */
     kind: z.string(),
     accounts: z.array(CreatorAccountReadSchema),
@@ -243,8 +244,8 @@ export const CollectionCreatorMatchSchema = z.object({
     lookupId: z.string().nullable().optional(),
     siteName: z.string(),
     creatorLabel: z.string(),
-    /** What the creator's Site calls the things the creator adds, such as playlists on YouTube. */
-    sectionNames: CreatorSectionNamesSchema,
+    /** Every type of section the creator's Site has, such as feeds and playlists on YouTube. */
+    sectionTypes: z.array(SectionTypeSchema),
     ref: z.string(),
     url: z.string().nullable().optional(),
     title: z.string(),
@@ -253,7 +254,8 @@ export const CollectionCreatorMatchSchema = z.object({
     creatorSlug: z.string().nullable().optional(),
     /** The creator's section the collection is, when it is one. */
     sectionTitle: z.string().nullable().optional(),
-    sectionKindLabel: z.string().nullable().optional(),
+    /** The key of the type of the section the collection is. */
+    sectionType: z.string().nullable().optional(),
     /** Another of the creator's collections that keeps this section already, and can't let it go. */
     keptBy: z.string().nullable().optional(),
     /** The playlists that would be in two places once the collection joins; each stays in one, as you choose. */

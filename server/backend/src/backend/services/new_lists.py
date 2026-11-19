@@ -1,5 +1,5 @@
 """What happens with the lists a creator adds later, such as a new playlist or album: one setting for each kind of
-list the creator's Sites have (see ``Site.kinds_of_list``). Most Sites have one kind; SoundCloud keeps an artist's
+list the creator's Sites have (see ``Site.growing_types``), and with each kind of show. Most Sites have one kind; SoundCloud keeps an artist's
 albums apart from their playlists, so a SoundCloud artist has a setting for each.
 
 A creator keeps its settings in ``Creator.new_lists`` and a collection in ``Collection.new_lists``, by the kind's
@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from sources import CreatorSectionNames, SectionRef, Site
+from sources import Names, SectionKind, SectionRef, Site
 
 from backend.services.errors import ServiceError
 from backend.types.creator_types import NewSectionAction
@@ -22,7 +22,7 @@ class ListKind:
     """One kind of list a creator's Sites have, as the settings show it."""
 
     key: str
-    names: CreatorSectionNames
+    names: Names
     seasons: bool
     """One of these Sites can make the lists seasons of the creator's own collection."""
     albums: bool = False
@@ -54,17 +54,21 @@ class NewListSetting:
 
 
 def list_kinds(sites: Iterable[Site]) -> list[ListKind]:
-    """The kinds of list of ``sites``, in their order. Sites that share a kind, such as YouTube's and The Daily Wire's
-    one kind, share its setting, named for all of them."""
+    """The types of list and show of ``sites``, in their order. Sites that share a type, such as YouTube's and
+    Floatplane's playlists, share its setting, named for all of them."""
+    from backend.services.sites import joined_names
+
     kinds: dict[str, ListKind] = {}
     for site in sites:
-        for kind in site.kinds_of_list:
-            known = kinds.get(kind.key)
+        for type_ in site.growing_types:
+            seasons = site.link_seasons and type_.kind is SectionKind.LIST
+            known = kinds.get(type_.key)
             if known is None:
-                kinds[kind.key] = ListKind(kind.key, kind.names, site.link_seasons, kind.albums)
+                kinds[type_.key] = ListKind(type_.key, type_.names, seasons, type_.albums)
             else:
-                names = known.names if known.names == kind.names else CreatorSectionNames()
-                kinds[kind.key] = ListKind(kind.key, names, known.seasons or site.link_seasons, known.albums or kind.albums)
+                kinds[type_.key] = ListKind(
+                    type_.key, joined_names((known.names, type_.names)), known.seasons or seasons, known.albums or type_.albums,
+                )
     return list(kinds.values())
 
 
@@ -79,7 +83,7 @@ def album_kinds(kinds: Iterable[ListKind]) -> set[str]:
     marked = {kind.key for kind in kinds if kind.albums}
     if marked or len(kinds) < 2:
         return marked
-    return {kind.key for kind in kinds if {kind.key.lower(), kind.names.one.lower().removeprefix("an "),
+    return {kind.key for kind in kinds if {kind.key.lower(), kind.names.one.lower(),
                                            kind.names.many.lower()} & _ALBUM_NAMES}
 
 
@@ -122,8 +126,8 @@ def checked_new_sections(kinds: Iterable[ListKind], wanted: Mapping[str, str], m
 
 
 def section_kind(site: Site, section: SectionRef) -> str:
-    """The key of the kind of list a section is on its Site."""
-    return site.list_type_of(section).key
+    """The key of the type a section is on its Site, such as album."""
+    return site.section_type_of(section).key
 
 
 def link_season_action(action: str) -> NewLinkSeasonAction:

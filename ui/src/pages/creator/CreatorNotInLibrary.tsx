@@ -10,16 +10,12 @@ import CollectionTileArt from '../../components/CollectionTileArt/CollectionTile
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import type {CreatorPageRead, SectionPlan} from '../../types/schemas/creator'
 import {choices, isMovie, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
+import {sectionName} from '../../types/creator'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 
 // Tiles shown before "Show all": two rows on a computer, two on a phone.
 const DESKTOP_TILES = 12
 const PHONE_TILES = 4
-
-/** "a show" -> "show": one of what the creator adds, for a count. */
-function withoutArticle(one: string) {
-    return one.replace(/^(a|an) /, '')
-}
 
 function listed(titles: string[]) {
     if (titles.length <= 3) return titles.length > 1 ? `${titles.slice(0, -1).join(', ')} and ${titles[titles.length - 1]}` : titles[0]
@@ -55,17 +51,15 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const mayAdd = can('add_media')
     const sites = new Set(items.map(({account}) => account.site.key))
     const several = creator.accounts.length > 1
-    // In the words of their one Site, when they are all on one, such as playlists on YouTube.
-    const names = sites.size === 1 ? items[0].account.site.creatorSections : creator.sectionNames
-    // What is not in the library, by kind: "3 more feeds", "1 more show", or "4 more feeds and playlists".
-    const kinds = [
-        {count: items.filter(({section}) => section.kind === 'feed').length, one: 'feed', many: 'feeds'},
-        {
-            count: items.filter(({section}) => section.kind !== 'feed' && section.kind !== 'item').length,
-            one: withoutArticle(names.one), many: names.many,
-        },
-        {count: items.filter(({section}) => section.kind === 'item').length, one: 'movie', many: 'movies'},
-    ].filter((kind) => kind.count > 0)
+    // What is not in the library, by the type of section in the words of its Site: "3 more feeds", "1 more show", or
+    // "4 more feeds, albums and playlists".
+    const counts = new Map<string, {count: number, one: string, many: string}>()
+    for (const {account, section} of items) {
+        const names = sectionName(account.site.sectionTypes, section)
+        const known = counts.get(names.many) ?? {count: 0, ...names}
+        counts.set(names.many, {...known, count: known.count + 1})
+    }
+    const kinds = [...counts.values()]
     const nouns = kinds.length === 1
         ? (items.length === 1 ? kinds[0].one : kinds[0].many)
         : `${kinds.slice(0, -1).map((kind) => kind.many).join(', ')} and ${kinds[kinds.length - 1].many}`
@@ -165,7 +159,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                     <div className={`creator-more-grid${showAll ? '' : ' is-cut'}`} role="list">
                         {items.map((item) => {
                             const image = toImageUrl(item.section.imageUrl)
-                            const facts = [sectionFacts(item.section), item.section.movieSlug ? 'In your library' : null, several ? item.account.site.name : null].filter(Boolean).join(' · ')
+                            const facts = [sectionFacts(item.section, item.account.site), item.section.movieSlug ? 'In your library' : null, several ? item.account.site.name : null].filter(Boolean).join(' · ')
                             return (
                                 <div
                                     key={key(item)} className={`creator-more-tile${mayAdd ? ' is-addable' : ''}`} role="listitem"

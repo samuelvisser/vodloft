@@ -10,13 +10,15 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import {capitalized} from '../../types/creator'
+import {capitalized, growingNames, joinedNames, sectionName} from '../../types/creator'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import type {CreatorPageAccountRead, CreatorPageRead, CreatorSectionRead, SectionPlan} from '../../types/schemas/creator'
+import type {SectionType} from '../../types/schemas/source'
 
-export function sectionFacts(section: CreatorSectionRead) {
-    const noun = section.kindLabel === 'Album' ? ['track', 'tracks'] : ['video', 'videos']
-    return [section.kindLabel, section.itemCount != null ? `${section.itemCount} ${noun[section.itemCount === 1 ? 0 : 1]}` : null]
+/** What the section is and holds, in the words of its Site: "Album · 12 tracks", "Playlist · 4 videos". */
+export function sectionFacts(section: CreatorSectionRead, site: {sectionTypes: SectionType[], audio: boolean}) {
+    const noun = site.audio ? ['track', 'tracks'] : ['video', 'videos']
+    return [capitalized(sectionName(site.sectionTypes, section).one), section.itemCount != null ? `${section.itemCount} ${noun[section.itemCount === 1 ? 0 : 1]}` : null]
         .filter(Boolean).join(' · ')
 }
 
@@ -62,9 +64,9 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
 type Place = 'main' | 'own' | 'skip'
 
 /** What moving a playlist does, in words, before the user says yes. */
-function moveNote(section: CreatorSectionRead, to: Place, mainTitle: string, season: string): string {
+function moveNote({account, section}: AccountSection, to: Place, mainTitle: string, season: string): string {
     const a = /^[aeiou]/.test(season) ? 'an' : 'a'
-    const noun = (section.kindLabel ?? 'playlist').toLowerCase()
+    const noun = sectionName(account.site.sectionTypes, section).one
     if (to === 'own') {
         return `${section.title} becomes a collection of its own, and takes its videos out of ${mainTitle}. Downloaded videos `
             + 'take their files along, renamed into the new collection as manual downloads, since it has no Download '
@@ -202,7 +204,7 @@ export default function CreatorSectionsEditor({creator, part}: {
         ? <img className="creator-section-art" src={toImageUrl(section.imageUrl)} alt="" loading="lazy"/>
         : <span className="creator-section-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', section.kind === 'feed' ? 'rss' : section.kind === 'item' ? 'film' : 'list')}/></span>
     const facts = ({account, section}: AccountSection, ...more: (string | null)[]) => (
-        [sectionFacts(section), several ? account.site.name : null, ...more].filter(Boolean).join(' · ')
+        [sectionFacts(section, account.site), several ? account.site.name : null, ...more].filter(Boolean).join(' · ')
     )
     const addButtons = (item: AccountSection, ignore: boolean) => mayAdd && (
         <div className="creator-row-actions">
@@ -245,7 +247,7 @@ export default function CreatorSectionsEditor({creator, part}: {
 
             {part === 'rest' && placed.length > 0 && (
                 <div className="creator-section-group">
-                    <h2>Where the {(placed[0].section.kindLabel ?? 'playlist').toLowerCase()}s go</h2>
+                    <h2>Where the {joinedNames(placed.map(({account, section}) => sectionName(account.site.sectionTypes, section))).many} go</h2>
                     <div className="creator-section-list">
                         {placed.map((item) => {
                             const mainTitle = mainTitleOf(creator, item.account)
@@ -321,7 +323,7 @@ export default function CreatorSectionsEditor({creator, part}: {
 
             {part === 'rest' && checkedAt && (
                 <p className="creator-note">
-                    VODLoft looks for new {creator.sectionNames.many} once a day. Last look: {new Date(checkedAt).toLocaleString()}.
+                    VODLoft looks for new {joinedNames(creator.newLists).many || 'lists'} once a day. Last look: {new Date(checkedAt).toLocaleString()}.
                 </p>
             )}
 
@@ -332,7 +334,7 @@ export default function CreatorSectionsEditor({creator, part}: {
                 onDismiss={() => setMoving(null)}
                 confirmButton={{label: sectionBusy ? 'Moving…' : 'Move', onClick: moveSection, disabled: sectionBusy}}
             >
-                {moving && <p>{moveNote(moving.item.section, moving.to, mainTitleOf(creator, moving.item.account), mainSeasonOf(creator, moving.item.account))}</p>}
+                {moving && <p>{moveNote(moving.item, moving.to, mainTitleOf(creator, moving.item.account), mainSeasonOf(creator, moving.item.account))}</p>}
             </ConfirmDialog>
 
             <ConfirmDialog
@@ -345,7 +347,7 @@ export default function CreatorSectionsEditor({creator, part}: {
                 {splitting && (
                     <ul className="creator-order-note">
                         <li>The account on {splitting.site.name} becomes a creator of its own, named as {splitting.site.name} names them.</li>
-                        <li>Its own collection and the collections of its {splitting.site.creatorSections.many} go along. Collections that joined {creator.title} by another link stay.</li>
+                        <li>Its own collection and the collections of its {growingNames(splitting.site.sectionTypes).many || 'lists'} go along. Collections that joined {creator.title} by another link stay.</li>
                         <li>Collections keep their {creator.collections.length > 0 && creator.collections.every((collection) => collection.type === 'music') ? 'albums, tracks' : 'seasons, episodes'}, profiles and files. Nothing is indexed again.</li>
                     </ul>
                 )}

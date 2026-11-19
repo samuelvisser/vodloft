@@ -8,7 +8,7 @@ from pydantic import AliasChoices, AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.pagination import CursorPageRead
-from backend.api.models.source import CreatorSectionNamesAPIRead, ListKindAPIRead, SiteAPIRead
+from backend.api.models.source import ListKindAPIRead, SectionTypeAPIRead, SiteAPIRead
 from backend.types.creator_types import NewSectionAction, SectionTarget
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -29,7 +29,8 @@ class CreatorSectionAPIRead(ResponseBase):
     title: str
     kind: Literal["feed", "list", "show", "item"]
     role: str
-    kind_label: Optional[str] = None
+    type: str
+    """The key of the Site's section type the section is, such as album."""
     item_count: Optional[int] = None
     image_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("image_path", "image_url"))
     description: Optional[str] = None
@@ -78,8 +79,10 @@ class CreatorLookupAPIRead(ResponseBase):
     creator_label: str
     music_creator_label: str
     """What the Site calls the creator when they are added as a music artist."""
-    creator_sections: CreatorSectionNamesAPIRead
-    """What the Site calls the things its creators add, such as playlists on YouTube or shows on The Daily Wire."""
+    section_types: list[SectionTypeAPIRead]
+    """Every type of section the Site's creators have, such as playlists on YouTube or shows on The Daily Wire."""
+    audio: bool = False
+    """The Site has sound only, such as Bandcamp, so what its lists hold are tracks."""
     link_seasons: bool = False
     """The creator's lists can be seasons of its own collection."""
     movies: bool = False
@@ -186,8 +189,6 @@ class CreatorAPIRead(ResponseBase):
     """What VODLoft calls the creator: the word of their one Site, such as host, or artist for a music artist."""
     music: bool = False
     """A music artist: they have a Music collection."""
-    section_names: CreatorSectionNamesAPIRead
-    """What VODLoft looks for: what their one Site calls it, such as playlists, or playlists and shows."""
     kind: str
     """The label with their Site, when they are on one only, such as "The Daily Wire host"."""
     accounts: list[CreatorAccountAPIRead]
@@ -293,7 +294,8 @@ class CollectionCreatorMatchAPIRead(ResponseBase):
 
     site_name: str
     creator_label: str
-    section_names: CreatorSectionNamesAPIRead
+    section_types: list[SectionTypeAPIRead]
+    """Every type of section the creator's Site has, such as playlists on YouTube."""
     ref: str
     url: Optional[str] = None
     title: str
@@ -303,7 +305,8 @@ class CollectionCreatorMatchAPIRead(ResponseBase):
     """The creator's slug, when it is already in the Library."""
     section_title: Optional[str] = Field(default=None, validation_alias=AliasPath("section", "title"))
     """The creator's section the collection is, when it is one."""
-    section_kind_label: Optional[str] = Field(default=None, validation_alias=AliasPath("section", "kind_label"))
+    section_type: Optional[str] = None
+    """The key of the type of that section, such as list."""
     kept_by: Optional[str] = None
     """The title of another of the creator's collections that keeps this section already, which can't let it go."""
     overlaps: list["JoinOverlapAPIRead"] = Field(default_factory=list)

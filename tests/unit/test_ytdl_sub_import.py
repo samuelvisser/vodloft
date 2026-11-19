@@ -474,9 +474,9 @@ def _artist_import(monkeypatch):
 
         def creator_details(self, ref, progress=lambda step: None):
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
-                               kind=SectionKind.LIST, kind_label="Album")
+                               kind=SectionKind.LIST)
             single = SectionRef(ref="track/one", url="https://emilyharpist.bandcamp.com/track/one", title="One",
-                                kind=SectionKind.ITEM, kind_label="Single")
+                                kind=SectionKind.ITEM)
             return CreatorDetails(ref="emilyharpist", url="https://emilyharpist.bandcamp.com", title="Emily Hopkins",
                                   sections=(album, single), music=True)
 
@@ -807,7 +807,7 @@ def test_an_imported_artist_keeps_ytdl_subs_name_with_their_albums_and_music_vid
     from backend.db.models import Creator, Collection
     from backend.services import import_uploads, imports
     from sources import registry
-    from sources.contract import CreatorDetails, CreatorSectionNames, Feature, ListType, SectionKind, SectionRef, Site
+    from sources.contract import CreatorDetails, Feature, Names, SectionKind, SectionRef, SectionType, Site
 
     session = installation
     subscriptions = """
@@ -832,14 +832,14 @@ Jellyfin Music Videos:
         features = ytdlp.features | {Feature.CREATORS}
         # A Site that tells an artist's albums from their playlists.
         sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_label="artist", link_seasons=True,
-                      list_types=(ListType("album", CreatorSectionNames("an album", "albums"), albums=True),
-                                  ListType("playlist", CreatorSectionNames("a playlist", "playlists")))),)
+                      section_types=(SectionType("album", SectionKind.LIST, Names("album", "albums"), albums=True),
+                                     SectionType("playlist", SectionKind.LIST, Names("playlist", "playlists")))),)
 
         def creator_details(self, ref, progress=lambda step: None):
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
-                               kind=SectionKind.LIST, kind_label="Album", list_type="album")
+                               kind=SectionKind.LIST, type="album")
             playlist = SectionRef(ref="sets/favourites", url="https://emilyharpist.bandcamp.com/sets/favourites",
-                                  title="Favourites", kind=SectionKind.LIST, kind_label="Playlist", list_type="playlist")
+                                  title="Favourites", kind=SectionKind.LIST, type="playlist")
             # The site names the artist by their handle; ytdl-sub by the subscription.
             return CreatorDetails(ref="emilyharpist", url="https://emilyharpist.bandcamp.com", title="emilyharpist",
                                   sections=(album, playlist), music=True)

@@ -3,7 +3,6 @@ from types import MappingProxyType
 
 from ...contract import (
     Access,
-    CreatorSectionNames,
     SiteSetting,
     SiteSettings,
     StreamMethod,
@@ -55,6 +54,5 @@ class YouTube(OtherSites):
     shows_locked = False
     creators = True
     creator_presets = CREATOR_PRESETS
-    creator_sections = CreatorSectionNames("a playlist", "playlists")
     # A channel's playlists can be the seasons of a collection made from the channel.
     link_seasons = True

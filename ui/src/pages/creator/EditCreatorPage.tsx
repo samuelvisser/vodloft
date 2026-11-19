@@ -12,7 +12,7 @@ import {useCreator} from '../../lib/queries'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import PageHeader from '../../components/common/PageHeader'
-import {creatorKindText, newListActionReg} from '../../types/creator'
+import {creatorKindText, joinedNames, newListActionReg} from '../../types/creator'
 import NewListSettings, {listKindNames} from '../../components/common/NewListSettings'
 import {
     CreatorPageReadSchema, CreatorUpdateSchema, newListsValues, type CreatorUpdateIn, type CreatorUpdateOut,
@@ -156,8 +156,8 @@ export default function EditCreatorPage() {
             >
                 <p>
                     Delete {creator.title}? {creator.collections.length > 0
-                        ? `${creator.collections.length === 1 ? 'Its collection stays' : `Its ${creator.collections.length} collections stay`} in your library with their episodes and files, but VODLoft stops looking for new ${creator.sectionNames.many} of this ${creator.creatorLabel}.`
-                        : `VODLoft stops looking for new ${creator.sectionNames.many} of this ${creator.creatorLabel}.`}
+                        ? `${creator.collections.length === 1 ? 'Its collection stays' : `Its ${creator.collections.length} collections stay`} in your library with their episodes and files, but VODLoft stops looking for new ${joinedNames(creator.newLists).many || 'lists'} of this ${creator.creatorLabel}.`
+                        : `VODLoft stops looking for new ${joinedNames(creator.newLists).many || 'lists'} of this ${creator.creatorLabel}.`}
                 </p>
             </ConfirmDialog>
         </section>

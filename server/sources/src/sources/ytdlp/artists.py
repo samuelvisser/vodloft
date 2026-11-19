@@ -3,6 +3,7 @@ account, which may be a musician or a podcast, whose sections are its albums and
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlsplit
@@ -133,14 +134,16 @@ def artist_details(root: str, progress: Callable[[str], None]) -> CreatorDetails
     releases.sort(key=lambda release: release[0], reverse=True)
     sections = [section for _date, section in releases]
     if not bandcamp:
-        sections.append(SectionRef(ref="tracks", url=f"{root}/tracks", title="Tracks", kind=SectionKind.FEED, role=SectionRole.MAIN, kind_label="Feed"))
+        sections.append(SectionRef(ref="tracks", url=f"{root}/tracks", title="Tracks", kind=SectionKind.FEED, role=SectionRole.MAIN))
     has_albums = bool(album_links)
     name = next(filter(None, (_artist_name(info) for info in found.values())), None)
     handle = root.rstrip("/").rsplit("/", 1)[-1] if not bandcamp else urlsplit(root).hostname.split(".", 1)[0]
-    lists = sum(1 for section in sections if section.kind is SectionKind.LIST)
-    word = ("album" if lists == 1 else "albums") if bandcamp else ("playlist" if lists == 1 else "playlists")
+    # How many of each type of list the artist has, in the Site's words, such as "2 albums" and "1 playlist".
+    site = sites.site_of("bandcamp" if bandcamp else "soundcloud")
+    counts = Counter(site.section_type_of(section) for section in sections if section.kind is SectionKind.LIST)
+    facts = tuple(f"{count} {type_.names.one if count == 1 else type_.names.many}" for type_, count in counts.items())
     return CreatorDetails(
-        ref=handle, url=root, title=str(name or handle), facts=(f"{lists} {word}",),
+        ref=handle, url=root, title=str(name or handle), facts=facts or (f"0 {site.types_of(SectionKind.LIST)[0].names.many}",),
         # Bandcamp only has music; a SoundCloud account may as well be a podcast.
         sections=tuple(sections), music=bandcamp or has_albums, music_known=bandcamp,
         music_reason="It has albums on SoundCloud" if has_albums else None,
@@ -183,12 +186,11 @@ def _release(url: str, info: dict, bandcamp: bool = True, list_type: str | None 
         count = info.get("playlist_count")
         return date, SectionRef(
             ref=path, url=url, title=str(info.get("album") or info.get("title") or path), kind=SectionKind.LIST,
-            kind_label="Playlist" if list_type == sites.PLAYLIST_LIST else "Album",
             item_count=count if isinstance(count, int) else None,
             image_url=thumbnails.widest_still(image) if image else None, description=info.get("description") or None,
-            year=year, list_type=list_type,
+            year=year, type=list_type,
         )
     return date, SectionRef(
-        ref=path, url=url, title=str(info.get("track") or info.get("title") or path), kind=SectionKind.ITEM, kind_label="Single",
+        ref=path, url=url, title=str(info.get("track") or info.get("title") or path), kind=SectionKind.ITEM,
         image_url=thumbnails.widest_still(image) if image else None, year=year,
     )

@@ -6,6 +6,7 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'
 import {addCollectionToCreator, setCollectionCreator, useCreators, useCollectionCreatorLeave, useCollectionCreatorMatch} from '../../lib/queries'
 import type {CollectionCreatorMatch} from '../../types/schemas/creator'
+import {capitalized, growingNames} from '../../types/creator'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import LookupSteps from '../creator/LookupSteps'
@@ -38,7 +39,8 @@ function useRefresh(collectionSlug: string) {
 
 function sectionNote(creator: CollectionCreatorMatch, label: string): string {
     if (creator.sectionTitle) {
-        const kind = creator.sectionKindLabel ? `${creator.sectionKindLabel} · ` : ''
+        const type = creator.sectionTypes.find((type) => type.key === creator.sectionType)
+        const kind = type ? `${capitalized(type.one)} · ` : ''
         return `${kind}becomes the ${label}'s ${creator.sectionTitle} section`
     }
     if (creator.keptBy) return `The ${label}'s ${creator.keptBy} has this already, so this collection can't join it`
@@ -196,7 +198,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                         : (
                             <ul className="creator-order-note">
                                 <li>{words.season.Many}, {words.episode.one} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
-                                {!creator.creatorSlug && <li>The {creatorLabel}'s other {creator.sectionNames.many} start as not in your library, so you can add them from the {creatorLabel}'s Edit page.</li>}
+                                {!creator.creatorSlug && <li>The {creatorLabel}'s other {growingNames(creator.sectionTypes).many || 'lists'} start as not in your library, so you can add them from the {creatorLabel}'s Edit page.</li>}
                             </ul>
                         )}
                 </div>

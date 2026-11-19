@@ -86,9 +86,12 @@ def creator_sections_found(session: Session, creator: Creator, sections: list[Cr
     if not sections:
         return
     names = ", ".join(section.title for section in sections[:3]) + (f" and {len(sections) - 3} more" if len(sections) > 3 else "")
-    labels = {(section.kind_label or "").lower() for section in sections}
-    label = labels.pop() if len(labels) == 1 and "" not in labels else "section"
-    what = label if len(sections) == 1 else f"{label}s"
+    # In the Site's words, such as "album", or "albums and playlists" for several types.
+    from backend.services.creators import account_site
+    from backend.services.sites import joined_names
+
+    names_of = joined_names(account_site(section.account).section_type_of(section).names for section in sections)
+    what = names_of.one if len(sections) == 1 else names_of.many
     emit(
         session, Event.CREATOR_SECTIONS_FOUND,
         title=f"New {what} on {creator.title}" if len(sections) == 1 else f"{len(sections)} new {what} on {creator.title}",

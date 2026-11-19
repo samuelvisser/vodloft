@@ -313,7 +313,7 @@ def test_a_youtube_creator_page_opens_with_its_collections(client, monkeypatch):
 
 
 NEW_LIST = SectionRef(
-    "PLbarn", "https://tube.example/playlist?list=PLbarn", "Timber Frame Barn", SectionKind.LIST, kind_label="Playlist", item_count=4,
+    "PLbarn", "https://tube.example/playlist?list=PLbarn", "Timber Frame Barn", SectionKind.LIST, item_count=4,
 )
 
 
@@ -672,25 +672,27 @@ def test_a_site_names_its_creators_in_its_own_words(client, tube, monkeypatch):
 def test_a_creator_lookup_says_what_its_site_calls_the_creators_sections(client, tube, monkeypatch):
     from dataclasses import replace
 
-    from sources import CreatorSectionNames
+    from sources import Names, SectionKind, SectionType
 
-    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], creator_sections=CreatorSectionNames("a show", "shows")),))
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], section_types=(
+        SectionType("feed", SectionKind.FEED, Names("feed", "feeds")), SectionType("show", SectionKind.LIST, Names("show", "shows")),
+    )),))
     response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
     found = json.loads(response.text.splitlines()[-1])["creator"]
 
-    assert found["creatorSections"] == {"one": "a show", "many": "shows"}
+    assert [(t["key"], t["kind"], t["one"], t["many"]) for t in found["sectionTypes"]] == [
+        ("feed", "feed", "feed", "feeds"), ("show", "list", "show", "shows"),
+    ]
+    assert {section["type"] for section in found["sections"]} == {"feed", "show"}
 
 
-def test_a_creator_names_what_vodloft_looks_for_in_the_words_of_its_site(client, tube, monkeypatch):
-    from dataclasses import replace
-
-    from sources import CreatorSectionNames
+def test_a_creators_sections_keep_their_type(client, session):
+    from backend.db.models import CreatorSection
 
     _one_show(client)
-    assert client.get("/api/creators/workshop").json()["sectionNames"] == {"one": "a playlist or show", "many": "playlists and shows"}
-
-    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], creator_sections=CreatorSectionNames("a playlist", "playlists")),))
-    assert client.get("/api/creators/workshop").json()["sectionNames"] == {"one": "a playlist", "many": "playlists"}
+    assert {section.type for section in session.scalars(select(CreatorSection))} == {"feed", "list"}
+    page = client.get("/api/creators/workshop").json()
+    assert [(t["key"], t["many"]) for t in page["accounts"][0]["site"]["sectionTypes"]] == [("feed", "feeds"), ("list", "playlists")]
 
 
 def test_a_playlist_that_is_a_season_of_the_creators_collection_moves_to_a_collection_that_joins(client, session):
@@ -960,11 +962,7 @@ def test_a_renamed_creator_keeps_its_name_and_gives_it_to_its_collections_as_aut
 def test_new_sections_only_become_seasons_where_a_creators_site_can_make_lists_seasons(client, tube, monkeypatch):
     from dataclasses import replace
 
-    from sources import CreatorSectionNames
-
-    monkeypatch.setattr(type(tube), "sites", (replace(
-        tube.sites[0], link_seasons=False, creator_sections=CreatorSectionNames("a show", "shows"),
-    ),))
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], link_seasons=False),))
     plan = [{"ref": "videos", "target": "own"}]
     refused = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newLists": {"list": "season"}})
     assert refused.status_code == 422
@@ -973,14 +971,14 @@ def test_new_sections_only_become_seasons_where_a_creators_site_can_make_lists_s
     assert client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newLists": {"list": "own"}}).status_code == 201
     refused = client.patch("/api/creators/workshop", json={"newLists": {"list": "season"}})
     assert refused.status_code == 422
-    assert "shows can't be added as seasons" in str(refused.json())
+    assert "playlists can't be added as seasons" in str(refused.json())
 
 
 FILM_ROOT = "https://film.example/hosts/marsh"
 FILM_SECTIONS = (
     SectionRef("evenings", "https://film.example/shows/evenings", "Evenings", SectionKind.SHOW),
-    SectionRef("tribute", "https://film.example/videos/tribute", "A Tribute", SectionKind.ITEM, kind_label="Movie"),
-    SectionRef("harbour", "https://film.example/videos/harbour", "The Harbour", SectionKind.ITEM, kind_label="Movie"),
+    SectionRef("tribute", "https://film.example/videos/tribute", "A Tribute", SectionKind.ITEM),
+    SectionRef("harbour", "https://film.example/videos/harbour", "The Harbour", SectionKind.ITEM),
 )
 
 
@@ -1132,11 +1130,12 @@ def test_each_kind_of_list_has_its_own_setting_for_new_ones(client, session, tub
     from dataclasses import replace
 
     from backend.db.models import Collection, Creator
-    from sources import CreatorSectionNames, ListType
+    from sources import Names, SectionKind, SectionType
 
-    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], list_types=(
-        ListType("album", CreatorSectionNames("an album", "albums"), albums=True),
-        ListType("playlist", CreatorSectionNames("a playlist", "playlists")),
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], section_types=(
+        SectionType("feed", SectionKind.FEED, Names("feed", "feeds")),
+        SectionType("album", SectionKind.LIST, Names("album", "albums"), albums=True),
+        SectionType("playlist", SectionKind.LIST, Names("playlist", "playlists")),
     )),))
     _one_show(client)
     client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
@@ -1151,8 +1150,8 @@ def test_each_kind_of_list_has_its_own_setting_for_new_ones(client, session, tub
     session.refresh(main)
     assert main.new_lists == {"album": "add", "playlist": "ask"}
     assert session.scalar(select(Creator)).new_lists == {"album": "season", "playlist": "ask"}
-    album = replace(NEW_LIST, ref="PLalbum", url="https://tube.example/playlist?list=PLalbum", title="Album", list_type="album")
-    playlist = replace(NEW_LIST, list_type="playlist")
+    album = replace(NEW_LIST, ref="PLalbum", url="https://tube.example/playlist?list=PLalbum", title="Album", type="album")
+    playlist = replace(NEW_LIST, type="playlist")
 
     result = _follow(session, tube, (album, playlist, *SECTIONS))
 

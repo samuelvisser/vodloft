@@ -14,7 +14,7 @@ import {
 import {DwMembershipLevelReg} from '../../types/dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg, type CollectionTypeValue, type EpisodeIdentifierValue} from '../../types/collection'
 import {useCollectionDefaults} from '../../components/AddCollectionPage/collectionDefaults'
-import {newListActionReg} from '../../types/creator'
+import {growingNames, newListActionReg, sectionName, sectionTypeOf} from '../../types/creator'
 import NewListSettings, {listKindNames} from '../../components/common/NewListSettings'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
@@ -27,26 +27,26 @@ import LookupSteps from './LookupSteps'
 import './CreatorPages.css'
 
 /** The starting points, in the words of what this creator has: playlists on YouTube, shows on The Daily Wire. */
-function presetText(key: CreatorCreateIn['preset'], lists: string, hasFeeds: boolean, creator: CreatorLookupRead, music: boolean) {
-    // What the Site calls everything a creator adds there, such as shows on The Daily Wire.
+function presetText(key: CreatorCreateIn['preset'], hasFeeds: boolean, creator: CreatorLookupRead, music: boolean) {
+    // What the Site calls the lists and shows its creators add, such as shows on The Daily Wire.
+    const {one, many} = growingNames(creator.sectionTypes)
     const skipped = {
         label: 'Only what I pick',
-        help: `All ${hasFeeds ? `feeds and ${creator.creatorSections.many}` : creator.creatorSections.many} start skipped.`,
+        help: `All ${hasFeeds ? `feeds and ${many}` : many} start skipped.`,
     }
     if (music) {
-        if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with ${lists === 'albums' ? 'every album' : `each ${lists.replace(/s$/, '')} as an album`}${hasFeeds ? ' and the other tracks by year' : ''}.`}
-        if (key === 'per_list') return {label: 'A collection per album', help: `Each ${lists === 'albums' ? 'album' : lists.replace(/s$/, '')} is a Music collection of its own.`}
+        if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with ${one === 'album' ? 'every album' : `each ${one} as an album`}${hasFeeds ? ' and the other tracks by year' : ''}.`}
+        if (key === 'per_list') return {label: 'A collection per album', help: `Each ${one} is a Music collection of its own.`}
         return skipped
     }
     if (key === 'one_show') {
-        // A Site offers it only where its sections can be seasons, so not The Daily Wire's shows.
-        const many = creator.creatorSections.many
-        return {label: 'One collection', help: `${many.charAt(0).toUpperCase()}${many.slice(1)} as named seasons, the rest as seasons based on their year.`}
+        // A Site offers it only where its lists can be seasons, so not The Daily Wire's shows.
+        return {label: 'One collection', help: `${capitalize(many)} as named seasons, the rest as seasons based on their year.`}
     }
     if (key === 'per_list') {
         return {
-            label: `A collection per ${lists.replace(/s$/, '')}`,
-            help: hasFeeds ? `Each of the ${lists} is a collection of its own, plus one for the other videos.` : `Each of the ${lists} is a collection of its own.`,
+            label: `A collection per ${one}`,
+            help: hasFeeds ? `Each of the ${many} is a collection of its own, plus one for the other videos.` : `Each of the ${many} is a collection of its own.`,
         }
     }
     return skipped
@@ -89,13 +89,13 @@ function isMovie(creator: CreatorLookupRead, section: CreatorSectionRead) {
     return section.kind === 'item' && creator.movies
 }
 
-function sectionFacts(section: CreatorSectionRead): string {
+/** What the section is and holds, in the words of its Site: "Album · 2016 · 12 tracks". */
+function sectionFacts(creator: CreatorLookupRead, section: CreatorSectionRead): string {
+    const noun = creator.audio ? ['track', 'tracks'] : ['video', 'videos']
     return [
-        section.kindLabel,
+        capitalize(sectionName(creator.sectionTypes, section).one),
         section.year,
-        section.itemCount != null
-            ? `${section.itemCount} ${section.kindLabel === 'Album' ? (section.itemCount === 1 ? 'track' : 'tracks') : (section.itemCount === 1 ? 'video' : 'videos')}`
-            : null,
+        section.itemCount != null ? `${section.itemCount} ${noun[section.itemCount === 1 ? 0 : 1]}` : null,
     ].filter(Boolean).join(' · ')
 }
 
@@ -340,22 +340,23 @@ export default function AddCreatorPage() {
         )
     }
 
-    const listLabel = creator.sections.find((section) => section.kind === 'list')?.kindLabel
-    const hasShows = creator.sections.some((section) => section.kind === 'show')
-    const listsTitle = listLabel === 'Album' ? 'Albums' : listLabel ? 'Playlists' : hasShows ? 'Shows' : 'Playlists'
-    const lists = listsTitle.toLowerCase()
+    // What the creator's Site calls its lists and shows, such as "albums and playlists" on SoundCloud.
+    const lists = growingNames(creator.sectionTypes).many
     const hasFeeds = creator.sections.some((section) => section.kind === 'feed')
     const feeds = new Set(creator.sections.filter((section) => section.kind === 'feed').map((section) => section.ref))
     const keepsFeeds = (plan: SectionPlan[]) => plan.some((item) => feeds.has(item.ref) && item.target !== 'skip')
     // A Daily Wire host has no collection of their own: each show is one.
     const hasMain = [...registries.values()].some((registry) => registry.options.some((option) => option.value === 'main'))
-    const groups: [string, CreatorSectionRead[]][] = [
-        ['Feeds', creator.sections.filter((section) => section.kind === 'feed')],
-        // A creator with shows but no lists, such as a Daily Wire host, has its shows here.
-        [listsTitle, creator.sections.filter((section) => section.kind === (listLabel || !hasShows ? 'list' : 'show'))],
-        ...(listLabel && hasShows ? [['Shows', creator.sections.filter((section) => section.kind === 'show')]] as [string, CreatorSectionRead[]][] : []),
-        [music ? 'Singles' : 'Movies', creator.sections.filter((section) => section.kind === 'item')],
-    ]
+    // A group for each type of section the Site has, in its words and order: Feeds and Playlists on YouTube, or
+    // Albums, Playlists and Singles on SoundCloud.
+    const groups: [string, CreatorSectionRead[]][] = creator.sectionTypes.map((type) => [
+        capitalize(type.many), creator.sections.filter((section) => sectionTypeOf(creator.sectionTypes, section)?.key === type.key),
+    ])
+    // A section of a kind the Site names no type for goes under VODLoft's own word for it.
+    const unnamed = creator.sections.filter((section) => !sectionTypeOf(creator.sectionTypes, section))
+    for (const many of new Set(unnamed.map((section) => sectionName(creator.sectionTypes, section).many))) {
+        groups.push([capitalize(many), unnamed.filter((section) => sectionName(creator.sectionTypes, section).many === many)])
+    }
     // What is in the library already stays where it is, so it makes no collection.
     const inLibrary = new Set(creator.sections.filter((section) => section.collectionSlug).map((section) => section.ref))
     const sectionOf = new Map(creator.sections.map((section) => [section.ref, section]))
@@ -420,7 +421,7 @@ export default function AddCreatorPage() {
                                 {
                                     value: 'series',
                                     label: capitalize(creator.creatorLabel),
-                                    description: `Videos and ${lists} in Series collections, with ${lists} as seasons`,
+                                    description: `Series collections of their videos, with ${lists} as seasons`,
                                 },
                                 {
                                     value: 'music',
@@ -443,8 +444,8 @@ export default function AddCreatorPage() {
                         {creator.presets.map((item) => (
                             <label key={item.key} className={`creator-preset${preset === item.key ? ' is-on' : ''}`}>
                                 <input type="radio" name="preset" checked={preset === item.key} onChange={() => choosePreset(item.key)}/>
-                                <b>{presetText(item.key, lists, music ? keepsFeeds(item.musicPlan) : hasFeeds, creator, music).label}</b>
-                                <span>{presetText(item.key, lists, music ? keepsFeeds(item.musicPlan) : hasFeeds, creator, music).help}</span>
+                                <b>{presetText(item.key, music ? keepsFeeds(item.musicPlan) : hasFeeds, creator, music).label}</b>
+                                <span>{presetText(item.key, music ? keepsFeeds(item.musicPlan) : hasFeeds, creator, music).help}</span>
                             </label>
                         ))}
                     </fieldset>
@@ -484,7 +485,7 @@ export default function AddCreatorPage() {
                                                 ? `Already in your library as ${section.collectionTitle ?? section.collectionSlug}`
                                                 : section.access
                                                     ? 'Only some members can watch this. Pick it if VODLoft signs in as one.'
-                                                    : sectionFacts(section)}
+                                                    : sectionFacts(creator, section)}
                                         </span>
                                     </div>
                                     {section.kind === 'item' && !isMovie(creator, section) ? (

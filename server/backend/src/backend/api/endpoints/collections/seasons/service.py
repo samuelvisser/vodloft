@@ -18,10 +18,10 @@ from backend.utils.helpers import with_article
 from backend.services.new_lists import checked_new_link_seasons
 from backend.services.link_seasons import (
     collection_list_kinds, collection_new_lists,
-    LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists,
+    LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists, loose_season_name,
     offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists, active_lists,
 )
-from backend.services.sites import collection_creator_label
+from backend.services.sites import collection_creator_label, collection_site
 from backend.services.season_moves import queue_season_folder_moves
 from backend.services.season_order import (
     arrange_seasons, link_first_videos, lists_by_season, match_seasons_of_downloaded, renumber_seasons,
@@ -31,7 +31,7 @@ from config.network import is_no_internet_error
 from backend.types.collection_types import CollectionType
 from backend.types.season_types import SeasonType
 from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
-from sources import Feature, get_source
+from sources import Feature, SectionKind, get_source
 
 
 class CollectionNotFoundError(LookupError):
@@ -71,7 +71,8 @@ class _View:
     collection: Collection
     seasons: list
     link_seasons_offered: bool
-    names: object
+    list_types: object
+    loose_season: str
     music: bool
     creator_label: str
     playlists: list
@@ -141,7 +142,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
             for season in sorted(collection.seasons, key=lambda season: season.index)
         ],
         link_seasons_offered=offers_link_seasons(collection),
-        names=list_names(collection),
+        list_types=collection_site(collection).types_of(SectionKind.LIST), loose_season=loose_season_name(collection),
         music=music,
         creator_label=collection_creator_label(collection),
         playlists=[_Playlist(playlist, firsts.get(playlist.id), *leaving.get(playlist.id, (0, 0))) for playlist in playlists],

@@ -115,42 +115,45 @@ class UpgradeChecks:
 
 
 @dataclass(frozen=True)
-class ListNames:
-    """What a Site calls the lists a collection's link seasons come from, in any collection, and the one season of
-    a collection's videos in none of them."""
+class Names:
+    """A word in its singular and plural forms, in lower case and without an article, such as album and albums."""
 
-    one: str = "playlist"
-    """One list, in lower case, such as playlist or album."""
-    many: str = "playlists"
-    loose_season: str = "Videos"
-    """The name of the one season of the videos in none of the lists."""
-    music_loose_season: str = "Singles"
-    """That season's name in a Music collection, whose seasons are albums."""
-
-
-@dataclass(frozen=True)
-class CreatorSectionNames:
-    """What a Site calls the things a creator adds there, which VODLoft looks for every day, in lower case."""
-
-    one: str = "a playlist or show"
-    """One of them, with its article, such as "a playlist"."""
-    many: str = "playlists and shows"
+    one: str
+    many: str
 
 
 LIST_TYPE = "list"
-"""The key of a Site's one kind of list, for a Site that names no list types of its own."""
+"""The key of VODLoft's own kind of list, the playlist, which most Sites have."""
 
 
 @dataclass(frozen=True)
-class ListType:
-    """One kind of list a Site's creators make, such as an album or a playlist on SoundCloud. Each kind has a setting
-    of its own for what happens with a new one. ``key`` is stored with those settings, so it never changes."""
+class SectionType:
+    """One type of section a Site's creators have, such as a feed, an album or a playlist on SoundCloud, and what
+    the Site calls it. ``key`` is stored with each section and with the settings for what happens with a new list or
+    show, so it never changes."""
 
     key: str
-    names: CreatorSectionNames
+    kind: SectionKind
+    names: Names
     albums: bool = False
-    """The kind that best describes an artist's albums. A new artist on a Site with such kinds adds new lists of
-    those kinds and skips the others; on any other Site, an artist adds every kind."""
+    """The type of list that best describes an artist's albums. A new artist on a Site with such types adds new
+    lists of those types and skips the others; on any other Site, an artist adds every type."""
+
+    @property
+    def grows(self) -> bool:
+        """The creator adds new ones of the type, each with a setting for what happens with it: lists and shows."""
+        return self.kind in (SectionKind.LIST, SectionKind.SHOW)
+
+
+@dataclass(frozen=True)
+class SeasonNames:
+    """What VODLoft calls the seasons it makes itself in a collection on the Site, whatever the Site's sections
+    are."""
+
+    loose: str = "Videos"
+    """The one season of the videos in none of a collection's link seasons."""
+    music_loose: str = "Singles"
+    """That season in a Music collection, whose seasons are albums."""
 
 
 @dataclass(frozen=True)
@@ -424,8 +427,9 @@ class SectionRef:
     title: str
     kind: SectionKind
     role: SectionRole = SectionRole.MAIN
-    kind_label: str | None = None
-    """What the Site calls it, such as Playlist or Show."""
+    type: str | None = None
+    """The key of the Site's ``SectionType`` the section is, such as album or playlist on SoundCloud; None for the
+    Site's first type of its kind."""
     item_count: int | None = None
     image_url: str | None = None
     description: str | None = None
@@ -434,9 +438,6 @@ class SectionRef:
     """A list with seasons of its own, such as a Daily Wire show, keeps them."""
     year: str | None = None
     """The year an album came out."""
-    list_type: str | None = None
-    """The key of the Site's ``ListType`` the list is, such as album or playlist on SoundCloud; None for the Site's
-    first."""
 
 
 @dataclass(frozen=True)
@@ -835,32 +836,45 @@ class Site:
     says."""
     creator_presets: tuple[CreatorPreset, ...] = ()
     """The ways the Site offers to keep a creator, the first one the default."""
-    creator_sections: CreatorSectionNames = CreatorSectionNames()
-    """What the Site calls the things its creators add, such as playlists on YouTube or shows on The Daily Wire."""
-    list_types: tuple[ListType, ...] = ()
-    """The kinds of list the Site's creators make, when there is more than one, such as SoundCloud's albums and
-    playlists. Without, the Site has one, named like ``creator_sections``; see ``kinds_of_list``."""
+    section_types: tuple[SectionType, ...] = (
+        SectionType("feed", SectionKind.FEED, Names("feed", "feeds")),
+        SectionType(LIST_TYPE, SectionKind.LIST, Names("playlist", "playlists")),
+    )
+    """Every type of section the Site's creators have, in the order VODLoft shows them, such as YouTube's feeds and
+    playlists, or The Daily Wire's shows and movies. VODLoft names sections by them everywhere."""
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
-    list_names: ListNames = field(default_factory=lambda: ListNames())
-    """What the Site calls the lists a collection's link seasons come from, such as playlists on YouTube, in every
-    collection on the Site. A Music collection still calls the seasons themselves albums."""
+    season_names: SeasonNames = SeasonNames()
+    """What VODLoft calls the seasons it makes itself in a collection on the Site, such as Tracks on Bandcamp."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
     videos, it starts hidden. Where a collection is locked as a whole, as on The Daily Wire, hiding it
     would empty the collection."""
 
-    @property
-    def kinds_of_list(self) -> tuple[ListType, ...]:
-        """The kinds of list the Site's creators make, at least one."""
-        return self.list_types or (ListType(LIST_TYPE, self.creator_sections),)
+    def types_of(self, *kinds: SectionKind) -> tuple[SectionType, ...]:
+        """The Site's section types of these kinds, such as its lists."""
+        return tuple(type_ for type_ in self.section_types if type_.kind in kinds)
 
-    def list_type_of(self, section: SectionRef) -> ListType:
-        """The kind of list a section is. A section of no kind of its own, such as a feed or a show, is the first."""
-        kinds = self.kinds_of_list
-        return next((kind for kind in kinds if kind.key == section.list_type), kinds[0])
+    @property
+    def growing_types(self) -> tuple[SectionType, ...]:
+        """The types the Site's creators add new ones of, each with a setting for what happens with a new one: its
+        lists and shows."""
+        return tuple(type_ for type_ in self.section_types if type_.grows)
+
+    def section_type_of(self, section: SectionRef) -> SectionType:
+        """The type a section is: the one it names, or else the Site's first of its kind. Also takes a section
+        VODLoft stored, which has a ``type`` and ``kind`` too."""
+        return self.section_type(section.type, section.kind)
+
+    def section_type(self, key: str | None, kind: SectionKind) -> SectionType:
+        """The Site's section type by its key, or else its first of ``kind``. A kind the Site names no type for gets
+        VODLoft's own word for it."""
+        kind = SectionKind(kind)
+        return next((type_ for type_ in self.section_types if type_.key == key), None) or next(
+            (type_ for type_ in self.section_types if type_.kind == kind), None,
+        ) or SectionType(kind.value, kind, Names("video", "videos") if kind is SectionKind.ITEM else Names(kind.value, f"{kind.value}s"))
 
     def access(self, key: str | None) -> Access | None:
         """One of ``accesses`` by its key."""

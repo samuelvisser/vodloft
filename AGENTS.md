@@ -190,6 +190,10 @@ does differently on a Site lives in that Site's contract, a `Site` from `sources
   `site.link_seasons`), never by comparing a Site key or domain. Need something new to differ per Site? Add a field
   to `Site` with the generic default, and set it in the contracts that differ. Do not add lookup tables keyed by
   Site key beside the contracts.
+- A Site's `section_types` are every type of section its creators have (feeds, lists, shows, items), each a
+  `SectionType` with a stored `key` and its `Names` (singular and plural, no article). Name sections only from them:
+  a combined name such as "albums and playlists" is joined from the types where it is shown, never written into a
+  contract or hardcoded. How VODLoft names the seasons it makes itself is `season_names`, apart from sections.
 
 ## Jinja analysis
 Output template analysis lives in the `jinja_analysis` package (`server/jinja_analysis`), which only depends on

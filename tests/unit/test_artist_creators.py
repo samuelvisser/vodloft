@@ -47,10 +47,10 @@ def test_a_bandcamp_artist_lists_albums_newest_first_and_tracks_on_their_own_as_
     assert (details.ref, details.url, details.title, details.facts, details.music) == (
         "tycho", "https://tycho.bandcamp.com", "Tycho", ("2 albums",), True,
     )
-    assert [(s.title, s.kind, s.kind_label, s.year, s.item_count) for s in details.sections] == [
-        ("Epoch (Remix)", SectionKind.ITEM, "Single", "2019", None),
-        ("Epoch", SectionKind.LIST, "Album", "2016", 13),
-        ("Dive", SectionKind.LIST, "Album", "2011", 10),
+    assert [(s.title, s.kind, s.year, s.item_count) for s in details.sections] == [
+        ("Epoch (Remix)", SectionKind.ITEM, "2019", None),
+        ("Epoch", SectionKind.LIST, "2016", 13),
+        ("Dive", SectionKind.LIST, "2011", 10),
     ]
     assert steps[0] == "Listing the albums" and steps[-1] == "Reading the albums: 3 of 3"
 
@@ -82,6 +82,7 @@ def test_a_soundcloud_artists_albums_are_told_from_their_playlists(monkeypatch):
     monkeypatch.setattr(artists.runner, "run_json", soundcloud)
     details = artists.artist_details("https://soundcloud.com/flume", lambda step: None)
 
-    lists = {s.ref: (s.list_type, s.kind_label) for s in details.sections if s.kind is SectionKind.LIST}
-    assert lists == {"flume/sets/palaces": ("album", "Album"), "flume/sets/favourites": ("playlist", "Playlist")}
+    lists = {s.ref: s.type for s in details.sections if s.kind is SectionKind.LIST}
+    assert lists == {"flume/sets/palaces": "album", "flume/sets/favourites": "playlist"}
+    assert details.facts == ("1 album", "1 playlist")
     assert (details.music, details.music_known) == (True, False)
