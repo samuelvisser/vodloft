@@ -141,7 +141,7 @@ class QuickSource(ListedSource):
         self.checked: list[str] = []
         self.detailed: list[list[str]] = []
 
-    def latest_items(self, url):
+    def latest_items(self, url, *, feeds=None):
         self.checked.append(url)
         return [ItemRef(video.slug, video.url) for video in self.videos]
 

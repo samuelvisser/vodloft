@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "bd6c56bd1a8d"
+HEAD_REVISION = "5e0c7a2b91d4"
 
 
 @pytest.fixture
@@ -1756,3 +1756,34 @@ def test_movies_that_a_creators_account_lists_join_that_creator(migration_databa
         assert connection.execute(text("SELECT id, creator_id FROM media_items_movie ORDER BY id")).all() == [
             (1, 1), (2, None), (3, None),
         ]
+
+
+def test_a_creators_collection_that_holds_only_its_playlists_lists_none_of_its_feeds(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "bd6c56bd1a8d")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        # An artist's collection and a creator's of only playlists, a creator's with its feeds, and a plain one.
+        for collection_id, collection_type, outside in ((1, "music", "only"), (2, "series", "only"), (3, "series", "leave_out"), (4, "music", "only")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order, outside_videos) VALUES (:id, :slug, :slug, 'Channel', "
+                "'https://example.test/' || :slug, 'free', :type, 'seasonal', 'Artist', 'artist', 'ytdlp', 'newest_first', :outside)"
+            ), {"id": collection_id, "slug": f"c{collection_id}", "type": collection_type, "outside": outside})
+        connection.execute(text("INSERT INTO creators (id, uuid, slug, title) VALUES (1, 'c', 'artist', 'Artist')"))
+        for account_id in (1, 2, 3):
+            connection.execute(text(
+                "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref, main_collection_id) "
+                "VALUES (:id, 1, 'ytdlp', 'youtube', :id, :id)"
+            ), {"id": account_id})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        rows = connection.execute(text("SELECT id, outside_videos, feeds FROM collections ORDER BY id")).all()
+    assert [(row[0], row[1], json.loads(row[2]) if row[2] is not None else None) for row in rows] == [
+        (1, "add", []), (2, "only", []), (3, "leave_out", None), (4, "only", None),
+    ]

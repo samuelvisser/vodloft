@@ -66,6 +66,17 @@ def holds_only_link_seasons(collection: Collection) -> bool:
     return collection.outside_videos == OutsideVideos.ONLY.value
 
 
+def lists_own_link(collection: Collection) -> bool:
+    """Whether the collection's own link lists its videos: it has one, it holds more than its link seasons, and when it
+    is a creator's own collection, at least one of the creator's feeds is placed in it."""
+    return collection.sharing_url is not None and not holds_only_link_seasons(collection) and collection.feeds != []
+
+
+def own_feeds(collection: Collection) -> frozenset[str] | None:
+    """The creator's feeds a creator's own collection lists, or None when it lists all that its link lists."""
+    return frozenset(collection.feeds) if collection.feeds is not None else None
+
+
 def lists_playlists(collection: Collection) -> bool:
     """Whether the collection's own link is a creator's whole channel, on a Site whose playlists can be seasons, so
     its playlists are listed for it."""

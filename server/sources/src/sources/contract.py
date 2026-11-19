@@ -1029,8 +1029,13 @@ class Source(ABC):
         a Site with ``link_seasons`` implement it, and their ``item_details`` looks the videos up."""
         raise NotImplementedError(f"{self.name} has no playlists to make seasons of")
 
-    def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
+    def list_episodes(
+        self, url: str, *, known: frozenset[str], feeds: frozenset[str] | None = None,
+    ) -> Iterator[VideoDetails]:
         """The collection's episodes whose slugs are not in ``known``.
+
+        ``feeds`` are the refs of the creator's feeds, as ``creator_details`` names them, that a creator's own
+        collection takes, such as only a YouTube channel's Videos; None lists all that the link lists.
 
         An episode that cannot be looked up right now is left out, so a later
         scan tries it again.
@@ -1044,8 +1049,9 @@ class Source(ABC):
         Only Sources with ``Feature.COLLECTIONS`` implement it."""
         raise NotImplementedError(f"{self.name} has no collections")
 
-    def latest_items(self, url: str) -> list[ItemRef]:
-        """The collection's newest items, newest first. Only Sources with ``Feature.QUICK_CHECK`` implement it."""
+    def latest_items(self, url: str, *, feeds: frozenset[str] | None = None) -> list[ItemRef]:
+        """The collection's newest items, newest first, of only ``feeds`` when given, as ``list_episodes`` takes them.
+        Only Sources with ``Feature.QUICK_CHECK`` implement it."""
         raise NotImplementedError(f"{self.name} has no quick check")
 
     def item_details(self, items: Sequence[ItemRef]) -> dict[str, VideoDetails | None]:

@@ -122,12 +122,17 @@ def lists_are_seasons(site: Site | None) -> bool:
 
 
 def _takes_uploads(collection: Collection) -> bool:
-    """Whether the collection lists all of a creator's uploads: its Videos page, which has its Shorts and Live too,
-    unless it holds only what its link seasons give it."""
+    """Whether the collection lists a creator's uploads: its Videos page, which has its Shorts and Live too, unless it
+    holds only what its link seasons give it. ``takes_feed`` tells which of the feeds it lists."""
     return (
         collection.sharing_url is not None and collection.outside_videos != OutsideVideos.ONLY.value
         and get_source(collection.source_key).is_creator_page(collection.sharing_url)
     )
+
+
+def takes_feed(collection: Collection, ref: str) -> bool:
+    """Whether the creator's own collection lists the creator's feed with this ref."""
+    return _takes_uploads(collection) and (collection.feeds is None or ref in collection.feeds)
 
 
 def sections_in_library(
@@ -143,17 +148,21 @@ def sections_in_library(
     main_feed = _main_feed(sections)
     slugs[creator_ref] = main_feed.ref if main_feed is not None else ""
     found: dict[str, str] = {}
-    for url, slug, outside in s.execute(
-        select(Collection.sharing_url, Collection.slug, Collection.outside_videos)
+    for url, slug, outside, feeds in s.execute(
+        select(Collection.sharing_url, Collection.slug, Collection.outside_videos, Collection.feeds)
         .where(Collection.source_key == source_key, Collection.sharing_url.in_(urls))
     ):
-        # A collection that holds only what its lists give it, such as an artist's albums, doesn't keep its link's feed.
-        if outside != OutsideVideos.ONLY.value:
+        # A collection that holds only what its lists give it, such as an artist's albums, doesn't keep its link's
+        # feed, nor does a creator's own collection that the feed wasn't placed in.
+        if outside != OutsideVideos.ONLY.value and (feeds is None or urls[url] in feeds):
             found.setdefault(urls[url], slug)
-    for slug, outside in s.execute(
-        select(Collection.slug, Collection.outside_videos).where(Collection.source_key == source_key, Collection.slug.in_(slugs))
+    for slug, outside, feeds in s.execute(
+        select(Collection.slug, Collection.outside_videos, Collection.feeds)
+        .where(Collection.source_key == source_key, Collection.slug.in_(slugs))
     ):
-        if slugs[slug] and not (slug == creator_ref and outside == OutsideVideos.ONLY.value):
+        if slug == creator_ref and (outside == OutsideVideos.ONLY.value or (feeds is not None and slugs[slug] not in feeds)):
+            continue
+        if slugs[slug]:
             found.setdefault(slugs[slug], slug)
     if main is not None:
         uploads = _takes_uploads(main)
@@ -164,7 +173,7 @@ def sections_in_library(
                 # The creator placed the list in its own collection; a collection of the list left from before keeps
                 # only what the list no longer has.
                 found[section.ref] = main.slug
-            elif section.kind == SectionKind.FEED and uploads:
+            elif section.kind == SectionKind.FEED and uploads and (main.feeds is None or section.ref in main.feeds):
                 # A collection of its own, such as one of the creator's Shorts, keeps it before the creator's.
                 found.setdefault(section.ref, main.slug)
     return found
@@ -381,14 +390,22 @@ def _place(
             made.append(main)
         else:
             changed.append(main)
-        # Without a feed, the creator's collection holds only what its lists give it; a feed brings its uploads back.
-        # An artist's albums keep their tracks that the feed doesn't list, such as those on their Topic channel.
-        if any(sections[plan.ref].kind == SectionKind.FEED for plan in main_plans):
+        # The creator's collection lists only the feeds placed in it. Without one, it holds only what its lists give
+        # it. An artist's collection also takes the tracks of their albums that its feeds don't list, such as those on
+        # their Topic channel, so a feed placed in it later shows up too.
+        feeds = {plan.ref for plan in main_plans if sections[plan.ref].kind == SectionKind.FEED}
+        music = main.type == CollectionType.MUSIC.value
+        if main in made:
+            main.feeds = sorted(feeds)
+            if music:
+                main.outside_videos = OutsideVideos.ADD.value
+            elif not feeds:
+                main.outside_videos = OutsideVideos.ONLY.value
+        elif feeds:
+            if main.feeds is not None:
+                main.feeds = sorted({*main.feeds, *feeds})
             if main.outside_videos == OutsideVideos.ONLY.value:
-                music = main.type == CollectionType.MUSIC.value
                 main.outside_videos = (OutsideVideos.ADD if music else OutsideVideos.LEAVE_OUT).value
-        elif main in made:
-            main.outside_videos = OutsideVideos.ONLY.value
         lists = {plan.ref for plan in main_plans if sections[plan.ref].kind == SectionKind.LIST}
         if lists:
             _make_seasons(account, main, lists)
@@ -631,7 +648,7 @@ def collection_section(
         if other.id == collection.id:
             continue
         if other.id == account.main_collection_id:
-            keeps = (section.kind == SectionKind.FEED and _takes_uploads(other)) or _season_of_main(account, section.ref) is not None
+            keeps = (section.kind == SectionKind.FEED and takes_feed(other, section.ref)) or _season_of_main(account, section.ref) is not None
         else:
             keeps = other.sharing_url == section.url or other.slug == section_collection_slug(account.site_ref, section)
         if keeps:

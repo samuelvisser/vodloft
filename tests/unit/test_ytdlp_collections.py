@@ -50,7 +50,7 @@ class ListedSource(Source):
     def collection_details(self, url):
         return CollectionDetails(slug="PL1", url=url, title="A playlist", author_name="A Channel")
 
-    def list_episodes(self, url, *, known):
+    def list_episodes(self, url, *, known, feeds=None):
         self.known_seen.append(known)
         return iter([video for video in self.videos if video.slug not in known])
 
@@ -652,3 +652,21 @@ def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(lis
     session.commit()
     with pytest.raises(DownloadError, match="yt-dlp Source can no longer be used. Line 1: -o"):
         download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+
+
+def test_a_creators_collection_lists_only_the_feeds_placed_in_it():
+    from sources.ytdlp.source import _feeds, _listing_urls
+    from sources.ytdlp.youtube_api import mapping
+
+    url = "https://www.youtube.com/@artist/videos"
+    assert _listing_urls(url) == [url, "https://www.youtube.com/@artist/shorts", "https://www.youtube.com/@artist/streams"]
+    assert _listing_urls(url, frozenset({"videos"})) == [url]
+    assert _listing_urls(url, frozenset({"streams"})) == ["https://www.youtube.com/@artist/streams"]
+    assert _listing_urls(url, frozenset()) == []
+
+    ref = mapping.YouTubeRef("channel", "UCabc")
+    assert ref.feed_playlists("UCabc", None) == ["UUabc"]
+    # Each feed has a playlist of its own: the videos without Shorts and livestreams, the Shorts, the livestreams.
+    assert ref.feed_playlists("UCabc", frozenset({"videos", "streams"})) == ["UULFabc", "UULVabc"]
+    assert _feeds(ref, frozenset({"shorts"})) == [{"playlist_id": "UUSHabc"}]
+    assert _feeds(ref, None) == [{"channel_id": "UCabc"}]

@@ -56,7 +56,7 @@ from backend.services.notifications.emitters import link_seasons_found
 from backend.services.reassigned import placed_elsewhere, settle_creator
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
-    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, place_in_link_seasons, link_seasons_on,
+    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, own_feeds, place_in_link_seasons, link_seasons_on,
     save_lists,
 )
 from backend.services.metadata_refresh import new_item_metadata_is_final
@@ -147,16 +147,17 @@ def with_chapters(source: Source, details: VideoDetails) -> VideoDetails:
 
 def _list_new_episodes(s: Session, collection: Collection, source: Source, progress) -> list[VideoDetails]:
     title, url = collection.title, collection.sharing_url
-    if url is None or holds_only_link_seasons(collection):
+    if url is None or not lists_own_link(collection):
         # Its link seasons say what it holds, so its own link is not listed.
         return []
+    feeds = own_feeds(collection)
     split = splits_chapters(collection)
     known = known_episode_slugs(s, collection)
     # No transaction stays open while the Source looks videos up.
     s.rollback()
     update_progress(progress, _LISTING_PROGRESS, f"Listing the episodes of '{title}' at {source.name}")
     found: list[VideoDetails] = []
-    for details in source.list_episodes(url, known=known):
+    for details in source.list_episodes(url, known=known, feeds=feeds):
         found.append(with_chapters(source, details) if split else details)
         message = f"Found {len(found)} new {'episode' if len(found) == 1 else 'episodes'} of '{title}' at {source.name}"
         if progress:
@@ -371,7 +372,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
         return RefreshCounts()
     title, url = collection.title, collection.sharing_url
     # A collection that only holds its link seasons has no listing of its own to read its videos from.
-    one_by_one = url is None or holds_only_link_seasons(collection)
+    one_by_one = url is None or not lists_own_link(collection)
     # The parts of a split video are asked about once, as their video.
     items = list({
         slug: ItemRef(slug, item_url or "")

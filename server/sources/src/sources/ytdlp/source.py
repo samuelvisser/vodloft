@@ -91,15 +91,19 @@ def channel_root(url: str) -> str | None:
     return urlunsplit(("https", "www.youtube.com", f"/{match.group(1)}", "", ""))
 
 
-def _listing_urls(url: str) -> list[str]:
-    """The pages that list a collection's videos: for a channel's Videos tab, its Shorts and Live tabs too."""
+def _listing_urls(url: str, feeds: frozenset[str] | None = None) -> list[str]:
+    """The pages that list a collection's videos: for a channel's Videos tab, its Shorts and Live tabs too, or the tabs
+    of only ``feeds`` when given."""
     url = collection_url(url)
     ref = mapping.youtube_ref(url)
     if ref is None or ref.kind == "playlist" or ref.tab != "videos":
         return [url]
     parts = urlsplit(url)
     base = parts.path.rstrip("/").removesuffix("/videos")
-    return [url] + [urlunsplit(parts._replace(path=f"{base}/{tab}")) for tab in _CHANNEL_EXTRA_TABS]
+    return [
+        urlunsplit(parts._replace(path=f"{base}/{tab}")) for tab in ("videos", *_CHANNEL_EXTRA_TABS)
+        if feeds is None or tab in feeds
+    ]
 
 
 def _site(info: dict) -> str:
@@ -142,6 +146,13 @@ def _feed(ref: mapping.YouTubeRef) -> dict[str, str]:
     if ref.kind == "channel" and ref.tab == "videos":
         return {"channel_id": ref.value}
     return {"playlist_id": ref.value if ref.kind == "playlist" else ref.uploads_playlist(ref.value)}
+
+
+def _feeds(ref: mapping.YouTubeRef, feeds: frozenset[str] | None) -> list[dict[str, str]]:
+    """The RSS feeds that list the newest videos of a YouTube collection, of only ``feeds`` when given."""
+    if feeds is None or ref.kind != "channel" or ref.tab != "videos":
+        return [_feed(ref)]
+    return [{"playlist_id": playlist_id} for playlist_id in ref.feed_playlists(ref.value, feeds)]
 
 
 def _is_youtube(url: str) -> bool:
@@ -872,7 +883,9 @@ class YtDlpSource(Source):
             raise runner.YtDlpError("This link is a single video, not a channel or playlist")
         return self._collection(info, url)
 
-    def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
+    def list_episodes(
+        self, url: str, *, known: frozenset[str], feeds: frozenset[str] | None = None,
+    ) -> Iterator[VideoDetails]:
         """A YouTube collection's videos come through the API when a key is set, and through yt-dlp otherwise.
 
         The API lists all of a channel's uploads in seconds. yt-dlp lists the
@@ -887,7 +900,10 @@ class YtDlpSource(Source):
         if catalogue is not None:
             try:
                 ref = self._channel_ref(collection_url(url), catalogue)
-                ids = catalogue.video_ids(catalogue.playlist_id(ref)) if ref is not None else None
+                ids = (
+                    [video_id for playlist_id in catalogue.playlist_ids(ref, feeds) for video_id in catalogue.video_ids(playlist_id)]
+                    if ref is not None else None
+                )
             except (YouTubeApiError, runner.YtDlpError) as exc:
                 logger.info("Listing %s with yt-dlp, because the YouTube API could not: %s", url, exc)
                 ids = None
@@ -900,7 +916,7 @@ class YtDlpSource(Source):
                 if ref.kind != "playlist":
                     try:
                         # Also what the API listed but would not give details of, which yt-dlp may still see.
-                        entries = self._unseen_entries(url, frozenset(listed))
+                        entries = self._unseen_entries(url, frozenset(listed), feeds)
                     except runner.YtDlpError as exc:
                         logger.info("Not listing %s's members-only videos: %s", url, exc)
                         return
@@ -911,7 +927,7 @@ class YtDlpSource(Source):
                         if details := self._from_entry(entry):
                             yield details
                 return
-        yield from self._list_with_ytdlp(url, known)
+        yield from self._list_with_ytdlp(url, known, feeds)
 
     def _details_from_api(self, catalogue: Catalogue, ids: list[str]) -> Iterator[VideoDetails]:
         for start in range(0, len(ids), MAX_RESULTS):
@@ -988,13 +1004,13 @@ class YtDlpSource(Source):
             details[ref.slug] = self._video(info, ref.url)
         return ItemRefresh(details=details, removed=frozenset(removed))
 
-    def _list_with_ytdlp(self, url: str, known: frozenset[str]) -> Iterator[VideoDetails]:
-        for entry in self._unseen_entries(url, known).values():
+    def _list_with_ytdlp(self, url: str, known: frozenset[str], feeds: frozenset[str] | None = None) -> Iterator[VideoDetails]:
+        for entry in self._unseen_entries(url, known, feeds).values():
             if details := self._from_entry(entry):
                 yield details
 
     @staticmethod
-    def _unseen_entries(url: str, known: frozenset[str]) -> dict[str, dict]:
+    def _unseen_entries(url: str, known: frozenset[str], feeds: frozenset[str] | None = None) -> dict[str, dict]:
         """The collection's listed videos VODLoft does not know yet, by slug, in the listing's order.
 
         YouTube's listing only says how long ago a video came out, which yt-dlp
@@ -1006,7 +1022,7 @@ class YtDlpSource(Source):
                 if video_slug(entry) not in known:
                     entries.setdefault(video_slug(entry), entry)
             return entries
-        for index, listing_url in enumerate(_listing_urls(url)):
+        for index, listing_url in enumerate(_listing_urls(url, feeds)):
             try:
                 listing = runner.run_json(
                     "--flat-playlist", "--extractor-args", "youtubetab:approximate_date", listing_url,
@@ -1035,28 +1051,28 @@ class YtDlpSource(Source):
             return self._video(entry, entry_url)
         return None
 
-    def latest_items(self, url: str) -> list[ItemRef]:
+    def latest_items(self, url: str, *, feeds: frozenset[str] | None = None) -> list[ItemRef]:
         """A YouTube collection's 50 newest videos through the API, else its RSS feed's 15, else yt-dlp's listing."""
         url = collection_url(url)
         if mapping.youtube_ref(url) is None:
-            return self._latest_with_ytdlp(url)
+            return self._latest_with_ytdlp(url, feeds)
         catalogue = self._catalogue(adding=False)
         if catalogue is not None:
             try:
                 ref = self._channel_ref(url, catalogue)
                 if ref is not None:
                     return [ItemRef(video_id, mapping.video_url(video_id))
-                            for video_id in catalogue.latest_ids(catalogue.playlist_id(ref))]
+                            for playlist_id in catalogue.playlist_ids(ref, feeds) for video_id in catalogue.latest_ids(playlist_id)]
             except (YouTubeApiError, runner.YtDlpError) as exc:
                 logger.info("Checking %s without the YouTube API, because it could not: %s", url, exc)
         try:
             ref = self._channel_ref(url, None)
             if ref is not None:
-                ids = youtube_rss.latest_video_ids(**_feed(ref))
+                ids = [video_id for feed in _feeds(ref, feeds) for video_id in youtube_rss.latest_video_ids(**feed)]
                 return [ItemRef(video_id, mapping.video_url(video_id)) for video_id in ids]
         except (youtube_rss.FeedError, runner.YtDlpError) as exc:
             logger.info("Checking %s with yt-dlp, because its RSS feed could not be read: %s", url, exc)
-        return self._latest_with_ytdlp(url)
+        return self._latest_with_ytdlp(url, feeds)
 
     def newest_episodes(self, url: str) -> list[VideoDetails]:
         """A YouTube collection's 50 newest videos through the API, for 2 units, else its RSS feed's 15,
@@ -1088,7 +1104,7 @@ class YtDlpSource(Source):
             and entry.get("title") not in _UNAVAILABLE_TITLES
         ]
 
-    def _latest_with_ytdlp(self, url: str) -> list[ItemRef]:
+    def _latest_with_ytdlp(self, url: str, feeds: frozenset[str] | None = None) -> list[ItemRef]:
         if artists.artist_root(url) and artists.lists_all_music(url):
             # An artist's newest music is on their newest album.
             return [
@@ -1096,7 +1112,7 @@ class YtDlpSource(Source):
                 for entry in artists.all_tracks(url, newest_albums=1)[:_LATEST_COUNT] if entry.get("url")
             ]
         items: dict[str, ItemRef] = {}
-        for index, listing_url in enumerate(_listing_urls(url)):
+        for index, listing_url in enumerate(_listing_urls(url, feeds)):
             try:
                 listing = runner.run_json(
                     "--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", listing_url, cookies=sites.cookies_for(listing_url),

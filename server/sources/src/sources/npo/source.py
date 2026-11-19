@@ -303,7 +303,9 @@ class NpoSource(Source):
             return {program["slug"]: bool(states[0]) for program in programs}
         return {program["slug"]: bool(self._protected(program)) for program in programs}
 
-    def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
+    def list_episodes(
+        self, url: str, *, known: frozenset[str], feeds: frozenset[str] | None = None,
+    ) -> Iterator[VideoDetails]:
         parsed = parse_link(url)
         if parsed is None or parsed[0] is not LinkKind.COLLECTION:
             raise NpoError("This is not a link to a series on NPO Start")

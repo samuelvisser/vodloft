@@ -628,14 +628,19 @@ def test_an_artist_on_a_video_site_keeps_only_their_albums(client, session):
         {"ref": ref, "target": target} for ref, target in music.items()
     ]})
     assert response.status_code == 201, response.text
-    # Without a feed the artist's collection holds only what its playlists give it.
-    assert session.scalar(select(Collection.outside_videos).where(Collection.slug == "UCworkshop")) == OutsideVideos.ONLY.value
+    # Without a feed the artist's collection lists none of the channel's uploads, so it holds what its playlists give
+    # it, also the tracks the channel's own link doesn't list.
+    main = lambda: session.execute(select(Collection.outside_videos, Collection.feeds).where(Collection.slug == "UCworkshop")).one()
+    assert tuple(main()) == (OutsideVideos.ADD.value, [])
 
-    # A feed that joins it later brings the uploads in, and the albums keep the tracks the feed doesn't list.
+    # A feed that joins it later lists only that feed: its Videos, without its Live and Shorts.
     added = client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "videos", "target": "main"}]})
     assert added.status_code == 200, added.text
     session.expire_all()
-    assert session.scalar(select(Collection.outside_videos).where(Collection.slug == "UCworkshop")) == OutsideVideos.ADD.value
+    assert tuple(main()) == (OutsideVideos.ADD.value, ["videos"])
+    page = client.get("/api/creators/workshop").json()
+    kept = {section["ref"]: section["collectionSlug"] for section in page["accounts"][0]["sections"]}
+    assert (kept["videos"], kept["streams"], kept["shorts"]) == ("UCworkshop", None, None)
 
 
 def test_a_creator_the_site_knows_isnt_an_artist_isnt_added_as_one(client, tube, monkeypatch):

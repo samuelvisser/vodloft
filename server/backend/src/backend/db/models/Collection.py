@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING, TypeAlias
 
-from sqlalchemy import ForeignKey, Text, UniqueConstraint, func
+from sqlalchemy import JSON, ForeignKey, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
@@ -71,6 +71,13 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         comment=(
             "What happens with the videos of the playlists that are seasons that the collection's own link does "
             "not list: leave_out, add, or only, which holds nothing but the videos of those playlists"
+        ),
+    )
+    feeds: Mapped[Optional[list[str]]] = mapped_column(
+        JSON, nullable=True,
+        comment=(
+            "For a creator's own collection, the refs of the creator's feeds its link lists, such as only a YouTube "
+            "channel's Videos; null lists all that its link lists"
         ),
     )
     custom_season_order: Mapped[bool] = mapped_column(

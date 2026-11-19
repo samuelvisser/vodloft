@@ -214,7 +214,7 @@ Paste a link to a YouTube channel in **Add media** and choose **Add the creator*
 
 The Add creator page lists the YouTube channel's feeds (Videos, Live and Shorts on YouTube) and its playlists or shows. For each one you choose where it goes:
 
-- **Main collection**: one collection named after the creator. Feeds become a season per year, and a playlist becomes a playlist season (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)). A Daily Wire show has seasons of its own, so it always gets a collection of its own.
+- **Main collection**: one collection named after the creator. Feeds become a season per year, and a playlist becomes a playlist season (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)). The main collection takes only the feeds you put in it: with only Videos, the channel's livestreams and Shorts stay out until you add those feeds too. A Daily Wire show has seasons of its own, so it always gets a collection of its own.
 - **A collection of its own**: the part becomes a separate collection, for example Shorts that you want to keep apart from the rest.
 - **Skip**: nothing is added. The part stays listed on the creator's **Edit** page, so you can add it later.
 
