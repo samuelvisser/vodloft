@@ -1,5 +1,6 @@
 import {forwardRef} from 'react'
-import Select, {type Props as ReactSelectProps, type SelectInstance} from 'react-select'
+import {type Props as ReactSelectProps, type SelectInstance} from 'react-select'
+import Select from './Select'
 
 import type {SelectRegistry} from '../../utils/selectRegistry'
 

@@ -14,7 +14,7 @@ import {
     type CollectionCreateFormIn, CollectionCreatePayloadOut, CollectionCreatePayloadIn,
 } from "../../types/schemas/collection";
 import {EpisodeIdentifierReg, CollectionTypeReg} from "../../types/collection";
-import Select from "react-select";
+import Select from '../common/Select'
 import {UseQueryResult} from "@tanstack/react-query";
 import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
 import {DwMembershipLevelReg} from "../../types/dailywire_user_info";

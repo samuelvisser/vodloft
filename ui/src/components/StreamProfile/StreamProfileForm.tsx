@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
-import Select from 'react-select'
+import Select from '../common/Select'
 import ReadMore from '../../utils/ReadMore'
 import {episodeTagLabel, SourceFeature, sourceHas} from '../../types/schemas/source'
 import {FORMAT_HEIGHTS, PreferredFormatReg} from '../../types/local_media_profile'

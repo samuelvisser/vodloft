@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState} from 'react'
 import {useWatch, type UseFormReturn} from 'react-hook-form'
-import Select from 'react-select'
+import Select from '../common/Select'
 import Switch from 'react-switch'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 

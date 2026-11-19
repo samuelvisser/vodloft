@@ -1,6 +1,6 @@
 import {ReactNode, useEffect} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
-import Select from 'react-select'
+import Select from '../common/Select'
 import ReadMore from '../../utils/ReadMore'
 import {RssHlsOutputModes, RssVideoOutputModeReg} from '../../types/stream_profile'
 import StreamAddressField from './StreamAddressField'

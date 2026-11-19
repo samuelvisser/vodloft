@@ -2,7 +2,7 @@ import {useQuery} from '@tanstack/react-query'
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
-import Select from 'react-select'
+import Select from '../components/common/Select'
 import {faIcon} from '../icons/faIcon'
 
 import {Column, DataTable} from '../components/DataTable/DataTable'
