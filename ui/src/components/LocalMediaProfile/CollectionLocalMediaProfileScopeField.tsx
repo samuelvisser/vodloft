@@ -106,7 +106,7 @@ export default function CollectionLocalMediaProfileScopeField({
             <label htmlFor="mp-collection-scope">Available for</label>
             <ScopeRequestedField mode="collection" scope={scope} apply={(next) => {
                 const nextScope = next as CollectionLocalMediaProfileScope
-                const previousScope = (scope ?? 'podcast_and_series') as CollectionLocalMediaProfileScope
+                const previousScope = (scope ?? 'podcast-and-series') as CollectionLocalMediaProfileScope
                 onScopeChange(nextScope)
                 form.setValue('collectionScope', nextScope, {shouldDirty: true, shouldValidate: true})
                 return switchCollectionScope(form, previousScope, nextScope, isCreating)
@@ -121,7 +121,7 @@ export default function CollectionLocalMediaProfileScopeField({
                                 <SimpleSelect
                                     inputId="mp-collection-scope"
                                     registry={CollectionLocalMediaProfileScopeReg}
-                                    value={field.value ?? 'podcast_and_series'}
+                                    value={field.value ?? 'podcast-and-series'}
                                     isDisabled={locked}
                                     isOptionDisabled={(option) => tracksBlocked && option.value === 'music_tracks'}
                                     components={SCOPE_COMPONENTS}
@@ -129,7 +129,7 @@ export default function CollectionLocalMediaProfileScopeField({
                                     {...{disabledOptionReason: TO_TRACKS_REASON}}
                                     onChange={(value) => {
                                         const nextScope = value as CollectionLocalMediaProfileScope
-                                        const previousScope = (field.value ?? 'podcast_and_series') as CollectionLocalMediaProfileScope
+                                        const previousScope = (field.value ?? 'podcast-and-series') as CollectionLocalMediaProfileScope
                                         // Let the defaulting logic read the previous scope before
                                         // updating the form with the new one.
                                         onScopeChange(nextScope)

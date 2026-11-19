@@ -180,7 +180,7 @@ def _profiles(data: WireLoftData) -> tuple[ProfilePlan, ...]:
         if kind == "collection" and profile_id in show_profiles:
             scope = show_profiles[profile_id]["show_scope"]
             # WireLoft calls a profile for podcasts and series "both".
-            settings["collection_scope"] = "podcast_and_series" if scope == "both" else scope
+            settings["collection_scope"] = "podcast-and-series" if scope == "both" else scope
             if show_profiles[profile_id].get("download_show_assets") is not None:
                 settings["download_collection_assets"] = bool(show_profiles[profile_id]["download_show_assets"])
         indexes = tuple(

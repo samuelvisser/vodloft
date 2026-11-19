@@ -450,7 +450,7 @@ def test_a_saved_profile_starts_on_a_collection_that_downloads_to_it(db_session)
 
     profile = CollectionLocalMediaProfile(
         slug="shows", name="Shows", output_template="/downloads/{{ collection }}/{{ episode }}.ext",
-        preferred_format="format_1080p", collection_scope="podcast_and_series",
+        preferred_format="format_1080p", collection_scope="podcast-and-series",
     )
     db_session.add(profile)
     collections = [

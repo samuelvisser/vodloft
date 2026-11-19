@@ -1,6 +1,6 @@
-"""A Collection profile available for podcasts and series stores that as podcast_and_series
+"""A Collection profile available for podcasts and series stores that as podcast-and-series
 
-The Available for choice "Podcasts and Series" was stored as "both". It is now stored as "podcast_and_series".
+The Available for choice "Podcasts and Series" was stored as "both". It is now stored as "podcast-and-series".
 
 Revision ID: bb1c178245cc
 Revises: 5e0c7a2b91d4
@@ -24,8 +24,8 @@ def _rename(old: str, new: str) -> None:
 
 
 def upgrade() -> None:
-    _rename("both", "podcast_and_series")
+    _rename("both", "podcast-and-series")
 
 
 def downgrade() -> None:
-    _rename("podcast_and_series", "both")
+    _rename("podcast-and-series", "both")

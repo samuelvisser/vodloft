@@ -25,8 +25,8 @@ export function useProfileFit(mode: LocalMediaProfileType): ProfileFit {
 
 /** The choices of Available for that fit what a link asks for, broadest last, and how to name them. */
 const SCOPE_FITS: Record<string, {fits: readonly string[], needs: string}> = {
-    podcast: {fits: ['podcast', 'podcast_and_series'], needs: 'Podcasts, or Podcasts and Series'},
-    series: {fits: ['series', 'podcast_and_series'], needs: 'Series, or Podcasts and Series'},
+    podcast: {fits: ['podcast', 'podcast-and-series'], needs: 'Podcasts, or Podcasts and Series'},
+    series: {fits: ['series', 'podcast-and-series'], needs: 'Series, or Podcasts and Series'},
     music_tracks: {fits: ['music_tracks'], needs: 'Music tracks'},
     music_videos: {fits: ['music_videos'], needs: 'Music videos'},
     videos: {fits: ['videos', 'both'], needs: 'Videos, or Videos and movies'},
@@ -34,7 +34,7 @@ const SCOPE_FITS: Record<string, {fits: readonly string[], needs: string}> = {
 }
 
 /** What a profile of this type is available for when it hasn't chosen yet. */
-const DEFAULT_SCOPE: Record<LocalMediaProfileType, string> = {collection: 'podcast_and_series', video: 'both'}
+const DEFAULT_SCOPE: Record<LocalMediaProfileType, string> = {collection: 'podcast-and-series', video: 'both'}
 
 /** The default Available for of the profile type a link's ``asked`` belongs to. */
 function defaultScope(asked: string | null | undefined): string {

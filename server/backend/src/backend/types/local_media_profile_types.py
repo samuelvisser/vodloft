@@ -66,7 +66,7 @@ class EpisodeNfo(StrEnum):
 
 
 class CollectionLocalMediaProfileScope(StrEnum):
-    PODCAST_AND_SERIES = "podcast_and_series"
+    PODCAST_AND_SERIES = "podcast-and-series"
     """Podcasts and series."""
     PODCAST = "podcast"
     SERIES = "series"

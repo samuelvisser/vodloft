@@ -1695,7 +1695,7 @@ def test_music_profiles_become_collection_profiles_and_video_profiles_say_what_t
         assert connection.execute(text(
             "SELECT p.slug, p.type, c.collection_scope FROM local_media_profiles p "
             "JOIN local_media_profiles_collection c ON c.id = p.id ORDER BY p.id"
-        )).all() == [("tracks", "collection", "music_tracks"), ("music-videos", "collection", "music_videos"), ("shows", "collection", "podcast_and_series")]
+        )).all() == [("tracks", "collection", "music_tracks"), ("music-videos", "collection", "music_videos"), ("shows", "collection", "podcast-and-series")]
         assert connection.execute(text(
             "SELECT p.slug, v.video_scope FROM local_media_profiles p JOIN local_media_profiles_video v ON v.id = p.id ORDER BY p.id"
         )).all() == [("vodloft-movies", "movies"), ("vodloft-videos", "both"), ("own", "both")]
@@ -1789,7 +1789,7 @@ def test_a_creators_collection_that_holds_only_its_playlists_lists_none_of_its_f
     ]
 
 
-def test_a_profile_for_podcasts_and_series_is_stored_as_podcast_and_series(migration_database):
+def test_a_profile_for_podcasts_and_series_is_stored_under_its_own_name(migration_database):
     _database_path, engine = migration_database
     from backend.db.migrations import get_alembic_config
 
@@ -1815,8 +1815,8 @@ def test_a_profile_for_podcasts_and_series_is_stored_as_podcast_and_series(migra
         return column["default"]
 
     command.upgrade(config, "bb1c178245cc")
-    assert scopes() == ["podcast_and_series", "podcast", "music_tracks"]
-    assert "podcast_and_series" in scope_default()
+    assert scopes() == ["podcast-and-series", "podcast", "music_tracks"]
+    assert "podcast-and-series" in scope_default()
 
     command.downgrade(config, "5e0c7a2b91d4")
     assert scopes() == ["both", "podcast", "music_tracks"]

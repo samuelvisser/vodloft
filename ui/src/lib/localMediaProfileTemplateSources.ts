@@ -78,7 +78,7 @@ export function useLocalMediaProfileTemplateVariables(
 export function useLocalMediaProfileTemplateSources(
     mode: LocalMediaProfileTemplateSourceMode,
     {
-        collectionScope = 'podcast_and_series',
+        collectionScope = 'podcast-and-series',
         search = '',
         enabled = true,
         pageSize = 30,
@@ -127,7 +127,7 @@ export function useLocalMediaProfileTemplateSources(
 
 
 export function useRandomCollectionTemplateSource(
-    collectionScope: CollectionLocalMediaProfileScope = 'podcast_and_series',
+    collectionScope: CollectionLocalMediaProfileScope = 'podcast-and-series',
     enabled = true,
     /** A saved profile starts on an episode of a collection that downloads to it. */
     localMediaProfileId: number | null = null,

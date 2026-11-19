@@ -233,7 +233,7 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
     custom: list[str] = []
     settings: dict[str, object] = {
         "preferred_format": _preferred_format(profile),
-        "collection_scope": "podcast_and_series",
+        "collection_scope": "podcast-and-series",
         **_quality_settings(profile),
     }
     if option_set is not None:

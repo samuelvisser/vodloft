@@ -28,7 +28,7 @@ def test_collection_local_media_profile_scope_defaults_to_both() -> None:
         ),
     )
 
-    assert profile.collection_scope == "podcast_and_series"
+    assert profile.collection_scope == "podcast-and-series"
 
     session.close()
     engine.dispose()
@@ -82,7 +82,7 @@ def test_updating_collection_scope_keeps_the_saved_subtitle_choice() -> None:
     for initial_scope, initial_mode, new_scope in (
         ("podcast", "no_subtitles", "series"),
         ("series", "sidecar", "podcast"),
-        ("podcast_and_series", "embed_and_sidecar", "podcast"),
+        ("podcast-and-series", "embed_and_sidecar", "podcast"),
     ):
         session, engine = _new_session()
         try:
