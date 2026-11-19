@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
-    ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
+    ApiKeyNoteAPIRead, ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
     SourceAPIRead, SourceSiteAPIRead,
 )
-from backend.db.models import Episode, Collection
+from backend.db.models import Collection, CreatorAccount, Episode, Settings
 from backend.security.access import Access
 from backend.types.collection_types import CollectionType
 from backend.services.media_access import access_locked, link_access
 from backend.services.sites import preferred_sources, site_record
 from backend.services.source_requests import asking_source
+from backend.services.users import settings_row
 from backend.utils.helpers import slugify
 from sources import (
     Feature, LinkKind, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, sources_for,
@@ -124,6 +126,43 @@ def get_api_status(s: Session, source: Source) -> ApiStatusAPIRead:
         .all()
     )
     return ApiStatusAPIRead.model_validate(source.api_status([(url, count) for url, count in collections]))
+
+
+API_KEY_NOTE_PAUSE = timedelta(days=7)
+"""How long Remind me later puts off the note that asks for an API key."""
+
+
+def api_key_notes(s: Session) -> list[ApiKeyNoteAPIRead]:
+    """The Sources whose API key would speed up collections or creators in the Library while they have none, unless
+    the user put the note off or turned it off."""
+    settings = s.scalars(select(Settings).order_by(Settings.id).limit(1)).first()
+    if settings is not None and (
+        settings.api_key_note_off
+        or (settings.api_key_note_after is not None and settings.api_key_note_after > datetime.now(timezone.utc))
+    ):
+        return []
+    notes = []
+    for source in all_sources():
+        if not source.has(Feature.API_KEY):
+            continue
+        links = s.scalars(
+            select(Collection.sharing_url).where(Collection.source_key == source.id, Collection.sharing_url.is_not(None))
+            .union(select(CreatorAccount.url).where(CreatorAccount.source_key == source.id, CreatorAccount.url.is_not(None)))
+        ).all()
+        status = source.api_status([(link, 0) for link in links])
+        site = next((site for link in links if (site := source.site_for(link)) is not None and site.takes_api_key), None)
+        if status.key_hint is None and status.collection_count and site is not None:
+            notes.append(ApiKeyNoteAPIRead(source_key=source.id, site_name=site.name))
+    return notes
+
+
+def put_off_api_key_note(s: Session, action: str) -> None:
+    """Put the note that asks for an API key off for a while, or turn it off."""
+    settings = settings_row(s)
+    if action == "never":
+        settings.api_key_note_off = True
+    else:
+        settings.api_key_note_after = datetime.now(timezone.utc) + API_KEY_NOTE_PAUSE
 
 
 def _collection_of_local_episode(s: Session, source: Source, episode_slug: str) -> Collection | None:

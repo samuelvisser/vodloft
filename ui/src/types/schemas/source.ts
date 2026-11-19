@@ -239,6 +239,13 @@ export function episodeTagLabel(tags: readonly EpisodeTagRead[] | undefined, key
     return tags?.find((tag) => tag.key === key)?.label ?? key
 }
 
+/** A Site whose API key would speed up collections or creators in the Library, while there is none. */
+export const ApiKeyNoteReadSchema = z.object({
+    sourceKey: z.string(),
+    siteName: z.string(),
+})
+export type ApiKeyNoteRead = z.infer<typeof ApiKeyNoteReadSchema>
+
 export const ApiStatusReadSchema = z.object({
     /** The last characters of the key, or null when no key is set. */
     keyHint: z.string().nullable(),

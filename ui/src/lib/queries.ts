@@ -72,7 +72,7 @@ import {TaskOperationRead} from "../types/schemas/operation";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
-    ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
+    ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
     ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
     SourceReadSchema,
@@ -666,6 +666,24 @@ export function useKeepQuestions() {
 }
 
 /** What the user should fix about any Source, for Needs attention on Home. */
+/** The Sites whose API key would speed up what is in the Library while there is none, for the note on Home. */
+export function useApiKeyNotes() {
+    return useQuery<ApiKeyNoteRead[], Error, ApiKeyNoteRead[], readonly ['apiKeyNotes']>({
+        queryKey: ['apiKeyNotes'] as const,
+        enabled: can('sources', 'manage'),
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/sources/api-key-notes`, ApiKeyNoteReadSchema.array(), signal),
+    })
+}
+
+/** Put the note on Home that asks for an API key off for a week, or never show it again. */
+export async function putOffApiKeyNotes(action: 'later' | 'never'): Promise<void> {
+    const response = await fetch(`${apiUrl()}/sources/api-key-notes`, {
+        method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action}),
+    })
+    if (!response.ok) throw await responseError(response)
+}
+
 export function useSourceProblems() {
     return useQuery<SourceProblemRead[], Error, SourceProblemRead[], readonly ['sourceProblems']>({
         queryKey: ['sourceProblems'] as const,

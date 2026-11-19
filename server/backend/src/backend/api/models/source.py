@@ -294,6 +294,20 @@ class ApiQuotaShareAPIRead(ResponseBase):
     limit: int
 
 
+class ApiKeyNoteAPIRead(ResponseBase):
+    """A Source whose API key would speed up collections or creators in the Library, while it has none."""
+
+    source_key: str
+    site_name: str
+    """The Site the key is for, such as YouTube."""
+
+
+class ApiKeyNoteAPIIn(RequestBase):
+    """Put the note off for a week (``later``), or never show it again (``never``)."""
+
+    action: Literal["later", "never"]
+
+
 class ApiStatusAPIRead(ResponseBase):
     key_hint: Optional[str] = None
     shares: list[ApiQuotaShareAPIRead]
