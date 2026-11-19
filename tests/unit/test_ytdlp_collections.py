@@ -670,3 +670,27 @@ def test_a_creators_collection_lists_only_the_feeds_placed_in_it():
     assert ref.feed_playlists("UCabc", frozenset({"videos", "streams"})) == ["UULFabc", "UULVabc"]
     assert _feeds(ref, frozenset({"shorts"})) == [{"playlist_id": "UUSHabc"}]
     assert _feeds(ref, None) == [{"channel_id": "UCabc"}]
+
+
+def test_a_music_collection_takes_new_albums_and_asks_about_new_playlists(session):
+    from backend.services.link_seasons import LinkListing, save_lists
+    from sources import SectionKind, SectionRef
+
+    collection = _collection(session, "PLartist")
+    collection.type, collection.link_seasons, collection.new_link_seasons = "music", "selected", "add"
+
+    def listed(ref, album):
+        return SectionRef(ref, f"https://soundcloud.com/artist/sets/{ref}", ref.title(), SectionKind.LIST, album=album)
+
+    # On the first look the albums are seasons and the playlists are only known.
+    assert save_lists(session, collection, LinkListing([listed("first", True), listed("mix", False)])) == []
+    assert {link.ref: (link.enabled, link.status) for link in collection.lists} == {
+        "first": (True, "known"), "mix": (False, "known"),
+    }
+    asked = save_lists(session, collection, LinkListing([
+        listed("second", True), listed("faves", False), listed("first", True), listed("mix", False),
+    ]))
+    assert [link.ref for link in asked] == ["faves"]
+    assert {link.ref: (link.enabled, link.status) for link in collection.lists if link.ref in ("second", "faves")} == {
+        "second": (True, "known"), "faves": (False, "new"),
+    }

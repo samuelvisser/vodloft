@@ -415,9 +415,10 @@ class SectionRef:
     """A list with seasons of its own, such as a Daily Wire show, keeps them."""
     year: str | None = None
     """The year an album came out."""
-    album: bool = False
-    """A list the artist released as an album, rather than a playlist they put together: every list of a Bandcamp
-    artist, and a SoundCloud artist's albums."""
+    album: bool | None = None
+    """Whether the list is an album the artist released, rather than a playlist they put together: every list of a
+    Bandcamp artist is, and SoundCloud tells its albums from its playlists. None where the Site can't tell, such as on
+    YouTube."""
 
 
 @dataclass(frozen=True)
