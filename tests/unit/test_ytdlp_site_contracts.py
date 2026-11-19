@@ -52,3 +52,10 @@ def test_a_contract_can_only_set_what_a_site_has():
 def test_every_contract_has_a_key_of_its_own():
     assert all(key == contract.key for key, contract in CONTRACTS.items())
     assert len(CONTRACTS) == len({contract.__name__ for contract in CONTRACTS.values()})
+
+
+def test_soundcloud_calls_its_sets_playlists_and_the_rest_tracks_outside_music():
+    names = site_of("soundcloud").list_names
+
+    assert (names.one, names.many, names.loose_season) == ("playlist", "playlists", "Tracks")
+    assert site_of("soundcloud").music_link_season_names.loose_season == "Singles"
