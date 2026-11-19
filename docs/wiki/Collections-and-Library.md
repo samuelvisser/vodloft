@@ -71,7 +71,7 @@ Every collection is a **Podcast**, a **Series** or **Music**. You choose when ad
 
 - A **Podcast** downloads its newest episodes, by date or by number.
 - A **Series** downloads by season.
-- **Music** is an artist's music: each season is an album, and each episode a track. It downloads by season, like a Series, and only takes Music profiles (see [[Local-Media-Profiles#music-profiles]]). VODLoft uses those words everywhere for it: its pages, menus and windows say album instead of season, and track instead of episode. On a site with videos, such as YouTube, what the collection lists are called music videos, and the files a Music profile makes of them are tracks.
+- **Music** is an artist's music: each season is an album, and each episode a track. It downloads by season, like a Series, and takes Music profiles for its tracks and Collection profiles for its music videos (see [[Local-Media-Profiles#music-profiles]]). VODLoft uses those words everywhere for it: its pages, menus and windows say album instead of season, and track instead of episode. On a site with videos, such as YouTube, what the collection lists are called music videos.
 
 A collection can only change to a type its Download Profiles suit. To make a Series into Music, remove its Download Profiles first, and add new ones with a Music profile.
 
@@ -235,9 +235,9 @@ A creator with a Music collection is called an **artist**, on its page and in th
 ### Music videos
 
 An artist's music videos are a collection of their own on the artist's page, beside the albums: they go to a Music
-Videos library, not a Music library. Give the collection a Collection profile made from the **Music videos** preset
-(see [[Local-Media-Profiles#media-server-presets]]), which files each video under the artist's name with a
-`musicvideo` NFO.
+Videos library, not a Music library. Make it a Music collection and give it a Collection profile for **Music videos**,
+made from the **Music videos** preset (see [[Local-Media-Profiles#media-server-presets]]), which files each video under
+the artist's name with a `musicvideo` NFO. **Add one** on such a collection's page sets a new profile up that way.
 
 Official videos are often on another channel than the albums, such as the artist's label. A collection can join any
 creator in your Library, whatever its link: see [Adding a collection to a creator](#adding-a-collection-to-a-creator-and-removing-it).

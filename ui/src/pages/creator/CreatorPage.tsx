@@ -148,7 +148,7 @@ export default function CreatorPage() {
     // An artist whose collections are all Music collections has albums, and tracks on a Site with sound only.
     const music = creator.collections.length > 0 && creator.collections.every((collection) => collection.type === 'music')
     const words = collectionWords(music ? 'music' : null, creator.accounts.every((account) => account.site.audio) ? 'audio' : 'video')
-    const fileWords = collectionWords(music ? 'music' : null, 'audio')
+    const fileWords = words
     const firstDates = creator.collections.map((collection) => collection.firstPublishedDate).filter((date): date is Date => !!date)
     const since = firstDates.length ? Math.min(...firstDates.map((date) => date.getFullYear())) : null
     const newest = creator.lastPublishedDate

@@ -21,7 +21,7 @@ export default function CollectionLocalMediaProfileScopeField({
             <div className="form-row">
                 <label>Available for</label>
                 <div style={{padding: '6px 0'}}>Music collections</div>
-                <div className="help">A Music profile is offered for Music collections only, and they take no other profile.</div>
+                <div className="help">A Music profile keeps the tracks of Music collections. Their music videos can go to a Collection profile for Music videos.</div>
             </div>
         )
     }
@@ -43,6 +43,8 @@ export default function CollectionLocalMediaProfileScopeField({
                             // updating the form with the new one.
                             onScopeChange(nextScope)
                             field.onChange(nextScope)
+                            // A Music collection's videos are music videos.
+                            if (nextScope === 'music') form.setValue('episodeNfo', 'music_video', {shouldDirty: true})
                         }}
                         onBlur={field.onBlur}
                         aria-invalid={!!errors.collectionScope}

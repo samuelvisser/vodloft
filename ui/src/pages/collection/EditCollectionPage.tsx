@@ -393,7 +393,7 @@ export default function EditCollectionPage() {
           {typeError && <div id="collection-type-error" className="error" role="alert">{typeError}</div>}
           <div className="help" id="collection-type-help">
             {CollectionTypeReg.getHelp(form.type) ?? ''} The Local Media Profiles offered for this collection depend on
-            its type: Music collections take Music profiles only.
+            its type: a Music collection takes Music profiles for its tracks, and Collection profiles for its music videos.
           </div>
         </div>
 

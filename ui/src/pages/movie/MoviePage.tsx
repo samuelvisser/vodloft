@@ -41,6 +41,7 @@ import './MoviePage.css'
 import {apiUrl} from '../../lib/api'
 import {type DownloadStarts, startLabel, useDownloadStarts} from '../../lib/downloadStarts'
 import {refreshFrontendPuller} from '../../lib/puller'
+import {addLocalMediaProfilePath} from '../../types/local_media_profile'
 
 type MovieExtraSummary = {
     id?: number
@@ -662,7 +663,7 @@ export default function MoviePage() {
                     ) : (
                         <div className="movie-profile-empty">
                             <p>Create a Video Local Media Profile for The Daily Wire before downloading a movie or extra.</p>
-                            <Link className="btn" to="/add-local-media-profile?type=video">Create profile</Link>
+                            <Link className="btn" to={addLocalMediaProfilePath({siteKey: localMovie?.site?.key ?? DAILYWIRE_SOURCE_KEY})}>Create profile</Link>
                         </div>
                     )}
                 </aside>

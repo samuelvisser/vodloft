@@ -72,7 +72,7 @@ class CollectionLocalMediaProfileScope(StrEnum):
     PODCAST = "podcast"
     SERIES = "series"
     MUSIC = "music"
-    """Music collections, which only Music profiles keep."""
+    """Music collections: a Music profile keeps their tracks, a Collection profile their music videos."""
 
     def collection_types(self) -> tuple[str, ...]:
         """The collection types a profile with this scope keeps."""

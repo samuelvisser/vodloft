@@ -64,7 +64,7 @@ A Collection profile also has an **Available for** setting. This controls where 
 
 ### Music profiles
 
-Music profiles store the tracks of **Music** collections, and Music collections take no other kind of profile. A Music profile downloads audio only, as M4A, Opus, MP3 or FLAC, and tags every file the way music players expect:
+Music profiles store the tracks of **Music** collections. A Music collection can also take a Collection profile whose **Available for** is **Music videos**: it keeps the collection's videos as video, each with a `musicvideo` NFO. Attach either, or both. A Music profile downloads audio only, as M4A, Opus, MP3 or FLAC, and tags every file the way music players expect:
 
 - the **album** is the episode's season, such as a playlist or album the collection holds, or else the collection's title;
 - the **artist** and **album artist** are the creator the collection belongs to, or else its author;

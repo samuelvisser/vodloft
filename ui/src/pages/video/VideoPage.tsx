@@ -22,6 +22,7 @@ import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocke
 import {isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../../components/common/DurationPill'
+import {addLocalMediaProfilePath} from '../../types/local_media_profile'
 
 /** The site a video is on, since one Source can serve many sites. */
 export default function VideoPage() {
@@ -222,7 +223,7 @@ export default function VideoPage() {
                     {!locked && !downloadStateError && profiles !== undefined && !videoProfiles?.length && (
                         <p>
                             No Video Local Media Profiles yet.{' '}
-                            <Link to="/add-local-media-profile?type=video">Add one</Link> to download this video.
+                            <Link to={addLocalMediaProfilePath({siteKey: video.site?.key})}>Add one</Link> to download this video.
                         </p>
                     )}
                     {!locked && !downloadStateError && !!videoProfiles?.length && (

@@ -30,8 +30,9 @@ import {
 import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {LocalMediaProfileType, LocalMediaProfileTypeReg, localMediaProfileEndpoint} from '../../types/local_media_profile'
-import {MUSIC_OUTPUT_TEMPLATE} from '../../components/LocalMediaProfile/outputTemplatePresets'
+import {MUSIC_OUTPUT_TEMPLATE, outputTemplatePreset} from '../../components/LocalMediaProfile/outputTemplatePresets'
 import {apiUrl} from '../../lib/api'
+import {parseOutputTemplate, renderCompactOutputTemplate} from '../../components/LocalMediaProfile/outputTemplateFormatting'
 
 
 /** The settings of an existing profile as a new profile, under a name the user still has to accept. */
@@ -150,6 +151,32 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
     })
 
     const form = ({collection: formCollection, music: formMusic, video: formVideo}[profileType]) as UseFormReturn<any>
+
+    // Opened to download a collection, video or movie: a new profile starts for every Site and, for a podcast or
+    // series, for both, which fits. A draft the user narrowed is widened just enough to fit.
+    const fitsCollectionType = searchParams.get('for')
+    const fitsSite = searchParams.get('site')
+    useEffect(() => {
+        if (!explicitType) return
+        const fitting = form as UseFormReturn<any>
+        const scope = fitting.getValues('collectionScope')
+        if (explicitType === 'collection' && fitsCollectionType === 'music' && scope !== 'music') {
+            // For a Music collection's music videos, as the Music videos preset keeps them.
+            const preset = outputTemplatePreset('music_videos')!
+            fitting.setValue('collectionScope', 'music', {shouldDirty: true})
+            if (fitting.getValues('preferredFormat') === 'format_audio_only') fitting.setValue('preferredFormat', 'format_1080p', {shouldDirty: true})
+            fitting.setValue('outputTemplate', renderCompactOutputTemplate(parseOutputTemplate(preset.template('/downloads/music-videos'), 'editor')), {shouldDirty: true})
+            for (const [name, value] of Object.entries(preset.choices)) fitting.setValue(name, value, {shouldDirty: true})
+        } else if (explicitType === 'collection' && fitsCollectionType && scope && scope !== 'both' && scope !== fitsCollectionType) {
+            fitting.setValue('collectionScope', 'both', {shouldDirty: true})
+        }
+        const siteKeys = fitting.getValues('siteKeys')
+        if (fitsSite && Array.isArray(siteKeys) && !siteKeys.includes(fitsSite)) {
+            fitting.setValue('siteKeys', [...siteKeys, fitsSite], {shouldDirty: true})
+        }
+        // Only once, as the page opens: after that the choice is the user's.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 
     useEffect(() => {

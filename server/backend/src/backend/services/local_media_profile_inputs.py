@@ -280,7 +280,8 @@ class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
                 raise FieldValueError("preferred_format", "A Music profile downloads audio only")
         else:
             if self.collection_scope == CollectionLocalMediaProfileScope.MUSIC:
-                raise FieldValueError("collection_scope", "Music collections take Music profiles")
+                # A Collection profile keeps a Music collection's music videos as video, so it calls them that.
+                self.episode_nfo = EpisodeNfo.MUSIC_VIDEO
             if self.audio_format == AudioFormat.FLAC:
                 raise FieldValueError("audio_format", "FLAC is for Music profiles")
         return self

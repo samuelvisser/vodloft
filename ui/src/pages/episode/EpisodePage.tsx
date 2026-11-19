@@ -26,7 +26,8 @@ import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../../components/common/DurationPill'
 import EpisodeTypePill from '../../components/Episode/EpisodeTypePill'
-import {wordsFor} from '../../lib/collectionWords'
+import {fileWordsFor, wordsFor} from '../../lib/collectionWords'
+import {addLocalMediaProfilePath} from '../../types/local_media_profile'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -93,8 +94,6 @@ export default function EpisodePage() {
 
     const {data: collection, isPending: isCollectionPending, isFetching: isCollectionFetching, error} = useCollection(collectionId)
     const words = wordsFor(collection)
-    // A Music collection is downloaded by Music Local Media Profiles, as tracks.
-    const fileWords = wordsFor(collection, 'audio')
     const {data: skipped} = useSkippedByFilter(collection?.id)
     const {
         data: episode,
@@ -102,6 +101,10 @@ export default function EpisodePage() {
         isFetching: isEpisodeFetching,
     } = useEpisode(episodeId)
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
+    // A Music collection's files are tracks while only Music Local Media Profiles, which keep sound, are offered for it.
+    const fileWords = fileWordsFor(collection, profiles
+        ?.filter((profile) => isCollectionLocalMediaProfileAvailableFor(profile, collection?.type))
+        .map((profile) => profile.type))
     const {data: waitingForCountdown} = useWaitingForCountdown(
         collection?.id,
         String(episode?.publishStatus) === 'published_preliminary',
@@ -374,8 +377,9 @@ export default function EpisodePage() {
                         )}
                         {!locked && !downloadStateError && profiles !== undefined && !collectionProfiles?.length && (
                             <p>
-                                No Local Media Profiles configured yet.{' '}
-                                <Link to="/add-local-media-profile">Add one</Link> to download this {words.episode.one}.
+                                {profiles.length ? `No Local Media Profile fits ${collection.title} yet.` : 'No Local Media Profiles configured yet.'}{' '}
+                                <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, audio: collection.site?.audio})}>Add one</Link>
+                                {' '}to download this {words.episode.one}.
                             </p>
                         )}
                         {!locked && !downloadStateError && !!collectionProfiles?.length && (

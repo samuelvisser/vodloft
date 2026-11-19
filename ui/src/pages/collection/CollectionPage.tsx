@@ -35,7 +35,8 @@ import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
 import LockedEpisodesFilter from '../../components/Episode/LockedEpisodesFilter'
 import {apiFetch, apiUrl, publicAddress} from '../../lib/api'
-import {wordsFor} from '../../lib/collectionWords'
+import {fileWordsFor, wordsFor} from '../../lib/collectionWords'
+import {isCollectionLocalMediaProfileAvailableFor} from '../../types/local_media_profile'
 
 const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
 
@@ -129,8 +130,6 @@ export default function CollectionPage() {
 
   const { data: collection, isLoading, error } = useCollection(id)
   const words = wordsFor(collection)
-  // A Music collection's files are tracks: only Music Local Media Profiles, which keep sound, download it.
-  const fileWords = wordsFor(collection, 'audio')
   // Count each visit once, so the Library can list the most used Collections first.
   const countedVisit = useRef<string | null>(null)
   useEffect(() => {
@@ -306,6 +305,10 @@ export default function CollectionPage() {
   } = useCollectionDownloadedLocalMediaProfiles(id)
   const { data: downloadProfiles } = useCollectionDownloadProfilesView(id)
   const { data: localMediaProfiles } = useLocalMediaProfiles()
+  // A Music collection's files are tracks while only Music Local Media Profiles, which keep sound, are offered for it.
+  const fileWords = fileWordsFor(collection, localMediaProfiles
+    ?.filter((profile) => isCollectionLocalMediaProfileAvailableFor(profile, collection?.type))
+    .map((profile) => profile.type))
   const { data: streamProfiles } = useCollectionStreamProfilesView(id)
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
 

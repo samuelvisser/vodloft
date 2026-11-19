@@ -59,6 +59,13 @@ interface WordedCollection {
     site?: { audio?: boolean } | null
 }
 
+/** The words for the files of a collection, kept by the Local Media Profiles of these types that it is offered:
+ *  tracks when only Music profiles, which keep sound, are, and otherwise what the collection holds. */
+export function fileWordsFor(collection: WordedCollection | null | undefined, profileTypes: readonly string[] | undefined): CollectionWords {
+    const audio = !!profileTypes?.length && profileTypes.every((type) => type === 'music')
+    return wordsFor(collection, audio ? 'audio' : undefined)
+}
+
 /** The words for a collection, as its Site has it: the episodes of a Music collection on a Site with sound only,
  *  such as Bandcamp, are tracks. Pass ``audio`` where the files are meant, which a Music Local Media Profile
  *  keeps as sound. */

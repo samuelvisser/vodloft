@@ -39,8 +39,9 @@ def test_a_music_profile_keeps_audio_for_music_collections_only():
     # FLAC and the Music collections are for Music profiles.
     with pytest.raises(ValidationError, match="FLAC is for Music profiles"):
         CollectionLocalMediaProfileAPICreate(preferred_format="format_audio_only", audio_format="flac", **MUSIC)
-    with pytest.raises(ValidationError, match="Music collections take Music profiles"):
-        CollectionLocalMediaProfileAPICreate(preferred_format="format_audio_only", collection_scope="music", **MUSIC)
+    # A Collection profile keeps a Music collection's music videos, as music videos.
+    videos = CollectionLocalMediaProfileAPICreate(preferred_format="format_1080p", collection_scope="music", **MUSIC)
+    assert (videos.collection_scope, videos.episode_nfo) == (CollectionLocalMediaProfileScope.MUSIC, "music_video")
 
     session = _new_session()
     profile = create_collection_local_media_profile(session, music)
