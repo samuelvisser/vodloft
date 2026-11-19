@@ -20,7 +20,6 @@ _WORKER_EXPORTS = {
     "reconcile_collection_assets": ".reconcile_collection_assets",
     "check_pending_episodes": ".monitor_pending_episode",
     "fetch_new_episodes": ".fetch_new_episodes",
-    "monitor_no_usable_media_episode": ".monitor_no_usable_media_episode",
     "refresh_episode_metadata": ".refresh_metadata",
     "refresh_metadata": ".refresh_metadata",
     "scan_existing_files": ".scan_existing_files",

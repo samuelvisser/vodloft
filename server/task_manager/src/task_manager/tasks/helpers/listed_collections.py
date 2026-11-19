@@ -59,6 +59,7 @@ from backend.services.link_seasons import (
 )
 from backend.services.metadata_refresh import new_item_metadata_is_final
 from backend.services.pending_episodes import site_follows_pending
+from backend.services.removed_downloads import back_at_source, left_source
 from backend.types.episode_types import PENDING_EPISODE_PUBLISH_STATUSES, EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.types.collection_types import EpisodeIdentifier
@@ -401,12 +402,13 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
 
 def _apply_refresh(s: Session, collection_id: int, refresh, slugs: frozenset[str]) -> RefreshCounts:
     updated = removed = returned = opened = 0
-    for episode in s.scalars(select(Episode).where(Episode.collection_id == collection_id, Episode.video_slug.in_(slugs))):
+    for episode in list(s.scalars(select(Episode).where(Episode.collection_id == collection_id, Episode.video_slug.in_(slugs)))):
         slug = episode.video_slug
         if slug in refresh.removed:
             if not episode.removed_from_source:
-                episode.removed_from_source = True
                 removed += 1
+            # One with files stays, marked removed; one without goes.
+            left_source(s, episode)
             continue
         details = refresh.details.get(slug)
         access = refresh.refused.get(slug)
@@ -414,8 +416,7 @@ def _apply_refresh(s: Session, collection_id: int, refresh, slugs: frozenset[str
             opened += open_up(s, episode)
         if details is None and access is None:
             continue
-        if episode.removed_from_source:
-            episode.removed_from_source = False
+        if back_at_source(episode):
             returned += 1
         if access is not None and episode.access_refused_at is None:
             lock_refused(episode, access)

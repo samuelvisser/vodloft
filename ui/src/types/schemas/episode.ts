@@ -45,7 +45,6 @@ export const EpisodeReadSchema = z.looseObject({
     drmProtected: z.boolean(),
     ...LockableFields,
     removedFromSource: z.boolean(),
-    earlyDeleteAvailable: z.boolean().optional().default(false),
     downloadDelayPassed: z.boolean(),
     downloadDelayReadyAt: ApiDateTimeSchema.nullable(),
     description: z.string().nullable(),

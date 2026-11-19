@@ -70,8 +70,6 @@ SettingFieldPath = Literal[
     "newEpisodeSchedule.quickCheckCron",
     "newEpisodeSchedule.fullRescanCronEnabled",
     "newEpisodeSchedule.fullRescanCron",
-    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
-    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
     "newEpisodeSchedule.upcomingAndLive",
     "newEpisodeSchedule.pendingUpcomingMinutes",
@@ -86,7 +84,6 @@ SettingFieldPath = Literal[
     "downloadProfileDefaults.autoSubtitles",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
-    "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
     "downloadSettings.verifyDownloadsCronEnabled",
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
@@ -178,8 +175,6 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "newEpisodeSchedule.quickCheckCron",
     "newEpisodeSchedule.fullRescanCronEnabled",
     "newEpisodeSchedule.fullRescanCron",
-    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
-    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
     "newEpisodeSchedule.upcomingAndLive",
     "newEpisodeSchedule.pendingUpcomingMinutes",
@@ -194,7 +189,6 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadProfileDefaults.autoSubtitles",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
-    "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
     "downloadSettings.verifyDownloadsCronEnabled",
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
@@ -357,8 +351,6 @@ class TrackNewEpisodeScheduleValue(_SettingsValueModel):
     quick_check_cron: str = Field(min_length=1)
     full_rescan_cron_enabled: bool
     full_rescan_cron: str = Field(min_length=1)
-    monitor_no_usable_media_episode_cron_enabled: bool
-    monitor_no_usable_media_episode_cron: str = Field(min_length=1)
     metadata_refresh_intervals: str = Field(min_length=1)
     upcoming_and_live: bool
     pending_upcoming_minutes: int = Field(ge=PENDING_MINIMUM_MINUTES, le=24 * 60)
@@ -373,7 +365,6 @@ class TrackNewEpisodeScheduleValue(_SettingsValueModel):
 class EpisodeStatusTimingValue(_SettingsValueModel):
     published_final_after_minutes: int = Field(ge=0)
     dw_processing_max_minutes: int = Field(ge=0)
-    no_usable_media_delete_after_minutes: int = Field(ge=0)
 
 
 class DownloadSettingsValue(_SettingsValueModel):
@@ -699,7 +690,6 @@ class LibraryDefaultsAPIRead(ResponseBase):
     download_collection_assets: bool
     filename_restriction_mode: FilenameRestrictionMode
     """The filename mode a new Local Media Profile starts with."""
-    no_usable_media_delete_after_minutes: int
 
 
 class SpeedLimitStatusRead(ResponseBase):

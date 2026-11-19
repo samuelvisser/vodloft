@@ -10,7 +10,6 @@ For most installations, the defaults are a good balance between keeping content 
 | --- | --- |
 | New episodes on managed collections | Every 30 minutes |
 | Known episodes that are still publishing | Every 2 minutes |
-| Episodes temporarily without usable media | Every 20 minutes |
 | Recent episode metadata | 15m, 30m, 1h, 3h, 6h, 24h, 3d after publication |
 | Download verification | Every 2 hours |
 | Tracked files on disk | Every 10 minutes |
@@ -54,16 +53,14 @@ With a YouTube API key, VODLoft refreshes up to 50 YouTube videos for a single u
 
 A refresh only changes what VODLoft shows and what its RSS feeds serve. Files you already downloaded keep their names and the information they were saved with.
 
-## Episodes without usable media
+## Episodes their site no longer has
 
-Sometimes The Daily Wire lists an episode but does not (yet) provide usable media for it. This can be temporary, so VODLoft does not immediately remove the episode.
+When a site takes an episode down, or has nothing usable for it, such as a Daily Wire episode that was removed or a stream that was cancelled, VODLoft treats it the same way on every site:
 
-By default, VODLoft rechecks these episodes every 20 minutes. If usable media returns, the episode becomes available to downloads and RSS profiles again automatically.
+- **Without downloaded files**, the episode is removed from VODLoft.
+- **With downloaded files**, it stays and gets a **Removed** tag. The Home page asks whether to keep its files, and they are kept until you answer. If the site lists the episode again, the tag goes away.
 
-If an episode remains unavailable and The Daily Wire continues to confirm that it is no longer available, VODLoft can eventually remove the stale entry. The default waiting period is **4 hours**.
-VODLoft only removes episodes after those 4 hours if The Daily Wire does not have them listed on their site either (in other words, if it 404's).
-
-On an affected episode page, **Early Delete** lets you request that cleanup immediately instead of waiting for the normal delay. VODLoft still checks the current Daily Wire state before removing it.
+An episode that just went live gets a little longer. Right after a stream, a site may not show the recording for a while, so an episode that was live and is not published yet stays for **4 hours** before VODLoft removes it. If the recording shows up in that time, VODLoft downloads it as usual.
 
 ## Download queue
 

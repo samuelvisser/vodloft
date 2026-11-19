@@ -43,7 +43,6 @@ DAILYWIRE_FEATURE_MODULES = {
     "task_manager/src/task_manager/tasks/helpers/collections.py",
     "task_manager/src/task_manager/tasks/workers/debug_ep_details/service.py",
     "task_manager/src/task_manager/tasks/workers/fetch_new_episodes/service.py",
-    "task_manager/src/task_manager/tasks/workers/monitor_no_usable_media_episode/service.py",
     "task_manager/src/task_manager/tasks/workers/monitor_pending_episode/_helpers.py",
     "task_manager/src/task_manager/tasks/workers/monitor_pending_episode/service.py",
     "task_manager/src/task_manager/tasks/workers/refresh_episode_metadata/service.py",

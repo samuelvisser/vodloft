@@ -34,7 +34,7 @@ def _restore(session) -> int:
     episodes = list(session.scalars(
         select(Episode).where(
             Episode.source_key != _DAILYWIRE,
-            Episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value,
+            Episode.publish_status == "no_usable_media",
         ).order_by(Episode.id)
     ))
     restored = 0

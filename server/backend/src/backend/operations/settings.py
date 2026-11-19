@@ -59,13 +59,6 @@ class FullRescanCronOperation(_SingleTaskSettingsCronOperation):
     target_resource_id = None
 
 
-class MonitorNoUsableMediaCronOperation(_SingleTaskSettingsCronOperation):
-    kind = "system.cron.monitor_no_usable_media"
-    title_text = "Monitor episodes without usable media"
-    task = "monitor_no_usable_media_episode"
-    target_resource_type = "collection"
-
-
 class VerifyDownloadsCronOperation(_SingleTaskSettingsCronOperation):
     kind = "system.cron.verify_downloads"
     title_text = "Verify downloads"

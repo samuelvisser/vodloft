@@ -39,7 +39,6 @@ class _EpisodeAPIReadSource:
 
 
 _METADATA_REFRESH_TASK_KEY = "refresh_episode_metadata"
-_EARLY_DELETE_TASK_KEY = "monitor_no_usable_media_episode"
 
 
 def _episode_api_read(episode: Episode) -> EpisodeAPIRead:
@@ -400,58 +399,6 @@ def request_episode_metadata_refresh(
     return {
         "queued": True,
         "episode_id": episode.id,
-        "operation_id": operation.id,
-    }
-
-
-def request_episode_early_delete(
-        s: Session,
-        episode_slug: str,
-) -> dict[str, bool | str]:
-    """Queue an immediate no-usable-media verification for a confirmed missing episode."""
-    episode = (
-        s.query(Episode)
-        .filter_by(slug=episode_slug)
-        .one_or_none()
-    )
-    if episode is None:
-        raise HTTPException(status_code=404, detail="Episode not found")
-    if not episode.early_delete_available:
-        raise HTTPException(
-            status_code=409,
-            detail="Early Delete is only available after Daily Wire has returned 404 for this episode",
-        )
-
-    collection = episode.collection
-    target = OperationTargetSpec(
-        task_key=_EARLY_DELETE_TASK_KEY,
-        resource_type="collection",
-        resource_id=episode.collection_id,
-        task_kwargs={
-            "episode_id": episode.id,
-            "force": True,
-        },
-        slot_key=f"{_EARLY_DELETE_TASK_KEY}:episode:{episode.id}:force",
-    )
-    operation = create_operation(
-        s,
-        kind="episode.early_delete",
-        resource_type="episode",
-        resource_id=episode.id,
-        title=episode.title,
-        targets=[target],
-        context={
-            "episode_slug": episode.slug,
-            "episode_title": episode.title,
-            "collection_id": episode.collection_id,
-            "collection_slug": collection.slug if collection is not None else None,
-            "collection_title": collection.title if collection is not None else None,
-        },
-    )
-    queue_operation_target_dispatch(s, operation.id, target.resolved_slot_key())
-    s.flush()
-    return {
-        "queued": True,
         "operation_id": operation.id,
     }
 

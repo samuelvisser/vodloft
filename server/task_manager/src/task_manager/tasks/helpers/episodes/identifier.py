@@ -197,49 +197,6 @@ def _standalone_identifier(
     )
 
 
-def direct_identifier_for_episode(
-    identifier_type: EpisodeIdentifier,
-    season: "Season",
-    ep: DwEpisodeRecord,
-) -> str | None:
-    """Return the canonical source-backed identifier, or None for standalone content."""
-    if _is_extra_season(season):
-        return None
-
-    if identifier_type is EpisodeIdentifier.DATE_BASED:
-        if is_episode_trailer(ep):
-            return None
-        return f"{EpIdType.EP}.{datetime_to_string(ep.published_date)}"
-
-    ep_num = ep.ep_number
-    if ep_num is None:
-        return None
-
-    segment = ep.ep_segment
-    trailer = is_episode_trailer(ep)
-    if segment == 0:
-        if trailer:
-            return None
-        if identifier_type is EpisodeIdentifier.NUMBERED:
-            return f"{EpIdType.EP}.{ep_num}"
-        if identifier_type is EpisodeIdentifier.SEASONAL:
-            season_number = _normal_season_number(season)
-            return f"{EpIdType.EP}.S{season_number:02d}E{ep_num:02d}"
-
-    if 0 < segment < _COLLECTION_AUX_SEGMENT_START:
-        extra_type = EpisodeExtraType.TRAILER if trailer else EpisodeExtraType.OTHER
-        if identifier_type is EpisodeIdentifier.NUMBERED:
-            return f"{EpIdType.EP_EXTRA}.{extra_type}.{ep_num}.{segment}"
-        if identifier_type is EpisodeIdentifier.SEASONAL:
-            season_number = _normal_season_number(season)
-            return (
-                f"{EpIdType.EP_EXTRA}.{extra_type}."
-                f"S{season_number:02d}E{ep_num:02d}.{segment}"
-            )
-
-    return None
-
-
 def _get_episode_identifier_map_numbered(
     season_eps: List[DwEpisodeRecord],
     current_values: IdentifierMaxValues,
@@ -495,8 +452,8 @@ def reconcile_episode_identifier_from_dailywire(
         and desired_info.type == EpIdType.AUX
     ):
         # A direct Daily Wire source slot is occupied by another record. The
-        # episode was already quarantined into the collection-global AUX namespace, so
-        # keep that stable AUX identity rather than allocating a fresh counter.
+        # episode already has an identifier in the collection-global AUX namespace,
+        # so keep that stable AUX identity rather than allocating a fresh counter.
         return False
 
     if desired == episode.episode_identifier:

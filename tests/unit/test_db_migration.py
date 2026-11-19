@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "63dbd1de00d8"
+HEAD_REVISION = "3564f2e6fe1c"
 
 
 @pytest.fixture
@@ -1381,6 +1381,68 @@ def test_a_channel_knows_its_own_collection_and_installations_get_the_new_sectio
         assert connection.execute(text("SELECT main_collection_id, new_sections FROM channels")).one() == (2, "ask")
         rules = connection.execute(text("SELECT default_key, position FROM notification_rules ORDER BY position")).all()
         assert rules[-1] == ("channel_sections_found", rules[-2].position + 1)
+
+
+def test_episodes_without_usable_media_leave_or_stay_removed_from_their_source(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "63dbd1de00d8")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key, episode_order) VALUES (1, 'c1', 'c1', 'C', "
+            "'https://example.test/c1', 'FREE', 'podcast', 'numbered', 'Host', 'host', 'dailywire', 'newest_first')"
+        ))
+        # 1 has no files, 2 has files and its old identifier is free, 3 has files and 4 took its old identifier.
+        for episode_id, identifier, status in (
+            (1, "not-usable.1", "no_usable_media"), (2, "not-usable.2", "no_usable_media"),
+            (3, "not-usable.3", "no_usable_media"), (4, "ep.6", "published_final"),
+        ):
+            connection.execute(text(
+                "INSERT INTO media_items (id, uuid, type, source_key) VALUES (:id, :uuid, 'episode', 'dailywire')"
+            ), {"id": episode_id, "uuid": f"e{episode_id}"})
+            connection.execute(text(
+                "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, "
+                "slug, publish_status, sharing_url, source_slug) VALUES (:id, 1, 1, :id, :identifier, :slug, :status, "
+                "'https://example.test', :slug)"
+            ), {"id": episode_id, "identifier": identifier, "slug": f"e{episode_id}", "status": status})
+        for episode_id, previous in ((1, "ep.4"), (2, "ep.5"), (3, "ep.6")):
+            for key, value in (("no_usable_media.previous_identifier", previous), ("no_usable_media.reason", "not_found")):
+                connection.execute(text(
+                    "INSERT INTO metadata (parent_table, parent_id, key, value, created_at, updated_at) "
+                    "VALUES ('media_items_episode', :id, :key, :value, '2026-11-18', '2026-11-18')"
+                ), {"id": episode_id, "key": key, "value": value})
+        for key, value in (("ep_id.latest_not_usable_num", "3"), ("ep_id.latest_aux_num", "2")):
+            connection.execute(text(
+                "INSERT INTO metadata (parent_table, parent_id, key, value, created_at, updated_at) "
+                "VALUES ('collections', 1, :key, :value, '2026-11-18', '2026-11-18')"
+            ), {"key": key, "value": value})
+        for download_id, episode_id in ((1, 2), (2, 3)):
+            connection.execute(text(
+                "INSERT INTO media_downloads (id, type, media_item_id, local_media_profile_id, file_path, artifact_status) "
+                "VALUES (:id, 'episode', :media, 1, '/downloads/' || :id, 'missing')"
+            ), {"id": download_id, "media": episode_id})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        episodes = connection.execute(text(
+            "SELECT e.id, e.episode_identifier, e.publish_status, m.removed_from_source "
+            "FROM media_items_episode e JOIN media_items m ON m.id = e.id ORDER BY e.id"
+        )).all()
+        assert [tuple(row) for row in episodes] == [
+            (2, "ep.5", "published_final", 1), (3, "aux.3", "published_final", 1), (4, "ep.6", "published_final", 0),
+        ]
+        assert connection.execute(text("SELECT count(*) FROM media_items WHERE id = 1")).scalar_one() == 0
+        assert dict(connection.execute(text("SELECT key, value FROM metadata WHERE parent_table = 'collections'")).all()) == {
+            "ep_id.latest_aux_num": "3",
+        }
+        assert connection.execute(text(
+            "SELECT count(*) FROM metadata WHERE parent_table = 'media_items_episode'"
+        )).scalar_one() == 0
 
 
 def test_a_webdav_folder_name_becomes_the_profiles_title(migration_database):

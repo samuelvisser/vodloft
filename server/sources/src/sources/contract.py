@@ -223,8 +223,6 @@ class EpisodePublishStatus(StrEnum):
     a Daily Wire episode that still opens with its countdown."""
     PUBLISHED_FINAL = "published_final"
     """Published for good."""
-    NO_USABLE_MEDIA = "no_usable_media"
-    """The Source has nothing usable for it right now; VODLoft keeps checking for a while."""
 
 
 class ReleaseDate(StrEnum):
@@ -259,10 +257,6 @@ DEFAULT_PUBLISH_STATUS_LABELS: tuple[PublishStatusLabel, ...] = (
         "Published, but the source will still replace the media with a final version.",
     ),
     PublishStatusLabel(EpisodePublishStatus.PUBLISHED_FINAL, "Published", "Published for good."),
-    PublishStatusLabel(
-        EpisodePublishStatus.NO_USABLE_MEDIA, "No usable media",
-        "The source has nothing usable for it right now. VODLoft keeps checking for a while.",
-    ),
 )
 
 

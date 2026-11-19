@@ -96,7 +96,6 @@ class _EpisodeAPIBaseOut(SourcedResponse, LockableResponse, _EpisodeIdentifierAP
     scheduled_date: Optional[datetime]
     metadata_refreshed_at: Optional[datetime] = None
     sharing_url: str
-    early_delete_available: bool = False
     download_delay_passed: bool
     download_delay_ready_at: Optional[datetime]
 

@@ -154,7 +154,7 @@ A quick check looks for new videos every 10 minutes or so, adds only what is new
 
 An announced livestream or premiere is added as soon as VODLoft finds it, marked **Upcoming** with the time it starts. VODLoft looks it up again every hour, and every couple of minutes from 15 minutes before it starts. While it is on, it shows as **Live**, and VODLoft checks it every few minutes. Once the video is published, your Download Profiles download it like any other video. VODLoft never records a stream while it is live.
 
-A stream that starts late shows as **Delayed**. In a collection named by date, the episode takes the date it was actually published. A stream that is cancelled, or made private before it airs, gets **No usable media** and is removed after a while, just like a Daily Wire episode that disappears. If it comes back, VODLoft follows it again.
+A stream that starts late shows as **Delayed**. In a collection named by date, the episode takes the date it was actually published. A stream that is cancelled, or made private before it airs, is removed, like any video its site no longer has. A stream that already went live gets 4 hours to show up as a video before it is removed. See [[Automation-and-Background-Tasks#episodes-their-site-no-longer-has]].
 
 This works for every site yt-dlp supports that announces streams, not only YouTube. If you would rather only see videos once they are published, turn off **Upcoming and live videos** for the site under **Settings → Automation → Per-Site scheduling**, or for every site at once with the system setting there.
 

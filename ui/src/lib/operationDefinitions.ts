@@ -1,6 +1,5 @@
 import {partialMatchKey, type QueryClient, type QueryKey} from '@tanstack/react-query'
 
-import {PUBLISH_STATUS_LABELS} from '../types/episode'
 import {type TaskOperationRead} from '../types/schemas/operation'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from './cache'
 import {episodeQueryKeys} from './collectionQueryOptions'
@@ -349,17 +348,6 @@ function invalidateEpisodeCronJob(
   )
 }
 
-function invalidateEpisodeAndDownloadCronJob(
-  operation: TaskOperationRead,
-  invalidations: InvalidationCollector,
-) {
-  invalidateEpisodeCronJob(operation, invalidations)
-  invalidations.push(
-    ['mediaDownloads'],
-    ['mediaDownloadsView'],
-  )
-}
-
 function invalidateDownloadCronJob(
   _operation: TaskOperationRead,
   invalidations: InvalidationCollector,
@@ -392,14 +380,6 @@ function invalidateFullRescanCron(
 ) {
   invalidateEpisodeCronJob(operation, invalidations)
   invalidateTaskLedgerDefinition('rescan_quick_checked_collections', invalidations)
-}
-
-function invalidateNoUsableMediaCron(
-  operation: TaskOperationRead,
-  invalidations: InvalidationCollector,
-) {
-  invalidateEpisodeAndDownloadCronJob(operation, invalidations)
-  invalidateTaskLedgerDefinition('monitor_no_usable_media_episode', invalidations)
 }
 
 function invalidateVerifyDownloadsCron(
@@ -436,12 +416,6 @@ export const frontendOperationDefinitions = {
     resourceType: 'system',
     label: 'Re-scan collections with quick checks',
     invalidate: invalidateFullRescanCron,
-  },
-  'system.cron.monitor_no_usable_media': {
-    kind: 'system.cron.monitor_no_usable_media',
-    resourceType: 'system',
-    label: 'Monitor episodes without usable media',
-    invalidate: invalidateNoUsableMediaCron,
   },
   'system.cron.verify_downloads': {
     kind: 'system.cron.verify_downloads',
@@ -500,32 +474,6 @@ export const frontendOperationDefinitions = {
     success: (operation) => {
       const episodeTitle = contextString(operation, 'episode_title') || operation.title
       return `Metadata refresh completed for ${episodeTitle}`
-    },
-  },
-  'episode.early_delete': {
-    kind: 'episode.early_delete',
-    resourceType: 'episode',
-    label: 'Early delete',
-    invalidate: invalidateEpisode,
-    success: (operation) => {
-      const episodeTitle = contextString(operation, 'episode_title') || operation.title
-      const outcome = resultString(operation, 'outcome')
-      if (outcome === 'recovered' || outcome === 'replaced') {
-        const publishStatus = resultString(operation, 'publish_status')
-        const statusLabel = publishStatus
-          ? (PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus)
-          : undefined
-        return statusLabel
-          ? `Recovered ${episodeTitle} to ${statusLabel} state`
-          : `Recovered ${episodeTitle}`
-      }
-      if (outcome === 'deleted') return `Deleted ${episodeTitle}`
-      if (outcome === 'retained') return `${episodeTitle} remains in No usable media state`
-      if (outcome === 'unverified') return `Could not verify ${episodeTitle}; it was not deleted`
-      if (outcome === 'already_resolved') {
-        return `${episodeTitle} no longer needs No usable media verification`
-      }
-      return `Early delete completed for ${episodeTitle}`
     },
   },
   'collection.rename_files': {

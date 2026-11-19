@@ -77,10 +77,8 @@ def test_upsert_existing_episode_stores_raw_source_number_separately():
     session.close()
     engine.dispose()
 
-def test_pending_monitor_marks_unreconciled_404_as_no_usable_media(monkeypatch):
-    from backend.types.episode_types import EpisodePublishStatus
+def test_pending_monitor_marks_unreconciled_404_as_removed_from_its_source(monkeypatch):
     from sources.dailywire.api.dw_api.client import MiddlewareAPIError
-    from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason, episode_no_usable_media_reason, episode_no_usable_media_since
     from task_manager.tasks.workers.monitor_pending_episode import service
     engine, session, collection, episode = _monitor_fixture()
 
@@ -91,14 +89,13 @@ def test_pending_monitor_marks_unreconciled_404_as_no_usable_media(monkeypatch):
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     monkeypatch.setattr(service, "_try_reconcile_slug_after_404", lambda *args, **kwargs: False)
     result = service.run_monitor_pending_episode(session, episode_id=episode.id)
-    assert result is EpisodePublishStatus.NO_USABLE_MEDIA
+    assert result is None
     session.expire_all()
     stored = session.get(type(episode), episode.id)
-    assert stored.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value
-    assert stored.episode_identifier == "not-usable.1"
-    assert stored.get_meta("no_usable_media.previous_identifier") == "ep.101"
-    assert episode_no_usable_media_reason(stored) is NoUsableMediaReason.NOT_FOUND
-    assert episode_no_usable_media_since(stored) is not None
+    # It was live, so it waits a few hours before it goes, with its status and identifier as they were.
+    assert stored.publish_status == "live"
+    assert stored.removed_from_source is True
+    assert stored.episode_identifier == "ep.101"
     session.close()
     engine.dispose()
 
