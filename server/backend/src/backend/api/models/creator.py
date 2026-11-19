@@ -56,6 +56,8 @@ class SectionPlanAPIRead(ResponseBase):
 class CreatorPresetAPIRead(ResponseBase):
     key: CreatorPreset
     plan: list[SectionPlanAPIRead]
+    music_plan: list[SectionPlanAPIRead]
+    """The plan when the creator is added as a music artist."""
 
 
 class CreatorLookupAPIRead(ResponseBase):

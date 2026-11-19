@@ -230,7 +230,7 @@ A musician on **Bandcamp** or **SoundCloud** can be added the same way: paste a 
 
 Bandcamp only has artists, and The Daily Wire only hosts, so VODLoft knows. Elsewhere the Add creator page asks **What is …?**: the creator as their site calls them, such as a YouTube channel, or a **Music artist**. VODLoft picks one for you: a YouTube channel with a **Releases** tab, or a SoundCloud account with albums, starts as a music artist, and the page says why. Pick the other one if it guessed wrong.
 
-An artist's collections are **Music** collections. **One discography** puts every album in one collection, with each album as a season named after it and the other tracks under **Singles**; **A collection per album** gives each album its own. Download them with a profile for Music tracks (see [[Local-Media-Profiles#music-tracks-and-music-videos]]), which tags every track with its album, artist and track number, such as 3/10.
+An artist's collections are **Music** collections. **One discography** puts every album in one collection, with each album as a season named after it and the other tracks under **Singles**; **A collection per album** gives each album its own. For an artist on YouTube both leave the channel's Videos, Live and Shorts out: the artist's collection holds only what their playlists give it, each playlist as an album, and a playlist the artist adds later becomes a new album. Download them with a profile for Music tracks (see [[Local-Media-Profiles#music-tracks-and-music-videos]]), which tags every track with its album, artist and track number, such as 3/10.
 
 Looking up an artist reads each album once, so an artist with many albums takes a minute; the page shows how far it is. YouTube's Releases tab cannot be read yet.
 
