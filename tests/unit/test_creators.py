@@ -889,3 +889,22 @@ def test_a_renamed_creator_keeps_its_name_and_gives_it_to_its_collections_as_aut
     assert "change it on their Edit page" in refused.json()["detail"]
     assert client.patch("/api/collections/UCworkshop", json={**body, "authorName": "Northwind"}).status_code == 200
 
+
+
+def test_new_sections_only_become_seasons_where_a_creators_site_can_make_lists_seasons(client, tube, monkeypatch):
+    from dataclasses import replace
+
+    from sources import CreatorSectionNames
+
+    monkeypatch.setattr(type(tube), "sites", (replace(
+        tube.sites[0], link_seasons=False, creator_sections=CreatorSectionNames("a show", "shows"),
+    ),))
+    plan = [{"ref": "videos", "target": "own"}]
+    refused = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newSections": "season"})
+    assert refused.status_code == 422
+    assert "can't be added as seasons" in str(refused.json())
+
+    assert client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newSections": "own"}).status_code == 201
+    refused = client.patch("/api/creators/workshop", json={"newSections": "season"})
+    assert refused.status_code == 422
+    assert "shows can't be added as seasons" in str(refused.json())

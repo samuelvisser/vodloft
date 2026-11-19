@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "a91a97a6c374"
+HEAD_REVISION = "8bf741c29247"
 
 
 @pytest.fixture
@@ -1699,3 +1699,29 @@ def test_music_profiles_become_collection_profiles_and_video_profiles_say_what_t
         assert connection.execute(text(
             "SELECT p.slug, v.video_scope FROM local_media_profiles p JOIN local_media_profiles_video v ON v.id = p.id ORDER BY p.id"
         )).all() == [("vodloft-movies", "movies"), ("vodloft-videos", "both"), ("own", "both")]
+
+
+def test_a_creator_on_sites_without_link_seasons_adds_new_sections_as_collections(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "a91a97a6c374")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        # A Daily Wire host, a YouTube creator, a creator with both, and a host who already asked.
+        for creator_id, new_sections in ((1, "season"), (2, "season"), (3, "season"), (4, "ask")):
+            connection.execute(text(
+                "INSERT INTO creators (id, uuid, slug, title, new_sections) VALUES (:id, :id, :id, :id, :new)"
+            ), {"id": creator_id, "new": new_sections})
+        for account_id, creator_id, site_key in ((1, 1, "dailywire"), (2, 2, "youtube"), (3, 3, "dailywire"), (4, 3, "youtube"), (5, 4, "dailywire")):
+            connection.execute(text(
+                "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref) VALUES (:id, :creator, 's', :site, :id)"
+            ), {"id": account_id, "creator": creator_id, "site": site_key})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id, new_sections FROM creators ORDER BY id")).all() == [
+            (1, "own"), (2, "season"), (3, "season"), (4, "ask"),
+        ]
