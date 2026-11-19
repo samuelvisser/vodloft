@@ -19,6 +19,7 @@ import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import CreatorHeader from './CreatorHeader'
+import LookupSteps from './LookupSteps'
 import './CreatorPages.css'
 
 /** The starting points, in the words of what this creator has: playlists on YouTube, shows on The Daily Wire. */
@@ -68,17 +69,7 @@ function sectionFacts(section: CreatorSectionRead): string {
 function AddCreatorSkeleton({steps, label}: {steps: string[], label: string}) {
     return (
         <div className="creator-skeleton" aria-busy="true">
-            <ol className="creator-lookup-steps" aria-live="polite">
-                {(steps.length ? steps : [`Looking the ${label} up`]).map((step, index, all) => {
-                    const current = index === all.length - 1
-                    return (
-                        <li key={step} className={current ? 'is-current' : 'is-done'}>
-                            <FontAwesomeIcon icon={current ? faIcon('fass', 'spinner') : faIcon('fass', 'check')} spin={current} fixedWidth/>
-                            <span>{step}{current ? '…' : ''}</span>
-                        </li>
-                    )
-                })}
-            </ol>
+            <LookupSteps steps={steps} first={`Looking the ${label} up`}/>
             <div className="creator-header" aria-hidden="true">
                 <div className="creator-banner skeleton-block"/>
                 <div className="creator-identity">

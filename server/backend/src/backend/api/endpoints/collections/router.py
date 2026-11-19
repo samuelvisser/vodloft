@@ -10,7 +10,7 @@ from backend.api.endpoints.creators.service import (
     leave_collection_creator, look_up_collection_creator,
 )
 from backend.api.models.creator import (
-    CollectionCreatorJoinAPIIn, CollectionCreatorLeaveAPIRead, CollectionCreatorMatchAPIRead,
+    CollectionCreatorJoinAPIIn, CollectionCreatorLeaveAPIRead,
 )
 from .service import (
     get_collections_list,
@@ -53,6 +53,7 @@ from ...models.collection import (
     CollectionRedownloadEpisodesAPIRequest,
 )
 from ...models.source import EpisodeTagAPIRead
+from backend.api.steps import STEPS_RESPONSE, stream_steps
 from backend.app import db_session
 from backend.security.access import Access, Area, Level
 from backend.security.deps import may_delete_files, requires, signed_in
@@ -330,15 +331,25 @@ def _creator_behind(collection_slug: str):
 
 
 @router.get(
-    "/{collection_slug}/creator/match",
-    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
-    response_model=CollectionCreatorMatchAPIRead,
+    "/{collection_slug}/creator/match", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], responses=STEPS_RESPONSE,
 )
 def collection_creator_match_get(collection_slug: str):
-    """Find the creator behind the collection's link, and which of its sections the collection is."""
-    source_key, details = _creator_behind(collection_slug)
+    """Find the creator behind the collection's link, and which of its sections the collection is.
+
+    Asking the Site takes a while, so the answer is a line of JSON per step, ``{"step": "..."}``, then
+    ``{"match": CollectionCreatorMatchAPIRead}`` or ``{"error": "..."}``.
+    """
     with db_session() as s:
-        return _collection_found(lambda: collection_creator_match(s, collection_slug, source_key, details))
+        link = _collection_found(lambda: collection_link(s, collection_slug))
+
+    def match(send) -> dict:
+        details = look_up_collection_creator(link, lambda step: send(step=step))
+        send(step="Checking what is in your library already")
+        with db_session() as s:
+            found = collection_creator_match(s, collection_slug, link.source_key, details)
+        return {"match": found.model_dump(mode="json", by_alias=True)}
+
+    return stream_steps(match, "Could not look up the creator")
 
 
 @router.post(

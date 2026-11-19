@@ -367,19 +367,23 @@ def collection_link(s: Session, collection_slug: str) -> CollectionLink:
     return CollectionLink(collection.source_key, collection.title, collection.sharing_url)
 
 
-def look_up_collection_creator(link: CollectionLink) -> CreatorDetails:
-    """The creator behind the collection's link, asked of its Source. Slow: call it outside a transaction."""
+def look_up_collection_creator(
+    link: CollectionLink, progress: Callable[[str], None] = lambda step: None,
+) -> CreatorDetails:
+    """The creator behind the collection's link, asked of its Source, telling ``progress`` what it is doing. Slow: call
+    it outside a transaction."""
     source = get_source(link.source_key)
     if not source.has(Feature.CREATORS):
         raise ServiceError(f"{source.name} has no creators")
     site = source.site_for(link.url)
     label = site.creator_label if site is not None else "creator"
+    progress(f"Finding the {label} behind the link")
     with asking_source(f"Could not look up the {label}"):
         ref = source.creator_of(link.url)
     if ref is None:
         raise ServiceError(f"VODLoft found no {label} behind the link of {link.title}")
     with asking_source(f"Could not look up the {label}"):
-        return source.creator_details(ref)
+        return source.creator_details(ref, progress)
 
 
 @dataclass

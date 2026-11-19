@@ -79,6 +79,12 @@ def _lookup(client):
     return [line["step"] for line in lines[:-1]], lines[-1]["creator"]
 
 
+def _match(client, slug):
+    """The creator the collection's link is of, after the steps of looking it up, and the steps."""
+    lines = [json.loads(line) for line in client.get(f"/api/collections/{slug}/creator/match").text.splitlines()]
+    return lines[-1]["match"], [line["step"] for line in lines[:-1]]
+
+
 def _plan(body, preset):
     plan = next(item["plan"] for item in body["presets"] if item["key"] == preset)
     return {item["ref"]: item["target"] for item in plan}
@@ -425,7 +431,8 @@ def test_adding_a_collection_to_a_creator_adds_the_creator_and_matches_its_link(
 
     _plain_collection(session, "tools", SECTIONS[4].url)
 
-    match = client.get("/api/collections/tools/creator/match").json()
+    match, steps = _match(client, "tools")
+    assert steps == ["Finding the creator behind the link", "Reading the creator", "Checking what is in your library already"]
     assert (match["title"], match["creatorSlug"]) == ("Northwind Workshop", None)
     assert (match["sectionTitle"], match["keptBy"]) == ("Tool Reviews", None)
 
@@ -452,7 +459,7 @@ def test_a_collection_of_a_section_another_collection_keeps_cannot_join(client, 
 
     assert client.post("/api/collections/tools/creator").status_code == 200
     # The creator's own collection keeps all its uploads already.
-    match = client.get("/api/collections/my-videos/creator/match").json()
+    match, _steps = _match(client, "my-videos")
     assert match["creatorSlug"] == "workshop"
     assert (match["keptBy"], match["sectionTitle"]) == ("Northwind Workshop", None)
     refused = client.post("/api/collections/my-videos/creator")
@@ -534,7 +541,7 @@ def test_a_playlist_that_is_a_season_of_the_creators_collection_moves_to_a_colle
     ]})
     _plain_collection(session, "cabin", SECTIONS[3].url)
 
-    match = client.get("/api/collections/cabin/creator/match").json()
+    match, _steps = _match(client, "cabin")
     assert (match["sectionTitle"], match["keptBy"]) == ("Building the Cabin", None)
     assert match["overlaps"] == [
         {"ref": "PLcabin", "title": "Building the Cabin", "keptBy": "Northwind Workshop", "canMoveHere": True},

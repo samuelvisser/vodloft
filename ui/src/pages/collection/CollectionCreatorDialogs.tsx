@@ -7,6 +7,7 @@ import {addCollectionToCreator, setCollectionCreator, useCreators, useCollection
 import type {CollectionCreatorMatch} from '../../types/schemas/creator'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import LookupSteps from '../creator/LookupSteps'
 import '../creator/CreatorPages.css'
 
 type DialogProps = {
@@ -119,7 +120,27 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                     <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                 </ul>
             )}
-            {!chosen && match.isLoading && <p>Looking up the {creatorLabel} behind this collection's link…</p>}
+            {!chosen && match.isLoading && (
+                <div className="creator-skeleton creator-join" aria-busy="true">
+                    <LookupSteps steps={match.steps} first={`Finding the ${creatorLabel} behind the link`}/>
+                    <div className="creator-join-who" aria-hidden="true">
+                        <span className="creator-avatar creator-avatar--small skeleton-block"/>
+                        <div className="creator-skeleton-copy">
+                            <span className="skeleton-block creator-skeleton-line creator-skeleton-line--kind"/>
+                            <span className="skeleton-block creator-skeleton-line creator-skeleton-line--title-small"/>
+                            <span className="skeleton-block creator-skeleton-line creator-skeleton-line--short"/>
+                        </div>
+                    </div>
+                    <div className="creator-section-list" aria-hidden="true">
+                        <div className="creator-section-row">
+                            <div className="creator-section-copy creator-skeleton-copy">
+                                <span className="skeleton-block creator-skeleton-line creator-skeleton-line--title-small"/>
+                                <span className="skeleton-block creator-skeleton-line"/>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
             {!chosen && match.error && <p className="text-danger">{match.error.message}</p>}
             {!chosen && creator && (
                 <div className="creator-join">

@@ -10,7 +10,7 @@ import {
     useQuery,
     useQueryClient,
 } from '@tanstack/react-query'
-import {useEffect, useMemo, useRef} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveCollectionsToStorage} from './cache'
 import {
     type LazyCollectionPage,
@@ -764,6 +764,28 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
 
 /** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
 /** Look a creator up at its Site. It can take a minute: ``onStep`` hears what the lookup is doing as it goes. */
+/** Reads an answer sent a line of JSON per step: tells ``onStep`` each step, and returns the line after them. */
+async function readSteps(
+    response: Response, onStep: (step: string, line: Record<string, unknown>) => void,
+): Promise<Record<string, unknown>> {
+    if (!response.ok || !response.body) throw await responseError(response)
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+    let buffered = ''
+    for (;;) {
+        const {value, done} = await reader.read()
+        buffered += value ?? ''
+        const lines = buffered.split('\n')
+        buffered = done ? '' : lines.pop() ?? ''
+        for (const line of lines.filter((item) => item.trim())) {
+            const message = JSON.parse(line) as Record<string, unknown>
+            if (typeof message.step === 'string') onStep(message.step, message)
+            else if (typeof message.error === 'string') throw new ApiError(message.error, 502)
+            else return message
+        }
+        if (done) throw new ApiError('The lookup stopped before it was done', 502)
+    }
+}
+
 export async function lookUpCreator(
     body: {sourceKey: string, url?: string | null, ref?: string | null},
     onStep: (step: string, creatorLabel?: string) => void,
@@ -776,23 +798,8 @@ export async function lookUpCreator(
         body: JSON.stringify(body),
         signal,
     })
-    if (!response.ok || !response.body) throw await responseError(response)
-    // One line of JSON per step, and then the creator or what went wrong.
-    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
-    let buffered = ''
-    for (;;) {
-        const {value, done} = await reader.read()
-        buffered += value ?? ''
-        const lines = buffered.split('\n')
-        buffered = done ? '' : lines.pop() ?? ''
-        for (const line of lines.filter((item) => item.trim())) {
-            const message = JSON.parse(line) as {step?: string, creatorLabel?: string, creator?: unknown, error?: string}
-            if (message.step) onStep(message.step, message.creatorLabel)
-            else if (message.error) throw new ApiError(message.error, 502)
-            else return CreatorLookupReadSchema.parse(message.creator)
-        }
-        if (done) throw new ApiError('The creator lookup stopped before it was done', 502)
-    }
+    const result = await readSteps(response, (step, line) => onStep(step, line.creatorLabel as string | undefined))
+    return CreatorLookupReadSchema.parse(result.creator)
 }
 
 export function useCreators() {
@@ -870,18 +877,22 @@ function collectionCreatorPath(slug: string, rest = ''): string {
 }
 
 /** Find the creator behind a collection's links, and which of its sections each link becomes. Slow: asks the site. */
+/** The creator behind a collection's link, with the steps of looking it up so far. */
 export function useCollectionCreatorMatch(slug: string, enabled: boolean) {
-    return useQuery<CollectionCreatorMatch, Error>({
+    const [steps, setSteps] = useState<string[]>([])
+    const query = useQuery<CollectionCreatorMatch, Error>({
         queryKey: ['collection-creator-match', slug] as const,
         enabled,
         retry: false,
         staleTime: 60_000,
-        queryFn: async () => {
-            const response = await fetch(collectionCreatorPath(slug, '/match'), {credentials: 'include'})
-            if (!response.ok) throw await responseError(response)
-            return CollectionCreatorMatchSchema.parse(await response.json())
+        queryFn: async ({signal}) => {
+            setSteps([])
+            const response = await fetch(collectionCreatorPath(slug, '/match'), {credentials: 'include', signal})
+            const result = await readSteps(response, (step) => setSteps((done) => [...done, step]))
+            return CollectionCreatorMatchSchema.parse(result.match)
         },
     })
+    return {...query, steps}
 }
 
 export function useCollectionCreatorLeave(slug: string, enabled: boolean) {

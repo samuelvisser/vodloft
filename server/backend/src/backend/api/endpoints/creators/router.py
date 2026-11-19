@@ -1,39 +1,26 @@
-import json
-import logging
-import queue
-import threading
-from collections.abc import Iterator
-
 from fastapi import APIRouter, HTTPException, status
-from fastapi.responses import StreamingResponse
 
 from backend.api.models.creator import (
     CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorLookupAPIRequest,
     CreatorPageAPIRead, CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd,
 )
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
+from backend.api.steps import STEPS_RESPONSE, stream_steps
 from backend.app import db_session
 from backend.db.core import run_write_transaction
 from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, signed_in
-from backend.services.errors import ServiceError
-from backend.services.source_requests import SourceRequestError, asking_source
-from config.network import NO_INTERNET_CONNECTION_MESSAGE, is_no_internet_error
+from backend.services.source_requests import asking_source
 
 from .service import (
     CreatorNotFoundError, account_link, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, list_creators,
     look_up_creator, lookup_creator_label, move_creator_reassigned, move_creator_section, update_creator,
 )
 
-logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/creators", tags=["Creators"])
 
 
-@router.post(
-    "/lookup", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)],
-    responses={200: {"content": {"application/x-ndjson": {}}}},
-)
+@router.post("/lookup", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], responses=STEPS_RESPONSE)
 def lookup_creator(body: CreatorLookupAPIRequest, access: Access = signed_in()):
     """Look a creator up at its Site: who it is, its sections, and what each way of adding it does with them.
 
@@ -42,39 +29,18 @@ def lookup_creator(body: CreatorLookupAPIRequest, access: Access = signed_in()):
     works, then ``{"creator": CreatorLookupAPIRead}`` or ``{"error": "..."}``.
     """
     access.check_link_at(body.source_key, body.url)
-    lines: queue.Queue[dict] = queue.Queue()
 
-    def send(**line) -> None:
-        lines.put(line)
+    def look_up(send) -> dict:
+        label = lookup_creator_label(body.source_key, body.url)
+        send(step=f"Looking the {label} up", creatorLabel=label)
+        with asking_source(f"Could not look up this {label}"):
+            details = look_up_creator(body.source_key, body.url, body.ref, lambda step: send(step=step))
+        send(step="Checking what is in your library already")
+        with db_session() as s:
+            found = CreatorLookupAPIRead.model_validate(creator_lookup(s, body.source_key, details))
+        return {"creator": found.model_dump(mode="json", by_alias=True)}
 
-    def look_up() -> None:
-        try:
-            label = lookup_creator_label(body.source_key, body.url)
-            send(step=f"Looking the {label} up", creatorLabel=label)
-            with asking_source(f"Could not look up this {label}"):
-                details = look_up_creator(body.source_key, body.url, body.ref, lambda step: send(step=step))
-            send(step="Checking what is in your library already")
-            with db_session() as s:
-                found = CreatorLookupAPIRead.model_validate(creator_lookup(s, body.source_key, details))
-            send(creator=found.model_dump(mode="json", by_alias=True))
-        except Exception as exc:
-            if is_no_internet_error(exc):
-                send(error=NO_INTERNET_CONNECTION_MESSAGE)
-            elif isinstance(exc, (ServiceError, SourceRequestError)):
-                send(error=str(exc))
-            else:
-                logger.exception("Could not look up the creator")
-                send(error="Could not look up this creator")
-
-    def stream() -> Iterator[str]:
-        while True:
-            line = lines.get()
-            yield json.dumps(line) + "\n"
-            if "step" not in line:
-                return
-
-    threading.Thread(target=look_up, name="creator-lookup", daemon=True).start()
-    return StreamingResponse(stream(), media_type="application/x-ndjson")
+    return stream_steps(look_up, "Could not look up this creator")
 
 
 @router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CreatorPageAPIRead, status_code=status.HTTP_201_CREATED)
