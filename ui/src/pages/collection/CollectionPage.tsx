@@ -237,7 +237,8 @@ export default function CollectionPage() {
   // YouTube channel's members-only videos. Episodes the account can watch are never hidden.
   const [storedShowLocked, setShowLocked] = useShowLocked(id)
   const showLocked = storedShowLocked ?? collection?.site?.showsLocked ?? true
-  const creatorLabel = collection?.site?.creatorLabel ?? 'creator'
+  // A Music collection's creator is an artist, as VODLoft calls any creator with Music collections.
+  const creatorLabel = collection?.type === 'music' ? 'artist' : collection?.site?.creatorLabel ?? 'creator'
   const {data: libraryCreators} = useCreators()
   const {
     data: episodePagesData,
