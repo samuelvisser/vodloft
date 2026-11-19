@@ -31,6 +31,7 @@ const KIND_LABEL: Record<ResolvedLinkRead['kind'], string> = {
     movie: 'Movie',
     episode: 'Episode',
     video: 'Video',
+    creator: 'Creator',
 }
 
 export default function AddMediaPage({onboarding = false, onCollection, onMovie, onBrowse, onBack, onSkip, initialUrl}: AddMediaPageProps = {}) {
@@ -165,7 +166,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         && (sources ?? []).some((source) => canUseSource(source.id) && sourceHas(source, SourceFeature.LINK_COLLECTIONS))
 
     // Hand the link to the Quick download page: one video, episode or movie that can be downloaded.
-    const quickDownloadable = !!link && link.kind !== 'collection' && !link.drmProtected && !link.accessLocked
+    const quickDownloadable = !!link && link.kind !== 'collection' && link.kind !== 'creator' && !link.drmProtected && !link.accessLocked
     const quickDownload = () => {
         if (!link) return
         navigate(`/quick-download?url=${encodeURIComponent(link.url)}&source=${encodeURIComponent(link.source.id)}`)
@@ -288,6 +289,18 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                                     </button>
                                 )}
                             </div>
+                        ) : link.kind === 'creator' ? (
+                            creatorChoice ? (
+                                <div className="add-media-preview-actions">
+                                    <button className="btn btn-primary" type="button" onClick={addCreator}
+                                            title="Add their shows and movies, and choose where each goes">
+                                        Add the {link.creatorLabel ?? 'creator'}
+                                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
+                                    </button>
+                                </div>
+                            ) : (
+                                <p role="alert">Add a {link.creatorLabel ?? 'creator'} from Add media once you are done here.</p>
+                            )
                         ) : collectionsUnsupported ? (
                             <p role="alert">
                                 VODLoft cannot add creators or playlists from {link.source.name} yet. Paste the link to one video instead.

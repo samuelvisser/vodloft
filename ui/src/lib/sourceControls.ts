@@ -19,7 +19,7 @@ export function sourceControls(item: SourcedItem) {
 
 export type ResolvedLinkLike = {
     source: {id: string}
-    kind: 'collection' | 'movie' | 'episode' | 'video'
+    kind: 'collection' | 'movie' | 'episode' | 'video' | 'creator'
     slug: string
     url: string
     collectionSlug?: string | null
@@ -39,6 +39,8 @@ export type MediaLinkTarget = {
 /** The collection, movie or video a resolved link should open. An episode opens its collection. */
 export function linkTarget(link: ResolvedLinkLike): MediaLinkTarget | null {
     const base = {sourceKey: link.source.id, title: link.preview.title}
+    // A creator is added on its own page, with all it has.
+    if (link.kind === 'creator') return null
     if (link.kind === 'movie') return {...base, kind: 'movie', slug: link.slug, url: link.url}
     if (link.kind === 'collection') return {...base, kind: 'collection', slug: link.slug, url: link.url}
     if (link.kind === 'video') return {...base, kind: 'video', slug: link.slug, url: link.url}
