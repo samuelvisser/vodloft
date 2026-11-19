@@ -54,6 +54,9 @@ class CreatorPresetAPIRead(ResponseBase):
 class CreatorLookupAPIRead(ResponseBase):
     """A creator at its Site, before it is added: who it is, its sections and what each preset does with them."""
 
+    lookup_id: Optional[str] = None
+    """Adding the creator with this id uses what this lookup found, instead of asking the Site again."""
+
     source_key: str
     site_key: str
     site_name: str
@@ -93,16 +96,38 @@ class CreatorAPICreate(RequestBase):
     episode_identifier: EpisodeIdentifier = EpisodeIdentifier.SEASONAL
     membership_level: DwMembershipLevel = DwMembershipLevel.HIGHEST_ALLOWED
     new_sections: NewSectionAction = NewSectionAction.ASK
+    lookup_id: Optional[str] = Field(default=None, max_length=64)
+    """The lookup's id, to use what it found instead of asking the Site again."""
+    into: Optional[str] = Field(default=None, max_length=255)
+    """The slug of a creator in the Library whose account this is too, such as a host's YouTube channel: the account
+    joins that creator instead of becoming a creator of its own."""
 
 
 class CreatorCollectionAPIRead(ResponseBase):
     slug: str
     title: str
     type: str
+    source_key: str
     thumbnail_landscape_path: Optional[str] = None
     episode_count: int = 0
     links: list[str] = Field(default_factory=list)
     """The titles of the creator's sections it takes."""
+
+
+class CreatorAccountAPIRead(ResponseBase):
+    """A creator's account on one Site, such as their YouTube channel."""
+
+    id: int
+    source_key: str
+    site: SiteAPIRead
+    """The account's Site, with what it calls a creator and whether their lists can be seasons."""
+    site_ref: str
+    url: Optional[str] = None
+    handle: Optional[str] = None
+    checked_at: Optional[datetime] = None
+    """When VODLoft last looked for new sections."""
+    main_collection_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("main_collection", "slug"))
+    """The collection named after the creator that takes this account's uploads."""
 
 
 class CreatorAPIRead(ResponseBase):
@@ -110,13 +135,12 @@ class CreatorAPIRead(ResponseBase):
 
     id: int
     slug: str
-    source_key: str
-    site: SiteAPIRead
     creator_label: str
-    site_ref: str
-    url: Optional[str] = None
+    """What VODLoft calls the creator: artist, the word of their one Site, such as host, or creator."""
+    kind: str
+    """The label with their Site, when they are on one only, such as "The Daily Wire host"."""
+    accounts: list[CreatorAccountAPIRead]
     title: str
-    handle: Optional[str] = None
     description: Optional[str] = None
     avatar_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("avatar_path", "avatar_url"))
     banner_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("banner_path", "banner_url"))
@@ -128,16 +152,19 @@ class CreatorAPIRead(ResponseBase):
     new_sections: NewSectionAction
     genre: Optional[str] = None
     content_rating: Optional[str] = None
-    checked_at: Optional[datetime] = None
-    """When VODLoft last looked for new sections."""
+
+
+class CreatorPageAccountAPIRead(CreatorAccountAPIRead):
+    """An account on the creator's page, with its sections and the collection that keeps each."""
+
+    sections: list[CreatorSectionAPIRead]
 
 
 class CreatorPageAPIRead(CreatorAPIRead):
-    """A creator's page: its collections, and its sections with the collection that keeps each."""
+    """A creator's page: their collections, and the sections of each account with the collection that keeps each."""
 
     collections: list[CreatorCollectionAPIRead]
-    sections: list[CreatorSectionAPIRead]
-    main_collection_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("main_collection", "slug"))
+    accounts: list[CreatorPageAccountAPIRead]
     reassigned_count: int = 0
     """The downloaded videos that the creator places in another of its collections than the one they are in."""
 
@@ -156,6 +183,12 @@ class CreatorAPIUpdate(RequestBase):
     content_rating: Optional[str] = Field(default=None, max_length=50)
 
 
+class CreatorCombineAPIIn(RequestBase):
+    """Another creator in the Library who is the same person or group, whose accounts and collections move over."""
+
+    other_slug: str = Field(min_length=1, max_length=255)
+
+
 class CreatorSectionsAPIAdd(RequestBase):
     """Add sections of a creator to its collections, or ignore them."""
 
@@ -164,6 +197,9 @@ class CreatorSectionsAPIAdd(RequestBase):
 
 class CollectionCreatorMatchAPIRead(ResponseBase):
     """The creator behind a collection's link, before the collection is added to it."""
+
+    lookup_id: Optional[str] = None
+    """Adding the collection with this id uses what this lookup found, instead of asking the Site again."""
 
     site_name: str
     creator_label: str
@@ -192,6 +228,8 @@ class JoinOverlapAPIRead(ResponseBase):
 
 
 class CollectionCreatorJoinAPIIn(RequestBase):
+    lookup_id: Optional[str] = Field(default=None, max_length=64)
+    """The match's id, to use what it found instead of asking the Site again."""
     move_here: list[str] = Field(default_factory=list, max_length=5000)
     """The lists, by ref, that leave the creator's own collection for the joining one."""
     creator_slug: Optional[str] = Field(default=None, max_length=255)

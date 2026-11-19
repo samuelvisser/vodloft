@@ -1150,12 +1150,12 @@ def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collec
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
     from sources import get_source
 
-    from backend.services.creators import creator_in_library, creator_site
+    from backend.services.creators import account_in_library, creator_site
 
     source = get_source("ytdlp")
     details = source.creator_details(plan.url)
     site = creator_site(source.id, details.url or plan.url)
-    existing = creator_in_library(session, site.key, details.ref)
+    existing = account_in_library(session, site.key, details.ref)
     if existing is not None and existing.main_collection is not None:
         # The artist is in the Library already: the import links their collection.
         raise CollectionAlreadyAddedError(existing.main_collection, existing.site)
@@ -1166,9 +1166,10 @@ def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collec
         membership_level="FREE",
     ))
     creator.genre, creator.content_rating = plan.settings.get("genre"), plan.settings.get("content_rating")
-    if creator.main_collection is None:
+    main = creator.accounts[0].main_collection
+    if main is None:
         raise ValueError(f"{details.title} has nothing VODLoft can add")
-    return creator.main_collection
+    return main
 
 
 def _add_link_seasons(session: Session, collection: Collection, plan: CollectionPlan) -> int:

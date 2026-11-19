@@ -488,9 +488,10 @@ def creator_output_template_values(creator) -> dict[str, str]:
     valid for every collection."""
     if creator is None:
         return {field: "" for field in CREATOR_OUTPUT_TEMPLATE_FIELDS}
+    account = creator.accounts[0] if creator.accounts else None
     return {
         "creator_title": creator.title,
-        "creator_handle": (creator.handle or "").lstrip("@"),
+        "creator_handle": ((account.handle if account is not None else None) or "").lstrip("@"),
         "creator_kind": _creator_kind(creator),
     }
 
@@ -506,7 +507,7 @@ def _creator_values(episode: "Episode") -> dict[str, str]:
         creator = collection.creator
         sections = creator.sections if creator is not None else []
         section = next((section for section in sections if section.url == collection.sharing_url), None)
-        if section is None and creator is not None and creator.main_collection_id == collection.id:
+        if section is None and creator is not None and collection.id in creator.main_collection_ids:
             section = next((section for section in sections if section.kind == "feed" and section.role == "main"), None)
         title, kind = (section.title, section.kind) if section is not None else ("", "")
     return {
@@ -565,16 +566,10 @@ def _music_values(episode: "Episode") -> dict[str, str]:
 
 
 def _creator_kind(creator) -> str:
-    """What the Site calls the creator, such as "YouTube creator" or "The Daily Wire host"."""
-    from sources import UnknownSourceError, get_source
+    """What the creator is, such as "YouTube creator", "The Daily Wire host" or, on several Sites, "creator"."""
+    from backend.services.creators import creator_kind
 
-    try:
-        site = get_source(creator.source_key).site_of(creator.site_key)
-    except UnknownSourceError:
-        site = None
-    if site is None:
-        return "creator"
-    return f"{site.name} {site.creator_label}"
+    return creator_kind(creator)
 
 
 def _source_name(source_key: str) -> str:

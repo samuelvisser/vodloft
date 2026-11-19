@@ -250,7 +250,7 @@ def test_a_playlist_season_moves_to_a_collection_of_its_own_with_its_files(creat
     main, _tools = creator
     _cabin_video(session, main)
 
-    moved = client.post("/api/creators/workshop/sections/PLcabin/move", json={"target": "own"})
+    moved = client.post("/api/creators/workshop/accounts/1/sections/PLcabin/move", json={"target": "own"})
 
     assert moved.status_code == 200, moved.text
     session.expire_all()
@@ -265,7 +265,7 @@ def test_a_playlist_season_moves_to_a_collection_of_its_own_with_its_files(creat
         CollectionList.collection_id == main.id, CollectionList.ref == "PLcabin",
     )) is False
     page = moved.json()
-    assert {section["ref"]: section["collectionSlug"] for section in page["sections"]}["PLcabin"] == cabin.slug
+    assert {section["ref"]: section["collectionSlug"] for section in page["accounts"][0]["sections"]}["PLcabin"] == cabin.slug
 
 
 def test_a_playlist_collection_becomes_a_season_and_goes_once_it_is_empty(creator, client, session):
@@ -278,7 +278,7 @@ def test_a_playlist_collection_becomes_a_season_and_goes_once_it_is_empty(creato
     download_id, tools_id = download.id, tools.id
     session.commit()
 
-    moved = client.post("/api/creators/workshop/sections/PLtools/move", json={"target": "main"})
+    moved = client.post("/api/creators/workshop/accounts/1/sections/PLtools/move", json={"target": "main"})
 
     assert moved.status_code == 200, moved.text
     session.expire_all()
@@ -289,12 +289,12 @@ def test_a_playlist_collection_becomes_a_season_and_goes_once_it_is_empty(creato
 
 
 def test_a_playlist_season_leaves_the_library_and_a_collection_of_its_own_must_be_deleted_instead(creator, client, session):
-    out = client.post("/api/creators/workshop/sections/PLcabin/move", json={"target": "skip"})
+    out = client.post("/api/creators/workshop/accounts/1/sections/PLcabin/move", json={"target": "skip"})
     assert out.status_code == 200, out.text
-    sections = {section["ref"]: section for section in out.json()["sections"]}
+    sections = {section["ref"]: section for section in out.json()["accounts"][0]["sections"]}
     assert (sections["PLcabin"]["collectionSlug"], sections["PLcabin"]["status"]) == (None, "ignored")
 
-    refused = client.post("/api/creators/workshop/sections/PLtools/move", json={"target": "skip"})
+    refused = client.post("/api/creators/workshop/accounts/1/sections/PLtools/move", json={"target": "skip"})
     assert refused.status_code == 422 and "delete that collection" in refused.text
 
 
@@ -311,7 +311,7 @@ def test_a_video_only_the_playlist_collection_has_joins_the_creators_collection_
     download_id = download.id
     session.commit()
 
-    assert client.post("/api/creators/workshop/sections/PLtools/move", json={"target": "main"}).status_code == 200
+    assert client.post("/api/creators/workshop/accounts/1/sections/PLtools/move", json={"target": "main"}).status_code == 200
 
     session.expire_all()
     moved = session.get(EpisodeMediaDownload, download_id)

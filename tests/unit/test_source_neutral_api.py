@@ -307,7 +307,7 @@ def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
         "results": [{
             "kind": "collection", "slug": "clips", "url": "https://stub.example/collection/clips", "title": "clip collection",
             "description": None, "imageUrl": None, "authorName": None, "collectionSlug": None, "collectionUrl": None,
-            "kindLabel": "Channel", "facts": ["3 videos"], "access": None, "accessLabel": None,
+            "kindLabel": "Channel", "facts": ["3 videos"], "access": None, "accessLabel": None, "creatorLabel": None,
         }],
         "notice": {
             "badge": "Search via stub", "text": "Answered by the stub", "tone": "neutral",

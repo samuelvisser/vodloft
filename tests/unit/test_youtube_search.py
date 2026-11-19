@@ -64,6 +64,25 @@ def test_with_a_key_the_api_answers_with_counts_durations_and_dates(youtube):
     assert answer.notice.text == "About 18 API searches left today"
 
 
+def test_api_results_read_the_text_youtube_escapes_as_html(youtube):
+    youtube.search_results = [_search_item("video", "v1", "Here&#39;s what &quot;fast&quot; means &amp; why")]
+
+    (video,) = YtDlpSource().search("veritasium").results
+
+    assert video.title == 'Here\'s what "fast" means & why'
+
+
+def test_a_channel_result_can_be_added_as_a_creator_and_a_playlist_cannot(youtube):
+    from backend.api.endpoints.sources.service import search_source
+    from backend.security.access import Access
+
+    youtube.search_results = [_search_item("channel", "UCv", "Veritasium"), _search_item("playlist", "PL1", "Physics")]
+
+    results = search_source(Access.full(), YtDlpSource(), "veritasium").results
+
+    assert [(result.slug, result.creator_label) for result in results] == [("UCv", "creator"), ("PL1", None)]
+
+
 def test_the_same_search_within_an_hour_costs_nothing(youtube):
     source = YtDlpSource()
     source.search("veritasium")

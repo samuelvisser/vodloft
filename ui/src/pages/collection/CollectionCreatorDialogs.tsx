@@ -7,6 +7,7 @@ import {addCollectionToCreator, setCollectionCreator, useCreators, useCollection
 import type {CollectionCreatorMatch} from '../../types/schemas/creator'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import LookupSteps from '../creator/LookupSteps'
 import '../creator/CreatorPages.css'
 
 type DialogProps = {
@@ -16,6 +17,8 @@ type DialogProps = {
     /** What the collection's Site calls a creator, such as host on The Daily Wire. */
     creatorLabel: string
     onDismiss: () => void
+    /** The collection's Source can find the creator behind its link. Without it, it joins a creator in the Library. */
+    findsCreator?: boolean
 }
 
 function useRefresh(collectionSlug: string) {
@@ -42,16 +45,17 @@ function sectionNote(creator: CollectionCreatorMatch, label: string): string {
 }
 
 /** "Add to creator", in the words of the Site: find the creator behind the collection's link, show what the collection becomes, and add it. */
-export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, onDismiss}: DialogProps) {
-    /** ``behind``: the creator behind the collection's link; otherwise the slug of a creator in the Library. */
-    const [target, setTarget] = useState('behind')
+export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, onDismiss, findsCreator = true}: DialogProps) {
     const {data: libraryCreators} = useCreators()
-    const targets = useMemo(() => createSelectRegistry(`JoinCreatorTarget-${collectionSlug}`, {
-        behind: {label: `The ${creatorLabel} behind its link`},
+    /** ``behind``: the creator behind the collection's link; otherwise the slug of a creator in the Library. */
+    const [picked, setTarget] = useState<string | null>(null)
+    const target = picked ?? (findsCreator ? 'behind' : libraryCreators?.[0]?.slug ?? '')
+    const targets = useMemo(() => createSelectRegistry<string>(`JoinCreatorTarget-${collectionSlug}-${findsCreator}`, {
+        ...(findsCreator ? {behind: {label: `The ${creatorLabel} behind its link`}} : {}),
         ...Object.fromEntries((libraryCreators ?? []).map((other) => [
-            other.slug, {label: `${other.title} (${other.site.name} ${other.creatorLabel})`},
+            other.slug, {label: `${other.title} (${other.kind})`},
         ])),
-    }), [collectionSlug, creatorLabel, libraryCreators])
+    }), [collectionSlug, creatorLabel, libraryCreators, findsCreator])
     const chosen = libraryCreators?.find((other) => other.slug === target)
     const match = useCollectionCreatorMatch(collectionSlug, open && target === 'behind')
     const refresh = useRefresh(collectionSlug)
@@ -78,7 +82,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
         try {
             await setCollectionCreator(collectionSlug, true, [...moveHere].filter((ref) => (
                 creator.overlaps.some((overlap) => overlap.ref === ref && overlap.canMoveHere)
-            )))
+            )), creator.lookupId)
             await refresh()
             toast.success(`${collectionTitle} is now part of ${creator.title}`)
             onDismiss()
@@ -116,7 +120,27 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                     <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                 </ul>
             )}
-            {!chosen && match.isLoading && <p>Looking up the {creatorLabel} behind this collection's link…</p>}
+            {!chosen && match.isLoading && (
+                <div className="creator-skeleton creator-join" aria-busy="true">
+                    <LookupSteps steps={match.steps} first={`Finding the ${creatorLabel} behind the link`}/>
+                    <div className="creator-join-who" aria-hidden="true">
+                        <span className="creator-avatar creator-avatar--small skeleton-block"/>
+                        <div className="creator-skeleton-copy">
+                            <span className="skeleton-block creator-skeleton-line creator-skeleton-line--kind"/>
+                            <span className="skeleton-block creator-skeleton-line creator-skeleton-line--title-small"/>
+                            <span className="skeleton-block creator-skeleton-line creator-skeleton-line--short"/>
+                        </div>
+                    </div>
+                    <div className="creator-section-list" aria-hidden="true">
+                        <div className="creator-section-row">
+                            <div className="creator-section-copy creator-skeleton-copy">
+                                <span className="skeleton-block creator-skeleton-line creator-skeleton-line--title-small"/>
+                                <span className="skeleton-block creator-skeleton-line"/>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
             {!chosen && match.error && <p className="text-danger">{match.error.message}</p>}
             {!chosen && creator && (
                 <div className="creator-join">
@@ -166,7 +190,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                         : (
                             <ul className="creator-order-note">
                                 <li>Seasons, episode numbers, profiles and files stay as they are. Nothing is indexed again.</li>
-                                {!creator.creatorSlug && <li>The {creatorLabel}'s other playlists and shows start as not in your library, so you can add them from its page.</li>}
+                                {!creator.creatorSlug && <li>The {creatorLabel}'s other playlists and shows start as not in your library, so you can add them from the {creatorLabel}'s Edit page.</li>}
                             </ul>
                         )}
                 </div>

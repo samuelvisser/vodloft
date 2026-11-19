@@ -1,39 +1,27 @@
-import json
-import logging
-import queue
-import threading
-from collections.abc import Iterator
-
 from fastapi import APIRouter, HTTPException, status
-from fastapi.responses import StreamingResponse
 
 from backend.api.models.creator import (
-    CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorLookupAPIRead, CreatorLookupAPIRequest, CreatorPageAPIRead,
-    CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd,
+    CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorLookupAPIRequest,
+    CreatorPageAPIRead, CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd,
 )
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
+from backend.api.steps import STEPS_RESPONSE, stream_steps
 from backend.app import db_session
 from backend.db.core import run_write_transaction
 from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, signed_in
-from backend.services.errors import ServiceError
-from backend.services.source_requests import SourceRequestError, asking_source
-from config.network import NO_INTERNET_CONNECTION_MESSAGE, is_no_internet_error
+from backend.services.source_requests import asking_source
 
+from . import lookups
 from .service import (
-    CreatorNotFoundError, add_creator, add_sections, creator_lookup, creator_page, check_creator, list_creators, look_up_creator, lookup_creator_label,
-    move_creator_reassigned, move_creator_section, update_creator,
+    CreatorNotFoundError, account_link, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, list_creators,
+    look_up_creator, lookup_creator_label, move_creator_reassigned, move_creator_section, update_creator,
 )
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/creators", tags=["Creators"])
 
 
-@router.post(
-    "/lookup", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)],
-    responses={200: {"content": {"application/x-ndjson": {}}}},
-)
+@router.post("/lookup", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], responses=STEPS_RESPONSE)
 def lookup_creator(body: CreatorLookupAPIRequest, access: Access = signed_in()):
     """Look a creator up at its Site: who it is, its sections, and what each way of adding it does with them.
 
@@ -42,47 +30,29 @@ def lookup_creator(body: CreatorLookupAPIRequest, access: Access = signed_in()):
     works, then ``{"creator": CreatorLookupAPIRead}`` or ``{"error": "..."}``.
     """
     access.check_link_at(body.source_key, body.url)
-    lines: queue.Queue[dict] = queue.Queue()
 
-    def send(**line) -> None:
-        lines.put(line)
+    def look_up(send) -> dict:
+        label = lookup_creator_label(body.source_key, body.url)
+        send(step=f"Looking the {label} up", creatorLabel=label)
+        with asking_source(f"Could not look up this {label}"):
+            details = look_up_creator(body.source_key, body.url, body.ref, lambda step: send(step=step))
+        send(step="Checking what is in your library already")
+        with db_session() as s:
+            found = CreatorLookupAPIRead.model_validate(creator_lookup(s, body.source_key, details))
+        found.lookup_id = lookups.keep(("creator", body.source_key, body.url, body.ref), details)
+        return {"creator": found.model_dump(mode="json", by_alias=True)}
 
-    def look_up() -> None:
-        try:
-            label = lookup_creator_label(body.source_key, body.url)
-            send(step=f"Looking the {label} up", creatorLabel=label)
-            with asking_source(f"Could not look up this {label}"):
-                details = look_up_creator(body.source_key, body.url, body.ref, lambda step: send(step=step))
-            send(step="Checking what is in your library already")
-            with db_session() as s:
-                found = CreatorLookupAPIRead.model_validate(creator_lookup(s, body.source_key, details))
-            send(creator=found.model_dump(mode="json", by_alias=True))
-        except Exception as exc:
-            if is_no_internet_error(exc):
-                send(error=NO_INTERNET_CONNECTION_MESSAGE)
-            elif isinstance(exc, (ServiceError, SourceRequestError)):
-                send(error=str(exc))
-            else:
-                logger.exception("Could not look up the creator")
-                send(error="Could not look up this creator")
-
-    def stream() -> Iterator[str]:
-        while True:
-            line = lines.get()
-            yield json.dumps(line) + "\n"
-            if "step" not in line:
-                return
-
-    threading.Thread(target=look_up, name="creator-lookup", daemon=True).start()
-    return StreamingResponse(stream(), media_type="application/x-ndjson")
+    return stream_steps(look_up, "Could not look up this creator")
 
 
 @router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CreatorPageAPIRead, status_code=status.HTTP_201_CREATED)
 def create_creator(body: CreatorAPICreate, access: Access = signed_in()):
     """Add a creator, with a collection for each place its sections go, and start indexing them."""
     access.check_link_at(body.source_key, body.url)
-    with asking_source("Could not look up this creator"):
-        details = look_up_creator(body.source_key, body.url, body.ref)
+    details = lookups.found(body.lookup_id, ("creator", body.source_key, body.url, body.ref))
+    if details is None:
+        with asking_source("Could not look up this creator"):
+            details = look_up_creator(body.source_key, body.url, body.ref)
     return run_write_transaction(lambda s: add_creator(s, body, details, added_by_id=access.user_id))
 
 
@@ -114,21 +84,49 @@ def creator_update(slug: str, body: CreatorAPIUpdate):
     return _found(lambda: run_write_transaction(lambda s: update_creator(s, slug, body)))
 
 
-@router.post("/{slug}/sections", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CreatorPageAPIRead)
-def creator_add_sections(slug: str, body: CreatorSectionsAPIAdd, access: Access = signed_in()):
-    """Add sections of the creator to its collections, or ignore them."""
-    return _found(lambda: run_write_transaction(lambda s: add_sections(s, slug, body, added_by_id=access.user_id)))
+@router.post(
+    "/{slug}/accounts/{account_id}/sections", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)],
+    response_model=CreatorPageAPIRead,
+)
+def creator_add_sections(slug: str, account_id: int, body: CreatorSectionsAPIAdd, access: Access = signed_in()):
+    """Add sections of one of the creator's accounts to the creator's collections, or ignore them."""
+    return _found(lambda: run_write_transaction(
+        lambda s: add_sections(s, slug, account_id, body, added_by_id=access.user_id),
+    ))
 
 
 @router.post(
-    "/{slug}/sections/{ref}/move", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CreatorPageAPIRead,
+    "/{slug}/accounts/{account_id}/sections/{ref}/move", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CreatorPageAPIRead,
 )
-def creator_move_section(slug: str, ref: str, body: CreatorSectionMoveAPIIn, access: Access = signed_in()):
-    """Move one of the creator's playlists to a season of its own collection, to a collection of its own, or out of
-    the Library, with its videos and their files."""
+def creator_move_section(slug: str, account_id: int, ref: str, body: CreatorSectionMoveAPIIn, access: Access = signed_in()):
+    """Move one of the playlists of a creator's account to a season of the account's own collection, to a collection
+    of its own, or out of the Library, with its videos and their files."""
     return _found(lambda: run_write_transaction(
-        lambda s: move_creator_section(s, slug, ref, body, added_by_id=access.user_id),
+        lambda s: move_creator_section(s, slug, account_id, ref, body, added_by_id=access.user_id),
     ))
+
+
+@router.post(
+    "/{slug}/accounts/{account_id}/split", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CreatorPageAPIRead,
+)
+def creator_split_account(slug: str, account_id: int):
+    """Make one of the creator's accounts a creator of their own again, with the collections it keeps."""
+    def link():
+        with db_session() as s:
+            return account_link(s, slug, account_id)
+
+    source_key, ref = _found(link)
+    details = look_up_account(source_key, ref)
+    return _found(lambda: run_write_transaction(lambda s: split_creator_account(s, slug, account_id, details)))
+
+
+@router.post("/{slug}/combine", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CreatorPageAPIRead)
+def creator_combine(slug: str, body: CreatorCombineAPIIn):
+    """Make another creator in the Library, who is the same person or group, a part of this one: their accounts and
+    collections move over, and the other creator leaves the Library."""
+    return _found(lambda: run_write_transaction(lambda s: combine_creator(s, slug, body)))
 
 
 @router.post(

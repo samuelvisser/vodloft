@@ -26,7 +26,7 @@ import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg} from '../types/collection'
 import DurationPill from '../components/common/DurationPill'
 import './LibraryPage.css'
-import {capitalized} from '../types/creator'
+import {capitalized, creatorKindText} from '../types/creator'
 import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
@@ -206,15 +206,18 @@ export default function LibraryPage() {
         () => hasCreators ? applicableChipFilter(kindFilter, KIND_VALUES) : [],
         [kindFilter, hasCreators],
     )
-    // Creators come first. A collection type says nothing about a creator, so choosing one leaves creators out.
-    const filteredCreators = useMemo(() => (
-        matchesChipFilter('creator', activeKindFilter) && activeCollectionTypeFilter.length === 0
-            ? creators?.filter((creator) => (
-                matchesSiteFilter(creator, activeSiteFilter)
-                && matchesLibrarySearch({title: creator.title, authorName: creator.handle}, searchWords)
-            )) ?? []
-            : []
-    ), [creators, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords])
+    // Creators come first. A creator matches a collection type when one of its collections has that type.
+    const filteredCreators = useMemo(() => {
+        if (!matchesChipFilter('creator', activeKindFilter)) return []
+        const typed = new Set((collections ?? [])
+            .filter((collection) => collection.creatorSlug && matchesChipFilter(collection.type, activeCollectionTypeFilter))
+            .map((collection) => collection.creatorSlug))
+        return creators?.filter((creator) => (
+            (activeCollectionTypeFilter.length === 0 || typed.has(creator.slug))
+            && creator.accounts.some((account) => matchesSiteFilter(account, activeSiteFilter))
+            && matchesLibrarySearch({title: creator.title, authorName: creator.accounts[0]?.handle}, searchWords)
+        )) ?? []
+    }, [creators, collections, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords])
     const filteredCollections = useMemo(() => {
         if (!matchesChipFilter('collection', activeKindFilter)) return []
         // A creator's collections are behind its card, unless a search looks for them or the card is filtered out.
@@ -405,11 +408,11 @@ export default function LibraryPage() {
                                         {avatar
                                             ? <img className="library-creator-avatar" src={avatar} alt="" loading="lazy" decoding="async"/>
                                             : <span className="library-creator-avatar library-creator-avatar--empty" aria-hidden="true">{creator.title.slice(0, 2).toUpperCase()}</span>}
-                                        <SourceBadge sourceKey={creator.sourceKey} className="library-tile-source"/>
+                                        {creator.accounts.length === 1 && <SourceBadge sourceKey={creator.accounts[0].sourceKey} className="library-tile-source"/>}
                                     </span>
                                     <span className="library-tile-copy">
                                         <span className="library-tile-title">{creator.title}</span>
-                                        <span className="library-tile-author">{creator.site.name} {creator.creatorLabel}</span>
+                                        <span className="library-tile-author">{creatorKindText(creator)}</span>
                                         <span className="library-tile-meta">
                                             <span>{creator.collectionCount} {creator.collectionCount === 1 ? 'collection' : 'collections'}</span>
                                             <span>{creator.episodeCount} videos</span>

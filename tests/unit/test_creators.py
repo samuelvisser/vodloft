@@ -79,6 +79,12 @@ def _lookup(client):
     return [line["step"] for line in lines[:-1]], lines[-1]["creator"]
 
 
+def _match(client, slug):
+    """The creator the collection's link is of, after the steps of looking it up, and the steps."""
+    lines = [json.loads(line) for line in client.get(f"/api/collections/{slug}/creator/match").text.splitlines()]
+    return lines[-1]["match"], [line["step"] for line in lines[:-1]]
+
+
 def _plan(body, preset):
     plan = next(item["plan"] for item in body["presets"] if item["key"] == preset)
     return {item["ref"]: item["target"] for item in plan}
@@ -128,8 +134,26 @@ def test_adding_a_creator_makes_its_collection_with_its_playlists_as_seasons(cli
         ("PLcabin", True), ("PLtools", False), ("PLmembers", False),
     ]
     # The section nobody keeps stays on the creator page.
-    left = {section["ref"]: section["collectionSlug"] for section in page["sections"]}
+    left = {section["ref"]: section["collectionSlug"] for section in page["accounts"][0]["sections"]}
     assert left["PLmembers"] is None and left["PLtools"] == "PLtools"
+
+
+def test_adding_a_creator_uses_what_its_lookup_found(client, tube, monkeypatch):
+    _steps, found = _lookup(client)
+    asked = []
+    look_up = tube.creator_details
+    monkeypatch.setattr(tube, "creator_details", lambda ref, progress=None: asked.append(ref) or look_up(ref))
+
+    plan = [{"ref": "videos", "target": "main"}]
+    added = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "lookupId": found["lookupId"]})
+
+    assert added.status_code == 201, added.text
+    assert added.json()["title"] == "Northwind Workshop" and asked == []
+    # A lookup id of another link is not used for this one.
+    other = client.post("/api/creators", json={
+        "sourceKey": "tube", "url": f"{ROOT}/videos", "sections": plan, "lookupId": found["lookupId"],
+    })
+    assert asked == [f"{ROOT}/videos"] and other.status_code == 422
 
 
 def test_a_section_already_in_the_library_stays_where_it_is(client, session):
@@ -151,7 +175,7 @@ def test_a_section_already_in_the_library_stays_where_it_is(client, session):
     client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [{"ref": "shorts", "target": "own"}]})
     page = client.get("/api/creators/workshop").json()
     # The creator's page shows it is kept in the collection it was already in.
-    kept = next(section for section in page["sections"] if section["ref"] == "PLtools")
+    kept = next(section for section in page["accounts"][0]["sections"] if section["ref"] == "PLtools")
     assert (kept["collectionSlug"], kept["collectionTitle"]) == ("tools", "My tools")
 
 
@@ -160,7 +184,7 @@ def test_the_creator_list_counts_its_collections(client):
 
     [creator] = client.get("/api/creators").json()
 
-    assert (creator["title"], creator["collectionCount"], creator["site"]["name"]) == ("Northwind Workshop", 1, "Tube")
+    assert (creator["title"], creator["collectionCount"], creator["accounts"][0]["site"]["name"]) == ("Northwind Workshop", 1, "Tube")
 
 
 def test_a_youtube_creator_is_read_from_its_tabs_and_playlists_under_the_link_people_paste(monkeypatch):
@@ -195,6 +219,33 @@ def test_a_youtube_creator_is_read_from_its_tabs_and_playlists_under_the_link_pe
         ("videos", SectionKind.FEED, "https://www.youtube.com/@workshop/videos"),
         ("PLcabin", SectionKind.LIST, "https://www.youtube.com/playlist?list=PLcabin"),
     ]
+
+
+def test_a_youtube_playlist_shows_the_picture_youtube_serves(monkeypatch):
+    from sources import ytdlp_runner as runner
+    from sources.ytdlp.source import YtDlpSource
+
+    signed = "https://i9.ytimg.com/s_p/PLretro/landscape_sddefault.jpg?sqp=abc&rs=def"
+    pages = {
+        "https://www.youtube.com/@workshop/videos": {"channel_id": "UCworkshop", "channel": "Northwind Workshop", "uploader_id": "@workshop", "entries": []},
+        "https://www.youtube.com/@workshop/playlists": {"entries": [{"id": "PLretro", "title": "Retro Tech", "thumbnails": [
+            {"url": "https://i9.ytimg.com/s_p/PLretro/landscape_mqdefault.jpg?sqp=abc&rs=ghi", "width": 320},
+            {"url": signed, "width": 800},
+            # yt-dlp's widest form has no signature, and YouTube answers it with a grey placeholder.
+            {"url": "https://i9.ytimg.com/s_p/PLretro/landscape_maxresdefault.jpg", "width": 2560},
+        ]}]},
+    }
+
+    def run_json(*args, **_kwargs):
+        if args[-1] not in pages:
+            raise runner.YtDlpError("This channel does not have that tab")
+        return pages[args[-1]]
+
+    monkeypatch.setattr(runner, "run_json", run_json)
+
+    details = YtDlpSource().creator_details("https://www.youtube.com/@workshop/videos")
+
+    assert [section.image_url for section in details.sections if section.ref == "PLretro"] == [signed]
 
 
 def test_a_youtube_creator_page_opens_with_its_collections(client, monkeypatch):
@@ -241,14 +292,14 @@ def _one_show(client):
 
 def _follow(session, tube, sections):
     from backend.db.models import Creator
-    from backend.services.creators import follow_creator
+    from backend.services.creators import follow_account
     from datetime import datetime, timezone
 
     creator = session.scalar(select(Creator))
     details = tube.creator_details(ROOT)
     from dataclasses import replace
 
-    result = follow_creator(session, creator, replace(details, sections=sections), now=datetime.now(timezone.utc))
+    result = follow_account(session, creator.accounts[0], replace(details, sections=sections), now=datetime.now(timezone.utc))
     session.commit()
     return result
 
@@ -259,21 +310,21 @@ def test_a_new_playlist_waits_for_a_choice_and_says_so(client, session, tube):
 
     _one_show(client)
     result = _follow(session, tube, (NEW_LIST, *SECTIONS))
-    creator_sections_found(session, result.asked[0].creator, result.asked)
+    creator_sections_found(session, result.asked[0].account.creator, result.asked)
     session.commit()
 
     assert [section.ref for section in result.asked] == ["PLbarn"]
     event = session.scalar(select(NotificationEvent))
-    assert (event.title, event.url) == ("New playlist on Northwind Workshop", "/creator/workshop")
+    assert (event.title, event.url) == ("New playlist on Northwind Workshop", "/edit-creator/workshop")
     page = client.get("/api/creators/workshop").json()
-    assert next(s for s in page["sections"] if s["ref"] == "PLbarn")["status"] == "new"
+    assert next(s for s in page["accounts"][0]["sections"] if s["ref"] == "PLbarn")["status"] == "new"
 
     # Adding it to the creator's own collection makes it a season of it.
-    page = client.post("/api/creators/workshop/sections", json={"sections": [{"ref": "PLbarn", "target": "main"}]}).json()
-    assert next(c for c in page["collections"] if c["slug"] == page["mainCollectionSlug"])["links"] == [
+    page = client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLbarn", "target": "main"}]}).json()
+    assert next(c for c in page["collections"] if c["slug"] == page["accounts"][0]["mainCollectionSlug"])["links"] == [
         "Timber Frame Barn", "Videos", "Live",
     ]
-    assert next(s for s in page["sections"] if s["ref"] == "PLbarn")["status"] == "known"
+    assert next(s for s in page["accounts"][0]["sections"] if s["ref"] == "PLbarn")["status"] == "known"
 
 
 def test_the_creator_asks_about_a_new_playlist_also_when_its_collection_has_playlist_seasons(client, session, tube):
@@ -281,7 +332,7 @@ def test_the_creator_asks_about_a_new_playlist_also_when_its_collection_has_play
 
     _one_show(client)
     _follow(session, tube, SECTIONS)
-    client.post("/api/creators/workshop/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
+    client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
 
     result = _follow(session, tube, (NEW_LIST, *SECTIONS))
 
@@ -295,7 +346,7 @@ def test_a_creator_set_to_make_new_playlists_seasons_adds_them_to_its_own_collec
     from backend.db.models import Collection
 
     _one_show(client)
-    client.post("/api/creators/workshop/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
+    client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
     assert client.patch("/api/creators/workshop", json={"newSections": "season"}).status_code == 200
 
     result = _follow(session, tube, (NEW_LIST, *SECTIONS))
@@ -326,9 +377,9 @@ def test_ignoring_a_new_playlist_keeps_it_on_the_creator_page(client, session, t
     _one_show(client)
     _follow(session, tube, (NEW_LIST, *SECTIONS))
 
-    page = client.post("/api/creators/workshop/sections", json={"sections": [{"ref": "PLbarn", "target": "skip"}]}).json()
+    page = client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLbarn", "target": "skip"}]}).json()
 
-    assert next(s for s in page["sections"] if s["ref"] == "PLbarn")["status"] == "ignored"
+    assert next(s for s in page["accounts"][0]["sections"] if s["ref"] == "PLbarn")["status"] == "ignored"
     # The next look does not ask again.
     assert _follow(session, tube, (NEW_LIST, *SECTIONS)).asked == []
 
@@ -362,7 +413,7 @@ def test_the_daily_look_finds_new_playlists_on_every_creator_and_asks_about_them
     assert result.data["found"] == 1 and result.data["added"] == 0
     session.expire_all()
     creator = session.scalar(select(Creator))
-    assert creator.facts == ["1.3M subscribers"] and creator.checked_at is not None
+    assert creator.facts == ["1.3M subscribers"] and creator.accounts[0].checked_at is not None
     assert session.scalar(select(NotificationEvent.title)) == "New playlist on Northwind Workshop"
     # Looking again finds nothing new and does not ask twice.
     assert run_follow_creators(session).data["found"] == 0
@@ -393,24 +444,28 @@ def _plain_collection(session, slug, url):
     session.commit()
 
 
-def test_adding_a_collection_to_a_creator_adds_the_creator_and_matches_its_link(client, session):
+def test_adding_a_collection_to_a_creator_adds_the_creator_and_matches_its_link(client, session, tube, monkeypatch):
     from backend.db.models import Creator, Collection
 
     _plain_collection(session, "tools", SECTIONS[4].url)
 
-    match = client.get("/api/collections/tools/creator/match").json()
+    match, steps = _match(client, "tools")
+    assert steps == ["Finding the creator behind the link", "Reading the creator", "Checking what is in your library already"]
     assert (match["title"], match["creatorSlug"]) == ("Northwind Workshop", None)
     assert (match["sectionTitle"], match["keptBy"]) == ("Tool Reviews", None)
 
-    response = client.post("/api/collections/tools/creator")
+    # Adding it uses what the lookup found, without asking the Site again.
+    asked = []
+    monkeypatch.setattr(tube, "creator_details", lambda ref, progress=None: asked.append(ref))
+    response = client.post("/api/collections/tools/creator", json={"lookupId": match["lookupId"]})
     assert response.status_code == 200, response.text
-    assert response.json()["creatorSlug"] == "workshop"
+    assert response.json()["creatorSlug"] == "workshop" and asked == []
     creator = session.scalar(select(Creator))
-    assert creator.main_collection is None
+    assert creator.accounts[0].main_collection is None
     page = client.get("/api/creators/workshop").json()
     assert [(c["title"], c["links"]) for c in page["collections"]] == [("My tools", ["Tool Reviews"])]
     # The creator's other sections are not in the library, and nothing asks about them.
-    assert {s["ref"]: (s["collectionSlug"], s["status"]) for s in page["sections"]}["PLcabin"] == (None, "known")
+    assert {s["ref"]: (s["collectionSlug"], s["status"]) for s in page["accounts"][0]["sections"]}["PLcabin"] == (None, "known")
     assert session.scalar(select(Collection).where(Collection.slug == "tools")).episodes == []
 
 
@@ -425,7 +480,7 @@ def test_a_collection_of_a_section_another_collection_keeps_cannot_join(client, 
 
     assert client.post("/api/collections/tools/creator").status_code == 200
     # The creator's own collection keeps all its uploads already.
-    match = client.get("/api/collections/my-videos/creator/match").json()
+    match, _steps = _match(client, "my-videos")
     assert match["creatorSlug"] == "workshop"
     assert (match["keptBy"], match["sectionTitle"]) == ("Northwind Workshop", None)
     refused = client.post("/api/collections/my-videos/creator")
@@ -447,11 +502,11 @@ def test_removing_a_collection_from_its_creator_makes_it_plain_again(client, ses
     assert response.json()["creatorSlug"] is None
     session.expire_all()
     main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
-    assert main.creator_id is None and session.scalar(select(Creator)).main_collection_id is None
+    assert main.creator_id is None and session.scalar(select(Creator)).accounts[0].main_collection_id is None
     page = client.get("/api/creators/workshop").json()
     assert [c["title"] for c in page["collections"]] == ["Tool Reviews"]
     # Its link is still the Videos page, so the creator page shows it kept there.
-    assert next(s for s in page["sections"] if s["ref"] == "videos")["collectionSlug"] == "UCworkshop"
+    assert next(s for s in page["accounts"][0]["sections"] if s["ref"] == "videos")["collectionSlug"] == "UCworkshop"
 
     # It can join again.
     assert client.post("/api/collections/UCworkshop/creator").status_code == 200
@@ -507,7 +562,7 @@ def test_a_playlist_that_is_a_season_of_the_creators_collection_moves_to_a_colle
     ]})
     _plain_collection(session, "cabin", SECTIONS[3].url)
 
-    match = client.get("/api/collections/cabin/creator/match").json()
+    match, _steps = _match(client, "cabin")
     assert (match["sectionTitle"], match["keptBy"]) == ("Building the Cabin", None)
     assert match["overlaps"] == [
         {"ref": "PLcabin", "title": "Building the Cabin", "keptBy": "Northwind Workshop", "canMoveHere": True},
@@ -577,3 +632,104 @@ def test_a_collection_from_another_link_can_join_a_creator_in_the_library(client
     refused = client.post("/api/collections/tools/creator", json={"creatorSlug": "workshop"})
     assert refused.status_code == 422 and "behind its link" in refused.text
     assert "not in the Library" in client.post("/api/collections/tools/creator", json={"creatorSlug": "nowhere"}).text
+
+
+CAST_ROOT = "https://cast.example/hosts/northwind"
+
+
+class CastSource(ListedSource):
+    """A second Site, whose creators are hosts with shows."""
+
+    id = "cast"
+    name = "Cast"
+    domains = ("cast.example",)
+    features = ListedSource.features | {Feature.CREATORS}
+    sites = (Site("cast", "Cast", ("cast.example",), creators=True, creator_label="host"),)
+
+    def creator_details(self, ref, progress=lambda step: None):
+        return CreatorDetails(
+            ref="northwind", url=CAST_ROOT, title="Northwind Workshop Live", handle="@nw-live",
+            sections=(SectionRef("workbench", "https://cast.example/shows/workbench", "The Workbench", SectionKind.SHOW),),
+        )
+
+
+@pytest.fixture
+def cast(tube):
+    return registry.register(CastSource())
+
+
+def _add_host(client, into=None):
+    return client.post("/api/creators", json={
+        "sourceKey": "cast", "url": CAST_ROOT, "sections": [{"ref": "workbench", "target": "own"}], "into": into,
+    })
+
+
+def test_a_creator_is_called_what_their_one_site_calls_them_and_a_creator_on_several(client, cast):
+    _one_show(client)
+    assert _add_host(client).status_code == 201
+    creators = {creator["slug"]: creator for creator in client.get("/api/creators").json()}
+    assert {slug: (creator["creatorLabel"], creator["kind"]) for slug, creator in creators.items()} == {
+        "workshop": ("creator", "Tube creator"), "nw-live": ("host", "Cast host"),
+    }
+
+
+def test_an_account_on_another_site_joins_a_creator_in_the_library(client, cast, session):
+    from backend.db.models import Collection
+    from task_manager.tasks.workers.follow_creators.service import run_follow_creators
+
+    _one_show(client)
+    response = _add_host(client, into="workshop")
+    assert response.status_code == 201, response.text
+
+    page = response.json()
+    assert page["slug"] == "workshop" and (page["creatorLabel"], page["kind"]) == ("creator", "creator")
+    assert [account["site"]["name"] for account in page["accounts"]] == ["Tube", "Cast"]
+    assert [section["collectionSlug"] for section in page["accounts"][1]["sections"]] == ["workbench"]
+    assert [creator["slug"] for creator in client.get("/api/creators").json()] == ["workshop"]
+    assert session.scalar(select(Collection.creator_id).where(Collection.slug == "workbench")) == page["id"]
+    # The daily look visits both accounts of the one creator.
+    assert run_follow_creators(session).data | {"found": 0} == {
+        "creators": 1, "accounts": 2, "found": 0, "added": 0, "failed": [],
+    }
+    # Adding the same account again says where it is.
+    again = _add_host(client)
+    assert again.status_code == 422 and "as Northwind Workshop" in again.json()["detail"]
+
+
+def test_two_creators_who_are_one_person_combine(client, cast, session):
+    from backend.db.models import Collection, Creator
+
+    _one_show(client)
+    assert _add_host(client).status_code == 201
+
+    response = client.post("/api/creators/workshop/combine", json={"otherSlug": "nw-live"})
+    assert response.status_code == 200, response.text
+    page = response.json()
+    assert [account["site"]["key"] for account in page["accounts"]] == ["tube", "cast"]
+    assert {collection["slug"] for collection in page["collections"]} >= {"UCworkshop", "workbench"}
+    session.expire_all()
+    assert list(session.scalars(select(Creator.slug))) == ["workshop"]
+    assert set(session.scalars(select(Collection.creator_id))) == {page["id"]}
+    assert client.post("/api/creators/workshop/combine", json={"otherSlug": "workshop"}).status_code == 422
+
+
+def test_an_account_splits_off_into_a_creator_of_its_own_with_its_collections(client, cast, session):
+    from backend.db.models import Collection
+
+    _one_show(client)
+    page = _add_host(client, into="workshop").json()
+    cast_account = page["accounts"][1]["id"]
+
+    response = client.post(f"/api/creators/workshop/accounts/{cast_account}/split")
+    assert response.status_code == 200, response.text
+    split = response.json()
+    assert (split["slug"], split["title"], split["kind"]) == ("nw-live", "Northwind Workshop Live", "Cast host")
+    assert [collection["slug"] for collection in split["collections"]] == ["workbench"]
+    workshop = client.get("/api/creators/workshop").json()
+    assert [account["site"]["key"] for account in workshop["accounts"]] == ["tube"]
+    assert "workbench" not in {collection["slug"] for collection in workshop["collections"]}
+    session.expire_all()
+    assert session.scalar(select(Collection.creator_id).where(Collection.slug == "workbench")) == split["id"]
+    # A creator's only account stays theirs.
+    only = client.post(f"/api/creators/nw-live/accounts/{cast_account}/split")
+    assert only.status_code == 422

@@ -3,10 +3,10 @@
 .creator-header {
     border: 1px solid rgba(100, 116, 139, 0.24);
     border-radius: 12px;
-    overflow: hidden;
     background: transparent;
 }
-.creator-banner { aspect-ratio: 6 / 1; background-size: cover; background-position: center; }
+/* The banner rounds its own corners, so the header lets its Actions menu reach past its edge. */
+.creator-banner { aspect-ratio: 6 / 1; background-size: cover; background-position: center; border-radius: 11px 11px 0 0; }
 .creator-identity { display: flex; gap: 1rem; align-items: flex-start; padding: 1rem; }
 .creator-avatar {
     flex: 0 0 auto; width: 72px; height: 72px; border-radius: 50%; object-fit: cover;
@@ -49,16 +49,49 @@
 .creator-order-note { margin: 0; opacity: .75; font-size: .875rem; }
 .creator-summary { margin-right: auto; opacity: .8; }
 
-.creator-collections { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
-.creator-collection { display: flex; flex-direction: column; gap: .25rem; color: inherit; text-decoration: none; }
-.creator-collection img, .creator-collection-art {
-    width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px;
-    display: grid; place-items: center; background: rgba(100, 116, 139, 0.15);
+/* The creator's collections in the Library, as cards with their artwork. */
+.creator-collections-title { display: flex; align-items: baseline; gap: .5rem; }
+.creator-collections-title span { font-weight: 400; font-size: .875rem; opacity: .65; }
+.creator-collections { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1.25rem 1rem; }
+.creator-collection { display: flex; flex-direction: column; gap: .2rem; color: inherit; text-decoration: none; min-width: 0; }
+.creator-collection b { margin-top: .4rem; line-height: 1.3; overflow-wrap: anywhere; }
+.creator-collection > span:not(.creator-collection-art) { opacity: .7; font-size: .85rem; }
+.creator-collection-art {
+    position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
+    display: grid; place-items: center; font-size: 1.75rem; background: rgba(100, 116, 139, 0.15);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .12); transition: transform .15s ease, box-shadow .15s ease;
 }
-.creator-collection span { opacity: .75; font-size: .875rem; }
+.creator-collection-art img { width: 100%; height: 100%; object-fit: cover; }
+.creator-collection:hover .creator-collection-art, .creator-collection:focus-visible .creator-collection-art {
+    transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15, 23, 42, .2);
+}
+.creator-collection:hover b { text-decoration: underline; }
+.creator-collection-count {
+    position: absolute; right: .5rem; bottom: .5rem; padding: .1rem .45rem; border-radius: 999px;
+    background: rgba(15, 23, 42, .78); color: #fff; font-size: .75rem; font-weight: 600;
+}
+.creator-collection-source { position: absolute; left: .5rem; top: .5rem; }
+.creator-empty { margin: 0; opacity: .8; }
+
+/* New playlists and shows wait for a choice on the Edit page. */
+.creator-waiting {
+    display: flex; align-items: center; gap: .75rem; padding: .75rem 1rem; color: inherit; text-decoration: none;
+    border: 1px solid #3b82f6; border-radius: 12px; background: rgba(59, 130, 246, 0.08);
+}
+.creator-waiting > svg:first-child { color: #3b82f6; }
+.creator-waiting > span { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.creator-waiting > span > span { opacity: .75; font-size: .875rem; }
+.creator-waiting-go { opacity: .6; }
+.creator-waiting:hover { background: rgba(59, 130, 246, 0.14); }
+
+.creator-row-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-left: auto; }
+.creator-section-list--new { border-color: #3b82f6; background: rgba(59, 130, 246, 0.05); }
 
 @media (max-width: 640px) {
     .creator-section-row { flex-wrap: wrap; }
+    .creator-row-actions, .creator-section-place { margin-left: calc(64px + .75rem); flex: 1 1 100%; min-width: 0; }
+    .creator-row-actions .btn { padding: .3rem .65rem; font-size: .85rem; }
+    .creator-collections { grid-template-columns: 1fr; }
     .creator-section-choice { flex: 1 1 100%; }
     .creator-identity { flex-direction: column; }
 }
@@ -68,11 +101,6 @@
 .creator-identity-copy { flex: 1 1 auto; }
 .creator-actions { display: flex; gap: .5rem; flex: 0 0 auto; }
 .creator-note { margin: 0; opacity: .75; font-size: .875rem; }
-.creator-found {
-    display: flex; align-items: center; gap: .75rem; padding: .75rem 1rem; flex-wrap: wrap;
-    border: 1px solid #3b82f6; border-radius: 12px; background: rgba(59, 130, 246, 0.08);
-}
-.creator-found-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-left: auto; }
 .creator-section-place { margin-left: auto; min-width: 15rem; }
 
 .creator-join { display: flex; flex-direction: column; gap: .75rem; }

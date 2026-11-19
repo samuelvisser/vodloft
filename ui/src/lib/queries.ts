@@ -10,7 +10,7 @@ import {
     useQuery,
     useQueryClient,
 } from '@tanstack/react-query'
-import {useEffect, useMemo, useRef} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveCollectionsToStorage} from './cache'
 import {
     type LazyCollectionPage,
@@ -450,6 +450,14 @@ export function useSources() {
     })
 }
 
+/** The ids of the Sources the Library has media from. */
+export function useSourcesInUse() {
+    return useQuery<string[], Error, string[], readonly ['sourcesInUse']>({
+        queryKey: ['sourcesInUse'] as const,
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/sources/in-use`, z.string().array(), signal),
+    })
+}
+
 /** The Sources by id, with a name fallback for items whose Source is no longer registered. */
 export function useSourceLookup() {
     const {data: sources} = useSources()
@@ -764,6 +772,28 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
 
 /** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
 /** Look a creator up at its Site. It can take a minute: ``onStep`` hears what the lookup is doing as it goes. */
+/** Reads an answer sent a line of JSON per step: tells ``onStep`` each step, and returns the line after them. */
+async function readSteps(
+    response: Response, onStep: (step: string, line: Record<string, unknown>) => void,
+): Promise<Record<string, unknown>> {
+    if (!response.ok || !response.body) throw await responseError(response)
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+    let buffered = ''
+    for (;;) {
+        const {value, done} = await reader.read()
+        buffered += value ?? ''
+        const lines = buffered.split('\n')
+        buffered = done ? '' : lines.pop() ?? ''
+        for (const line of lines.filter((item) => item.trim())) {
+            const message = JSON.parse(line) as Record<string, unknown>
+            if (typeof message.step === 'string') onStep(message.step, message)
+            else if (typeof message.error === 'string') throw new ApiError(message.error, 502)
+            else return message
+        }
+        if (done) throw new ApiError('The lookup stopped before it was done', 502)
+    }
+}
+
 export async function lookUpCreator(
     body: {sourceKey: string, url?: string | null, ref?: string | null},
     onStep: (step: string, creatorLabel?: string) => void,
@@ -776,23 +806,8 @@ export async function lookUpCreator(
         body: JSON.stringify(body),
         signal,
     })
-    if (!response.ok || !response.body) throw await responseError(response)
-    // One line of JSON per step, and then the creator or what went wrong.
-    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
-    let buffered = ''
-    for (;;) {
-        const {value, done} = await reader.read()
-        buffered += value ?? ''
-        const lines = buffered.split('\n')
-        buffered = done ? '' : lines.pop() ?? ''
-        for (const line of lines.filter((item) => item.trim())) {
-            const message = JSON.parse(line) as {step?: string, creatorLabel?: string, creator?: unknown, error?: string}
-            if (message.step) onStep(message.step, message.creatorLabel)
-            else if (message.error) throw new ApiError(message.error, 502)
-            else return CreatorLookupReadSchema.parse(message.creator)
-        }
-        if (done) throw new ApiError('The creator lookup stopped before it was done', 502)
-    }
+    const result = await readSteps(response, (step, line) => onStep(step, line.creatorLabel as string | undefined))
+    return CreatorLookupReadSchema.parse(result.creator)
 }
 
 export function useCreators() {
@@ -811,9 +826,10 @@ export function useCreator(slug: string | undefined) {
     })
 }
 
-/** Add sections of a creator to its collections, or ignore them. Answers with the creator's page. */
-export async function addCreatorSections(slug: string, sections: SectionPlan[]): Promise<CreatorPageRead> {
-    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/sections`, {
+/** Add sections of one of a creator's accounts to the creator's collections, or ignore them. Answers with the
+ * creator's page. */
+export async function addCreatorSections(slug: string, accountId: number, sections: SectionPlan[]): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
@@ -823,14 +839,42 @@ export async function addCreatorSections(slug: string, sections: SectionPlan[]):
     return CreatorPageReadSchema.parse(await response.json())
 }
 
-/** Move one of the creator's playlists, with its videos and their files: a season of its own collection, a collection
- * of its own, or out of the Library. */
-export async function moveCreatorSection(slug: string, ref: string, target: 'main' | 'own' | 'skip'): Promise<CreatorPageRead> {
-    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/sections/${encodeURIComponent(ref)}/move`, {
+/** Move one of the playlists of a creator's account, with its videos and their files: a season of the account's own
+ * collection, a collection of its own, or out of the Library. */
+export async function moveCreatorSection(
+    slug: string, accountId: number, ref: string, target: 'main' | 'own' | 'skip',
+): Promise<CreatorPageRead> {
+    const response = await fetch(
+        `${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections/${encodeURIComponent(ref)}/move`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({target}),
+        },
+    )
+    if (!response.ok) throw await responseError(response)
+    return CreatorPageReadSchema.parse(await response.json())
+}
+
+/** Make one of a creator's accounts a creator of their own again, with its collections. Answers with the new
+ * creator's page. */
+export async function splitCreatorAccount(slug: string, accountId: number): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/split`, {
+        method: 'POST',
+        credentials: 'include',
+    })
+    if (!response.ok) throw await responseError(response)
+    return CreatorPageReadSchema.parse(await response.json())
+}
+
+/** Make another creator in the Library, who is the same person or group, a part of this one. Answers with this
+ * creator's page. */
+export async function combineCreators(slug: string, otherSlug: string): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/combine`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({target}),
+        body: JSON.stringify({otherSlug}),
     })
     if (!response.ok) throw await responseError(response)
     return CreatorPageReadSchema.parse(await response.json())
@@ -841,18 +885,22 @@ function collectionCreatorPath(slug: string, rest = ''): string {
 }
 
 /** Find the creator behind a collection's links, and which of its sections each link becomes. Slow: asks the site. */
+/** The creator behind a collection's link, with the steps of looking it up so far. */
 export function useCollectionCreatorMatch(slug: string, enabled: boolean) {
-    return useQuery<CollectionCreatorMatch, Error>({
+    const [steps, setSteps] = useState<string[]>([])
+    const query = useQuery<CollectionCreatorMatch, Error>({
         queryKey: ['collection-creator-match', slug] as const,
         enabled,
         retry: false,
         staleTime: 60_000,
-        queryFn: async () => {
-            const response = await fetch(collectionCreatorPath(slug, '/match'), {credentials: 'include'})
-            if (!response.ok) throw await responseError(response)
-            return CollectionCreatorMatchSchema.parse(await response.json())
+        queryFn: async ({signal}) => {
+            setSteps([])
+            const response = await fetch(collectionCreatorPath(slug, '/match'), {credentials: 'include', signal})
+            const result = await readSteps(response, (step) => setSteps((done) => [...done, step]))
+            return CollectionCreatorMatchSchema.parse(result.match)
         },
     })
+    return {...query, steps}
 }
 
 export function useCollectionCreatorLeave(slug: string, enabled: boolean) {
@@ -869,9 +917,11 @@ export function useCollectionCreatorLeave(slug: string, enabled: boolean) {
 }
 
 /** Add a collection to the creator behind its links, or take it out of its creator again. */
-export async function setCollectionCreator(slug: string, inCreator: boolean, moveHere: string[] = []): Promise<void> {
+export async function setCollectionCreator(
+    slug: string, inCreator: boolean, moveHere: string[] = [], lookupId?: string | null,
+): Promise<void> {
     const response = await fetch(collectionCreatorPath(slug), inCreator
-        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moveHere})}
+        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moveHere, lookupId})}
         : {method: 'DELETE', credentials: 'include'})
     if (!response.ok) throw await responseError(response)
 }

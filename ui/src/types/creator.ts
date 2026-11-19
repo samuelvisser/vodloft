@@ -5,14 +5,21 @@ export function capitalized(label: string): string {
     return label.slice(0, 1).toUpperCase() + label.slice(1)
 }
 
+/** What a creator is, for a label: "YouTube creator" on one Site, "Creator on YouTube and The Daily Wire" on several. */
+export function creatorKindText(creator: {kind: string, accounts: {site: {name: string}}[]}): string {
+    const names = [...new Set(creator.accounts.map((account) => account.site.name))]
+    if (names.length < 2) return creator.kind
+    return `${capitalized(creator.kind)} on ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
 const newSectionActionRegs = new Map<string, ReturnType<typeof makeNewSectionActionReg>>()
 
 function makeNewSectionActionReg(label: string) {
     return createSelectRegistry(`NewSectionAction-${label}`, {
-        ask: {label: 'Ask me', help: `Sends a message, and shows the new one on the ${label}'s page with the choices.`},
+        ask: {label: 'Ask me', help: `Sends a message, and shows the new one on the ${label}'s Edit page with the choices.`},
         season: {label: 'Add it as a season', help: `It becomes a season of the ${label}'s own collection. A show, with seasons of its own, gets a collection of its own.`},
         own: {label: 'Add it as a collection', help: 'Each new one becomes a collection of its own.'},
-        ignore: {label: 'Ignore it', help: `It is only listed on the ${label}'s page.`},
+        ignore: {label: 'Ignore it', help: `It is only listed on the ${label}'s Edit page.`},
     })
 }
 

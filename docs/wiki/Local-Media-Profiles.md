@@ -283,7 +283,7 @@ For example, to keep only the part of a title before ` | `, and leave the title 
 | `collection_site_id` | The id the site gives the collection, such as a YouTube channel or playlist id |
 | `creator_title` | Name of the creator the collection belongs to, or empty when it belongs to none |
 | `creator_handle` | The creator's handle, such as `@kurzgesagt`, when the site has one |
-| `creator_kind` | What the site calls a creator, such as `YouTube creator` or `The Daily Wire host` |
+| `creator_kind` | What the creator is, such as `YouTube creator` or `The Daily Wire host`, or `creator` for one on several sites |
 | `section_title` | The playlist or show of the creator that the episode came from, such as `Shorts`; empty otherwise |
 | `section_kind` | `feed` for Videos, Live or Shorts, `list` for a playlist or show, `item` for a single movie; empty otherwise |
 | `artist` | Who the music is by: the creator's name, else the collection's author |

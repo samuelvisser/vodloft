@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
     ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
     SourceAPIRead, SourceSiteAPIRead,
 )
-from backend.db.models import Episode, Collection
+from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase
 from backend.security.access import Access
 from backend.types.collection_types import CollectionType
 from backend.services.media_access import access_locked, link_access
@@ -30,6 +30,14 @@ class LinkNotRecognisedError(LookupError):
 
 def list_sources() -> list[SourceAPIRead]:
     return [SourceAPIRead.model_validate(source) for source in all_sources()]
+
+
+def sources_in_use(s: Session) -> list[str]:
+    """The ids of the Sources the Library has collections, creators, movies or videos from."""
+    return sorted(s.scalars(
+        select(Collection.source_key)
+        .union(select(CreatorAccount.source_key), select(MediaItemBase.source_key))
+    ).all())
 
 
 class SourceFeatureMissingError(LookupError):
@@ -74,10 +82,21 @@ def search_source(access: Access, source: Source, query: str) -> SearchResultsAP
     results = SearchResultsAPIRead.model_validate(answer)
     return results.model_copy(update={
         "results": [
-            result.model_copy(update={"access_label": _access_label(source, result.url, result.access)})
+            result.model_copy(update={
+                "access_label": _access_label(source, result.url, result.access),
+                "creator_label": _creator_label(source, result.kind, result.url),
+            })
             for result in results.results if access.allows_link(source.id, result.url)
         ],
     })
+
+
+def _creator_label(source: Source, kind: str, url: str) -> str | None:
+    """What the Site calls a creator, when a collection result is a creator's own page that can be added as one."""
+    if kind != "collection" or not source.has(Feature.CREATORS) or not source.is_creator_page(url):
+        return None
+    site = source.site_for(url)
+    return site.creator_label if site is not None and site.creators else None
 
 
 def _access_label(source: Source, url: str, key: str | None) -> str | None:

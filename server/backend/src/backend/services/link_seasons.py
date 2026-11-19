@@ -75,7 +75,7 @@ def follows_creator(collection: Collection) -> bool:
     """Whether the collection is its creator's own collection, whose lists the creator finds and places: the
     collection does not look for new lists itself, and takes the ones the creator gives it."""
     creator = collection.creator
-    return creator is not None and creator.main_collection_id == collection.id
+    return creator is not None and collection.id in creator.main_collection_ids
 
 
 def offers_link_seasons(collection: Collection) -> bool:
