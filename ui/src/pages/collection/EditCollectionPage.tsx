@@ -20,6 +20,7 @@ import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
 import {CollectionTypeReg, CollectionTypeValue, EpisodeIdentifierReg, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
 import {apiUrl} from '../../lib/api'
 import SeasonsDialog from '../../components/CollectionSeasons/SeasonsDialog'
+import PageHeader, {PageHeaderAction} from '../../components/common/PageHeader'
 
 const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
   default: {label: 'Like other Collections'},
@@ -276,19 +277,15 @@ export default function EditCollectionPage() {
 
   return (
     <section className="view" aria-labelledby="edit-collection-title">
-      <div className="view-header">
-        <h1 id="edit-collection-title">Edit collection</h1>
-        {collection && (
-          <div className="actions" style={{margin: 0}}>
-            <button type="button" className="btn" onClick={() => setSeasonsOpen(true)}>
-              Seasons
-            </button>
-            <button type="button" className="btn" onClick={() => setMetadataOpen(true)}>
-              Metadata
-            </button>
-          </div>
+      <PageHeader
+        title="Edit collection" titleId="edit-collection-title"
+        actions={collection && (
+          <>
+            <PageHeaderAction icon={faIcon('fass', 'layer-group')} label="Seasons" variant="secondary" keepLabel onClick={() => setSeasonsOpen(true)}/>
+            <PageHeaderAction icon={faIcon('fass', 'list')} label="Metadata" variant="secondary" keepLabel onClick={() => setMetadataOpen(true)}/>
+          </>
         )}
-      </div>
+      />
 
       <form className="form" onSubmit={(e) => e.preventDefault()}>
         <div className="form-row">
