@@ -78,8 +78,8 @@
 .creator-section-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .creator-section-copy span { opacity: .75; font-size: .875rem; }
 /* A row's select takes the width of the longest choice in its list (SimpleSelect's fitLabels), so the selects of a
-   list line up. The title gives way when the row is short of room, and the select only past 60% of the row. */
-.creator-section-choice, .creator-section-place, .creator-join-overlap-select { flex: 0 0 auto; min-width: 15rem; max-width: 60%; }
+   list line up. The title gives way when the row is short of room, and the select only past half the row. */
+.creator-section-choice, .creator-section-place, .creator-join-overlap-select { flex: 0 0 auto; min-width: 15rem; max-width: 50%; }
 .creator-section-place { margin-left: auto; }
 .creator-section-note { opacity: .7; font-size: .875rem; }
 .creator-order-note { margin: 0; opacity: .75; font-size: .875rem; }

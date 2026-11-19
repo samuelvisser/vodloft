@@ -157,11 +157,11 @@ export default function AddCreatorPage() {
         () => new Map((creator?.sections ?? []).map((section) => [section.ref, choicesFor(creator!, section)])),
         [creator],
     )
-    // Every select in the lists is as wide as the longest choice of any of them, where the row has room for it.
-    const choiceLabels = useMemo(
-        () => [...registries.values()].flatMap((registry) => registry.options.map((option) => option.label)),
-        [registries],
-    )
+    // Every choice select is as wide as the longest choice any of them has, so they line up.
+    const choiceLabels = useMemo(() => (creator?.sections ?? [])
+        .filter((section) => section.kind !== 'item' && !section.collectionSlug)
+        .flatMap((section) => registries.get(section.ref)?.options.map((option) => option.label) ?? []),
+    [creator, registries])
 
     const choosePreset = (key: CreatorCreateIn['preset']) => {
         const chosen = creator?.presets.find((item) => item.key === key)
