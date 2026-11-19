@@ -68,16 +68,32 @@ def list_kinds(sites: Iterable[Site]) -> list[ListKind]:
     return list(kinds.values())
 
 
+_ALBUM_NAMES = frozenset({"album", "albums"})
+
+
+def album_kinds(kinds: Iterable[ListKind]) -> set[str]:
+    """The keys of the kinds that best describe an artist's albums: the ones their Site says do, or, where it says
+    none does and has more than one kind, the ones called album. Empty when no kind stands out, as on a Site with one
+    kind or with several of other names."""
+    kinds = list(kinds)
+    marked = {kind.key for kind in kinds if kind.albums}
+    if marked or len(kinds) < 2:
+        return marked
+    return {kind.key for kind in kinds if {kind.key.lower(), kind.names.one.lower().removeprefix("an "),
+                                           kind.names.many.lower()} & _ALBUM_NAMES}
+
+
 def default_new_sections(kinds: Iterable[ListKind], music: bool) -> dict[str, str]:
     """What a new creator does with each kind of new list. An artist adds them to their own collection, as albums;
-    where some kinds best describe albums, only those, and skips the others. Anyone else is asked."""
+    where some kinds best describe albums (``album_kinds``), only those, and skips the others. Anyone else is
+    asked."""
     kinds = list(kinds)
-    albums = any(kind.albums for kind in kinds)
+    albums = album_kinds(kinds)
 
     def action(kind: ListKind) -> NewSectionAction:
         if not music or not kind.seasons:
             return NewSectionAction.ASK
-        return NewSectionAction.SEASON if kind.albums or not albums else NewSectionAction.IGNORE
+        return NewSectionAction.SEASON if kind.key in albums or not albums else NewSectionAction.IGNORE
 
     return {kind.key: action(kind).value for kind in kinds}
 
@@ -124,11 +140,12 @@ def link_season_action(action: str) -> NewLinkSeasonAction:
 
 def default_new_link_seasons(kinds: Iterable[ListKind], music: bool) -> dict[str, str]:
     """What a collection does with each kind of new list until the user chooses: ask, except that a Music
-    collection on a Site where some kinds best describe albums skips the others, such as SoundCloud playlists."""
+    collection on a Site where some kinds best describe albums (``album_kinds``) skips the others, such as SoundCloud
+    playlists."""
     kinds = list(kinds)
-    albums = music and any(kind.albums for kind in kinds)
+    albums = album_kinds(kinds) if music else set()
     return {
-        kind.key: (NewLinkSeasonAction.IGNORE if albums and not kind.albums else NewLinkSeasonAction.ASK).value
+        kind.key: (NewLinkSeasonAction.IGNORE if albums and kind.key not in albums else NewLinkSeasonAction.ASK).value
         for kind in kinds
     }
 
