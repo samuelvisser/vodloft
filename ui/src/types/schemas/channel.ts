@@ -17,6 +17,7 @@ export const ChannelSectionReadSchema = z.object({
     description: z.string().nullable(),
     access: z.string().nullable(),
     hasSeasons: z.boolean(),
+    year: z.string().nullable().optional(),
     collectionSlug: z.string().nullable(),
     collectionTitle: z.string().nullable(),
     status: z.enum(['known', 'new', 'ignored']).default('known'),
@@ -48,6 +49,7 @@ export const ChannelLookupReadSchema = z.object({
     claimOrder: z.array(z.string()),
     presets: z.array(z.object({key: z.enum(ChannelPresetValues), plan: z.array(SectionPlanSchema)})),
     channelSlug: z.string().nullable(),
+    music: z.boolean().default(false),
 })
 export type ChannelLookupRead = z.infer<typeof ChannelLookupReadSchema>
 

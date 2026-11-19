@@ -105,7 +105,11 @@ def add_channel(s: Session, body: ChannelAPICreate, details: ChannelDetails, *, 
     channel, _collections = channels.add_channel(
         s, source_key=body.source_key, details=details,
         plans=[SectionPlan(plan.ref, SectionTarget(plan.target), LinkPlacement(plan.placement)) for plan in body.sections],
-        settings=NewCollectionSettings(CollectionType(body.type), EpisodeIdentifier(body.episode_identifier), body.membership_level),
+        # An artist's collections hold their music.
+        settings=NewCollectionSettings(
+            CollectionType.MUSIC if details.music else CollectionType(body.type), EpisodeIdentifier(body.episode_identifier),
+            body.membership_level,
+        ),
         added_by_id=added_by_id, new_sections=NewSectionAction(body.new_sections),
     )
     s.flush()

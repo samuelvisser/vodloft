@@ -19,6 +19,8 @@ class MusicTrack:
     album: str
     track_number: int | None
     year: str
+    track_count: int | None = None
+    """How many tracks the album has, as VODLoft knows it."""
 
 
 def collection_artist(collection) -> str:
@@ -31,7 +33,7 @@ def music_track(episode: "Episode") -> MusicTrack:
     published = episode.published_date
     return MusicTrack(
         artist=collection_artist(episode.collection), album=_album(episode), track_number=_track_number(episode),
-        year=str(published.year) if published else "",
+        year=str(published.year) if published else "", track_count=_track_count(episode),
     )
 
 
@@ -61,3 +63,14 @@ def _track_number(episode: "Episode") -> int | None:
     return session.scalar(
         select(func.count(Episode.id)).where(Episode.season_id == episode.season_id, Episode.index <= episode.index)
     ) or None
+
+
+def _track_count(episode: "Episode") -> int | None:
+    """How many episodes the episode's season has, which is the album's number of tracks."""
+    state = inspect(episode, raiseerr=False)
+    session = state.session if state is not None else None
+    if episode.season is None or session is None:
+        return None
+    from backend.db.models import Episode
+
+    return session.scalar(select(func.count(Episode.id)).where(Episode.season_id == episode.season_id)) or None

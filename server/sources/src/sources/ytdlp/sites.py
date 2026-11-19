@@ -51,9 +51,9 @@ _VIDEO_OUTPUT_HELP = {
 _HLS_DOWNLOADS = {"youtube": (360, 720, 1080)}
 _API_KEY_SITES = {"youtube"}
 # The Sites whose channels VODLoft can look up.
-_CHANNEL_SITES = {"youtube"}
+_CHANNEL_SITES = {"youtube", "bandcamp", "soundcloud"}
 # What a Site calls a channel, where that is not "channel".
-_CHANNEL_LABELS: dict[str, str] = {}
+_CHANNEL_LABELS = {"bandcamp": "artist", "soundcloud": "artist"}
 _CHANNEL_PRESETS = (ChannelPreset.ONE_SHOW, ChannelPreset.PER_LIST, ChannelPreset.PICK)
 # A channel's members-only videos sit among its open ones, so its collections start without them.
 _HIDES_LOCKED = {"youtube"}

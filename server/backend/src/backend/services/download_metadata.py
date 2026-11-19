@@ -67,6 +67,7 @@ def build_track_metadata(episode: Episode, collection) -> MediaServerMetadata:
         source_url=episode.sharing_url,
         album=track.album,
         track_number=track.track_number,
+        track_count=track.track_count,
         aired=_as_date(published),
         duration_seconds=episode.duration,
         authors=_strings((track.artist,)),

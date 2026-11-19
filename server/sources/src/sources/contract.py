@@ -385,6 +385,8 @@ class SectionRef:
     """The key of the ``Access`` the section needs, as for videos."""
     has_seasons: bool = False
     """A list with seasons of its own, such as a Daily Wire show, keeps them."""
+    year: str | None = None
+    """The year an album came out."""
 
 
 @dataclass(frozen=True)
@@ -407,6 +409,8 @@ class ChannelDetails:
     facts: tuple[str, ...] = ()
     """Short facts, such as "1.2M subscribers"."""
     sections: tuple[SectionRef, ...] = ()
+    music: bool = False
+    """A music artist, whose lists are albums: their collections are Music collections."""
 
 
 @dataclass(frozen=True)
@@ -448,6 +452,8 @@ class ResolvedLink:
     """Short facts for a search result, such as "412 videos" or "19:05"."""
     channel_url: str | None = None
     """The creator's channel this link is, on a Site with channels, so it can be added as a channel instead."""
+    channel_label: str | None = None
+    """What the Site calls that channel, such as channel or artist."""
 
 
 @dataclass(frozen=True)

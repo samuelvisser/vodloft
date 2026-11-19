@@ -219,7 +219,8 @@ def _place(
             feeds = [sections[plan.ref] for plan in group if sections[plan.ref].kind == SectionKind.FEED]
             main_feed = next((feed for feed in feeds if feed.role == SectionRole.MAIN), feeds[0] if feeds else first)
             title, slug, url, description = channel.title, channel.site_ref, main_feed.url, channel.description
-            image = channel.avatar_path
+            # An artist without a picture of their own shows their newest album's cover.
+            image = channel.avatar_path or next((sections[plan.ref].image_path for plan in group if sections[plan.ref].image_path), None)
         else:
             title = own.title if own.kind != SectionKind.FEED else f"{channel.title} {own.title}"
             slug, url, description, image = section_collection_slug(channel.site_ref, own), own.url, own.description, own.image_path

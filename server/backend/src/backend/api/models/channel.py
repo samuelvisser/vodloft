@@ -34,6 +34,8 @@ class ChannelSectionAPIRead(ResponseBase):
     description: Optional[str] = None
     access: Optional[str] = None
     has_seasons: bool = False
+    year: Optional[str] = None
+    """The year an album came out."""
     collection_slug: Optional[str] = None
     """The collection that keeps the section, when one does."""
     collection_title: Optional[str] = None
@@ -74,6 +76,8 @@ class ChannelLookupAPIRead(ResponseBase):
     presets: list[ChannelPresetAPIRead]
     channel_slug: Optional[str] = None
     """The channel's slug, when it is already in the Library."""
+    music: bool = False
+    """A music artist, whose lists are albums and whose collections are Music collections."""
 
 
 class SectionPlanAPIIn(RequestBase):

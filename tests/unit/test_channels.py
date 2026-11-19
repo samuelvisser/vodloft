@@ -436,6 +436,23 @@ def test_a_failed_lookup_ends_with_what_went_wrong(client, tube, monkeypatch):
     ]
 
 
+def test_an_artists_collections_hold_music(client, tube, session, monkeypatch):
+    from dataclasses import replace
+
+    from backend.db.models import Collection
+
+    details = tube.channel_details(ROOT)
+    monkeypatch.setattr(tube, "channel_details", lambda ref, progress=lambda step: None: replace(details, music=True))
+    _steps, body = _lookup(client)
+    assert body["music"] is True
+
+    response = client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "PLcabin", "target": "main", "placement": "one_season"}, {"ref": "PLtools", "target": "own"},
+    ]})
+    assert response.status_code == 201, response.text
+    assert set(session.scalars(select(Collection.type))) == {"music"}
+
+
 def test_a_site_names_its_channels_in_its_own_words(client, tube, monkeypatch):
     from dataclasses import replace
 

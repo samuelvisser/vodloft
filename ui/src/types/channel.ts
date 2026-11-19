@@ -9,14 +9,14 @@ const newSectionActionRegs = new Map<string, ReturnType<typeof makeNewSectionAct
 
 function makeNewSectionActionReg(label: string) {
     return createSelectRegistry(`NewSectionAction-${label}`, {
-        ask: {label: 'Ask me', help: `Sends a message, and shows the new playlist or show on the ${label}'s page with the choices.`},
-        main: {label: 'Add it as a season', help: `A new playlist becomes a season of the ${label}'s own collection. A show with its own seasons gets a collection of its own.`},
-        own: {label: 'Add it as a collection', help: 'Each new playlist or show becomes a collection of its own.'},
+        ask: {label: 'Ask me', help: `Sends a message, and shows the new one on the ${label}'s page with the choices.`},
+        main: {label: 'Add it as a season', help: `It becomes a season of the ${label}'s own collection. A show with seasons of its own gets a collection of its own.`},
+        own: {label: 'Add it as a collection', help: 'Each new one becomes a collection of its own.'},
         ignore: {label: 'Ignore it', help: `It is only listed on the ${label}'s page.`},
     })
 }
 
-/** What to do when a channel adds a playlist or show, in the words of its Site, such as host on The Daily Wire. */
+/** What to do when a channel adds a playlist, show or album, in the words of its Site, such as host on The Daily Wire. */
 export function newSectionActionReg(label: string) {
     let registry = newSectionActionRegs.get(label)
     if (!registry) {

@@ -343,6 +343,8 @@ class ResolvedLinkAPIRead(ResponseBase):
     preview: ResolvedLinkPreviewAPIRead
     channel_url: Optional[str] = None
     """The creator's channel this link is, on a Site with channels, so it can be added as a channel instead."""
+    channel_label: Optional[str] = None
+    """What the Site calls that channel, such as channel or artist."""
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
 
