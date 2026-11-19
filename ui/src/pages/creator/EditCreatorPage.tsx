@@ -85,7 +85,7 @@ export default function EditCreatorPage() {
         <section className="view creator-view" aria-labelledby="edit-creator-title">
             <PageHeader
                 title="Edit creator" titleId="edit-creator-title"
-                subtitle={<p className="view-description"><Link to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
+                subtitle={<p className="view-description"><Link className="quiet-link" to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
             />
             <CreatorSectionsEditor creator={creator} part="new"/>
             <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
