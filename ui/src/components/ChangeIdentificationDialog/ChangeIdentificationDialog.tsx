@@ -9,7 +9,7 @@ import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
-import {EpisodeIdentifierReg, EpisodeOrderReg, type EpisodeIdentifierValue, type EpisodeOrderValue} from '../../types/collection'
+import {episodeIdentifierRegFor, EpisodeOrderReg, type EpisodeIdentifierValue, type EpisodeOrderValue} from '../../types/collection'
 import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
 import './ChangeIdentificationDialog.css'
 import {collectionWords, CollectionWords} from '../../lib/collectionWords'
@@ -35,6 +35,8 @@ type Props = {
     /** The identification the collection has now, and the one picked. */
     current: EpisodeIdentifierValue
     target: EpisodeIdentifierValue | null
+    /** The collection's type, which names its identifications: "By album" for Music. */
+    collectionType?: string
     episodeOrder: EpisodeOrderValue
     onDismiss: () => void
     /** The change started: its operation shows on the collection page. */
@@ -125,7 +127,7 @@ function names(items: string[]) {
 
 /** Asks before a collection numbers its episodes another way, saying what that does to its files and profiles. */
 export default function ChangeIdentificationDialog({
-    open, collectionSlug, collectionTitle, current, target, episodeOrder, onDismiss, onStarted, words = collectionWords(null),
+    open, collectionSlug, collectionTitle, current, target, collectionType, episodeOrder, onDismiss, onStarted, words = collectionWords(null),
 }: Props) {
     const {season, episode} = words
     const startOperation = useStartOperation()
@@ -209,9 +211,9 @@ export default function ChangeIdentificationDialog({
             {preview && target && (
                 <>
                     <p className="change-identification-change">
-                        <span className="change-identification-chip">{EpisodeIdentifierReg.getLabelLoose(current)}</span>
+                        <span className="change-identification-chip">{episodeIdentifierRegFor(collectionType).getLabelLoose(current)}</span>
                         <span className="change-identification-arrow" aria-label="to">→</span>
-                        <span className="change-identification-chip is-target">{EpisodeIdentifierReg.getLabelLoose(target)}</span>
+                        <span className="change-identification-chip is-target">{episodeIdentifierRegFor(collectionType).getLabelLoose(target)}</span>
                     </p>
                     {preview.episodesRenumbered === 0 && <p>The {episode.many} of {collectionTitle} keep their numbers.</p>}
                     <ul className="change-identification-steps">

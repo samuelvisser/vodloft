@@ -5,7 +5,6 @@ import {Link, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
-import CollectionIndexingProgress from '../components/CollectionIndexingProgress/CollectionIndexingProgress'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import SourceBadge from '../components/Source/SourceBadge'
 import CollectionTile from '../components/CollectionTile/CollectionTile'
@@ -426,14 +425,7 @@ export default function LibraryPage() {
                                 key={collection.slug} collection={collection}
                                 // A yt-dlp creator's author is usually the creator itself: do not say its name twice.
                                 subtitle={collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null}
-                            >
-                                <CollectionIndexingProgress
-                                    collectionId={collection.id}
-                                    collectionSlug={collection.slug}
-                                    pollForStart={collection.episodeCount === 0}
-                                    className="library-collection-indexing"
-                                />
-                            </CollectionTile>
+                            />
                         ))}
                     </div>
                 ) : (

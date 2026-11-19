@@ -11,7 +11,7 @@ import SimpleSelect from '../../components/common/SimpleSelect'
 import {useCollectionDefaults} from '../../components/AddCollectionPage/collectionDefaults'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
-import {CollectionTypeReg, EpisodeIdentifierReg} from '../../types/collection'
+import {CollectionTypeReg, EpisodeIdentifierReg, episodeIdentifierRegFor, musicIdentificationAdvice} from '../../types/collection'
 import {
     CreatorCollectionFormSchema,
     CreatorPageReadSchema,
@@ -121,7 +121,10 @@ export default function NewCreatorCollectionDialog({creator, item, onDismiss}: {
                 </p>
             )}
             {field('type', 'Collection type', CollectionTypeReg)}
-            {field('episodeIdentifier', 'Episode identification', EpisodeIdentifierReg)}
+            {field('episodeIdentifier', 'Episode identification', episodeIdentifierRegFor(form.watch('type')))}
+            {musicIdentificationAdvice(form.watch('type'), form.watch('episodeIdentifier')) && (
+                <p className="help form-advice" role="status">{musicIdentificationAdvice(form.watch('type'), form.watch('episodeIdentifier'))}</p>
+            )}
             {errors.root && <div className="form-error-card" role="alert">{String(errors.root.message)}</div>}
         </ConfirmDialog>
     )

@@ -6,9 +6,13 @@ import {toImageUrl} from '../Episode/EpisodeCard'
 import CollectionTileArt from '../CollectionTileArt/CollectionTileArt'
 import SourceBadge from '../Source/SourceBadge'
 import {wordsFor} from '../../lib/collectionWords'
+import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
+import CollectionIndexingProgress from '../CollectionIndexingProgress/CollectionIndexingProgress'
 
 type CollectionTileProps = {
     collection: {
+        /** With it, the tile shows how far indexing is while the collection is being indexed. */
+        id?: number
         slug: string
         title: string
         sourceKey: string
@@ -26,7 +30,7 @@ type CollectionTileProps = {
     subtitle?: string | null
     /** Show the collection's Source on its artwork. */
     showSource?: boolean
-    /** More beside the episode count, such as how far indexing is. */
+    /** More beside the episode count. */
     children?: ReactNode
 }
 
@@ -37,6 +41,7 @@ export default function CollectionTile({collection, subtitle, showSource = true,
         collection.thumbnailSquarePath || collection.thumbnailPortraitPath || collection.thumbnailLandscapePath
         || collection.logoImagePath || collection.authorHeadshotPath,
     )
+    const indexing = !!useActiveOperation('collection.index', 'collection', collection.id ?? null)
     return (
         <Link className="library-tile" to={`/collection/${collection.slug}`} role="listitem">
             <span className="library-tile-art">
@@ -49,10 +54,19 @@ export default function CollectionTile({collection, subtitle, showSource = true,
                 <span className="library-tile-title">{collection.title}</span>
                 {subtitle && <span className="library-tile-author">{subtitle}</span>}
                 <span className="library-tile-status">
-                    <span className="library-tile-meta">
-                        <span>{wordsFor(collection).count(collection.episodeCount)}</span>
-                        {collection.years && <span>{collection.years}</span>}
-                    </span>
+                    {/* A collection that is still being indexed has no episodes yet, only progress. */}
+                    {!(indexing && collection.episodeCount === 0) && (
+                        <span className="library-tile-meta">
+                            <span>{wordsFor(collection).count(collection.episodeCount)}</span>
+                            {collection.years && <span>{collection.years}</span>}
+                        </span>
+                    )}
+                    {collection.id !== undefined && (
+                        <CollectionIndexingProgress
+                            collectionId={collection.id} collectionSlug={collection.slug}
+                            pollForStart={collection.episodeCount === 0} className="library-collection-indexing"
+                        />
+                    )}
                     {children}
                 </span>
             </span>

@@ -128,6 +128,7 @@ class CreatorAPICreate(RequestBase):
 
 
 class CreatorCollectionAPIRead(ResponseBase):
+    id: int
     slug: str
     title: str
     type: str

@@ -17,7 +17,7 @@ import {toast} from 'react-hot-toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
-import {CollectionTypeReg, CollectionTypeValue, EpisodeIdentifierReg, EpisodeIdentifierValue, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
+import {CollectionTypeReg, CollectionTypeValue, episodeIdentifierRegFor, musicIdentificationAdvice, EpisodeIdentifierValue, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
 import ChangeIdentificationDialog from '../../components/ChangeIdentificationDialog/ChangeIdentificationDialog'
 import ProgressSelect from '../../components/common/ProgressSelect'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
@@ -401,7 +401,7 @@ export default function EditCollectionPage() {
           <label htmlFor="collection-episode-identification">{words.episode.One} identification</label>
           <ProgressSelect
             inputId="collection-episode-identification"
-            registry={EpisodeIdentifierReg}
+            registry={episodeIdentifierRegFor(form.type)}
             value={collection?.episodeIdentifier ?? null}
             isDisabled={!collection}
             definition={frontendOperationDefinitions['collection.change_identification']}
@@ -420,6 +420,9 @@ export default function EditCollectionPage() {
             How VODLoft numbers the {words.episode.many}. Changing it numbers every {words.episode.one} again, renames the files
             that are named by their numbers and rewrites their metadata.
           </div>
+          {musicIdentificationAdvice(form.type, collection?.episodeIdentifier) && (
+            <div className="help form-advice" role="status">{musicIdentificationAdvice(form.type, collection?.episodeIdentifier)}</div>
+          )}
         </div>
 
         <div className="form-row">
@@ -577,6 +580,7 @@ export default function EditCollectionPage() {
           collectionSlug={collection.slug}
           collectionTitle={collection.title}
           current={collection.episodeIdentifier as EpisodeIdentifierValue}
+          collectionType={form.type}
           target={identificationTarget}
           episodeOrder={collection.episodeOrder}
           words={wordsFor(collection)}

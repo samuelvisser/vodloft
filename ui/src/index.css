@@ -2552,3 +2552,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 @media (max-width: 600px) {
   .keep-question-copy small { white-space: normal; }
 }
+
+/* A small advisory under a field, such as a Music collection that isn't identified by album. */
+.help.form-advice { color: #b45309; }
+@media (prefers-color-scheme: dark) { .help.form-advice { color: #fbbf24; } }

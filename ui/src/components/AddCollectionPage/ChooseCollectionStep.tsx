@@ -13,7 +13,7 @@ import {
     CollectionCreatePayloadSchema,
     type CollectionCreateFormIn, CollectionCreatePayloadOut, CollectionCreatePayloadIn,
 } from "../../types/schemas/collection";
-import {EpisodeIdentifierReg, CollectionTypeReg} from "../../types/collection";
+import {CollectionTypeReg, episodeIdentifierRegFor, musicIdentificationAdvice} from "../../types/collection";
 import Select from "react-select";
 import {UseQueryResult} from "@tanstack/react-query";
 import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
@@ -215,8 +215,8 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                     <Select
                         classNamePrefix="select"
                         inputId="episode-identification"
-                        options={EpisodeIdentifierReg.options}
-                        value={EpisodeIdentifierReg.options.find(o => o.value === field.value) ?? null}
+                        options={episodeIdentifierRegFor(watch("type")).options}
+                        value={episodeIdentifierRegFor(watch("type")).options.find(o => o.value === field.value) ?? null}
                         onChange={(opt) => field.onChange(opt?.value ?? "")}
                         onBlur={field.onBlur}
                         aria-invalid={!!errors.episodeIdentifier}
@@ -229,6 +229,9 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                 <div id="episode-identification-errors" className="error" role="alert" aria-live="polite">
                     {errors.episodeIdentifier.message as string}
                 </div>
+            )}
+            {musicIdentificationAdvice(watch("type"), watch("episodeIdentifier")) && (
+                <div className="help form-advice" role="status">{musicIdentificationAdvice(watch("type"), watch("episodeIdentifier"))}</div>
             )}
             <div className="help" id="episode-identification-help">
                 <ReadMore summary={<span>How are episodes in this collection identified?</span>}>

@@ -56,14 +56,19 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const several = creator.accounts.length > 1
     // In the words of their one Site, when they are all on one, such as playlists on YouTube.
     const names = sites.size === 1 ? items[0].account.site.creatorSections : creator.sectionNames
-    const movieCount = items.filter(({section}) => section.kind === 'item').length
-    const sectionCount = items.length - movieCount
-    const movieNoun = movieCount === 1 ? 'movie' : 'movies'
-    // "3 more shows", "1 more movie", or "3 more shows and 1 movie".
-    const counted = [
-        sectionCount ? `${sectionCount} more ${sectionCount === 1 ? withoutArticle(names.one) : names.many}` : null,
-        movieCount ? `${movieCount} ${sectionCount ? '' : 'more '}${movieNoun}` : null,
-    ].filter(Boolean).join(' and ')
+    // What is not in the library, by kind: "3 more feeds", "1 more show", or "4 more feeds and playlists".
+    const kinds = [
+        {count: items.filter(({section}) => section.kind === 'feed').length, one: 'feed', many: 'feeds'},
+        {
+            count: items.filter(({section}) => section.kind !== 'feed' && section.kind !== 'item').length,
+            one: withoutArticle(names.one), many: names.many,
+        },
+        {count: items.filter(({section}) => section.kind === 'item').length, one: 'movie', many: 'movies'},
+    ].filter((kind) => kind.count > 0)
+    const nouns = kinds.length === 1
+        ? (items.length === 1 ? kinds[0].one : kinds[0].many)
+        : `${kinds.slice(0, -1).map((kind) => kind.many).join(', ')} and ${kinds[kinds.length - 1].many}`
+    const counted = `${items.length} more ${nouns}`
     const onSite = sites.size === 1 ? ` on ${items[0].account.site.name}` : ''
     const arts = items.map(({section}) => toImageUrl(section.imageUrl)).filter((url): url is string => !!url).slice(0, 4)
     const key = ({account, section}: AccountSection) => `${account.id}:${section.ref}`

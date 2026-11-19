@@ -130,6 +130,7 @@ export type CreatorPageAccountRead = z.infer<typeof CreatorPageAccountReadSchema
 
 export const CreatorPageReadSchema = CreatorReadSchema.extend({
     collections: z.array(z.object({
+        id: z.number(),
         slug: z.string(),
         title: z.string(),
         type: z.string(),
