@@ -30,6 +30,7 @@ export const VideoPreferredFormatReg = createSelectRegistry("VideoPreferredForma
 
 export const LocalMediaProfileTypeReg = createSelectRegistry("LocalMediaProfileType", {
   'collection': { label: "Collection", help: "Store downloaded collection episodes" },
+  'music': { label: "Music", help: "Store music collections as tagged audio tracks, an album per season" },
   'video': { label: "Video", help: "Store single videos and movies added on their own" },
 });
 
@@ -37,6 +38,14 @@ export const CollectionLocalMediaProfileScopeReg = createSelectRegistry("Collect
   'both': { label: "Podcasts and Series", help: "Offer this profile for both Podcasts and Series" },
   'podcast': { label: "Podcasts", help: "Offer this profile only for Podcasts" },
   'series': { label: "Series", help: "Offer this profile only for Series" },
+  'music': { label: "Music", help: "Music collections, which only Music profiles keep" },
+});
+
+/** The scopes a Collection profile can choose: Music collections take Music profiles only. */
+export const CollectionProfileScopeChoiceReg = createSelectRegistry("CollectionLocalMediaProfileScope", {
+  'both': CollectionLocalMediaProfileScopeReg.spec.both,
+  'podcast': CollectionLocalMediaProfileScopeReg.spec.podcast,
+  'series': CollectionLocalMediaProfileScopeReg.spec.series,
 });
 
 export const FilenameRestrictionModeReg = createSelectRegistry("FilenameRestrictionMode", {
@@ -50,32 +59,41 @@ export function effectiveFilenameMode(mode: string | undefined, systemMode: stri
   return mode === 'system' ? systemMode : mode
 }
 
-export type LocalMediaProfileType = 'collection' | 'video'
-/** The API collection that creates, updates and deletes profiles of one type. */
+export type LocalMediaProfileType = 'collection' | 'music' | 'video'
+/** The API collection that creates, updates and deletes profiles of one type. A Music profile is a kind of
+ *  Collection profile. */
 export function localMediaProfileEndpoint(type: LocalMediaProfileType | string): string {
-    return `${type}-local-media-profiles`
+    return `${type === 'music' ? 'collection' : type}-local-media-profiles`
 }
 
 export type CollectionLocalMediaProfileScope = (typeof CollectionLocalMediaProfileScopeReg)["values"][number]
-export type CollectionLocalMediaProfileContext = 'podcast' | 'series'
+export type CollectionLocalMediaProfileContext = 'podcast' | 'series' | 'music'
+export function isCollectionContext(value: string | null | undefined): value is CollectionLocalMediaProfileContext {
+    return value === 'podcast' || value === 'series' || value === 'music'
+}
 
 export function defaultSubtitleModeForProfile(
     type: LocalMediaProfileType,
     collectionScope: CollectionLocalMediaProfileScope = 'both',
 ): LocalMediaProfileSubtitleMode {
     // New Video profiles start without subtitles; they can be turned on like any other profile.
-    if (type === 'video') return 'no_subtitles'
+    if (type === 'video' || type === 'music') return 'no_subtitles'
     return type === 'collection' && collectionScope === 'podcast' ? 'no_subtitles' : 'sidecar'
+}
+
+/** Collection and Music profiles both store the episodes of collections. */
+export function isCollectionProfileType(type: LocalMediaProfileType | string | undefined): boolean {
+    return type === 'collection' || type === 'music'
 }
 
 export function isCollectionLocalMediaProfileAvailableFor(
     profile: LocalMediaProfileRead,
     collectionType: string | null | undefined,
 ): boolean {
-    if (profile.type !== 'collection') return false
-    if (collectionType !== 'podcast' && collectionType !== 'series') return true
+    if (!isCollectionProfileType(profile.type)) return false
+    if (collectionType !== 'podcast' && collectionType !== 'series' && collectionType !== 'music') return true
     const scope = profile.collectionScope ?? 'both'
-    return scope === 'both' || scope === collectionType
+    return scope === collectionType || (scope === 'both' && collectionType !== 'music')
 }
 
 /** Every Site whose media a Local Media Profile of this type can store. */
@@ -201,8 +219,8 @@ export function buildLocalMediaProfileSelectRegistry(
     const values: string[] = []
     if (Array.isArray(mediaProfiles)) {
         for (const p of mediaProfiles) {
-            if (type && p.type !== type) continue
-            if (type === 'collection' && collectionType && !isCollectionLocalMediaProfileAvailableFor(p, collectionType)) continue
+            if (type && isCollectionProfileType(p.type) !== isCollectionProfileType(type)) continue
+            if (isCollectionProfileType(type) && collectionType && !isCollectionLocalMediaProfileAvailableFor(p, collectionType)) continue
             if (!isLocalMediaProfileAvailableForSite(p, siteKey)) continue
             const id = (p as any).id
             const name = (p as any).name ?? String(id)

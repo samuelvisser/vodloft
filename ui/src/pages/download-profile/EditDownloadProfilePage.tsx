@@ -13,7 +13,7 @@ import {
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
-import {isLocalMediaProfileAvailableForSite, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {isCollectionContext, isLocalMediaProfileAvailableForSite, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_view";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import ReadMore from "../../utils/ReadMore";
@@ -81,7 +81,7 @@ export default function EditDownloadProfilePage() {
     const mediaProfileReg = useLocalMediaProfileSelectRegistry(
         offeredProfiles,
         'collection',
-        collectionType === 'podcast' || collectionType === 'series' ? collectionType : undefined,
+        isCollectionContext(collectionType) ? collectionType : undefined,
     )
     // A collection has one Download Profile per Local Media Profile.
     const usedLocalMediaProfiles = useMemo(() => new Set(

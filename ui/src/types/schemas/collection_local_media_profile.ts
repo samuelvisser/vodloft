@@ -36,7 +36,7 @@ export const CollectionLocalMediaProfileIndexingValuesSchema = z.array(IndexingV
 
 // ---------- Strict request (create/update) ----------
 const CollectionLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
-    type: z.literal('collection').default('collection'),
+    type: z.enum(['collection', 'music']).default('collection'),
     collectionScope: z.enum(CollectionLocalMediaProfileScopeReg.values).default('both'),
     outputTemplate: LocalMediaProfileOutputTemplateSchema.default(
         '/downloads/shows/{{ collection }}/{{ episode_title }}.ext',
@@ -64,7 +64,7 @@ export type CollectionLocalMediaProfileUpdateOut = z.output<typeof CollectionLoc
 
 // ------------ Lenient response (read) ------------
 export const CollectionLocalMediaProfileReadSchema = LocalMediaProfileSchemaResponse.safeExtend({
-    type: z.literal('collection'),
+    type: z.enum(['collection', 'music']),
     collectionScope: z.enum(CollectionLocalMediaProfileScopeReg.values)
         .nullable()
         .optional()

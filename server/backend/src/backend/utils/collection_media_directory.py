@@ -73,7 +73,7 @@ def infer_collection_media_directory(
         # A collection's channel is the same for each of its episodes, so a folder per channel is above the collection's.
         collection_fields = {
             name for name in values
-            if name in {"collection", "collection_title"} | CHANNEL_OUTPUT_TEMPLATE_FIELDS or name.startswith("meta_collection_")
+            if name in {"collection", "collection_title", "artist"} | CHANNEL_OUTPUT_TEMPLATE_FIELDS or name.startswith("meta_collection_")
         }
         analysis = analyze_template(tree, environment=environment, variables=values,
                                     known_values={name: values[name] for name in collection_fields})

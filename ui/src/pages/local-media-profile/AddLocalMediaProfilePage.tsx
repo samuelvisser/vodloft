@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
-import LocalMediaProfileForm, {LocalMediaProfileMode} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import LocalMediaProfileForm, {profileMode} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import IndexingValuesEditorButton from '../../components/LocalMediaProfile/IndexingValuesEditorButton'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
@@ -29,7 +29,8 @@ import {
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
 import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
 import {getZodDefaults} from '../../utils/defaultZod'
-import {LocalMediaProfileTypeReg, localMediaProfileEndpoint} from '../../types/local_media_profile'
+import {LocalMediaProfileType, LocalMediaProfileTypeReg, localMediaProfileEndpoint} from '../../types/local_media_profile'
+import {MUSIC_OUTPUT_TEMPLATE} from '../../components/LocalMediaProfile/outputTemplatePresets'
 import {apiUrl} from '../../lib/api'
 
 
@@ -97,11 +98,10 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
         [source],
     )
     const requestedMode = searchParams.get('type')
-    const explicitMode = !source && (requestedMode === 'collection' || requestedMode === 'video')
-        ? requestedMode
-        : undefined
-    const initialMode: LocalMediaProfileMode = explicitMode || (restoredDraft?.mode ?? 'collection')
-    const [mode, setMode] = useState<LocalMediaProfileMode>(initialMode)
+    const explicitType = !source && LocalMediaProfileTypeReg.is(requestedMode) ? requestedMode : undefined
+    const initialType: LocalMediaProfileType = explicitType || (restoredDraft?.mode ?? 'collection')
+    const [profileType, setProfileType] = useState<LocalMediaProfileType>(initialType)
+    const mode = profileMode(profileType)
     // A draft is only kept once something is typed, so a draft that is there holds the user's own changes.
     const showRestored = !source && !!restoredDraft
 
@@ -112,6 +112,26 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
         defaultValues: {
             ...getZodDefaults(CollectionLocalMediaProfileCreateSchema),
             ...(restoredDraft?.mode === 'collection'
+                ? restoredDraft.values as Partial<CollectionLocalMediaProfileCreateIn>
+                : {}),
+        },
+    })
+
+    // A Music profile is a Collection profile for music collections that keeps audio only.
+    const formMusic = useForm<WithRoot<CollectionLocalMediaProfileCreateIn>>({
+        resolver: zodResolver(CollectionLocalMediaProfileCreateSchema),
+        mode: 'onBlur',
+        shouldFocusError: true,
+        defaultValues: {
+            ...getZodDefaults(CollectionLocalMediaProfileCreateSchema),
+            type: 'music',
+            collectionScope: 'music',
+            preferredFormat: 'format_audio_only',
+            subtitleMode: 'no_subtitles',
+            thumbnailMode: 'embed',
+            metadataMode: 'embed',
+            outputTemplate: MUSIC_OUTPUT_TEMPLATE,
+            ...(restoredDraft?.mode === 'music'
                 ? restoredDraft.values as Partial<CollectionLocalMediaProfileCreateIn>
                 : {}),
         },
@@ -129,14 +149,14 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
         },
     })
 
-    const form = ({collection: formCollection, video: formVideo}[mode]) as UseFormReturn<any>
+    const form = ({collection: formCollection, music: formMusic, video: formVideo}[profileType]) as UseFormReturn<any>
 
 
     useEffect(() => {
         if (!draftKey) return
         const saveDraft = (values: Partial<LocalMediaProfileCreateIn>) => {
             saveLocalMediaProfileDraft<LocalMediaProfileCreateIn>(draftKey, {
-                mode,
+                mode: profileType,
                 values,
             })
         }
@@ -145,10 +165,10 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
             saveDraft(values as Partial<LocalMediaProfileCreateIn>)
         })
         return () => subscription.unsubscribe()
-    }, [draftKey, form, mode])
+    }, [draftKey, form, profileType])
 
     const submitFn = async (data: LocalMediaProfileCreateOut) => {
-        const endpoint = localMediaProfileEndpoint(mode)
+        const endpoint = localMediaProfileEndpoint(profileType)
         return fetch(`${apiUrl()}/${endpoint}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -190,13 +210,18 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
                         <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(source.type)}</div>
                     ) : <SegmentedOptions
                         name="local-media-profile-mode"
-                        value={mode}
-                        onChange={(value) => setMode(value as LocalMediaProfileMode)}
+                        value={profileType}
+                        onChange={(value) => setProfileType(value as LocalMediaProfileType)}
                         options={[
                             {
                                 value: 'collection',
                                 label: 'Collection',
                                 description: 'Store downloaded collection episodes',
+                            },
+                            {
+                                value: 'music',
+                                label: 'Music',
+                                description: 'Store the tracks of music collections, as audio with music tags',
                             },
                             {
                                 value: 'video',

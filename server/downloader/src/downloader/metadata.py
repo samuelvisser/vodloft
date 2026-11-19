@@ -35,13 +35,26 @@ class MediaServerMetadata:
     content_rating: str | None = None
     parent_movie_title: str | None = None
     media_type: str | None = None
+    album: str | None = None
+    """For a track: the album it is on, which music players group by."""
+    track_number: int | None = None
+
+    @property
+    def is_track(self) -> bool:
+        return self.kind == "track"
 
     def ffmpeg_tags(self) -> dict[str, str]:
         tags: dict[str, str] = {"title": self.title}
         if self.description:
             tags["description"] = self.description
             tags["comment"] = self.description
-        if self.collection_title:
+        if self.is_track:
+            # Music players group by album and album artist, and sort by track number.
+            if self.album:
+                tags["album"] = self.album
+            if self.track_number is not None:
+                tags["track"] = str(self.track_number)
+        elif self.collection_title:
             tags["show"] = self.collection_title
             tags["album"] = self.collection_title
         if self.authors:
@@ -52,7 +65,7 @@ class MediaServerMetadata:
             tags["date"] = self.aired.isoformat()
         elif self.release_date:
             tags["date"] = self.release_date.isoformat()
-        if self.season_number is not None:
+        if self.season_number is not None and not self.is_track:
             tags["season_number"] = str(self.season_number)
         if self.episode_number is not None:
             tags["episode_id"] = str(self.episode_number)

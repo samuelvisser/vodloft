@@ -250,10 +250,12 @@ def embed_media(
     media_path: str, *, metadata: Mapping[str, str] | None = None,
     thumbnail_path: str | None = None, audio_only: bool = False,
     subtitles: tuple[tuple[str, str, bool, str | None], ...] = (),
-    default_subtitle: int | None = None,
+    default_subtitle: int | None = None, square_artwork: bool = False,
     ffmpeg_path: str = "ffmpeg", should_cancel: Optional[CancelCheck] = None,
 ) -> None:
     """Apply artwork, metadata, and optional subtitles in one serialized pass.
+
+    ``square_artwork`` cuts the artwork to a square from its middle, as music players show album covers.
 
     Each subtitle is (language, SRT path, forced, track title or None);
     ``default_subtitle`` is the index of the one players pick by default.
@@ -267,9 +269,11 @@ def embed_media(
     if not ffmpeg_available(ffmpeg_path):
         raise FfmpegNotFoundError(f"ffmpeg binary '{ffmpeg_path}' not found on PATH")
     suffix = Path(media_path).suffix.lower()
-    muxer = {".mp4": "mp4", ".m4a": "mp4", ".m4v": "mp4", ".mp3": "mp3", ".mkv": "matroska"}.get(suffix)
-    if muxer is None:
-        raise DownloadError(f"Cannot embed artwork, metadata or subtitles into '{suffix}' media")
+    muxer = {
+        ".mp4": "mp4", ".m4a": "mp4", ".m4v": "mp4", ".mp3": "mp3", ".mkv": "matroska", ".flac": "flac", ".opus": "opus",
+    }.get(suffix)
+    if muxer is None or (muxer == "opus" and thumbnail_path is not None):
+        raise DownloadError(f"Cannot embed {'artwork' if muxer else 'artwork, metadata or subtitles'} into '{suffix}' media")
     if subtitles and (audio_only or muxer not in {"mp4", "matroska"} or suffix == ".m4a"):
         raise DownloadError("Embedding subtitles requires an MP4 or MKV video file")
     part_path = media_path + ".metadata.part"
@@ -312,6 +316,8 @@ def embed_media(
             artwork_stream_index = 0 if audio_only else 1
             command += [f"-c:v:{artwork_stream_index}", "mjpeg",
                         f"-disposition:v:{artwork_stream_index}", "attached_pic"]
+            if square_artwork:
+                command += [f"-filter:v:{artwork_stream_index}", "crop='min(iw,ih)':'min(iw,ih)'"]
         for key, value in (metadata or {}).items():
             if value:
                 command += ["-metadata", f"{key}={value}"]

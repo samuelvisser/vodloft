@@ -828,9 +828,10 @@ def _get_profile(s: Session, profile_id: int, expected_type: LocalMediaProfileTy
     profile: Optional[LocalMediaProfileBase] = s.get(LocalMediaProfileBase, profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Local media profile not found")
-    if profile.type != expected_type.value:
+    if LocalMediaProfileType(profile.type).for_collections != expected_type.for_collections:
         label = _PROFILE_TYPE_LABELS[expected_type]
-        raise HTTPException(status_code=422, detail=f"{label} require a {expected_type.value.title()} Local Media Profile")
+        wanted = "Collection or Music" if expected_type.for_collections else expected_type.label
+        raise HTTPException(status_code=422, detail=f"{label} require a {wanted} Local Media Profile")
     if not profile_offered_for_site(s, profile, site_key):
         raise HTTPException(status_code=422, detail=f"Local Media Profile '{profile.name}' is not available for this Site")
     return profile

@@ -410,9 +410,9 @@ def test_a_ytdlp_download_plans_thumbnails_and_nfo_in_every_container(video_sour
     assets = {asset.id: asset for asset in plan.assets}
     assert assets["artwork"].url == "https://img.clips.example/abc.jpg" and assets["artwork"].publish
     assert assets["nfo"].target_suffix == ".nfo" and b"<title>" in assets["nfo"].content
-    # An Opus file gets the thumbnail and NFO beside it; VODLoft can't embed into it.
+    # An Opus file gets its tags, and the thumbnail and NFO beside it: VODLoft can't embed artwork into it.
     assert (plan.artwork_asset_id == "artwork") is embeds
-    assert bool(plan.metadata_tags) is embeds
+    assert bool(plan.metadata_tags)
 
 
 def test_a_frame_vodloft_took_from_the_video_is_embedded_and_kept_beside_it(video_sources, session, monkeypatch, tmp_path):

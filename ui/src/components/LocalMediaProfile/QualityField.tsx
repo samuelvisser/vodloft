@@ -83,6 +83,7 @@ export default function QualityField({form, mode}: Props) {
         const nearest = nearestVideoFormat(offered, preferredFormat)
         if (nearest) setValue('preferredFormat', nearest, OPTIONS)
     }, [offered, preferredFormat, setValue])
+    const music = useWatch({control, name: 'type'}) === 'music'
     const audioOnly = preferredFormat === 'format_audio_only'
     const hls = preferredFormat === 'format_hls'
     const codecs = videoCodecs ?? []
@@ -113,7 +114,7 @@ export default function QualityField({form, mode}: Props) {
     }
 
     const option = (value: string): DownloadOption => ({value, label: QualityDownloadReg.getLabelLoose(value)})
-    const downloadGroups = [
+    const downloadGroups = music ? [{label: 'Music', options: [option('format_audio_only')]}] : [
         {
             label: 'Video, up to',
             options: LADDER_STEPS.filter((step) => !offered || offered.videoHeights.includes(FORMAT_HEIGHTS[step])).map(option),
@@ -152,7 +153,9 @@ export default function QualityField({form, mode}: Props) {
                 />
                 {errors.preferredFormat && <div className="error" role="alert">{String(errors.preferredFormat.message)}</div>}
                 <div className="help">
-                    {audioOnly
+                    {music
+                        ? 'A Music profile keeps audio only.'
+                        : audioOnly
                         ? 'Audio only: no video is downloaded.'
                         : hls
                             ? `An HLS bundle keeps several resolutions together, so podcast apps can pick one${hlsHelp ? `: ${hlsHelp}` : ''}.`
@@ -166,7 +169,7 @@ export default function QualityField({form, mode}: Props) {
                         <div className="form-row">
                             <span className="quality-field__heading" id="quality-audio-format">Audio format</span>
                             <div className="quality-cards" role="radiogroup" aria-labelledby="quality-audio-format">
-                                {AudioFormatReg.values.map((value) => (
+                                {AudioFormatReg.values.filter((value) => music || value !== 'flac').map((value) => (
                                     <button
                                         key={value} type="button" role="radio" aria-checked={audioFormat === value}
                                         className={`quality-card${audioFormat === value ? ' is-selected' : ''}`}
@@ -177,7 +180,7 @@ export default function QualityField({form, mode}: Props) {
                                     </button>
                                 ))}
                             </div>
-                            <div className="help">Podcast RSS feeds use this format. {appliesTo}</div>
+                            <div className="help">{music ? 'Music players read the tags and cover art of M4A, MP3 and FLAC; Opus files get tags but no cover art.' : 'Podcast RSS feeds use this format.'} {appliesTo}</div>
                         </div>
                     )}
 

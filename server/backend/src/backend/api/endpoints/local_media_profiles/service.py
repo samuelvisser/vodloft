@@ -226,7 +226,7 @@ def _filtered(s: Session, filters: LocalMediaProfileListQuery):
     """The Local Media Profiles the filters match, and the alias to sort them by."""
     profile = with_polymorphic(LocalMediaProfileBase, "*")
     scope = profile.CollectionLocalMediaProfile.collection_scope
-    is_collection = profile.type == LocalMediaProfileType.COLLECTION.value
+    is_collection = profile.type.in_([LocalMediaProfileType.COLLECTION.value, LocalMediaProfileType.MUSIC.value])
     used_for = {
         UsedFor.PODCAST: is_collection & scope.in_([
             CollectionLocalMediaProfileScope.PODCAST.value, CollectionLocalMediaProfileScope.BOTH.value,
@@ -235,6 +235,7 @@ def _filtered(s: Session, filters: LocalMediaProfileListQuery):
             CollectionLocalMediaProfileScope.SERIES.value, CollectionLocalMediaProfileScope.BOTH.value,
         ]),
         UsedFor.VIDEO: profile.type == LocalMediaProfileType.VIDEO.value,
+        UsedFor.MUSIC: profile.type == LocalMediaProfileType.MUSIC.value,
     }
     has_files = (
         select(MediaDownloadBase.id)

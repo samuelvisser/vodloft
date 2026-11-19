@@ -44,7 +44,7 @@ def examples(monkeypatch, tmp_path):
         monkeypatch.setattr(module, "get_settings", lambda: settings)
     monkeypatch.setattr(collection_assets, "collection_profile_roots", lambda *_args, **_kwargs: {})
     collections = [SimpleNamespace(
-        id=number, title=f"Saved Show {number}", slug=f"collection-{number}",
+        id=number, title=f"Saved Show {number}", slug=f"collection-{number}", author_name="",
         seasons=[SimpleNamespace(slug="season-1", name="First season", index=1, season_number=1)],
         meta_items=[SimpleNamespace(key="custom.folder", value="Saved Folder")], channel=None,
     ) for number in (1, 2)]

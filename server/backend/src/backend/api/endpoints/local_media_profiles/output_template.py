@@ -74,6 +74,10 @@ _EXAMPLE_COLLECTION_VALUES = {
     "channel_kind": "YouTube channel",
     "section_title": "Videos",
     "section_kind": "feed",
+    "artist": "Example Host",
+    "album": "Season 1",
+    "track_number": "1",
+    "track_number_padded": "01",
     "collection_site_id": "example-collection",
     "season": "season-1",
     "season_name": "Season 1",
@@ -172,7 +176,7 @@ def get_output_template_variables(
     profile_type: LocalMediaProfileType,
 ) -> list[LocalMediaProfileTemplateVariable]:
     """Return custom template variables available to one Local Media Profile type."""
-    if profile_type == LocalMediaProfileType.COLLECTION:
+    if LocalMediaProfileType(profile_type).for_collections:
         scope: CustomMetadataScope = "collection"
         description = "Custom collection metadata"
     elif profile_type == LocalMediaProfileType.VIDEO:
@@ -192,13 +196,7 @@ def get_output_template_variables(
 
 
 def _collection_type_values(collection_scope: CollectionLocalMediaProfileScope) -> tuple[str, ...]:
-    if collection_scope == CollectionLocalMediaProfileScope.BOTH:
-        return (CollectionType.PODCAST.value, CollectionType.SERIES.value)
-    if collection_scope == CollectionLocalMediaProfileScope.PODCAST:
-        return (CollectionType.PODCAST.value,)
-    if collection_scope == CollectionLocalMediaProfileScope.SERIES:
-        return (CollectionType.SERIES.value,)
-    raise ValueError(f"Unsupported collection template source scope: {collection_scope}")
+    return CollectionLocalMediaProfileScope(collection_scope).collection_types()
 
 
 def _on_sites(site_key_column, site_keys: list[str] | None):
@@ -832,7 +830,7 @@ def get_output_template_source_page(
 
     With `site_keys`, only media on those Sites, as a profile's Sites filter offers it.
     """
-    if profile_type == LocalMediaProfileType.COLLECTION:
+    if LocalMediaProfileType(profile_type).for_collections:
         anchor_offset = None
         if cursor is None and anchor_source_id and not (search or "").strip():
             anchor_offset = _collection_source_anchor_offset(
@@ -1057,7 +1055,7 @@ def _output_template_preview(
     index_keys = output_template_custom_index_keys(body.output_template)
     definition_keys: frozenset[str] = frozenset()
     provisional_keys: frozenset[str] = frozenset()
-    if body.type == LocalMediaProfileType.COLLECTION:
+    if LocalMediaProfileType(body.type).for_collections:
         output_path, definition_keys, provisional_keys = _render_collection_preview(
             session,
             body,

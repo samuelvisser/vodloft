@@ -36,7 +36,7 @@ A collection can stay in the Library without any download or RSS profiles. This 
 
 ### Automatic download rules
 
-Which automatic download options a collection offers follows its episode identification, whether the collection is a Podcast or a Series.
+Which automatic download options a collection offers follows its episode identification, whether the collection is a Podcast, a Series or Music.
 
 - Download Profiles can use a rolling date window, a number of recent episodes, or no limit.
 - For a collection identified by season, Download Profiles also choose seasons and can automatically include future seasons.
@@ -63,6 +63,16 @@ Collection downloads without the cookies file. When a download fails because the
 bot check or a members-only video, the Collection uses the cookies file for a week, starting with the retry. The edit
 page shows when that is the case. **Always** and **Never** do what they say.
 
+### Podcast, Series and Music
+
+Every collection is a **Podcast**, a **Series** or **Music**. You choose when adding it, and can change it later on its Edit page.
+
+- A **Podcast** downloads its newest episodes, by date or by number.
+- A **Series** downloads by season.
+- **Music** is an artist's music: each season is an album, and each episode a track. It downloads by season, like a Series, and only takes Music profiles (see [[Local-Media-Profiles#music-profiles]]).
+
+A collection can only change to a type its Download Profiles suit. To make a Series into Music, remove its Download Profiles first, and add new ones with a Music profile.
+
 ## Seasons and episodes
 
 Series can contain multiple seasons. The collection page lets you switch between them rather than treating the entire collection as one long list.
@@ -87,7 +97,7 @@ The episode page shows its downloads, formats, file sizes, and download history.
 
 ### Bulk download and bulk delete
 
-**Bulk download** on a collection's page downloads many episodes at once with one Local Media Profile. Choose the episode types and, for a series, the seasons. For a podcast you can limit it to the latest episodes, the last so many days, or episodes from a start date. Episodes that already have a file for that profile, that are still running, or that VODLoft cannot download (DRM, removed from the Source, or a subscription VODLoft is not signed in with) are skipped. Missing files are downloaded again.
+**Bulk download** on a collection's page downloads many episodes at once with one Local Media Profile. Choose the episode types and, for a series or music, the seasons. For a podcast you can limit it to the latest episodes, the last so many days, or episodes from a start date. Episodes that already have a file for that profile, that are still running, or that VODLoft cannot download (DRM, removed from the Source, or a subscription VODLoft is not signed in with) are skipped. Missing files are downloaded again.
 
 **Bulk delete downloads** and **Bulk delete and re-download** can delete everything, or only episodes older than a number of days, or everything except the latest downloads in the chosen profiles. Episodes without a download do not count toward that number. Deleting everything with **Bulk delete downloads** turns off the Download Profiles for the chosen profiles first, so they do not download it all again. Deleting only some episodes leaves the Download Profiles on, so episodes they cover can be downloaded again.
 

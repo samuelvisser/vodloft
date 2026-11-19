@@ -13,7 +13,7 @@ import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
 import {FollowsSettingsSelect} from './FollowsSettings'
 import {parseOutputTemplate, renderCompactOutputTemplate} from './outputTemplateFormatting'
 import {useRevealFields} from './LocalMediaProfileSection'
-import {PRESET_CHOICE_FIELDS, outputTemplatePreset, outputTemplatePresetRegistry, templateBaseFolder} from './outputTemplatePresets'
+import {PRESET_CHOICE_FIELDS, outputTemplatePreset, outputTemplatePresetLabel, outputTemplatePresetRegistry, templateBaseFolder} from './outputTemplatePresets'
 
 /** Which characters file and folder names may hold: the mode in Settings, or the profile's own. */
 export function FilenameModeField({form}: {form: UseFormReturn<any>}) {
@@ -74,6 +74,7 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
     const [presetOpen, setPresetOpen] = useState(isCreating)
     const preferredFormat = useWatch({control, name: 'preferredFormat'})
     const [pendingPreset, setPendingPreset] = useState<string | null>(null)
+    const music = useWatch({control, name: 'type'}) === 'music'
     const revealFields = useRevealFields()
     const outputTemplate = useWatch({control, name: 'outputTemplate'}) as string | undefined
     const choiceValues = useWatch({control, name: [...PRESET_CHOICE_FIELDS]}) as unknown[]
@@ -81,7 +82,7 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
 
     // The preset shows as chosen while the template and the choices are the ones it writes, also after a reload or
     // on a saved profile. Jellyfin and Kodi write the same template, and only their NFO choices tell them apart.
-    const presetRegistry = outputTemplatePresetRegistry(audioOnly)
+    const presetRegistry = outputTemplatePresetRegistry(audioOnly, music)
     const chosenPreset = useMemo(() => {
         if (!outputTemplate) return null
         const base = templateBaseFolder(outputTemplate, '/downloads')
@@ -98,7 +99,7 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
         const preset = outputTemplatePreset(key)
         if (!preset) return
         const options = {shouldDirty: true, shouldTouch: true, shouldValidate: true}
-        const base = templateBaseFolder(getValues('outputTemplate') ?? '', audioOnly ? '/downloads/podcasts' : '/downloads/shows')
+        const base = templateBaseFolder(getValues('outputTemplate') ?? '', music ? '/downloads/music' : audioOnly ? '/downloads/podcasts' : '/downloads/shows')
         // The presets are written as the editor shows them; the form keeps the compact template.
         const template = renderCompactOutputTemplate(parseOutputTemplate(preset.template(base), 'editor'))
         setValue('outputTemplate', template, options)
@@ -128,12 +129,17 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
                                 inputId="mp-output-template-preset"
                                 registry={presetRegistry}
                                 value={chosenPreset}
-                                placeholder="Choose a media server…"
+                                placeholder={music ? 'Choose a layout…' : 'Choose a media server…'}
                                 onChange={setPendingPreset}
                                 aria-describedby="mp-output-template-preset-help"
                             />
                             <div className="help" id="mp-output-template-preset-help">
-                                <ReadMore summary="Fill in an output template and NFO settings that a media server reads well. You can change any of it afterwards.">
+                                {music ? (
+                                    <p>
+                                        <strong>Music library</strong>: <code>Artist/Album/01 - Title</code>, which Plex,
+                                        Jellyfin, Navidrome and most music players read. You can change any of it afterwards.
+                                    </p>
+                                ) : <ReadMore summary="Fill in an output template and NFO settings that a media server reads well. You can change any of it afterwards.">
                                     <p>
                                         <strong>Jellyfin and Emby</strong>: <code>Show/Season 01/Show S01E01 Title</code>, with
                                         show and season NFO files.
@@ -150,7 +156,7 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
                                         The template starts in the folder your current template uses. Extras are numbered with
                                         an Indexing Value called <code>extra</code>, which the preset adds when the profile has none.
                                     </p>
-                                </ReadMore>
+                                </ReadMore>}
                             </div>
                         </div>
                     )}
@@ -171,7 +177,7 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
                 }}
             >
                 <p>
-                    The {pendingPreset ? outputTemplatePresetRegistry(true).getLabelLoose(pendingPreset) : ''} preset
+                    The {pendingPreset ? outputTemplatePresetLabel(pendingPreset) : ''} preset
                     replaces the output template, and sets the metadata, NFO, file date and While downloading choices of this profile.
                 </p>
             </ConfirmDialog>

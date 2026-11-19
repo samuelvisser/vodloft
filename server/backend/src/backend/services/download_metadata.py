@@ -53,6 +53,28 @@ def build_episode_metadata(episode: Episode, collection) -> MediaServerMetadata:
     )
 
 
+def build_track_metadata(episode: Episode, collection) -> MediaServerMetadata:
+    """An episode kept by a Music profile: a track, tagged with its artist, album and number on the album."""
+    from backend.utils.music import music_track
+
+    track = music_track(episode)
+    published = episode.published_date or episode.went_live_date or episode.scheduled_date
+    return MediaServerMetadata(
+        kind="track",
+        title=episode.title,
+        unique_id=episode.source_slug,
+        unique_id_type=episode.source_key,
+        source_url=episode.sharing_url,
+        album=track.album,
+        track_number=track.track_number,
+        aired=_as_date(published),
+        duration_seconds=episode.duration,
+        authors=_strings((track.artist,)),
+        genres=_strings((collection.genre,)),
+        media_type="track",
+    )
+
+
 def build_show_metadata(collection) -> MediaServerMetadata:
     """What tvshow.nfo says about a Collection, so a media server shows it without looking it up."""
     return MediaServerMetadata(

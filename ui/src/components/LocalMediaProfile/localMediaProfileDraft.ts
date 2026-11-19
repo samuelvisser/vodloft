@@ -1,8 +1,8 @@
 import {clearFormDraft, loadFormDraft, saveFormDraft} from '../FormDraft/formDraft'
-import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
+import type {LocalMediaProfileType} from '../../types/local_media_profile'
 
 export type LocalMediaProfileDraft<T> = {
-    mode: LocalMediaProfileMode
+    mode: LocalMediaProfileType
     values: Partial<T>
 }
 
@@ -19,7 +19,7 @@ export function editLocalMediaProfileDraftKey(slug: string): string {
 export function loadLocalMediaProfileDraft<T>(key: string): LocalMediaProfileDraft<T> | null {
     const draft = loadFormDraft<LocalMediaProfileDraft<T>>(key, DRAFT_SCHEMA_VERSION)
     if (!draft) return null
-    if (!draft.values || !['collection', 'video'].includes(draft.mode)) {
+    if (!draft.values || !['collection', 'music', 'video'].includes(draft.mode)) {
         clearFormDraft(key)
         return null
     }
