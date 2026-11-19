@@ -194,6 +194,7 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
 .creator-more-tile:hover, .creator-more-tile:focus-within { border-style: solid; border-color: rgba(59, 130, 246, .6); }
 .creator-more-tile:hover .creator-more-art > *, .creator-more-tile:focus-within .creator-more-art > * { filter: none; }
 .creator-more-tile .library-tile-title { font-size: 15px; }
+.creator-more-tile.is-addable { cursor: pointer; }
 .creator-more-tile-new { position: absolute; top: 12px; left: 8px; margin: 0; z-index: 1; }
 .creator-more-add { position: absolute; top: 8px; right: 8px; z-index: 2; }
 .creator-more-plus { width: 34px; height: 34px; padding: 0; justify-content: center; border-radius: 50%; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }

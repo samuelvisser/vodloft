@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useRef, useState, type MouseEvent, type PointerEvent} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {toast} from 'react-hot-toast'
@@ -44,6 +44,8 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const [busy, setBusy] = useState<string | null>(null)
     // The section that becomes a collection of its own, while the user chooses its type and identification.
     const [adding, setAdding] = useState<AccountSection | null>(null)
+    // Whether a tile's menu was open when the pointer went down on the tile.
+    const menuWasOpen = useRef(false)
     if (!items.length) return null
 
     const mayAdd = can('add_media')
@@ -57,6 +59,15 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const key = ({account, section}: AccountSection) => `${account.id}:${section.ref}`
 
     const toggle = () => setOpen(!open)
+    // A click anywhere on a tile does what its + does: add it, or open its menu. A click that only closes the open
+    // menu leaves it closed.
+    const tileDown = (event: PointerEvent<HTMLDivElement>) => {
+        menuWasOpen.current = !!event.currentTarget.querySelector('.action-menu.is-open')
+    }
+    const tileClick = (event: MouseEvent<HTMLDivElement>) => {
+        if ((event.target as Element).closest('.creator-more-add') || menuWasOpen.current) return
+        event.currentTarget.querySelector<HTMLButtonElement>('.creator-more-plus, .action-menu-trigger')?.click()
+    }
     const add = async (item: AccountSection, plan: SectionPlan) => {
         if (plan.target === 'own') {
             setAdding(item)
@@ -145,7 +156,10 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                             const image = toImageUrl(item.section.imageUrl)
                             const facts = [sectionFacts(item.section), several ? item.account.site.name : null].filter(Boolean).join(' · ')
                             return (
-                                <div key={key(item)} className="creator-more-tile" role="listitem">
+                                <div
+                                    key={key(item)} className={`creator-more-tile${mayAdd ? ' is-addable' : ''}`} role="listitem"
+                                    onPointerDownCapture={mayAdd ? tileDown : undefined} onClick={mayAdd ? tileClick : undefined}
+                                >
                                     <span className="library-tile-art creator-more-art">
                                         {image
                                             ? <CollectionTileArt key={image} src={image}/>
