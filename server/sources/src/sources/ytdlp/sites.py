@@ -17,7 +17,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from ..contract import (
-    Access, CreatorPreset, DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
+    Access, CreatorPreset, CreatorSectionNames, DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
 )
 from ..cookies import site_cookies
 from ..registry import named_site_for
@@ -54,6 +54,12 @@ _API_KEY_SITES = {"youtube"}
 _CREATOR_SITES = {"youtube", "bandcamp", "soundcloud"}
 # What a Site calls a creator, where that is not "creator".
 _CREATOR_LABELS = {"bandcamp": "artist", "soundcloud": "artist"}
+# What a Site's creators add, which VODLoft looks for: a channel's playlists, an artist's albums.
+_CREATOR_SECTIONS = {
+    "youtube": CreatorSectionNames("a playlist", "playlists"),
+    "bandcamp": CreatorSectionNames("an album", "albums"),
+    "soundcloud": CreatorSectionNames("an album or playlist", "albums and playlists"),
+}
 # Sites whose channels' playlists can be the seasons of a collection made from the channel.
 # An artist's albums are their playlists.
 _LINK_SEASON_SITES = {"youtube", "bandcamp", "soundcloud"}
@@ -152,6 +158,7 @@ def site_of(key: str, host: str | None = None) -> Site:
         settings=_SITE_SETTINGS.get(key, _SETTINGS), accesses=_accesses(key),
         takes_api_key=key in _API_KEY_SITES, shows_locked=key not in _HIDES_LOCKED,
         creators=key in _CREATOR_SITES, creator_label=_CREATOR_LABELS.get(key, "creator"),
+        creator_sections=_CREATOR_SECTIONS.get(key, CreatorSectionNames()),
         creator_presets=_CREATOR_PRESETS if key in _CREATOR_SITES else (), link_seasons=key in _LINK_SEASON_SITES,
     )
 

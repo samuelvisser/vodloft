@@ -90,7 +90,7 @@ export default function EditCreatorPage() {
             <CreatorSectionsEditor creator={creator} part="new"/>
             <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
                 <div className="form-row creator-membership">
-                    <label htmlFor="creator-new-sections">When the {creator.creatorLabel} adds a playlist or show</label>
+                    <label htmlFor="creator-new-sections">When the {creator.creatorLabel} adds {creator.sectionNames.one}</label>
                     <SimpleSelect
                         inputId="creator-new-sections" registry={newSectionActionReg(creator.creatorLabel)} value={newSections}
                         onChange={(value) => setValue('newSections', value as CreatorUpdateIn['newSections'], {shouldDirty: true})}
@@ -141,8 +141,8 @@ export default function EditCreatorPage() {
             >
                 <p>
                     Delete {creator.title}? {creator.collections.length > 0
-                        ? `${creator.collections.length === 1 ? 'Its collection stays' : `Its ${creator.collections.length} collections stay`} in your library with their episodes and files, but VODLoft stops looking for new playlists and shows of this ${creator.creatorLabel}.`
-                        : `VODLoft stops looking for new playlists and shows of this ${creator.creatorLabel}.`}
+                        ? `${creator.collections.length === 1 ? 'Its collection stays' : `Its ${creator.collections.length} collections stay`} in your library with their episodes and files, but VODLoft stops looking for new ${creator.sectionNames.many} of this ${creator.creatorLabel}.`
+                        : `VODLoft stops looking for new ${creator.sectionNames.many} of this ${creator.creatorLabel}.`}
                 </p>
             </ConfirmDialog>
         </section>

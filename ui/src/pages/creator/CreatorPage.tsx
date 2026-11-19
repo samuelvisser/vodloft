@@ -172,7 +172,7 @@ export default function CreatorPage() {
                                 <PageHeaderAction icon={faIcon('fass', 'pen')} label="Edit" variant="secondary" to={`/edit-creator/${creator.slug}`}/>
                                 <ActionMenu items={[{
                                     label: checking ? 'Looking…' : 'Check now',
-                                    description: 'Look for new playlists and shows',
+                                    description: `Look for new ${creator.sectionNames.many}`,
                                     icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: checking,
                                     onSelect: () => void check(),
@@ -207,7 +207,7 @@ export default function CreatorPage() {
 
             {checking && (
                 <p className="creator-note" role="status">
-                    VODLoft is looking for new playlists and shows. They show on the Edit page when it is done.
+                    VODLoft is looking for new {creator.sectionNames.many}. They show on the Edit page when it is done.
                 </p>
             )}
             {actionError && <div className="form-error-card" role="alert">{actionError}</div>}
@@ -216,7 +216,7 @@ export default function CreatorPage() {
                 <Link className="creator-waiting" to={`/edit-creator/${creator.slug}`}>
                     <FontAwesomeIcon icon={faIcon('fass', 'circle-plus')}/>
                     <span>
-                        <b>{waiting.length === 1 ? `New on ${creator.title}: ${waiting[0].title}` : `${waiting.length} new playlists and shows on ${creator.title}`}</b>
+                        <b>{waiting.length === 1 ? `New on ${creator.title}: ${waiting[0].title}` : `${waiting.length} new ${creator.sectionNames.many} on ${creator.title}`}</b>
                         <span>Choose whether to add {waiting.length === 1 ? 'it' : 'them'} to your library</span>
                     </span>
                     <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} className="creator-waiting-go"/>

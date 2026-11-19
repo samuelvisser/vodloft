@@ -2,6 +2,7 @@ import {z} from 'zod'
 import {DwMembershipLevelReg} from '../dailywire_user_info'
 import {ApiDateTimeSchema} from './datetime'
 import {EpisodeReadViewSchema} from './episode'
+import {CreatorSectionNamesSchema} from './source'
 
 export const SectionTargetValues = ['main', 'own', 'skip'] as const
 export const CreatorPresetValues = ['one_show', 'per_list', 'pick'] as const
@@ -59,6 +60,8 @@ export const NewSectionActionValues = ['ask', 'season', 'own', 'ignore'] as cons
 
 const SiteSchema = z.object({
     key: z.string(), name: z.string(), creatorLabel: z.string().default('creator'), linkSeasons: z.boolean().default(false),
+    /** What the Site calls the things its creators add, such as playlists on YouTube. */
+    creatorSections: CreatorSectionNamesSchema,
 })
 
 /** A creator's account on one Site, such as their YouTube channel. */
@@ -80,6 +83,8 @@ export const CreatorReadSchema = z.object({
     slug: z.string(),
     /** Artist, the word of their one Site, such as host, or creator. */
     creatorLabel: z.string(),
+    /** What VODLoft looks for: what their one Site calls it, such as playlists, or playlists and shows. */
+    sectionNames: CreatorSectionNamesSchema,
     /** The label with their Site, when they are on one only, such as "The Daily Wire host". */
     kind: z.string(),
     accounts: z.array(CreatorAccountReadSchema),
@@ -171,6 +176,8 @@ export const CollectionCreatorMatchSchema = z.object({
     lookupId: z.string().nullable().optional(),
     siteName: z.string(),
     creatorLabel: z.string(),
+    /** What the creator's Site calls the things the creator adds, such as playlists on YouTube. */
+    sectionNames: CreatorSectionNamesSchema,
     ref: z.string(),
     url: z.string().nullable().optional(),
     title: z.string(),

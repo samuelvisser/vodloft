@@ -28,7 +28,7 @@ from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus
 from backend.utils.helpers import generate_uuid, slugify
 from sources import (
-    CreatorDetails, CreatorPreset, Feature, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source, site_of,
+    CreatorDetails, CreatorPreset, CreatorSectionNames, Feature, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source, site_of,
 )
 
 
@@ -657,6 +657,13 @@ def creator_label(creator: Creator) -> str:
         return ARTIST_LABEL
     sites = list(_sites(creator).values())
     return sites[0].creator_label if len(sites) == 1 else CREATOR_LABEL
+
+
+def creator_sections(creator: Creator) -> CreatorSectionNames:
+    """What the creator adds, which VODLoft looks for: what their Site calls it, such as playlists on YouTube, when
+    all their accounts and collections are on one Site, and otherwise playlists and shows."""
+    sites = list(_sites(creator).values())
+    return sites[0].creator_sections if len(sites) == 1 else CreatorSectionNames()
 
 
 def creator_kind(creator: Creator) -> str:

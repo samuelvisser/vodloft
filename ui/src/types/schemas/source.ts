@@ -184,6 +184,11 @@ export function pluralKindName(name: string): string {
 }
 
 /** The website a collection or video is on, such as YouTube, whichever Source fetches it. */
+/** What a Site calls the things a creator adds there, in lower case: one with its article, such as "a playlist",
+ * and many, such as "playlists". */
+export const CreatorSectionNamesSchema = z.object({one: z.string(), many: z.string()})
+export type CreatorSectionNames = z.infer<typeof CreatorSectionNamesSchema>
+
 export const SiteReadSchema = z.object({
     key: z.string(),
     name: z.string(),
@@ -191,6 +196,8 @@ export const SiteReadSchema = z.object({
     showsLocked: z.boolean().optional().default(true),
     /** What the Site calls a creator, in lower case, such as host on The Daily Wire. */
     creatorLabel: z.string().optional().default('creator'),
+    /** What the Site calls the things its creators add, which VODLoft looks for, such as playlists on YouTube. */
+    creatorSections: CreatorSectionNamesSchema.optional().default({one: 'a playlist or show', many: 'playlists and shows'}),
 })
 export type SiteRead = z.infer<typeof SiteReadSchema>
 

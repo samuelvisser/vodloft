@@ -8,7 +8,7 @@ from pydantic import AliasChoices, AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.pagination import CursorPageRead
-from backend.api.models.source import SiteAPIRead
+from backend.api.models.source import CreatorSectionNamesAPIRead, SiteAPIRead
 from backend.types.creator_types import NewSectionAction, SectionTarget
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -147,6 +147,8 @@ class CreatorAPIRead(ResponseBase):
     slug: str
     creator_label: str
     """What VODLoft calls the creator: artist, the word of their one Site, such as host, or creator."""
+    section_names: CreatorSectionNamesAPIRead
+    """What VODLoft looks for: what their one Site calls it, such as playlists, or playlists and shows."""
     kind: str
     """The label with their Site, when they are on one only, such as "The Daily Wire host"."""
     accounts: list[CreatorAccountAPIRead]
@@ -226,6 +228,7 @@ class CollectionCreatorMatchAPIRead(ResponseBase):
 
     site_name: str
     creator_label: str
+    section_names: CreatorSectionNamesAPIRead
     ref: str
     url: Optional[str] = None
     title: str

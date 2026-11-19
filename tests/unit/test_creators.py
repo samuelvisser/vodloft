@@ -586,6 +586,18 @@ def test_a_site_names_its_creators_in_its_own_words(client, tube, monkeypatch):
     assert lines[-1]["creator"]["creatorLabel"] == "host"
 
 
+def test_a_creator_names_what_vodloft_looks_for_in_the_words_of_its_site(client, tube, monkeypatch):
+    from dataclasses import replace
+
+    from sources import CreatorSectionNames
+
+    _one_show(client)
+    assert client.get("/api/creators/workshop").json()["sectionNames"] == {"one": "a playlist or show", "many": "playlists and shows"}
+
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], creator_sections=CreatorSectionNames("a playlist", "playlists")),))
+    assert client.get("/api/creators/workshop").json()["sectionNames"] == {"one": "a playlist", "many": "playlists"}
+
+
 def test_a_playlist_that_is_a_season_of_the_creators_collection_moves_to_a_collection_that_joins(client, session):
     from backend.db.models import Collection, CollectionList
 

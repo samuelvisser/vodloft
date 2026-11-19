@@ -215,6 +215,10 @@ class _CreatorRead:
         return creators.creator_label(self.creator)
 
     @property
+    def section_names(self):
+        return creators.creator_sections(self.creator)
+
+    @property
     def kind(self) -> str:
         return creators.creator_kind(self.creator)
 
@@ -512,6 +516,7 @@ class _Match:
     details: CreatorDetails
     site_name: str
     creator_label: str
+    section_names: object
     section: object | None
     kept_by: str | None
     creator_slug: str | None = None
@@ -529,7 +534,7 @@ def collection_creator_match(s: Session, collection_slug: str, source_key: str, 
     overlaps = creators.join_overlaps(s, collection, source_key, details, existing)
     movable = keeper is not None and any(overlap.ref == section.ref and overlap.can_move_here for overlap in overlaps)
     return CollectionCreatorMatchAPIRead.model_validate(_Match(
-        details, site.name, site.creator_label, section if keeper is None or movable else None,
+        details, site.name, site.creator_label, site.creator_sections, section if keeper is None or movable else None,
         keeper.title if keeper is not None and not movable else None,
         existing.creator.slug if existing is not None else None,
         overlaps,

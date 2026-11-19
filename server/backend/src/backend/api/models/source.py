@@ -397,6 +397,14 @@ class SearchResultsAPIRead(ResponseBase):
     notice: Optional[SearchNoticeAPIRead] = None
 
 
+class CreatorSectionNamesAPIRead(ResponseBase):
+    """What a Site calls the things its creators add, which VODLoft looks for, in lower case."""
+
+    one: str
+    """One of them, with its article, such as "a playlist"."""
+    many: str
+
+
 class SiteAPIRead(ResponseBase):
     """The website a collection or video is on, such as YouTube, whichever Source fetches it."""
 
@@ -414,6 +422,12 @@ class SiteAPIRead(ResponseBase):
     def creator_label(self) -> str:
         """What the Site calls a creator, in lower case, such as host on The Daily Wire."""
         return site_of(self.key).creator_label
+
+    @computed_field
+    @property
+    def creator_sections(self) -> CreatorSectionNamesAPIRead:
+        """What the Site calls the things its creators add, such as playlists on YouTube."""
+        return CreatorSectionNamesAPIRead.model_validate(site_of(self.key).creator_sections)
 
     @computed_field
     @property
