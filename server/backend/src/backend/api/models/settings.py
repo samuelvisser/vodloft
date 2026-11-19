@@ -116,6 +116,8 @@ SettingFieldPath = Literal[
     "youtubeApi.checksQuota",
     "youtubeApi.searchQuota",
     "youtubeApi.minCheckIntervalMinutes",
+    "youtubeApi.usageLogEnabled",
+    "youtubeApi.usageLogMaxLines",
     "fileWatcher.enabled",
     "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
@@ -221,6 +223,8 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "youtubeApi.checksQuota",
     "youtubeApi.searchQuota",
     "youtubeApi.minCheckIntervalMinutes",
+    "youtubeApi.usageLogEnabled",
+    "youtubeApi.usageLogMaxLines",
     "fileWatcher.enabled",
     "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
@@ -424,6 +428,8 @@ class YouTubeApiSettingsValue(_SettingsValueModel):
     checks_quota: int = Field(ge=0)
     search_quota: int = Field(ge=0)
     min_check_interval_minutes: int = Field(ge=10)
+    usage_log_enabled: bool
+    usage_log_max_lines: int = Field(ge=100)
 
     @field_validator("search_quota")
     @classmethod

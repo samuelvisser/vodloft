@@ -267,6 +267,15 @@ class YouTubeApiSettings(SubmodelBase):
         ge=10,
         description="Shortest time between two quick checks of the same collection",
     )
+    usage_log_enabled: bool = Field(
+        default=False,
+        description="Keep a log file of every API call and a summary of each day, which survives restarts",
+    )
+    usage_log_max_lines: int = Field(
+        default=100_000,
+        ge=100,
+        description="Lines the usage log keeps; older lines are removed",
+    )
 
     @model_validator(mode="after")
     def _shares_fit_in_the_daily_quota(self):
