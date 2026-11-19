@@ -125,14 +125,15 @@ def artist_details(root: str, progress: Callable[[str], None]) -> CreatorDetails
             except runner.YtDlpError as exc:
                 logger.info("Leaving out %s: %s", lookups[lookup], exc)
 
-    releases = [_release(url, info, bandcamp) for url, info in found.items()]
+    # SoundCloud keeps an artist's albums apart from their playlists, so an account with albums is an artist's. One
+    # without may still be, so the user decides.
+    album_links = set() if bandcamp else _album_links(root, cookies)
+    releases = [_release(url, info, bandcamp, bandcamp or url in album_links) for url, info in found.items()]
     releases.sort(key=lambda release: release[0], reverse=True)
     sections = [section for _date, section in releases]
     if not bandcamp:
         sections.append(SectionRef(ref="tracks", url=f"{root}/tracks", title="Tracks", kind=SectionKind.FEED, role=SectionRole.MAIN, kind_label="Feed"))
-    # SoundCloud keeps an artist's albums apart from their playlists, so an account with albums is an artist's. One
-    # without may still be, so the user decides.
-    has_albums = not bandcamp and _has_albums(root, cookies)
+    has_albums = bool(album_links)
     name = next(filter(None, (_artist_name(info) for info in found.values())), None)
     handle = root.rstrip("/").rsplit("/", 1)[-1] if not bandcamp else urlsplit(root).hostname.split(".", 1)[0]
     lists = sum(1 for section in sections if section.kind is SectionKind.LIST)
@@ -145,13 +146,15 @@ def artist_details(root: str, progress: Callable[[str], None]) -> CreatorDetails
     )
 
 
-def _has_albums(root: str, cookies) -> bool:
-    """Whether a SoundCloud account lists albums of its own, as artists do and podcasts don't."""
+def _album_links(root: str, cookies) -> set[str]:
+    """The links of a SoundCloud account's albums, which its playlists list among the rest. Artists have them,
+    podcasts don't."""
     try:
-        return bool(runner.run_json("--flat-playlist", "--playlist-items", "1", f"{root}/albums", cookies=cookies).get("entries"))
+        listing = runner.run_json("--flat-playlist", f"{root}/albums", cookies=cookies)
     except runner.YtDlpError as exc:
         logger.debug("%s has no albums: %s", root, exc)
-        return False
+        return set()
+    return {str(entry["url"]) for entry in listing.get("entries") or [] if isinstance(entry, dict) and entry.get("url")}
 
 
 def _artist_name(info: dict) -> str | None:
@@ -164,7 +167,7 @@ def _artist_name(info: dict) -> str | None:
     return None
 
 
-def _release(url: str, info: dict, bandcamp: bool = True) -> tuple[str, SectionRef]:
+def _release(url: str, info: dict, bandcamp: bool = True, album: bool = True) -> tuple[str, SectionRef]:
     """An album, or a track on its own, with its release date to sort the artist's music by."""
     track = info if info.get("_type") != "playlist" else next(
         (entry for entry in info.get("entries") or [] if isinstance(entry, dict)), {},
@@ -179,9 +182,9 @@ def _release(url: str, info: dict, bandcamp: bool = True) -> tuple[str, SectionR
         count = info.get("playlist_count")
         return date, SectionRef(
             ref=path, url=url, title=str(info.get("album") or info.get("title") or path), kind=SectionKind.LIST,
-            kind_label="Album" if bandcamp else "Playlist", item_count=count if isinstance(count, int) else None,
+            kind_label="Album" if album else "Playlist", item_count=count if isinstance(count, int) else None,
             image_url=thumbnails.widest_still(image) if image else None, description=info.get("description") or None,
-            year=year,
+            year=year, album=album,
         )
     return date, SectionRef(
         ref=path, url=url, title=str(info.get("track") or info.get("title") or path), kind=SectionKind.ITEM, kind_label="Single",

@@ -176,13 +176,23 @@ What comes along:
   arrive as collections.
 - A **Bandcamp** or **SoundCloud Discography** subscription adds the artist. All of the artist's albums go
   into one Music collection, each album a season, with a Music Local Media Profile that keeps ytdl-sub's folder per
-  artist and per album. The genre you give with `= Lofi` becomes the artist's genre, which new albums get too.
+  artist and per album. A SoundCloud artist's playlists stay on the artist's page, as ytdl-sub only took their
+  albums. New albums are added as seasons when they come out, as ytdl-sub did. The genre you give with `= Lofi` becomes
+  the artist's genre, which new albums get too.
 - A **YouTube Full Albums** subscription becomes a Music collection that splits videos by chapter: each video is an
   album and each chapter a track, as in ytdl-sub. The tracks ytdl-sub already saved are adopted one by one.
-- A **Music Videos** subscription (for Plex, Jellyfin, Emby or Kodi) becomes a collection of the artist,
-  with a Collection profile that keeps ytdl-sub's folder per artist and writes `musicvideo` NFO files. One whose
-  categories list several links per artist is not imported; add those as collections of the artist instead (see
-  [[Collections-and-Library#music-videos]]).
+- A **Music Videos** subscription (for Plex, Jellyfin, Emby or Kodi) becomes a Music collection with a Collection
+  profile for Music videos, which keeps ytdl-sub's folder per artist and writes `musicvideo` NFO files. Its link can be
+  a channel, a playlist or a single video. An artist written as a `+` map, with links under categories such as
+  Concerts, becomes one collection with each link a season named after its category.
+- Every artist keeps the name ytdl-sub gave them, also when their site calls them something else, so new files go
+  into the same artist folder as the ones you already have.
+- An artist with both albums and music videos in ytdl-sub becomes one artist with two collections,
+  named after the artist, such as *Emily Hopkins albums* and *Emily Hopkins music videos* (see [[Collections-and-Library#music-videos]]), also when the
+  music videos are on another site or their label's channel. When both download the same link, they share one
+  collection that keeps both profiles.
+- ytdl-sub's **best** audio keeps what the site sends: VODLoft saves it as Opus, or as MP3 on Bandcamp. **FLAC**
+  stays FLAC for music.
 
 What does not come along is listed in the report: scripts that compute values (VODLoft's templates are Jinja, see
 [[Local-Media-Profiles]]), throttle settings (VODLoft has a guard of its own, see

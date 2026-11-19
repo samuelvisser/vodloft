@@ -67,3 +67,21 @@ def test_a_soundcloud_artist_has_its_albums_and_a_feed_of_all_its_tracks(monkeyp
 
     assert (details.ref, details.title) == ("flume", "Flume")
     assert [(s.ref, s.kind) for s in details.sections] == [("flume/sets/palaces", SectionKind.LIST), ("tracks", SectionKind.FEED)]
+
+
+def test_a_soundcloud_artists_albums_are_told_from_their_playlists(monkeypatch):
+    def soundcloud(*args, cookies=None):
+        url = args[-1]
+        if url.endswith("/sets"):
+            return {"entries": [{"url": "https://soundcloud.com/flume/sets/palaces"},
+                                {"url": "https://soundcloud.com/flume/sets/favourites"}]}
+        if url.endswith("/albums"):
+            return {"entries": [{"url": "https://soundcloud.com/flume/sets/palaces"}]}
+        return {"_type": "playlist", "title": url.rsplit("/", 1)[-1], "release_date": "20220520"}
+
+    monkeypatch.setattr(artists.runner, "run_json", soundcloud)
+    details = artists.artist_details("https://soundcloud.com/flume", lambda step: None)
+
+    lists = {s.ref: (s.album, s.kind_label) for s in details.sections if s.kind is SectionKind.LIST}
+    assert lists == {"flume/sets/palaces": (True, "Album"), "flume/sets/favourites": (False, "Playlist")}
+    assert (details.music, details.music_known) == (True, False)
