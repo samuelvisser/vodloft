@@ -34,11 +34,12 @@ def season_year(season: Season) -> int | None:
 def link_first_videos(s: Session, collection: Collection) -> dict[int, datetime]:
     """When the first video of the collection that each playlist has came out, by playlist id. YouTube does not say
     when a playlist was made, so this stands in for it."""
+    # The lists are named by a subquery, so that SQLite starts from their videos rather than trying each of the
+    # collection's episodes against each of its lists.
     rows = s.execute(
         select(CollectionListItem.list_id, func.min(Episode.published_date))
-        .join(CollectionList, CollectionList.id == CollectionListItem.list_id)
         .join(Episode, (Episode.collection_id == collection.id) & (Episode.source_slug == CollectionListItem.source_slug))
-        .where(CollectionList.collection_id == collection.id)
+        .where(CollectionListItem.list_id.in_(select(CollectionList.id).where(CollectionList.collection_id == collection.id)))
         .group_by(CollectionListItem.list_id)
     )
     return {playlist_id: _aware(first) for playlist_id, first in rows if first is not None}

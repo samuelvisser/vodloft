@@ -181,10 +181,11 @@ export default function AddCreatorPage() {
         }),
     }), {
         fallbackField: 'sections',
-        onSuccess: async (created: any) => {
-            await queryClient.invalidateQueries({queryKey: ['creators']})
-            await queryClient.invalidateQueries({queryKey: ['collections']})
-            await queryClient.invalidateQueries({queryKey: ['collectionsView']})
+        onSuccess: (created: any) => {
+            // The creator's page loads on its own, so the lists it changed refresh behind it.
+            void queryClient.invalidateQueries({queryKey: ['creators']})
+            void queryClient.invalidateQueries({queryKey: ['collections']})
+            void queryClient.invalidateQueries({queryKey: ['collectionsView']})
             navigate(`/creator/${created.slug}`, {replace: true})
         },
     })

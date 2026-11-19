@@ -7,6 +7,7 @@ from backend.api.models.source import (
     SiteAddAPIRequest, SiteAddedAPIRead, SiteAuthenticationAPIRead,
 )
 from backend.app import db_session
+from backend.api.endpoints.creators.service import look_up_creator_ahead
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.site_cookies import (
@@ -94,9 +95,13 @@ def resolve(body: ResolveAPIRequest, access: Access = signed_in()):
     """Find the Source that recognises a link, and what the link points to."""
     with db_session() as s:
         try:
-            return resolve_link(s, access, body.url, body.source_key)
+            link = resolve_link(s, access, body.url, body.source_key)
         except LinkNotRecognisedError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if link.creator_url and access.allows(Area.ADD_MEDIA) and access.allows_link(link.source.id, link.creator_url):
+        # Adding the creator is one click away, and looking them up takes seconds.
+        look_up_creator_ahead(link.source.id, link.creator_url)
+    return link
 
 
 @router.get("/sources/{source_id}/episode-tags", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=list[EpisodeTagAPIRead])
