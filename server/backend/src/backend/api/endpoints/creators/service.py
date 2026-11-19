@@ -409,6 +409,8 @@ def add_sections(
     creators.place_sections(
         s, _account(s, slug, account_id), [SectionPlan(plan.ref, SectionTarget(plan.target)) for plan in body.sections],
         added_by_id=added_by_id,
+        type=CollectionType(body.type) if body.type else None,
+        episode_identifier=EpisodeIdentifier(body.episode_identifier) if body.episode_identifier else None,
     )
     s.flush()
     return creator_page(s, slug)

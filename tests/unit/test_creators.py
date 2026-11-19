@@ -359,6 +359,24 @@ def test_a_new_playlist_waits_for_a_choice_and_says_so(client, session, tube):
     assert next(s for s in page["accounts"][0]["sections"] if s["ref"] == "PLbarn")["status"] == "known"
 
 
+def test_a_playlist_added_as_a_collection_of_its_own_takes_the_type_and_identification_the_user_chose(client, session, tube):
+    from backend.db.models import Collection
+
+    _one_show(client)
+    _follow(session, tube, SECTIONS)
+    main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
+    assert (main.type, main.episode_identifier) == ("series", "seasonal")
+
+    page = client.post("/api/creators/workshop/accounts/1/sections", json={
+        "sections": [{"ref": "PLcabin", "target": "own"}], "type": "podcast", "episodeIdentifier": "date_based",
+    }).json()
+
+    slug = next(s for s in page["accounts"][0]["sections"] if s["ref"] == "PLcabin")["collectionSlug"]
+    session.expire_all()
+    added = session.scalar(select(Collection).where(Collection.slug == slug))
+    assert (added.type, added.episode_identifier) == ("podcast", "date_based")
+
+
 def test_the_creator_asks_about_a_new_playlist_also_when_its_collection_has_playlist_seasons(client, session, tube):
     from backend.db.models import Collection
 

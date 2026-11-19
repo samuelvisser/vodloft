@@ -1,5 +1,6 @@
 import {z} from 'zod'
 import {DwMembershipLevelReg} from '../dailywire_user_info'
+import {CollectionTypeReg, EpisodeIdentifierReg} from '../collection'
 import {ApiDateTimeSchema} from './datetime'
 import {EpisodeReadViewSchema} from './episode'
 import {CreatorSectionNamesSchema} from './source'
@@ -204,3 +205,13 @@ export const CollectionCreatorLeaveSchema = z.object({
     creatorTitle: z.string(),
 })
 export type CollectionCreatorLeave = z.infer<typeof CollectionCreatorLeaveSchema>
+
+/** The type and episode identification of a section of a creator that becomes a collection of its own. */
+export const CreatorCollectionFormSchema = z.object({
+    type: z.union([z.enum(CollectionTypeReg.values), z.literal('')]).default('')
+        .pipe(z.enum(CollectionTypeReg.values, {error: 'Choose a collection type'})),
+    episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.literal('')]).default('')
+        .pipe(z.enum(EpisodeIdentifierReg.values, {error: 'Choose how its episodes are identified'})),
+})
+export type CreatorCollectionFormIn = z.input<typeof CreatorCollectionFormSchema>
+export type CreatorCollectionFormOut = z.output<typeof CreatorCollectionFormSchema>

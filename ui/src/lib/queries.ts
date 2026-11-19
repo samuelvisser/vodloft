@@ -863,13 +863,25 @@ export function useCreatorEpisodes(slug: string | undefined) {
 
 /** Add sections of one of a creator's accounts to the creator's collections, or ignore them. Answers with the
  * creator's page. */
-export async function addCreatorSections(slug: string, accountId: number, sections: SectionPlan[]): Promise<CreatorPageRead> {
-    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections`, {
+/**
+ * Add sections of a creator's account to its collections, or ignore them. A section that becomes a collection of its
+ * own takes ``type`` and ``episodeIdentifier`` when they are given, and otherwise those of the creator's collection.
+ */
+export function creatorSectionsRequest(slug: string, accountId: number, body: {
+    sections: SectionPlan[]
+    type?: string
+    episodeIdentifier?: string
+}): Promise<Response> {
+    return fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({sections}),
+        body: JSON.stringify(body),
     })
+}
+
+export async function addCreatorSections(slug: string, accountId: number, sections: SectionPlan[]): Promise<CreatorPageRead> {
+    const response = await creatorSectionsRequest(slug, accountId, {sections})
     if (!response.ok) throw await responseError(response)
     return CreatorPageReadSchema.parse(await response.json())
 }

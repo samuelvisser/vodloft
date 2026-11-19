@@ -7,6 +7,7 @@ import {faIcon} from '../../icons/faIcon'
 import {can} from '../../lib/access'
 import {addCreatorSections, moveCreatorSection, splitCreatorAccount} from '../../lib/queries'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
+import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
@@ -100,6 +101,8 @@ export default function CreatorSectionsEditor({creator, part}: {
     const [moving, setMoving] = useState<{item: AccountSection, to: Place} | null>(null)
     const [sectionBusy, setSectionBusy] = useState(false)
     const [splitting, setSplitting] = useState<CreatorPageAccountRead | null>(null)
+    // The section that becomes a collection of its own, while the user chooses its type and identification.
+    const [adding, setAdding] = useState<AccountSection | null>(null)
 
     const mayAdd = can('add_media')
     const mayManage = can('library', 'manage')
@@ -172,7 +175,7 @@ export default function CreatorSectionsEditor({creator, part}: {
         <div className="creator-row-actions">
             {choices(creator, item).map((choice) => (
                 <button key={choice.label} type="button" className="btn" disabled={busy !== null}
-                        onClick={() => void place(item.account, choice.plan)}>
+                        onClick={() => choice.plan.target === 'own' ? setAdding(item) : void place(item.account, choice.plan)}>
                     {busy === sectionKey(item.account, item.section.ref) ? 'Adding…' : choice.label}
                 </button>
             ))}
@@ -312,6 +315,8 @@ export default function CreatorSectionsEditor({creator, part}: {
                     </ul>
                 )}
             </ConfirmDialog>
+
+            {adding && <NewCreatorCollectionDialog creator={creator} item={adding} onDismiss={() => setAdding(null)}/>}
         </>
     )
 }

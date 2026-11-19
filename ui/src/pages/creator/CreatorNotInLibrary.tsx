@@ -10,29 +10,11 @@ import CollectionTileArt from '../../components/CollectionTileArt/CollectionTile
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import type {CreatorPageRead, SectionPlan} from '../../types/schemas/creator'
 import {choices, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
+import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 
-// Whether the viewer left the section open, for every creator.
-const OPEN_KEY = 'vodloft.creator.notInLibrary.open'
 // Tiles shown before "Show all": two rows on a computer, two on a phone.
 const DESKTOP_TILES = 12
 const PHONE_TILES = 4
-
-function readOpen(): boolean | null {
-    try {
-        const value = window.localStorage.getItem(OPEN_KEY)
-        return value === null ? null : value === '1'
-    } catch {
-        return null
-    }
-}
-
-function saveOpen(open: boolean) {
-    try {
-        window.localStorage.setItem(OPEN_KEY, open ? '1' : '0')
-    } catch {
-        // Only a convenience: the section just starts folded next time.
-    }
-}
 
 /** "a show" -> "show": one of what the creator adds, for a count. */
 function withoutArticle(one: string) {
@@ -46,7 +28,7 @@ function listed(titles: string[]) {
 
 /**
  * The creator's playlists or shows that are not in the Library: one folded line until the user opens it, then faded
- * Library tiles with a button that adds each one. It starts open while a new one waits for a choice.
+ * Library tiles with a button that adds each one.
  */
 export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead}) {
     const queryClient = useQueryClient()
@@ -56,9 +38,12 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
         // The new ones, which wait for a choice, first.
         .sort((a, b) => Number(b.section.status === 'new') - Number(a.section.status === 'new'))
     const newCount = items.filter(({section}) => section.status === 'new').length
-    const [open, setOpen] = useState(() => newCount > 0 || readOpen() === true)
+    // Folded each time the page opens; the summary says how many are new.
+    const [open, setOpen] = useState(false)
     const [showAll, setShowAll] = useState(false)
     const [busy, setBusy] = useState<string | null>(null)
+    // The section that becomes a collection of its own, while the user chooses its type and identification.
+    const [adding, setAdding] = useState<AccountSection | null>(null)
     if (!items.length) return null
 
     const mayAdd = can('add_media')
@@ -71,11 +56,12 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const arts = items.map(({section}) => toImageUrl(section.imageUrl)).filter((url): url is string => !!url).slice(0, 4)
     const key = ({account, section}: AccountSection) => `${account.id}:${section.ref}`
 
-    const toggle = () => {
-        saveOpen(!open)
-        setOpen(!open)
-    }
+    const toggle = () => setOpen(!open)
     const add = async (item: AccountSection, plan: SectionPlan) => {
+        if (plan.target === 'own') {
+            setAdding(item)
+            return
+        }
         setBusy(key(item))
         try {
             queryClient.setQueryData(['creator', creator.slug], await addCreatorSections(creator.slug, item.account.id, [plan]))
@@ -182,6 +168,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                     )}
                 </div>
             )}
+            {adding && <NewCreatorCollectionDialog creator={creator} item={adding} onDismiss={() => setAdding(null)}/>}
         </section>
     )
 }

@@ -11,7 +11,7 @@ Wire host, and collections from any other link can join them too.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 from sqlalchemy import select
@@ -340,10 +340,12 @@ def _settings_of(creator: Creator) -> NewCollectionSettings:
 
 def place_sections(
     s: Session, account: CreatorAccount, plans: list[SectionPlan], *, added_by_id: int | None = None,
+    type: CollectionType | None = None, episode_identifier: EpisodeIdentifier | None = None,
 ) -> list[Collection]:
     """Add sections of a creator's account that is in the Library to the creator's collections, or ignore them.
 
-    ``s`` is a write transaction's session."""
+    A section that becomes a collection of its own gets ``type`` and ``episode_identifier`` when they are given, and
+    otherwise those of the creator's own collection. ``s`` is a write transaction's session."""
     creator = account.creator
     sections = {section.ref: section for section in account.sections}
     unknown = [plan.ref for plan in plans if plan.ref not in sections]
@@ -355,7 +357,11 @@ def place_sections(
     adding = [plan for plan in plans if plan.target is not SectionTarget.SKIP]
     if not adding:
         return []
-    return _place(s, account, adding, _settings_of(creator), added_by_id=added_by_id)
+    settings = _settings_of(creator)
+    settings = replace(
+        settings, type=type or settings.type, episode_identifier=episode_identifier or settings.episode_identifier,
+    )
+    return _place(s, account, adding, settings, added_by_id=added_by_id)
 
 
 def _as_ref(section: CreatorSection) -> SectionRef:

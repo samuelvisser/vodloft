@@ -218,6 +218,10 @@ class CreatorSectionsAPIAdd(RequestBase):
     """Add sections of a creator to its collections, or ignore them."""
 
     sections: list[SectionPlanAPIIn] = Field(min_length=1, max_length=500)
+    type: Optional[CollectionType] = None
+    """The type of the sections that become a collection of their own; left out, that of the creator's collection."""
+    episode_identifier: Optional[EpisodeIdentifier] = None
+    """How those collections number their episodes; left out, like the creator's collection."""
 
 
 class CollectionCreatorMatchAPIRead(ResponseBase):
