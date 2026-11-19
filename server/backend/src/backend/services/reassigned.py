@@ -35,14 +35,21 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from sources import SectionKind
 
 
-def _list_collection_ids(channel: Channel) -> set[int]:
-    """The channel's collections of their own made from one of its lists."""
-    urls = {section.url for section in channel.sections if section.kind == SectionKind.LIST}
-    refs = {section.ref for section in channel.sections if section.kind == SectionKind.LIST}
+def _list_collection_ids(channel: Channel, seasons: frozenset[str] = frozenset()) -> set[int]:
+    """The channel's collections of their own made from one of its lists. One whose list the channel placed in its
+    own collection as a season, ``seasons``, is left over from before, and holds nothing any more."""
+    lists = [section for section in channel.sections if section.kind == SectionKind.LIST and section.ref not in seasons]
+    urls = {section.url for section in lists}
+    refs = {section.ref for section in lists}
     return {
         collection.id for collection in channel.collections
         if collection.id != channel.main_collection_id and (collection.sharing_url in urls or collection.slug in refs)
     }
+
+
+def _main_seasons(s: Session, channel: Channel) -> frozenset[str]:
+    main = channel.main_collection
+    return frozenset(link.ref for link in active_lists(s, main)) if main is not None else frozenset()
 
 
 @dataclass
@@ -76,7 +83,7 @@ class ChannelPlaces:
 
 def channel_places(s: Session, channel: Channel) -> ChannelPlaces:
     order = sorted(channel.collections, key=lambda collection: (collection.id != channel.main_collection_id, collection.id))
-    lists = _list_collection_ids(channel)
+    lists = _list_collection_ids(channel, _main_seasons(s, channel))
     places = ChannelPlaces(order=order, held={})
     ids = [collection.id for collection in order]
     for collection in order:
@@ -149,7 +156,7 @@ def placed_elsewhere(s: Session, collection: Collection) -> frozenset[str]:
     """The videos a collection does not add, because a list of another collection of its channel holds them. A
     collection made from a list adds every video of its list."""
     channel = collection.channel
-    if channel is None or collection.id in _list_collection_ids(channel):
+    if channel is None or collection.id in _list_collection_ids(channel, _main_seasons(s, channel)):
         return frozenset()
     return channel_places(s, channel).elsewhere(collection.id)
 

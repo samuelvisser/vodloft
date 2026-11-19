@@ -823,6 +823,19 @@ export async function addChannelSections(slug: string, sections: SectionPlan[]):
     return ChannelPageReadSchema.parse(await response.json())
 }
 
+/** Move one of the channel's playlists, with its videos and their files: a season of its own collection, a collection
+ * of its own, or out of the Library. */
+export async function moveChannelSection(slug: string, ref: string, target: 'main' | 'own' | 'skip'): Promise<ChannelPageRead> {
+    const response = await fetch(`${apiUrl()}/channels/${encodeURIComponent(slug)}/sections/${encodeURIComponent(ref)}/move`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({target}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return ChannelPageReadSchema.parse(await response.json())
+}
+
 function collectionChannelPath(slug: string, rest = ''): string {
     return `${apiUrl()}/collections/${encodeURIComponent(slug)}/channel${rest}`
 }
