@@ -14,7 +14,9 @@ from backend.db.models import Collection, CollectionList, CollectionListItem, Ep
 from backend.db.models import MediaDownloadBase
 from backend.services.collections import reindex_collection
 from backend.services.errors import ServiceError
+from backend.services.new_lists import checked_new_link_seasons
 from backend.services.link_seasons import (
+    collection_list_kinds, collection_new_lists,
     LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists,
     offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists, active_lists,
 )
@@ -81,6 +83,7 @@ class _View:
     only_leaving_with_files: int
     creator_slug: str | None
     creator_title: str | None
+    new_lists: list
 
     def __getattr__(self, name):
         return getattr(self.collection, name)
@@ -147,6 +150,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         only_leaving_count=len(only_leaving), only_leaving_with_files=len(only_with_files),
         creator_slug=collection.creator.slug if follows_creator(collection) else None,
         creator_title=collection.creator.title if follows_creator(collection) else None,
+        new_lists=collection_new_lists(collection),
     ))
 
 
@@ -235,7 +239,11 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     collection.outside_videos = body.outside_videos
     if not follows_creator(collection):
         # A creator's own collection follows what the creator does with a new playlist.
-        collection.new_link_seasons = body.new_link_seasons
+        current = {setting.key: setting.action for setting in collection_new_lists(collection)}
+        collection.new_lists = checked_new_link_seasons(
+            collection_list_kinds(collection), {**current, **body.new_lists},
+            collection.type == CollectionType.MUSIC.value,
+        )
     collection.loose_videos = body.loose_videos
     collection.list_layout = body.list_layout
     regrouped = _regroup(playlists, seasons, body)
@@ -338,10 +346,10 @@ def save_listed_links(s: Session, collection_slug: str, listing: LinkListing) ->
     collection = _collection(s, collection_slug)
     if collection.lists:
         # A playlist found now waits for the user's choice in the dialog, whatever the collection does with new ones.
-        action = collection.new_link_seasons
-        collection.new_link_seasons = NewLinkSeasonAction.ADD.value
+        settings = collection.new_lists
+        collection.new_lists = {setting.key: NewLinkSeasonAction.ADD.value for setting in collection_new_lists(collection)}
         save_lists(s, collection, listing)
-        collection.new_link_seasons = action
+        collection.new_lists = settings
     else:
         save_lists(s, collection, listing)
     s.flush()

@@ -30,6 +30,7 @@ from typing import Any, Literal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.services.new_lists import list_kinds, section_kind, skipped_kinds
 from backend.services.site_settings import download_profile_defaults, local_media_profile_defaults
 from backend.services.sites import CollectionAlreadyAddedError, collection_site
 
@@ -1168,10 +1169,15 @@ def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collect
         episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
         author_name=plan.artist or details.title, author_slug=slugify(details.handle or details.title) or details.ref,
         thumbnail_landscape_path=details.avatar_url or next((section.image_url for section in sections if section.image_url), None),
-        # Every album is a season, the ones to come too; a playlist the Site tells from the albums waits for the
-        # user's choice, as the other program took only albums.
-        link_seasons=LinkSeasons.SELECTED.value, new_link_seasons=NewLinkSeasonAction.ADD.value,
+        link_seasons=LinkSeasons.SELECTED.value,
     )
+    # Every album is a season, the ones to come too; a kind of list an artist skips, such as a SoundCloud playlist,
+    # is not, as the other program took only albums.
+    kinds = list_kinds([collection_site(collection)])
+    skipped = skipped_kinds(kinds, collection.type == CollectionType.MUSIC.value)
+    collection.new_lists = {
+        kind.key: (NewLinkSeasonAction.IGNORE if kind.key in skipped else NewLinkSeasonAction.ADD).value for kind in kinds
+    }
     add_collection(session, collection)
     index_new_collection(session, collection)
     return collection
@@ -1197,14 +1203,20 @@ def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collec
         raise CollectionAlreadyAddedError(existing.main_collection, existing.site)
     kind = CollectionType.MUSIC if details.music and details.music_known else CollectionType(plan.settings.get("type", CollectionType.SERIES.value))
     music = kind is CollectionType.MUSIC
-    # An artist's discography is their albums, not the playlists they put together.
+    # An artist's discography is their albums, not the kinds of list an artist skips, such as the playlists they put
+    # together on SoundCloud.
+    kinds = list_kinds([site])
+    skipped = skipped_kinds(kinds, music)
     plans = [SectionPlan(section.ref, SectionTarget.MAIN) for section in details.sections if section.access is None
-             and not (music and section.kind is SectionKind.LIST and section.album is False)]
+             and not (section.kind is SectionKind.LIST and section_kind(site, section) in skipped)]
     creator, _made = add_creator(session, source_key=source.id, details=details, plans=plans, settings=NewCollectionSettings(
         type=kind, episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
         membership_level="FREE",
     # The other program downloaded every new album as it came out.
-    ), new_sections=NewSectionAction.SEASON)
+    ), new_lists={
+        kind.key: (NewSectionAction.IGNORE if kind.key in skipped else NewSectionAction.SEASON).value
+        for kind in kinds if kind.seasons
+    })
     creator.genre, creator.content_rating = plan.settings.get("genre"), plan.settings.get("content_rating")
     main = creator.accounts[0].main_collection
     if main is None:

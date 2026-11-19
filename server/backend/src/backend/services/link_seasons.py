@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, MediaDownloadBase, Season
 from backend.services.season_order import arrange_seasons, link_first_videos, match_seasons_of_downloaded, season_year
 from backend.services.seasons import create_season_record
+from backend.services.new_lists import ListKind, NewListSetting, list_kinds, new_link_seasons_settings, section_kind
 from backend.services.sites import collection_site
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.season_types import SeasonType
@@ -162,6 +163,29 @@ class LinkListing:
     collection that adds them."""
 
 
+def collection_list_kinds(collection: Collection) -> list[ListKind]:
+    """The kinds of list of the collection's Site, each with a setting of its own for new ones."""
+    return list_kinds([collection_site(collection)])
+
+
+def collection_new_lists(collection: Collection) -> list[NewListSetting]:
+    """What the collection does with a new list of each kind of its Site."""
+    return new_link_seasons_settings(
+        collection_list_kinds(collection), collection.new_lists, collection.type == CollectionType.MUSIC.value,
+    )
+
+
+def _new_list_actions(collection: Collection):
+    """What the collection does with a new list, by the list: a function of its ``SectionRef``. When the collection
+    is set up, it takes every list but those of a kind it skips; when it skips every kind, that is about the lists to
+    come, and it takes all it found."""
+    site = collection_site(collection)
+    actions = {setting.key: NewLinkSeasonAction(setting.action) for setting in collection_new_lists(collection)}
+    if not collection.lists and all(action is NewLinkSeasonAction.IGNORE for action in actions.values()):
+        actions = dict.fromkeys(actions, NewLinkSeasonAction.ASK)
+    return lambda found: actions.get(section_kind(site, found), NewLinkSeasonAction.ASK)
+
+
 def known_video_slugs(s: Session, collection: Collection, also: frozenset[str] = frozenset()) -> frozenset[str]:
     return frozenset(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id))) | also
 
@@ -173,7 +197,8 @@ def list_lists(s: Session, collection: Collection, source: Source, also: frozens
     # The creator's daily look finds the lists of its own collection; the collection only lists their videos.
     url = collection.sharing_url if lists_playlists(collection) and not follows_creator(collection) else None
     every = collection.link_seasons == LinkSeasons.ALL.value
-    adds_new = every or collection.new_link_seasons == NewLinkSeasonAction.ADD.value or not collection.lists
+    action_of = _new_list_actions(collection)
+    first = not collection.lists
     known = {playlist.ref: (playlist.url, playlist.enabled and playlist.status == ListStatus.KNOWN.value)
              for playlist in collection.lists}
     adds_outside = adds_outside_videos(collection)
@@ -187,7 +212,7 @@ def list_lists(s: Session, collection: Collection, source: Source, also: frozens
             logger.info("Could not list the playlists of %s: %s", url, exc)
     wanted = {ref: playlist_url for ref, (playlist_url, on) in known.items() if every or on}
     for playlist in playlists or ():
-        if playlist.ref not in known and adds_new:
+        if playlist.ref not in known and _added(action_of(playlist), first=first, every=every):
             wanted[playlist.ref] = playlist.url
     items: dict[str, tuple[ItemRef, ...]] = {}
 
@@ -225,6 +250,12 @@ def _look_up_outside(
     return [details for details in found.values() if details is not None]
 
 
+def _added(action: NewLinkSeasonAction, *, first: bool, every: bool) -> bool:
+    """A new list is a season: every list is, in a collection where all are; the lists the creator had when the
+    collection was set up are, but for a kind it skips; and later ones are when the collection adds them."""
+    return every or action is NewLinkSeasonAction.ADD or (first and action is not NewLinkSeasonAction.IGNORE)
+
+
 def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list[CollectionList]:
     """Store the creator's playlists and what the seasons among them hold. A playlist the creator added since the
     collection was set up is a season, is left off, or waits for the user's choice, as the collection says. Returns
@@ -234,29 +265,17 @@ def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list
     known = {playlist.ref: playlist for playlist in collection.lists}
     first = not known
     every = collection.link_seasons == LinkSeasons.ALL.value
-    action = NewLinkSeasonAction(collection.new_link_seasons)
-    music = collection.type == CollectionType.MUSIC.value
+    action_of = _new_list_actions(collection)
     asked: list[CollectionList] = []
     for position, found in enumerate(listing.playlists or ()):
         playlist = known.get(found.ref)
         if playlist is None:
-            # The playlists the creator had when the collection was set up are all seasons to begin with. A Music
-            # collection's albums are, but a playlist its Site tells from the albums waits for the user's choice.
-            if music and not every and found.album is False:
-                playlist = CollectionList(
-                    ref=found.ref, url=found.url, title=found.title, image_path=found.image_url,
-                    item_count=found.item_count, site_position=position, enabled=False,
-                    status=(ListStatus.KNOWN if first else ListStatus.NEW).value,
-                )
-                collection.lists.append(playlist)
-                known[found.ref] = playlist
-                if not first:
-                    asked.append(playlist)
-                continue
+            # Each kind of list has its own setting, such as a SoundCloud artist's albums and their playlists.
+            action = action_of(found)
             asks = not first and not every and action is NewLinkSeasonAction.ASK
             playlist = CollectionList(
                 ref=found.ref, url=found.url, title=found.title, image_path=found.image_url, item_count=found.item_count,
-                site_position=position, enabled=first or every or action is NewLinkSeasonAction.ADD,
+                site_position=position, enabled=_added(action, first=first, every=every),
                 status=(ListStatus.NEW if asks else ListStatus.KNOWN).value,
             )
             collection.lists.append(playlist)

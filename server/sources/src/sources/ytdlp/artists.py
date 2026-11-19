@@ -128,7 +128,8 @@ def artist_details(root: str, progress: Callable[[str], None]) -> CreatorDetails
     # SoundCloud keeps an artist's albums apart from their playlists, so an account with albums is an artist's. One
     # without may still be, so the user decides.
     album_links = set() if bandcamp else _album_links(root, cookies)
-    releases = [_release(url, info, bandcamp, bandcamp or url in album_links) for url, info in found.items()]
+    releases = [_release(url, info, bandcamp, None if bandcamp else sites.ALBUM_LIST if url in album_links else sites.PLAYLIST_LIST)
+                for url, info in found.items()]
     releases.sort(key=lambda release: release[0], reverse=True)
     sections = [section for _date, section in releases]
     if not bandcamp:
@@ -167,7 +168,7 @@ def _artist_name(info: dict) -> str | None:
     return None
 
 
-def _release(url: str, info: dict, bandcamp: bool = True, album: bool = True) -> tuple[str, SectionRef]:
+def _release(url: str, info: dict, bandcamp: bool = True, list_type: str | None = None) -> tuple[str, SectionRef]:
     """An album, or a track on its own, with its release date to sort the artist's music by."""
     track = info if info.get("_type") != "playlist" else next(
         (entry for entry in info.get("entries") or [] if isinstance(entry, dict)), {},
@@ -182,9 +183,10 @@ def _release(url: str, info: dict, bandcamp: bool = True, album: bool = True) ->
         count = info.get("playlist_count")
         return date, SectionRef(
             ref=path, url=url, title=str(info.get("album") or info.get("title") or path), kind=SectionKind.LIST,
-            kind_label="Album" if album else "Playlist", item_count=count if isinstance(count, int) else None,
+            kind_label="Playlist" if list_type == sites.PLAYLIST_LIST else "Album",
+            item_count=count if isinstance(count, int) else None,
             image_url=thumbnails.widest_still(image) if image else None, description=info.get("description") or None,
-            year=year, album=album,
+            year=year, list_type=list_type,
         )
     return date, SectionRef(
         ref=path, url=url, title=str(info.get("track") or info.get("title") or path), kind=SectionKind.ITEM, kind_label="Single",

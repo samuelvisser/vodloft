@@ -2,6 +2,7 @@ import {z} from 'zod'
 
 export const LinkSeasonModeValues = ['all', 'selected'] as const
 export const NewLinkSeasonValues = ['ask', 'add', 'ignore'] as const
+export type NewLinkSeason = typeof NewLinkSeasonValues[number]
 export const ListLayoutValues = ['season_each', 'by_year'] as const
 export const LooseVideosValues = ['one_season', 'by_year'] as const
 export const OutsideVideosValues = ['leave_out', 'add', 'only'] as const
@@ -53,7 +54,11 @@ export const CollectionSeasonsReadSchema = z.object({
     /** The collection can hold only what its playlists have, with links you add from any site. */
     linksOnlyOffered: z.boolean().default(false),
     linkSeasons: z.enum(['off', ...LinkSeasonModeValues]),
-    newLinkSeasons: z.enum(NewLinkSeasonValues),
+    /** What happens with a list the creator adds, for each kind of list of the collection's Site. */
+    newLists: z.array(z.object({
+        key: z.string(), one: z.string(), many: z.string(), seasons: z.boolean(), albums: z.boolean().default(false),
+        action: z.enum(NewLinkSeasonValues),
+    })),
     listLayout: z.enum(ListLayoutValues).default('season_each'),
     looseVideos: z.enum(LooseVideosValues),
     outsideVideos: z.enum(OutsideVideosValues),
@@ -85,7 +90,8 @@ export const CollectionSeasonsFormSchema = z.object({
     customSeasonOrder: z.boolean().default(false),
     linkSeasonsOn: z.boolean().default(false),
     linkSeasonMode: z.enum(LinkSeasonModeValues).default('all'),
-    newLinkSeasons: z.enum(NewLinkSeasonValues).default('ask'),
+    /** What happens with a new list, by the key of its kind. */
+    newLists: z.record(z.string(), z.enum(NewLinkSeasonValues)).default({}),
     listLayout: z.enum(ListLayoutValues).default('season_each'),
     looseVideos: z.enum(LooseVideosValues).default('one_season'),
     outsideVideos: z.enum(OutsideVideosValues).default('leave_out'),
@@ -110,7 +116,7 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         customSeasonOrder: view.customSeasonOrder,
         linkSeasonsOn: view.linkSeasons !== 'off',
         linkSeasonMode: view.linkSeasons === 'off' ? 'all' : view.linkSeasons,
-        newLinkSeasons: view.newLinkSeasons,
+        newLists: Object.fromEntries(view.newLists.map((setting) => [setting.key, setting.action])),
         listLayout: view.listLayout,
         looseVideos: view.looseVideos,
         outsideVideos: view.outsideVideos,

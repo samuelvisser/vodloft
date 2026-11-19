@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "5e0c7a2b91d4"
+HEAD_REVISION = "9c3e1f5a7b20"
 
 
 @pytest.fixture
@@ -1379,8 +1379,8 @@ def test_a_channel_knows_its_own_collection_and_installations_get_the_new_sectio
 
     with engine.connect() as connection:
         assert connection.execute(text(
-            "SELECT a.main_collection_id, c.new_sections FROM creators c JOIN creator_accounts a ON a.creator_id = c.id"
-        )).one() == (2, "ask")
+            "SELECT a.main_collection_id, c.new_lists FROM creators c JOIN creator_accounts a ON a.creator_id = c.id"
+        )).one() == (2, '{"list": "ask"}')
         rules = connection.execute(text("SELECT default_key, position FROM notification_rules ORDER BY position")).all()
         assert rules[-1] == ("creator_sections_found", rules[-2].position + 1)
 
@@ -1722,8 +1722,44 @@ def test_a_creator_on_sites_without_link_seasons_adds_new_sections_as_collection
     command.upgrade(config, HEAD_REVISION)
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT id, new_sections FROM creators ORDER BY id")).all() == [
-            (1, "own"), (2, "season"), (3, "season"), (4, "ask"),
+        assert connection.execute(text("SELECT id, new_lists FROM creators ORDER BY id")).all() == [
+            (1, '{"list": "own"}'), (2, '{"list": "season"}'), (3, '{"list": "season"}'), (4, '{"list": "ask"}'),
+        ]
+
+
+def test_new_lists_are_set_for_each_kind_of_list_of_the_sites(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "5e0c7a2b91d4")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        # A SoundCloud artist, a YouTube creator, and a creator on both.
+        for creator_id, new_sections in ((1, "season"), (2, "ignore"), (3, "ask")):
+            connection.execute(text(
+                "INSERT INTO creators (id, uuid, slug, title, new_sections) VALUES (:id, :id, :id, :id, :new)"
+            ), {"id": creator_id, "new": new_sections})
+        for account_id, creator_id, site_key in ((1, 1, "soundcloud"), (2, 2, "youtube"), (3, 3, "youtube"), (4, 3, "soundcloud")):
+            connection.execute(text(
+                "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref) VALUES (:id, :creator, 's', :site, :id)"
+            ), {"id": account_id, "creator": creator_id, "site": site_key})
+        for collection_id, site_key, action in ((1, "soundcloud", "add"), (2, "youtube", "ignore"), (3, None, "ask")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, membership_level, type, episode_identifier, author_name, "
+                "author_slug, source_key, episode_order, site_key, new_link_seasons) VALUES (:id, :id, :id, :id, 'free', "
+                "'series', 'seasonal', 'A', 'a', 'ytdlp', 'newest_first', :site, :action)"
+            ), {"id": collection_id, "site": site_key, "action": action})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id, new_lists FROM creators ORDER BY id")).all() == [
+            (1, '{"album": "season", "playlist": "season"}'), (2, '{"list": "ignore"}'),
+            (3, '{"album": "ask", "playlist": "ask", "list": "ask"}'),
+        ]
+        assert connection.execute(text("SELECT id, new_lists FROM collections ORDER BY id")).all() == [
+            (1, '{"album": "add", "playlist": "add"}'), (2, '{"list": "ignore"}'), (3, '{"list": "ask"}'),
         ]
 
 

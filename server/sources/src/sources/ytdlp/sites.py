@@ -17,7 +17,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from ..contract import (
-    Access, CreatorPreset, CreatorSectionNames, DownloadOptions, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
+    Access, CreatorPreset, CreatorSectionNames, DownloadOptions, ListType, Site, SiteSetting, SiteSettings, StreamMethod, UpgradeChecks, UpgradeImprovement, domain_site, link_host,
 )
 from ..cookies import site_cookies
 from ..registry import named_site_for
@@ -64,6 +64,16 @@ _CREATOR_SECTIONS = {
 }
 # Sites whose channels' playlists can be the seasons of a collection made from the channel.
 # An artist's albums are their playlists.
+ALBUM_LIST = "album"
+PLAYLIST_LIST = "playlist"
+# The kinds of list a Site's creators make, where there is more than one. SoundCloud keeps an artist's albums apart
+# from the playlists they put together.
+_LIST_TYPES = {
+    "soundcloud": (
+        ListType(ALBUM_LIST, CreatorSectionNames("an album", "albums"), albums=True),
+        ListType(PLAYLIST_LIST, CreatorSectionNames("a playlist", "playlists")),
+    ),
+}
 _LINK_SEASON_SITES = {"youtube", "bandcamp", "soundcloud"}
 _CREATOR_PRESETS = (CreatorPreset.ONE_SHOW, CreatorPreset.PER_LIST, CreatorPreset.PICK)
 # A channel's members-only videos sit among its open ones, so its collections start without them.
@@ -160,7 +170,7 @@ def site_of(key: str, host: str | None = None) -> Site:
         settings=_SITE_SETTINGS.get(key, _SETTINGS), accesses=_accesses(key),
         takes_api_key=key in _API_KEY_SITES, shows_locked=key not in _HIDES_LOCKED,
         creators=key in _CREATOR_SITES, audio=key in _AUDIO_SITES, creator_label=_CREATOR_LABELS.get(key, "creator"),
-        creator_sections=_CREATOR_SECTIONS.get(key, CreatorSectionNames()),
+        creator_sections=_CREATOR_SECTIONS.get(key, CreatorSectionNames()), list_types=_LIST_TYPES.get(key, ()),
         creator_presets=_CREATOR_PRESETS if key in _CREATOR_SITES else (), link_seasons=key in _LINK_SEASON_SITES,
     )
 

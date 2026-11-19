@@ -82,6 +82,6 @@ def test_a_soundcloud_artists_albums_are_told_from_their_playlists(monkeypatch):
     monkeypatch.setattr(artists.runner, "run_json", soundcloud)
     details = artists.artist_details("https://soundcloud.com/flume", lambda step: None)
 
-    lists = {s.ref: (s.album, s.kind_label) for s in details.sections if s.kind is SectionKind.LIST}
-    assert lists == {"flume/sets/palaces": (True, "Album"), "flume/sets/favourites": (False, "Playlist")}
+    lists = {s.ref: (s.list_type, s.kind_label) for s in details.sections if s.kind is SectionKind.LIST}
+    assert lists == {"flume/sets/palaces": ("album", "Album"), "flume/sets/favourites": ("playlist", "Playlist")}
     assert (details.music, details.music_known) == (True, False)

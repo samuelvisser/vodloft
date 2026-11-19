@@ -14,11 +14,13 @@ import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry, type SelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
+import NewListSettings from '../common/NewListSettings'
+import type {ListKind} from '../../types/creator'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {
     CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, seasonsFormValues,
     type CollectionListRead, type CollectionSeasonsFormIn, type CollectionSeasonsFormOut, type CollectionSeasonsRead,
-    type LinkSeasonAddFormIn, type LinkSeasonAddFormOut,
+    type LinkSeasonAddFormIn, type LinkSeasonAddFormOut, type NewLinkSeason,
 } from '../../types/schemas/collection_seasons'
 import './SeasonsDialog.css'
 import {collectionWords, CollectionWords, Noun} from '../../lib/collectionWords'
@@ -77,10 +79,11 @@ function registries(names: CollectionSeasonsRead['names'], words: Words, view: C
             all: {label: `Every ${names.one}`, help: `Every ${names.one}, also the ones to come, is ${words.season.a}${words.here}.`},
             selected: {label: `Only the ${names.many} I pick`, help: `Only the ${names.many} switched on below are ${words.season.many}${words.here}.`},
         }),
-        newLinks: createSelectRegistry(`NewLinkSeasons-${names.many}`, {
-            ask: {label: 'Ask me', help: `VODLoft sends a message, and the new ${names.one} waits here for you to switch it on.`},
-            add: {label: `Make it ${words.season.a}${words.here}`, help: `A new ${names.one} becomes ${words.season.a}${words.here} right away.`},
-            ignore: {label: 'Leave it off', help: `A new ${names.one} stays off. You can switch it on here.`},
+        // One for each kind of list of the Site, such as a SoundCloud artist's albums and their playlists.
+        newLinks: (kind: ListKind) => createSelectRegistry(`NewLinkSeasons-${kind.key}-${kind.one}-${words.season.a}${words.here}`, {
+            ask: {label: 'Ask me', help: `VODLoft sends a message, and the new ${kind.one.replace(/^an? /, '')} waits here for you to switch it on.`},
+            add: {label: `Make it ${words.season.a}${words.here}`, help: `A new ${kind.one.replace(/^an? /, '')} becomes ${words.season.a}${words.here} right away.`},
+            ignore: {label: 'Always skip it', help: `A new ${kind.one.replace(/^an? /, '')} stays off. You can switch it on here.`},
         }),
         layout: createSelectRegistry(`ListLayout-${names.many}`, {
             season_each: {label: words.here ? `Each ${names.one} on its own` : `A ${words.season.one} per ${names.one}`, help: `Each ${names.one} is ${words.season.a}${words.here}, or shares one with the ${names.many} you put together below.`},
@@ -149,7 +152,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const looseVideos = watch('looseVideos') ?? 'one_season'
     const listLayout = watch('listLayout') ?? 'season_each'
     const outsideVideos = watch('outsideVideos') ?? 'leave_out'
-    const newLinkSeasons = watch('newLinkSeasons') ?? 'ask'
+    const newLists = watch('newLists') ?? {}
     const customOrder = watch('customSeasonOrder') ?? false
     const removedLinks = watch('removedLinks') ?? []
     const only = outsideVideos === 'only'
@@ -182,7 +185,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             seasons: data.seasons,
             customSeasonOrder: data.customSeasonOrder,
             linkSeasons: data.linkSeasonsOn || data.outsideVideos === 'only' ? data.linkSeasonMode : 'off',
-            newLinkSeasons: data.newLinkSeasons,
+            newLists: data.newLists,
             looseVideos: data.looseVideos,
             listLayout: data.listLayout,
             outsideVideos: data.outsideVideos,
@@ -424,12 +427,14 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
                                                     {mode === 'selected' && view.listsPlaylists && !view.creatorSlug && (
                                                         <div className="form-row">
-                                                            <label htmlFor="seasons-new-links">When the {words.creator} adds {/^[aeiou]/.test(names.one) ? 'an' : 'a'} {names.one}</label>
-                                                            <SimpleSelect
-                                                                inputId="seasons-new-links" registry={regs.newLinks} value={newLinkSeasons}
-                                                                onChange={(value) => setValue('newLinkSeasons', value as CollectionSeasonsFormIn['newLinkSeasons'], {shouldDirty: true})}
+                                                            <label>When the {words.creator} adds {/^[aeiou]/.test(names.one) ? 'an' : 'a'} {names.one}</label>
+                                                            <NewListSettings
+                                                                kinds={view.newLists} values={newLists}
+                                                                fallback="ask" idPrefix="seasons-new-links" registryFor={regs.newLinks}
+                                                                onChange={(key, value) => setValue('newLists', {...newLists, [key]: value as NewLinkSeason}, {shouldDirty: true})}
                                                             />
-                                                            <div className="help">{regs.newLinks.getHelp(newLinkSeasons)} VODLoft looks once a day.</div>
+                                                            {errors.newLists && <div className="error" role="alert">{(errors.newLists as {message?: string}).message}</div>}
+                                                            <div className="help">VODLoft looks once a day.</div>
                                                         </div>
                                                     )}
 

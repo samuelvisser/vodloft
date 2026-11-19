@@ -9,12 +9,13 @@ import {apiUrl} from '../../lib/api'
 import {lookUpCreator, useCreators} from '../../lib/queries'
 import {
     CreatorCreateSchema, type CreatorCreateIn, type CreatorCreateOut, type CreatorLookupRead, type CreatorSectionRead,
-    type SectionPlan,
+    type NewSectionAction, type SectionPlan, newListsValues,
 } from '../../types/schemas/creator'
 import {DwMembershipLevelReg} from '../../types/dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg, type CollectionTypeValue, type EpisodeIdentifierValue} from '../../types/collection'
 import {useCollectionDefaults} from '../../components/AddCollectionPage/collectionDefaults'
-import {newSectionActionReg} from '../../types/creator'
+import {newListActionReg} from '../../types/creator'
+import NewListSettings, {listKindNames} from '../../components/common/NewListSettings'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -57,10 +58,10 @@ function choiceOf(plan: SectionPlan | undefined): Choice {
     return plan?.target ?? 'skip'
 }
 
-/** What happens with a list the creator adds later, to start with: an artist's new playlist is a new album of
- *  theirs, where the Site's lists can be seasons; anyone else is asked. */
-function newSectionsFor(creator: CreatorLookupRead, music: boolean): CreatorCreateIn['newSections'] {
-    return music && creator.linkSeasons ? 'season' : 'ask'
+/** What happens with a list of each kind the creator adds later, to start with, as the server says: an artist's new
+ *  albums are new albums of theirs, and kinds that aren't albums are skipped; anyone else is asked. */
+function newListsFor(creator: CreatorLookupRead, music: boolean): Record<string, NewSectionAction> {
+    return newListsValues(music ? creator.musicNewLists : creator.newLists)
 }
 
 const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
@@ -238,7 +239,7 @@ export default function AddCreatorPage() {
                 setCreator(found)
                 setLabel(found.creatorLabel)
                 setValue('type', found.music ? 'music' : 'series')
-                setValue('newSections', newSectionsFor(found, found.music))
+                setValue('newLists', newListsFor(found, found.music))
                 const preset = found.presets[0]
                 if (preset) {
                     setValue('preset', preset.key)
@@ -252,7 +253,8 @@ export default function AddCreatorPage() {
     const plans = watch('sections') ?? []
     const preset = watch('preset')
     const membershipLevel = watch('membershipLevel')
-    const newSections = watch('newSections') ?? 'ask'
+    const newLists = watch('newLists') ?? {}
+    const newListKinds = creator ? (music ? creator.musicNewLists : creator.newLists) : []
     const byRef = useMemo(() => new Map(plans.map((plan) => [plan.ref, plan])), [plans])
     const registries = useMemo(
         () => new Map((creator?.sections ?? []).map((section) => [section.ref, choicesFor(creator!, section, music)])),
@@ -273,7 +275,7 @@ export default function AddCreatorPage() {
     // An artist starts from what the preset keeps of an artist, such as only their albums on YouTube.
     const chooseKind = (kind: 'series' | 'music') => {
         setValue('type', kind, {shouldValidate: true})
-        if (creator) setValue('newSections', newSectionsFor(creator, kind === 'music'))
+        if (creator) setValue('newLists', newListsFor(creator, kind === 'music'))
         choosePreset(preset ?? creator?.presets[0]?.key, kind === 'music')
     }
     const choose = (section: string, choice: Choice) => {
@@ -290,7 +292,7 @@ export default function AddCreatorPage() {
             sections: data.type === 'music' ? data.sections : data.sections.map((plan) => (
                 plan.target === 'own' && collectionSettings[plan.ref] ? {...plan, ...collectionSettings[plan.ref]} : plan
             )),
-            membershipLevel: data.membershipLevel, newSections: data.newSections, into: data.into || null,
+            membershipLevel: data.membershipLevel, newLists: data.newLists, into: data.into || null,
             type: data.type === 'music' ? 'music' : collectionSettings[MAIN_KEY]?.type || 'series',
             ...(data.type !== 'music' && collectionSettings[MAIN_KEY]?.episodeIdentifier
                 ? {episodeIdentifier: collectionSettings[MAIN_KEY].episodeIdentifier} : {}),
@@ -507,13 +509,15 @@ export default function AddCreatorPage() {
                 ))}
 
 
-                {!into && <div className="form-row creator-membership">
-                    <label htmlFor="creator-new-sections">When the {creatorWord} adds {/^[aeiou]/.test(lists) ? 'an' : 'a'} {lists.replace(/s$/, '')}</label>
-                    <SimpleSelect
-                        inputId="creator-new-sections" registry={newSectionActionReg(creatorWord, [{name: creator.siteName, linkSeasons: creator.linkSeasons, creatorSections: creator.creatorSections}], music)} value={newSections}
-                        onChange={(value) => setValue('newSections', value as CreatorCreateIn['newSections'])}
+                {!into && <div className="creator-section-group">
+                    <h2>New {listKindNames(newListKinds)}</h2>
+                    <NewListSettings
+                        kinds={newListKinds} values={newLists} fallback="ask" idPrefix="creator-new-lists"
+                        registryFor={(kind) => newListActionReg(creatorWord, kind, music)}
+                        onChange={(key, value) => setValue('newLists', {...newLists, [key]: value as NewSectionAction})}
                     />
-                    <div className="help">{newSectionActionReg(creatorWord, [{name: creator.siteName, linkSeasons: creator.linkSeasons, creatorSections: creator.creatorSections}], music).meta(newSections as never)?.help} VODLoft looks for new ones once a day.</div>
+                    {errors.newLists && <div className="error" role="alert">{(errors.newLists as {message?: string}).message}</div>}
+                    <div className="help">VODLoft looks for new ones once a day.</div>
                 </div>}
 
                 {sourceKey === 'dailywire' && (

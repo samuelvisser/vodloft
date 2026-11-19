@@ -37,6 +37,30 @@ export const SectionPlanSchema = z.object({
 })
 export type SectionPlan = z.infer<typeof SectionPlanSchema>
 
+export const NewSectionActionValues = ['ask', 'season', 'own', 'ignore'] as const
+export type NewSectionAction = typeof NewSectionActionValues[number]
+
+/** One kind of list a creator's Sites have, such as a SoundCloud artist's albums, with what happens with a new one. */
+export const CreatorNewListSchema = z.object({
+    key: z.string(),
+    one: z.string(),
+    many: z.string(),
+    /** The lists can be seasons of the creator's own collection. */
+    seasons: z.boolean(),
+    /** The kind best describes an artist's albums. */
+    albums: z.boolean().default(false),
+    action: z.enum(NewSectionActionValues),
+})
+export type CreatorNewList = z.infer<typeof CreatorNewListSchema>
+
+/** What happens with a new list, by the key of its kind, as a form keeps it. */
+export const NewListsSchema = z.record(z.string(), z.enum(NewSectionActionValues))
+
+/** A form's settings for new lists, from what the server says of each kind. */
+export function newListsValues(settings: readonly CreatorNewList[]): Record<string, CreatorNewList['action']> {
+    return Object.fromEntries(settings.map((setting) => [setting.key, setting.action]))
+}
+
 export const CreatorLookupReadSchema = z.object({
     /** Adding the creator with it uses what this lookup found, instead of asking the Site again. */
     lookupId: z.string().nullable().optional(),
@@ -69,10 +93,12 @@ export const CreatorLookupReadSchema = z.object({
     musicKnown: z.boolean().default(false),
     /** Why the lookup took the creator for a music artist, when it guessed so. */
     musicReason: z.string().nullable().optional(),
+    /** What the creator does with a new list of each kind until you choose otherwise. */
+    newLists: z.array(CreatorNewListSchema),
+    /** The same for a music artist: their albums are added, and other kinds of list are skipped. */
+    musicNewLists: z.array(CreatorNewListSchema),
 })
 export type CreatorLookupRead = z.infer<typeof CreatorLookupReadSchema>
-
-export const NewSectionActionValues = ['ask', 'season', 'own', 'ignore'] as const
 
 const SiteSchema = z.object({
     key: z.string(), name: z.string(), creatorLabel: z.string().default('creator'), linkSeasons: z.boolean().default(false),
@@ -115,7 +141,8 @@ export const CreatorReadSchema = z.object({
     createdAt: z.string(),
     collectionCount: z.number(),
     episodeCount: z.number(),
-    newSections: z.enum(NewSectionActionValues),
+    /** What the creator does with a new list, for each kind of list of their Sites. */
+    newLists: z.array(CreatorNewListSchema),
     genre: z.string().nullable(),
     contentRating: z.string().nullable(),
 })
@@ -184,7 +211,7 @@ export const CreatorCreateSchema = z.object({
     preset: z.enum(CreatorPresetValues).default('one_show'),
     sections: z.array(SectionPlanSchema).default([]),
     membershipLevel: z.enum(DwMembershipLevelReg.Enum).default(DwMembershipLevelReg.Enum.HIGHEST_ALLOWED),
-    newSections: z.enum(NewSectionActionValues).default('ask'),
+    newLists: NewListsSchema.default({}),
     /** A creator in the Library who is the same person or group: the account joins them. Empty for a new creator. */
     into: z.string().default(''),
     /** What the creator's collections are: Music for a music artist. */
@@ -199,7 +226,7 @@ export type CreatorCreateOut = z.output<typeof CreatorCreateSchema>
 /** The form that changes how VODLoft follows a creator. */
 export const CreatorUpdateSchema = z.object({
     title: z.string().trim().min(1, 'Give them a name').max(255).default(''),
-    newSections: z.enum(NewSectionActionValues).default('ask'),
+    newLists: NewListsSchema.default({}),
     genre: z.string().trim().max(200).default(''),
     contentRating: z.string().trim().max(50).default(''),
 })

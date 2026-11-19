@@ -11,11 +11,12 @@ import {apiUrl} from '../../lib/api'
 import {useCreator} from '../../lib/queries'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
-import SimpleSelect from '../../components/common/SimpleSelect'
 import PageHeader from '../../components/common/PageHeader'
-import {creatorKindText, newSectionActionReg} from '../../types/creator'
+import {creatorKindText, newListActionReg} from '../../types/creator'
+import NewListSettings, {listKindNames} from '../../components/common/NewListSettings'
 import {
-    CreatorPageReadSchema, CreatorUpdateSchema, type CreatorUpdateIn, type CreatorUpdateOut,
+    CreatorPageReadSchema, CreatorUpdateSchema, newListsValues, type CreatorUpdateIn, type CreatorUpdateOut,
+    type NewSectionAction,
 } from '../../types/schemas/creator'
 import CreatorSectionsEditor from './CreatorSectionsEditor'
 import './CreatorPages.css'
@@ -36,14 +37,14 @@ export default function EditCreatorPage() {
     useEffect(() => {
         if (!creator) return
         reset({
-            title: creator.title, newSections: creator.newSections, genre: creator.genre ?? '', contentRating: creator.contentRating ?? '',
+            title: creator.title, newLists: newListsValues(creator.newLists), genre: creator.genre ?? '', contentRating: creator.contentRating ?? '',
         })
     }, [creator, reset])
 
     if (error) return <section className="view"><div className="form-error-card" role="alert">{error.message}</div></section>
     if (!creator) return <section className="view"><p>Loading…</p></section>
 
-    const newSections = watch('newSections') ?? 'ask'
+    const newLists = watch('newLists') ?? {}
 
     const onSubmit = buildServerAwareSubmit<CreatorUpdateIn, CreatorUpdateOut>(form, (data) => fetch(
         `${apiUrl()}/creators/${encodeURIComponent(creator.slug)}`, {
@@ -51,11 +52,11 @@ export default function EditCreatorPage() {
             credentials: 'include',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                title: data.title, newSections: data.newSections, genre: data.genre || null, contentRating: data.contentRating || null,
+                title: data.title, newLists: data.newLists, genre: data.genre || null, contentRating: data.contentRating || null,
             }),
         },
     ), {
-        fallbackField: 'newSections',
+        fallbackField: 'newLists',
         onSuccess: async (page: unknown) => {
             queryClient.setQueryData(['creator', slug], CreatorPageReadSchema.parse(page))
             // The creator's collections take its name as their author.
@@ -104,16 +105,15 @@ export default function EditCreatorPage() {
                     </div>
                 </div>
 
-                <div className="form-row creator-membership">
-                    <label htmlFor="creator-new-sections">When the {creator.creatorLabel} adds {creator.sectionNames.one}</label>
-                    <SimpleSelect
-                        inputId="creator-new-sections" registry={newSectionActionReg(creator.creatorLabel, creator.accounts.map((account) => account.site), creator.creatorLabel === 'artist')} value={newSections}
-                        onChange={(value) => setValue('newSections', value as CreatorUpdateIn['newSections'], {shouldDirty: true})}
+                <div className="creator-section-group">
+                    <h2>New {listKindNames(creator.newLists)}</h2>
+                    <NewListSettings
+                        kinds={creator.newLists} values={newLists} fallback="ask" idPrefix="creator-new-lists"
+                        registryFor={(kind) => newListActionReg(creator.creatorLabel, kind, creator.creatorLabel === 'artist')}
+                        onChange={(key, value) => setValue('newLists', {...newLists, [key]: value as NewSectionAction}, {shouldDirty: true})}
                     />
-                    {errors.newSections && <div className="error" role="alert">{errors.newSections.message}</div>}
-                    <div className="help">
-                        {newSectionActionReg(creator.creatorLabel, creator.accounts.map((account) => account.site), creator.creatorLabel === 'artist').meta(newSections as never)?.help} VODLoft looks for new ones once a day.
-                    </div>
+                    {errors.newLists && <div className="error" role="alert">{(errors.newLists as {message?: string}).message}</div>}
+                    <div className="help">VODLoft looks for new ones once a day.</div>
                 </div>
 
                 <div className="form-row creator-membership">

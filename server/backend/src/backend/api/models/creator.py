@@ -8,7 +8,7 @@ from pydantic import AliasChoices, AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.pagination import CursorPageRead
-from backend.api.models.source import CreatorSectionNamesAPIRead, SiteAPIRead
+from backend.api.models.source import CreatorSectionNamesAPIRead, ListKindAPIRead, SiteAPIRead
 from backend.types.creator_types import NewSectionAction, SectionTarget
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -53,6 +53,12 @@ class SectionPlanAPIRead(ResponseBase):
     target: SectionTarget
 
 
+class CreatorNewListAPIRead(ListKindAPIRead):
+    """What the creator does with a new list of one kind, such as a new playlist."""
+
+    action: NewSectionAction
+
+
 class CreatorPresetAPIRead(ResponseBase):
     key: CreatorPreset
     plan: list[SectionPlanAPIRead]
@@ -87,6 +93,11 @@ class CreatorLookupAPIRead(ResponseBase):
     facts: list[str] = Field(default_factory=list)
     sections: list[CreatorSectionAPIRead]
     presets: list[CreatorPresetAPIRead]
+    new_lists: list[CreatorNewListAPIRead]
+    """What the creator does with a new list of each kind of its Site until the user chooses otherwise."""
+    music_new_lists: list[CreatorNewListAPIRead]
+    """The same, when the creator is added as a music artist: their albums are added, and where the Site tells albums
+    from other lists, those others are skipped."""
     creator_slug: Optional[str] = None
     """The creator's slug, when it is already in the Library."""
     music: bool = False
@@ -119,7 +130,8 @@ class CreatorAPICreate(RequestBase):
     episode_identifier: EpisodeIdentifier = EpisodeIdentifier.SEASONAL
     """How the creator's own collection identifies its episodes, and each collection whose plan says nothing."""
     membership_level: DwMembershipLevel = DwMembershipLevel.HIGHEST_ALLOWED
-    new_sections: NewSectionAction = NewSectionAction.ASK
+    new_lists: dict[str, NewSectionAction] = Field(default_factory=dict, max_length=20)
+    """What the creator does with a new list, by the key of its kind; a kind left out takes its default."""
     lookup_id: Optional[str] = Field(default=None, max_length=64)
     """The lookup's id, to use what it found instead of asking the Site again."""
     into: Optional[str] = Field(default=None, max_length=255)
@@ -184,7 +196,8 @@ class CreatorAPIRead(ResponseBase):
     created_at: datetime
     collection_count: int = 0
     episode_count: int = 0
-    new_sections: NewSectionAction
+    new_lists: list[CreatorNewListAPIRead]
+    """What the creator does with a new list, for each kind of list of their Sites."""
     genre: Optional[str] = None
     content_rating: Optional[str] = None
 
@@ -246,7 +259,8 @@ class CreatorAPIUpdate(RequestBase):
     title: Optional[str] = Field(default=None, min_length=1, max_length=255)
     """The creator's name, which their collections take as author; left out, it stays as it is. A name given here
     is kept when the Site's name changes."""
-    new_sections: NewSectionAction
+    new_lists: dict[str, NewSectionAction] = Field(default_factory=dict, max_length=20)
+    """What the creator does with a new list, by the key of its kind; a kind left out keeps its setting."""
     genre: Optional[str] = Field(default=None, max_length=200)
     content_rating: Optional[str] = Field(default=None, max_length=50)
 

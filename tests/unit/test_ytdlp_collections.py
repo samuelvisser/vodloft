@@ -672,20 +672,29 @@ def test_a_creators_collection_lists_only_the_feeds_placed_in_it():
     assert _feeds(ref, None) == [{"channel_id": "UCabc"}]
 
 
-def test_a_music_collection_takes_new_albums_and_asks_about_new_playlists(session):
-    from backend.services.link_seasons import LinkListing, save_lists
+def test_a_music_collection_has_a_setting_for_new_albums_and_one_for_new_playlists(session):
+    from backend.services.link_seasons import LinkListing, collection_new_lists, save_lists
     from sources import SectionKind, SectionRef
 
-    collection = _collection(session, "PLartist")
-    collection.type, collection.link_seasons, collection.new_link_seasons = "music", "selected", "add"
+    collection = _collection(session, "PLartist", source_key="ytdlp")
+    collection.sharing_url = "https://soundcloud.com/artist"
+    collection.type, collection.link_seasons = "music", "selected"
+    # Until the user chooses, a Music collection asks about new albums and skips new playlists.
+    assert [(setting.key, setting.action) for setting in collection_new_lists(collection)] == [
+        ("album", "ask"), ("playlist", "ignore"),
+    ]
+    collection.new_lists = {"album": "add", "playlist": "ask"}
 
     def listed(ref, album):
-        return SectionRef(ref, f"https://soundcloud.com/artist/sets/{ref}", ref.title(), SectionKind.LIST, album=album)
+        return SectionRef(
+            ref, f"https://soundcloud.com/artist/sets/{ref}", ref.title(), SectionKind.LIST,
+            list_type="album" if album else "playlist",
+        )
 
-    # On the first look the albums are seasons and the playlists are only known.
+    # On the first look every list is a season, as the collection skips no kind.
     assert save_lists(session, collection, LinkListing([listed("first", True), listed("mix", False)])) == []
     assert {link.ref: (link.enabled, link.status) for link in collection.lists} == {
-        "first": (True, "known"), "mix": (False, "known"),
+        "first": (True, "known"), "mix": (True, "known"),
     }
     asked = save_lists(session, collection, LinkListing([
         listed("second", True), listed("faves", False), listed("first", True), listed("mix", False),
