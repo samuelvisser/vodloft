@@ -8,7 +8,7 @@ from pydantic import AliasChoices, AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.pagination import CursorPageRead
-from backend.api.models.source import ListKindAPIRead, SectionTypeAPIRead, SiteAPIRead
+from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead, SiteAPIRead
 from backend.types.creator_types import NewSectionAction, SectionTarget
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -31,6 +31,8 @@ class CreatorSectionAPIRead(ResponseBase):
     role: str
     type: str
     """The key of the Site's section type the section is, such as album."""
+    names: NamesAPIRead = Field(validation_alias=AliasPath("section_type", "names"))
+    """What the Site calls the section's type, or VODLoft's own word for its kind where the Site names none."""
     item_count: Optional[int] = None
     image_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("image_path", "image_url"))
     description: Optional[str] = None
@@ -82,6 +84,8 @@ class CreatorLookupAPIRead(ResponseBase):
     section_types: list[SectionTypeAPIRead]
     """Every type of section the Site's creators have, such as playlists on YouTube or shows on The Daily Wire."""
     audio_only: bool = False
+    media_names: NamesAPIRead = Field(validation_alias=AliasPath("site", "media_names"))
+    """What the Site calls one of its videos: a video, or a track on a Site with sound only."""
     """The Site has sound only, such as Bandcamp, so what its lists hold are tracks."""
     link_seasons: bool = False
     """The creator's lists can be seasons of its own collection."""

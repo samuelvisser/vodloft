@@ -34,6 +34,10 @@ class CollectionContract:
     """What they are called when they are sound only, such as the tracks of a Music collection on a Site with sound
     only or the files of a profile for Music tracks; the same as ``words`` unless the contract sets it."""
 
+    downloads_by_season: bool = True
+    """Downloads pick the collection's seasons, as for a series or an artist's albums; otherwise its newest episodes,
+    by a number of days or of episodes, as for a podcast."""
+
     def __post_init__(self) -> None:
         if self.audio_words is None:
             object.__setattr__(self, "audio_words", self.words)
@@ -43,8 +47,8 @@ class CollectionContract:
         return self.audio_words if audio else self.words
 
 
-PODCAST = CollectionContract(CollectionType.PODCAST)
-"""A podcast's episodes, which are what VODLoft calls them everywhere."""
+PODCAST = CollectionContract(CollectionType.PODCAST, downloads_by_season=False)
+"""A podcast, whose newest episodes are what is downloaded."""
 
 SERIES = CollectionContract(CollectionType.SERIES)
 """A series' seasons and episodes, which are what VODLoft calls them everywhere."""

@@ -889,6 +889,13 @@ class Site:
         if self.audio_only and self.episode_tags is VIDEO_TAGS:
             object.__setattr__(self, "episode_tags", TRACK_TAGS)
 
+    @property
+    def media_names(self) -> Names:
+        """What the Site calls one of its videos, from its main episode tag: a video, or a track on a Site with sound
+        only, such as the items a playlist holds."""
+        main = self.episode_tags[0]
+        return Names(main.singular, main.plural)
+
     def episode_tag(self, key: str | None) -> EpisodeTag | None:
         """One of the Site's episode tags by its key."""
         return next((tag for tag in self.episode_tags if tag.key == key), None)

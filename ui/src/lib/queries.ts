@@ -546,14 +546,16 @@ export async function saveSourceYtdlpOptions(sourceId: string, text: string): Pr
 }
 
 /** The tags a Source gives episodes of the show at ``url``, or of any of its shows without one. */
-export function useEpisodeTags(sourceKey?: string | null, url?: string | null) {
-    return useQuery<EpisodeTagRead[], Error, EpisodeTagRead[], readonly ['episodeTags', string, string | null]>({
-        queryKey: ['episodeTags', sourceKey ?? '', url ?? null] as const,
+/** A Source's episode tags for the collection at ``url``; with ``collectionType``, the main one is named as a collection
+ *  of that type names its episodes. */
+export function useEpisodeTags(sourceKey?: string | null, url?: string | null, collectionType?: string | null) {
+    return useQuery<EpisodeTagRead[], Error, EpisodeTagRead[], readonly ['episodeTags', string, string | null, string | null]>({
+        queryKey: ['episodeTags', sourceKey ?? '', url ?? null, collectionType ?? null] as const,
         enabled: !!sourceKey,
         staleTime: Infinity,
         queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/sources/${encodeURIComponent(sourceKey ?? '')}/episode-tags`
-            + (url ? `?url=${encodeURIComponent(url)}` : ''),
+            `${apiUrl()}/sources/${encodeURIComponent(sourceKey ?? '')}/episode-tags?`
+            + new URLSearchParams({...(url ? {url} : {}), ...(collectionType ? {collection_type: collectionType} : {})}),
             EpisodeTagReadSchema.array(),
             signal,
         ),
@@ -583,7 +585,7 @@ export function useCollectionEpisodeTags({collectionId, collectionSlug, sourceKe
     const collection = collectionId !== undefined
         ? collections?.find((item) => item.id === collectionId)
         : collectionSlug ? collections?.find((item) => item.slug === collectionSlug) : undefined
-    return useEpisodeTags(collection?.sourceKey ?? sourceKey, collection?.sharingUrl ?? url)
+    return useEpisodeTags(collection?.sourceKey ?? sourceKey, collection?.sharingUrl ?? url, collection?.type)
 }
 
 /** The episode tags that a saved collection's episodes actually have, in its Source's order. */

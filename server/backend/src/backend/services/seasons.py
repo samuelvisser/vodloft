@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Season
 from backend.services.episode_filters import add_upcoming_season
 from backend.types.season_types import SeasonType
-from backend.types.collection_types import CollectionType
+from backend.types.collection_contracts import collection_contract
 from backend.utils.season_ordering import season_type_from_name
 from task_manager.events.transactional import queue_event
 
@@ -48,7 +48,7 @@ def create_season_record(
     s.add(season)
     s.flush()
 
-    if update_collection_profiles and CollectionType(season.collection.type).by_season:
+    if update_collection_profiles and collection_contract(season.collection.type).downloads_by_season:
         for profile in season.collection.download_profiles:
             add_upcoming_season(profile, season.slug)
         s.flush()

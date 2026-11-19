@@ -37,7 +37,8 @@
           "many": "episodes",
           "a": "an episode"
         }
-      }
+      },
+      "downloadsBySeason": false
     },
     {
       "type": "series",
@@ -64,7 +65,8 @@
           "many": "episodes",
           "a": "an episode"
         }
-      }
+      },
+      "downloadsBySeason": true
     },
     {
       "type": "music",
@@ -91,7 +93,8 @@
           "many": "tracks",
           "a": "a track"
         }
-      }
+      },
+      "downloadsBySeason": true
     }
   ]
 }

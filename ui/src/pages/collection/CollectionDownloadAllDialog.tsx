@@ -22,7 +22,7 @@ import {createSelectRegistry} from '../../utils/selectRegistry'
 import NumberInput from '../../components/common/NumberInput'
 import './CollectionDownloadAllDialog.css'
 import {apiUrl} from '../../lib/api'
-import {collectionWords, CollectionWords} from '../../lib/collectionWords'
+import {collectionWords, CollectionWords, downloadsBySeason} from '../../lib/collectionWords'
 
 const LimitByReg = createSelectRegistry('DownloadAllLimitBy', {
   none: {label: 'No limits'},
@@ -71,7 +71,7 @@ export default function CollectionDownloadAllDialog({
   const selectId = useId()
   const startOperation = useStartOperation()
   // Series and Music collections are downloaded by season; a podcast by date or number of episodes.
-  const bySeason = collectionType !== 'podcast'
+  const bySeason = downloadsBySeason(collectionType)
   const [starting, setStarting] = useState(false)
 
   const compatibleProfiles = useMemo(
@@ -112,18 +112,18 @@ export default function CollectionDownloadAllDialog({
           message: 'Select at least one episode type.',
         })
       }
-      if (collectionType === 'podcast' && data.limitBy === 'date' && data.downloadDaysInPast < 1) {
+      if (!bySeason && data.limitBy === 'date' && data.downloadDaysInPast < 1) {
         context.addIssue({
           code: 'custom',
           path: ['downloadDaysInPast'],
           message: 'Enter a positive number of days.',
         })
       }
-      if (collectionType === 'podcast' && data.limitBy === 'episodes' && data.downloadEpisodeCount < 1) {
+      if (!bySeason && data.limitBy === 'episodes' && data.downloadEpisodeCount < 1) {
         context.addIssue({
           code: 'custom',
           path: ['downloadEpisodeCount'],
-          message: 'Enter a positive number of episodes.',
+          message: `Enter a positive number of ${episode.many}.`,
         })
       }
     }),

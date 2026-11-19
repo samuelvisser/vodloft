@@ -99,13 +99,19 @@ def collection_words(collection: Collection, *, audio: bool | None = None) -> Co
 
 def collection_episode_tags(collection: Collection) -> tuple[EpisodeTag, ...]:
     """The tags of a collection's episodes, the main one named as the collection names its episodes
-    (``collection_words``), such as tracks in a Music collection on Bandcamp. Its key stays the Site's, so profiles
-    select it the same everywhere."""
-    episode = collection_words(collection).episode
+    (``collection_words``), such as tracks in a Music collection on Bandcamp."""
+    tags = get_source(collection.source_key).episode_tags_for(collection.sharing_url)
+    return episode_tags_named(tags, collection_words(collection))
+
+
+def episode_tags_named(tags: Iterable[EpisodeTag], words: CollectionWords) -> tuple[EpisodeTag, ...]:
+    """A Site's episode tags with the main one named by a collection's ``words``. Its key stays the Site's, so
+    profiles select it the same everywhere."""
+    episode = words.episode
     return tuple(
         replace(tag, label=episode.one.capitalize(), help=f"{episode.a.capitalize()} of the collection",
                 singular=episode.one, plural=episode.many) if tag.main else tag
-        for tag in get_source(collection.source_key).episode_tags_for(collection.sharing_url)
+        for tag in tags
     )
 
 

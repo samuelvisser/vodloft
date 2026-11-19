@@ -184,3 +184,19 @@ def test_the_episode_tags_endpoint_and_profiles_accept_source_tags():
         DownloadProfileAPICreate.model_validate(
             {**body, "filters": [{"action": "only", "field": "types", "episode_types": ["ep; drop"]}]}
         )
+
+def test_the_episode_tags_endpoint_names_the_main_tag_by_collection_type():
+    from backend.api.endpoints.sources import router as source_router_module
+
+    app = FastAPI()
+    app.include_router(source_router_module.router, prefix="/api")
+    client = TestClient(app)
+
+    def labels(url, collection_type=None):
+        params = {"url": url, **({"collection_type": collection_type} if collection_type else {})}
+        return [tag["label"] for tag in client.get("/api/sources/ytdlp/episode-tags", params=params).json()]
+
+    assert labels("https://x.bandcamp.com/music", "music") == ["Track"]
+    assert labels("https://www.youtube.com/@a", "music")[0] == "Music video"
+    assert labels("https://www.youtube.com/@a", "podcast")[0] == "Episode"
+    assert labels("https://www.youtube.com/@a")[0] == "Video"

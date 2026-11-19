@@ -21,8 +21,9 @@ from backend.services.errors import ServiceError
 from backend.services.access_checks import ask_for_check, refused_media
 from backend.services.media_access import locked_clause
 from backend.services.local_media_profile_sites import profile_offered_for_site
-from backend.services.sites import collection_episode_tags, collection_site_key, place_collection
+from backend.services.sites import collection_episode_tags, collection_site_key, collection_words, place_collection
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
+from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
 from backend.api.endpoints.media_downloads.service import create_new_episode_download
 from config import get_settings
@@ -471,17 +472,20 @@ def request_collection_download_all(
         # Nor can media locked behind an access VODLoft does not have, such as a channel membership.
         ~locked_clause(Episode),
     )
-    if CollectionType(collection.type).by_season:
+    words = collection_words(collection)
+    if collection_contract(collection.type).downloads_by_season:
         if not body.season_ids:
-            raise HTTPException(status_code=422, detail="Select at least one season")
+            raise HTTPException(status_code=422, detail=f"Select at least one {words.season.one}")
         if body.download_days_in_past or body.download_episode_count or body.download_starting_from:
-            raise HTTPException(status_code=422, detail="Podcast limits cannot be used for series")
+            raise HTTPException(
+                status_code=422, detail=f"Pick {words.season.many} instead of a date or a number of {words.episode.many}",
+            )
         selected_ids = set(body.season_ids)
         valid_ids = set(s.scalars(
             select(Season.id).where(Season.collection_id == collection.id, Season.id.in_(selected_ids))
         ))
         if selected_ids != valid_ids:
-            raise HTTPException(status_code=422, detail="A selected season does not belong to this collection")
+            raise HTTPException(status_code=422, detail=f"A selected {words.season.one} does not belong to this collection")
         statement = (
             statement.where(Episode.season_id.in_(selected_ids))
             .order_by(Episode.season_id.asc(), Episode.index.asc(), Episode.id.asc())

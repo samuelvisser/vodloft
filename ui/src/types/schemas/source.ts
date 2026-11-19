@@ -187,6 +187,10 @@ export function pluralKindName(name: string): string {
 /** The website a collection or video is on, such as YouTube, whichever Source fetches it. */
 /** One type of section a Site's creators have, such as a feed, or an album or a playlist on SoundCloud, and what the
  * Site calls it, in lower case and without an article: one, such as "playlist", and many, such as "playlists". */
+/** A word as the backend names it: one, many, and one with its article, such as album, albums and an album. */
+export const NamesSchema = z.object({one: z.string(), many: z.string(), a: z.string()})
+export type Names = z.infer<typeof NamesSchema>
+
 export const SectionTypeSchema = z.object({
     key: z.string(),
     kind: z.enum(['feed', 'list', 'show', 'item']),
@@ -204,8 +208,10 @@ export const SiteReadSchema = z.object({
     showsLocked: z.boolean().optional().default(true),
     /** The Site has sound only, such as Bandcamp: a Music collection on it holds tracks, not music videos. */
     audioOnly: z.boolean().optional().default(false),
+    /** What the Site calls one of its videos: a video, or a track on a Site with sound only. */
+    mediaNames: NamesSchema,
     /** What the Site calls a creator, in lower case, such as host on The Daily Wire. */
-    creatorLabel: z.string().optional().default('creator'),
+    creatorLabel: z.string(),
     /** What the Site calls a creator with a Music collection, such as artist. */
     musicCreatorLabel: z.string(),
     /** Every type of section the Site's creators have, such as YouTube's feeds and playlists. */

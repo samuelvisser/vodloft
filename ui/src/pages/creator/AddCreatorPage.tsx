@@ -14,7 +14,7 @@ import {
 import {DwMembershipLevelReg} from '../../types/dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg, type CollectionTypeValue, type EpisodeIdentifierValue} from '../../types/collection'
 import {useCollectionDefaults} from '../../components/AddCollectionPage/collectionDefaults'
-import {growingNames, newListActionReg, sectionName, sectionTypeOf} from '../../types/creator'
+import {growingNames, newListActionReg} from '../../types/creator'
 import NewListSettings, {listKindNames} from '../../components/common/NewListSettings'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
@@ -91,11 +91,11 @@ function isMovie(creator: CreatorLookupRead, section: CreatorSectionRead) {
 
 /** What the section is and holds, in the words of its Site: "Album · 2016 · 12 tracks". */
 function sectionFacts(creator: CreatorLookupRead, section: CreatorSectionRead): string {
-    const noun = creator.audioOnly ? ['track', 'tracks'] : ['video', 'videos']
+    const media = creator.mediaNames
     return [
-        capitalize(sectionName(creator.sectionTypes, section).one),
+        capitalize(section.names.one),
         section.year,
-        section.itemCount != null ? `${section.itemCount} ${noun[section.itemCount === 1 ? 0 : 1]}` : null,
+        section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? media.one : media.many}` : null,
     ].filter(Boolean).join(' · ')
 }
 
@@ -350,12 +350,12 @@ export default function AddCreatorPage() {
     // A group for each type of section the Site has, in its words and order: Feeds and Playlists on YouTube, or
     // Albums, Playlists and Singles on SoundCloud.
     const groups: [string, CreatorSectionRead[]][] = creator.sectionTypes.map((type) => [
-        capitalize(type.many), creator.sections.filter((section) => sectionTypeOf(creator.sectionTypes, section)?.key === type.key),
+        capitalize(type.many), creator.sections.filter((section) => section.type === type.key),
     ])
-    // A section of a kind the Site names no type for goes under VODLoft's own word for it.
-    const unnamed = creator.sections.filter((section) => !sectionTypeOf(creator.sectionTypes, section))
-    for (const many of new Set(unnamed.map((section) => sectionName(creator.sectionTypes, section).many))) {
-        groups.push([capitalize(many), unnamed.filter((section) => sectionName(creator.sectionTypes, section).many === many)])
+    // A section of a kind the Site names no type for goes under the backend's word for its kind.
+    const unnamed = creator.sections.filter((section) => !creator.sectionTypes.some((type) => type.key === section.type))
+    for (const many of new Set(unnamed.map((section) => section.names.many))) {
+        groups.push([capitalize(many), unnamed.filter((section) => section.names.many === many)])
     }
     // What is in the library already stays where it is, so it makes no collection.
     const inLibrary = new Set(creator.sections.filter((section) => section.collectionSlug).map((section) => section.ref))

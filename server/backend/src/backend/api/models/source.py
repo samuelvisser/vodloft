@@ -399,6 +399,14 @@ class SearchResultsAPIRead(ResponseBase):
     notice: Optional[SearchNoticeAPIRead] = None
 
 
+class NamesAPIRead(ResponseBase):
+    """A word in lower case: one, many, and one with its article, such as album, albums and an album."""
+
+    one: str
+    many: str
+    a: str
+
+
 class SectionTypeAPIRead(ResponseBase):
     """One type of section a Site's creators have, such as a feed, or an album or a playlist on SoundCloud, and what
     the Site calls it, in lower case."""
@@ -438,6 +446,12 @@ class SiteAPIRead(ResponseBase):
     def shows_locked(self) -> bool:
         """A collection on the Site shows what VODLoft has no access to until the user hides it."""
         return site_of(self.key).shows_locked
+
+    @computed_field
+    @property
+    def media_names(self) -> NamesAPIRead:
+        """What the Site calls one of its videos: a video, or a track on a Site with sound only."""
+        return NamesAPIRead.model_validate(site_of(self.key).media_names)
 
     @computed_field
     @property
