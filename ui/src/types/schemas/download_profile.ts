@@ -60,7 +60,7 @@ export const EpisodeFilterSchema = z.object({
         if (!filter.episodeTypes?.length) ctx.addIssue({code: 'custom', path: ['episodeTypes'], message: 'Choose at least one episode type'})
     } else if (filter.field === 'seasons') {
         if (!filter.seasonSlugs?.length && !filter.includeUpcoming) {
-            ctx.addIssue({code: 'custom', path: ['seasonSlugs'], message: 'Choose at least one season, or upcoming seasons'})
+            ctx.addIssue({code: 'custom', path: ['seasonSlugs'], message: 'Choose at least one, or the upcoming ones'})
         }
     } else if (filter.field === 'duration') {
         if (!filter.durationOperator || !filter.durationSeconds) {

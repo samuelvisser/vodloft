@@ -286,6 +286,7 @@ export default function AddDownloadProfilePage() {
                         form={form}
                         episodeIdentifier={episodeIdentifier}
                         collectionId={selectedCollection?.id}
+                        collectionType={selectedCollection?.type}
                         seasons={seasonsData}
                         collectionRoot={false}
                         newProfile

@@ -1,3 +1,4 @@
+import {collectionWords} from '../../lib/collectionWords'
 import {useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams} from 'react-router-dom'
@@ -62,11 +63,12 @@ export default function DownloadProfilePage() {
     const resourceLabel = `${profile.collectionTitle} (${profile.localMediaProfileName})`
     const localMediaProfile = localMediaProfiles?.find((item) => item.id === profile.localMediaProfileId)
     const typeLabel = (key: string) => tags?.find((tag) => tag.key === key)?.label ?? key
+    const season = collectionWords(profile.collectionType).season
     const seasonLabel = (slug: string) => seasons?.find((season) => season.slug === slug)?.name ?? slug
     const sentence = (filter: DownloadProfileRead['filters'][number]) => plainText(
-        filterSentence(filter, typeLabel, seasonLabel, profile.deleteOlderEpisodes),
+        filterSentence(filter, typeLabel, seasonLabel, profile.deleteOlderEpisodes, undefined, season),
     )
-    const filterText = (index: number) => leftOutByText(profile.filters[index], typeLabel, seasonLabel, profile.deleteOlderEpisodes)
+    const filterText = (index: number) => leftOutByText(profile.filters[index], typeLabel, seasonLabel, profile.deleteOlderEpisodes, season)
     const outside = statistics ? statistics.outOfScope + statistics.outOfScopeKept : 0
     // Counting walks the filters over every episode of the Collection, which takes a while on a busy server.
     const counted = (value: number | string | undefined) => value !== undefined ? value : (
