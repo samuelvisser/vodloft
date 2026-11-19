@@ -327,8 +327,12 @@ Google gives each project 10,000 units a day, reset at midnight Pacific time. Mo
 | `youtubeApi.checksQuota` | `VL_YOUTUBE_API__CHECKS_QUOTA` | `7000` | Checks for new videos and full re-scans of your YouTube collections. |
 | `youtubeApi.searchQuota` | `VL_YOUTUBE_API__SEARCH_QUOTA` | `2000` | YouTube searches on the Add media page, about 19 a day. When it is used up, or set to `0`, searches use yt-dlp. |
 | `youtubeApi.minCheckIntervalMinutes` | `VL_YOUTUBE_API__MIN_CHECK_INTERVAL_MINUTES` | `10` | The shortest time between two checks of the same collection. |
+| `youtubeApi.usageLogEnabled` | `VL_YOUTUBE_API__USAGE_LOG_ENABLED` | `false` | Keep a usage log file. See below. |
+| `youtubeApi.usageLogMaxLines` | `VL_YOUTUBE_API__USAGE_LOG_MAX_LINES` | `100000` | How many lines the usage log keeps; the oldest are removed first. |
 
 What the checks and search shares leave of the daily total is kept free for adding collections, testing the key and manual refreshes. Adding a collection uses the units kept free first and then the checks share; listing a channel costs about 2 units per 50 videos. The split is under **How to spend the YouTube API quota** on the yt-dlp card, and shows what each share means in practice, such as how often each collection gets checked.
+
+To see what VODLoft really spends, look in the log under **Logs**: once a new Pacific day starts, VODLoft logs a summary of what each share used the day before, split by kind of call, and how many calls a full share refused. With debug logging on (`logLevel: DEBUG`), the log also shows every YouTube API call with the share it came from. The log under **Logs** starts empty each time VODLoft restarts. To keep a record over days or weeks, turn on **Keep a usage log**: VODLoft then writes the same lines to `youtube-api-usage.log` in the `yt-dlp` folder next to `config.yml`, whatever the log level.
 
 ### Sites more than one Source handles
 

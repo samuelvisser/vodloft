@@ -119,7 +119,7 @@ def test_google_errors_become_the_kinds_the_source_acts_on():
     assert isinstance(error_for(google_error(403, "quotaExceeded")), QuotaExceededError)
     # Google's word counts for the rest of the Pacific day.
     assert quota.status().exhausted
-    assert not quota.try_spend(Share.RESERVE, 1)
+    assert not quota.try_spend(Share.RESERVE, 1, call="videos")
 
 
 def test_temporary_failures_are_retried_and_never_show_the_key():
@@ -146,7 +146,7 @@ def test_the_quota_day_follows_pacific_time():
     assert quota.pacific_day(late).isoformat() == "2026-10-27"
     assert quota.next_reset(late) == datetime(2026, 10, 28, 7, 0, tzinfo=timezone.utc)
 
-    quota.try_spend(Share.CHECKS, 5, now=late)
+    quota.try_spend(Share.CHECKS, 5, call="videos", now=late)
     assert quota.status(now=late).usage(Share.CHECKS).used == 5
     assert quota.status(now=morning).usage(Share.CHECKS).used == 0
 
@@ -257,3 +257,45 @@ def test_the_api_key_endpoints(api_client, monkeypatch):
     assert api_client.get("/api/sources/problems").json() == []
     assert api_client.delete("/api/sources/ytdlp/api/key").json()["keyHint"] is None
     assert api_client.get("/api/sources/dailywire/api").status_code == 404
+
+
+def test_debug_logging_shows_each_call_and_info_a_summary_of_each_day(caplog):
+    caplog.set_level("DEBUG", logger=quota.logger.name)
+    day = datetime(2026, 10, 27, 18, 0, tzinfo=timezone.utc)
+    next_day = datetime(2026, 10, 28, 18, 0, tzinfo=timezone.utc)
+    quota.try_spend(Share.CHECKS, 1, call="playlistItems", now=day)
+    quota.try_spend(Share.CHECKS, 1, call="playlistItems", now=day)
+    quota.try_spend(Share.SEARCH, 100, call="search", now=day)
+    assert not quota.try_spend(Share.SEARCH, 5_000, call="search", now=day)
+    assert "checks: playlistItems (1 unit), 2 of 7,000 used" in caplog.text
+
+    caplog.clear()
+    caplog.set_level("INFO", logger=quota.logger.name)
+    assert quota.status(now=next_day).used == 0
+    assert "Summary of 2026-10-27 (Pacific time): 102 of 10,000 units used" in caplog.text
+    assert "checks: 2 of 7,000 units (playlistItems 2 units in 2 calls)" in caplog.text
+    assert "search: 100 of 2,000 units (search 100 units in 1 call), 1 call refused" in caplog.text
+    # The day is summed up once.
+    caplog.clear()
+    quota.status(now=next_day)
+    assert "Summary" not in caplog.text
+
+
+def test_the_usage_log_survives_restarts_and_keeps_its_length(quota_settings, ytdlp_dir):
+    day = datetime(2026, 10, 27, 18, 0, tzinfo=timezone.utc)
+    quota.try_spend(Share.CHECKS, 1, call="videos", now=day)
+    assert not quota.usage_log_path().exists()
+
+    quota_settings(usage_log_enabled=True, usage_log_max_lines=100)
+    for _ in range(150):
+        quota.try_spend(Share.CHECKS, 1, call="videos", now=day)
+    lines = quota.usage_log_path().read_text().splitlines()
+    assert 100 <= len(lines) <= 110
+    assert lines[-1].endswith("checks: videos (1 unit), 151 of 7,000 used")
+
+    # A restart counts the lines already in the file.
+    quota._usage_log_lines.clear()
+    quota.status(now=datetime(2026, 10, 28, 18, 0, tzinfo=timezone.utc))
+    lines = quota.usage_log_path().read_text().splitlines()
+    assert "Summary of 2026-10-27" in lines[-4]
+    assert lines[-3].endswith("checks: 151 of 7,000 units (videos 151 units in 151 calls)")

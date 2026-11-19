@@ -281,7 +281,7 @@ def test_a_rescan_only_details_new_videos_and_pays_from_the_checks_share(youtube
 def test_adding_a_collection_moves_on_to_the_checks_share_when_the_reserve_is_used(youtube):
     youtube.playlists["PL1"] = ["v1"]
     youtube.videos["v1"] = _video_item("v1")
-    assert quota.try_spend(Share.RESERVE, quota.status().usage(Share.RESERVE).limit)
+    assert quota.try_spend(Share.RESERVE, quota.status().usage(Share.RESERVE).limit, call="videos")
 
     found = list(YtDlpSource().list_episodes("https://www.youtube.com/playlist?list=PL1", known=frozenset()))
 
