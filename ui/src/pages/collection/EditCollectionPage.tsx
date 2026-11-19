@@ -19,8 +19,8 @@ import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../l
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
 import {CollectionTypeReg, CollectionTypeValue, EpisodeIdentifierReg, EpisodeIdentifierValue, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
 import ChangeIdentificationDialog from '../../components/ChangeIdentificationDialog/ChangeIdentificationDialog'
-import DisabledReason from '../../components/common/DisabledReason'
-import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
+import ProgressSelect from '../../components/common/ProgressSelect'
+import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {apiUrl} from '../../lib/api'
 import SeasonsDialog from '../../components/CollectionSeasons/SeasonsDialog'
 import PageHeader, {PageHeaderAction} from '../../components/common/PageHeader'
@@ -116,10 +116,6 @@ export default function EditCollectionPage() {
   }, [id, collection])
 
   const [identificationTarget, setIdentificationTarget] = useState<EpisodeIdentifierValue | null>(null)
-  const identificationOperation = useActiveOperation('collection.change_identification', 'collection', collection?.id)
-  const identificationBusyReason = identificationOperation
-    ? `VODLoft is still numbering the episodes of ${collection?.title ?? 'this collection'} again and renaming their files. You can change the identification again once that is done.`
-    : undefined
 
   const usesYtdlp = hasSourceFeature(collection, SourceFeature.YTDLP_OPTIONS)
   const optionalCookies = hasSourceFeature(collection, SourceFeature.OPTIONAL_COOKIES)
@@ -399,24 +395,23 @@ export default function EditCollectionPage() {
 
         <div className="form-row">
           <label htmlFor="collection-episode-identification">Episode identification</label>
-          <DisabledReason reason={identificationBusyReason} placement="below-start" as="div">
-            {({describedBy, explain}) => (
-              <div onClick={identificationBusyReason ? explain : undefined}>
-                <SimpleSelect
-                  inputId="collection-episode-identification"
-                  registry={EpisodeIdentifierReg}
-                  value={collection?.episodeIdentifier ?? null}
-                  isDisabled={!collection || !!identificationBusyReason}
-                  onChange={(value) => {
-                    if (collection && value !== collection.episodeIdentifier) {
-                      setIdentificationTarget(value as EpisodeIdentifierValue)
-                    }
-                  }}
-                  aria-describedby={describedBy ?? 'collection-episode-identification-help'}
-                />
-              </div>
-            )}
-          </DisabledReason>
+          <ProgressSelect
+            inputId="collection-episode-identification"
+            registry={EpisodeIdentifierReg}
+            value={collection?.episodeIdentifier ?? null}
+            isDisabled={!collection}
+            definition={frontendOperationDefinitions['collection.change_identification']}
+            resourceId={collection?.id}
+            targetValueKey="episode_identifier"
+            activeLabel="Renumbering episodes"
+            busyReason={`VODLoft is still numbering the episodes of ${collection?.title ?? 'this collection'} again and renaming their files. You can change the identification again once that is done.`}
+            onChange={(value) => {
+              if (collection && value !== collection.episodeIdentifier) {
+                setIdentificationTarget(value as EpisodeIdentifierValue)
+              }
+            }}
+            aria-describedby="collection-episode-identification-help"
+          />
           <div className="help" id="collection-episode-identification-help">
             How VODLoft numbers the episodes. Changing it numbers every episode again, renames the files that are named
             by their numbers and rewrites their metadata.
