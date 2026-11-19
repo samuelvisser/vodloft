@@ -1,17 +1,17 @@
-import {useMemo, useRef, useState} from 'react'
+import {useCallback, useMemo, useState} from 'react'
 import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {can} from '../../lib/access'
-import {checkCreator, combineCreators, useCreator, useCreators} from '../../lib/queries'
+import {checkCreator, combineCreators, useCreator, useCreatorEpisodes, useCreators} from '../../lib/queries'
+import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import EpisodeCard from '../../components/Episode/EpisodeCard'
 import CollectionTile from '../../components/CollectionTile/CollectionTile'
 import OpenOnSiteLink from '../../components/common/OpenOnSiteLink'
-import type {CreatorPageRead} from '../../types/schemas/creator'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import {postReassignedMove, reassignedMoveMessage} from '../../components/Episode/SeasonPlaceNote'
@@ -38,8 +38,13 @@ function timeAgo(date: Date) {
 }
 
 /** A row of episodes that scrolls sideways, with buttons to scroll it on a computer. */
-function EpisodeShelf({episodes}: {episodes: CreatorPageRead['newestEpisodes']}) {
-    const row = useRef<HTMLDivElement>(null)
+function EpisodeShelf({slug}: {slug: string}) {
+    const {data, hasNextPage, isFetchingNextPage, fetchNextPage} = useCreatorEpisodes(slug)
+    const episodes = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data])
+    // The next page loads when the end of the row comes near, as the user scrolls it on.
+    const loadMore = useCallback(() => { if (!isFetchingNextPage) void fetchNextPage() }, [isFetchingNextPage, fetchNextPage])
+    const {rootRef: row, endRef} = useLoadMoreOnScroll<HTMLDivElement, HTMLDivElement>(!!hasNextPage, loadMore)
+    if (!episodes.length) return null
     const scroll = (direction: number) => row.current?.scrollBy({left: direction * row.current.clientWidth * 0.8, behavior: 'smooth'})
     return (
         <section className="creator-section-group" aria-labelledby="creator-newest-title">
@@ -58,6 +63,7 @@ function EpisodeShelf({episodes}: {episodes: CreatorPageRead['newestEpisodes']})
                 {episodes.map((episode) => (
                     <EpisodeCard key={episode.id} ep={episode} collectionSlug={episode.collectionSlug} collectionTitle={episode.collectionTitle}/>
                 ))}
+                {hasNextPage && <div ref={endRef} className="creator-shelf-more" aria-hidden="true"/>}
             </div>
         </section>
     )
@@ -141,7 +147,7 @@ export default function CreatorPage() {
     const episodes = creator.collections.reduce((total, collection) => total + collection.episodeCount, 0)
     const firstDates = creator.collections.map((collection) => collection.firstPublishedDate).filter((date): date is Date => !!date)
     const since = firstDates.length ? Math.min(...firstDates.map((date) => date.getFullYear())) : null
-    const newest = creator.newestEpisodes[0]?.publishedDate
+    const newest = creator.lastPublishedDate
 
     return (
         <section className="view creator-view" aria-labelledby="creator-title">
@@ -217,7 +223,7 @@ export default function CreatorPage() {
                 </Link>
             )}
 
-            {creator.newestEpisodes.length > 0 && <EpisodeShelf episodes={creator.newestEpisodes}/>}
+            <EpisodeShelf slug={creator.slug}/>
 
             <div className="creator-section-group">
                 <h2 className="creator-collections-title">Collections</h2>

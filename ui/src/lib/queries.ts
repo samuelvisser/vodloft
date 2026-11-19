@@ -23,7 +23,7 @@ import {
 import {useFrontendPuller} from './puller'
 import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/siteSettings'
 import {
-    CreatorLookupReadSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorLookupRead, type CreatorPageRead, type CreatorRead,
+    CreatorEpisodePageReadSchema, CreatorLookupReadSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorLookupRead, type CreatorPageRead, type CreatorRead,
     CollectionCreatorLeaveSchema, CollectionCreatorMatchSchema, type CollectionCreatorLeave, type CollectionCreatorMatch,
     type SectionPlan,
 } from '../types/schemas/creator'
@@ -841,6 +841,23 @@ export function useCreator(slug: string | undefined) {
         queryKey: ['creator', slug] as const,
         enabled: !!slug && can('library'),
         queryFn: ({signal}) => fetchParsed(`${apiUrl()}/creators/${encodeURIComponent(slug ?? '')}`, CreatorPageReadSchema, signal),
+    })
+}
+
+const CREATOR_EPISODE_PAGE_SIZE = 12
+
+/** The episodes of all of a creator's collections, newest first, a page at a time. */
+export function useCreatorEpisodes(slug: string | undefined) {
+    return useInfiniteQuery({
+        queryKey: ['creator', slug, 'episodes'] as const,
+        enabled: !!slug && can('library'),
+        initialPageParam: null as string | null,
+        queryFn: ({pageParam, signal}) => {
+            const params = new URLSearchParams({limit: String(CREATOR_EPISODE_PAGE_SIZE)})
+            if (pageParam) params.set('cursor', pageParam)
+            return fetchParsed(`${apiUrl()}/creators/${encodeURIComponent(slug ?? '')}/episodes?${params}`, CreatorEpisodePageReadSchema, signal)
+        },
+        getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     })
 }
 

@@ -24,7 +24,7 @@
 .creator-about { grid-area: about; min-width: 0; padding: 10px 20px 0; display: flex; flex-direction: column; gap: 6px; }
 .creator-header--no-banner .creator-about { padding-left: 0; padding-right: 0; }
 .creator-facts { margin: 0; color: var(--muted); }
-.creator-description-wrap { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
+.creator-description-wrap { color: var(--muted); display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
 .creator-description {
     margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     white-space: pre-line; overflow-wrap: anywhere;
@@ -92,6 +92,9 @@
 .creator-shelf-arrows .btn { width: 34px; height: 34px; padding: 0; border-radius: 50%; justify-content: center; }
 .creator-shelf.episodes-row { grid-auto-columns: 240px; padding-left: 0; padding-right: 0; scrollbar-width: none; }
 .creator-shelf.episodes-row::-webkit-scrollbar { display: none; }
+/* Where the next episodes appear while they load. */
+.creator-shelf-more { aspect-ratio: 16 / 9; border-radius: 10px; background: rgba(100, 116, 139, 0.15); animation: creator-shelf-pulse 1.2s ease-in-out infinite alternate; }
+@keyframes creator-shelf-pulse { from { opacity: .5; } to { opacity: 1; } }
 @media (max-width: 640px) {
     .creator-shelf-arrows { display: none; }
     .creator-shelf.episodes-row { grid-auto-columns: 200px; gap: 12px; margin-right: -16px; padding-right: 16px; }

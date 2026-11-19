@@ -784,7 +784,7 @@ def _video(session, collection, slug, published):
     ))
 
 
-def test_the_creator_page_shows_each_collections_years_and_the_newest_episodes(client, session):
+def test_the_creator_page_shows_each_collections_years_and_pages_through_the_newest_episodes(client, session):
     from datetime import datetime, timezone
 
     from backend.db.models import Collection
@@ -800,7 +800,25 @@ def test_the_creator_page_shows_each_collections_years_and_the_newest_episodes(c
     page = client.get("/api/creators/workshop").json()
 
     assert {c["slug"]: c["years"] for c in page["collections"]} == {"UCworkshop": "2019-2024", shorts.slug: "2025-2025"}
-    assert [(e["slug"], e["collectionSlug"]) for e in page["newestEpisodes"]] == [
-        ("short", shorts.slug), ("latest", "UCworkshop"), ("first", "UCworkshop"),
-    ]
-    assert page["newestEpisodes"][0]["collectionTitle"] == shorts.title
+    assert page["lastPublishedDate"].startswith("2025-01-01")
+
+    first = client.get("/api/creators/workshop/episodes", params={"limit": 2}).json()
+    assert [(e["slug"], e["collectionSlug"]) for e in first["items"]] == [("short", shorts.slug), ("latest", "UCworkshop")]
+    assert first["items"][0]["collectionTitle"] == shorts.title
+    rest = client.get("/api/creators/workshop/episodes", params={"limit": 2, "cursor": first["nextCursor"]}).json()
+    assert [e["slug"] for e in rest["items"]] == ["first"]
+    assert rest["hasMore"] is False
+
+
+def test_deleting_a_creator_keeps_its_collections_as_plain_ones(client, session):
+    from backend.db.models import Collection, Creator
+
+    _one_show(client)
+
+    assert client.delete("/api/creators/workshop").status_code == 204
+
+    session.expire_all()
+    assert session.scalar(select(Creator).where(Creator.slug == "workshop")) is None
+    collections = session.scalars(select(Collection)).all()
+    assert collections and all(c.creator_id is None for c in collections)
+    assert client.delete("/api/creators/workshop").status_code == 404

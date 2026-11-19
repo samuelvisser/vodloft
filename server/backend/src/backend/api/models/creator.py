@@ -7,6 +7,7 @@ from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
+from backend.api.models.pagination import CursorPageRead
 from backend.api.models.source import SiteAPIRead
 from backend.types.creator_types import NewSectionAction, SectionTarget
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
@@ -176,12 +177,16 @@ class CreatorEpisodeAPIRead(EpisodeAPIReadView):
     collection_title: str
 
 
+class CreatorEpisodePageAPIRead(CursorPageRead[CreatorEpisodeAPIRead]):
+    """One page of the episodes of all of a creator's collections, newest first."""
+
+
 class CreatorPageAPIRead(CreatorAPIRead):
     """A creator's page: their collections, and the sections of each account with the collection that keeps each."""
 
     collections: list[CreatorCollectionAPIRead]
-    newest_episodes: list[CreatorEpisodeAPIRead] = Field(default_factory=list)
-    """The newest episodes of all of the creator's collections, newest first."""
+    last_published_date: Optional[datetime] = None
+    """When the newest episode of all of the creator's collections came out."""
     accounts: list[CreatorPageAccountAPIRead]
     reassigned_count: int = 0
     """The downloaded videos that the creator places in another of its collections than the one they are in."""

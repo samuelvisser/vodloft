@@ -612,6 +612,17 @@ def leave_creator(s: Session, collection: Collection) -> None:
     s.flush()
 
 
+def delete_creator(s: Session, creator: Creator) -> None:
+    """Take a creator out of the Library. Its collections stay, as plain collections with their episodes, files and
+    settings; VODLoft stops looking for the creator's new sections.
+
+    ``s`` is a write transaction's session."""
+    for collection in list(creator.collections):
+        leave_creator(s, collection)
+    s.delete(creator)
+    s.flush()
+
+
 ARTIST_LABEL = "artist"
 """What VODLoft calls a creator that has a Music collection."""
 

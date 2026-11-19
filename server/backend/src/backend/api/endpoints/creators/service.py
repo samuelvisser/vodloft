@@ -10,7 +10,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
@@ -18,7 +18,9 @@ from backend.services.reassigned import move_and_rename, reassigned_in_creator
 from backend.api.models.creator import (
     CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorPageAPIRead,
     CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd, CollectionCreatorLeaveAPIRead, CollectionCreatorMatchAPIRead,
+    CreatorEpisodeAPIRead, CreatorEpisodePageAPIRead,
 )
+from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from backend.api.models.collection import CollectionAPIRead
 from backend.api.endpoints.episodes.service import episode_view_columns
 from backend.db.models import Creator, CreatorAccount, Collection, Episode
@@ -206,7 +208,7 @@ class _CreatorRead:
     collections: list = field(default_factory=list)
     accounts: list | None = None
     reassigned_count: int = 0
-    newest_episodes: list = field(default_factory=list)
+    last_published_date: datetime | None = None
 
     @property
     def creator_label(self) -> str:
@@ -235,10 +237,6 @@ def list_creators(s: Session) -> list[CreatorAPIRead]:
         CreatorAPIRead.model_validate(_CreatorRead(creator, collections.get(creator.id, 0), episodes.get(creator.id, 0)))
         for creator in rows
     ]
-
-
-# The newest episodes a creator's page shows in its row.
-_NEWEST_EPISODES = 12
 
 
 @dataclass(frozen=True)
@@ -276,13 +274,6 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
             ).where(Episode.collection_id.in_(collection_ids)).group_by(Episode.collection_id)
         )
     }
-    newest = s.execute(
-        select(*episode_view_columns(), Collection.slug.label("collection_slug"), Collection.title.label("collection_title"))
-        .join(Collection, Episode.collection_id == Collection.id)
-        .where(Episode.collection_id.in_(collection_ids))
-        .order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
-        .limit(_NEWEST_EPISODES)
-    ).mappings().all()
     kept = {
         account.id: creators.sections_in_library(
             s, account.source_key, account.site_ref, account.sections, account.main_collection,
@@ -313,8 +304,51 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     return CreatorPageAPIRead.model_validate(_CreatorRead(
         creator, collections_count.get(creator.id, 0), episodes.get(creator.id, 0),
         collections=collections, accounts=accounts, reassigned_count=len(reassigned_in_creator(s, creator)),
-        newest_episodes=list(newest),
+        last_published_date=max((row.last for row in stats.values() if row.last is not None), default=None),
     ))
+
+
+def creator_episodes(s: Session, slug: str, *, cursor: str | None, limit: int) -> CreatorEpisodePageAPIRead:
+    """One page of the episodes of all of the creator's collections, newest first, and those without a date last."""
+    creator_id = s.scalar(select(Creator.id).where(Creator.slug == slug))
+    if creator_id is None:
+        raise CreatorNotFoundError(f"Creator '{slug}' not found")
+    stmt = (
+        select(*episode_view_columns(), Collection.slug.label("collection_slug"), Collection.title.label("collection_title"))
+        .join(Collection, Episode.collection_id == Collection.id)
+        .where(Collection.creator_id == creator_id)
+        .order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
+    )
+    if cursor:
+        values = decode_cursor(cursor)
+        cursor_id, published_raw = values.get("id"), values.get("published_at")
+        if (
+            values.get("kind") != "creator-episodes" or values.get("creator") != slug
+            or not isinstance(cursor_id, int) or isinstance(cursor_id, bool)
+            or (published_raw is not None and not isinstance(published_raw, str))
+        ):
+            raise InvalidCursorError("Cursor does not match this list")
+        if published_raw is None:
+            stmt = stmt.where(Episode.published_date.is_(None), Episode.id < cursor_id)
+        else:
+            published_at = datetime.fromisoformat(published_raw)
+            stmt = stmt.where(or_(
+                Episode.published_date < published_at,
+                and_(Episode.published_date == published_at, Episode.id < cursor_id),
+                Episode.published_date.is_(None),
+            ))
+    rows = s.execute(stmt.limit(limit + 1)).mappings().all()
+    next_cursor = None
+    if len(rows) > limit:
+        rows = rows[:limit]
+        last = rows[-1]
+        next_cursor = encode_cursor({
+            "kind": "creator-episodes", "creator": slug, "id": last["id"],
+            "published_at": last["published_date"].isoformat() if last["published_date"] else None,
+        })
+    return CreatorEpisodePageAPIRead(
+        items=[CreatorEpisodeAPIRead.model_validate(row) for row in rows], limit=limit, next_cursor=next_cursor,
+    )
 
 
 def move_creator_section(
@@ -411,6 +445,13 @@ def combine_creator(s: Session, slug: str, body: CreatorCombineAPIIn) -> Creator
     creators.combine_creators(s, creator, other)
     s.expire_all()
     return creator_page(s, slug)
+
+
+def delete_creator(s: Session, slug: str) -> None:
+    """Take the creator out of the Library, and keep its collections as plain ones.
+
+    ``s`` is a write transaction's session."""
+    creators.delete_creator(s, _creator(s, slug))
 
 
 def check_creator(s: Session, slug: str) -> None:

@@ -119,16 +119,24 @@ export const CreatorPageReadSchema = CreatorReadSchema.extend({
         firstPublishedDate: ApiDateTimeSchema.nullable(),
         links: z.array(z.string()),
     })),
-    /** The newest episodes of all of the creator's collections, newest first. */
-    newestEpisodes: z.array(EpisodeReadViewSchema.extend({
-        collectionSlug: z.string(),
-        collectionTitle: z.string(),
-    })),
+    /** When the newest episode of all of the creator's collections came out. */
+    lastPublishedDate: ApiDateTimeSchema.nullable(),
     accounts: z.array(CreatorPageAccountReadSchema),
     /** Downloaded episodes the creator places in another of its collections than the one they are in. */
     reassignedCount: z.number().default(0),
 })
 export type CreatorPageRead = z.infer<typeof CreatorPageReadSchema>
+
+/** One page of the episodes of all of a creator's collections, newest first. */
+export const CreatorEpisodePageReadSchema = z.object({
+    items: z.array(EpisodeReadViewSchema.extend({
+        collectionSlug: z.string(),
+        collectionTitle: z.string(),
+    })),
+    nextCursor: z.string().nullable().optional(),
+    hasMore: z.boolean(),
+})
+export type CreatorEpisode = z.infer<typeof CreatorEpisodePageReadSchema>['items'][number]
 
 /** The form that adds a creator: where each of its sections goes. */
 export const CreatorCreateSchema = z.object({

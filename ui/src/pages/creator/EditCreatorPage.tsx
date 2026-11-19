@@ -1,4 +1,8 @@
-import {useEffect} from 'react'
+import {useEffect, useState} from 'react'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {toast} from 'react-hot-toast'
+import {faIcon} from '../../icons/faIcon'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
@@ -21,6 +25,7 @@ export default function EditCreatorPage() {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
     const {data: creator, error} = useCreator(slug)
+    const [deleting, setDeleting] = useState(false)
 
     const form = useForm<CreatorUpdateIn, unknown, CreatorUpdateOut>({
         resolver: zodResolver(CreatorUpdateSchema),
@@ -57,6 +62,24 @@ export default function EditCreatorPage() {
             navigate(`/creator/${creator.slug}`)
         },
     })
+
+    const onConfirmDelete = async () => {
+        const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(creator.slug)}`, {method: 'DELETE', credentials: 'include'})
+        if (!response.ok) {
+            const data = await response.json().catch(() => null)
+            toast.error(typeof data?.detail === 'string' ? data.detail : `The ${creator.creatorLabel} could not be deleted (HTTP ${response.status})`)
+            return
+        }
+        setDeleting(false)
+        queryClient.removeQueries({queryKey: ['creator', slug]})
+        await Promise.all([
+            queryClient.invalidateQueries({queryKey: ['creators']}),
+            queryClient.invalidateQueries({queryKey: ['collections']}),
+            queryClient.invalidateQueries({queryKey: ['collectionsView']}),
+        ])
+        toast.success(`${creator.title} was deleted`)
+        navigate('/library')
+    }
 
     return (
         <section className="view creator-view" aria-labelledby="edit-creator-title">
@@ -95,6 +118,10 @@ export default function EditCreatorPage() {
 
                 {errors.root && <div className="form-error-card" role="alert">{errors.root.message}</div>}
                 <div className="actions">
+                    <button type="button" className="btn btn-danger" style={{marginRight: 'auto'}} onClick={() => setDeleting(true)}>
+                        <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
+                        <span>Delete {creator.creatorLabel}</span>
+                    </button>
                     <button type="button" className="btn" onClick={() => navigate(`/creator/${creator.slug}`)}>Cancel</button>
                     <button type="submit" className="btn btn-primary" disabled={isSubmitting || !isDirty}>
                         {isSubmitting ? 'Saving…' : 'Save'}
@@ -103,6 +130,21 @@ export default function EditCreatorPage() {
             </form>
 
             <CreatorSectionsEditor creator={creator} part="rest"/>
+
+            <ConfirmDialog
+                open={deleting}
+                title={`Delete ${creator.creatorLabel}`}
+                onDismiss={() => setDeleting(false)}
+                icon={faIcon('fass', 'trash')}
+                iconTone="danger"
+                confirmButton={{label: 'Delete', onClick: onConfirmDelete, className: 'btn btn-danger'}}
+            >
+                <p>
+                    Delete {creator.title}? {creator.collections.length > 0
+                        ? `${creator.collections.length === 1 ? 'Its collection stays' : `Its ${creator.collections.length} collections stay`} in your library with their episodes and files, but VODLoft stops looking for new playlists and shows of this ${creator.creatorLabel}.`
+                        : `VODLoft stops looking for new playlists and shows of this ${creator.creatorLabel}.`}
+                </p>
+            </ConfirmDialog>
         </section>
     )
 }
