@@ -521,7 +521,9 @@ def test_an_import_without_creators_makes_the_artist_one_plain_collection(instal
     collection = session.scalar(select(Collection))
     assert (collection.title, collection.type, collection.creator_id) == ("Emily Hopkins", "music", None)
     # Every album is a season, the ones to come too.
-    assert (collection.sharing_url, collection.link_seasons) == ("https://emilyharpist.bandcamp.com", "all")
+    assert (collection.sharing_url, collection.link_seasons, collection.new_link_seasons) == (
+        "https://emilyharpist.bandcamp.com", "selected", "add",
+    )
 
 
 def test_an_imported_collection_joins_the_creator_behind_its_link(installation, monkeypatch):
@@ -834,7 +836,7 @@ Jellyfin Music Videos:
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
                                kind=SectionKind.LIST, kind_label="Album", album=True)
             playlist = SectionRef(ref="sets/favourites", url="https://emilyharpist.bandcamp.com/sets/favourites",
-                                  title="Favourites", kind=SectionKind.LIST, kind_label="Playlist")
+                                  title="Favourites", kind=SectionKind.LIST, kind_label="Playlist", album=False)
             # The site names the artist by their handle; ytdl-sub by the subscription.
             return CreatorDetails(ref="emilyharpist", url="https://emilyharpist.bandcamp.com", title="emilyharpist",
                                   sections=(album, playlist), music=True)
@@ -856,3 +858,29 @@ Jellyfin Music Videos:
     assert (videos.type, videos.sharing_url, videos.author_name) == ("music", "https://www.youtube.com/playlist?list=PLharp", "Emily Hopkins")
     # The discography is the artist's albums, not their playlists.
     assert [link.title for link in albums.lists if link.enabled] == ["Harp"]
+
+
+def test_albums_and_music_videos_of_differently_named_subscriptions_pair_by_their_artist(tmp_path):
+    # ytdl-sub keeps only the last of two subscriptions of one name, so configurations name the artist in an override.
+    plan = _plan(_write(tmp_path, """
+__preset__:
+  overrides:
+    music_directory: "/media/music"
+    music_video_directory: "/media/music_videos"
+
+Bandcamp:
+  "Emily Hopkins - Albums":
+    overrides:
+      url: "https://emilyharpist.bandcamp.com/"
+      track_artist: "Emily Hopkins"
+
+Jellyfin Music Videos:
+  "Emily Hopkins - Videos":
+    overrides:
+      url: "https://www.youtube.com/playlist?list=PLharp"
+      music_video_artist: "Emily Hopkins"
+"""), ("/media", "/downloads"))
+
+    assert [(collection.title, collection.artist) for collection in plan.collections] == [
+        ("Emily Hopkins albums", "Emily Hopkins"), ("Emily Hopkins music videos", "Emily Hopkins"),
+    ]

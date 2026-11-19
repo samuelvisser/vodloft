@@ -605,8 +605,12 @@ def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails,
     if not found:
         return FollowResult([], [], [])
     action = NewSectionAction(creator.new_sections)
-    # A single item, or a section only some members can watch, is never added by itself.
-    addable = [record for record in found if _usable(_as_ref(record)) and record.access is None]
+    # A single item, or a section only some members can watch, is never added by itself, nor is an artist's playlist
+    # that their Site tells from their albums.
+    playlists = {section.ref for section in details.sections if section.kind is SectionKind.LIST and section.album is False}
+    music = main is not None and main.type == CollectionType.MUSIC.value
+    addable = [record for record in found if _usable(_as_ref(record)) and record.access is None
+               and not (music and record.ref in playlists)]
     if action is NewSectionAction.IGNORE:
         for record in found:
             record.status = SectionStatus.IGNORED.value

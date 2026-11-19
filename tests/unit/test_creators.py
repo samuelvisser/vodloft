@@ -1126,3 +1126,23 @@ def test_each_new_collection_takes_the_type_and_identification_chosen_for_it(cli
     } == {
         "UCworkshop": ("podcast", "date_based"), "PLcabin": ("series", "seasonal"), "PLtools": ("podcast", "date_based"),
     }
+
+
+def test_an_artist_set_to_add_new_albums_asks_about_a_new_playlist(client, session, tube):
+    from dataclasses import replace
+
+    from backend.db.models import Collection
+
+    _one_show(client)
+    client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
+    assert client.patch("/api/creators/workshop", json={"newSections": "season"}).status_code == 200
+    main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
+    main.type = "music"
+    session.commit()
+    album = replace(NEW_LIST, ref="PLalbum", url="https://tube.example/playlist?list=PLalbum", title="Album", album=True)
+    playlist = replace(NEW_LIST, album=False)
+
+    result = _follow(session, tube, (album, playlist, *SECTIONS))
+
+    # The Site tells the album from the playlist, which waits for the user's choice.
+    assert ([section.ref for section in result.added], [section.ref for section in result.asked]) == (["PLalbum"], ["PLbarn"])

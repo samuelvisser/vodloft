@@ -245,11 +245,24 @@ def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list
     first = not known
     every = collection.link_seasons == LinkSeasons.ALL.value
     action = NewLinkSeasonAction(collection.new_link_seasons)
+    music = collection.type == CollectionType.MUSIC.value
     asked: list[CollectionList] = []
     for position, found in enumerate(listing.playlists or ()):
         playlist = known.get(found.ref)
         if playlist is None:
-            # The playlists the creator had when the collection was set up are all seasons to begin with.
+            # The playlists the creator had when the collection was set up are all seasons to begin with. A Music
+            # collection's albums are, but a playlist its Site tells from the albums waits for the user's choice.
+            if music and not every and found.album is False:
+                playlist = CollectionList(
+                    ref=found.ref, url=found.url, title=found.title, image_path=found.image_url,
+                    item_count=found.item_count, site_position=position, enabled=False,
+                    status=(ListStatus.KNOWN if first else ListStatus.NEW).value,
+                )
+                collection.lists.append(playlist)
+                known[found.ref] = playlist
+                if not first:
+                    asked.append(playlist)
+                continue
             asks = not first and not every and action is NewLinkSeasonAction.ASK
             playlist = CollectionList(
                 ref=found.ref, url=found.url, title=found.title, image_path=found.image_url, item_count=found.item_count,

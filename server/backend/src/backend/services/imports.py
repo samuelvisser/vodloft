@@ -1150,7 +1150,7 @@ def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collect
     of its own, for an import that adds no creators."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
-    from backend.types.link_season_types import LinkSeasons
+    from backend.types.link_season_types import LinkSeasons, NewLinkSeasonAction
     from backend.utils.helpers import generate_uuid, slugify
     from sources import SectionKind, get_source
 
@@ -1168,8 +1168,9 @@ def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collect
         episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
         author_name=plan.artist or details.title, author_slug=slugify(details.handle or details.title) or details.ref,
         thumbnail_landscape_path=details.avatar_url or next((section.image_url for section in sections if section.image_url), None),
-        # Every album is a season, the ones to come too.
-        link_seasons=LinkSeasons.ALL.value,
+        # Every album is a season, the ones to come too; a playlist the Site tells from the albums waits for the
+        # user's choice, as the other program took only albums.
+        link_seasons=LinkSeasons.SELECTED.value, new_link_seasons=NewLinkSeasonAction.ADD.value,
     )
     add_collection(session, collection)
     index_new_collection(session, collection)
@@ -1198,7 +1199,7 @@ def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collec
     music = kind is CollectionType.MUSIC
     # An artist's discography is their albums, not the playlists they put together.
     plans = [SectionPlan(section.ref, SectionTarget.MAIN) for section in details.sections if section.access is None
-             and not (music and section.kind is SectionKind.LIST and not section.album)]
+             and not (music and section.kind is SectionKind.LIST and section.album is False)]
     creator, _made = add_creator(session, source_key=source.id, details=details, plans=plans, settings=NewCollectionSettings(
         type=kind, episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
         membership_level="FREE",
