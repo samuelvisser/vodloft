@@ -48,7 +48,8 @@ def create_creator(body: CreatorAPICreate, access: Access = signed_in()):
     """Add a creator, with a collection for each place its sections go, and start indexing them."""
     access.check_link_at(body.source_key, body.url)
     with asking_source("Could not look up this creator"):
-        details = look_up_creator(body.source_key, body.url, body.ref)
+        # The creator the user just looked up is the one they chose its sections' places from.
+        details = look_up_creator(body.source_key, body.url, body.ref, reuse=True)
     return run_write_transaction(lambda s: add_creator(s, body, details, added_by_id=access.user_id))
 
 

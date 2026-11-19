@@ -327,7 +327,8 @@ def _collection_found(work):
 def _creator_behind(collection_slug: str):
     with db_session() as s:
         link = _collection_found(lambda: collection_link(s, collection_slug))
-    return link.source_key, look_up_collection_creator(link)
+    # The match the user just saw is the creator the collection joins.
+    return link.source_key, look_up_collection_creator(link, reuse=True)
 
 
 @router.get(

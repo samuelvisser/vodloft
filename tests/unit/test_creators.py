@@ -48,6 +48,14 @@ class CreatorSource(ListedSource):
         )
 
 
+@pytest.fixture(autouse=True)
+def forget_lookups(monkeypatch):
+    """Each test looks its creators up afresh."""
+    from backend.api.endpoints.creators import service
+
+    monkeypatch.setattr(service, "_lookups", {})
+
+
 @pytest.fixture
 def tube(monkeypatch):
     monkeypatch.setattr(registry, "_sources", dict(registry._sources))
@@ -136,6 +144,46 @@ def test_adding_a_creator_makes_its_collection_with_its_playlists_as_seasons(cli
     # The section nobody keeps stays on the creator page.
     left = {section["ref"]: section["collectionSlug"] for section in page["accounts"][0]["sections"]}
     assert left["PLmembers"] is None and left["PLtools"] == "PLtools"
+
+
+def test_adding_a_creator_right_after_looking_it_up_uses_that_lookup(client, tube, monkeypatch):
+    calls = []
+    looked_up = tube.creator_details
+
+    def creator_details(ref, progress=lambda step: None):
+        calls.append(ref)
+        return looked_up(ref, progress)
+
+    monkeypatch.setattr(tube, "creator_details", creator_details)
+    _lookup(client)
+    plan = [{"ref": "videos", "target": "main"}]
+    assert client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan}).status_code == 201
+    # The sections the user placed are the ones the lookup found, so the Site is not asked again.
+    assert calls == [ROOT]
+
+
+def test_a_creator_looked_up_ahead_is_found_by_the_users_lookup(client, tube, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from backend.api.endpoints.creators import service
+
+    calls = []
+    looked_up = tube.creator_details
+
+    def creator_details(ref, progress=lambda step: None):
+        calls.append(ref)
+        return looked_up(ref, progress)
+
+    monkeypatch.setattr(tube, "creator_details", creator_details)
+    with ThreadPoolExecutor(max_workers=1) as ahead:
+        monkeypatch.setattr(service, "_ahead", ahead)
+        service.look_up_creator_ahead("tube", ROOT)
+        ahead.submit(lambda: None).result()
+
+    _steps, body = _lookup(client)
+
+    assert body["title"] == "Northwind Workshop"
+    assert calls == [ROOT]
 
 
 def test_a_section_already_in_the_library_stays_where_it_is(client, session):
