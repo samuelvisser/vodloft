@@ -712,7 +712,7 @@ class YtDlpSource(Source):
             ))
         return found
 
-    def is_channel_page(self, url: str) -> bool:
+    def is_creator_page(self, url: str) -> bool:
         """A YouTube channel's own link or its Videos tab, which stand for all its uploads, or a Bandcamp or SoundCloud
         artist's page of all their music. Not one playlist or album, nor only a channel's Shorts or Live tab."""
         if artists.artist_root(url):
@@ -733,7 +733,7 @@ class YtDlpSource(Source):
         """A playlist's or album's videos; a channel's uploads, for a link that is another channel; or the video
         itself, for a link to one video."""
         items: dict[str, ItemRef] = {}
-        for listing_url in _listing_urls(url) if self.is_channel_page(url) else [url]:
+        for listing_url in _listing_urls(url) if self.is_creator_page(url) else [url]:
             listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
             if listing.get("_type") != "playlist" and listing.get("id"):
                 slug = video_slug(listing)

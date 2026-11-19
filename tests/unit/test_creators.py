@@ -197,6 +197,38 @@ def test_a_youtube_creator_is_read_from_its_tabs_and_playlists_under_the_link_pe
     ]
 
 
+def test_a_youtube_creator_page_opens_with_its_collections(client, monkeypatch):
+    from sources import ytdlp_runner as runner
+
+    pages = {
+        "https://www.youtube.com/@workshop/videos": {
+            "channel_id": "UCworkshop", "channel": "Northwind Workshop", "uploader_id": "@workshop", "entries": [{"id": "v1"}],
+        },
+        "https://www.youtube.com/@workshop/streams": {"entries": []},
+        "https://www.youtube.com/@workshop/playlists": {"entries": [{"id": "PLcabin", "title": "Building the Cabin"}]},
+    }
+
+    def run_json(*args, **_kwargs):
+        if args[-1] not in pages:
+            raise runner.YtDlpError("This channel does not have a shorts tab")
+        return pages[args[-1]]
+
+    monkeypatch.setattr(runner, "run_json", run_json)
+    plan = [{"ref": "videos", "target": "main"}, {"ref": "PLcabin", "target": "own"}]
+    added = client.post(
+        "/api/creators", json={"sourceKey": "ytdlp", "url": "https://www.youtube.com/@workshop", "sections": plan},
+    )
+    assert added.status_code == 201, added.text
+
+    page = client.get(f"/api/creators/{added.json()['slug']}")
+
+    assert page.status_code == 200, page.text
+    assert page.json()["title"] == "Northwind Workshop"
+    assert [(c["title"], c["links"]) for c in page.json()["collections"]] == [
+        ("Northwind Workshop", ["Videos"]), ("Building the Cabin", ["Building the Cabin"]),
+    ]
+
+
 NEW_LIST = SectionRef(
     "PLbarn", "https://tube.example/playlist?list=PLbarn", "Timber Frame Barn", SectionKind.LIST, kind_label="Playlist", item_count=4,
 )

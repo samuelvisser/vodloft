@@ -794,7 +794,7 @@ class Site:
     """The ways the Site offers to keep a creator, the first one the default."""
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
-    link seasons, through its Source's ``is_channel_page``, ``season_lists`` and ``list_items``."""
+    link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
     list_names: ListNames = field(default_factory=lambda: ListNames())
     """What link seasons are called in a collection on the Site, other than a Music collection."""
     music_link_season_names: ListNames = field(default_factory=lambda: ListNames("album", "albums", "Singles"))
@@ -988,9 +988,9 @@ class Source(ABC):
         one creator's. Slow: it may ask the Site. Only Sources with ``Feature.CREATORS`` implement it."""
         raise NotImplementedError(f"{self.name} has no creators")
 
-    def is_channel_page(self, url: str) -> bool:
-        """Whether a collection's link is a creator's whole channel, whose playlists can be its seasons, rather than
-        one playlist. Told without asking the Site. Only Sources with a Site with ``link_seasons`` implement it."""
+    def is_creator_page(self, url: str) -> bool:
+        """Whether a collection's link is a creator's own page of all their uploads, such as a YouTube channel, whose
+        playlists can be its seasons, rather than one playlist. Told without asking the Site. Only Sources with a Site with ``link_seasons`` implement it."""
         return False
 
     def season_lists(self, url: str) -> list[SectionRef]:
