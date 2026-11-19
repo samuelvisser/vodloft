@@ -53,6 +53,56 @@ _EPISODE_BASE = Builtin(config={
         "enable_resolution_assert": True,
     },
 })
+_MUSIC_BASE = Builtin(config={
+    "output_options": {
+        "output_directory": "{music_directory}",
+        "file_name": "{track_full_path}",
+        "thumbnail_name": "{album_cover_path}",
+        "maintain_download_archive": True,
+    },
+    "ytdl_options": {"break_on_existing": True},
+    "format": "ba[ext=webm]/ba",
+    "audio_extract": {"codec": "best"},
+    "music_tags": {"artist": "{track_artist}", "album": "{track_album}", "track": "{track_number}"},
+    "overrides": {
+        "track_genre_default": "Unset",
+        "subscription_indent_1": "{track_genre_default}",
+        "track_title": "{title}",
+        "track_album": "{title}",
+        "track_artist": "{subscription_name}",
+        "track_album_artist": "{track_artist}",
+        "track_number": "1",
+        "track_number_padded": "01",
+        "track_total": "1",
+        "track_year": "{upload_year}",
+        "track_genre": "{subscription_indent_1}",
+        "artist_dir": "{track_artist_sanitized}",
+        "album_dir": "[{track_year}] {track_album_sanitized}",
+        "track_file_name": "{track_number_padded} - {track_title_sanitized}.{ext}",
+        "track_full_path": "{artist_dir}/{album_dir}/{track_file_name}",
+        "album_cover_path": "{artist_dir}/{album_dir}/folder.{thumbnail_ext}",
+    },
+})
+"""ytdl-sub's music presets: a folder per artist, a folder per album, a file per track."""
+MUSIC_GENRE_DEFAULT = "Unset"
+MUSIC_TRACK_VALUES = {
+    "track_artist": "{music_artist}",
+    "track_album": "{music_album}",
+    "track_number": "{music_track_number}",
+    "track_number_padded": "{music_track_number_padded}",
+    # The year each track came out, which is the album's year for nearly every album.
+    "track_year": "{upload_year}",
+}
+"""What ytdl-sub's music presets read from each album and track, as the values VODLoft's Music profiles keep."""
+MUSIC_PRESET_VALUES = {
+    "track_artist": {"{subscription_name}"},
+    "track_album": {"{title}", "{playlist_title}", "{sc_track_album}"},
+    "track_number": {"1", "{playlist_index}", "{chapter_index}", "{sc_track_number}"},
+    "track_number_padded": {"01", "{playlist_index_padded}", "{chapter_index_padded}", "{sc_track_number_padded}"},
+    "track_year": {"{upload_year}", "{playlist_max_upload_year}", "{sc_track_year}"},
+}
+"""The values ytdl-sub's own music presets give them; a value the configuration changed is kept as written."""
+
 TV_SHOW_GENRE_DEFAULT = "ytdl-sub"
 TV_SHOW_CONTENT_RATING_DEFAULT = "TV-14"
 
@@ -153,9 +203,25 @@ BUILTINS: dict[str, Builtin] = {
         "description_include_eval": "ANY", "description_exclude_eval": "ANY",
     }}),
     "Filter Duration": Builtin(config={"overrides": {"filter_duration_min_s": 0, "filter_duration_max_s": 4294967296}}),
-    **{name: Builtin(kind="music") for name in (
-        "YouTube Releases", "YouTube Full Albums", "SoundCloud Discography", "Bandcamp", "Single",
-    )},
+    "_music_base": _MUSIC_BASE,
+    "_albums_from_playlists": Builtin(("_music_base",), {"overrides": {
+        "track_album": "{playlist_title}", "track_number": "{playlist_index}",
+        "track_number_padded": "{playlist_index_padded}", "track_total": "{playlist_count}",
+        "track_year": "{playlist_max_upload_year}",
+    }}),
+    "_albums_from_chapters": Builtin(("_music_base",), {"overrides": {
+        "track_title": "{chapter_title}", "track_album": "{title}", "track_number": "{chapter_index}",
+        "track_number_padded": "{chapter_index_padded}", "track_total": "{chapter_count}",
+    }}),
+    "YouTube Releases": Builtin(("_albums_from_playlists",), kind="music"),
+    "YouTube Full Albums": Builtin(("_albums_from_chapters",), kind="music"),
+    "Bandcamp": Builtin(("_albums_from_playlists",), kind="music"),
+    "SoundCloud Discography": Builtin(("_music_base",), {"overrides": {
+        "track_album": "{sc_track_album}", "track_number": "{sc_track_number}",
+        "track_number_padded": "{sc_track_number_padded}", "track_total": "{sc_track_total}",
+        "track_year": "{sc_track_year}",
+    }}, kind="music"),
+    "Single": Builtin(("_music_base",), kind="music"),
     **{name: Builtin(kind="music_video") for name in (
         "Jellyfin Music Videos", "Emby Music Videos", "Kodi Music Videos", "Plex Music Videos",
         "Jellyfin Music Videos with Extras", "Kodi Music Videos with Extras", "Plex Music Videos with Extras",

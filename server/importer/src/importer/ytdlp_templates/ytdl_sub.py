@@ -69,6 +69,14 @@ ENTRY_VARIABLES: dict[str, tuple[str, str | None]] = {
     "download_index_padded6": (f"{PSEUDO_FIELD_PREFIX}download_index_padded6", None),
     "playlist_index_padded6": (f"{PSEUDO_FIELD_PREFIX}playlist_index_padded6", None),
     "subscription_name": (f"{PSEUDO_FIELD_PREFIX}subscription_name", None),
+    # A Music profile's own values for the artist, the album (the episode's season) and the track.
+    "music_artist": (f"{PSEUDO_FIELD_PREFIX}music_artist", None),
+    "music_album": (f"{PSEUDO_FIELD_PREFIX}music_album", None),
+    "music_track_number": (f"{PSEUDO_FIELD_PREFIX}music_track_number", None),
+    "music_track_number_padded": (f"{PSEUDO_FIELD_PREFIX}music_track_number_padded", None),
+    # A TV Show Collection's season, numbered as ytdl-sub numbers it: the import keeps each link's number.
+    "collection_season_number": (f"{PSEUDO_FIELD_PREFIX}season_number", None),
+    "collection_season_number_padded": (f"{PSEUDO_FIELD_PREFIX}season_number_padded", None),
     # Plex's variants swap digits for full-width ones, so Plex doesn't read "4x4" as an episode number.
     "title_sanitized_plex": (f"{PSEUDO_FIELD_PREFIX}title_plex", None),
     "uid_sanitized_plex": (f"{PSEUDO_FIELD_PREFIX}uid_plex", None),
@@ -90,6 +98,12 @@ YTDL_SUB_FIELDS: dict[str, FieldValue] = {
     f"{PSEUDO_FIELD_PREFIX}playlist_index_padded6": FieldValue(
         "'%06d' | format('playlist' | custom_index)", always=True, support="close", reason=_INDEX_REASON,
     ),
+    f"{PSEUDO_FIELD_PREFIX}music_artist": FieldValue("artist", always=True),
+    f"{PSEUDO_FIELD_PREFIX}music_album": FieldValue("album", always=True),
+    f"{PSEUDO_FIELD_PREFIX}music_track_number": FieldValue("track_number", always=True),
+    f"{PSEUDO_FIELD_PREFIX}music_track_number_padded": FieldValue("track_number_padded", always=True),
+    f"{PSEUDO_FIELD_PREFIX}season_number": FieldValue("season_number", always=True),
+    f"{PSEUDO_FIELD_PREFIX}season_number_padded": FieldValue("'%02d' | format(season_number | int)", always=True),
     # The import names each Collection after its subscription.
     f"{PSEUDO_FIELD_PREFIX}subscription_name": FieldValue("collection_title", always=True),
     f"{PSEUDO_FIELD_PREFIX}title_plex": FieldValue(

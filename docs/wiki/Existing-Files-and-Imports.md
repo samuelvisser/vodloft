@@ -159,12 +159,21 @@ What comes along:
 - The **genre** and **content rating** you give with `= Documentaries` and `= TV-Y` become the collection's own genre
   and content rating, which VODLoft writes into its NFO files.
 - ytdl-sub's file names use the same characters as VODLoft's Windows-compatible names, so the import sets that.
+- A subscription with **several links** becomes one collection with all of them. A **TV Show Collection** keeps
+  each season's number and name, and a video that is in more than one season stays in the highest, as in ytdl-sub.
+- **Add the collections** in the preview chooses how they arrive. *As channels*, the default, adds each collection to
+  the channel behind its links, such as a YouTube channel, and adds the channel when it is not in your Library yet.
+  *As collections* adds each one on its own; you can still add it to its channel later. Pinchflat imports always
+  arrive as collections.
+- A **Bandcamp** or **SoundCloud Discography** subscription adds the artist. All of the artist's albums go
+  into one Music collection, each album a season, with a Music Local Media Profile that keeps ytdl-sub's folder per
+  artist and per album. The genre you give with `= Lofi` becomes the artist's genre, which new albums get too.
 
 What does not come along is listed in the report: scripts that compute values (VODLoft's templates are Jinja, see
 [[Local-Media-Profiles]]), throttle settings (VODLoft has a guard of its own, see
-[[Downloads-and-File-Integrity#when-youtube-only-offers-360p]]), chunked downloads, the music presets, and yt-dlp
-options VODLoft has no setting for. A subscription with more than one link gets the first one; add the others as
-collections of their own.
+[[Downloads-and-File-Integrity#when-youtube-only-offers-360p]]), chunked downloads, music videos, *YouTube Releases* and *YouTube Full Albums*
+(VODLoft can't read YouTube's Releases tab or split a video into tracks yet), and yt-dlp options VODLoft has no
+setting for.
 
 Stop ytdl-sub's cron job before you turn on the imported Download Profiles, or both will download the same videos.
 
