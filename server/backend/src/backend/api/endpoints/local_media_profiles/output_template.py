@@ -84,6 +84,8 @@ _EXAMPLE_COLLECTION_VALUES = {
     "season_index": "1",
     "season_type": "normal",
     "season_number": "1",
+    "album_slug": "season-1",
+    "album_number": "1",
     "episode": "the-first-episode",
     "episode_title": "The First Episode",
     "title": "The First Episode",

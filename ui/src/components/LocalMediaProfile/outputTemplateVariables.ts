@@ -150,6 +150,8 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
         },
     },
     {name: 'album', description: 'The episode\'s season when it holds one playlist or album, else the collection\'s title'},
+    {name: 'album_slug', description: 'Album URL slug, the same as season'},
+    {name: 'album_number', description: 'The album\'s number, the same as season_number; Extras use 0'},
     {name: 'track_number', description: 'The episode\'s number on its album, such as 3'},
     {name: 'track_number_padded', description: 'The track number with two digits, such as 03'},
     ...DATE_VARIABLES,
@@ -204,14 +206,10 @@ const VARIABLES_BY_MODE: Record<LocalMediaProfileMode, readonly OutputTemplateVa
 /** The numbers VODLoft keeps for every episode, which the template help lists as built-in Indexing values. */
 export const BUILT_IN_INDEXING_VALUES: ReadonlySet<string> = new Set(['episode_index', 'extra_index'])
 
-// What the season variables hold in a Music collection, whose albums are its seasons: told only on a profile for
-// Music tracks or Music videos.
-const MUSIC_SEASON_NOTES: Record<string, string> = {
-    season: 'In a Music collection, each album is a season, so <strong>season</strong> holds the album\'s slug.',
-    season_name: 'In a Music collection, each album is a season, so <strong>season_name</strong> holds the album\'s name, '
-        + 'such as <code>Solar Power</code>. The <strong>album</strong> variable has it too.',
-    season_number: 'In a Music collection, each album is a season, so this is the album\'s number.',
-}
+// A Music collection's albums are its seasons. A profile for Music tracks or Music videos lists them as albums, by
+// the album_* names that hold the same values, and every other Collection profile lists them as seasons.
+const SEASON_VARIABLES: ReadonlySet<string> = new Set(['season', 'season_name', 'season_number'])
+const ALBUM_VARIABLES: ReadonlySet<string> = new Set(['album_slug', 'album_number'])
 
 const MUSIC_SCOPES: ReadonlySet<string> = new Set(['music_tracks', 'music_videos'])
 
@@ -221,11 +219,9 @@ export function getOutputTemplateVariables(
     collectionScope?: string,
 ): readonly OutputTemplateVariable[] {
     const music = mode === 'collection' && !!collectionScope && MUSIC_SCOPES.has(collectionScope)
-    const baseVariables = VARIABLES_BY_MODE[mode].map((variable) => {
-        const note = music ? MUSIC_SEASON_NOTES[variable.name] : undefined
-        if (!note) return variable
-        return {...variable, readMore: {...variable.readMore, paragraphs: [...(variable.readMore?.paragraphs ?? []), note]}}
-    })
+    const baseVariables = VARIABLES_BY_MODE[mode].filter((variable) => (
+        music ? !SEASON_VARIABLES.has(variable.name) : !ALBUM_VARIABLES.has(variable.name)
+    ))
     const merged = new Map(baseVariables.map((variable) => [variable.name, variable]))
     for (const variable of customVariables) merged.set(variable.name, variable)
     return [...merged.values()]

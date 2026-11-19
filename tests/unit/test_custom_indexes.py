@@ -1213,3 +1213,16 @@ def test_keep_numbers_round_trips_through_the_api(db_session):
     db_session.flush()
     read = CollectionLocalMediaProfileAPIRead.model_validate(profile)
     assert [(item.key, item.keep_numbers) for item in read.indexing_values] == [("clips", True)]
+
+
+def test_album_variables_alias_the_season_variables(db_session):
+    from backend.utils.output_template import episode_output_template_values
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    episode = _make_episode(db_session, collection, season, index=1, slug="first", identifier="ep.1")
+
+    values = episode_output_template_values(episode)
+
+    assert values["album_slug"] == values["season"] == "season-1"
+    assert values["album_number"] == values["season_number"]
