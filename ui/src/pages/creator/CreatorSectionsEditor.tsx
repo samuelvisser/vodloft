@@ -1,4 +1,4 @@
-import {useMemo, useState} from 'react'
+import {type CSSProperties, useMemo, useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
@@ -10,6 +10,7 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import {useWidestLabel} from '../../utils/useWidestLabel'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import type {CreatorPageAccountRead, CreatorPageRead, CreatorSectionRead, SectionPlan} from '../../types/schemas/creator'
 
@@ -163,6 +164,9 @@ export default function CreatorSectionsEditor({creator, part}: {
     const placeOf = ({account, section}: AccountSection): Place => section.collectionSlug === account.mainCollectionSlug ? 'main' : 'own'
     const found = all.filter(({section}) => section.status === 'new' && !section.collectionSlug)
     const left = all.filter(({section}) => !section.collectionSlug && section.kind !== 'item' && section.status !== 'new')
+    // Every place select is as wide as the longest choice any of them has, so they line up.
+    const placeWidth = useWidestLabel(['Collection of its own', 'Not in your library',
+        ...creator.accounts.map((account) => `Season of ${mainTitleOf(creator, account)}`)])
     const checkedAt = creator.accounts.map((account) => account.checkedAt).filter(Boolean).sort().pop()
 
     const sectionArt = (section: CreatorSectionRead) => section.imageUrl
@@ -213,7 +217,7 @@ export default function CreatorSectionsEditor({creator, part}: {
             {part === 'rest' && placed.length > 0 && (
                 <div className="creator-section-group">
                     <h2>Where the {(placed[0].section.kindLabel ?? 'playlist').toLowerCase()}s go</h2>
-                    <div className="creator-section-list">
+                    <div className="creator-section-list" style={placeWidth ? {'--creator-choice-width': `${placeWidth}px`} as CSSProperties : undefined}>
                         {placed.map((item) => {
                             const mainTitle = mainTitleOf(creator, item.account)
                             return (

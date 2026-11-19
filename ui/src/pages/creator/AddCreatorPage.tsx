@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react'
+import {type CSSProperties, useEffect, useMemo, useState} from 'react'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
@@ -20,6 +20,7 @@ import SimpleSelect from '../../components/common/SimpleSelect'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import CreatorHeader from './CreatorHeader'
 import LookupSteps from './LookupSteps'
+import {useWidestLabel} from '../../utils/useWidestLabel'
 import './CreatorPages.css'
 
 /** The starting points, in the words of what this creator has: playlists on YouTube, shows on The Daily Wire. */
@@ -158,6 +159,11 @@ export default function AddCreatorPage() {
         [creator],
     )
 
+    // Every choice select is as wide as the longest choice any of them has, so they line up.
+    const choiceWidth = useWidestLabel((creator?.sections ?? [])
+        .filter((section) => section.kind !== 'item' && !section.collectionSlug)
+        .flatMap((section) => registries.get(section.ref)?.options.map((option) => option.label) ?? []))
+
     const choosePreset = (key: CreatorCreateIn['preset']) => {
         const chosen = creator?.presets.find((item) => item.key === key)
         if (!chosen || !key) return
@@ -258,7 +264,8 @@ export default function AddCreatorPage() {
                 avatarUrl={creator.avatarUrl} bannerUrl={creator.bannerUrl} facts={creator.facts} description={creator.description}
             />
 
-            <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
+            <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate
+                style={choiceWidth ? {'--creator-choice-width': `${choiceWidth}px`} as CSSProperties : undefined}>
                 {creator.presets.length > 1 && (
                     <fieldset className="creator-presets">
                         <legend>What to keep from this {creator.creatorLabel}</legend>
