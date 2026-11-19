@@ -244,15 +244,35 @@ def test_a_new_playlist_waits_for_a_choice_and_says_so(client, session, tube):
     assert next(s for s in page["sections"] if s["ref"] == "PLbarn")["status"] == "known"
 
 
-def test_a_new_playlist_of_a_collection_with_playlist_seasons_is_the_collections_to_add(client, session, tube):
+def test_the_channel_asks_about_a_new_playlist_also_when_its_collection_has_playlist_seasons(client, session, tube):
+    from backend.db.models import Collection
+
     _one_show(client)
     _follow(session, tube, SECTIONS)
     client.post("/api/channels/workshop/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
 
     result = _follow(session, tube, (NEW_LIST, *SECTIONS))
 
-    # The collection's own setting asks, adds or ignores it when it lists its playlists.
-    assert result.asked == [] and result.added == []
+    # The channel alone finds new playlists and asks; its own collection follows the channel's setting.
+    assert [section.ref for section in result.asked] == ["PLbarn"]
+    main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
+    assert (main.link_seasons, main.new_link_seasons) == ("selected", "ask")
+
+
+def test_a_channel_set_to_make_new_playlists_seasons_adds_them_to_its_own_collection(client, session, tube):
+    from backend.db.models import Collection
+
+    _one_show(client)
+    client.post("/api/channels/workshop/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
+    assert client.patch("/api/channels/workshop", json={"newSections": "season"}).status_code == 200
+
+    result = _follow(session, tube, (NEW_LIST, *SECTIONS))
+
+    assert [section.ref for section in result.added] == ["PLbarn"]
+    main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
+    session.refresh(main)
+    assert main.new_link_seasons == "add"
+    assert {link.ref: link.enabled for link in main.lists}["PLbarn"] is True
 
 
 def test_a_channel_set_to_add_new_playlists_as_collections_adds_them(client, session, tube):
@@ -445,3 +465,50 @@ def test_a_site_names_its_channels_in_its_own_words(client, tube, monkeypatch):
 
     assert lines[0] == {"step": "Looking the host up", "channelLabel": "host"}
     assert lines[-1]["channel"]["channelLabel"] == "host"
+
+
+def test_a_playlist_that_is_a_season_of_the_channels_collection_moves_to_a_collection_that_joins(client, session):
+    from backend.db.models import Collection, CollectionList
+
+    client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "PLcabin", "target": "main"},
+    ]})
+    _plain_collection(session, "cabin", SECTIONS[3].url)
+
+    match = client.get("/api/collections/cabin/channel/match").json()
+    assert (match["sectionTitle"], match["keptBy"]) == ("Building the Cabin", None)
+    assert match["overlaps"] == [
+        {"ref": "PLcabin", "title": "Building the Cabin", "keptBy": "Northwind Workshop", "canMoveHere": True},
+    ]
+    # Without the user's choice the playlist stays where it is, and the collection can't join.
+    refused = client.post("/api/collections/cabin/channel")
+    assert refused.status_code == 422 and "already keeps" in refused.json()["detail"]
+
+    joined = client.post("/api/collections/cabin/channel", json={"moveHere": ["PLcabin"]})
+
+    assert joined.status_code == 200, joined.text
+    session.expire_all()
+    assert session.scalar(select(Collection.channel_id).where(Collection.slug == "cabin")) is not None
+    main_cabin = session.scalar(
+        select(CollectionList).join(Collection).where(Collection.slug == "UCworkshop", CollectionList.ref == "PLcabin")
+    )
+    assert main_cabin.enabled is False
+
+
+def test_the_seasons_window_of_a_channels_collection_follows_the_channel(client, session):
+    client.post("/api/channels", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "PLcabin", "target": "main"},
+    ]})
+
+    view = client.get("/api/collections/UCworkshop/season-settings").json()
+    assert (view["channelSlug"], view["channelTitle"], view["linkSeasons"]) == ("workshop", "Northwind Workshop", "selected")
+    body = {
+        "seasons": [{"id": season["id"], "name": season["name"]} for season in view["seasons"]],
+        "customSeasonOrder": False, "linkSeasons": "all", "newLinkSeasons": "add",
+        "playlists": [{"id": playlist["id"], "enabled": playlist["enabled"]} for playlist in view["playlists"]],
+    }
+    refused = client.put("/api/collections/UCworkshop/season-settings", json=body)
+    assert refused.status_code == 422 and "decides which of its playlists" in refused.text
+    saved = client.put("/api/collections/UCworkshop/season-settings", json={**body, "linkSeasons": "selected"}).json()
+    # What happens with a new playlist stays the channel's choice.
+    assert saved["newLinkSeasons"] == "ask"

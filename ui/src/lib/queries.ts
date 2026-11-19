@@ -856,8 +856,10 @@ export function useCollectionChannelLeave(slug: string, enabled: boolean) {
 }
 
 /** Add a collection to the channel behind its links, or take it out of its channel again. */
-export async function setCollectionChannel(slug: string, inChannel: boolean): Promise<void> {
-    const response = await fetch(collectionChannelPath(slug), {method: inChannel ? 'POST' : 'DELETE', credentials: 'include'})
+export async function setCollectionChannel(slug: string, inChannel: boolean, moveHere: string[] = []): Promise<void> {
+    const response = await fetch(collectionChannelPath(slug), inChannel
+        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moveHere})}
+        : {method: 'DELETE', credentials: 'include'})
     if (!response.ok) throw await responseError(response)
 }
 

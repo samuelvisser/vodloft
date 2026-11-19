@@ -1,9 +1,10 @@
 """Channels: a creator on one Site, whose sections go into collections.
 
 A channel never indexes anything itself. Adding one makes the channel's own collection, which takes all its uploads
-from its Videos page, and a collection of its own for each section that goes elsewhere. On a Site whose playlists
-can be seasons, a playlist that goes into the channel's own collection becomes one of its seasons; the collection
-then follows the channel's playlists itself.
+from its Videos page, and a collection of its own for each section that goes elsewhere. On a Site whose lists can be
+seasons, a list, such as a playlist, that goes into the channel's own collection becomes one of its seasons. The
+channel alone decides where each section goes: its daily look finds new sections, also new playlists, and its one
+setting says what happens with them. A show, with seasons of its own, is always a collection of its own.
 """
 from __future__ import annotations
 
@@ -66,7 +67,7 @@ def preset_plan(details: ChannelDetails, preset: ChannelPreset) -> list[SectionP
             # The channel's own collection lists its Shorts and Live too, tagged, so they need no collection of their own.
             if section.kind is SectionKind.FEED:
                 target = SectionTarget.MAIN
-            elif section.has_seasons or preset is ChannelPreset.PER_LIST:
+            elif section.kind is SectionKind.SHOW or preset is ChannelPreset.PER_LIST:
                 target = SectionTarget.OWN
             else:
                 target = SectionTarget.MAIN
@@ -75,9 +76,9 @@ def preset_plan(details: ChannelDetails, preset: ChannelPreset) -> list[SectionP
 
 
 def section_collection_slug(channel_ref: str, section: SectionRef | ChannelSection) -> str:
-    """The slug a section's own collection gets: its own id for a list, such as a playlist or a Daily Wire show,
-    whose collection is known by it, and the channel's id with the feed's for a feed."""
-    return section.ref if section.kind == SectionKind.LIST else f"{channel_ref}-{section.ref}"
+    """The slug a section's own collection gets: its own id for a list or a show, such as a playlist or a Daily Wire
+    show, whose collection is known by it, and the channel's id with the feed's for a feed."""
+    return f"{channel_ref}-{section.ref}" if section.kind == SectionKind.FEED else section.ref
 
 
 def _main_feed(sections: Sequence[SectionRef | ChannelSection]) -> SectionRef | ChannelSection | None:
@@ -153,32 +154,7 @@ def _section_record(section: SectionRef, position: int, status: SectionStatus = 
     return ChannelSection(
         ref=section.ref, url=section.url, title=section.title, kind=section.kind.value, role=section.role.value,
         kind_label=section.kind_label, item_count=section.item_count, image_path=section.image_url,
-        description=section.description, access=section.access, has_seasons=section.has_seasons,
-        site_position=position, status=status.value,
-    )
-
-
-def _new_channel(
-    s: Session, source_key: str, site_key: str, details: ChannelDetails, *, added_by_id: int | None,
-    new_sections: NewSectionAction = NewSectionAction.ASK,
-) -> Channel:
-    channel = Channel(
-        uuid=generate_uuid(), slug=_unique_slug(s, Channel, slugify(details.handle or details.title) or details.ref), source_key=source_key,
-        site_key=site_key, site_ref=details.ref, url=details.url, title=details.title, handle=details.handle,
-        description=details.description, avatar_path=details.avatar_url, banner_path=details.banner_url,
-        links=list(details.links), facts=list(details.facts), added_by_id=added_by_id, new_sections=new_sections.value,
-    )
-    channel.sections = [_section_record(section, position) for position, section in enumerate(details.sections)]
-    s.add(channel)
-    s.flush()
-    return channel
-
-
-def _section_record(section: SectionRef, position: int, status: SectionStatus = SectionStatus.KNOWN) -> ChannelSection:
-    return ChannelSection(
-        ref=section.ref, url=section.url, title=section.title, kind=section.kind.value, role=section.role.value,
-        kind_label=section.kind_label, item_count=section.item_count, image_path=section.image_url,
-        description=section.description, access=section.access, has_seasons=section.has_seasons,
+        description=section.description, access=section.access,
         site_position=position, status=status.value,
     )
 
@@ -220,12 +196,13 @@ def add_channel(
     return channel, collections
 
 
-def _new_link_seasons(channel: Channel) -> NewLinkSeasonAction:
-    """What the channel's own collection does with a new playlist: what the channel does with a new section."""
+def new_link_seasons(channel: Channel) -> NewLinkSeasonAction:
+    """What the channel's own collection does with a new playlist: what the channel does with a new section. The
+    channel's daily look finds them and places them; the collection only follows."""
     match NewSectionAction(channel.new_sections):
         case NewSectionAction.ASK:
             return NewLinkSeasonAction.ASK
-        case NewSectionAction.MAIN:
+        case NewSectionAction.SEASON:
             return NewLinkSeasonAction.ADD
         case _:
             return NewLinkSeasonAction.IGNORE
@@ -233,12 +210,10 @@ def _new_link_seasons(channel: Channel) -> NewLinkSeasonAction:
 
 def _make_seasons(channel: Channel, main: Collection, refs: set[str]) -> None:
     """Make the lists ``refs`` seasons of the channel's own collection, which then knows all the channel's lists."""
-    if main.link_seasons in (None, LinkSeasons.OFF.value):
-        lists = {section.ref for section in channel.sections if section.kind == SectionKind.LIST}
-        # Every list a season is every playlist, the ones to come too, unless new sections wait for a choice.
-        every = lists <= refs and NewSectionAction(channel.new_sections) is NewSectionAction.MAIN
-        main.link_seasons = (LinkSeasons.ALL if every else LinkSeasons.SELECTED).value
-        main.new_link_seasons = _new_link_seasons(channel).value
+    # The channel decides which of its lists are seasons, the ones to come too, so the collection only takes the ones
+    # the channel gives it.
+    main.link_seasons = LinkSeasons.SELECTED.value
+    main.new_link_seasons = new_link_seasons(channel).value
     known = {playlist.ref: playlist for playlist in main.lists}
     for section in channel.sections:
         if section.kind != SectionKind.LIST:
@@ -268,8 +243,11 @@ def _place(
             continue
         section = sections[plan.ref]
         section.status = SectionStatus.KNOWN.value
-        # A list goes into the channel's own collection only as one of its seasons.
-        if plan.target is SectionTarget.MAIN and section.kind == SectionKind.LIST and not lists_are_seasons(site):
+        # A list goes into the channel's own collection only as one of its seasons, and a show, with seasons of its
+        # own, always has a collection of its own.
+        if plan.target is SectionTarget.MAIN and (
+            section.kind == SectionKind.SHOW or (section.kind == SectionKind.LIST and not lists_are_seasons(site))
+        ):
             plan = SectionPlan(plan.ref, SectionTarget.OWN)
         wanted.append(plan)
     main_plans = [plan for plan in wanted if plan.target is SectionTarget.MAIN]
@@ -371,6 +349,8 @@ def update_channel_settings(s: Session, channel: Channel, settings: ChannelSetti
 
     ``s`` is a write transaction's session."""
     channel.new_sections = settings.new_sections.value
+    if channel.main_collection is not None:
+        channel.main_collection.new_link_seasons = new_link_seasons(channel).value
     for field in ("genre", "content_rating"):
         old, new = getattr(channel, field), getattr(settings, field) or None
         if old == new:
@@ -392,9 +372,8 @@ class FollowResult:
 
 def follow_channel(s: Session, channel: Channel, details: ChannelDetails, *, now: datetime) -> FollowResult:
     """Take in what the Site says about a channel now: its name, pictures and facts, its sections' titles and counts,
-    and the sections it did not have before, which the channel's setting adds, ignores or asks about. A new playlist
-    of a channel whose own collection makes playlists seasons is that collection's to add. Sections the Site no
-    longer lists stay, with what they hold.
+    and the sections it did not have before, which the channel's setting adds, ignores or asks about, new playlists
+    too. Sections the Site no longer lists stay, with what they hold.
 
     ``details`` was looked up before the write transaction; ``s`` is a write transaction's session."""
     for field, value in (
@@ -423,13 +402,11 @@ def follow_channel(s: Session, channel: Channel, details: ChannelDetails, *, now
                 setattr(record, field, value)
     s.flush()
     main = channel.main_collection
-    collection_follows = main is not None and main.link_seasons != LinkSeasons.OFF.value
-    # A section that is already in the library, such as a show added before the channel, needs no choice, a
-    # single item, such as a movie, is added from its own page, and the channel's own collection chooses about its
-    # new playlists itself.
+    # A section that is already in the library, such as a show added before the channel, needs no choice, and a
+    # single item, such as a movie, is added from its own page.
     kept = sections_in_library(s, channel.source_key, channel.site_ref, found, main)
     for record in found:
-        if record.ref in kept or record.kind == SectionKind.ITEM or (collection_follows and record.kind == SectionKind.LIST):
+        if record.ref in kept or record.kind == SectionKind.ITEM:
             record.status = SectionStatus.KNOWN.value
     found = [record for record in found if record.status == SectionStatus.NEW.value]
     if not found:
@@ -444,8 +421,8 @@ def follow_channel(s: Session, channel: Channel, details: ChannelDetails, *, now
     if action is NewSectionAction.ASK or not addable:
         return FollowResult(found, [], [])
     target = SectionTarget.OWN if action is NewSectionAction.OWN else SectionTarget.MAIN
-    # A show with its own seasons keeps them, so it becomes a collection of its own.
-    plans = [SectionPlan(record.ref, SectionTarget.OWN if record.has_seasons else target) for record in addable]
+    # A show keeps its own seasons, so it becomes a collection of its own; _place sees to that.
+    plans = [SectionPlan(record.ref, target) for record in addable]
     place_sections(s, channel, plans)
     return FollowResult([record for record in found if record not in addable], addable, [])
 
@@ -460,10 +437,10 @@ def _site_key_of(source_key: str) -> str:
 
 def collection_section(
     s: Session, collection: Collection, source_key: str, details: ChannelDetails, channel: Channel | None,
-) -> tuple[SectionRef | ChannelSection | None, str | None]:
+) -> tuple[SectionRef | ChannelSection | None, Collection | None]:
     """The section of the channel the collection is: the section at its link, the channel's Videos page for a
     collection of all its uploads, or the section it is known by, such as a playlist added by its own link before.
-    Also the title of another of the channel's collections that keeps that section already, when one does."""
+    Also another of the channel's collections that keeps that section already, when one does."""
     sections: Sequence[SectionRef | ChannelSection] = channel.sections if channel is not None else details.sections
     section = next((section for section in sections if section.url == collection.sharing_url), None)
     if section is None and _takes_uploads(collection):
@@ -477,17 +454,68 @@ def collection_section(
     for other in channel.collections:
         if other.id == collection.id:
             continue
-        held = sections_in_library(s, source_key, channel.site_ref, [section], other if other.id == channel.main_collection_id else None)
-        if held.get(section.ref) == other.slug:
-            return None, other.title
+        if other.id == channel.main_collection_id:
+            keeps = (section.kind == SectionKind.FEED and _takes_uploads(other)) or _season_of_main(channel, section.ref) is not None
+        else:
+            keeps = other.sharing_url == section.url or other.slug == section_collection_slug(channel.site_ref, section)
+        if keeps:
+            return section, other
     return section, None
+
+
+@dataclass(frozen=True)
+class Overlap:
+    """A list that a collection joining a channel holds, which another of the channel's collections holds already."""
+
+    ref: str
+    title: str
+    kept_by: Collection
+    can_move_here: bool
+    """The other collection is the channel's own, which can let the list go; a collection of its own can't."""
+
+
+def _season_of_main(channel: Channel, ref: str) -> CollectionList | None:
+    main = channel.main_collection
+    if main is None or main.link_seasons == LinkSeasons.OFF.value:
+        return None
+    return next((link for link in main.lists if link.ref == ref and is_season(main, link)), None)
+
+
+def join_overlaps(
+    s: Session, collection: Collection, source_key: str, details: ChannelDetails, channel: Channel | None,
+) -> list[Overlap]:
+    """The lists that would be in two places once the collection joins the channel: the section it is, when the
+    channel's own collection has it as a season, and the lists that are its seasons that another of the channel's
+    collections holds. Once it joins, each is in one place, as the user chooses."""
+    if channel is None:
+        return []
+    section, keeper = collection_section(s, collection, source_key, details, channel)
+    overlaps: list[Overlap] = []
+    if section is not None and keeper is not None and _season_of_main(channel, section.ref) is not None:
+        overlaps.append(Overlap(section.ref, section.title, keeper, True))
+    if collection.link_seasons == LinkSeasons.OFF.value:
+        return overlaps
+    sections = {section.ref: section for section in channel.sections if section.kind == SectionKind.LIST}
+    for link in collection.lists:
+        if link.ref not in sections or not is_season(collection, link):
+            continue
+        if _season_of_main(channel, link.ref) is not None and channel.main_collection_id != collection.id:
+            overlaps.append(Overlap(link.ref, link.title, channel.main_collection, True))
+            continue
+        kept = sections_in_library(s, channel.source_key, channel.site_ref, [sections[link.ref]])
+        other = next((other for other in channel.collections if other.slug == kept.get(link.ref) and other.id != collection.id), None)
+        if other is not None:
+            overlaps.append(Overlap(link.ref, link.title, other, False))
+    return overlaps
 
 
 def join_channel(
     s: Session, collection: Collection, *, source_key: str, details: ChannelDetails, added_by_id: int | None = None,
+    move_here: frozenset[str] = frozenset(),
 ) -> Channel:
     """Make a collection one of a channel's, adding the channel when it is not in the Library yet. Nothing is indexed
-    again and no file moves.
+    again and no file moves. A list that would be in two places stays in one: in the collection when its ref is in
+    ``move_here`` and the channel's own collection can let it go, and otherwise where it was.
 
     ``details`` was looked up before the write transaction. ``s`` is a write transaction's session."""
     if collection.channel_id is not None:
@@ -497,17 +525,41 @@ def join_channel(
     channel = channel_in_library(s, record.key, details.ref)
     if channel is None:
         channel = _new_channel(s, source_key, record.key, details, added_by_id=added_by_id)
-    section, kept_by = collection_section(s, collection, source_key, details, channel)
-    if kept_by is not None:
-        raise ServiceError(f"{kept_by} already keeps this part of {channel.title}")
+    section, keeper = collection_section(s, collection, source_key, details, channel)
     if not isinstance(section, ChannelSection):
         raise ServiceError(f"{collection.title} is not a playlist, show or the videos of {channel.title}")
+    overlaps = join_overlaps(s, collection, source_key, details, channel)
+    if keeper is not None and not any(overlap.ref == section.ref and overlap.ref in move_here for overlap in overlaps):
+        raise ServiceError(f"{keeper.title} already keeps this part of {channel.title}")
+    changed: set[int] = set()
+    for overlap in overlaps:
+        if overlap.ref in move_here and overlap.can_move_here:
+            _switch_off(overlap.kept_by, overlap.ref)
+            changed.add(overlap.kept_by.id)
+        else:
+            _switch_off(collection, overlap.ref)
+            changed.add(collection.id)
     section.status = SectionStatus.KNOWN.value
     collection.channel = channel
     if section.kind == SectionKind.FEED and section.role == SectionRole.MAIN and channel.main_collection is None:
         channel.main_collection = collection
     s.flush()
+    for collection_id in changed:
+        from backend.services.link_seasons import place_in_link_seasons
+
+        place_in_link_seasons(s, s.get(Collection, collection_id), by_user=True)
     return channel
+
+
+def _switch_off(collection: Collection, ref: str) -> None:
+    """Stop a list being a season of the collection. One that made every list a season keeps the others on."""
+    if collection.link_seasons == LinkSeasons.ALL.value:
+        for link in collection.lists:
+            link.enabled = True
+        collection.link_seasons = LinkSeasons.SELECTED.value
+    for link in collection.lists:
+        if link.ref == ref:
+            link.enabled = False
 
 
 def leave_channel(s: Session, collection: Collection) -> None:

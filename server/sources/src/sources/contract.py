@@ -366,7 +366,11 @@ class SectionKind(StrEnum):
     FEED = "feed"
     """Grows forever, ordered by date: Videos, Shorts, Live, Reels."""
     LIST = "list"
-    """Finite and curated, with a title and artwork of its own: a playlist, an album, a Daily Wire show."""
+    """Finite and curated, with a title and artwork of its own, that can be a season of a collection: a playlist or
+    an album. Each Source names lists in its own words."""
+    SHOW = "show"
+    """A show with seasons of its own, such as a Daily Wire show: it grows like a feed, has a title and artwork of its
+    own, and is always a collection of its own."""
     ITEM = "item"
     """One movie or video, such as a movie on a Daily Wire host's page."""
 
@@ -395,7 +399,6 @@ class SectionRef:
     description: str | None = None
     access: str | None = None
     """The key of the ``Access`` the section needs, as for videos."""
-    has_seasons: bool = False
     """A list with seasons of its own, such as a Daily Wire show, keeps them."""
     year: str | None = None
     """The year an album came out."""

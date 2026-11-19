@@ -48,7 +48,7 @@ function choiceOf(plan: SectionPlan | undefined): Choice {
 function choicesFor(channel: ChannelLookupRead, section: ChannelSectionRead) {
     const spec: Partial<Record<Choice, {label: string}>> = {}
     if (section.kind === 'feed') spec.main = {label: 'Main collection'}
-    else if (channel.linkSeasons) spec.main = {label: `Main collection, as ${channel.music ? 'an album' : 'a playlist'} season`}
+    else if (section.kind === 'list' && channel.linkSeasons) spec.main = {label: `Main collection, as ${channel.music ? 'an album' : 'a playlist'} season`}
     spec.own = {label: 'A collection of its own'}
     spec.skip = {label: 'Skip'}
     return createSelectRegistry(`ChannelSection-${channel.ref}-${section.ref}`, spec as Record<Choice, {label: string}>)
@@ -221,12 +221,14 @@ export default function AddChannelPage() {
     }
 
     const listLabel = channel.sections.find((section) => section.kind === 'list')?.kindLabel
-    const listsTitle = listLabel === 'Show' ? 'Shows' : listLabel === 'Album' ? 'Albums' : 'Playlists'
+    const hasShows = channel.sections.some((section) => section.kind === 'show')
+    const listsTitle = listLabel === 'Album' ? 'Albums' : listLabel ? 'Playlists' : hasShows ? 'Shows' : 'Playlists'
     const lists = listsTitle.toLowerCase()
     const hasFeeds = channel.sections.some((section) => section.kind === 'feed')
     const groups: [string, ChannelSectionRead[]][] = [
         ['Feeds', channel.sections.filter((section) => section.kind === 'feed')],
         [listsTitle, channel.sections.filter((section) => section.kind === 'list')],
+        ...(listLabel && hasShows ? [['Shows', channel.sections.filter((section) => section.kind === 'show')]] as [string, ChannelSectionRead[]][] : []),
         [channel.music ? 'Singles' : 'Movies', channel.sections.filter((section) => section.kind === 'item')],
     ]
     // What is in the library already stays where it is, so it makes no collection.

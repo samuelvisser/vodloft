@@ -10,7 +10,7 @@ const newSectionActionRegs = new Map<string, ReturnType<typeof makeNewSectionAct
 function makeNewSectionActionReg(label: string) {
     return createSelectRegistry(`NewSectionAction-${label}`, {
         ask: {label: 'Ask me', help: `Sends a message, and shows the new one on the ${label}'s page with the choices.`},
-        main: {label: 'Add it as a season', help: `It becomes a season of the ${label}'s own collection. A show with seasons of its own gets a collection of its own.`},
+        season: {label: 'Add it as a season', help: `It becomes a season of the ${label}'s own collection. A show, with seasons of its own, gets a collection of its own.`},
         own: {label: 'Add it as a collection', help: 'Each new one becomes a collection of its own.'},
         ignore: {label: 'Ignore it', help: `It is only listed on the ${label}'s page.`},
     })

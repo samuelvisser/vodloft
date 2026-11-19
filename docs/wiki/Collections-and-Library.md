@@ -193,13 +193,13 @@ Paste a link to a YouTube channel in **Add media** and choose **Add the channel*
 
 The Add channel page lists the channel's feeds (Videos, Live and Shorts on YouTube) and its playlists or shows. For each one you choose where it goes:
 
-- **Main collection**: one collection named after the channel. Feeds become a season per year, a playlist becomes a playlist season (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)), and a Daily Wire show keeps its own seasons.
+- **Main collection**: one collection named after the channel. Feeds become a season per year, and a playlist becomes a playlist season (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)). A Daily Wire show has seasons of its own, so it always gets a collection of its own.
 - **A collection of its own**: the part becomes a separate collection, for example Shorts that you want to keep apart from the rest.
 - **Skip**: nothing is added. The part stays listed on the channel's page, so you can add it later.
 
 Three starting points fill these choices in for you: **One show** (YouTube only) puts the videos, livestreams and playlists in the main collection and gives Shorts their own; **A show per playlist** gives every playlist or show its own collection; **Only what I pick** starts with everything skipped. A playlist or show that is already in your Library stays where it is.
 
-A video that appears in more than one place is kept once. In the main collection a video in a playlist season is in that season and not in the season of videos in no playlist. Once you change which playlists are seasons, the main collection's Seasons window takes over; see [Playlists and albums as seasons](#playlists-and-albums-as-seasons).
+A video that appears in more than one place is kept once, and a playlist is always in one place only: a season of the main collection or a collection of its own. In the main collection a video in a playlist season is in that season and not in the season of videos in no playlist. The channel decides which playlists are seasons of its main collection, so that collection's Seasons window doesn't look for new playlists itself; it still lets you name, order and group the seasons, and turn a playlist season off.
 
 Collections made from a channel start without Download Profiles; add them on each collection as usual. In the Library, channels show with a round picture next to your collections; the **Kind** filter shows only channels or only collections.
 
@@ -219,12 +219,12 @@ Each part downloads only its own stretch of the video, so it works with everythi
 
 ### Following a channel
 
-Once a day VODLoft looks at each channel for playlists or shows it did not have before. **Check now** on the channel's page looks right away. What happens with a new one is up to you, under **When the channel adds a playlist or show** on the Add channel page or in the channel's **Edit** page:
+Once a day VODLoft looks at each channel for playlists or shows it did not have before, also for a main collection that has playlist seasons. **Check now** on the channel's page looks right away. What happens with a new one is up to you, under **When the channel adds a playlist or show** on the Add channel page or in the channel's **Edit** page:
 
 - **Ask me** (the default): VODLoft sends a message and shows the new playlist or show at the top of the channel's page, where you choose to add it to the main collection as a season, give it a collection of its own, or ignore it.
-- **Add to the main collection**: a new playlist becomes a season of the channel's main collection, and a new Daily Wire show keeps its own seasons there.
-- **Add as its own collection**: each new playlist or show becomes a collection.
-- **Ignore**: nothing is added, and you are not asked.
+- **Add it as a season**: a new playlist becomes a season of the channel's main collection. A new Daily Wire show gets a collection of its own, because it has seasons of its own.
+- **Add it as a collection**: each new playlist or show becomes a collection.
+- **Ignore it**: nothing is added, and you are not asked.
 
 Playlists or shows you skipped stay under **Not in your library** on the channel's page, each with an **Add** button.
 
@@ -238,6 +238,8 @@ The channel's **Edit** page holds:
 ### Adding a collection to a channel, and removing it
 
 A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its channel later. Choose **Add to channel** (**Add to host** for a Daily Wire show) in the collection's **Actions** menu. VODLoft finds the channel or host behind the collection's links, adds the channel to your Library if it is not there yet, and shows which of the channel's playlists or shows the collection becomes. The collection keeps its seasons, episode numbers, profiles and files; nothing is indexed again. A collection that another of the channel's collections already covers can't join.
+
+When some of the collection's playlists are already somewhere else in the channel, the window lists them, because once the collection joins each playlist is in one place only. A playlist that is a season of the channel's main collection can stay there or move to the joining collection, as you choose. A playlist that is a collection of its own stays where it is and leaves the joining collection.
 
 **Remove from channel** in the same menu makes it a plain collection again. It keeps its episodes, profiles, files, genre and content rating.
 

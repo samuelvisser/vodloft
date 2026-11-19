@@ -207,9 +207,9 @@ class DailyWireSource(Source):
         first = shows[0] if shows else None
         sections = tuple(
             SectionRef(
-                ref=show.slug, url=collection_url(show.slug), title=show.title, kind=SectionKind.LIST,
+                ref=show.slug, url=collection_url(show.slug), title=show.title, kind=SectionKind.SHOW,
                 kind_label="Show", image_url=_first(show.thumbnail_landscape_path, show.background_image_path),
-                description=show.description, has_seasons=True,
+                description=show.description,
             )
             for show in shows
         ) + tuple(

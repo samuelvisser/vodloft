@@ -38,7 +38,7 @@ class Channel(Base):
     facts: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", comment='Short facts, such as "1.2M subscribers"')
     added_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     new_sections: Mapped[str] = mapped_column(
-        default="ask", server_default="ask", comment="What happens when the channel adds a section: ask, main, own or ignore",
+        default="ask", server_default="ask", comment="What happens when the channel adds a section: ask, season, own or ignore",
     )
     genre: Mapped[Optional[str]] = mapped_column(comment="Given to the channel's collections, for their NFO files")
     content_rating: Mapped[Optional[str]] = mapped_column(comment="Given to the channel's collections, for their NFO files")
@@ -73,14 +73,13 @@ class ChannelSection(Base):
     ref: Mapped[str] = mapped_column(comment="The Site's own id for the section")
     url: Mapped[str]
     title: Mapped[str]
-    kind: Mapped[str] = mapped_column(comment="feed, list or item")
+    kind: Mapped[str] = mapped_column(comment="feed, list, show or item")
     role: Mapped[str] = mapped_column(default="main", server_default="main", comment="main, short or live")
     kind_label: Mapped[Optional[str]] = mapped_column(comment="What the Site calls it, such as Playlist")
     item_count: Mapped[Optional[int]]
     image_path: Mapped[Optional[str]]
     description: Mapped[Optional[str]]
     access: Mapped[Optional[str]] = mapped_column(comment="The key of the access the section needs")
-    has_seasons: Mapped[bool] = mapped_column(default=False, server_default="0")
     site_position: Mapped[int] = mapped_column(default=0, server_default="0", comment="Where the Site lists it")
     status: Mapped[str] = mapped_column(
         default="known", server_default="known",
