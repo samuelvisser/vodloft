@@ -8,6 +8,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -19,6 +20,7 @@ from backend.api.models.creator import (
     CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd, CollectionCreatorLeaveAPIRead, CollectionCreatorMatchAPIRead,
 )
 from backend.api.models.collection import CollectionAPIRead
+from backend.api.endpoints.episodes.service import episode_view_columns
 from backend.db.models import Creator, CreatorAccount, Collection, Episode
 from backend.services import creators
 from backend.services.creators import NewCollectionSettings, SectionPlan
@@ -204,6 +206,7 @@ class _CreatorRead:
     collections: list = field(default_factory=list)
     accounts: list | None = None
     reassigned_count: int = 0
+    newest_episodes: list = field(default_factory=list)
 
     @property
     def creator_label(self) -> str:
@@ -234,11 +237,23 @@ def list_creators(s: Session) -> list[CreatorAPIRead]:
     ]
 
 
+# The newest episodes a creator's page shows in its row.
+_NEWEST_EPISODES = 12
+
+
 @dataclass(frozen=True)
 class _CollectionRead:
     collection: Collection
     episode_count: int
+    first_published_date: datetime | None
+    last_published_date: datetime | None
     links: list[str]
+
+    @property
+    def years(self) -> str:
+        if self.first_published_date is None or self.last_published_date is None:
+            return ""
+        return f"{self.first_published_date.year}-{self.last_published_date.year}"
 
     def __getattr__(self, name):
         return getattr(self.collection, name)
@@ -252,10 +267,22 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     if creator is None:
         raise CreatorNotFoundError(f"Creator '{slug}' not found")
     collections_count, episodes = _counts(s, [creator.id])
-    per_collection = dict(s.execute(
-        select(Episode.collection_id, func.count()).where(Episode.collection_id.in_([c.id for c in creator.collections]))
-        .group_by(Episode.collection_id)
-    ).all())
+    collection_ids = [c.id for c in creator.collections]
+    stats = {
+        row.collection_id: row for row in s.execute(
+            select(
+                Episode.collection_id, func.count().label("episode_count"),
+                func.min(Episode.published_date).label("first"), func.max(Episode.published_date).label("last"),
+            ).where(Episode.collection_id.in_(collection_ids)).group_by(Episode.collection_id)
+        )
+    }
+    newest = s.execute(
+        select(*episode_view_columns(), Collection.slug.label("collection_slug"), Collection.title.label("collection_title"))
+        .join(Collection, Episode.collection_id == Collection.id)
+        .where(Episode.collection_id.in_(collection_ids))
+        .order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
+        .limit(_NEWEST_EPISODES)
+    ).mappings().all()
     kept = {
         account.id: creators.sections_in_library(
             s, account.source_key, account.site_ref, account.sections, account.main_collection,
@@ -266,7 +293,9 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     titles = dict(s.execute(select(Collection.slug, Collection.title).where(Collection.slug.in_(slugs))).all())
     collections = [
         _CollectionRead(
-            collection, per_collection.get(collection.id, 0),
+            collection, stats[collection.id].episode_count if collection.id in stats else 0,
+            stats[collection.id].first if collection.id in stats else None,
+            stats[collection.id].last if collection.id in stats else None,
             [
                 section.title for account in creator.accounts for section in account.sections
                 if kept[account.id].get(section.ref) == collection.slug
@@ -284,6 +313,7 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     return CreatorPageAPIRead.model_validate(_CreatorRead(
         creator, collections_count.get(creator.id, 0), episodes.get(creator.id, 0),
         collections=collections, accounts=accounts, reassigned_count=len(reassigned_in_creator(s, creator)),
+        newest_episodes=list(newest),
     ))
 
 

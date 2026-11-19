@@ -765,3 +765,42 @@ def test_an_account_splits_off_into_a_creator_of_its_own_with_its_collections(cl
     # A creator's only account stays theirs.
     only = client.post(f"/api/creators/nw-live/accounts/{cast_account}/split")
     assert only.status_code == 422
+
+
+def _video(session, collection, slug, published):
+    from backend.db.models import Episode, Season
+    from backend.types.media_types import MediaType
+
+    season = session.scalar(select(Season).where(Season.collection_id == collection.id))
+    if season is None:
+        season = Season(collection_id=collection.id, index=1, slug=f"{collection.slug}-1", name="Season 1")
+        session.add(season)
+        session.flush()
+    session.add(Episode(
+        source_key="tube", uuid=f"uuid-{slug}", type=MediaType.EPISODE.value, collection_id=collection.id,
+        season_id=season.id, index=published.year, episode_identifier=f"ep.S01E{published.year}", slug=slug,
+        publish_status="published_final", sharing_url=f"https://example.test/{slug}", published_date=published,
+        title=slug, duration=60,
+    ))
+
+
+def test_the_creator_page_shows_each_collections_years_and_the_newest_episodes(client, session):
+    from datetime import datetime, timezone
+
+    from backend.db.models import Collection
+
+    _one_show(client)
+    main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
+    shorts = session.scalar(select(Collection).where(Collection.slug != "UCworkshop"))
+    _video(session, main, "first", datetime(2019, 3, 1, tzinfo=timezone.utc))
+    _video(session, main, "latest", datetime(2024, 5, 1, tzinfo=timezone.utc))
+    _video(session, shorts, "short", datetime(2025, 1, 1, tzinfo=timezone.utc))
+    session.commit()
+
+    page = client.get("/api/creators/workshop").json()
+
+    assert {c["slug"]: c["years"] for c in page["collections"]} == {"UCworkshop": "2019-2024", shorts.slug: "2025-2025"}
+    assert [(e["slug"], e["collectionSlug"]) for e in page["newestEpisodes"]] == [
+        ("short", shorts.slug), ("latest", "UCworkshop"), ("first", "UCworkshop"),
+    ]
+    assert page["newestEpisodes"][0]["collectionTitle"] == shorts.title

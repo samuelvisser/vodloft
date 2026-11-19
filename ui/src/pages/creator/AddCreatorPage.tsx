@@ -72,14 +72,11 @@ function AddCreatorSkeleton({steps, label}: {steps: string[], label: string}) {
             <LookupSteps steps={steps} first={`Looking the ${label} up`}/>
             <div className="creator-header" aria-hidden="true">
                 <div className="creator-banner skeleton-block"/>
-                <div className="creator-identity">
-                    <span className="creator-avatar skeleton-block"/>
-                    <div className="creator-identity-copy creator-skeleton-copy">
-                        <span className="skeleton-block creator-skeleton-line creator-skeleton-line--kind"/>
-                        <span className="skeleton-block creator-skeleton-line creator-skeleton-line--title"/>
-                        <span className="skeleton-block creator-skeleton-line"/>
-                        <span className="skeleton-block creator-skeleton-line creator-skeleton-line--short"/>
-                    </div>
+                <span className="creator-avatar skeleton-block"/>
+                <span className="creator-name skeleton-block creator-skeleton-line creator-skeleton-line--title"/>
+                <div className="creator-about creator-skeleton-copy">
+                    <span className="skeleton-block creator-skeleton-line"/>
+                    <span className="skeleton-block creator-skeleton-line creator-skeleton-line--short"/>
                 </div>
             </div>
             <div className="creator-presets" aria-hidden="true">

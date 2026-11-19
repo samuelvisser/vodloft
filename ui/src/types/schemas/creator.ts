@@ -1,5 +1,7 @@
 import {z} from 'zod'
 import {DwMembershipLevelReg} from '../dailywire_user_info'
+import {ApiDateTimeSchema} from './datetime'
+import {EpisodeReadViewSchema} from './episode'
 
 export const SectionTargetValues = ['main', 'own', 'skip'] as const
 export const CreatorPresetValues = ['one_show', 'per_list', 'pick'] as const
@@ -108,8 +110,19 @@ export const CreatorPageReadSchema = CreatorReadSchema.extend({
         type: z.string(),
         sourceKey: z.string(),
         thumbnailLandscapePath: z.string().nullable(),
+        thumbnailPortraitPath: z.string().nullable(),
+        thumbnailSquarePath: z.string().nullable(),
+        logoImagePath: z.string().nullable(),
+        authorHeadshotPath: z.string().nullable(),
         episodeCount: z.number(),
+        years: z.string(),
+        firstPublishedDate: ApiDateTimeSchema.nullable(),
         links: z.array(z.string()),
+    })),
+    /** The newest episodes of all of the creator's collections, newest first. */
+    newestEpisodes: z.array(EpisodeReadViewSchema.extend({
+        collectionSlug: z.string(),
+        collectionTitle: z.string(),
     })),
     accounts: z.array(CreatorPageAccountReadSchema),
     /** Downloaded episodes the creator places in another of its collections than the one they are in. */

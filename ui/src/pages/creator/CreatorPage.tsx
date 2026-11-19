@@ -1,4 +1,4 @@
-import {useMemo, useState} from 'react'
+import {useMemo, useRef, useState} from 'react'
 import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
@@ -8,10 +8,12 @@ import {checkCreator, combineCreators, useCreator, useCreators} from '../../lib/
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import {toImageUrl} from '../../components/Episode/EpisodeCard'
+import EpisodeCard from '../../components/Episode/EpisodeCard'
+import CollectionTile from '../../components/CollectionTile/CollectionTile'
+import OpenOnSiteLink from '../../components/common/OpenOnSiteLink'
+import type {CreatorPageRead} from '../../types/schemas/creator'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
-import SourceBadge from '../../components/Source/SourceBadge'
 import {postReassignedMove, reassignedMoveMessage} from '../../components/Episode/SeasonPlaceNote'
 import {toast} from 'react-hot-toast'
 import {creatorKindText} from '../../types/creator'
@@ -20,8 +22,45 @@ import './CreatorPages.css'
 
 /** The places a collection lists, short enough for a card: "Videos, Live and 9 more". */
 function listedSources(titles: string[]) {
+    if (titles.length === 1) return titles[0]
     if (titles.length <= 3) return titles.slice(0, -1).join(', ') + ' and ' + titles[titles.length - 1]
     return `${titles.slice(0, 2).join(', ')} and ${titles.length - 2} more`
+}
+
+/** How long ago something happened, in words: "2 days ago". */
+function timeAgo(date: Date) {
+    const seconds = (date.getTime() - Date.now()) / 1000
+    const format = new Intl.RelativeTimeFormat(undefined, {numeric: 'auto'})
+    for (const [unit, size] of [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600]] as const) {
+        if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit)
+    }
+    return format.format(Math.round(seconds / 60), 'minute')
+}
+
+/** A row of episodes that scrolls sideways, with buttons to scroll it on a computer. */
+function EpisodeShelf({episodes}: {episodes: CreatorPageRead['newestEpisodes']}) {
+    const row = useRef<HTMLDivElement>(null)
+    const scroll = (direction: number) => row.current?.scrollBy({left: direction * row.current.clientWidth * 0.8, behavior: 'smooth'})
+    return (
+        <section className="creator-section-group" aria-labelledby="creator-newest-title">
+            <div className="creator-shelf-head">
+                <h2 id="creator-newest-title">Newest episodes</h2>
+                <div className="creator-shelf-arrows">
+                    <button type="button" className="btn" onClick={() => scroll(-1)} aria-label="Scroll back">
+                        <FontAwesomeIcon icon={faIcon('fass', 'chevron-left')}/>
+                    </button>
+                    <button type="button" className="btn" onClick={() => scroll(1)} aria-label="Scroll on">
+                        <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')}/>
+                    </button>
+                </div>
+            </div>
+            <div className="episodes-row creator-shelf" role="list" ref={row}>
+                {episodes.map((episode) => (
+                    <EpisodeCard key={episode.id} ep={episode} collectionSlug={episode.collectionSlug} collectionTitle={episode.collectionTitle}/>
+                ))}
+            </div>
+        </section>
+    )
 }
 
 export default function CreatorPage() {
@@ -94,12 +133,15 @@ export default function CreatorPage() {
     }
 
     const several = creator.accounts.length > 1
-    const links = creator.accounts.filter((account) => account.url).map((account) => ({
-        label: several ? `Open on ${account.site.name}` : 'Open on the site', url: account.url!,
-    }))
+    const links = creator.accounts.filter((account) => account.url).map((account) => ({siteName: account.site.name, url: account.url!}))
+    // Two sites fit as buttons; more go into the Actions menu.
+    const linkButtons = links.length <= 2 ? links : []
     const waiting = creator.accounts.flatMap((account) => account.sections)
         .filter((section) => section.status === 'new' && !section.collectionSlug)
     const episodes = creator.collections.reduce((total, collection) => total + collection.episodeCount, 0)
+    const firstDates = creator.collections.map((collection) => collection.firstPublishedDate).filter((date): date is Date => !!date)
+    const since = firstDates.length ? Math.min(...firstDates.map((date) => date.getFullYear())) : null
+    const newest = creator.newestEpisodes[0]?.publishedDate
 
     return (
         <section className="view creator-view" aria-labelledby="creator-title">
@@ -107,31 +149,52 @@ export default function CreatorPage() {
                 title={creator.title} label={creatorKindText(creator)}
                 handle={creator.accounts[0]?.handle}
                 avatarUrl={creator.avatarUrl} bannerUrl={creator.bannerUrl} facts={creator.facts}
-                description={creator.description} links={links} titleId="creator-title"
-                actions={mayManage && (
+                description={creator.description} titleId="creator-title"
+                stats={creator.collections.length > 0 && (
+                    <ul className="creator-stats">
+                        <li><b>{creator.collections.length}</b> {creator.collections.length === 1 ? 'collection' : 'collections'}</li>
+                        <li><b>{episodes}</b> {episodes === 1 ? 'episode' : 'episodes'}</li>
+                        {since && <li>Since <b>{since}</b></li>}
+                        {newest && <li>Newest <b>{timeAgo(newest)}</b></li>}
+                    </ul>
+                )}
+                actions={(linkButtons.length > 0 || mayManage) && (
                     <>
-                        <PageHeaderAction icon={faIcon('fass', 'pen')} label="Edit" variant="secondary" to={`/edit-creator/${creator.slug}`}/>
-                        <PageHeaderAction
-                            icon={faIcon('fass', 'arrows-rotate')} label={checking ? 'Looking…' : 'Check now'} variant="secondary"
-                            onClick={() => void check()}
-                        />
-                        <ActionMenu items={[{
-                            label: 'Move reassigned episodes',
-                            description: creator.reassignedCount
-                                ? `${creator.reassignedCount} downloaded ${creator.reassignedCount === 1 ? 'episode belongs' : 'episodes belong'} in another collection of this ${creator.creatorLabel} now`
-                                : undefined,
-                            icon: faIcon('fass', 'arrow-right-from-bracket'),
-                            disabled: movingReassigned || !creator.reassignedCount,
-                            disabledReason: creator.reassignedCount ? undefined : `No episode of this ${creator.creatorLabel} belongs in another of its collections.`,
-                            onSelect: () => void moveReassigned(),
-                        }, {
-                            label: 'Combine with another creator',
-                            description: 'The same person or group, added from another site or twice',
-                            icon: faIcon('fass', 'object-group'),
-                            disabled: !others.length,
-                            disabledReason: others.length ? undefined : 'There is no other creator in your library.',
-                            onSelect: () => setCombining(true),
-                        }]}/>
+                        {linkButtons.map((link) => <OpenOnSiteLink key={link.url} url={link.url} siteName={link.siteName}/>)}
+                        {mayManage && (
+                            <>
+                                <PageHeaderAction icon={faIcon('fass', 'pen')} label="Edit" variant="secondary" to={`/edit-creator/${creator.slug}`}/>
+                                <ActionMenu items={[{
+                                    label: checking ? 'Looking…' : 'Check now',
+                                    description: 'Look for new playlists and shows',
+                                    icon: faIcon('fass', 'arrows-rotate'),
+                                    disabled: checking,
+                                    onSelect: () => void check(),
+                                }, ...(linkButtons.length ? [] : links.map((link) => ({
+                                    label: `Open on ${link.siteName}`,
+                                    icon: faIcon('fass', 'arrow-up-right-from-square'),
+                                    onSelect: () => window.open(link.url, '_blank', 'noreferrer'),
+                                }))),
+                                // Episodes can only move between collections, so a creator with one has nothing to move.
+                                ...(creator.collections.length > 1 ? [{
+                                    label: 'Move reassigned episodes',
+                                    description: creator.reassignedCount
+                                        ? `${creator.reassignedCount} downloaded ${creator.reassignedCount === 1 ? 'episode belongs' : 'episodes belong'} in another collection of this ${creator.creatorLabel} now`
+                                        : undefined,
+                                    icon: faIcon('fass', 'arrow-right-from-bracket'),
+                                    disabled: movingReassigned || !creator.reassignedCount,
+                                    disabledReason: creator.reassignedCount ? undefined : `No episode of this ${creator.creatorLabel} belongs in another of its collections.`,
+                                    onSelect: () => void moveReassigned(),
+                                }] : []), {
+                                    label: 'Combine with another creator',
+                                    description: 'The same person or group, added from another site or twice',
+                                    icon: faIcon('fass', 'object-group'),
+                                    disabled: !others.length,
+                                    disabledReason: others.length ? undefined : 'There is no other creator in your library.',
+                                    onSelect: () => setCombining(true),
+                                }]}/>
+                            </>
+                        )}
                     </>
                 )}
             />
@@ -154,31 +217,20 @@ export default function CreatorPage() {
                 </Link>
             )}
 
+            {creator.newestEpisodes.length > 0 && <EpisodeShelf episodes={creator.newestEpisodes}/>}
+
             <div className="creator-section-group">
-                <h2 className="creator-collections-title">
-                    Collections <span>{episodes} {episodes === 1 ? 'episode' : 'episodes'}</span>
-                </h2>
+                <h2 className="creator-collections-title">Collections</h2>
                 {creator.collections.length ? (
-                    <div className="creator-collections" role="list">
-                        {creator.collections.map((collection) => {
-                            const image = toImageUrl(collection.thumbnailLandscapePath)
-                            const noun = collection.type === 'music'
-                                ? (collection.episodeCount === 1 ? 'track' : 'tracks')
-                                : (collection.episodeCount === 1 ? 'video' : 'videos')
-                            return (
-                                <Link key={collection.slug} className="creator-collection" to={`/collection/${collection.slug}`} role="listitem">
-                                    <span className="creator-collection-art">
-                                        {image
-                                            ? <img src={image} alt="" loading="lazy"/>
-                                            : <FontAwesomeIcon icon={collection.type === 'music' ? faIcon('fass', 'music') : faIcon('fass', 'tv')}/>}
-                                        {several && <SourceBadge sourceKey={collection.sourceKey} className="creator-collection-source"/>}
-                                        <span className="creator-collection-count">{collection.episodeCount} {noun}</span>
-                                    </span>
-                                    <b>{collection.title}</b>
-                                    {collection.links.length > 1 && <span>From {listedSources(collection.links)}</span>}
-                                </Link>
-                            )
-                        })}
+                    <div className="library-collection-grid" role="list" aria-label="Collections">
+                        {creator.collections.map((collection) => (
+                            <CollectionTile
+                                key={collection.slug} collection={collection} showSource={several}
+                                // Where it comes from, unless that is just its own title.
+                                subtitle={collection.links.length > 1 || (collection.links.length === 1 && collection.links[0] !== collection.title)
+                                    ? listedSources(collection.links) : null}
+                            />
+                        ))}
                     </div>
                 ) : (
                     <p className="creator-empty">

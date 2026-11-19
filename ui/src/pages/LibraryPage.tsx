@@ -8,7 +8,7 @@ import {toImageUrl} from '../components/Episode/EpisodeCard'
 import CollectionIndexingProgress from '../components/CollectionIndexingProgress/CollectionIndexingProgress'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import SourceBadge from '../components/Source/SourceBadge'
-import CollectionTileArt from '../components/CollectionTileArt/CollectionTileArt'
+import CollectionTile from '../components/CollectionTile/CollectionTile'
 import {DrmBadge} from '../components/common/DrmProtected'
 import {AccessBadge} from '../components/common/AccessLocked'
 import FilterBar, {ChipFilter} from '../components/common/FilterBar'
@@ -421,40 +421,20 @@ export default function LibraryPage() {
                                 </Link>
                             )
                         })}
-                        {filteredCollections.map((collection) => {
-                            // The tile is square, so square artwork comes first when a Source has it.
-                            const image = toImageUrl(
-                                collection.thumbnailSquarePath || collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.logoImagePath || collection.authorHeadshotPath,
-                            )
-                            // A yt-dlp creator's author is usually the creator itself: do not say its name twice.
-                            const showAuthor = !!collection.authorName && !sameName(collection.authorName, collection.title)
-                            return (
-                                <Link className="library-tile" to={`/collection/${collection.slug}`} key={collection.slug} role="listitem">
-                                    <span className="library-tile-art">
-                                        {image
-                                            ? <CollectionTileArt key={image} src={image}/>
-                                            : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
-                                        <SourceBadge sourceKey={collection.sourceKey} className="library-tile-source"/>
-                                    </span>
-                                    <span className="library-tile-copy">
-                                        <span className="library-tile-title">{collection.title}</span>
-                                        {showAuthor && <span className="library-tile-author">{collection.authorName}</span>}
-                                        <span className="library-tile-status">
-                                            <span className="library-tile-meta">
-                                                <span>{collection.episodeCount} episodes</span>
-                                                {collection.years && <span>{collection.years}</span>}
-                                            </span>
-                                            <CollectionIndexingProgress
-                                                collectionId={collection.id}
-                                                collectionSlug={collection.slug}
-                                                pollForStart={collection.episodeCount === 0}
-                                                className="library-collection-indexing"
-                                            />
-                                        </span>
-                                    </span>
-                                </Link>
-                            )
-                        })}
+                        {filteredCollections.map((collection) => (
+                            <CollectionTile
+                                key={collection.slug} collection={collection}
+                                // A yt-dlp creator's author is usually the creator itself: do not say its name twice.
+                                subtitle={collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null}
+                            >
+                                <CollectionIndexingProgress
+                                    collectionId={collection.id}
+                                    collectionSlug={collection.slug}
+                                    pollForStart={collection.episodeCount === 0}
+                                    className="library-collection-indexing"
+                                />
+                            </CollectionTile>
+                        ))}
                     </div>
                 ) : (
                     <NoMatches search={searchWords.length > 0} what="collections"/>

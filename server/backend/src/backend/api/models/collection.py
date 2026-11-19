@@ -240,6 +240,11 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     creator_title: Optional[str] = Field(
         default=None, validation_alias=AliasChoices(AliasPath("creator", "title"), AliasPath("collection", "creator", "title")),
     )
+    creator_avatar_url: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices(AliasPath("creator", "avatar_path"), AliasPath("collection", "creator", "avatar_path")),
+    )
+    """The picture of the creator, shown beside their name."""
 
 
 class CollectionAPIRead(_CollectionAPIBaseOut):

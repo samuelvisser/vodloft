@@ -6,6 +6,7 @@ from typing import Literal, Optional
 from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.source import SiteAPIRead
 from backend.types.creator_types import NewSectionAction, SectionTarget
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
@@ -109,7 +110,15 @@ class CreatorCollectionAPIRead(ResponseBase):
     type: str
     source_key: str
     thumbnail_landscape_path: Optional[str] = None
+    thumbnail_portrait_path: Optional[str] = None
+    thumbnail_square_path: Optional[str] = None
+    logo_image_path: Optional[str] = None
+    author_headshot_path: Optional[str] = None
     episode_count: int = 0
+    years: str = ""
+    """The years of its oldest and newest episode, such as 2015-2026, as the Library shows them."""
+    first_published_date: Optional[datetime] = None
+    """When its oldest episode came out."""
     links: list[str] = Field(default_factory=list)
     """The titles of the creator's sections it takes."""
 
@@ -160,10 +169,19 @@ class CreatorPageAccountAPIRead(CreatorAccountAPIRead):
     sections: list[CreatorSectionAPIRead]
 
 
+class CreatorEpisodeAPIRead(EpisodeAPIReadView):
+    """One of the newest episodes on a creator's page, with the collection it is in."""
+
+    collection_slug: str
+    collection_title: str
+
+
 class CreatorPageAPIRead(CreatorAPIRead):
     """A creator's page: their collections, and the sections of each account with the collection that keeps each."""
 
     collections: list[CreatorCollectionAPIRead]
+    newest_episodes: list[CreatorEpisodeAPIRead] = Field(default_factory=list)
+    """The newest episodes of all of the creator's collections, newest first."""
     accounts: list[CreatorPageAccountAPIRead]
     reassigned_count: int = 0
     """The downloaded videos that the creator places in another of its collections than the one they are in."""
