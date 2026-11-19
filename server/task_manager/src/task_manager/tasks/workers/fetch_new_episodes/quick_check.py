@@ -20,7 +20,9 @@ from backend.services.check_frequency import joins_regular_checks
 from backend.db.models import Episode, Collection
 from config.network import is_no_internet_error
 from sources import Feature, Source, get_source
-from ...helpers.listed_collections import add_listed_episodes, index_listed_collection, known_episode_slugs
+from ...helpers.listed_collections import (
+    add_listed_episodes, claim_listed_items, collection_links, index_listed_collection, known_episode_slugs, link_item_slugs,
+)
 from backend.services.thumbnails import newest_media_item_id
 from .service import finish_index
 
@@ -71,7 +73,9 @@ def _due_collections(s: Session, now: datetime) -> list[tuple[Collection, Source
     due = []
     for source_key, collections in by_source.items():
         source = get_source(source_key)
-        minutes = source.quick_check_minutes([(collection.sharing_url, counts.get(collection.id, 0)) for collection in collections])
+        minutes = source.quick_check_minutes([
+            (link.url, counts.get(collection.id, 0)) for collection in collections for link in collection.links
+        ])
         for collection in collections:
             last = _last_checked.get(collection.id)
             wait = timedelta(minutes=check_frequency.quick_check_minutes(collection, minutes))
@@ -81,17 +85,31 @@ def _due_collections(s: Session, now: datetime) -> list[tuple[Collection, Source
 
 
 def _check_collection(s: Session, *, collection: Collection, source: Source) -> int:
-    collection_id, url = collection.id, collection.sharing_url
-    known = known_episode_slugs(s, collection)
+    """Look at the newest videos of each of the collection's links, and add the ones it does not have yet."""
+    collection_id = collection.id
+    collection_known = known_episode_slugs(s, collection)
+    links = [(link_id, url, link_item_slugs(s, link_id)) for link_id, url in collection_links(s, collection_id)]
     # No transaction stays open while the Source looks videos up.
     s.rollback()
-    new = [item for item in source.latest_items(url) if item.slug not in known]
-    if not new:
-        return 0
-    found = [details for details in source.item_details(new).values() if details is not None]
+    added = 0
     newest = newest_media_item_id(s)
     s.rollback()
-    added = run_write_transaction(lambda w: add_listed_episodes(w, collection_id=collection_id, found=found))
+    for link_id, url, link_known in links:
+        latest = [item for item in source.latest_items(url) if item.slug not in link_known]
+        if not latest:
+            continue
+        # A video another link already gave the collection is only noted for this link.
+        shared = {item.slug for item in latest if item.slug in collection_known}
+        new = [item for item in latest if item.slug not in collection_known]
+        found = [details for details in source.item_details(new).values() if details is not None] if new else []
+
+        def save(w: Session) -> int:
+            claim_listed_items(w, collection_id=collection_id, link_id=link_id, slugs=shared)
+            return add_listed_episodes(w, collection_id=collection_id, link_id=link_id, found=found)
+
+        count = run_write_transaction(save)
+        collection_known |= {details.slug for details in found}
+        added += count
     if added:
         finish_index(collection_id=collection_id, found=added, newest=newest)
     return added

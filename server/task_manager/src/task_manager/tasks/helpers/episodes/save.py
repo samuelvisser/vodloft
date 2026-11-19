@@ -66,6 +66,8 @@ def upsert_episode(
                 "source_key": collection.source_key,
                 "collection_id": collection.id,
                 "season_id": season.id,
+                # The Daily Wire indexes a show from its one link.
+                "collection_link_id": collection.links[0].id if collection.links else None,
                 "index": index_value,
                 "episode_identifier": ep_id,
                 "dw_episode_number": ep.episode_number or None,

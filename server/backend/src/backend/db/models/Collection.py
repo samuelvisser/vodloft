@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
     from backend.db.models import Season, DownloadProfile, Site
-    from backend.db.models import CustomIndexState
+    from backend.db.models import CustomIndexState, CollectionLink
 
 
 def _default_episode_order(context) -> str:
@@ -109,6 +109,17 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     custom_index_states: Mapped[list["CustomIndexState"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan"
     )
+    links: Mapped[list["CollectionLink"]] = relationship(
+        back_populates="collection", cascade="all, delete-orphan", order_by="CollectionLink.position",
+    )
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.links and self.sharing_url:
+            # A collection starts with the link it was added with as its only link.
+            from backend.db.models.CollectionLink import CollectionLink
+
+            self.links.append(CollectionLink(url=self.sharing_url))
 
     def __repr__(self) -> str:
         return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

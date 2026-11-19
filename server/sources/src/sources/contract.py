@@ -518,12 +518,17 @@ class ItemRefresh:
     may watch now. An item in none of them could not be checked this time and
     stays as it is, and a detail that leaves out the access it needs says nothing
     about whether it is open.
+
+    ``listed`` holds the items the link still lists, such as the videos still in a
+    playlist, when the Source read the link's whole listing; None when it could not
+    tell. An item it leaves out may still be at the Source on another link.
     """
 
     details: dict[str, VideoDetails] = field(default_factory=dict)
     removed: frozenset[str] = frozenset()
     refused: dict[str, str] = field(default_factory=dict)
     open: frozenset[str] = frozenset()
+    listed: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)

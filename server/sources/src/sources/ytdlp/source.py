@@ -927,7 +927,7 @@ class YtDlpSource(Source):
         """
         details: dict[str, VideoDetails] = {}
         missing: list[ItemRef] = []
-        listing, listed_open = self._refresh_from_listing(url, frozenset(item.slug for item in items))
+        listing, listed_open, still_listed = self._refresh_from_listing(url, frozenset(item.slug for item in items))
         youtube = [item.slug for item in items if _is_youtube(item.url)]
         catalogue = self._catalogue(adding=False) if youtube else None
         listed = [item.slug for item in items] if catalogue is None else [item.slug for item in items if not _is_youtube(item.url)]
@@ -951,7 +951,7 @@ class YtDlpSource(Source):
         checked = self._missing_from_api(missing)
         return ItemRefresh(
             details=details | checked.details, removed=checked.removed, refused=checked.refused,
-            open=listed_open | checked.open,
+            open=listed_open | checked.open, listed=still_listed,
         )
 
     def _missing_from_api(self, items: Sequence[ItemRef]) -> ItemRefresh:
@@ -1040,26 +1040,37 @@ class YtDlpSource(Source):
             open=frozenset(looked_open) | checked.open,
         )
 
-    def _refresh_from_listing(self, url: str, wanted: frozenset[str]) -> tuple[dict[str, VideoDetails], frozenset[str]]:
+    def _refresh_from_listing(
+        self, url: str, wanted: frozenset[str],
+    ) -> tuple[dict[str, VideoDetails], frozenset[str], frozenset[str] | None]:
         """Titles from the collection's flat listing, which takes one request a page instead of one a video.
 
         The listing has no reliable description or picture, so those are kept. It
         has the length of most YouTube videos, the uploader when the site says, and
         the badge YouTube shows on a video only members or paying subscribers can watch.
-        Returns those details, and which of the videos the listing says are open.
+        Returns those details, which of the videos the listing says are open, and
+        which of them it lists at all. That last one is None for a channel, whose
+        tabs may leave a video out, or when a page could not be read.
         """
         details: dict[str, VideoDetails] = {}
         listed_open: set[str] = set()
+        ref = mapping.youtube_ref(collection_url(url))
+        seen: set[str] | None = set() if ref is None or ref.kind == "playlist" else None
         for listing_url in _listing_urls(url):
             try:
                 listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
             except runner.YtDlpError as exc:
                 logger.info("Not refreshing from %s: %s", listing_url, exc)
+                seen = None
                 continue
             for entry in listing.get("entries") or []:
-                if not isinstance(entry, dict) or not entry.get("id") or not entry.get("title"):
+                if not isinstance(entry, dict) or not entry.get("id"):
                     continue
                 slug = video_slug(entry)
+                if seen is not None and slug in wanted:
+                    seen.add(slug)
+                if not entry.get("title"):
+                    continue
                 entry_url = entry.get("url") or entry.get("webpage_url")
                 if slug in wanted and entry_url and entry["title"] not in _UNAVAILABLE_TITLES:
                     duration = entry.get("duration")
@@ -1071,7 +1082,7 @@ class YtDlpSource(Source):
                     ))
                     if _listed_open(entry):
                         listed_open.add(slug)
-        return details, frozenset(listed_open)
+        return details, frozenset(listed_open), frozenset(seen) if seen is not None else None
 
     def search(self, query: str) -> SearchResults:
         """YouTube through the API while the search share has room, else through yt-dlp."""
