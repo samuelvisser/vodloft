@@ -38,11 +38,22 @@ const LIBRARY_SITE_FILTER_STORAGE_KEY = 'librarySiteFilter'
 const LIBRARY_KIND_FILTER_STORAGE_KEY = 'libraryKindFilter'
 const KIND_VALUES = ['creator', 'collection']
 
-/** Creators and collections, with creators named as their Sites call them when they all call them the same. */
-function kindOptions(creatorNames: Names[]) {
-    const kinds = new Set(creatorNames.map((names) => names.plural))
-    const creators = kinds.size === 1 ? capitalized([...kinds][0]) : 'Creators'
-    return [{value: 'creator', label: creators}, {value: 'collection', label: 'Collections'}]
+type Noun = {singular: string, plural: string}
+
+/** What the library's creators are called: as their Sites call them when they all call them the same, such as hosts. */
+function creatorNoun(creatorNames: Names[]): Noun {
+    const kinds = new Map(creatorNames.map((names) => [names.plural, names]))
+    return kinds.size === 1 ? [...kinds.values()][0] : {singular: 'creator', plural: 'creators'}
+}
+/** Creators and collections. */
+function kindOptions(creators: Noun) {
+    return [{value: 'creator', label: capitalized(creators.plural)}, {value: 'collection', label: 'Collections'}]
+}
+const COLLECTION_NOUN: Noun = {singular: 'collection', plural: 'collections'}
+const MEDIA_TYPE_NOUNS: Record<MediaType, Noun> = {
+    collections: COLLECTION_NOUN,
+    movies: {singular: 'movie', plural: 'movies'},
+    videos: {singular: 'video', plural: 'videos'},
 }
 const LIBRARY_COLLECTION_SORT_STORAGE_KEY = 'libraryCollectionSort'
 
@@ -358,6 +369,13 @@ export default function LibraryPage() {
     const matchingCount = activeType === 'collections' ? filteredCreators.length + filteredCollections.length
         : activeType === 'movies' ? filteredMovies.length
             : filteredVideos.length
+    // Name what the count holds: one kind of tile when the kind filter picks one, "items" when creators and
+    // collections show together.
+    const creatorsNoun = creatorNoun((creators ?? []).map((creator) => creator.creatorNames))
+    const matchingNoun = activeType !== 'collections' ? MEDIA_TYPE_NOUNS[activeType]
+        : !showKindFilter ? COLLECTION_NOUN
+            : activeKindFilter.length !== 1 ? {singular: 'item', plural: 'items'}
+                : activeKindFilter[0] === 'creator' ? creatorsNoun : COLLECTION_NOUN
     const resetFilters = () => {
         setSiteFilter([])
         setCollectionTypeFilter([])
@@ -397,7 +415,7 @@ export default function LibraryPage() {
                     activeCount={activeFilterCount}
                     footer={filtered && (
                         <div className="filter-bar-count" aria-live="polite">
-                            <strong>{matchingCount.toLocaleString()} matching {activeType}</strong>
+                            <strong>{matchingCount.toLocaleString()} matching {matchingCount === 1 ? matchingNoun.singular : matchingNoun.plural}</strong>
                             <button type="button" className="filter-chip-reset" onClick={resetFilters}>Reset filters</button>
                         </div>
                     )}
@@ -405,7 +423,7 @@ export default function LibraryPage() {
                     {showChips && (
                         <>
                             {showKindFilter && (
-                                <ChipFilter label="Kind" options={kindOptions((creators ?? []).map((creator) => creator.creatorNames))} selected={activeKindFilter} onChange={setKindFilter}/>
+                                <ChipFilter label="Kind" options={kindOptions(creatorsNoun)} selected={activeKindFilter} onChange={setKindFilter}/>
                             )}
                             <ChipFilter label="Site" options={siteOptions} selected={activeSiteFilter} onChange={setSiteFilter}/>
                             {showTypeFilter && (
