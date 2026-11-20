@@ -68,6 +68,10 @@
 .creator-preset:focus-within { outline: 2px solid #3b82f6; outline-offset: 2px; }
 
 .creator-section-group h2 { font-size: 1rem; margin: 0 0 .5rem; }
+.creator-section-group-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: .5rem; }
+.creator-section-group-head h2 { margin: 0; }
+.creator-section-row.bulk-row { cursor: pointer; }
+.creator-section-row.is-selected { background: rgba(59, 130, 246, .12); }
 .creator-section-list { display: flex; flex-direction: column; border: 1px solid rgba(100, 116, 139, 0.24); border-radius: 12px; }
 .creator-section-row { display: flex; align-items: center; gap: .75rem; padding: .6rem .75rem; }
 .creator-section-row + .creator-section-row { border-top: 1px solid rgba(100, 116, 139, 0.24); }
