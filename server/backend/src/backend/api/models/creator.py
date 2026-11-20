@@ -295,6 +295,12 @@ class CreatorCombineAPIIn(RequestBase):
     other_slug: str = Field(min_length=1, max_length=255)
 
 
+class CreatorSectionsAPIShow(RequestBase):
+    """Show sections of a creator that were hidden on the creator page there again."""
+
+    refs: list[str] = Field(min_length=1, max_length=500)
+
+
 class CreatorSectionsAPIAdd(RequestBase):
     """Add sections of a creator to its collections, or ignore them."""
 

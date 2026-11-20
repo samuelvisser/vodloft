@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from backend.api.models.creator import (
     CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorLookupAPIRequest,
     CreatorEpisodePageAPIRead, CreatorPageAPIRead, CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd,
+    CreatorSectionsAPIShow,
 )
 from backend.api.pagination import InvalidCursorError
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
@@ -19,7 +20,7 @@ from backend.api.endpoints.movies.service import look_up_movies
 from . import lookups
 from .service import (
     CreatorNotFoundError, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
-    look_up_creator, lookup_creator_names, move_creator_reassigned, record_creator_opened, move_creator_section, update_creator,
+    look_up_creator, lookup_creator_names, move_creator_reassigned, record_creator_opened, move_creator_section, show_sections, update_creator,
 )
 
 router = APIRouter(prefix="/creators", tags=["Creators"])
@@ -128,6 +129,15 @@ def creator_add_sections(slug: str, account_id: int, body: CreatorSectionsAPIAdd
         )
 
     return _found(add)
+
+
+@router.post(
+    "/{slug}/accounts/{account_id}/sections/show", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)],
+    response_model=CreatorPageAPIRead,
+)
+def creator_show_sections(slug: str, account_id: int, body: CreatorSectionsAPIShow):
+    """Show sections of one of the creator's accounts that were hidden on the creator page there again."""
+    return _found(lambda: run_write_transaction(lambda s: show_sections(s, slug, account_id, body), concurrent=True))
 
 
 @router.post(

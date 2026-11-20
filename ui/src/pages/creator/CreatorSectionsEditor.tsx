@@ -5,7 +5,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {toast} from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 import {can} from '../../lib/access'
-import {addCreatorSections, moveCreatorSection, splitCreatorAccount} from '../../lib/queries'
+import {addCreatorSections, moveCreatorSection, showCreatorSections, splitCreatorAccount} from '../../lib/queries'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import CreatorBulkBar from './CreatorBulkEdit'
@@ -135,6 +135,7 @@ export default function CreatorSectionsEditor({creator, part}: {
     const queryClient = useQueryClient()
     const navigate = useNavigate()
     const [busy, setBusy] = useState<string | null>(null)
+    const [unhiding, setUnhiding] = useState<string | null>(null)
     const [actionError, setActionError] = useState<string | null>(null)
     const [moving, setMoving] = useState<{item: AccountSection, to: Place} | null>(null)
     const [sectionBusy, setSectionBusy] = useState(false)
@@ -164,6 +165,19 @@ export default function CreatorSectionsEditor({creator, part}: {
             setActionError(exc instanceof Error ? exc.message : String(exc))
         } finally {
             setBusy(null)
+        }
+    }
+    // A section hidden on the creator page shows there again.
+    const unhide = async ({account, section}: AccountSection) => {
+        setUnhiding(sectionKey(account, section.ref))
+        setActionError(null)
+        try {
+            queryClient.setQueryData(['creator', slug], await showCreatorSections(slug, account.id, [section.ref]))
+            toast.success(`${section.title} shows on ${creator.title}'s page again`)
+        } catch (exc) {
+            setActionError(exc instanceof Error ? exc.message : String(exc))
+        } finally {
+            setUnhiding(null)
         }
     }
     const moveSection = async () => {
@@ -237,6 +251,11 @@ export default function CreatorSectionsEditor({creator, part}: {
                 <button type="button" className="btn btn-link" disabled={busy !== null}
                         onClick={() => void place(item.account, {ref: item.section.ref, target: 'skip'})}>
                     Ignore
+                </button>
+            )}
+            {item.section.status === 'ignored' && (
+                <button type="button" className="btn" disabled={busy !== null || unhiding !== null} onClick={() => void unhide(item)}>
+                    <FontAwesomeIcon icon={faIcon('fass', unhiding === sectionKey(item.account, item.section.ref) ? 'spinner' : 'eye')} spin={unhiding === sectionKey(item.account, item.section.ref)} aria-hidden="true"/> Show on creator page
                 </button>
             )}
         </div>
