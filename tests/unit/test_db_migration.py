@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "bb1c178245cc"
+HEAD_REVISION = "f3df05c49000"
 
 
 @pytest.fixture
@@ -1907,10 +1907,24 @@ def test_a_profile_for_podcasts_and_series_is_stored_under_its_own_name(migratio
         column = next(c for c in inspect(engine).get_columns("local_media_profiles_collection") if c["name"] == "collection_scope")
         return column["default"]
 
-    command.upgrade(config, "bb1c178245cc")
+    command.upgrade(config, "f3df05c49000")
     assert scopes() == ["podcast-and-series", "podcast", "music_tracks"]
     assert "podcast-and-series" in scope_default()
 
     command.downgrade(config, "7d3b9e41a6c2")
     assert scopes() == ["both", "podcast", "music_tracks"]
     assert "both" in scope_default()
+
+
+def test_a_database_that_renamed_podcasts_and_series_early_still_gets_the_lists_and_section_types(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "bb1c178245cc")
+    assert "new_lists" not in {c["name"] for c in inspect(engine).get_columns("collections")}
+
+    command.upgrade(config, "head")
+    assert "new_lists" in {c["name"] for c in inspect(engine).get_columns("collections")}
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT alembic_version_num FROM settings")).scalars().all() == [HEAD_REVISION]
