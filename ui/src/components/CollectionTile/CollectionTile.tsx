@@ -30,12 +30,14 @@ type CollectionTileProps = {
     subtitle?: string | null
     /** Show the collection's Source on its artwork. */
     showSource?: boolean
+    /** A label on the artwork's top corner, such as the creator's main collection. */
+    badge?: string | null
     /** More beside the episode count. */
     children?: ReactNode
 }
 
 /** A collection as the Library shows it: square artwork, its title, a line under it, and its episodes and years. */
-export default function CollectionTile({collection, subtitle, showSource = true, children}: CollectionTileProps) {
+export default function CollectionTile({collection, subtitle, showSource = true, badge, children}: CollectionTileProps) {
     // The tile is square, so square artwork comes first when a Source has it.
     const image = toImageUrl(
         collection.thumbnailSquarePath || collection.thumbnailPortraitPath || collection.thumbnailLandscapePath
@@ -48,6 +50,7 @@ export default function CollectionTile({collection, subtitle, showSource = true,
                 {image
                     ? <CollectionTileArt key={image} src={image}/>
                     : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
+                {badge && <span className="badge library-tile-badge">{badge}</span>}
                 {showSource && <SourceBadge sourceKey={collection.sourceKey} className="library-tile-source"/>}
             </span>
             <span className="library-tile-copy">
