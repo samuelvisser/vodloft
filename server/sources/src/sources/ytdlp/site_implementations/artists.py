@@ -101,7 +101,9 @@ class ArtistImplementation(OtherSitesImplementation):
         handle = self.handle(root)
         # How many of each type of list the artist has, in the Site's words, such as "2 albums" and "1 playlist".
         counts = Counter(section.type for section in sections if section.kind is SectionKind.LIST)
-        facts = tuple(f"{count} {type_.names.singular if count == 1 else type_.names.plural}" for type_, count in counts.items())
+        # Listed in the Site's order of its list types, not in the order the lookups happened to finish.
+        facts = tuple(f"{counts[type_]} {type_.names.singular if counts[type_] == 1 else type_.names.plural}"
+                      for type_ in self.site.types_of(SectionKind.LIST) if counts[type_])
         return CreatorDetails(
             ref=handle, url=root, title=str(name or handle), avatar_url=avatar.result(),
             facts=facts or (f"0 {self.site.types_of(SectionKind.LIST)[0].names.plural}",),
