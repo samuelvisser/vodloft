@@ -1,6 +1,6 @@
 import {sourceControls} from '../../lib/sourceControls'
 import {useState} from 'react'
-import {Link, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
@@ -19,7 +19,8 @@ import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge} from '../../components/common/RemovedFromSource'
-import SeasonPlaceNote, {MovedBadge, ReassignedBadge, useMoveToCollection, useMoveToSeason, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
+import SeasonPlaceNote, {MovedBadge, ReassignedBadge, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
+import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
 import {can} from '../../lib/access'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
 import SponsorBlockTimeline from '../../components/Episode/SponsorBlockTimeline'
@@ -119,12 +120,12 @@ export default function EpisodePage() {
         error: downloadsError,
         hasDomainData: hasDownloadState,
     } = useEpisodeDownloads(episodeId)
+    const navigate = useNavigate()
     // Its collection's playlists put it in another season, where it waits for the user to move it.
     const {data: seasonPlace} = useSeasonPlace(episodeId)
     const moved = !!seasonPlace?.belongsElsewhere
-    const {move: moveToSeason, moving: movingToSeason} = useMoveToSeason(episodeId ?? '', collectionId, words)
     const reassignedTo = seasonPlace?.collectionTitle ?? null
-    const {move: moveToCollection, moving: movingToCollection} = useMoveToCollection(episodeId ?? '', collectionId, words)
+    const [reconciling, setReconciling] = useState(false)
     const collectionProfiles = profiles?.filter((profile) => (
         isCollectionLocalMediaProfileAvailableFor(profile, collection?.type)
         // A profile limited to other Sites still shows the download it already made.
@@ -280,15 +281,12 @@ export default function EpisodePage() {
                                     label: `Move to ${reassignedTo}`,
                                     description: `Moves the ${words.episode.singular} to the collection its creator places it in now, with its files`,
                                     icon: faIcon('fass', 'arrow-right-from-bracket'),
-                                    disabled: movingToCollection,
-                                    onSelect: () => void moveToCollection(),
-                                }] : []),
-                                ...(moved && can('library', 'manage') ? [{
+                                    onSelect: () => setReconciling(true),
+                                }] : moved && can('library', 'manage') ? [{
                                     label: `Move to its new ${words.season.singular}`,
                                     description: `Moves the ${words.episode.singular} and renames its files to match`,
                                     icon: faIcon('fass', 'arrow-right-arrow-left'),
-                                    disabled: movingToSeason,
-                                    onSelect: () => void moveToSeason(),
+                                    onSelect: () => setReconciling(true),
                                 }] : []),
                             ]}
                             note={sourceControls(collection).metadataRefresh ? undefined : detailsChecked}
@@ -351,7 +349,19 @@ export default function EpisodePage() {
                     </div>
                 </header>
 
-                <SeasonPlaceNote episodeSlug={episode.slug} collectionSlug={collectionId} canManage={can('library', 'manage')} words={words} fileWords={fileWords}/>
+                <SeasonPlaceNote episodeSlug={episode.slug} canManage={can('library', 'manage')} onMove={() => setReconciling(true)} words={words} fileWords={fileWords}/>
+                <ReconcileDialog
+                    open={reconciling}
+                    path={`/episodes/${encodeURIComponent(episode.slug)}`}
+                    what={episode.title}
+                    onDismiss={() => setReconciling(false)}
+                    onDone={(result) => {
+                        // A Reassigned episode lives in its new collection now.
+                        if (result.collectionSlug && result.collectionSlug !== collectionId) {
+                            navigate(`/collection/${result.collectionSlug}/episode/${result.episodeSlug}`, {replace: true})
+                        }
+                    }}
+                />
 
                 {!!episode.description?.trim() && (
                     <section className="episode-description" aria-labelledby="episode-description-title">

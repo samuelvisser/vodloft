@@ -1,6 +1,7 @@
 import {sourceControls} from '../../lib/sourceControls'
 import OpenOnSiteLink from '../../components/common/OpenOnSiteLink'
 import CreatorLink from '../../components/Creator/CreatorLink'
+import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
 import {useMovedEpisodes, useReassignedEpisodes} from '../../components/Episode/SeasonPlaceNote'
 import {addedByLabel, can} from '../../lib/access'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -123,6 +124,8 @@ export default function CollectionPage() {
   const { id } = useParams()
   const {data: movedEpisodes} = useMovedEpisodes(id)
   const {data: reassignedEpisodes} = useReassignedEpisodes(id)
+  // Reassigned and Moved episodes wait for the Move action, which Home links to as well.
+  const waitingCount = (reassignedEpisodes?.size ?? 0) + (movedEpisodes?.size ?? 0)
   const startOperation = useStartOperation()
   const controlOperation = useControlOperation()
   const {isStarting, onStartingChange} = useStartingOperations()
@@ -147,9 +150,15 @@ export default function CollectionPage() {
   const [fileRenameConfirm, setFileRenameConfirm] = useState(false)
   const [metadataRewriteConfirm, setMetadataRewriteConfirm] = useState(false)
   const [renameSeasonFolders, setRenameSeasonFolders] = useState(true)
-  const [moveReassigned, setMoveReassigned] = useState(false)
   const [fileRenameProfileId, setFileRenameProfileId] = useState<number | undefined>(undefined)
   const [searchParams, setSearchParams] = useSearchParams()
+  const reconciling = searchParams.get('move') === '1'
+  const setReconciling = (open: boolean) => setSearchParams((current) => {
+    const next = new URLSearchParams(current)
+    if (open) next.set('move', '1')
+    else next.delete('move')
+    return next
+  }, {replace: true})
   const existingFilesParam = Number(searchParams.get('existingFiles'))
   const [existingFilesProfileId, setExistingFilesProfileId] = useState<number | null>(
     Number.isInteger(existingFilesParam) && existingFilesParam > 0 ? existingFilesParam : null,
@@ -593,6 +602,12 @@ export default function CollectionPage() {
       controls: operationControls(metadataRefreshOperation?.id, 'metadata refresh'),
       onSelect: () => setMetadataRefreshConfirm(true),
     }] : []),
+    ...(waitingCount ? [{
+      label: `Move ${fileWords.episode.plural}`,
+      description: `${waitingCount} downloaded ${waitingCount === 1 ? `${fileWords.episode.singular} belongs` : `${fileWords.episode.plural} belong`} in another ${reassignedEpisodes?.size ? 'collection' : words.season.singular} now`,
+      icon: faIcon('fass', 'arrow-right-arrow-left') as [string, string],
+      onSelect: () => setReconciling(true),
+    }] : []),
     {
       label: `Rename all ${fileWords.episode.singular} files`,
       icon: faIcon('fass', 'file-pen'),
@@ -956,6 +971,13 @@ export default function CollectionPage() {
         <p>Refresh metadata for every {words.episode.singular} in "{collection.title}"? This can take a while and is usually not needed.</p>
       </ActionConfirmDialogue>
 
+      <ReconcileDialog
+        open={reconciling}
+        path={`/collections/${encodeURIComponent(id)}`}
+        what={`the ${fileWords.episode.plural} of ${collection.title}`}
+        onDismiss={() => setReconciling(false)}
+      />
+
       <ActionConfirmDialogue
         open={fileRenameConfirm}
         operationDefinition={frontendOperationDefinitions['collection.rename_files']}
@@ -970,7 +992,7 @@ export default function CollectionPage() {
         scope_by_local_media_profile
         localMediaProfiles={actionLocalMediaProfiles}
         initialLocalMediaProfileId={fileRenameProfileId}
-        extraBody={{seasonFolders: renameSeasonFolders, moveReassigned: moveReassigned && !!reassignedEpisodes?.size}}
+        extraBody={{seasonFolders: renameSeasonFolders}}
       >
         <p>
           Rename existing {fileWords.episode.singular} files in "{collection.title}" so their paths match the current Local Media Profile output templates.
@@ -993,26 +1015,6 @@ export default function CollectionPage() {
             </span>
           </span>
         </label>
-        {!!reassignedEpisodes?.size && (
-          <label className="rename-season-folders">
-            <Switch
-              checked={moveReassigned}
-              onChange={setMoveReassigned}
-              onColor="#0ea5e9" offColor="#d1d5db" uncheckedIcon={false} checkedIcon={false}
-              height={18} width={34} handleDiameter={14}
-            />
-            <span>
-              <b>Also move reassigned {fileWords.episode.plural} out</b>
-              <span className="help">
-                {reassignedEpisodes.size === 1
-                  ? `One downloaded ${fileWords.episode.singular} belongs in another collection of this ${creatorNames?.singular} now. It moves there with its files`
-                  : `${reassignedEpisodes.size} downloaded ${fileWords.episode.plural} belong in other collections of this ${creatorNames?.singular} now. They move there with their files`},
-                or are downloaded again there when that collection uses another Local Media Profile. {fileWords.episode.Plural} reassigned
-                to this collection from elsewhere stay where they are.
-              </span>
-            </span>
-          </label>
-        )}
       </ActionConfirmDialogue>
 
       <ActionConfirmDialogue

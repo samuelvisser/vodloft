@@ -134,9 +134,6 @@ class CollectionFileRenameAPIRequest(RequestBase):
     season_folders: bool = True
     """Files move to their season's folder too. Without it each file keeps its folder and only its name changes.
     With it, a video with files also moves to the playlist season it belongs in now first."""
-    move_reassigned: bool = False
-    """The collection's reassigned videos move out to the collections of its creator they belong in now, with their
-    files. Videos reassigned to this collection from another one stay where they are."""
 
 
 class CollectionDownloadAllAPIRequest(RequestBase):

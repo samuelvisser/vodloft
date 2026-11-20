@@ -27,11 +27,13 @@ import {TitleList, namedSections} from './sectionNames'
  * what type of collection they are, before adding them. It suggests what Add collection suggests for the first one's
  * link.
  */
-export default function NewCreatorCollectionDialog({creator, items, onDismiss, onAdded}: {
+export default function NewCreatorCollectionDialog({creator, items, onDismiss, onAdded, onChoose}: {
     creator: CreatorPageRead
     items: AccountSection[]
     onDismiss: () => void
     onAdded?: () => void
+    /** Instead of adding them: what the user chose, for a list waiting for an answer, which the move dialog adds. */
+    onChoose?: (values: CreatorCollectionFormOut) => void
 }) {
     const queryClient = useQueryClient()
     const {account, section} = items[0]
@@ -117,8 +119,8 @@ export default function NewCreatorCollectionDialog({creator, items, onDismiss, o
             icon={faIcon('fass', 'plus')}
             onDismiss={() => {if (!isSubmitting) onDismiss()}}
             confirmButton={{
-                label: isSubmitting ? 'Adding…' : one ? 'Add collection' : `Add ${items.length} collections`,
-                onClick: () => void submit(),
+                label: onChoose ? 'Next' : isSubmitting ? 'Adding…' : one ? 'Add collection' : `Add ${items.length} collections`,
+                onClick: () => void (onChoose ? form.handleSubmit((values) => onChoose(values))() : submit()),
                 disabled: suggestion.isLoading || isSubmitting,
             }}
         >

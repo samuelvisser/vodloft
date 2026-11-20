@@ -1,3 +1,4 @@
+import {CollectionWordsSchema} from './collection_contract'
 import {z} from 'zod'
 import {DwMembershipLevelReg} from '../dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg} from '../collection'
@@ -234,6 +235,7 @@ export const CreatorPageReadSchema = CreatorReadSchema.extend({
     accounts: z.array(CreatorPageAccountReadSchema),
     /** Downloaded episodes the creator places in another of its collections than the one they are in. */
     reassignedCount: z.number().default(0),
+    movedCount: z.number().default(0),
 })
 export type CreatorPageRead = z.infer<typeof CreatorPageReadSchema>
 
@@ -326,7 +328,11 @@ export type CreatorCollectionFormIn = z.input<typeof CreatorCollectionFormSchema
 export type CreatorCollectionFormOut = z.output<typeof CreatorCollectionFormSchema>
 
 /** One feed or list of the creator that goes elsewhere. */
-export type SectionMove = {accountId: number, ref: string, target: typeof SectionTargetValues[number], collectionSlug?: string}
+export type SectionMove = {
+    accountId: number, ref: string, target: typeof SectionTargetValues[number], collectionSlug?: string
+    /** For a list waiting for an answer that becomes a collection of its own: its type and episode identification. */
+    type?: string, episodeIdentifier?: string
+}
 
 /** The videos of one feed or list that leave a collection or join it. */
 export const MovedPartSchema = z.object({
@@ -334,7 +340,7 @@ export const MovedPartSchema = z.object({
     sectionKind: z.enum(['feed', 'list', 'show', 'item']),
     /** What moves, in the Site's words: shorts for a feed, videos for a list. */
     names: NamesSchema,
-    direction: z.enum(['out', 'in', 'leave', 'season', 'loose']),
+    direction: z.enum(['out', 'in', 'leave', 'season', 'loose', 'moved']),
     count: z.number(),
     otherTitle: z.string().nullable().optional(),
     examples: z.array(z.string()),
@@ -366,3 +372,22 @@ export type MoveCollection = z.infer<typeof MoveCollectionSchema>
 
 export const SectionMovesPreviewSchema = z.object({collections: z.array(MoveCollectionSchema)})
 export type SectionMovesPreview = z.infer<typeof SectionMovesPreviewSchema>
+
+/** Where an episode is after its Move action moved it. */
+export const ReconcileResultSchema = z.object({
+    episodeSlug: z.string().nullable().optional(),
+    collectionSlug: z.string().nullable().optional(),
+})
+export type ReconcileResult = z.infer<typeof ReconcileResultSchema>
+
+/** A creator, or a collection of no creator, whose Reassigned or Moved episodes wait for its Move action. */
+export const MovesWaitingSchema = z.object({
+    kind: z.enum(['creator', 'collection']),
+    slug: z.string(),
+    title: z.string(),
+    reassigned: z.number(),
+    moved: z.number(),
+    /** What it calls its seasons and episodes. */
+    words: CollectionWordsSchema,
+})
+export type MovesWaiting = z.infer<typeof MovesWaitingSchema>

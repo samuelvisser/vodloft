@@ -726,11 +726,9 @@ def request_collection_file_rename(
         local_media_profile_id: int | None,
         *,
         season_folders: bool = True,
-        move_reassigned: bool = False,
 ) -> dict[str, bool | int | str]:
     """Rename existing collection artifacts using collision-safe profile-wide plans. With ``season_folders`` the
-    videos with files first move to the playlist seasons they belong in now, and take their season's number. With
-    ``move_reassigned`` the reassigned videos first move out to the collections they belong in now."""
+    videos with files first move to the playlist seasons they belong in now, and take their season's number."""
     from backend.services.link_seasons import place_in_link_seasons
     from backend.services.season_order import match_seasons_of_downloaded
 
@@ -741,11 +739,6 @@ def request_collection_file_rename(
     )
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
-    if move_reassigned:
-        from backend.services.reassigned import move_and_rename, reassigned_episodes
-
-        move_and_rename(s, reassigned_episodes(s, collection))
-        s.expire(collection)
     if season_folders:
         place_in_link_seasons(s, collection, with_files=True)
         match_seasons_of_downloaded(s, collection)

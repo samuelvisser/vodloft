@@ -10,9 +10,10 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import CollectionTileArt from '../../components/CollectionTileArt/CollectionTileArt'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import type {CreatorPageRead, SectionPlan} from '../../types/schemas/creator'
-import {choices, isMovie, placeMove, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
+import {choices, isMovie, placeLabel, placeMove, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
 import AnotherCollectionDialog, {otherCollections} from './AnotherCollectionDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
+import {isWaitingList, useAnswerList} from './useAnswerList'
 import CreatorBulkBar from './CreatorBulkEdit'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import '../../components/ProfileBulkEdit/ProfileBulkEdit.css'
@@ -46,6 +47,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const [open, setOpen] = useState(false)
     const [showAll, setShowAll] = useState(false)
     const [busy, setBusy] = useState<string | null>(null)
+    const {answer, dialog: answerDialog} = useAnswerList(creator)
     // Bulk edit: whether it is on, and the keys of the chosen sections.
     const [selecting, setSelecting] = useState(false)
     const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
@@ -105,10 +107,15 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
         if ((event.target as Element).closest('.creator-more-add') || menuWasOpen.current) return
         event.currentTarget.querySelector<HTMLButtonElement>('.creator-more-plus, .action-menu-trigger')?.click()
     }
-    const add = async (item: AccountSection, plan: SectionPlan) => {
+    const add = async (item: AccountSection, plan: SectionPlan, to?: string) => {
         // A movie needs no collection settings.
         if (plan.target === 'own' && item.section.kind !== 'item') {
             setAdding(item)
+            return
+        }
+        if (isWaitingList(item) && plan.target !== 'exclude') {
+            // Its answer moves its videos, so the move dialog asks first.
+            answer(item, {target: plan.target, collectionSlug: plan.collectionSlug}, to ?? '')
             return
         }
         setBusy(key(item))
@@ -139,7 +146,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                 items={[
                     ...options.map((option) => ({
                         label: option.label, description: option.description, disabled: busy !== null,
-                        onSelect: () => void add(item, option.plan),
+                        onSelect: () => void add(item, option.plan, option.label),
                     })),
                     ...(item.section.kind !== 'item' && otherCollections(creator, item).length > 0 ? [{
                         label: 'Another collection…', description: `Into one of ${creator.title}'s other collections`,
@@ -265,10 +272,19 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
             {picking && (
                 <AnotherCollectionDialog
                     creator={creator} item={picking} confirmLabel="Add" onDismiss={() => setPicking(null)}
-                    onPick={async (place) => { setPicking(null); await add(picking, {ref: picking.section.ref, ...placeMove(place)}) }}
+                    onPick={async (place) => { setPicking(null); await add(picking, {ref: picking.section.ref, ...placeMove(place)}, placeLabel(creator, picking, place)) }}
                 />
             )}
-            {adding && <NewCreatorCollectionDialog creator={creator} items={[adding]} onDismiss={() => setAdding(null)}/>}
+            {adding && (
+                <NewCreatorCollectionDialog
+                    creator={creator} items={[adding]} onDismiss={() => setAdding(null)}
+                    onChoose={isWaitingList(adding) ? (values) => {
+                        answer(adding, {target: 'own', type: values.type, episodeIdentifier: values.episodeIdentifier}, 'Collection of its own')
+                        setAdding(null)
+                    } : undefined}
+                />
+            )}
+            {answerDialog}
         </section>
     )
 }

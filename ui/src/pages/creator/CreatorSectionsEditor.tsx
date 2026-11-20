@@ -8,6 +8,7 @@ import {can} from '../../lib/access'
 import {addCreatorSections, showCreatorSections, splitCreatorAccount} from '../../lib/queries'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
+import {isWaitingList, useAnswerList} from './useAnswerList'
 import AnotherCollectionDialog, {otherCollections} from './AnotherCollectionDialog'
 import CreatorBulkBar from './CreatorBulkEdit'
 import {sectionNouns} from './sectionNames'
@@ -209,6 +210,8 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
     const [selecting, setSelecting] = useState(false)
     const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
 
+    // A waiting list's answer moves its videos, so it asks through the move dialog first.
+    const {answer, dialog: answerDialog} = useAnswerList(creator)
     const mayAdd = can('add_media')
     const mayManage = can('library', 'manage')
     const slug = creator.slug
@@ -322,13 +325,19 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
         <div className="creator-row-actions">
             {choices(creator, item).map((choice) => (
                 <button key={choice.label} type="button" className="btn" disabled={busy !== null}
-                        onClick={() => choice.plan.target === 'own' && item.section.kind !== 'item' ? setAdding(item) : void place(item.account, choice.plan)}>
+                        onClick={() => choice.plan.target === 'own' && item.section.kind !== 'item'
+                            ? setAdding(item)
+                            : isWaitingList(item)
+                                ? answer(item, {target: choice.plan.target}, choice.label)
+                                : void place(item.account, choice.plan)}>
                     {busy === sectionKey(item.account, item.section.ref) ? 'Adding…' : choice.label}
                 </button>
             ))}
             {item.section.kind !== 'item' && otherCollections(creator, item).length > 0 && (
                 <button type="button" className="btn" disabled={busy !== null}
-                        onClick={() => setPicking({item, confirm: 'Add', pick: (to) => place(item.account, {ref: item.section.ref, ...placeMove(to)})})}>
+                        onClick={() => setPicking({item, confirm: isWaitingList(item) ? 'Next' : 'Add', pick: (to) => isWaitingList(item)
+                            ? answer(item, placeMove(to), placeLabel(creator, item, to))
+                            : place(item.account, {ref: item.section.ref, ...placeMove(to)})})}>
                     Another collection…
                 </button>
             )}
@@ -505,7 +514,16 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                     onPick={async (to) => { await picking.pick(to); setPicking(null) }}
                 />
             )}
-            {adding && <NewCreatorCollectionDialog creator={creator} items={[adding]} onDismiss={() => setAdding(null)}/>}
+            {adding && (
+                <NewCreatorCollectionDialog
+                    creator={creator} items={[adding]} onDismiss={() => setAdding(null)}
+                    onChoose={isWaitingList(adding) ? (values) => {
+                        answer(adding, {target: 'own', type: values.type, episodeIdentifier: values.episodeIdentifier}, 'Collection of its own')
+                        setAdding(null)
+                    } : undefined}
+                />
+            )}
+            {answerDialog}
         </>
     )
 }

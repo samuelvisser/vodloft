@@ -121,7 +121,7 @@ When a playlist season is turned off, its downloaded videos move to the season a
 
 When the creator takes such a video out of the playlist, VODLoft never deletes its files on its own. A video without files leaves the collection. A downloaded one stays, marked **Removed**, and the Home page asks whether to keep it, as for a video its site no longer has. **Keep** keeps it in the collection; **Don't keep** removes it, files and all. If the playlist lists it again, it is back as usual.
 
-A downloaded video stays where it is when it belongs in another season now, for example because it was added to a playlist after it was downloaded, since moving it renames its files. The collection marks it **Moved**, and its page explains where it belongs now. **Move it there** on its page, or **Move to its new season** in its **Actions** menu, moves it and renames its files to match. To move every such video of the collection at once, use **Rename all episode files** with **Rename season folders too**.
+A downloaded video stays where it is when it belongs in another season now, for example because it was added to a playlist after it was downloaded, since moving it renames its files. The collection marks it **Moved**, and its page explains where it belongs now. **Move it there** on its page, or **Move to its new season** in its **Actions** menu, moves it and renames its files to match. To move every such video of the collection at once, use **Move episodes** in the collection's **Actions** menu. Both first show what the move does. The **Home** page lists collections with such videos under **Needs attention**.
 
 Episodes can also have different Daily Wire types, such as regular episodes and auxiliary items. Profiles can choose which types they apply to.
 
@@ -284,13 +284,17 @@ The creator's **Edit** page holds:
 
 A creator keeps each of their videos in one of its collections, and a playlist wins over a feed: a video in a playlist that is a collection of its own belongs in that collection, not in the main collection with the rest of the uploads. A video that is not downloaded yet just goes there. The main collection doesn't add a video that such a playlist has, and leaves one it had.
 
-The same goes for every playlist that isn't in a collection: one you excluded from the library, or one that waits for your choice, keeps its videos out of the creator's main collection too, even though the creator's Videos feed lists them. This always wins, so a video stays out even when a playlist that is a season of the main collection has it too. That way each video of a creator ends up in only one collection. A video that was already downloaded stays where it is, with its files, until you remove it.
+The same goes for a playlist you excluded from the library: it keeps its videos out of the creator's main collection too, even though the creator's Videos feed lists them. This always wins, so a video stays out even when a playlist that is a season of the main collection has it too. That way each video of a creator ends up in only one collection. A video that was already downloaded stays where it is, with its files, until you remove it.
 
-When a video is already downloaded, for example because the creator put it in a playlist only after VODLoft downloaded it, it stays where it is, files and all, with a **Reassigned** badge. Its page says which collection it belongs in now. That collection doesn't download it again while it waits. You choose when it moves:
+A new playlist that waits for your choice changes nothing yet: its videos stay where they would be without it, and keep downloading there, so you don't have to answer right away. When you do answer, on the creator's **Edit** page or in the **Not in your library** list, VODLoft first shows what your choice moves, the same way as moving playlists on the Edit page (see below), and then moves the playlist's videos to their new place at once, downloaded files and all.
 
-- **Move to** the collection, in the episode's **Actions** menu, moves that one.
-- **Also move reassigned episodes out** in **Rename all episode files** moves the collection's reassigned episodes along with the rename. It only moves them out of this collection, never into it.
-- **Move reassigned episodes** in the creator page's **Actions** menu moves every reassigned episode of the creator.
+When a video is already downloaded, for example because the creator put it in a playlist only after VODLoft downloaded it, it stays where it is, files and all, with a **Reassigned** badge. Its page says which collection it belongs in now. That collection doesn't download it again while it waits. The **Home** page lists every creator and collection with such videos under **Needs attention**, so they don't go unnoticed. You choose when they move:
+
+- **Move to** the collection, on the episode's page or in its **Actions** menu, moves that one.
+- **Move episodes** in a collection's **Actions** menu moves the collection's Reassigned and Moved episodes.
+- **Move episodes** in the creator page's **Actions** menu moves every Reassigned and Moved episode of the creator.
+
+Each of these first shows what the move does to every collection it touches: which episodes leave and join, which files are renamed, and which episodes get a new number, with a switch to keep the numbers as they are. It is the same window as moving playlists on the creator's **Edit** page.
 
 How the files move depends on the new collection's Download Profiles:
 

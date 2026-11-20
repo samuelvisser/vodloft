@@ -2,12 +2,12 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from backend.api.models.creator import (
     CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorLookupAPIRequest,
-    CreatorEpisodePageAPIRead, CreatorPageAPIRead, CreatorSectionMovesAPIIn, CreatorSectionMovesPreviewAPIRead,
+    CreatorEpisodePageAPIRead, CreatorPageAPIRead, CreatorSectionMovesAPIIn, CreatorSectionMovesPreviewAPIRead, ReconcileAPIIn, ReconcileAPIRead,
     CreatorSectionsAPIAdd,
     CreatorSectionsAPIShow,
 )
 from backend.api.pagination import InvalidCursorError
-from backend.api.models.collection_seasons import ReassignedMoveAPIRead
+from backend.api.endpoints.reconcile import creator_scope, move, preview_move
 from backend.api.models.source import NamesAPIRead
 from backend.api.steps import STEPS_RESPONSE, stream_steps
 from backend.app import db_session
@@ -21,7 +21,7 @@ from backend.api.endpoints.movies.service import look_up_movies
 from . import lookups
 from .service import (
     CreatorNotFoundError, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
-    look_up_creator, lookup_creator_names, move_creator_reassigned, record_creator_opened, preview_creator_moves, show_sections, update_creator,
+    look_up_creator, lookup_creator_names, record_creator_opened, preview_creator_moves, show_sections, update_creator,
 )
 
 router = APIRouter(prefix="/creators", tags=["Creators"])
@@ -177,11 +177,19 @@ def creator_combine(slug: str, body: CreatorCombineAPIIn):
 
 
 @router.post(
-    "/{slug}/move-reassigned", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ReassignedMoveAPIRead,
+    "/{slug}/reconcile/preview", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CreatorSectionMovesPreviewAPIRead,
 )
-def creator_move_reassigned(slug: str):
-    """Move every reassigned episode of the creator to the collection it belongs in now, with its files."""
-    return _found(lambda: run_write_transaction(lambda s: move_creator_reassigned(s, slug)))
+def creator_reconcile_preview(slug: str):
+    """What moving the creator's Reassigned and Moved episodes to where they belong now does to each of its
+    collections. Changes nothing."""
+    return run_write_transaction(lambda s: preview_move(s, creator_scope(slug)))
+
+
+@router.post("/{slug}/reconcile", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ReconcileAPIRead)
+def creator_reconcile(slug: str, body: ReconcileAPIIn):
+    """Move the creator's Reassigned and Moved episodes, with their files, to where they belong now."""
+    return run_write_transaction(lambda s: move(s, creator_scope(slug), body))
 
 
 @router.delete("/{slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], status_code=status.HTTP_204_NO_CONTENT)

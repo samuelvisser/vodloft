@@ -156,7 +156,9 @@ def test_a_video_in_two_playlists_goes_to_the_one_that_comes_first(source, sessi
 
 def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, session):
     from backend.db.models import Episode
-    from backend.services.link_seasons import belongs_elsewhere, move_to_where_it_belongs, moved_episodes
+    from backend.services.link_seasons import belongs_elsewhere, moved_episodes
+    from backend.db.core import run_write_transaction
+    from backend.services.reconcile import ReconcileScope, reconcile
 
     source.videos = [_video("a", 2024), _video("b", 2025)]
     source.lists = [_list("PLone", "One")]
@@ -174,8 +176,10 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
     assert belongs_elsewhere(session, episode).link.title == "One"
     # The collection view marks it Moved.
     assert [moved.source_slug for moved in moved_episodes(session, collection)] == ["b"]
-    assert move_to_where_it_belongs(session, episode)
+    episode_id = episode.id
     session.commit()
+    run_write_transaction(lambda w: reconcile(w, ReconcileScope.of_episode(w.get(Episode, episode_id)), renumber={}))
+    session.expire_all()
     # The season it left is empty now, and goes.
     assert _seasons(session) == [("One", 1, ["a", "b"])]
     session.expire_all()

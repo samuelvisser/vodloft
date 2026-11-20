@@ -26,6 +26,7 @@ import {
     CreatorEpisodePageReadSchema, CreatorLookupReadSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorLookupRead, type CreatorPageRead, type CreatorRead,
     CollectionCreatorLeaveSchema, CollectionCreatorMatchSchema, type CollectionCreatorLeave, type CollectionCreatorMatch,
     type SectionPlan, SectionMovesPreviewSchema, type SectionMove, type SectionMovesPreview,
+    ReconcileResultSchema, type ReconcileResult, MovesWaitingSchema,
 } from '../types/schemas/creator'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
@@ -890,6 +891,19 @@ export async function addCreatorSections(slug: string, accountId: number, sectio
     return CreatorPageReadSchema.parse(await response.json())
 }
 
+/** Move feeds and lists of a creator elsewhere, with their videos, as saving its Edit page does; ``renumber`` says
+ * which collections keep their numbers. Answers with the creator's page. */
+export async function moveCreatorSections(slug: string, moves: SectionMove[], renumber: Record<string, boolean>): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({moves, renumber}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return CreatorPageReadSchema.parse(await response.json())
+}
+
 /** Show sections of a creator's account that were hidden on the creator page there again. */
 export async function showCreatorSections(slug: string, accountId: number, refs: string[]): Promise<CreatorPageRead> {
     const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections/show`, {
@@ -914,6 +928,36 @@ export async function previewCreatorMoves(slug: string, moves: SectionMove[], si
     })
     if (!response.ok) throw await responseError(response)
     return SectionMovesPreviewSchema.parse(await response.json())
+}
+
+/** What the Move action of a creator, collection or episode does, by its API path such as `/creators/<slug>`:
+ * moving its Reassigned and Moved episodes to where they belong now. Changes nothing. */
+export async function previewReconcile(path: string, signal?: AbortSignal): Promise<SectionMovesPreview> {
+    const response = await fetch(`${apiUrl()}${path}/reconcile/preview`, {method: 'POST', credentials: 'include', signal})
+    if (!response.ok) throw await responseError(response)
+    return SectionMovesPreviewSchema.parse(await response.json())
+}
+
+/** Move the Reassigned and Moved episodes of a creator, collection or episode, with whether each collection
+ * numbers its episodes again. */
+export async function reconcile(path: string, renumber: Record<string, boolean>): Promise<ReconcileResult> {
+    const response = await fetch(`${apiUrl()}${path}/reconcile`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({renumber}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return ReconcileResultSchema.parse(await response.json())
+}
+
+/** The creators, and collections of no creator, whose Reassigned or Moved episodes wait to be moved. */
+export function useMovesWaiting(enabled = true) {
+    return useQuery({
+        queryKey: ['movesWaiting'],
+        enabled,
+        queryFn: ({signal}) => apiJson('/collections/moves-waiting', (data) => z.array(MovesWaitingSchema).parse(data), {signal}),
+    })
 }
 
 /** Make one of a creator's accounts a creator of their own again, with its collections. Answers with the new

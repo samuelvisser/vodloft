@@ -681,22 +681,3 @@ def moved_episodes(s: Session, collection: Collection) -> list[Episode]:
         .order_by(Episode.id)
     )
     return [episode for episode in episodes if places.belonging(episode) is not None]
-
-
-def move_to_where_it_belongs(s: Session, episode: Episode) -> bool:
-    """Move a video, files and all, to the season its collection's playlists put it in now. Returns whether it moved.
-
-    ``s`` is a write transaction's session."""
-    belonging = belongs_elsewhere(s, episode)
-    if belonging is None:
-        return False
-    collection = episode.collection
-    finder = SeasonFinder(s, collection)
-    left = episode.season_id
-    finder.move(episode, _season_for(finder, episode, belonging))
-    s.flush()
-    _drop_emptied(s, collection, {left})
-    arrange_seasons(s, collection)
-    # Its files move into its season's folder, so it takes that season's number.
-    match_seasons_of_downloaded(s, collection, {episode.id})
-    return True

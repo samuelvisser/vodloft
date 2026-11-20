@@ -283,6 +283,8 @@ class CreatorPageAPIRead(CreatorAPIRead):
     accounts: list[CreatorPageAccountAPIRead]
     reassigned_count: int = 0
     """The downloaded videos that the creator places in another of its collections than the one they are in."""
+    moved_count: int = 0
+    """The downloaded videos that a collection's lists put in another season than the one they are in."""
 
 
 class CreatorSectionMoveAPIIn(RequestBase):
@@ -295,6 +297,10 @@ class CreatorSectionMoveAPIIn(RequestBase):
     collection_slug: Optional[str] = None
     """With ``target`` main or main_loose, the collection it goes into, when that is not the account's own
     collection: one of the account's ``gatherable_slugs``."""
+    type: Optional[CollectionType] = None
+    episode_identifier: Optional[EpisodeIdentifier] = None
+    """For a list that waits for the user's choice and becomes a collection of its own: its type and how it numbers
+    its episodes; left out, those of the creator's collection."""
 
 
 class CreatorSectionMovesAPIIn(RequestBase):
@@ -310,8 +316,9 @@ class CreatorMovedPartAPIRead(ResponseBase):
     section_kind: Literal["feed", "list", "show", "item"]
     names: NamesAPIRead
     """What moves, in the Site's words: shorts for a feed, videos for a list."""
-    direction: Literal["out", "in", "leave", "season", "loose"]
-    """out to another collection, in from another one, or leave the Library."""
+    direction: Literal["out", "in", "leave", "season", "loose", "moved"]
+    """out to another collection, in from another one, leave the Library; or within the collection, season and loose
+    for a list that becomes a season or stops being one, and moved to the season named ``other_title``."""
     count: int
     other_title: Optional[str] = None
     examples: list[str]
@@ -347,6 +354,31 @@ class CreatorMoveCollectionAPIRead(ResponseBase):
 
 class CreatorSectionMovesPreviewAPIRead(ResponseBase):
     collections: list[CreatorMoveCollectionAPIRead]
+
+
+class ReconcileAPIIn(RequestBase):
+    """Move the Reassigned and Moved videos of a creator, a collection or one episode to where they belong now."""
+
+    renumber: dict[str, bool] = Field(default_factory=dict, max_length=200)
+    """By collection slug, whether a collection that gains or loses videos numbers them again; left out, it does."""
+
+
+class ReconcileAPIRead(ResponseBase):
+    """Where the moved episode is now, for one episode's Move action."""
+
+    episode_slug: Optional[str] = None
+    collection_slug: Optional[str] = None
+
+
+class MovesWaitingAPIRead(ResponseBase):
+    """A creator, or a collection of no creator, whose videos wait for its Move action."""
+
+    kind: Literal["creator", "collection"]
+    slug: str
+    title: str
+    reassigned: int = Field(validation_alias=AliasPath("waiting", "reassigned"))
+    moved: int = Field(validation_alias=AliasPath("waiting", "moved"))
+    words: CollectionWordsAPIRead
 
 
 class CreatorAPIUpdate(RequestBase):

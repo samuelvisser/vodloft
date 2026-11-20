@@ -132,7 +132,7 @@ def test_a_collection_does_not_add_a_video_a_playlist_of_another_collection_hold
 
 def _move(session, episode):
     from backend.db.core import run_write_transaction
-    from backend.services.reassigned import move_and_rename, reassignment_of
+    from backend.services.reassigned import move_reassigned, reassignment_of
 
     episode_id = episode.id
     session.commit()
@@ -140,11 +140,12 @@ def _move(session, episode):
     def work(w):
         from backend.db.models import Episode
 
-        return move_and_rename(w, [reassignment_of(w, w.get(Episode, episode_id))])
+        return move_reassigned(w, [reassignment_of(w, w.get(Episode, episode_id))])
 
-    result, operations = run_write_transaction(work)
+    result = run_write_transaction(work)
     session.expire_all()
-    return result, operations
+    # The collections whose files are renamed into them.
+    return result, sorted(result.rename)
 
 
 def test_moving_renames_a_download_the_new_collection_takes_with_the_same_local_media_profile(creator, session):
@@ -221,11 +222,42 @@ def test_the_api_shows_and_moves_reassigned_episodes(creator, client, session):
     assert t1_slug not in client.get("/api/collections/UCworkshop/season-settings/moved-episodes").json()["episodeSlugs"]
     assert client.get("/api/creators/workshop").json()["reassignedCount"] == 1
 
-    moved = client.post("/api/creators/workshop/move-reassigned")
+    page = client.get("/api/creators/workshop").json()
+    assert (page["reassignedCount"], page["movedCount"]) == (1, 1)
+    # Home says so, and links to the creator's Move action.
+    [waiting] = client.get("/api/collections/moves-waiting").json()
+    assert {key: waiting[key] for key in ("kind", "slug", "title", "reassigned", "moved")} == {
+        "kind": "creator", "slug": "workshop", "title": page["title"], "reassigned": 1, "moved": 1,
+    }
+    assert waiting["words"]["episode"]["plural"] == page["words"]["episode"]["plural"]
+    _settled()
+    preview = client.post("/api/creators/workshop/reconcile/preview")
+    assert preview.status_code == 200, preview.text
+    parts = {(item["slug"], part["direction"], part["count"]) for item in preview.json()["collections"] for part in item["parts"]}
+    # c1, which Building the Cabin holds, is Moved: it goes to that season in the same move.
+    assert parts == {("UCworkshop", "out", 1), ("PLtools", "in", 1), ("UCworkshop", "moved", 1)}
+    [moved_part] = [part for item in preview.json()["collections"] for part in item["parts"] if part["direction"] == "moved"]
+    assert (moved_part["otherTitle"], moved_part["examples"]) == ("Building the Cabin", ["Video c1"])
+    # The same move from the collection's and the episode's Move action.
+    assert client.post("/api/collections/UCworkshop/reconcile/preview").json() == preview.json()
+    [out, joins] = [
+        (item["slug"], [part["direction"] for part in item["parts"]])
+        for item in _ok(client.post(f"/api/episodes/{t1_slug}/reconcile/preview"))["collections"]
+    ]
+    assert (out, joins) == (("UCworkshop", ["out"]), ("PLtools", ["in"]))
+    assert client.get("/api/creators/workshop").json()["reassignedCount"] == 1
+
+    moved = client.post(f"/api/episodes/{t1_slug}/reconcile", json={})
 
     assert moved.status_code == 200, moved.text
-    assert (moved.json()["episodes"], moved.json()["renamed"]) == (1, 1)
+    assert moved.json()["collectionSlug"] == "PLtools"
     assert client.get("/api/creators/workshop").json()["reassignedCount"] == 0
+    _settled()
+    assert _ok(client.post("/api/collections/UCworkshop/reconcile", json={})) == {"episodeSlug": None, "collectionSlug": None}
+    # Nothing is left to move.
+    assert client.get("/api/collections/moves-waiting").json() == []
+    nothing = client.post("/api/creators/workshop/reconcile/preview")
+    assert nothing.status_code != 200 and "where it belongs" in nothing.json()["detail"]
 
 
 def _settled():
@@ -426,3 +458,8 @@ def test_a_downloaded_video_in_a_season_and_in_a_playlist_of_its_own_is_reassign
     assert [(item.episode.source_slug, item.target.collection.slug) for item in reassigned_episodes(session, main)] == [
         ("c1", "PLtools"),
     ]
+
+
+def _ok(response):
+    assert response.status_code == 200, response.text
+    return response.json()
