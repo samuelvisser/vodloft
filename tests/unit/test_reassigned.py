@@ -316,3 +316,81 @@ def test_a_video_only_the_playlist_collection_has_joins_the_creators_collection_
     session.expire_all()
     moved = session.get(EpisodeMediaDownload, download_id)
     assert (moved.media.collection_id, moved.media.season.name) == (main_id, "Tool Reviews")
+
+
+def test_a_creators_collection_leaves_a_video_its_feed_lists_to_the_playlist_that_is_a_collection_of_its_own(
+    client, session, tube, monkeypatch,
+):
+    """The creator's collection lists its uploads before Tool Reviews has listed its own videos: t1 and t2 still go
+    to Tool Reviews alone, and c1, in Building the Cabin too, which is a season of the creator's collection, stays."""
+    from backend.db.models import Collection, Episode
+    from sources import ItemRef
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
+
+    tools_url, cabin_url = "https://tube.example/playlist?list=PLtools", "https://tube.example/playlist?list=PLcabin"
+    lists = {tools_url: ["t1", "t2", "c1"], cabin_url: ["c1"]}
+    monkeypatch.setattr(tube, "list_episodes", lambda url, *, known, feeds=None: iter(
+        _video(slug, day) for day, slug in enumerate(lists.get(url, ["t1", "t2", "c1", "v1"]), start=1) if slug not in known
+    ))
+    monkeypatch.setattr(tube, "list_items", lambda url: tuple(
+        ItemRef(slug, f"https://tube.example/watch?v={slug}") for slug in lists[url]
+    ), raising=False)
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "PLcabin", "target": "main"}, {"ref": "PLtools", "target": "own"},
+    ]})
+    assert response.status_code == 201, response.text
+    main_id = session.scalar(select(Collection.id).where(Collection.slug == "UCworkshop"))
+    tools_id = session.scalar(select(Collection.id).where(Collection.slug == "PLtools"))
+    session.commit()
+
+    def slugs(collection_id):
+        session.expire_all()
+        return sorted(session.scalars(select(Episode.source_slug).where(Episode.collection_id == collection_id)))
+
+    index_listed_collection(session, collection_id=main_id, source=tube)
+    assert slugs(main_id) == ["c1", "v1"]
+    index_listed_collection(session, collection_id=tools_id, source=tube)
+    assert slugs(tools_id) == ["c1", "t1", "t2"]
+    # A new upload the creator put in Tool Reviews right away goes there too.
+    lists[tools_url].append("t3")
+    lists.setdefault(f"{ROOT}/videos", ["t1", "t2", "c1", "v1", "t3"])
+    index_listed_collection(session, collection_id=main_id, source=tube)
+    assert slugs(main_id) == ["c1", "v1"]
+
+
+def test_a_playlist_that_is_in_none_of_the_creators_collections_keeps_its_videos_out_of_them_too(
+    client, session, tube, monkeypatch,
+):
+    """Members' Cuts was skipped: the creator's collection leaves out its videos, also those its Videos feed lists. One
+    it had already goes when the collection syncs, unless it is downloaded."""
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, Episode
+    from sources import ItemRef
+    from task_manager.tasks.helpers.listed_collections import add_listed_episodes, index_listed_collection
+
+    members_url = "https://tube.example/playlist?list=PLmembers"
+    lists = {members_url: ["m1", "m2"]}
+    monkeypatch.setattr(tube, "list_episodes", lambda url, *, known, feeds=None: iter(
+        _video(slug, day) for day, slug in enumerate(["m1", "m2", "m3", "v1"], start=1) if slug not in known
+    ))
+    monkeypatch.setattr(tube, "list_items", lambda url: tuple(
+        ItemRef(slug, f"https://tube.example/watch?v={slug}") for slug in lists[url]
+    ), raising=False)
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "PLmembers", "target": "skip"},
+    ]})
+    assert response.status_code == 201, response.text
+    main_id = session.scalar(select(Collection.id).where(Collection.slug == "UCworkshop"))
+    session.commit()
+    # Indexed before VODLoft knew what Members' Cuts has; m1 was downloaded since.
+    run_write_transaction(lambda w: add_listed_episodes(w, collection_id=main_id, found=[_video("m1"), _video("m2", 2)]))
+    main = session.get(Collection, main_id)
+    local = _profile(session, "shows")
+    _download(session, _episode(session, main, "m1"), local, _download_profile(session, main, local))
+    session.commit()
+
+    lists[members_url].append("m3")
+    index_listed_collection(session, collection_id=main_id, source=tube)
+    session.expire_all()
+
+    assert sorted(session.scalars(select(Episode.source_slug).where(Episode.collection_id == main_id))) == ["m1", "v1"]

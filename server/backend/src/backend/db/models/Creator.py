@@ -131,6 +131,9 @@ class CreatorSection(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
     account: Mapped["CreatorAccount"] = relationship(back_populates="sections")
+    items: Mapped[list["CreatorSectionItem"]] = relationship(
+        back_populates="section", cascade="all, delete-orphan", passive_deletes=True,
+    )
 
     @property
     def section_type(self) -> "SectionType":
@@ -158,3 +161,15 @@ class CreatorSection(Base):
 
     def __repr__(self) -> str:
         return f"<CreatorSection(id={self.id}, account_id={self.account_id}, ref={self.ref!r}, type={self.type})>"
+
+
+class CreatorSectionItem(Base):
+    """A video a creator's list has, by the Source's own slug: what a collection of the creator the list is not in
+    leaves out."""
+
+    __tablename__ = "creator_section_items"
+
+    section_id: Mapped[int] = mapped_column(ForeignKey("creator_sections.id", ondelete="CASCADE"), primary_key=True)
+    source_slug: Mapped[str] = mapped_column(primary_key=True)
+
+    section: Mapped["CreatorSection"] = relationship(back_populates="items")

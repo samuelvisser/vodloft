@@ -138,6 +138,8 @@ def _out(s: Session, account: CreatorAccount, section: CreatorSection) -> Sectio
     section.status = SectionStatus.IGNORED.value
     s.flush()
     place_in_link_seasons(s, main, by_user=True)
+    # The list keeps its videos out of the collection now, also the ones its feeds list.
+    reindex_collection(s, main)
     return SectionMove(MoveResult(), None)
 
 

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.services.reassigned import settle_creator
+from backend.services.reassigned import list_left_out, lists_left_out, save_left_out, settle_creator
 from backend.services import check_frequency
 from backend.db.core import run_write_transaction
 from backend.services.check_frequency import joins_regular_checks
@@ -115,16 +115,24 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
     if not found:
         return 0
     listing = None
-    if playlists:
-        collection = s.get(Collection, collection_id)
-        listing = list_lists(s, collection, source) if collection is not None else None
-        s.rollback()
+    collection = s.get(Collection, collection_id)
+    # A new video in a list of the creator that is not in the collection stays out, also before the list's own
+    # collection listed it.
+    not_in_it = lists_left_out(s, collection) if collection is not None else {}
+    if playlists and collection is not None:
+        listing = list_lists(s, collection, source)
+    s.rollback()
+    left_out = list_left_out(source, not_in_it)
 
     def save(w: Session) -> int:
-        added = add_listed_episodes(w, collection_id=collection_id, found=found)
+        # What the lists have first, so a video that a list not in the collection has stays out, unless one of its
+        # seasons has it too.
+        save_left_out(w, left_out)
         collection = w.get(Collection, collection_id)
         if collection is not None and listing is not None:
             link_seasons_found(w, collection, save_lists(w, collection, listing))
+        added = add_listed_episodes(w, collection_id=collection_id, found=found)
+        if collection is not None and listing is not None:
             place_in_link_seasons(w, collection)
         if collection is not None:
             settle_creator(w, collection)
