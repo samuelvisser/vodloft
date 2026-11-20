@@ -17,7 +17,7 @@ from backend.api.models.collection_seasons import ReassignedMoveAPIRead
 from backend.services.reassigned import move_and_rename, reassigned_in_creator
 from backend.api.models.creator import (
     CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorPageAPIRead,
-    CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd, CollectionCreatorLeaveAPIRead, CollectionCreatorMatchAPIRead,
+    CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd, CreatorSectionsAPIShow, CollectionCreatorLeaveAPIRead, CollectionCreatorMatchAPIRead,
     CreatorEpisodeAPIRead, CreatorEpisodePageAPIRead,
 )
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
@@ -553,6 +553,12 @@ def add_sections(
         type=CollectionType(body.type) if body.type else None,
         episode_identifier=EpisodeIdentifier(body.episode_identifier) if body.episode_identifier else None,
     )
+    s.flush()
+    return creator_page(s, slug)
+
+
+def show_sections(s: Session, slug: str, account_id: int, body: CreatorSectionsAPIShow) -> CreatorPageAPIRead:
+    creators.show_sections(_account(s, slug, account_id), body.refs)
     s.flush()
     return creator_page(s, slug)
 

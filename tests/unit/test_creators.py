@@ -458,6 +458,20 @@ def test_ignoring_a_new_playlist_keeps_it_on_the_creator_page(client, session, t
     assert _follow(session, tube, (NEW_LIST, *SECTIONS)).asked == []
 
 
+def test_a_hidden_playlist_shows_on_the_creator_page_again(client, session, tube):
+    _one_show(client)
+    client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLtools", "target": "skip"}]})
+
+    page = client.post("/api/creators/workshop/accounts/1/sections/show", json={"refs": ["PLtools", "PLcabin"]})
+
+    assert page.status_code == 200, page.text
+    statuses = {s["ref"]: (s["status"], s["collectionSlug"]) for s in page.json()["accounts"][0]["sections"]}
+    # It is back on the creator page, and still not in the library; one that was not hidden stays as it was.
+    assert statuses["PLtools"] == ("known", None)
+    assert statuses["PLcabin"] == ("known", None)
+    assert client.post("/api/creators/workshop/accounts/1/sections/show", json={"refs": ["PLnone"]}).status_code == 422
+
+
 def test_the_creators_genre_follows_to_collections_that_had_it(client, session):
     from backend.db.models import Collection
 

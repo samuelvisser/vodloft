@@ -522,6 +522,18 @@ def place_sections(
     return made
 
 
+def show_sections(account: CreatorAccount, refs: list[str]) -> None:
+    """Show sections of a creator's account that the user hid on the creator page there again. They stay out of the
+    Library. ``account`` is from a write transaction's session."""
+    sections = {section.ref: section for section in account.sections}
+    unknown = [ref for ref in refs if ref not in sections]
+    if unknown:
+        raise ServiceError(f"{account.creator.title} has no section {unknown[0]}", field="refs")
+    for ref in refs:
+        if sections[ref].status == SectionStatus.IGNORED.value:
+            sections[ref].status = SectionStatus.KNOWN.value
+
+
 def _as_ref(section: CreatorSection) -> SectionRef:
     return SectionRef(
         ref=section.ref, url=section.url, type=section.section_type, title=section.own_title or "",

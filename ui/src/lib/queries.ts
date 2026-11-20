@@ -890,6 +890,18 @@ export async function addCreatorSections(slug: string, accountId: number, sectio
     return CreatorPageReadSchema.parse(await response.json())
 }
 
+/** Show sections of a creator's account that were hidden on the creator page there again. */
+export async function showCreatorSections(slug: string, accountId: number, refs: string[]): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections/show`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({refs}),
+    })
+    if (!response.ok) throw await responseError(response)
+    return CreatorPageReadSchema.parse(await response.json())
+}
+
 /** Move one of the playlists of a creator's account, with its videos and their files: a season of the account's own
  * collection, a collection of its own, or out of the Library. */
 export async function moveCreatorSection(

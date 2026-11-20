@@ -4,7 +4,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {toast} from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
-import {addCreatorSections} from '../../lib/queries'
+import {addCreatorSections, showCreatorSections} from '../../lib/queries'
 import {capitalized, joinedNames} from '../../types/creator'
 import type {CreatorPageRead} from '../../types/schemas/creator'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
@@ -14,7 +14,7 @@ import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import {TitleList, namedSections, sectionNouns} from './sectionNames'
 
 type BulkAction = {
-    id: 'main' | 'own' | 'movie' | 'skip'
+    id: 'main' | 'own' | 'movie' | 'skip' | 'show'
     label: string
     icon: IconProp
     /** The chosen sections the action applies to. */
@@ -28,6 +28,7 @@ function bulkActions(creator: CreatorPageRead, chosen: AccountSection[], onEdit:
     const toMain = sections.filter(({account, section}) => section.kind === 'feed' || (section.kind === 'list' && account.site.linkSeasons))
     // Those already hidden on the creator page stay hidden.
     const hideable = chosen.filter(({section}) => section.status !== 'ignored')
+    const hidden = chosen.filter(({section}) => section.status === 'ignored')
     const mains = new Set(toMain.map(({account}) => mainTitleOf(creator, account)))
     const mainLabel = () => {
         if (mains.size !== 1) return 'Add to main collections'
@@ -50,6 +51,7 @@ function bulkActions(creator: CreatorPageRead, chosen: AccountSection[], onEdit:
         hideable.length > 0 && {
             id: 'skip', label: onEdit ? 'Hide on creator page' : 'Do not show here again', icon: faIcon('fass', 'eye-slash'), items: hideable,
         },
+        hidden.length > 0 && {id: 'show', label: 'Show on creator page', icon: faIcon('fass', 'eye'), items: hidden},
     ]
     return actions.filter((action): action is BulkAction => !!action)
 }
@@ -82,6 +84,14 @@ function ActionNote({creator, action, onEdit}: {creator: CreatorPageRead, action
             <p>
                 {added > 0 && `${added === items.length ? (items.length === 1 ? 'It goes' : 'They go') : `${added} of them go`} into your library, as ${creator.title}'s. `}
                 {owned > 0 && `${owned === items.length ? (items.length === 1 ? 'It is' : 'They are') : `${owned} are`} in your library already and become ${creator.title}'s.`}
+            </p>
+        )
+    }
+    if (action.id === 'show') {
+        return (
+            <p>
+                {items.length === 1 ? 'It shows' : 'They show'} on {creator.title}'s page again, under what is not in your library, and
+                {' '}{items.length === 1 ? 'stays' : 'stay'} out of your library.
             </p>
         )
     }
@@ -129,12 +139,13 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
     const actions = bulkActions(creator, none ? items : chosen, onEdit)
     const nouns = sectionNouns(items).plural
 
-    const apply = async (action: BulkAction & {id: 'main' | 'movie' | 'skip'}) => {
-        const target = TARGETS[action.id]
+    const apply = async (action: BulkAction) => {
         try {
             for (const id of new Set(action.items.map(({account}) => account.id))) {
-                const plans = action.items.filter(({account}) => account.id === id).map(({section}) => ({ref: section.ref, target}))
-                queryClient.setQueryData(['creator', creator.slug], await addCreatorSections(creator.slug, id, plans))
+                const refs = action.items.filter(({account}) => account.id === id).map(({section}) => section.ref)
+                queryClient.setQueryData(['creator', creator.slug], action.id === 'show'
+                    ? await showCreatorSections(creator.slug, id, refs)
+                    : await addCreatorSections(creator.slug, id, refs.map((ref) => ({ref, target: TARGETS[action.id as keyof typeof TARGETS]}))))
             }
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['creators']}),
@@ -142,7 +153,12 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
                 queryClient.invalidateQueries({queryKey: ['collectionsView']}),
                 ...(action.id === 'movie' ? [queryClient.invalidateQueries({queryKey: ['movies']})] : []),
             ])
-            toast.success(action.id === 'skip' ? `Hid ${namedSections(action.items)} on ${onEdit ? `${creator.title}'s page` : 'this page'}` : `Added ${namedSections(action.items)}`)
+            const named = namedSections(action.items)
+            toast.success(
+                action.id === 'skip' ? `Hid ${named} on ${onEdit ? `${creator.title}'s page` : 'this page'}`
+                    : action.id === 'show' ? `${named} ${action.items.length === 1 ? 'shows' : 'show'} on ${creator.title}'s page again`
+                        : `Added ${named}`,
+            )
             onDone(action.items)
         } catch (exc) {
             toast.error(exc instanceof Error ? exc.message : String(exc))
@@ -158,6 +174,7 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
 
     const title = (action: BulkAction) => {
         const named = namedSections(action.items)
+        if (action.id === 'show') return `Show ${named} on ${creator.title}'s page again?`
         if (action.id === 'skip') return onEdit ? `Hide ${named} on ${creator.title}'s page?` : `Stop showing ${named} here?`
         if (action.id === 'main') {
             const main = mainTitleOf(creator, action.items[0].account)
@@ -188,7 +205,7 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
                     confirmButton={{
                         label: confirming.label,
                         className: confirming.id === 'skip' ? 'btn btn-danger' : 'btn btn-primary',
-                        onClick: () => apply(confirming as BulkAction & {id: 'main' | 'movie' | 'skip'}),
+                        onClick: () => apply(confirming),
                     }}
                 >
                     <ActionNote creator={creator} action={confirming} onEdit={onEdit}/>
