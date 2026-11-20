@@ -55,11 +55,16 @@ def asset_file_hash(path: Path) -> str | None:
 
 
 @contextmanager
-def asset_file_lock(download_root: Path, target: Path):
-    """Serialize cooperating workers/processes without stale crash-time leases."""
+def asset_file_lock(download_root: Path, target: Path, check_canceled: Callable[[], None]):
+    """Serialize cooperating workers/processes without stale crash-time leases.
+
+    Waits for as long as the other writer holds the file: it only holds it for a few short steps,
+    but one of them can be waiting for its turn to write to the database. Two reconciliations of
+    the same collection, such as one for an update and one for a sync, then take turns instead
+    of the second one giving up."""
     target = safe_asset_path(download_root, target)
     lock_path = lock_file_path("assets", hashlib.sha256(str(target).encode()).hexdigest())
-    with file_lock(lock_path, timeout_seconds=30, holder="the collection artwork writer"):
+    with file_lock(lock_path, while_waiting=check_canceled):
         yield target
 
 

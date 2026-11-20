@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import BinaryIO
@@ -36,16 +36,16 @@ def _try_lock(lock_file: BinaryIO, shared: bool) -> bool:
 
 @contextmanager
 def file_lock(
-    path: Path, *, shared: bool = False, timeout_seconds: float | None = None, poll_seconds: float = 0.05,
-    holder: str = "another worker",
+    path: Path, *, shared: bool = False, while_waiting: Callable[[], None] | None = None, poll_seconds: float = 0.05,
 ) -> Iterator[None]:
-    """Hold the lock on ``path``. Raises TimeoutError, naming the ``holder`` it waited for,
-    when the lock stays taken longer than ``timeout_seconds``."""
-    deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
+    """Hold the lock on ``path``, waiting as long as another holder has it.
+
+    ``while_waiting`` runs on every poll while the lock is taken, so a canceled caller can stop
+    waiting by raising."""
     with path.open("a+b") as lock_file:
         while not _try_lock(lock_file, shared):
-            if deadline is not None and time.monotonic() >= deadline:
-                raise TimeoutError(f"Timed out waiting for {holder}")
+            if while_waiting is not None:
+                while_waiting()
             time.sleep(poll_seconds)
         try:
             yield
