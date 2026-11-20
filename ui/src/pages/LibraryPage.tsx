@@ -14,6 +14,7 @@ import FilterBar, {ChipFilter} from '../components/common/FilterBar'
 import DownloadStatusBadge from '../components/DownloadProgress/DownloadStatusBadge'
 import CollectionSort, {
     type CollectionSortOrder,
+    type LibrarySortable,
     compareCollections,
     DEFAULT_COLLECTION_SORT,
     isCollectionSortOrder,
@@ -27,6 +28,8 @@ import DurationPill from '../components/common/DurationPill'
 import './LibraryPage.css'
 import {capitalized, creatorKindText} from '../types/creator'
 import type {Names} from '../types/schemas/source'
+import type {CollectionReadView} from '../types/schemas/collection'
+import type {CreatorRead} from '../types/schemas/creator'
 import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
 import {wordsOf} from '../lib/collectionWords'
 
@@ -234,6 +237,39 @@ export default function LibraryPage() {
             (ranks.get(a.slug) ?? 0) - (ranks.get(b.slug) ?? 0) || compareCollections(a, b, collectionSort)
         ))
     }, [collections, filteredCreators, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords, collectionSort])
+    // Creators and collections share the chosen order: a creator counts as opened when its page or one of its
+    // collections was, and was released when its first collection was. While searching, creators come first.
+    const collectionTiles = useMemo(() => {
+        const firstPublished = new Map<string, Date>()
+        for (const collection of collections ?? []) {
+            const date = collection.firstPublishedDate
+            if (!collection.creatorSlug || !date) continue
+            const known = firstPublished.get(collection.creatorSlug)
+            if (!known || date < known) firstPublished.set(collection.creatorSlug, date)
+        }
+        type Tile = {sortable: LibrarySortable} & (
+            {kind: 'creator', creator: CreatorRead} | {kind: 'collection', collection: CollectionReadView})
+        const creatorTiles: Tile[] = filteredCreators.map((creator) => ({
+            kind: 'creator', creator,
+            sortable: {
+                title: creator.title, openCount: creator.openCount, lastOpenedAt: creator.lastOpenedAt,
+                firstPublishedDate: firstPublished.get(creator.slug) ?? null, createdAt: new Date(creator.createdAt),
+            },
+        }))
+        const tiles: Tile[] = filteredCollections.map((collection) => ({kind: 'collection', collection, sortable: collection}))
+        if (searchWords.length > 0) return [...creatorTiles, ...tiles]
+        // The collections are in order already; each creator goes in before the first collection it comes before.
+        const sortedCreators = creatorTiles.sort((a, b) => compareCollections(a.sortable, b.sortable, collectionSort))
+        const merged: Tile[] = []
+        let next = 0
+        for (const tile of tiles) {
+            while (next < sortedCreators.length && compareCollections(sortedCreators[next].sortable, tile.sortable, collectionSort) <= 0) {
+                merged.push(sortedCreators[next++])
+            }
+            merged.push(tile)
+        }
+        return [...merged, ...sortedCreators.slice(next)]
+    }, [collections, filteredCreators, filteredCollections, searchWords, collectionSort])
     const filteredMovies = useMemo(
         () => movies?.filter((movie) => (
             matchesSiteFilter(movie, activeSiteFilter) && matchesLibrarySearch(movie, searchWords)
@@ -400,7 +436,18 @@ export default function LibraryPage() {
             ) : activeType === 'collections' && hasCollections ? (
                 filteredCreators.length + filteredCollections.length > 0 ? (
                     <div className="library-collection-grid" role="list" aria-label="Collections">
-                        {filteredCreators.map((creator) => {
+                        {collectionTiles.map((tile) => {
+                            if (tile.kind === 'collection') {
+                                const collection = tile.collection
+                                return (
+                                    <CollectionTile
+                                        key={collection.slug} collection={collection}
+                                        // A yt-dlp creator's author is usually the creator itself: do not say its name twice.
+                                        subtitle={collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null}
+                                    />
+                                )
+                            }
+                            const creator = tile.creator
                             const avatar = toImageUrl(creator.avatarUrl)
                             const banner = toImageUrl(creator.bannerUrl)
                             return (
@@ -422,13 +469,6 @@ export default function LibraryPage() {
                                 </Link>
                             )
                         })}
-                        {filteredCollections.map((collection) => (
-                            <CollectionTile
-                                key={collection.slug} collection={collection}
-                                // A yt-dlp creator's author is usually the creator itself: do not say its name twice.
-                                subtitle={collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null}
-                            />
-                        ))}
                     </div>
                 ) : (
                     <NoMatches search={searchWords.length > 0} what="collections"/>

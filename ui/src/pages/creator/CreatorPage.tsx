@@ -1,9 +1,10 @@
-import {useCallback, useMemo, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {Link, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {can} from '../../lib/access'
+import {apiFetch} from '../../lib/api'
 import {checkCreator, combineCreators, useCreator, useCreatorEpisodes, useCreators} from '../../lib/queries'
 import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
@@ -76,6 +77,15 @@ export default function CreatorPage() {
     const {slug} = useParams()
     const queryClient = useQueryClient()
     const {data: creator, error} = useCreator(slug)
+    // Count each visit once, so the Library can list the most used creators first.
+    const countedVisit = useRef<string | null>(null)
+    useEffect(() => {
+        if (!slug || countedVisit.current === slug) return
+        countedVisit.current = slug
+        apiFetch(`/creators/${encodeURIComponent(slug)}/opened`, {method: 'POST'}).catch(() => {
+            // Only the Library's order misses this visit.
+        })
+    }, [slug])
     const [actionError, setActionError] = useState<string | null>(null)
     const [checking, setChecking] = useState(false)
     const [movingReassigned, setMovingReassigned] = useState(false)

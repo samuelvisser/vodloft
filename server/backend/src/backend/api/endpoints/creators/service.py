@@ -8,9 +8,9 @@ import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
@@ -314,6 +314,17 @@ class _CreatorRead:
     def new_list_names(self) -> Names:
         return kinds_names(creators.creator_list_kinds(self.creator))
 
+    @property
+    def open_count(self) -> int:
+        """How often its page and its collections' pages were opened."""
+        return self.creator.open_count + sum(collection.open_count for collection in self.creator.collections)
+
+    @property
+    def last_opened_at(self) -> datetime | None:
+        """When its page or one of its collections' pages was last opened."""
+        opened = [self.creator.last_opened_at, *(collection.last_opened_at for collection in self.creator.collections)]
+        return max((at for at in opened if at is not None), default=None)
+
     def __getattr__(self, name):
         if name == "accounts":
             return self.creator.accounts
@@ -322,6 +333,22 @@ class _CreatorRead:
     def __post_init__(self):
         if self.accounts is None:
             self.accounts = list(self.creator.accounts)
+
+
+def record_creator_opened(s: Session, slug: str) -> None:
+    """Count one more opening of the creator's page, for the Library's Often used and Recently used orders."""
+    opened = s.execute(
+        update(Creator)
+        .where(Creator.slug == slug)
+        # Opening the page does not change the creator, so it keeps its last update time.
+        .values(
+            open_count=Creator.open_count + 1,
+            last_opened_at=datetime.now(timezone.utc),
+            updated_at=Creator.updated_at,
+        )
+    )
+    if opened.rowcount == 0:
+        raise CreatorNotFoundError(f"Creator '{slug}' not found")
 
 
 def list_creators(s: Session) -> list[CreatorAPIRead]:
