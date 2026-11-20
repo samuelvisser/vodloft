@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
-import {Link, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
@@ -18,7 +18,9 @@ import {PageHeaderAction} from '../../components/common/PageHeader'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import {postReassignedMove, reassignedMoveMessage} from '../../components/Episode/SeasonPlaceNote'
 import {toast} from 'react-hot-toast'
-import {creatorKindText} from '../../types/creator'
+import {creatorKindText, groupNames, joinedNames} from '../../types/creator'
+import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
+import {placedSections} from './CreatorSectionsEditor'
 import CreatorHeader from './CreatorHeader'
 import CreatorNotInLibrary from './CreatorNotInLibrary'
 import './CreatorPages.css'
@@ -76,7 +78,10 @@ function EpisodeShelf({slug, words}: {slug: string, words: CollectionWords}) {
 export default function CreatorPage() {
     const {slug} = useParams()
     const queryClient = useQueryClient()
+    const navigate = useNavigate()
     const {data: creator, error} = useCreator(slug)
+    // Moving feeds and playlists, started by saving the Edit page.
+    const moveOperation = useActiveOperation('creator.move_sections', 'creator', creator?.id ?? null)
     // Count each visit once, so the Library can list the most used creators first.
     const countedVisit = useRef<string | null>(null)
     useEffect(() => {
@@ -152,6 +157,9 @@ export default function CreatorPage() {
     }
 
     const several = creator.accounts.length > 1
+    // The feeds and playlists whose place the Edit page changes, named together, such as "feeds and playlists".
+    const placed = placedSections(creator).map(({section}) => section)
+    const placedNames = placed.length ? joinedNames(placed.map((section) => groupNames(section, placed))) : null
     const links = creator.accounts.filter((account) => account.url).map((account) => ({siteName: account.site.name, url: account.url!}))
     // Two sites fit as buttons; more go into the Actions menu.
     const linkButtons = links.length <= 2 ? links : []
@@ -212,7 +220,14 @@ export default function CreatorPage() {
                                     disabled: !others.length,
                                     disabledReason: others.length ? undefined : 'There is no other creator in your library.',
                                     onSelect: () => setCombining(true),
-                                }]}/>
+                                }, ...(placedNames ? [{
+                                    label: `Move ${placedNames.plural}`,
+                                    description: 'Choose where they go on the Edit page',
+                                    icon: faIcon('fass', 'arrow-right-arrow-left'),
+                                    // Saving the Edit page starts it; while it runs, its progress shows here.
+                                    operation: moveOperation,
+                                    onSelect: () => navigate(`/edit-creator/${creator.slug}`),
+                                }] : [])]}/>
                             </>
                         )}
                     </>

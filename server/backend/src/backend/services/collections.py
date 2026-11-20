@@ -15,6 +15,7 @@ from backend.utils.helpers import generate_uuid, slugify
 from sources import Feature, UnknownSourceError, all_sources, get_source
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
+from task_manager.scheduler.operations import queue_operation_target_dispatch
 
 
 class CollectionAdded(dict[str, object]):
@@ -51,7 +52,8 @@ def add_collection(s: Session, collection: Collection, *, added_by_id: int | Non
 def reindex_collection(s: Session, collection: Collection) -> None:
     """List a Collection again, as Sync now does, after its links changed."""
     s.flush()
-    create_operation(s, CollectionSyncOperation(collection))
+    operation = create_operation(s, CollectionSyncOperation(collection))
+    queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
 
 
 def index_new_collection(s: Session, collection: Collection) -> None:

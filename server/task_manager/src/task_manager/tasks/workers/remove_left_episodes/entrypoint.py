@@ -14,7 +14,7 @@ from .service import run_remove_left_episodes
     allowed_resource_types=("collection",),
     default_max_retries=1,
 )
-async def remove_left_episodes(*, resource_id: int | None = None) -> TaskResult:
+async def remove_left_episodes(*, resource_id: int | None = None, progress=None) -> TaskResult:
     if resource_id is None:
         raise ValueError("Removing episodes that left a collection requires a collection resource")
     with db_session() as s:

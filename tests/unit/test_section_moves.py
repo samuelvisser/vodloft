@@ -90,6 +90,14 @@ def test_shorts_become_a_collection_of_their_own_with_their_files(feeds, client,
     # The new collection renames the moved file and rewrites its metadata, showing on the Shorts row.
     renumbers = {operation.resource_id: operation for operation in _operations(session, "collection.renumber")}
     assert renumbers[shorts.id].context["sections"] == ["1:shorts"]
+    # One action for the whole move tells the user; the new collection's numbering and its indexing are its parts.
+    [move] = _operations(session, "creator.move_sections")
+    assert (move.resource_type, move.source, move.context["sections"]) == ("creator", "UI", ["1:shorts"])
+    assert move.context["names"]["plural"] == "shorts"
+    assert sorted(dependency.child_operation.kind for dependency in move.dependencies) == [
+        "collection.index", "collection.renumber",
+    ]
+    assert {dependency.child_operation.source for dependency in move.dependencies} == {"SYSTEM"}
 
 
 def test_shorts_join_the_creators_collection_again_and_their_collection_goes(feeds, client, session):
@@ -136,6 +144,9 @@ def test_livestreams_leave_the_library_with_their_files(feeds, client, session):
     assert _episode(session, main, "l1").from_link_season
     assert session.scalar(select(CreatorSection.status).where(CreatorSection.ref == "streams")) == "ignored"
     assert _episode(session, main, "v1") is not None and _episode(session, main, "s1") is not None
+    # Deleting the downloaded one's files runs as a task of the move's own operation, so its progress counts too.
+    [move] = _operations(session, "creator.move_sections")
+    assert [(target.task_key, target.resource_id) for target in move.targets] == [("remove_left_episodes", main_id)]
 
 
 def test_the_videos_feed_never_becomes_a_collection_of_its_own(feeds, client):
