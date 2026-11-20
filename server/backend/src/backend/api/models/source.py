@@ -123,18 +123,26 @@ class SourceAPIRead(ResponseBase):
     features: list[str]
     sites_label: Optional[str] = None
     search_label: Optional[str] = None
-    kind_names: dict[str, str] = {}
+    kind_names: dict[str, NamesAPIRead] = Field(validation_alias="named_kinds")
+    """What the Source calls each kind of media, such as show for a Daily Wire collection, or VODLoft's word."""
     release_date: ReleaseDate
     download_options: DownloadOptionsAPIRead
+    site_keys: list[str] = Field(default_factory=list, validation_alias="sites")
+    """The Sites the Source is made for, such as The Daily Wire; none for a Source of many sites, such as yt-dlp."""
 
     @field_validator("features", mode="before")
     @classmethod
     def _sorted_feature_names(cls, features: Iterable[Feature | str]) -> list[str]:
         return sorted(str(feature) for feature in features)
 
+    @field_validator("site_keys", mode="before")
+    @classmethod
+    def _site_keys(cls, sites: Iterable[object]) -> list[str]:
+        return [site if isinstance(site, str) else site.key for site in sites]
+
     @field_validator("kind_names", mode="before")
     @classmethod
-    def _kind_name_keys(cls, kind_names: Mapping[object, str]) -> dict[str, str]:
+    def _kind_name_keys(cls, kind_names: Mapping[object, object]) -> dict[str, object]:
         return {str(kind): name for kind, name in kind_names.items()}
 
 
@@ -269,6 +277,9 @@ class SiteOptionsAPIRead(ResponseBase):
     stream_methods: list[StreamMethod] = []
     """How RSS feeds can stream the collection's episodes without downloading them first; none for downloads only."""
     stream_video_heights: list[int] = []
+    stream_file_height: Optional[int] = None
+    """The one resolution the Site streams as an MP4 file with sound; a feed plays the others once VODLoft has joined
+    them into one."""
     stream_proxy_choice: bool = False
     """A feed can send podcast apps straight to the Site's video, or pass it through VODLoft."""
     video_output_help: dict[str, str] = {}
@@ -370,6 +381,8 @@ class ResolvedLinkAPIRead(ResponseBase):
     """The creator this link is, on a Site with creators, so it can be added as a creator instead."""
     creator_names: Optional[NamesAPIRead] = None
     """What the Site calls that creator, such as creator or artist."""
+    creator_sections: Optional[NamesAPIRead] = None
+    """Every type of section that creator has on the Site, named together, such as "albums and singles"."""
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
 
@@ -465,6 +478,18 @@ class SiteAPIRead(ResponseBase):
         """Every type of section the Site's creators have and what the Site calls it, such as YouTube's feeds and
         playlists."""
         return [SectionTypeAPIRead.model_validate(type_) for type_ in site_of(self.key).section_types]
+
+    @computed_field
+    @property
+    def list_names(self) -> NamesAPIRead:
+        """What the Site calls its lists, all its types of list together, such as albums and playlists."""
+        return NamesAPIRead.model_validate(site_of(self.key).list_names)
+
+    @computed_field
+    @property
+    def growing_names(self) -> NamesAPIRead:
+        """What the Site calls the lists and shows its creators add, such as playlists or shows."""
+        return NamesAPIRead.model_validate(site_of(self.key).growing_names)
 
     @computed_field
     @property

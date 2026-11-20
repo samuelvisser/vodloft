@@ -19,7 +19,7 @@ from backend.db.models import Collection, Episode, Movie, Site, Video
 from backend.types.collection_contracts import CollectionWords, collection_contract
 from backend.types.link_season_types import OutsideVideos
 from backend.services.local_media_profile_sites import add_upcoming_site
-from sources import EpisodeTag, Names, SectionKind, Site as SourceSite, collection_on_site, get_source, site_for, source_site, sources_for
+from sources import EpisodeTag, Names, Site as SourceSite, collection_on_site, get_source, site_for, source_site, sources_for
 
 
 class CollectionAlreadyAddedError(ValueError):
@@ -111,25 +111,6 @@ def episode_tags_named(tags: Iterable[EpisodeTag], words: CollectionWords) -> tu
         if tag.main else tag
         for tag in tags
     )
-
-
-def joined_names(names: Iterable[Names]) -> Names:
-    """One name for several section types, such as "album or playlist" and "albums and playlists" for SoundCloud's
-    lists, or "album, playlist or list" for three."""
-    names = list(names)
-    # "an album or playlist" starts with the first one, and so takes its article.
-    return Names(_joined([name.singular for name in names], "or"), _joined([name.plural for name in names], "and"),
-                 names[0].article if names else "")
-
-
-def _joined(words: list[str], conjunction: str) -> str:
-    words = list(dict.fromkeys(words))
-    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} {conjunction} {words[-1]}"
-
-
-def list_names(site: SourceSite) -> Names:
-    """What the Site calls its lists, all its types of list together, such as "albums and playlists" on SoundCloud."""
-    return joined_names(type_.names for type_ in site.types_of(SectionKind.LIST))
 
 
 def episode_site(episode: Episode) -> SourceSite:

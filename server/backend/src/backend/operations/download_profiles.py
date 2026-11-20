@@ -40,6 +40,7 @@ class DownloadProfileDeleteOutOfScopeOperation(OperationDefinition[DownloadProfi
     def context(self) -> dict[str, object]:
         return {
             "collection_title": self.resource.collection.title,
+            "collection_type": self.resource.collection.type,
             "local_media_profile_name": self.resource.local_media_profile.name,
             "downloads_requested": len(self.media_download_ids),
         }

@@ -12,8 +12,8 @@ import {useCreator} from '../../lib/queries'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import PageHeader from '../../components/common/PageHeader'
-import {creatorKindText, joinedNames, newListActionReg} from '../../types/creator'
-import NewListSettings, {listKindNames} from '../../components/common/NewListSettings'
+import {creatorKindText, newListActionReg} from '../../types/creator'
+import NewListSettings from '../../components/common/NewListSettings'
 import {
     CreatorPageReadSchema, CreatorUpdateSchema, newListsValues, type CreatorUpdateIn, type CreatorUpdateOut,
     type NewSectionAction,
@@ -106,7 +106,7 @@ export default function EditCreatorPage() {
                 </div>
 
                 <div className="creator-section-group">
-                    <h2>New {listKindNames(creator.newLists)}</h2>
+                    <h2>New {creator.newListNames.plural}</h2>
                     <NewListSettings
                         kinds={creator.newLists} values={newLists} fallback="ask" idPrefix="creator-new-lists"
                         registryFor={(kind) => newListActionReg(creator.creatorNames.singular, kind, creator.music)}
@@ -156,8 +156,8 @@ export default function EditCreatorPage() {
             >
                 <p>
                     Delete {creator.title}? {creator.collections.length > 0
-                        ? `${creator.collections.length === 1 ? 'Its collection stays' : `Its ${creator.collections.length} collections stay`} in your library with their episodes and files, but VODLoft stops looking for new ${joinedNames(creator.newLists.map((kind) => kind.names)).plural || 'lists'} of this ${creator.creatorNames.singular}.`
-                        : `VODLoft stops looking for new ${joinedNames(creator.newLists.map((kind) => kind.names)).plural || 'lists'} of this ${creator.creatorNames.singular}.`}
+                        ? `${creator.collections.length === 1 ? 'Its collection stays' : `Its ${creator.collections.length} collections stay`} in your library with their episodes and files, but VODLoft stops looking for new ${creator.newListNames.plural} of this ${creator.creatorNames.singular}.`
+                        : `VODLoft stops looking for new ${creator.newListNames.plural} of this ${creator.creatorNames.singular}.`}
                 </p>
             </ConfirmDialog>
         </section>

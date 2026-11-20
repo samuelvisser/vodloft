@@ -39,6 +39,13 @@
         }
       },
       "creatorNames": null,
+      "looseSeason": null,
+      "profileScope": "podcast",
+      "audioProfileScope": "podcast",
+      "profileScopes": [
+        "both",
+        "podcast"
+      ],
       "downloadsBySeason": false
     },
     {
@@ -68,6 +75,13 @@
         }
       },
       "creatorNames": null,
+      "looseSeason": null,
+      "profileScope": "series",
+      "audioProfileScope": "series",
+      "profileScopes": [
+        "both",
+        "series"
+      ],
       "downloadsBySeason": true
     },
     {
@@ -101,6 +115,13 @@
         "plural": "artists",
         "a": "an artist"
       },
+      "looseSeason": "Singles",
+      "profileScope": "music_videos",
+      "audioProfileScope": "music_tracks",
+      "profileScopes": [
+        "music_tracks",
+        "music_videos"
+      ],
       "downloadsBySeason": true
     }
   ]

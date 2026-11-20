@@ -9,6 +9,7 @@ import {apiUrl} from '../../lib/api'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {faIcon} from '../../icons/faIcon'
 import {collectionWords, CollectionWords} from '../../lib/collectionWords'
+import {NamesSchema} from '../../types/schemas/source'
 import '../common/DrmProtected.css'
 import './SeasonPlaceNote.css'
 
@@ -16,7 +17,8 @@ const SeasonPlaceSchema = z.object({
     belongsElsewhere: z.boolean(),
     seasonName: z.string().nullable().optional(),
     linkTitle: z.string().nullable().optional(),
-    linkKind: z.string().default('playlist'),
+    /** What the collection's Site calls its link seasons, such as playlists. */
+    linkNames: NamesSchema.nullable().optional(),
     /** Reassigned: the collection of its creator that the episode belongs in now. */
     collectionSlug: z.string().nullable().optional(),
     collectionTitle: z.string().nullable().optional(),
@@ -165,9 +167,9 @@ export function useMoveToSeason(episodeSlug: string, collectionSlug?: string, wo
 export function newPlace(place: SeasonPlace, words: CollectionWords = collectionWords(null)): string {
     const season = words.season.singular
     if (place.linkTitle) {
-        if (place.linkKind === season) return `the ${season} ${place.linkTitle}`
+        if (place.linkNames?.singular === season) return `the ${season} ${place.linkTitle}`
         const name = place.seasonName && place.seasonName !== place.linkTitle ? ` (${place.seasonName})` : ''
-        return `the ${season} of the ${place.linkKind} ${place.linkTitle}${name}`
+        return `the ${season} of the ${place.linkNames?.singular} ${place.linkTitle}${name}`
     }
     return place.seasonName ? `the ${season} ${place.seasonName}` : `another ${season}`
 }
@@ -231,7 +233,7 @@ export default function SeasonPlaceNote({episodeSlug, collectionSlug, canManage,
         <div className="season-place-note" role="note">
             <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-arrow-left')} aria-hidden="true"/>
             <p>
-                <strong>Moved.</strong> The {place.linkKind}s of this collection changed, and this {episode.singular} belongs in{' '}
+                <strong>Moved.</strong> The {place.linkNames?.plural} of this collection changed, and this {episode.singular} belongs in{' '}
                 {newPlace(place, words)} now. It is downloaded, so it stays in its old {season.singular} until you move it: moving it
                 renames its files and puts them in the folder of its new {season.singular}. Move it here, or move every such
                 {' '}{episode.singular} of the collection at once with <em>Rename all {fileWords.episode.singular} files</em> and{' '}

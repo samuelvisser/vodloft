@@ -130,7 +130,7 @@ class DailyWireSource(Source):
         ),
         creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)
-    kind_names = MappingProxyType({LinkKind.COLLECTION: "Show", LinkKind.CREATOR: "Host"})
+    kind_names = MappingProxyType({LinkKind.COLLECTION: Names("show", "shows"), LinkKind.CREATOR: HOST})
     features = frozenset({
         Feature.COLLECTIONS,
         Feature.MOVIES,

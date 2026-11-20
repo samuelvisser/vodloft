@@ -27,7 +27,7 @@ from backend.services.new_lists import (
 )
 from backend.types.creator_types import NewSectionAction, SectionStatus, SectionTarget
 from backend.types.dailywire_user_info import DwMembershipLevel
-from backend.types.collection_contracts import MUSIC
+from backend.types.collection_contracts import DEFAULT_WORDS, MUSIC, CollectionWords, collection_contract
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
 from backend.utils.helpers import generate_uuid, slugify
@@ -830,6 +830,16 @@ def creator_names(creator: Creator) -> Names:
     sites = list(_sites(creator).values())
     site = sites[0] if len(sites) == 1 else _ANY_SITE
     return MUSIC.creator_names_on(site) if is_music_creator(creator) else site.creator_names
+
+
+def creator_words(creator: Creator) -> CollectionWords:
+    """What the creator's page calls their seasons and episodes: as their collections' type does when all of them are
+    of one type, such as albums and tracks for an artist on Bandcamp, and otherwise VODLoft's own words."""
+    types = {collection.type for collection in creator.collections}
+    if len(types) != 1:
+        return DEFAULT_WORDS
+    audio = bool(creator.accounts) and all(_site(account.source_key, account.site_key).audio_only for account in creator.accounts)
+    return collection_contract(types.pop()).words_for(audio)
 
 
 def creator_kind(creator: Creator) -> str:

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 
 from backend.types.collection_contracts import collection_contract
-from backend.types.collection_types import CollectionType
+from sources import Names
 from backend.db.models import Creator, CreatorSection, Collection, CollectionList, DownloadProfile, Episode, User
 
 from .events import Event, emit
@@ -88,9 +88,8 @@ def creator_sections_found(session: Session, creator: Creator, sections: list[Cr
     names = ", ".join(section.title for section in sections[:3]) + (f" and {len(sections) - 3} more" if len(sections) > 3 else "")
     # In the Site's words, such as "album", or "albums and playlists" for several types.
     from backend.services.creators import account_site
-    from backend.services.sites import joined_names
 
-    names_of = joined_names(account_site(section.account).section_type_of(section).names for section in sections)
+    names_of = Names.joined(account_site(section.account).section_type_of(section).names for section in sections)
     what = names_of.singular if len(sections) == 1 else names_of.plural
     emit(
         session, Event.CREATOR_SECTIONS_FOUND,

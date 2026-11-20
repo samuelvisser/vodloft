@@ -4,6 +4,7 @@ import CollectionPreviewCard from "./CollectionPreviewCard";
 import {useDailywireShow, useDailywireUserInfo, useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
 import {DAILYWIRE_SOURCE_KEY, SourceFeature, sourceHas} from "../../types/schemas/source";
 import ReadMore from "../../utils/ReadMore";
+import {collectionWords} from "../../lib/collectionWords";
 import {dailywireShowDefaults, listedCollectionDefaults} from "./collectionDefaults";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
@@ -55,6 +56,9 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         });
         return () => subscription.unsubscribe();
     }, [watch, onChange]);
+
+    // What a collection of the chosen type calls its seasons and episodes.
+    const typeWords = collectionWords(watch("type"))
 
     // --- Watch the URL and extract the slug when valid
     const watchedUrl = watch("url");
@@ -239,14 +243,12 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                     <p><b>Numbered</b> episodes are identified by an episode number. VODLoft will know
                         when an episode is part of another episode (e.g. a clip) and label it as such.</p>
                     <p><b>Date-based</b> episodes are identified simply by their publish date.</p>
-                    {watch("type") === CollectionTypeReg.Enum.music
-                        ? <p><b>By album</b> tracks are identified by an album number and a track number, like "S01E01".
-                            Auxiliary content like trailers will be identified separately.</p>
-                        : <p><b>Seasonal</b> episodes are identified by a season number and an episode number, like "S01E01".
-                            Auxiliary content like trailers will be identified separately.</p>}
+                    <p><b>{episodeIdentifierRegFor(watch("type")).getLabel('seasonal')}</b> {typeWords.episode.plural} are identified
+                        by {typeWords.season.a} number and {typeWords.episode.a} number, like "S01E01".
+                        Auxiliary content like trailers will be identified separately.</p>
                     {listed.data && (seasonsFromSource
                         ? <p>{resolved.data?.source.name} has its own seasons, which VODLoft keeps, and a Seasonal collection keeps its episode numbers too.</p>
-                        : <p>{resolved.data?.source.name ?? 'This site'} has no seasons, so VODLoft puts the videos of each upload year in their own {watch("type") === CollectionTypeReg.Enum.music ? 'album' : 'season'}.</p>)}
+                        : <p>{resolved.data?.source.name ?? 'This site'} has no seasons, so VODLoft puts the {typeWords.episode.plural} of each upload year in their own {typeWords.season.singular}.</p>)}
                     {!listed.data && <p>VODLoft suggests one from the collection itself. If you're unsure, select "Numbered".</p>}
                 </ReadMore>
             </div>

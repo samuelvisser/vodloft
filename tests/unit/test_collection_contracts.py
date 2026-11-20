@@ -6,7 +6,7 @@ from pathlib import Path
 
 from backend.api.endpoints.config.service import get_collection_contracts
 from backend.db.models import Collection
-from backend.services.sites import collection_words, joined_names
+from backend.services.sites import collection_words
 from backend.types.collection_contracts import (
     CONTRACTS,
     DEFAULT_WORDS,
@@ -14,6 +14,7 @@ from backend.types.collection_contracts import (
     collection_contract,
 )
 from backend.types.collection_types import CollectionType
+from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from sources import Names
 
 UI_FIXTURE = Path(__file__).parents[2] / "ui" / "tests" / "fixtures" / "collectionContracts.json"
@@ -21,8 +22,10 @@ UI_FIXTURE = Path(__file__).parents[2] / "ui" / "tests" / "fixtures" / "collecti
 
 def test_every_type_has_a_contract_that_sets_only_what_differs_from_the_fallback():
     assert set(CONTRACTS) == set(CollectionType)
-    assert collection_contract("series") == CollectionContract(CollectionType.SERIES)
-    assert collection_contract("podcast") == CollectionContract(CollectionType.PODCAST, downloads_by_season=False)
+    scope = CollectionLocalMediaProfileScope
+    assert collection_contract("series") == CollectionContract(CollectionType.SERIES, profile_scope=scope.SERIES)
+    assert collection_contract("podcast") == CollectionContract(
+        CollectionType.PODCAST, profile_scope=scope.PODCAST, downloads_by_season=False)
     for collection_type in (CollectionType.PODCAST, CollectionType.SERIES):
         assert collection_contract(collection_type).words_for(audio=True) == DEFAULT_WORDS
     music = collection_contract("music")
@@ -41,7 +44,7 @@ def test_a_collection_takes_sound_words_on_a_site_with_sound_only():
 def test_a_word_has_its_article():
     assert (Names("album", "albums").a, Names("track", "tracks").a, Names("hour", "hours", "an").a) == (
         "an album", "a track", "an hour")
-    assert joined_names([Names("album", "albums"), Names("playlist", "playlists")]).a == "an album or playlist"
+    assert Names.joined([Names("album", "albums"), Names("playlist", "playlists")]).a == "an album or playlist"
 
 
 def test_the_ui_tests_use_the_words_the_api_serves():
@@ -69,3 +72,25 @@ def test_a_music_collection_calls_its_creator_an_artist_on_every_site():
     host = Site("cast", "Cast", creator_names=Names("host", "hosts"))
     assert collection_contract("music").creator_names_on(host) == Names("artist", "artists")
     assert collection_contract("series").creator_names_on(host) == Names("host", "hosts")
+
+
+def test_a_type_offers_the_profiles_that_keep_it_and_starts_a_new_one_for_it():
+    scope = CollectionLocalMediaProfileScope
+    assert collection_contract("podcast").profile_scopes == (scope.BOTH, scope.PODCAST)
+    assert collection_contract("music").profile_scopes == (scope.MUSIC_TRACKS, scope.MUSIC_VIDEOS)
+    assert (collection_contract("music").profile_scope, collection_contract("music").audio_profile_scope) == (
+        scope.MUSIC_VIDEOS, scope.MUSIC_TRACKS)
+    assert collection_contract("series").audio_profile_scope == scope.SERIES
+
+
+def test_a_music_collection_keeps_its_albums_in_the_artists_order_and_names_its_media_as_its_episodes():
+    from sources import site_of
+
+    music, series = collection_contract("music"), collection_contract("series")
+    assert (music.site_order, music.album_lists, series.site_order, series.album_lists) == (True, True, False, False)
+    youtube, bandcamp = site_of("youtube"), site_of("bandcamp")
+    assert music.media_names_on(youtube) == Names("music video", "music videos")
+    assert music.media_names_on(bandcamp) == Names("track", "tracks")
+    assert series.media_names_on(youtube) == Names("video", "videos")
+    assert (music.loose_season_on(bandcamp), series.loose_season_on(bandcamp), series.loose_season_on(youtube)) == (
+        "Singles", "Tracks", "Videos")

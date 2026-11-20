@@ -103,6 +103,10 @@ export const CreatorLookupReadSchema = z.object({
     newLists: z.array(CreatorNewListSchema),
     /** The same for a music artist: their albums are added, and other kinds of list are skipped. */
     musicNewLists: z.array(CreatorNewListSchema),
+    /** The kinds of list named together, such as albums and playlists. */
+    newListNames: NamesSchema,
+    /** What the Site calls the lists and shows its creators add, such as playlists, or shows on The Daily Wire. */
+    growingNames: NamesSchema,
 })
 export type CreatorLookupRead = z.infer<typeof CreatorLookupReadSchema>
 
@@ -114,6 +118,8 @@ const SiteSchema = z.object({
     mediaNames: NamesSchema,
     /** Every type of section the Site's creators have, such as feeds and playlists on YouTube. */
     sectionTypes: z.array(SectionTypeSchema),
+    /** What the Site calls the lists and shows its creators add, such as playlists, or shows on The Daily Wire. */
+    growingNames: NamesSchema,
 })
 
 /** A creator's account on one Site, such as their YouTube channel. */
@@ -151,6 +157,10 @@ export const CreatorReadSchema = z.object({
     episodeCount: z.number(),
     /** What the creator does with a new list, for each kind of list of their Sites. */
     newLists: z.array(CreatorNewListSchema),
+    /** Those kinds of list named together, such as albums and playlists, or lists when there are none. */
+    newListNames: NamesSchema,
+    /** What the creator's page calls their seasons and episodes, such as albums and tracks for an artist. */
+    words: z.object({season: NamesSchema, episode: NamesSchema}),
     genre: z.string().nullable(),
     contentRating: z.string().nullable(),
 })
@@ -249,6 +259,8 @@ export const CollectionCreatorMatchSchema = z.object({
     creatorNames: NamesSchema,
     /** Every type of section the creator's Site has, such as feeds and playlists on YouTube. */
     sectionTypes: z.array(SectionTypeSchema),
+    /** What the Site calls the lists and shows its creators add, such as playlists, or shows on The Daily Wire. */
+    growingNames: NamesSchema,
     ref: z.string(),
     url: z.string().nullable().optional(),
     title: z.string(),

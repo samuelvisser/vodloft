@@ -1,14 +1,11 @@
 import {createSelectRegistry} from '../utils/selectRegistry'
 import {collectionWords} from '../lib/collectionWords'
-
-/** A Site's word for a creator, such as host, at the start of a sentence or a label. */
+/** A word the backend gives in lower case, such as host, at the start of a sentence or a label. */
 export function capitalized(label: string): string {
     return label.slice(0, 1).toUpperCase() + label.slice(1)
 }
 
 import type {Names} from './schemas/source'
-
-type Named = {kind: string, names: Names}
 
 function joined(words: string[], conjunction: string): string {
     const unique = [...new Set(words)]
@@ -22,17 +19,6 @@ export function joinedNames(names: Names[]): Names {
     // "an album or playlist" takes the first one's article.
     const article = names[0] ? names[0].a.slice(0, names[0].a.length - names[0].singular.length) : ''
     return {singular, plural: joined(names.map((name) => name.plural), 'and'), a: `${article}${singular}`}
-}
-
-/** What the Site calls its lists, all its types of list together, such as "albums and playlists" on SoundCloud. */
-export function listNames(types: Named[]): Names {
-    return joinedNames(types.filter((type) => type.kind === 'list').map((type) => type.names))
-}
-
-/** What the Site calls the lists and shows its creators add, which VODLoft looks for every day, such as "playlists"
- * on YouTube or "shows" on The Daily Wire. */
-export function growingNames(types: Named[]): Names {
-    return joinedNames(types.filter((type) => type.kind === 'list' || type.kind === 'show').map((type) => type.names))
 }
 
 /** What a creator is, for a label: "YouTube creator" on one Site, "Creator on YouTube and The Daily Wire" on several. */

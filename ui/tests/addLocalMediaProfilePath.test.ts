@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import {setCollectionContracts} from '../src/lib/collectionWords'
 import {addLocalMediaProfilePath, safeReturnPath} from '../src/types/local_media_profile'
+import contracts from './fixtures/collectionContracts.json'
+
+// What a new profile keeps for each collection type comes from the backend's collection contracts.
+setCollectionContracts(contracts)
 
 test('a new profile fits what it is added for', () => {
     assert.equal(addLocalMediaProfilePath({collectionType: 'music', siteKey: 'bandcamp', audio: true}), '/add-local-media-profile?type=collection&for=music_tracks&site=bandcamp')

@@ -33,10 +33,9 @@ def test_anyone_but_an_artist_is_asked():
 
 
 def test_the_lists_of_several_sites_are_named_for_all_of_them():
-    from backend.services.sites import joined_names
 
-    assert joined_names([Names("playlist", "playlists"), Names("show", "shows")]) == Names("playlist or show", "playlists and shows")
-    assert joined_names([Names("album", "albums"), Names("playlist", "playlists"), Names("list", "lists")]) == Names(
+    assert Names.joined([Names("playlist", "playlists"), Names("show", "shows")]) == Names("playlist or show", "playlists and shows")
+    assert Names.joined([Names("album", "albums"), Names("playlist", "playlists"), Names("list", "lists")]) == Names(
         "album, playlist or list", "albums, playlists and lists",
     )
-    assert joined_names([Names("playlist", "playlists"), Names("playlist", "playlists")]) == Names("playlist", "playlists")
+    assert Names.joined([Names("playlist", "playlists"), Names("playlist", "playlists")]) == Names("playlist", "playlists")

@@ -111,7 +111,7 @@ type Props = {
     /** The title of the episode's collection, for a list of episodes from several collections. */
     collectionTitle?: string
     /** What the collection calls its seasons and episodes, such as albums and tracks. */
-    words?: CollectionWords
+    words: CollectionWords
 }
 
 /** The episode thumbnail card used on a show's episode list. */
@@ -125,7 +125,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
 
     // Episode thumbnails are landscape by default; if missing/empty, use a placeholder with the episode index.
     const landscapePath = (ep.thumbnailLandscapePath && ep.thumbnailLandscapePath.trim() !== '') ? ep.thumbnailLandscapePath : undefined
-    const imageUrl = landscapePath ? toImageUrl(landscapePath) : `https://placehold.co/640x360/png?text=${encodeURIComponent(words?.episode.Singular ?? 'Episode')}+%23${ep.index}`
+    const imageUrl = landscapePath ? toImageUrl(landscapePath) : `https://placehold.co/640x360/png?text=${encodeURIComponent(words.episode.Singular)}+%23${ep.index}`
     const style = imageUrl ? {backgroundImage: `url(${imageUrl})`} : undefined
     const isLive = String(ep.publishStatus).toLowerCase() === 'live'
     // An episode that has not started yet has no length, so its pill says it is upcoming instead.
@@ -162,7 +162,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
                     : reassignedTo ? <ReassignedBadge collectionTitle={reassignedTo} onCover/>
                     : moved && <MovedBadge onCover words={words}/>}
                 {isLive && (
-                    <span style={LIVE_BADGE_STYLE} aria-label={`${words?.episode.Singular ?? 'Episode'} is live`}>
+                    <span style={LIVE_BADGE_STYLE} aria-label={`${words.episode.Singular} is live`}>
                         <span style={LIVE_BADGE_DOT_STYLE} aria-hidden/>
                         Live
                     </span>

@@ -133,6 +133,19 @@ class Names:
         """The word with its article, such as an album or a playlist."""
         return f"{self.article or ('an' if self.singular[:1] in 'aeiou' else 'a')} {self.singular}"
 
+    @classmethod
+    def joined(cls, names: Iterable[Names]) -> Names:
+        """One name for several, such as "album or playlist" and "albums and playlists" for SoundCloud's lists, or
+        "album, playlist or list" for three. It starts with the first one, and so takes its article."""
+        names = list(names)
+        return cls(_joined([name.singular for name in names], "or"), _joined([name.plural for name in names], "and"),
+                   names[0].article if names else "")
+
+
+def _joined(words: list[str], conjunction: str) -> str:
+    words = list(dict.fromkeys(words))
+    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} {conjunction} {words[-1]}"
+
 
 LIST_TYPE = "list"
 """The key of VODLoft's own kind of list, the playlist, which most Sites have."""
@@ -155,17 +168,6 @@ class SectionType:
     def grows(self) -> bool:
         """The creator adds new ones of the type, each with a setting for what happens with it: lists and shows."""
         return self.kind in (SectionKind.LIST, SectionKind.SHOW)
-
-
-@dataclass(frozen=True)
-class SeasonNames:
-    """What VODLoft calls the seasons it makes itself in a collection on the Site, whatever the Site's sections
-    are."""
-
-    loose: str = "Videos"
-    """The one season of the videos in none of a collection's link seasons."""
-    music_loose: str = "Singles"
-    """That season in a Music collection, whose seasons are albums."""
 
 
 @dataclass(frozen=True)
@@ -416,6 +418,16 @@ class LinkKind(StrEnum):
     EPISODE = "episode"
     VIDEO = "video"
     CREATOR = "creator"
+
+
+LINK_KIND_NAMES = {
+    LinkKind.COLLECTION: Names("collection", "collections"),
+    LinkKind.MOVIE: Names("movie", "movies"),
+    LinkKind.EPISODE: Names("episode", "episodes"),
+    LinkKind.VIDEO: Names("video", "videos"),
+    LinkKind.CREATOR: Names("creator", "creators"),
+}
+"""VODLoft's own word for each kind of media a link can be."""
 
 
 class SectionKind(StrEnum):
@@ -880,8 +892,9 @@ class Site:
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
-    season_names: SeasonNames = SeasonNames()
-    """What VODLoft calls the seasons it makes itself in a collection on the Site, such as Tracks on Bandcamp."""
+    loose_season: str = "Videos"
+    """What VODLoft calls the season it makes itself of the videos in none of a collection's link seasons, such as
+    Tracks on Bandcamp. A collection type can name it itself (``CollectionContract.loose_season``)."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
@@ -914,6 +927,28 @@ class Site:
         """The types the Site's creators add new ones of, each with a setting for what happens with a new one: its
         lists and shows."""
         return tuple(type_ for type_ in self.section_types if type_.grows)
+
+    @property
+    def list_names(self) -> Names:
+        """What the Site calls its lists, all its types of list together, such as "albums and playlists" on
+        SoundCloud; VODLoft's own word on a Site whose creators have none."""
+        return self.names_of(SectionKind.LIST)
+
+    @property
+    def growing_names(self) -> Names:
+        """What the Site calls the lists and shows its creators add, which VODLoft looks for every day, such as
+        "playlists" on YouTube or "shows" on The Daily Wire."""
+        return self.names_of(SectionKind.LIST, SectionKind.SHOW)
+
+    @property
+    def section_names(self) -> Names:
+        """Every type of section the Site's creators have, named together, such as "feeds and playlists"."""
+        return Names.joined(type_.names for type_ in self.section_types)
+
+    def names_of(self, *kinds: SectionKind) -> Names:
+        """The Site's section types of these kinds named together, or VODLoft's word for the first kind."""
+        types = self.types_of(*kinds)
+        return Names.joined(type_.names for type_ in types) if types else SECTION_KIND_NAMES[kinds[0]]
 
     def section_type_of(self, section: SectionRef) -> SectionType:
         """The type a section is: the one it names, or else the Site's first of its kind. Also takes a section
@@ -988,10 +1023,15 @@ class Source(ABC):
     """What the Source calls each publish status, every status included."""
     release_date: ClassVar[ReleaseDate] = ReleaseDate.START
     """Which moment the release date the Source gives its items marks."""
-    kind_names: ClassVar[Mapping[LinkKind, str]] = MappingProxyType({})
+    kind_names: ClassVar[Mapping[LinkKind, Names]] = MappingProxyType({})
     """What the Source calls a kind of media where its own word differs from VODLoft's, such as
     Show for a Daily Wire collection. VODLoft uses these words only where it shows the Source's
     own catalogue, and a search result's ``kind_label`` still wins for that one result."""
+
+    @property
+    def named_kinds(self) -> dict[LinkKind, Names]:
+        """What the Source calls each kind of media: its own word (``kind_names``), or VODLoft's."""
+        return {kind: self.kind_names.get(kind, LINK_KIND_NAMES[kind]) for kind in LinkKind}
 
     def has(self, feature: Feature) -> bool:
         return feature in self.features

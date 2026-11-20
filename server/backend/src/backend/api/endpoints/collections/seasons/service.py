@@ -20,7 +20,7 @@ from backend.services.link_seasons import (
     LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists, loose_season_name,
     offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists, active_lists,
 )
-from backend.services.sites import collection_creator_names, collection_site
+from backend.services.sites import collection_creator_names, collection_site, collection_words
 from backend.services.season_moves import queue_season_folder_moves
 from backend.services.season_order import (
     arrange_seasons, link_first_videos, lists_by_season, match_seasons_of_downloaded, renumber_seasons,
@@ -28,7 +28,6 @@ from backend.services.season_order import (
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
 from backend.types.collection_contracts import collection_contract
-from backend.types.collection_types import CollectionType
 from backend.types.season_types import SeasonType
 from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 from sources import Feature, Names, SectionKind, get_source
@@ -72,8 +71,10 @@ class _View:
     seasons: list
     link_seasons_offered: bool
     list_types: object
+    list_names: Names
     loose_season: str
-    music: bool
+    site_order: bool
+    words: object
     creator_names: Names
     media_names: Names
     playlists: list
@@ -120,12 +121,12 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
     by_season = {season_id: [link.title for link in links] for season_id, links in lists_by_season(s, collection).items()}
     firsts = link_first_videos(s, collection)
     never = datetime.max.replace(tzinfo=timezone.utc)
-    music = collection.type == CollectionType.MUSIC.value
+    contract = collection_contract(collection.type)
     # An artist's albums in the artist's order; playlists in the order they were started, as far as the videos tell:
     # YouTube does not say when a playlist was made.
     # Links the user added stay in the order they were added.
     playlists = sorted(collection.lists, key=lambda playlist: (
-        (playlist.site_position,) if music else (
+        (playlist.site_position,) if contract.site_order else (
             firsts.get(playlist.id, never), playlist.site_position if playlist.added_by_user else -playlist.site_position,
         )
     ))
@@ -143,9 +144,9 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
             for season in sorted(collection.seasons, key=lambda season: season.index)
         ],
         link_seasons_offered=offers_link_seasons(collection),
-        list_types=collection_site(collection).types_of(SectionKind.LIST), loose_season=loose_season_name(collection),
-        music=music,
-        creator_names=collection_creator_names(collection), media_names=collection_site(collection).media_names,
+        list_types=collection_site(collection).types_of(SectionKind.LIST), list_names=list_names(collection),
+        loose_season=loose_season_name(collection), site_order=contract.site_order, words=collection_words(collection),
+        creator_names=collection_creator_names(collection), media_names=contract.media_names_on(collection_site(collection)),
         playlists=[_Playlist(playlist, firsts.get(playlist.id), *leaving.get(playlist.id, (0, 0))) for playlist in playlists],
         outside_count=len(outside), outside_with_files=len(with_files),
         has_own_link=collection.sharing_url is not None, lists_playlists=lists_playlists(collection),
@@ -251,7 +252,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         current = {setting.key: setting.action for setting in collection_new_lists(collection)}
         collection.new_lists = checked_new_link_seasons(
             collection_list_kinds(collection), {**current, **body.new_lists},
-            collection.type == CollectionType.MUSIC.value,
+            collection_contract(collection.type).album_lists,
         )
     collection.loose_videos = body.loose_videos
     collection.list_layout = body.list_layout

@@ -35,7 +35,8 @@ function noun({singular, plural, a}: BackendNames): Noun {
     return {singular, plural, Singular: upper(singular), Plural: upper(plural), a}
 }
 
-function words(names: {season: BackendNames, episode: BackendNames}): CollectionWords {
+/** A collection's words as the backend gives them, such as a creator's, in the forms a sentence needs. */
+export function wordsOf(names: {season: BackendNames, episode: BackendNames}): CollectionWords {
     const episode = noun(names.episode)
     return {
         season: noun(names.season), episode,
@@ -44,15 +45,18 @@ function words(names: {season: BackendNames, episode: BackendNames}): Collection
 }
 
 const STORAGE_KEY = 'vodloft.collectionContracts'
-type Contract = Record<MediaKind, CollectionWords> & {downloadsBySeason: boolean, creatorNames: BackendNames | null}
+type Contract = Record<MediaKind, CollectionWords> & {
+    downloadsBySeason: boolean, creatorNames: BackendNames | null, profileScope: string, audioProfileScope: string, profileScopes: string[],
+}
 let contracts: {fallback: CollectionWords, types: Map<string, Contract>} | undefined
 
 /** Keep the collection contracts the backend gave, which every function here names things from. */
 export function setCollectionContracts(loaded: CollectionContracts) {
     contracts = {
-        fallback: words(loaded.words),
+        fallback: wordsOf(loaded.words),
         types: new Map(loaded.types.map((type) => [type.type, {
-            video: words(type.words), audio: words(type.audioWords), downloadsBySeason: type.downloadsBySeason, creatorNames: type.creatorNames,
+            video: wordsOf(type.words), audio: wordsOf(type.audioWords), downloadsBySeason: type.downloadsBySeason, creatorNames: type.creatorNames,
+            profileScope: type.profileScope, audioProfileScope: type.audioProfileScope, profileScopes: type.profileScopes,
         }])),
     }
 }
@@ -80,15 +84,30 @@ export function collectionWords(type: string | null | undefined, kind: MediaKind
 /** Whether downloads of a collection type pick its seasons, as for a series or an artist's albums, rather than its
  *  newest episodes, as for a podcast. */
 export function downloadsBySeason(type: string): boolean {
-    const contract = contracts?.types.get(type)
-    if (!contract) throw new Error(`No collection contract for ${type}`)
-    return contract.downloadsBySeason
+    return contractOf(type).downloadsBySeason
 }
 
 /** What a collection of the type calls the creator behind it: the type's word, such as artist for Music, or else what
  *  their Site calls its creators. */
 export function creatorNamesFor(type: string | null | undefined, siteNames: BackendNames): BackendNames {
     return (type ? contracts?.types.get(type)?.creatorNames : null) ?? siteNames
+}
+
+function contractOf(type: string): Contract {
+    const contract = contracts?.types.get(type)
+    if (!contract) throw new Error(`No collection contract for ${type}`)
+    return contract
+}
+
+/** What a Local Media Profile can keep to be offered for a collection of the type, such as both or podcast. */
+export function profileScopesFor(type: string): string[] {
+    return contractOf(type).profileScopes
+}
+
+/** What a new Local Media Profile for a collection of the type keeps: music_tracks for sound in Music, for example. */
+export function newProfileScope(type: string, audio = false): string {
+    const contract = contractOf(type)
+    return audio ? contract.audioProfileScope : contract.profileScope
 }
 
 interface WordedCollection {

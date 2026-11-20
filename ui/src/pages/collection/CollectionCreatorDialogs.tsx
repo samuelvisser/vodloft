@@ -7,7 +7,7 @@ import {faIcon} from '../../icons/faIcon'
 import {addCollectionToCreator, setCollectionCreator, useCreators, useCollectionCreatorLeave, useCollectionCreatorMatch} from '../../lib/queries'
 import type {CollectionCreatorMatch} from '../../types/schemas/creator'
 import type {Names} from '../../types/schemas/source'
-import {capitalized, growingNames} from '../../types/creator'
+import {capitalized} from '../../types/creator'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import LookupSteps from '../creator/LookupSteps'
@@ -200,7 +200,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                         : (
                             <ul className="creator-order-note">
                                 <li>{words.season.Plural}, {words.episode.singular} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
-                                {!creator.creatorSlug && <li>The {creatorNames?.singular}'s other {growingNames(creator.sectionTypes).plural || 'lists'} start as not in your library, so you can add them from the {creatorNames?.singular}'s Edit page.</li>}
+                                {!creator.creatorSlug && <li>The {creatorNames?.singular}'s other {creator.growingNames.plural} start as not in your library, so you can add them from the {creatorNames?.singular}'s Edit page.</li>}
                             </ul>
                         )}
                 </div>

@@ -260,6 +260,8 @@ export const SiteOptionsSchema = z.object({
     streamMethods: z.array(z.enum(['file', 'hls', 'live'])),
     /** The resolutions the site streams video at. */
     streamVideoHeights: z.array(z.number().int()),
+    /** The one resolution the site streams as an MP4 file with sound; the others play once VODLoft has joined them. */
+    streamFileHeight: z.number().int().nullable().default(null),
     /** Whether a feed can send podcast apps straight to the site's video instead of passing it through VODLoft. */
     streamProxyChoice: z.boolean().default(false),
     /** What a feed's video output does on the site, by output value, where it differs from the usual explanation. */

@@ -323,11 +323,11 @@ def test_renaming_files_with_season_folders_moves_downloaded_videos_to_their_pla
 
 def test_a_site_can_name_its_link_seasons_itself(source, monkeypatch, session):
     from backend.services.link_seasons import list_names, loose_season_name
-    from sources import Names, SeasonNames, SectionKind, SectionType
+    from sources import Names, SectionKind, SectionType
 
     monkeypatch.setattr(type(source), "sites", (replace(source.sites[0], section_types=(
         SectionType("set", SectionKind.LIST, Names("set", "sets")), SectionType("mix", SectionKind.LIST, Names("mix", "mixes")),
-    ), season_names=SeasonNames("Loose")),))
+    ), loose_season="Loose"),))
     from backend.services import sites
 
     sites._site_of.cache_clear()

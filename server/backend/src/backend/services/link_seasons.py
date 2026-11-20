@@ -29,9 +29,9 @@ from backend.db.models import Collection, CollectionList, CollectionListItem, Ep
 from backend.services.season_order import arrange_seasons, link_first_videos, match_seasons_of_downloaded, season_year
 from backend.services.seasons import create_season_record
 from backend.services.new_lists import ListKind, NewListSetting, list_kinds, new_link_seasons_settings, section_kind
-from backend.services import sites
 from backend.services.sites import collection_site
-from backend.types.collection_types import CollectionType, EpisodeIdentifier
+from backend.types.collection_contracts import collection_contract
+from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonType
 from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 from backend.utils.helpers import slugify
@@ -48,14 +48,13 @@ _LISTS_AT_ONCE = 4
 def list_names(collection: Collection) -> Names:
     """What the collection's Site calls the lists its link seasons come from, such as playlists, or albums and
     playlists on SoundCloud."""
-    return sites.list_names(collection_site(collection))
+    return collection_site(collection).list_names
 
 
 def loose_season_name(collection: Collection) -> str:
-    """The name of the season of the videos in none of the collection's lists: Videos, or Singles in a Music
-    collection, unless its Site names it otherwise, such as Tracks on Bandcamp."""
-    names = collection_site(collection).season_names
-    return names.music_loose if collection.type == CollectionType.MUSIC.value else names.loose
+    """The name of the season of the videos in none of the collection's lists: Videos, or as its Site names it, such
+    as Tracks on Bandcamp, unless its type names it itself, such as Singles in a Music collection."""
+    return collection_contract(collection.type).loose_season_on(collection_site(collection))
 
 
 def link_seasons_on(collection: Collection) -> bool:
@@ -177,7 +176,7 @@ def collection_list_kinds(collection: Collection) -> list[ListKind]:
 def collection_new_lists(collection: Collection) -> list[NewListSetting]:
     """What the collection does with a new list of each kind of its Site."""
     return new_link_seasons_settings(
-        collection_list_kinds(collection), collection.new_lists, collection.type == CollectionType.MUSIC.value,
+        collection_list_kinds(collection), collection.new_lists, collection_contract(collection.type).album_lists,
     )
 
 

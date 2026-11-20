@@ -8,6 +8,7 @@ from pydantic import AliasChoices, AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.pagination import CursorPageRead
+from backend.api.models.collection_contract import CollectionWordsAPIRead
 from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead, SiteAPIRead
 from backend.types.creator_types import NewSectionAction, SectionTarget
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
@@ -82,9 +83,11 @@ class CreatorLookupAPIRead(ResponseBase):
     section_types: list[SectionTypeAPIRead]
     """Every type of section the Site's creators have, such as playlists on YouTube or shows on The Daily Wire."""
     audio_only: bool = False
+    """The Site has sound only, such as Bandcamp, so what its lists hold are tracks."""
     media_names: NamesAPIRead = Field(validation_alias=AliasPath("site", "media_names"))
     """What the Site calls one of its videos: a video, or a track on a Site with sound only."""
-    """The Site has sound only, such as Bandcamp, so what its lists hold are tracks."""
+    growing_names: NamesAPIRead = Field(validation_alias=AliasPath("site", "growing_names"))
+    """What the Site calls the lists and shows its creators add, such as playlists or shows."""
     link_seasons: bool = False
     """The creator's lists can be seasons of its own collection."""
     movies: bool = False
@@ -105,6 +108,8 @@ class CreatorLookupAPIRead(ResponseBase):
     music_new_lists: list[CreatorNewListAPIRead]
     """The same, when the creator is added as a music artist: their albums are added, and where the Site tells albums
     from other lists, those others are skipped."""
+    new_list_names: NamesAPIRead
+    """Those kinds of list named together, such as albums and playlists."""
     creator_slug: Optional[str] = None
     """The creator's slug, when it is already in the Library."""
     music: bool = False
@@ -193,6 +198,8 @@ class CreatorAPIRead(ResponseBase):
     """A music artist: they have a Music collection."""
     kind: str
     """The label with their Site, when they are on one only, such as "The Daily Wire host"."""
+    words: CollectionWordsAPIRead
+    """What the creator's page calls their seasons and episodes, such as albums and tracks for an artist."""
     accounts: list[CreatorAccountAPIRead]
     title: str
     description: Optional[str] = None
@@ -205,6 +212,8 @@ class CreatorAPIRead(ResponseBase):
     episode_count: int = 0
     new_lists: list[CreatorNewListAPIRead]
     """What the creator does with a new list, for each kind of list of their Sites."""
+    new_list_names: NamesAPIRead
+    """Those kinds of list named together, such as albums and playlists, or lists when there are none."""
     genre: Optional[str] = None
     content_rating: Optional[str] = None
 
@@ -298,6 +307,8 @@ class CollectionCreatorMatchAPIRead(ResponseBase):
     creator_names: NamesAPIRead
     section_types: list[SectionTypeAPIRead]
     """Every type of section the creator's Site has, such as playlists on YouTube."""
+    growing_names: NamesAPIRead
+    """What the Site calls the lists and shows its creators add, such as playlists or shows."""
     ref: str
     url: Optional[str] = None
     title: str

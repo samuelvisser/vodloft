@@ -183,9 +183,9 @@ export default function CollectionDownloadAllDialog({
           localMediaProfileId: values.localMediaProfileId,
           seasonIds: bySeason ? values.seasonIds : [],
           episodeTypes: values.episodeTypes,
-          downloadDaysInPast: collectionType === 'podcast' && values.limitBy === 'date' ? values.downloadDaysInPast : 0,
-          downloadEpisodeCount: collectionType === 'podcast' && values.limitBy === 'episodes' ? values.downloadEpisodeCount : 0,
-          downloadStartingFrom: collectionType === 'podcast' && values.limitBy === 'none' ? values.downloadStartingFrom : null,
+          downloadDaysInPast: !bySeason && values.limitBy === 'date' ? values.downloadDaysInPast : 0,
+          downloadEpisodeCount: !bySeason && values.limitBy === 'episodes' ? values.downloadEpisodeCount : 0,
+          downloadStartingFrom: !bySeason && values.limitBy === 'none' ? values.downloadStartingFrom : null,
         }),
       })
       toast.success(result.queued
@@ -289,7 +289,7 @@ export default function CollectionDownloadAllDialog({
           />
           {errors.episodeTypes && <div className="error" role="alert">{errors.episodeTypes.message}</div>}
       </div>
-      {collectionType === 'podcast' && (
+      {!bySeason && (
         <>
           <div className="form-row">
             <label htmlFor={`${selectId}-limit`}>Limit by</label>

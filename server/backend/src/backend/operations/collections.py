@@ -25,6 +25,8 @@ class _CollectionOperation(OperationDefinition[Collection]):
         return {
             "collection_slug": self.resource.slug,
             "collection_title": self.resource.title,
+            # Names what the operation counts in the collection's words, such as tracks.
+            "collection_type": self.resource.type,
         }
 
 
