@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
     from backend.db.models import Season, DownloadProfile, Site
-    from backend.db.models import Creator, CustomIndexState, CollectionList
+    from backend.db.models import Creator, CreatorAccount, CustomIndexState, CollectionList
 
 
 def _default_episode_order(context) -> str:
@@ -40,6 +40,11 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     site_ref: Mapped[Optional[str]] = mapped_column(comment="The Site's own id for the collection")
     creator_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("creators.id", ondelete="SET NULL"), index=True, comment="The creator it was added through",
+    )
+    creator_account_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("creator_accounts.id", ondelete="SET NULL", use_alter=True), index=True,
+        comment="The creator's account whose feeds and lists it gathers as the user placed them, for a collection of "
+                "the creator's other than the account's own collection",
     )
     title: Mapped[str]
     description: Mapped[Optional[str]]
@@ -140,6 +145,9 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     # Relationships
     site: Mapped[Optional["Site"]] = relationship(lazy="joined")
     creator: Mapped[Optional["Creator"]] = relationship(back_populates="collections", foreign_keys=[creator_id])
+    creator_account: Mapped[Optional["CreatorAccount"]] = relationship(
+        back_populates="gathering", foreign_keys=[creator_account_id],
+    )
     episodes: Mapped[list["Episode"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan", order_by="desc(Episode.index)"
     )

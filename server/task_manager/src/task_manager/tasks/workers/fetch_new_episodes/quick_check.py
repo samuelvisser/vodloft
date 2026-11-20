@@ -23,7 +23,7 @@ from config.network import is_no_internet_error
 from sources import Feature, Source, get_source
 from backend.services.notifications.emitters import link_seasons_found
 from backend.services.link_seasons import (
-    holds_only_link_seasons, list_lists, lists_own_link, own_feeds, place_in_link_seasons, link_seasons_on, save_lists,
+    holds_only_link_seasons, list_lists, lists_own_link, own_feeds, own_link, place_in_link_seasons, link_seasons_on, save_lists,
 )
 from ...helpers.listed_collections import (
     add_listed_episodes, index_listed_collection, known_episode_slugs, splits_chapters, with_chapters,
@@ -81,7 +81,7 @@ def _due_collections(s: Session, now: datetime) -> list[tuple[Collection, Source
     for source_key, collections in by_source.items():
         source = get_source(source_key)
         minutes = source.quick_check_minutes([
-            (collection.sharing_url or "", counts.get(collection.id, 0)) for collection in collections
+            (own_link(collection) or "", counts.get(collection.id, 0)) for collection in collections
         ])
         for collection in collections:
             last = _last_checked.get(collection.id)
@@ -98,7 +98,7 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
     """Look at the collection's newest videos, and add the ones it does not have yet. When it found some and the
     collection's playlists are seasons, it looks at the playlists too, so a new video goes to its playlist's season
     before it is downloaded."""
-    collection_id, url, feeds = collection.id, collection.sharing_url, own_feeds(collection)
+    collection_id, url, feeds = collection.id, own_link(collection), own_feeds(collection)
     known = known_episode_slugs(s, collection)
     split = splits_chapters(collection)
     playlists = link_seasons_on(collection)

@@ -138,6 +138,9 @@ class SectionPlanAPIIn(RequestBase):
     """For a section that becomes a collection of its own: its type; left out, the creator's."""
     episode_identifier: Optional[EpisodeIdentifier] = None
     """For a section that becomes a collection of its own: how it identifies its episodes; left out, the creator's."""
+    collection_slug: Optional[str] = None
+    """For a section that goes into another collection of the creator's than the account's own collection, with
+    ``target`` main or main_loose: that collection, one of the account's ``gatherable_slugs``."""
 
 
 class CreatorAPICreate(RequestBase):
@@ -195,6 +198,11 @@ class CreatorAccountAPIRead(ResponseBase):
     """When VODLoft last looked for new sections."""
     main_collection_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("main_collection", "slug"))
     """The collection named after the creator that takes this account's uploads."""
+    gathering_slugs: list[str] = Field(default_factory=list)
+    """The collections that gather the account's feeds and lists, its own collection first."""
+    gatherable_slugs: list[str] = Field(default_factory=list)
+    """The collections a feed or list of the account can go into besides a collection of its own: those of
+    ``gathering_slugs``, and those made from one of its feeds or lists, which can gather more of them."""
 
 
 class CreatorAPIRead(ResponseBase):
@@ -284,6 +292,9 @@ class CreatorSectionMoveAPIIn(RequestBase):
     account_id: int
     ref: str = Field(min_length=1)
     target: SectionTarget
+    collection_slug: Optional[str] = None
+    """With ``target`` main or main_loose, the collection it goes into, when that is not the account's own
+    collection: one of the account's ``gatherable_slugs``."""
 
 
 class CreatorSectionMovesAPIIn(RequestBase):

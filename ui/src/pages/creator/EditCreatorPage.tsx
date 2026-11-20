@@ -19,7 +19,7 @@ import {
     CreatorPageReadSchema, CreatorUpdateSchema, newListsValues, withNewList, type CreatorUpdateIn, type CreatorUpdateOut,
     type NewSectionAction, type SectionPlaces,
 } from '../../types/schemas/creator'
-import CreatorSectionsEditor, {mainSeasonOf, mainTitleOf, placedSections, placeKey, placeLabels, placeOf} from './CreatorSectionsEditor'
+import CreatorSectionsEditor, {placedSections, placeKey, placeLabel, placeMove, placeOf} from './CreatorSectionsEditor'
 import MoveSectionsDialog, {type PlaceChange} from './MoveSectionsDialog'
 import './CreatorPages.css'
 
@@ -58,12 +58,12 @@ export default function EditCreatorPage() {
 
     // What the user changed under where the feeds and lists go, in the words of their dropdowns.
     const placeChanges = (chosen: SectionPlaces): PlaceChange[] => placedSections(creator).flatMap((item) => {
-        const target = chosen[placeKey(item.account, item.section.ref)]
-        if (!target) return []
-        const labels = placeLabels(item.section, mainTitleOf(creator, item.account), mainSeasonOf(creator, item.account))
+        const place = chosen[placeKey(item.account, item.section.ref)]
+        if (!place) return []
         return [{
-            move: {accountId: item.account.id, ref: item.section.ref, target},
-            title: item.section.title, names: item.section.names, from: labels[placeOf(item)], to: labels[target],
+            move: {accountId: item.account.id, ref: item.section.ref, ...placeMove(place)},
+            title: item.section.title, names: item.section.names,
+            from: placeLabel(creator, item, placeOf(item)), to: placeLabel(creator, item, place),
         }]
     })
 

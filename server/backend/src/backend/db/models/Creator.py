@@ -66,6 +66,12 @@ class Creator(Base):
         """The collections named after the creator, one for each account that has one."""
         return {account.main_collection_id for account in self.accounts if account.main_collection_id is not None}
 
+    @property
+    def gathering_ids(self) -> set[int]:
+        """The collections that gather feeds and lists of the creator's accounts: each account's own collection, and
+        any other collection the user gave several of them."""
+        return {collection.id for account in self.accounts for collection in account.gathering} | self.main_collection_ids
+
     def __repr__(self) -> str:
         return f"<Creator(id={self.id}, slug={self.slug}, title={self.title!r})>"
 
@@ -98,6 +104,16 @@ class CreatorAccount(Base):
         back_populates="account", cascade="all, delete-orphan", order_by="CreatorSection.site_position",
     )
     main_collection: Mapped[Optional["Collection"]] = relationship(foreign_keys=[main_collection_id], post_update=True)
+    gathering: Mapped[list["Collection"]] = relationship(
+        back_populates="creator_account", foreign_keys="Collection.creator_account_id", order_by="Collection.id",
+    )
+    """The collections other than the account's own collection that gather some of its feeds and lists."""
+
+    @property
+    def gatherers(self) -> list["Collection"]:
+        """Every collection that gathers some of the account's feeds and lists: its own collection first."""
+        main = [self.main_collection] if self.main_collection is not None else []
+        return main + [collection for collection in self.gathering if collection.id != self.main_collection_id]
 
     def __repr__(self) -> str:
         return f"<CreatorAccount(id={self.id}, creator_id={self.creator_id}, site_key={self.site_key}, site_ref={self.site_ref!r})>"

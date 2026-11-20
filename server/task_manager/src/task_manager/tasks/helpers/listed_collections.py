@@ -56,7 +56,7 @@ from backend.services.notifications.emitters import link_seasons_found
 from backend.services.reassigned import list_left_out, lists_left_out, placed_elsewhere, save_left_out, settle_creator
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
-    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, own_feeds, section_list_names, place_in_link_seasons, link_seasons_on,
+    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, own_feeds, own_link, section_list_names, place_in_link_seasons, link_seasons_on,
     save_lists,
 )
 from backend.services.metadata_refresh import new_item_metadata_is_final
@@ -146,7 +146,7 @@ def with_chapters(source: Source, details: VideoDetails) -> VideoDetails:
 
 
 def _list_new_episodes(s: Session, collection: Collection, source: Source, progress) -> list[VideoDetails]:
-    title, url = collection.title, collection.sharing_url
+    title, url = collection.title, own_link(collection)
     if url is None or not lists_own_link(collection):
         # Its link seasons say what it holds, so its own link is not listed.
         return []
@@ -378,7 +378,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
     collection = s.get(Collection, collection_id)
     if collection is None:
         return RefreshCounts()
-    title, url = collection.title, collection.sharing_url
+    title, url = collection.title, own_link(collection)
     # A collection that only holds its link seasons has no listing of its own to read its videos from.
     one_by_one = url is None or not lists_own_link(collection)
     # The parts of a split video are asked about once, as their video.

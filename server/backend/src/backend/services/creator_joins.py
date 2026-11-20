@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Creator, CreatorAccount, CreatorSection, CreatorSectionItem, Collection, CollectionListItem
 from backend.services.creators import (
     _new_creator, _list_of_main, _site_key_of, _switch_off, account_in_library, belong_to, collection_section,
-    creator_site, join_overlaps, takes_feed,
+    creator_site, join_overlaps, own_collection, takes_feed,
 )
 from backend.services.episode_identification import collection_busy
 from backend.services.errors import ServiceError
@@ -39,7 +39,7 @@ from backend.services.reassigned import (
     settle_creator,
 )
 from backend.services.section_moves import (
-    Flow, SectionMovesPreview, _Moves, _add, _feed_episodes, _feeds_of, _handed_over, _media_names, _own_collection, _whole,
+    Flow, SectionMovesPreview, _Moves, _add, _feed_episodes, _feeds_of, _handed_over, _media_names, _whole,
     as_one_operation, follow_up, preview, snapshot,
 )
 from backend.services.sites import site_record
@@ -154,7 +154,7 @@ def _leave_kept_feeds(s: Session, account: CreatorAccount, collection: Collectio
     for feed in account.sections:
         if feed.kind != SectionKind.FEED or feed.role is SectionRole.MAIN or not takes_feed(collection, feed.ref):
             continue
-        own = _own_collection(account, feed)
+        own = own_collection(account, feed)
         if own is None:
             continue
         episodes = [episode for episode in _feed_episodes(s, account, collection, feed) if episode.source_slug not in held]
@@ -208,7 +208,7 @@ def _settle(s: Session, account: CreatorAccount, collections: list[Collection], 
         for slug, episode_id in places.episodes.get(collection.id, {}).items():
             target = places.place(collection.id, slug)
             if target is not None:
-                section = _list_of(sections, target, holders.get(slug) if target.id in creator.main_collection_ids else None)
+                section = _list_of(sections, target, holders.get(slug) if target.id in creator.gathering_ids else None)
                 if section is not None:
                     flows.setdefault((collection.id, target.id, section.id), []).append(episode_id)
             elif slug in places.blocked.get(collection.id, ()) and episode_id not in places.downloaded and slug in blocking:

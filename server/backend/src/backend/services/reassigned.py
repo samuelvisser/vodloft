@@ -50,16 +50,13 @@ def _list_collection_ids(creator: Creator, seasons: frozenset[str] = frozenset()
     refs = {section.ref for section in lists}
     return {
         collection.id for collection in creator.collections
-        if collection.id not in creator.main_collection_ids and (collection.sharing_url in urls or collection.slug in refs)
+        if collection.id not in creator.gathering_ids and (collection.sharing_url in urls or collection.slug in refs)
     }
 
 
 def _main_lists(creator: Creator) -> frozenset[str]:
-    """The lists in the creator's own collections, as seasons or not, one collection for each account that has one."""
-    return frozenset(
-        link.ref for account in creator.accounts if account.main_collection is not None
-        for link in lists_in(account.main_collection)
-    )
+    """The lists in the collections that gather the creator's feeds and lists, as seasons or not."""
+    return frozenset(link.ref for account in creator.accounts for collection in account.gatherers for link in lists_in(collection))
 
 
 @dataclass
@@ -109,7 +106,7 @@ class CreatorPlaces:
 
 
 def creator_places(s: Session, creator: Creator) -> CreatorPlaces:
-    mains = creator.main_collection_ids
+    mains = creator.gathering_ids
     order = sorted(creator.collections, key=lambda collection: (collection.id not in mains, collection.id))
     lists = _list_collection_ids(creator, _main_lists(creator))
     places = CreatorPlaces(s=s, order=order, held={})
