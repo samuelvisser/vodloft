@@ -236,6 +236,30 @@ def test_single_non_progress_target_operation_is_indeterminate(monkeypatch):
         session.close()
 
 
+def test_a_step_that_cannot_measure_itself_makes_its_operation_indeterminate():
+    """A task that tracks progress can say that its current step cannot tell how far it is, such as one long write."""
+    from task_manager.scheduler.operations import OperationTargetSpec, create_operation, refresh_operation
+    from task_manager.scheduler.types import ResourceType
+
+    session = _session()
+    try:
+        definition = _definition(session)
+        run = _run(session, definition, resource_type=ResourceType.COLLECTION, resource_id=42, progress=None)
+        operation = create_operation(
+            session, kind="collection.sync", resource_type="collection", resource_id=42, title="Test Show",
+            targets=[OperationTargetSpec(task_key=definition.key, resource_type="collection", resource_id=42)],
+        )
+        assert operation.progress is None
+
+        # The next step can, and the operation shows its percentage again.
+        run.progress = 5
+        session.flush()
+        refresh_operation(session, operation.id)
+        assert operation.progress == 5
+    finally:
+        session.close()
+
+
 def test_task_operation_models_expose_native_relationships():
     from task_manager.scheduler.operations import OperationTargetSpec, create_operation
     from task_manager.scheduler.types import ResourceType
@@ -869,6 +893,41 @@ def test_operation_dependencies_weight_child_completion_without_replacing_child_
             first.id,
             second.id,
         }
+    finally:
+        session.close()
+
+
+def test_a_parent_shows_no_percentage_until_one_of_its_parts_got_anywhere():
+    """Such as a creator's move while a collection numbers its episodes in one long write: not 0% the whole time."""
+    from task_manager.scheduler.operations import (
+        OperationDependencySpec, _operation_snapshot, add_operation_dependencies, create_operation, refresh_operation,
+    )
+    from task_manager.scheduler.types import OperationStatus
+
+    session = _session()
+    try:
+        children = []
+        for number in (1, 2):
+            child = create_operation(
+                session, kind="collection.renumber", resource_type="collection", resource_id=number,
+                title=f"Collection {number}", targets=[],
+            )
+            child.status, child.progress, child.completion_progress = OperationStatus.RUNNING.value, None, 0
+            children.append(child)
+        session.flush()
+        parent = create_operation(
+            session, kind="creator.move_sections", resource_type="creator", resource_id=1, title="Creator", targets=[],
+        )
+        add_operation_dependencies(session, parent.id, [
+            OperationDependencySpec(child_operation_id=child.id, slot_key=str(child.id)) for child in children
+        ])
+        refresh_operation(session, parent.id)
+        assert _operation_snapshot(parent).progress is None
+
+        children[0].status, children[0].progress, children[0].completion_progress = OperationStatus.SUCCEEDED.value, 100, 100
+        session.flush()
+        refresh_operation(session, parent.id)
+        assert _operation_snapshot(parent).progress == 50
     finally:
         session.close()
 

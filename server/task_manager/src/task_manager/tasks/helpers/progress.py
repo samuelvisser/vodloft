@@ -85,9 +85,10 @@ def weighted_progress_percent(
     return max(0, min(100, int(weighted_progress / max(1, total_weight))))
 
 
-def update_progress(progress, percentage: int, msg: str):
-    """Small helper to update the progress in any worker"""
+def update_progress(progress, percentage: int | None, msg: str):
+    """Small helper to update the progress in any worker. A percentage of None says the step that starts now cannot
+    tell how far it is, so its progress bar moves without a percentage until a later update gives one."""
     if progress:
         progress.set(percentage, msg)
     else:
-        print(f"{percentage}%: {msg}")
+        print(f"{'…' if percentage is None else f'{percentage}%'}: {msg}")

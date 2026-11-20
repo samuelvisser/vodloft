@@ -828,6 +828,39 @@ def test_progress_updater_honors_late_operation_cancellation(task_database):
     assert updater() is True
 
 
+def test_a_worker_says_its_step_cannot_measure_itself(task_database):
+    """A worker that reports no percentage for a step makes its operation show no percentage until the next one."""
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.executor import ProgressUpdater
+    from task_manager.scheduler.operations import OperationTargetSpec, create_operation, link_run_to_operations
+    from task_manager.scheduler.types import TaskStatus
+
+    session = task_database()
+    definition = _definition(session, "test_unmeasured_step_worker")
+    operation = create_operation(
+        session, kind="collection.test_unmeasured", resource_type="collection", resource_id=93, title="Collection 93",
+        targets=[OperationTargetSpec(task_key=definition.key, resource_type="episode", resource_id=903)],
+    )
+    run = _run(session, definition, resource_id=903, status=TaskStatus.RUNNING, progress=0)
+    link_run_to_operations(session, run=run, task_key=definition.key, operation_ids=(operation.id,))
+    session.commit()
+    run_id, operation_id = run.id, operation.id
+    session.close()
+
+    def progress():
+        s = task_database()
+        try:
+            return s.get(TaskOperation, operation_id).progress
+        finally:
+            s.close()
+
+    updater = ProgressUpdater(run_id)
+    updater.set(None, "Numbering the episodes")
+    assert progress() is None
+    updater.set(5, "Renaming the files")
+    assert progress() == 5
+
+
 def test_executor_rechecks_operation_ownership_after_link(task_database, monkeypatch):
     import task_manager.scheduler.executor as executor_module
     from task_manager.scheduler.db import TaskOperation, TaskRun

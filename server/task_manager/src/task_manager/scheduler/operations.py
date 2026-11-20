@@ -628,7 +628,9 @@ def _refresh_direct_operation(operation: TaskOperation) -> TaskOperation:
         if _task_status(run.status) not in _TERMINAL_TASK_STATUSES
         and _run_reports_worker_progress(run)
     ]
-    if not _direct_progress_is_determinate(targets) and len(terminal_runs) < total:
+    if len(terminal_runs) < total and (
+        not _direct_progress_is_determinate(targets) or _run_is_unmeasured(effective_runs, total)
+    ):
         operation.progress = None
     elif worker_progress_runs:
         progress_total = 0
@@ -768,10 +770,12 @@ def _composite_progress(operation: TaskOperation) -> tuple[int | None, int]:
 
     completion_progress = max(0, min(100, int(100 * completed_weight / total_weight) if total_weight else 0))
     total_units = len(targets) + len(dependencies)
+    # Several parts count as they finish, but until one of them got anywhere, the parent cannot tell how far it is,
+    # as while a collection numbers its episodes in one long write: it shows no percentage rather than 0%.
     determinate = (
-        total_units > 1
-        or (bool(targets) and _target_tracks_progress(targets[0]))
-        or (bool(dependencies) and child_determinate)
+        (total_units > 1 and completed_weight > 0)
+        or (total_units == 1 and bool(targets) and _target_tracks_progress(targets[0]))
+        or (total_units == 1 and bool(dependencies) and child_determinate)
     )
     return (completion_progress if determinate else None), completion_progress
 
@@ -1300,6 +1304,13 @@ def _run_matches_target_inputs(run: TaskRun, target: TaskOperationTarget) -> boo
     if not isinstance(inputs, dict):
         return False
     return all(inputs.get(key) == value for key, value in expected.items())
+
+
+def _run_is_unmeasured(effective_runs: Sequence[TaskRun | None], total: int) -> bool:
+    # The one task of an operation that said its current step cannot tell how far it is: a TaskRun of a task that
+    # tracks progress starts at zero, so None comes only from its worker.
+    run = effective_runs[0] if total == 1 else None
+    return run is not None and _task_status(run.status) not in _TERMINAL_TASK_STATUSES and run.progress is None
 
 
 def _run_reports_worker_progress(run: TaskRun) -> bool:

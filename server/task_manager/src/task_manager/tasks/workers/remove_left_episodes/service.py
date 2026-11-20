@@ -12,6 +12,7 @@ from backend.db.models import Collection, Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.link_seasons import held_back, leaving_outside, remove_left_episode
 from backend.services.reassigned import reassignment_of, replaced_sources
+from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.helpers.downloads.collection_episode_downloads import (
     cancel_active_download_attempts,
     delete_episode_download_artifact,
@@ -35,9 +36,12 @@ def _still_leaving(s: Session, episode: Episode) -> bool:
     return episode.id in {e.id for e in leaving_outside(s, episode.collection)} and not held_back(episode)
 
 
-def run_remove_left_episodes(s: Session, *, collection_id: int) -> int:
+def run_remove_left_episodes(s: Session, *, collection_id: int, progress=None) -> int:
     removed = 0
-    for episode_id in _leaving_ids(s, collection_id):
+    leaving = _leaving_ids(s, collection_id)
+    s.rollback()
+    for position, episode_id in enumerate(leaving):
+        update_progress(progress, position * 100 // len(leaving), f"Removing {len(leaving)} episode(s) and their files")
         downloads = list(s.scalars(select(EpisodeMediaDownload).where(EpisodeMediaDownload.media_item_id == episode_id)))
         cancel_active_download_attempts(s, downloads, reason="The episode left its collection")
         for download_id in [download.id for download in downloads]:
