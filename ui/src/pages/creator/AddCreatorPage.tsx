@@ -16,7 +16,7 @@ import {
 import {DwMembershipLevelReg} from '../../types/dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg, type CollectionTypeValue, type EpisodeIdentifierValue} from '../../types/collection'
 import {useCollectionDefaults} from '../../components/AddCollectionPage/collectionDefaults'
-import {capitalized, groupNames, newListActionReg} from '../../types/creator'
+import {capitalized, newListActionReg} from '../../types/creator'
 import NewListSettings from '../../components/common/NewListSettings'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
@@ -355,11 +355,12 @@ export default function AddCreatorPage() {
     const hasMain = [...registries.values()].some((registry) => registry.options.some((option) => option.value === 'main'))
     // A group for each type of section the Site has, in its words and order: Feeds and Playlists on YouTube, or
     // Albums, Playlists and Singles on SoundCloud.
-    // Several types of feed share one group, Feeds, as each feed is named after its type already.
+    // Every feed goes under one heading, Feeds, as each feed is named after its type already; each type of list,
+    // show or item has a heading of its own.
     const named = new Map<string, CreatorSectionRead[]>()
     for (const type of creator.sectionTypes) {
         for (const section of creator.sections.filter((section) => section.type === type.key)) {
-            const many = capitalized(groupNames(section, creator.sections).plural)
+            const many = capitalized((section.kind === 'feed' ? section.kindNames : section.names).plural)
             named.set(many, [...(named.get(many) ?? []), section])
         }
     }
