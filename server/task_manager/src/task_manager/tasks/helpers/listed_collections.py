@@ -53,7 +53,7 @@ from backend.db.models import Collection, Episode, Season
 from backend.db.core import run_write_transaction
 from backend.services.media_access import lock_refused
 from backend.services.notifications.emitters import link_seasons_found
-from backend.services.reassigned import placed_elsewhere, settle_creator
+from backend.services.reassigned import list_left_out, lists_left_out, placed_elsewhere, save_left_out, settle_creator
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
     SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, own_feeds, section_list_names, place_in_link_seasons, link_seasons_on,
@@ -182,6 +182,8 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
             logger.info("Dry run: would add %s (%s)", details.slug, details.title)
         return len(found)
     collection = s.get(Collection, collection_id)
+    # The creator's lists that are not in it keep their videos out, also before their own collections listed them.
+    not_in_it = lists_left_out(s, collection) if collection is not None and lists_own_link(collection) else {}
     listing = None
     if collection is not None and link_seasons_on(collection):
         # The Site's own word for its lists, such as playlists on YouTube or albums on Bandcamp.
@@ -189,6 +191,7 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
         update_progress(progress, _PLAYLISTS_PROGRESS, f"Listing the {lists} of '{title}' at {source.name}")
         listing = list_lists(s, collection, source, also=frozenset(details.slug for details in found))
     s.rollback()
+    left_out = list_left_out(source, not_in_it)
     if found:
         update_progress(progress, _SAVING_PROGRESS, f"Saving {len(found)} new episodes of '{title}'")
 
@@ -197,6 +200,12 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
         update_progress(progress, _SAVING_PROGRESS, f"Saving {len(outside)} videos of the {lists} of '{title}'")
 
     def save(w: Session) -> int:
+        # What the lists have first, so a video that a list not in the collection has stays out, unless one of its
+        # seasons has it too.
+        save_left_out(w, left_out)
+        collection = w.get(Collection, collection_id)
+        if collection is not None and listing is not None:
+            link_seasons_found(w, collection, save_lists(w, collection, listing))
         added = add_listed_episodes(w, collection_id=collection_id, found=[*found, *outside])
         if outside:
             # The collection's own link does not list them, so they leave when no playlist that is a season does.
@@ -204,11 +213,8 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
                 Episode.collection_id == collection_id, Episode.video_slug.in_([details.slug for details in outside]),
             )):
                 episode.from_link_season = True
-        collection = w.get(Collection, collection_id)
         if collection is None:
             return added
-        if listing is not None:
-            link_seasons_found(w, collection, save_lists(w, collection, listing))
         place_in_link_seasons(w, collection)
         settle_creator(w, collection)
         return added

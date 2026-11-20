@@ -280,6 +280,8 @@ The creator's **Edit** page holds:
 
 A creator keeps each of their videos in one of its collections, and a playlist wins over a feed: a video in a playlist that is a collection of its own belongs in that collection, not in the main collection with the rest of the uploads. A video that is not downloaded yet just goes there. The main collection doesn't add a video that such a playlist has, and leaves one it had.
 
+The same goes for every playlist that isn't in a collection: one you skipped, or one that waits for your choice, keeps its videos out of the creator's main collection too, even though the creator's Videos feed lists them. Only a playlist that is a season of the main collection lets its videos in. A video that was already downloaded stays where it is, with its files, until you remove it.
+
 When a video is already downloaded, for example because the creator put it in a playlist only after VODLoft downloaded it, it stays where it is, files and all, with a **Reassigned** badge. Its page says which collection it belongs in now. That collection doesn't download it again while it waits. You choose when it moves:
 
 - **Move to** the collection, in the episode's **Actions** menu, moves that one.

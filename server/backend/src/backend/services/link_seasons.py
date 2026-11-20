@@ -218,23 +218,30 @@ def list_lists(s: Session, collection: Collection, source: Source, also: frozens
     for playlist in playlists or ():
         if playlist.ref not in known and _added(action_of(playlist), first=first, every=every):
             wanted[playlist.ref] = playlist.url
-    items: dict[str, tuple[ItemRef, ...]] = {}
+    items = list_each(source, wanted)
+    return LinkListing(playlists, items, _look_up_outside(source, adds_outside, known_slugs, items))
 
-    def list_one(playlist_url: str) -> tuple[ItemRef, ...] | None:
+
+def list_each(source: Source, urls: dict[str, str]) -> dict[str, tuple[ItemRef, ...]]:
+    """The videos of each list, in its order, by the key it has in ``urls``. A list that could not be listed is left
+    out. Slow, so no transaction stays open."""
+
+    def list_one(url: str) -> tuple[ItemRef, ...] | None:
         try:
-            return source.list_items(playlist_url)
+            return source.list_items(url)
         except Exception as exc:
-            logger.info("Could not list the playlist %s: %s", playlist_url, exc)
+            logger.info("Could not list the playlist %s: %s", url, exc)
             return None
 
     # A creator can have hundreds of playlists, each a lookup of a second or more, so a few are listed at once. Each
     # runs in a copy of this context, which tells the Source's pacing whose requests they are.
+    items: dict[str, tuple[ItemRef, ...]] = {}
     with ThreadPoolExecutor(max_workers=_LISTS_AT_ONCE, thread_name_prefix="list-items") as pool:
-        listed = {ref: pool.submit(contextvars.copy_context().run, list_one, playlist_url) for ref, playlist_url in wanted.items()}
-        for ref, future in listed.items():
+        listed = {key: pool.submit(contextvars.copy_context().run, list_one, url) for key, url in urls.items()}
+        for key, future in listed.items():
             if (found := future.result()) is not None:
-                items[ref] = found
-    return LinkListing(playlists, items, _look_up_outside(source, adds_outside, known_slugs, items))
+                items[key] = found
+    return items
 
 
 def _look_up_outside(

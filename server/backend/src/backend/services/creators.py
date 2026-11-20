@@ -18,7 +18,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Creator, CreatorAccount, CreatorSection, Collection, CollectionList, Movie
-from backend.services.link_seasons import is_season
+from backend.services.link_seasons import is_season, lists_own_link
 from backend.services.collections import add_collection, index_new_collection, reindex_collection
 from backend.services.errors import ServiceError
 from backend.services.sites import collection_site, site_record
@@ -510,6 +510,12 @@ def place_sections(
     for plan in plans:
         if plan.target is SectionTarget.SKIP:
             sections[plan.ref].status = SectionStatus.IGNORED.value
+    if any(plan.target is SectionTarget.SKIP and sections[plan.ref].kind == SectionKind.LIST for plan in plans):
+        # A skipped list keeps its videos out of the creator's collections, also the ones their feeds list.
+        list_urls = {section.url for section in creator.sections if section.kind == SectionKind.LIST}
+        for collection in creator.collections:
+            if lists_own_link(collection) and collection.sharing_url not in list_urls:
+                reindex_collection(s, collection)
     adding = [plan for plan in plans if plan.target is not SectionTarget.SKIP]
     if not adding:
         return []

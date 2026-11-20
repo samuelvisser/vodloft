@@ -2,10 +2,14 @@
 
 A creator keeps each of its videos in one of its collections. A list, such as a playlist, beats a feed:
 a video is in the collection whose lists hold it, which is the creator's own collection for the playlists that are its
-seasons and a collection of its own for a playlist that is one. A video that a list of another collection holds, and
-no list of its own collection, belongs there. One that is not downloaded simply moves: the collection it is in leaves
-it, and a collection that does not hold it by a list does not add it. One with downloads stays where it is, files and
-all, and is Reassigned until the user moves it.
+seasons and a collection of its own for a playlist that is one. A list of the creator that is not in a collection
+keeps its videos out of it, also when a feed of that collection lists them: whether the list is a collection of its
+own, was skipped or waits for the user's choice. Only a season of the collection itself lets such a video in. Each
+collection of the creator lists those lists when it syncs, so it knows their videos before their own collections do.
+
+A video that is not downloaded simply moves: the collection it is in leaves it, and a collection that does not hold it
+by a list does not add it. One with downloads stays where it is, files and all. When another collection holds it by a
+list, it is Reassigned until the user moves it there.
 
 Moving a reassigned video hands each of its downloads to the same video in its new collection:
 
@@ -25,14 +29,16 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Creator, Collection, DownloadProfile, Episode, MediaDownloadBase
+from backend.db.models import (
+    Creator, CreatorSection, CreatorSectionItem, Collection, DownloadProfile, Episode, MediaDownloadBase,
+)
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.services.link_seasons import _holders, active_lists, link_seasons_on, remove_left_episode
+from backend.services.link_seasons import _holders, active_lists, link_seasons_on, list_each, remove_left_episode
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
-from sources import SectionKind
+from sources import ItemRef, SectionKind, Source
 
 
 def _list_collection_ids(creator: Creator, seasons: frozenset[str] = frozenset()) -> set[int]:
@@ -177,28 +183,74 @@ def reassignment_of(s: Session, episode: Episode, *, downloaded: bool = True) ->
 
 
 def placed_elsewhere(s: Session, collection: Collection) -> frozenset[str]:
-    """The videos a collection does not add, because a list of another collection of its creator holds them. A
-    collection made from a list adds every video of its list."""
+    """The videos a collection does not add, because a list of another collection of its creator holds them, or a
+    list of its creator that is not in it has them. A collection made from a list adds every video of its list."""
     creator = collection.creator
     if creator is None or collection.id in _list_collection_ids(creator, _main_seasons(s, creator)):
         return frozenset()
-    return creator_places(s, creator).elsewhere(collection.id)
+    return creator_places(s, creator).elsewhere(collection.id) | left_out(s, collection)
+
+
+def lists_left_out(s: Session, collection: Collection) -> dict[int, str]:
+    """The creator's lists on the collection's Source that are not in the collection, by the id of their section,
+    with their links: the collection leaves out every video they have, also one its feeds list. Each list counts that
+    is not one of the collection's seasons, whether it is a collection of its own, was skipped or waits for the
+    user's choice. Empty for a collection made from a list, which adds every video of its list, and for one without a
+    creator."""
+    creator = collection.creator
+    if creator is None or collection.id in _list_collection_ids(creator, _main_seasons(s, creator)):
+        return {}
+    seasons = {link.ref for link in active_lists(s, collection)}
+    return {
+        section.id: section.url for account in creator.accounts if account.source_key == collection.source_key
+        for section in account.sections if section.kind == SectionKind.LIST and section.ref not in seasons
+    }
+
+
+def list_left_out(source: Source, lists: dict[int, str]) -> dict[int, tuple[ItemRef, ...]]:
+    """The videos each of ``lists_left_out`` has now, by its section's id. A list that could not be listed is left
+    out, and keeps the videos it had. Slow, so no transaction stays open."""
+    return list_each(source, lists) if lists else {}
+
+
+def save_left_out(s: Session, listed: dict[int, tuple[ItemRef, ...]]) -> None:
+    """Store what the creator's lists have now.
+
+    ``s`` is a write transaction's session."""
+    known = set(s.scalars(select(CreatorSection.id).where(CreatorSection.id.in_(listed))))
+    for section_id, items in listed.items():
+        if section_id not in known:
+            continue
+        s.execute(delete(CreatorSectionItem).where(CreatorSectionItem.section_id == section_id))
+        s.add_all(CreatorSectionItem(section_id=section_id, source_slug=slug) for slug in dict.fromkeys(item.slug for item in items))
+    s.flush()
+
+
+def left_out(s: Session, collection: Collection) -> frozenset[str]:
+    """The videos the collection leaves out because a list of its creator that is not in it has them, unless one of
+    its own seasons has them too."""
+    lists = lists_left_out(s, collection)
+    if not lists:
+        return frozenset()
+    slugs = set(s.scalars(select(CreatorSectionItem.source_slug).where(CreatorSectionItem.section_id.in_(lists))))
+    return frozenset(slugs - set(_holders(s, active_lists(s, collection))))
 
 
 def settle_creator(s: Session, collection: Collection) -> int:
     """Let each of the creator's collections leave the videos that are not downloaded and that another collection
-    holds by a list now. Returns how many left.
+    holds by a list now, or that a list of the creator that is not in it has. Returns how many left.
 
     ``s`` is a write transaction's session."""
     creator = collection.creator
     if creator is None:
         return 0
     places = creator_places(s, creator)
+    outs = {other.id: left_out(s, other) for other in places.order}
     leaving = [
         episode_id
         for other in places.order
         for slug, episode_id in places.episodes[other.id].items()
-        if episode_id not in places.downloaded and places.place(other.id, slug) is not None
+        if episode_id not in places.downloaded and (places.place(other.id, slug) is not None or slug in outs[other.id])
     ]
     places.load(leaving)
     for episode_id in leaving:
