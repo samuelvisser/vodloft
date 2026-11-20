@@ -59,7 +59,7 @@ def analyze_profile_outputs(
     Local custom indexes remain profile-scoped symbols and are never evaluated.
     """
     extension = {"format_audio_only": "m4a", "format_hls": "m3u8"}.get(preferred_format, "mp4")
-    if profile_type in ("collection", "music"):
+    if profile_type == "collection":
         scenarios = (analyze_template(template, environment=environment, aliases=_COLLECTION_ALIASES, namespace=namespace),)
     elif profile_type == "video":
         feature = analyze_template(template, environment=environment, aliases=_MOVIE_ALIASES,

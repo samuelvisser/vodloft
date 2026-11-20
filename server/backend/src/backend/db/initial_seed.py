@@ -64,6 +64,7 @@ def _seed_local_media_profiles(session: Session) -> None:
             subtitle_mode="sidecar",
             output_template=_MOVIE_TEMPLATE,
             preferred_format="format_1080p",
+            video_scope="movies",
             site_keys=movie_site_keys(session),
             include_upcoming_sites=False,
         ),
@@ -72,6 +73,7 @@ def _seed_local_media_profiles(session: Session) -> None:
             name="VODLoft Videos",
             output_template=_VIDEO_TEMPLATE,
             preferred_format="format_1080p",
+            video_scope="videos",
         ),
     ))
 

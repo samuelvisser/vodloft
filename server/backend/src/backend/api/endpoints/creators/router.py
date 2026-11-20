@@ -2,10 +2,13 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from backend.api.models.creator import (
     CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorLookupAPIRequest,
-    CreatorEpisodePageAPIRead, CreatorPageAPIRead, CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd,
+    CreatorEpisodePageAPIRead, CreatorPageAPIRead, CreatorSectionMovesAPIIn, CreatorSectionMovesPreviewAPIRead,
+    CreatorSectionsAPIAdd,
+    CreatorSectionsAPIShow,
 )
 from backend.api.pagination import InvalidCursorError
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
+from backend.api.models.source import NamesAPIRead
 from backend.api.steps import STEPS_RESPONSE, stream_steps
 from backend.app import db_session
 from backend.db.core import run_write_transaction
@@ -13,10 +16,12 @@ from backend.security.access import Access, Area, Level
 from backend.security.deps import requires, signed_in
 from backend.services.source_requests import asking_source
 
+from backend.api.endpoints.movies.service import look_up_movies
+
 from . import lookups
 from .service import (
-    CreatorNotFoundError, account_link, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
-    look_up_creator, lookup_creator_label, move_creator_reassigned, move_creator_section, update_creator,
+    CreatorNotFoundError, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
+    look_up_creator, lookup_creator_names, move_creator_reassigned, record_creator_opened, preview_creator_moves, show_sections, update_creator,
 )
 
 router = APIRouter(prefix="/creators", tags=["Creators"])
@@ -27,15 +32,15 @@ def lookup_creator(body: CreatorLookupAPIRequest, access: Access = signed_in()):
     """Look a creator up at its Site: who it is, its sections, and what each way of adding it does with them.
 
     Looking a creator up can take a minute, so the answer is a line of JSON per step: first ``{"step": "...",
-    "creatorLabel": "..."}`` with what the Site calls a creator, then ``{"step": "..."}`` while it
+    "creatorNames": {"one", "many", "a"}}`` with what the Site calls a creator, then ``{"step": "..."}`` while it
     works, then ``{"creator": CreatorLookupAPIRead}`` or ``{"error": "..."}``.
     """
     access.check_link_at(body.source_key, body.url)
 
     def look_up(send) -> dict:
-        label = lookup_creator_label(body.source_key, body.url)
-        send(step=f"Looking the {label} up", creatorLabel=label)
-        with asking_source(f"Could not look up this {label}"):
+        names = lookup_creator_names(body.source_key, body.url)
+        send(step=f"Looking the {names.singular} up", creatorNames=NamesAPIRead.model_validate(names).model_dump(mode="json"))
+        with asking_source(f"Could not look up this {names.singular}"):
             details = look_up_creator(body.source_key, body.url, body.ref, lambda step: send(step=step))
         send(step="Checking what is in your library already")
         with db_session() as s:
@@ -54,7 +59,9 @@ def create_creator(body: CreatorAPICreate, access: Access = signed_in()):
     if details is None:
         with asking_source("Could not look up this creator"):
             details = look_up_creator(body.source_key, body.url, body.ref)
-    return run_write_transaction(lambda s: add_creator(s, body, details, added_by_id=access.user_id))
+    with asking_source("Could not look up this creator's movies"):
+        movies = look_up_movies(body.source_key, creator_movies_to_add(body, details))
+    return run_write_transaction(lambda s: add_creator(s, body, details, added_by_id=access.user_id, movies=movies))
 
 
 @router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[CreatorAPIRead])
@@ -70,6 +77,12 @@ def creator_get(slug: str):
             return creator_page(s, slug)
         except CreatorNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/{slug}/opened", dependencies=[requires(Area.LIBRARY, Level.VIEW)], status_code=status.HTTP_204_NO_CONTENT)
+def creator_opened(slug: str) -> None:
+    """Count that someone opened the creator's page, so the Library can list the most used creators first."""
+    _found(lambda: run_write_transaction(lambda s: record_creator_opened(s, slug), concurrent=True))
 
 
 @router.get("/{slug}/episodes", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=CreatorEpisodePageAPIRead)
@@ -96,9 +109,11 @@ def _found(work):
 
 
 @router.patch("/{slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CreatorPageAPIRead)
-def creator_update(slug: str, body: CreatorAPIUpdate):
-    """Change what happens with the creator's new sections, the genre and rating of its collections, and its order."""
-    return _found(lambda: run_write_transaction(lambda s: update_creator(s, slug, body)))
+def creator_update(slug: str, body: CreatorAPIUpdate, access: Access = signed_in()):
+    """Change what happens with the creator's new sections, the genre and rating of its collections, and where its
+    feeds and lists go: those move with their videos, after which each collection that changed numbers its episodes
+    again, renames its files and rewrites their metadata."""
+    return _found(lambda: run_write_transaction(lambda s: update_creator(s, slug, body, added_by_id=access.user_id)))
 
 
 @router.post(
@@ -106,22 +121,37 @@ def creator_update(slug: str, body: CreatorAPIUpdate):
     response_model=CreatorPageAPIRead,
 )
 def creator_add_sections(slug: str, account_id: int, body: CreatorSectionsAPIAdd, access: Access = signed_in()):
-    """Add sections of one of the creator's accounts to the creator's collections, or ignore them."""
-    return _found(lambda: run_write_transaction(
-        lambda s: add_sections(s, slug, account_id, body, added_by_id=access.user_id),
-    ))
+    """Add sections of one of the creator's accounts to the creator's collections, or ignore them. A movie of the
+    account goes into the Library, when it isn't there yet, and joins the creator."""
+    def add():
+        source_key, refs = account_movies_to_add(slug, account_id, body)
+        with asking_source("Could not look up the creator's movies"):
+            movies = look_up_movies(source_key, refs)
+        return run_write_transaction(
+            lambda s: add_sections(s, slug, account_id, body, added_by_id=access.user_id, movies=movies),
+        )
+
+    return _found(add)
 
 
 @router.post(
-    "/{slug}/accounts/{account_id}/sections/{ref}/move", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    "/{slug}/accounts/{account_id}/sections/show", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)],
     response_model=CreatorPageAPIRead,
 )
-def creator_move_section(slug: str, account_id: int, ref: str, body: CreatorSectionMoveAPIIn, access: Access = signed_in()):
-    """Move one of the playlists of a creator's account to a season of the account's own collection, to a collection
-    of its own, or out of the Library, with its videos and their files."""
-    return _found(lambda: run_write_transaction(
-        lambda s: move_creator_section(s, slug, account_id, ref, body, added_by_id=access.user_id),
-    ))
+def creator_show_sections(slug: str, account_id: int, body: CreatorSectionsAPIShow):
+    """Show sections of one of the creator's accounts that were hidden on the creator page there again."""
+    return _found(lambda: run_write_transaction(lambda s: show_sections(s, slug, account_id, body), concurrent=True))
+
+
+@router.post(
+    "/{slug}/moves/preview", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CreatorSectionMovesPreviewAPIRead,
+)
+def creator_preview_moves(slug: str, body: CreatorSectionMovesAPIIn):
+    """What moving feeds and lists of the creator elsewhere does to each of its collections: the videos that move or
+    leave the Library, the downloads deleted, the files renamed, and the episodes that get a new number. Changes
+    nothing: saving the creator with these moves makes them."""
+    return _found(lambda: run_write_transaction(lambda s: preview_creator_moves(s, slug, body)))
 
 
 @router.post(

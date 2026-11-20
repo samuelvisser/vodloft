@@ -9,7 +9,8 @@ import SourceBadge from '../components/Source/SourceBadge'
 import {useQueryClient} from '@tanstack/react-query'
 import {addVideo, resolveLink, useMovies, useCollections, useSources, useVideos} from '../lib/queries'
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
-import {ResolvedLinkRead, SourceFeature, SourceRead, kindName, searchName, sourceHas} from '../types/schemas/source'
+import {ResolvedLinkRead, SourceFeature, SourceRead, kindNames, searchName, sourceHas} from '../types/schemas/source'
+import {capitalized} from '../types/creator'
 import {DrmNotice} from '../components/common/DrmProtected'
 import {AccessNotice} from '../components/common/AccessLocked'
 import {ClearInputButton} from '../components/common/ClearInputButton'
@@ -24,13 +25,6 @@ type AddMediaPageProps = {
     onSkip?: () => void
     /** The link to look up right away, when it does not come from the page's own address. */
     initialUrl?: string
-}
-
-const KIND_LABEL: Record<ResolvedLinkRead['kind'], string> = {
-    collection: 'Collection',
-    movie: 'Movie',
-    episode: 'Episode',
-    video: 'Video',
 }
 
 export default function AddMediaPage({onboarding = false, onCollection, onMovie, onBrowse, onBack, onSkip, initialUrl}: AddMediaPageProps = {}) {
@@ -165,7 +159,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         && (sources ?? []).some((source) => canUseSource(source.id) && sourceHas(source, SourceFeature.LINK_COLLECTIONS))
 
     // Hand the link to the Quick download page: one video, episode or movie that can be downloaded.
-    const quickDownloadable = !!link && link.kind !== 'collection' && !link.drmProtected && !link.accessLocked
+    const quickDownloadable = !!link && link.kind !== 'collection' && link.kind !== 'creator' && !link.drmProtected && !link.accessLocked
     const quickDownload = () => {
         if (!link) return
         navigate(`/quick-download?url=${encodeURIComponent(link.url)}&source=${encodeURIComponent(link.source.id)}`)
@@ -258,7 +252,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                     )}
                     <div className="add-media-preview-copy">
                         <SourceBadge sourceKey={link.source.id}/>
-                        <p>{[kindName(link.source, link.kind, KIND_LABEL[link.kind]), link.site, link.preview.authorName].filter(Boolean).join(' · ')}</p>
+                        <p>{[capitalized(kindNames(link.source, link.kind)?.singular ?? ''), link.site, link.preview.authorName].filter(Boolean).join(' · ')}</p>
                         <h2>{link.preview.title}</h2>
                         {link.preview.description && (
                             <p className="add-media-preview-description">{link.preview.description}</p>
@@ -269,10 +263,8 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                             <div className="add-media-preview-actions">
                                 {creatorChoice && (
                                     <button className="btn btn-primary" type="button" onClick={addCreator}
-                                            title={link.creatorLabel === 'artist'
-                                                ? 'Add their albums, and choose where each goes'
-                                                : 'Add its videos, livestreams and playlists, and choose where each goes'}>
-                                        Add the {link.creatorLabel ?? 'creator'}
+                                            title={link.creatorSections ? `Add their ${link.creatorSections.plural}, and choose where each goes` : undefined}>
+                                        Add the {link.creatorNames?.singular}
                                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                                     </button>
                                 )}
@@ -288,6 +280,18 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                                     </button>
                                 )}
                             </div>
+                        ) : link.kind === 'creator' ? (
+                            creatorChoice ? (
+                                <div className="add-media-preview-actions">
+                                    <button className="btn btn-primary" type="button" onClick={addCreator}
+                                            title="Add their shows and movies, and choose where each goes">
+                                        Add the {link.creatorNames?.singular}
+                                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
+                                    </button>
+                                </div>
+                            ) : (
+                                <p role="alert">Add {link.creatorNames?.a} from Add media once you are done here.</p>
+                            )
                         ) : collectionsUnsupported ? (
                             <p role="alert">
                                 VODLoft cannot add creators or playlists from {link.source.name} yet. Paste the link to one video instead.

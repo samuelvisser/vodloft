@@ -1,5 +1,5 @@
 import {type FormEvent, useCallback, useEffect, useRef, useState} from 'react'
-import {useNavigate, useParams} from 'react-router-dom'
+import {useNavigate, useParams, useSearchParams} from 'react-router-dom'
 import LocalMediaProfileForm, {profileMode} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import IndexingValuesEditorButton from '../../components/LocalMediaProfile/IndexingValuesEditorButton'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
@@ -29,6 +29,8 @@ import {
     loadLocalMediaProfileDraft,
     saveLocalMediaProfileDraft,
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
+import {RequestedFieldsProvider, requestedOrigin} from '../../components/common/RequestedField'
+import {ProfileFitProvider} from '../../components/LocalMediaProfile/ProfileFit'
 import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
 import {apiUrl} from '../../lib/api'
 
@@ -40,6 +42,8 @@ function canonicalProfileValues(profile: LocalMediaProfileRead): LocalMediaProfi
 export default function EditLocalMediaProfilePage() {
     const navigate = useNavigate()
     const {slug} = useParams<{ slug: string }>()
+    // A link can ask for what the profile is available for and a Site, as one to add a profile does.
+    const [searchParams] = useSearchParams()
     const qc = useQueryClient()
     const systemFilenameMode = useLibraryDefaults().data?.filenameRestrictionMode
     const initializedSlug = useRef<string | undefined>(undefined)
@@ -229,7 +233,11 @@ export default function EditLocalMediaProfilePage() {
                     <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(profile.type)}</div>
                 </div>
 
-                <LocalMediaProfileForm form={form} mode={profileMode(profile.type)} isCreating={false}/>
+                <RequestedFieldsProvider mode="edit" ready={draftReady} origin={requestedOrigin(searchParams)}>
+                    <ProfileFitProvider value={{type: profile.type, scope: searchParams.get('for'), site: searchParams.get('site')}}>
+                        <LocalMediaProfileForm form={form} mode={profileMode(profile.type)} isCreating={false}/>
+                    </ProfileFitProvider>
+                </RequestedFieldsProvider>
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>

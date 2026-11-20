@@ -1671,6 +1671,24 @@ div[class$="-option"][aria-disabled="true"]:active,
 /* Normal hover/active for enabled options only */
 div[class$="-option"]:not([aria-disabled="true"]):hover { background: rgba(14, 165, 233, 0.18) !important; }
 div[class$="-option"]:not([aria-disabled="true"]):active { background: rgba(14, 165, 233, 0.26) !important; }
+/* SimpleSelect's fitLabels: the longest label sets the control's width, without taking any height. */
+.simple-select-fit {
+  grid-area: 1 / 1 / 2 / 3;
+  display: grid;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+.simple-select-fit > span {
+  grid-area: 1 / 1;
+  margin: 0 2px;
+  white-space: nowrap;
+}
+/* The option react-select highlights for the keyboard: the first result while typing, and
+   wherever the arrow keys move to. Enter chooses it. Needs classNamePrefix="select". */
+div[class$="-option"].select__option--is-focused:not(.select__option--is-disabled):not(.select__option--is-selected) {
+  background: rgba(14, 165, 233, 0.18) !important;
+}
 /* Multi-value (tags) */
 div[class$="-multiValue"] { background: rgba(14, 165, 233, 0.15) !important; }
 div[class$="-multiValueLabel"] { color: var(--text) !important; }
@@ -2534,3 +2552,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 @media (max-width: 600px) {
   .keep-question-copy small { white-space: normal; }
 }
+
+/* A small advisory under a field, such as a Music collection that isn't identified by album. */
+.help.form-advice { color: #b45309; }
+@media (prefers-color-scheme: dark) { .help.form-advice { color: #fbbf24; } }

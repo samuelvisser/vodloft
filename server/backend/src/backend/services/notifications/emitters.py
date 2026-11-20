@@ -10,6 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 
+from backend.types.collection_contracts import collection_contract
+from sources import section_type_names
 from backend.db.models import Creator, CreatorSection, Collection, CollectionList, DownloadProfile, Episode, User
 
 from .events import Event, emit
@@ -79,18 +81,18 @@ def quick_download_finished(session: Session, *, owner: str | None, title: str) 
 
 def creator_sections_found(session: Session, creator: Creator, sections: list[CreatorSection]) -> None:
     """The daily look found sections of a creator that wait for a choice: add them, or ignore them."""
-    from backend.services.creators import creator_label
+    from backend.services.creators import creator_names
 
     if not sections:
         return
     names = ", ".join(section.title for section in sections[:3]) + (f" and {len(sections) - 3} more" if len(sections) > 3 else "")
-    labels = {(section.kind_label or "").lower() for section in sections}
-    label = labels.pop() if len(labels) == 1 and "" not in labels else "section"
-    what = label if len(sections) == 1 else f"{label}s"
+    # In the Site's words, such as "album", or "albums and playlists" for several types.
+    names_of = section_type_names(section.section_type for section in sections)
+    what = names_of.singular if len(sections) == 1 else names_of.plural
     emit(
         session, Event.CREATOR_SECTIONS_FOUND,
         title=f"New {what} on {creator.title}" if len(sections) == 1 else f"{len(sections)} new {what} on {creator.title}",
-        body=f"{names}. Choose on the {creator_label(creator)}'s page whether to add {'it' if len(sections) == 1 else 'them'}.",
+        body=f"{names}. Choose on the {creator_names(creator).singular}'s page whether to add {'it' if len(sections) == 1 else 'them'}.",
         url=f"/edit-creator/{creator.slug}", data={"creator": creator.title, "sections": [section.title for section in sections]},
         dedupe_key=f"creator-sections:{creator.id}:{','.join(sorted(section.ref for section in sections))}",
     )
@@ -102,10 +104,14 @@ def link_seasons_found(session: Session, collection: Collection, playlists: list
         return
     names = ", ".join(playlist.title for playlist in playlists[:3]) + (f" and {len(playlists) - 3} more" if len(playlists) > 3 else "")
     one = len(playlists) == 1
+    season = collection_contract(collection.type).words.season
+    # The Site's own word for what it found, such as playlist on YouTube or album on Bandcamp.
+    from backend.services.link_seasons import section_list_names
+    lists = section_list_names(collection)
     emit(
         session, Event.CREATOR_SECTIONS_FOUND,
-        title=f"New playlist for {collection.title}" if one else f"{len(playlists)} new playlists for {collection.title}",
-        body=f"{names}. Choose in the collection's seasons whether {'it becomes a season' if one else 'they become seasons'}.",
+        title=f"New {lists.singular} for {collection.title}" if one else f"{len(playlists)} new {lists.plural} for {collection.title}",
+        body=f"{names}. Choose in the collection's {season.plural} whether {f'it becomes {season.a}' if one else f'they become {season.plural}'}.",
         url=f"/edit-collection/{collection.id}?seasons=1",
         data={"collection": collection.title, "playlists": [playlist.title for playlist in playlists]},
         dedupe_key=f"collection-playlists:{collection.id}:{','.join(sorted(playlist.ref for playlist in playlists))}",

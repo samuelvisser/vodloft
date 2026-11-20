@@ -741,7 +741,11 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const filenameRestrictionMode = useWatch({control, name: 'filenameRestrictionMode'})
-    const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'both'
+    const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'podcast-and-series'
+    const videoScope = useWatch({control, name: 'videoScope' as any}) ?? 'both'
+    const sourceLabel = mode !== 'collection'
+        ? ({videos: 'Example video', movies: 'Example movie'} as Record<string, string>)[videoScope] ?? 'Example video or movie'
+        : collectionScope === 'music_tracks' ? 'Example track' : collectionScope === 'music_videos' ? 'Example music video' : 'Example episode'
     const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
     const watchedSiteKeys = useWatch({control, name: 'siteKeys'}) as string[] | null | undefined
     const siteKeys = Array.isArray(watchedSiteKeys) ? watchedSiteKeys : undefined
@@ -796,8 +800,8 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     const variableQuery = useLocalMediaProfileTemplateVariables(mode)
     const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
     const variables = useMemo(
-        () => getOutputTemplateVariables(mode, customVariables),
-        [customVariables, mode],
+        () => getOutputTemplateVariables(mode, customVariables, collectionScope),
+        [customVariables, mode, collectionScope],
     )
     const metadataNames = useMemo(() => new Set(customVariables.map(({name}) => name)), [customVariables])
     const variableEntries = useMemo(
@@ -1086,12 +1090,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                         <div className="template-playground-heading">
                             <div>
                                 <h3 id="template-preview-heading">Example output</h3>
-                                <p>{readOnly ? 'Pick an episode to see where its file would go.' : 'Try different values here. Your profile is not changed.'}</p>
+                                <p>{readOnly ? `Pick ${sourceLabel === 'Example track' ? 'a track' : sourceLabel === 'Example music video' ? 'a music video' : 'an episode'} to see where its file would go.` : 'Try different values here. Your profile is not changed.'}</p>
                             </div>
                             <label className="template-source-label" htmlFor="template-example-source">
-                                <span>{mode === 'collection' ? 'Example episode' : 'Example video or movie'}</span>
+                                <span>{sourceLabel}</span>
                                 <TemplateSourceSelect
                                     mode={mode}
+                                    label={sourceLabel}
                                     sources={sources}
                                     selectedSource={selectedSource}
                                     isLoading={

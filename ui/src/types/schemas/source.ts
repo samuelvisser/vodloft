@@ -1,6 +1,10 @@
 import {z} from "zod";
 import {ApiDateTimeSchema} from "./datetime";
 
+/** A word as the backend names it: one, many, and one with its article, such as album, albums and an album. */
+export const NamesSchema = z.object({singular: z.string(), plural: z.string(), a: z.string()})
+export type Names = z.infer<typeof NamesSchema>
+
 /** Optional capabilities of a Source, as the backend names them. */
 export const SourceFeature = {
     COLLECTIONS: 'collections',
@@ -93,8 +97,10 @@ export const SourceReadSchema = z.object({
     /** What the Source downloads from, when its name does not say so, such as YouTube, and many more. */
     sitesLabel: z.string().nullable().optional(),
     searchLabel: z.string().nullable().optional(),
-    /** What the Source calls a kind of media in its own catalogue, such as Show for a Daily Wire collection. */
-    kindNames: z.record(z.string(), z.string()).optional(),
+    /** What the Source calls each kind of media, such as show for a Daily Wire collection, or VODLoft's word. */
+    kindNames: z.record(z.string(), NamesSchema),
+    /** The Sites the Source is made for, such as The Daily Wire; none for a Source of many sites. */
+    siteKeys: z.array(z.string()).default([]),
     /** Which moment the Source's release dates mark: when an item came out or began (Released), or when it was
      *  finished and put up, such as after a livestream ended (Published). */
     releaseDate: z.enum(['start', 'end']),
@@ -109,7 +115,8 @@ export function sourceHas(source: SourceRead | null | undefined, feature: Source
 
 export const ResolvedLinkReadSchema = z.object({
     source: SourceReadSchema,
-    kind: z.enum(['collection', 'movie', 'episode', 'video']),
+    /** A creator link, such as a Daily Wire host's page, is added as a creator only. */
+    kind: z.enum(['collection', 'movie', 'episode', 'video', 'creator']),
     slug: z.string(),
     url: z.string(),
     collectionSlug: z.string().nullable(),
@@ -128,7 +135,9 @@ export const ResolvedLinkReadSchema = z.object({
     }),
     /** The creator this link is, on a Site with creators. */
     creatorUrl: z.string().nullable().optional().default(null),
-    creatorLabel: z.string().nullable().optional().default(null),
+    creatorNames: NamesSchema.nullable().optional().default(null),
+    /** Every type of section that creator has on the Site, named together, such as albums and singles. */
+    creatorSections: NamesSchema.nullable().optional().default(null),
     /** Every Source that claims the link's site, preferred first. */
     candidates: z.array(SourceReadSchema),
 })
@@ -149,7 +158,7 @@ export const SearchResultReadSchema = z.object({
     access: z.string().nullable().optional(),
     accessLabel: z.string().nullable().optional(),
     /** What the Site calls a creator, when the result is a creator's own page that can be added as one. */
-    creatorLabel: z.string().nullable().optional(),
+    creatorNames: NamesSchema.nullable().optional(),
 })
 export type SearchResultRead = z.infer<typeof SearchResultReadSchema>
 
@@ -173,31 +182,38 @@ export function searchName(source: SourceRead | null | undefined): string | unde
     return source?.searchLabel ?? source?.name
 }
 
-/** What the Source calls a kind of media where it shows its own catalogue, or VODLoft's word for it. */
-export function kindName(source: SourceRead | null | undefined, kind: string, vodloftName: string): string {
-    return source?.kindNames?.[kind] ?? vodloftName
-}
-
-/** The plural of a kind name, such as Shows for Show; Series stays Series. */
-export function pluralKindName(name: string): string {
-    return name.endsWith('s') ? name : `${name}s`
+/** What the Source calls a kind of media, such as show for a Daily Wire collection; none until the Source is known. */
+export function kindNames(source: SourceRead | null | undefined, kind: string): Names | undefined {
+    return source?.kindNames[kind]
 }
 
 /** The website a collection or video is on, such as YouTube, whichever Source fetches it. */
-/** What a Site calls the things a creator adds there, in lower case: one with its article, such as "a playlist",
- * and many, such as "playlists". */
-export const CreatorSectionNamesSchema = z.object({one: z.string(), many: z.string()})
-export type CreatorSectionNames = z.infer<typeof CreatorSectionNamesSchema>
+/** One type of section a Site's creators have, such as a feed, or an album or a playlist on SoundCloud, and what the
+ * Site calls it. */
+export const SectionTypeSchema = z.object({
+    key: z.string(),
+    kind: z.enum(['feed', 'list', 'show', 'item']),
+    names: NamesSchema,
+})
+export type SectionType = z.infer<typeof SectionTypeSchema>
 
 export const SiteReadSchema = z.object({
     key: z.string(),
     name: z.string(),
     /** A collection on the Site shows what VODLoft has no access to until the user hides it. */
     showsLocked: z.boolean().optional().default(true),
+    /** The Site has sound only, such as Bandcamp: a Music collection on it holds tracks, not music videos. */
+    audioOnly: z.boolean().optional().default(false),
+    /** What the Site calls one of its videos: a video, or a track on a Site with sound only. */
+    mediaNames: NamesSchema,
     /** What the Site calls a creator, in lower case, such as host on The Daily Wire. */
-    creatorLabel: z.string().optional().default('creator'),
-    /** What the Site calls the things its creators add, which VODLoft looks for, such as playlists on YouTube. */
-    creatorSections: CreatorSectionNamesSchema.optional().default({one: 'a playlist or show', many: 'playlists and shows'}),
+    creatorNames: NamesSchema,
+    /** Every type of section the Site's creators have, such as YouTube's feeds and playlists. */
+    sectionTypes: z.array(SectionTypeSchema),
+    /** What the Site calls its lists, all its types of list together, such as albums and playlists. */
+    sectionListNames: NamesSchema,
+    /** What the Site calls the lists and shows its creators add, such as playlists, or shows on The Daily Wire. */
+    sectionGrowingNames: NamesSchema,
 })
 export type SiteRead = z.infer<typeof SiteReadSchema>
 
@@ -225,8 +241,7 @@ export const EpisodeTagReadSchema = z.object({
     label: z.string(),
     help: z.string(),
     /** Names a count of these episodes, such as "1 livestream" or "726 livestreams". */
-    singular: z.string(),
-    plural: z.string(),
+    names: NamesSchema,
     selectedByDefault: z.boolean(),
     rssEpisodeType: z.enum(['full', 'trailer', 'bonus']),
     /** Episodes with the main tag follow the collection's numbering. */
@@ -314,6 +329,8 @@ export const CollectionDetailsReadSchema = z.object({
     thumbnailLandscapePath: z.string().nullable(),
     /** The type VODLoft suggests from the collection's name. */
     probableCollectionType: z.string(),
+    /** Why the collection was taken for music, when it was, such as an album on YouTube Music. */
+    musicReason: z.string().nullable().optional(),
     /** The collection's own seasons, oldest first; empty when VODLoft makes a season per upload year. */
     seasons: z.array(z.object({slug: z.string(), name: z.string()})),
 })

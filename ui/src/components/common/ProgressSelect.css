@@ -1,0 +1,105 @@
+/* While its operation runs, the field keeps looking like a dropdown, and fills as its progress bar. */
+.progress-select.is-progress .select__control {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--bg);
+    border-color: rgba(148, 163, 184, 0.4) !important;
+    box-shadow: none !important;
+    cursor: not-allowed;
+}
+
+/* react-select lets the pointer pass through a disabled field, so a click or tap reaches the wrapper that explains
+   why. Only the cancel button takes the pointer itself. */
+.progress-select-host.is-progress {
+    cursor: not-allowed;
+}
+
+.progress-select .progress-select-fill {
+    z-index: 0;
+    background: rgba(59, 130, 246, 0.18);
+    transition: width 220ms ease;
+}
+
+.progress-select .progress-select-fill.is-waiting {
+    width: 100%;
+    opacity: 0.22;
+    background: repeating-linear-gradient(120deg, currentColor 0 4px, transparent 4px 8px);
+}
+
+.progress-select.is-progress .select__value-container,
+.progress-select.is-progress .select__indicators {
+    position: relative;
+    z-index: 1;
+}
+
+.progress-select .progress-select-value {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    color: var(--text, inherit);
+}
+
+/* The same small uppercase title as ProgressButton's. */
+.progress-select-title {
+    overflow: hidden;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.07em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--muted);
+}
+
+.progress-select-status {
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* The chevron fades, because the menu won't open; react-select's own disabled grey would vanish on the fill. */
+.progress-select.is-progress .select__dropdown-indicator {
+    color: var(--text);
+    opacity: 0.45;
+}
+
+.progress-select.is-progress .select__indicator-separator {
+    background-color: var(--text);
+    opacity: 0.2;
+}
+
+.progress-select-cancel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: 0 4px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text, inherit);
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.progress-select-cancel:hover,
+.progress-select-cancel:focus-visible {
+    background: rgba(148, 163, 184, 0.22);
+    color: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+    .progress-select .progress-select-fill {
+        background: rgba(96, 165, 250, 0.22);
+    }
+}

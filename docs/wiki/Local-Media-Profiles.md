@@ -49,7 +49,10 @@ keep what the site gives. They change the metadata only, not the file name, and 
 the site's text. They are written in the same editor as the output path, which suggests variables as you type, and each
 shows what it gives the example episode picked under **Output path**.
 
-## Collection, Music and Video profiles
+## Collection and Video profiles
+
+There are two kinds of profile: a **Collection** profile keeps the episodes of collections, and a **Video** profile keeps
+something you add on its own. Each has an **Available for** setting that says where VODLoft offers it.
 
 ### Collection profiles
 
@@ -60,23 +63,28 @@ Collection profiles can use:
 - 720p video;
 - audio only.
 
-A Collection profile also has an **Available for** setting. This controls where VODLoft offers the profile in the interface: for Podcasts, for Series, or for both.
+A Collection profile's **Available for** controls where VODLoft offers it: **Podcasts and Series**, **Podcasts**,
+**Series**, **Music tracks** or **Music videos**. The last two are for Music collections, see below.
 
-### Music profiles
+Music tracks keep sound only, so a profile can only switch to or from **Music tracks** before it has downloads. A
+profile with downloads shows **Music tracks** greyed out, and one for Music tracks with downloads keeps its choice. To
+keep a Music collection another way, duplicate the profile and change the copy.
 
-Music profiles store the tracks of **Music** collections, and Music collections take no other kind of profile. A Music profile downloads audio only, as M4A, Opus, MP3 or FLAC, and tags every file the way music players expect:
+### Music tracks and music videos
+
+A Collection profile available for **Music tracks** stores the tracks of **Music** collections. One available for **Music videos** keeps a Music collection's videos as video, each with a `musicvideo` NFO. Attach either, or both. A profile for Music tracks downloads audio only, as M4A, Opus, MP3 or FLAC, and tags every file the way music players expect:
 
 - the **album** is the episode's season, such as a playlist or album the collection holds, or else the collection's title;
 - the **artist** and **album artist** are the creator the collection belongs to, or else its author;
 - the **track number** is the episode's number in its season.
 
-The thumbnail goes inside the file as its cover art, cut to a square from the middle. Opus files take tags but no cover art. A new Music profile starts with the **Music library** layout, `Artist/Album/01 - Title`, which Plex, Jellyfin, Navidrome and most music players read; the `artist`, `album`, `track_number` and `track_number_padded` variables let you build your own.
+The thumbnail goes inside the file as its cover art, cut to a square from the middle. Opus files take tags but no cover art. A new profile for Music tracks starts with the **Music library** layout, `Artist/Album/01 - Title`, which Plex, Jellyfin, Navidrome and most music players read; the `artist`, `album`, `track_number` and `track_number_padded` variables let you build your own.
 
 FLAC keeps exactly what the site sends. Sites such as YouTube send compressed audio, so a FLAC file is larger but sounds no better than M4A or Opus.
 
 ### Video profiles
 
-Video profiles store what you add on its own, outside any collection: single videos, and movies with their extras such as trailers. They can use any video quality from 360p to 8K, or audio only. When a site does not offer the chosen quality, VODLoft downloads the best quality below it.
+Video profiles store what you add on its own, outside any collection: single videos, and movies with their extras such as trailers. Their **Available for** is **Videos and movies**, **Videos** or **Movies**. They can use any video quality from 360p to 8K, or audio only. When a site does not offer the chosen quality, VODLoft downloads the best quality below it.
 
 One profile can hold both videos and movies, but movies usually belong in a folder layout of their own. New installations start with two: **VODLoft Videos** for every site, and **VODLoft Movies**, which is only offered for The Daily Wire's movies. A movie and its extras always use the same profile, so its output template must keep them apart (see [Movies and extras](#movies-and-extras)).
 
@@ -183,7 +191,7 @@ Each site offers its own choices, and a profile shows what its sites offer toget
 
 Changing a codec, the container or the audio codec while a goal is chosen turns it into **Your own**. Choosing a goal again replaces your order with that goal's.
 
-**Audio format**, for Audio only: **M4A** (plays everywhere, including podcast apps), **Opus** (smallest, not every podcast app plays it) or **MP3** (for very old players). Music profiles can also choose **FLAC**. Opus files get their metadata inside, and their thumbnail beside them.
+**Audio format**, for Audio only: **M4A** (plays everywhere, including podcast apps), **Opus** (smallest, not every podcast app plays it) or **MP3** (for very old players). Profiles for Music tracks can also choose **FLAC**. Opus files get their metadata inside, and their thumbnail beside them.
 
 **Audio language** picks a dubbed audio track when a video has one. **Original** keeps the language the video was made in.
 
@@ -488,7 +496,7 @@ Files you already have keep their names until you rename a profile's files.
 
 **Start from a preset** above a Collection profile's output template fills in a layout that a media server reads well,
 together with the matching metadata and NFO choices: **Plex**, **Jellyfin and Emby**, **Kodi**, **Audiobookshelf** for
-audio, **Music library** for a Music profile, and **Music videos**, which files each video as `Artist/Title` with a
+audio, **Music library** for Music tracks, and **Music videos**, which files each video as `Artist/Title` with a
 `musicvideo` NFO. You can change everything afterwards.
 
 ## Suggested layouts
@@ -501,3 +509,11 @@ A common arrangement is:
 - one Video profile for The Daily Wire's movies, with a conventional movie folder and item-specific extra names.
 
 Local Media Profiles only control files VODLoft creates. Your media server can independently scan whichever subfolders you want.
+
+## Adding a profile from another page
+
+When a collection, video or movie has no profile that fits, its page links to a new one. The form then starts with the
+profile type, **Available for** and Site it needs, as broad as fits: for every Site, and for a podcast for both
+Podcasts and Series. Change any of them and a note under the field says when the new profile would no longer be
+offered where you came from. A Download Profile that a Stream Profile asks for works the same way: when no profile
+downloads the format it asks for, a button adds one for that format.

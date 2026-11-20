@@ -3,11 +3,19 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import SimpleSelect from '../common/SimpleSelect'
 import {faIcon} from '../../icons/faIcon'
 import {LibraryCollectionSortReg, type LibraryCollectionSortValue as CollectionSortBy} from '../../types/collection'
-import type {CollectionReadView} from '../../types/schemas/collection'
 import './CollectionSort.css'
 
 /** How the Library lists its Collections: by what, and whether that order is turned around. */
 export type CollectionSortOrder = {by: CollectionSortBy, reversed: boolean}
+
+/** What the Library orders a tile by: a collection, or a creator with what it knows from its collections. */
+export type LibrarySortable = {
+    title: string
+    openCount: number
+    lastOpenedAt?: Date | null
+    firstPublishedDate?: Date | null
+    createdAt: Date
+}
 
 export const DEFAULT_COLLECTION_SORT: CollectionSortOrder = {by: 'recently_used', reversed: false}
 
@@ -22,15 +30,15 @@ const DIRECTION_LABELS: Record<CollectionSortBy, [string, string]> = {
 
 const nameCollator = new Intl.Collator(undefined, {sensitivity: 'base', numeric: true})
 
-export function compareCollectionNames(a: CollectionReadView, b: CollectionReadView) {
+export function compareCollectionNames(a: LibrarySortable, b: LibrarySortable) {
     return nameCollator.compare(a.title, b.title)
 }
 
 /**
  * The value an order compares first, largest first; null sorts last whichever way the order goes.
- * A Collection never opened counts as opened longest ago, so it comes first when Recently used is turned around.
+ * A tile never opened counts as opened longest ago, so it comes first when Recently used is turned around.
  */
-function sortKey(collection: CollectionReadView, by: CollectionSortBy): number | null {
+function sortKey(collection: LibrarySortable, by: CollectionSortBy): number | null {
     switch (by) {
         case 'often_used':
             return collection.openCount
@@ -45,8 +53,8 @@ function sortKey(collection: CollectionReadView, by: CollectionSortBy): number |
     }
 }
 
-/** Compares two Collections in the chosen order, and by name where that order ties. */
-export function compareCollections(a: CollectionReadView, b: CollectionReadView, order: CollectionSortOrder) {
+/** Compares two tiles in the chosen order, and by name where that order ties. */
+export function compareCollections(a: LibrarySortable, b: LibrarySortable, order: CollectionSortOrder) {
     const direction = order.reversed ? -1 : 1
     if (order.by === 'name') return direction * compareCollectionNames(a, b)
 

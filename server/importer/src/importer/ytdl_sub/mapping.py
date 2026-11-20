@@ -12,7 +12,11 @@ whose playlists are seasons, each with its season's number and name, and a video
 highest one, as in ytdl-sub.
 
 A Bandcamp or SoundCloud discography becomes the artist, a creator, with its albums the seasons of one Music
-collection, with a Music Local Media Profile that keeps ytdl-sub's folder per artist and per album.
+collection, with a Music Local Media Profile that keeps ytdl-sub's folder per artist and per album. An artist's music
+videos are a Music collection of their own, with a profile for Music videos; a ``+`` map's categories, such as
+Concerts, are its link seasons. Every music collection names the artist as ytdl-sub does, and an artist's albums and
+music videos join one artist: two collections, "<artist> albums" and "<artist> music videos", or one collection with
+both profiles when they download the same link.
 """
 from __future__ import annotations
 
@@ -94,6 +98,8 @@ _EPISODE_NUMBER = re.compile(r"\.e(\d+) - ")
 _HEIGHTS = ((4320, "format_8k"), (2160, "format_4k"), (1440, "format_1440p"), (1080, "format_1080p"),
             (720, "format_720p"), (480, "format_480p"), (360, "format_360p"))
 _AUDIO_FORMATS = {"mp3": "mp3", "opus": "opus", "m4a": "m4a", "aac": "m4a"}
+# Lossless, which only a profile for Music tracks keeps.
+_MUSIC_AUDIO_FORMATS = {**_AUDIO_FORMATS, "flac": "flac"}
 _THROTTLE_OPTIONS = frozenset({
     "sleep_interval", "max_sleep_interval", "sleep_interval_requests", "sleep_interval_subtitles", "ratelimit",
     "throttledratelimit",
@@ -128,6 +134,7 @@ class _Planned:
     folder: str | None
     """The subscription's output folder, as ytdl-sub names it."""
     index: str | None
+    kind: str | None = None
 
 
 def _kind_and_player(sub: Subscription) -> tuple[str | None, str | None]:
@@ -237,6 +244,21 @@ def _links(sub: Subscription, kind: str | None) -> _Links | None:
     return _Links(channel[2], playlists, [], PlaylistSeasonPlan(channel[2], channel[1], channel[0]))
 
 
+def _map_links(sub: Subscription) -> _Links | None:
+    """A ``+`` map's links, each a link season named after its category, such as Concerts. A link of a channel is the
+    collection's own; without one, the collection holds only what the links have."""
+    numbered = [(number, category, url) for number, (category, links) in enumerate(sub.categories, start=1)
+                for url in links if "{" not in url]
+    if not numbered:
+        return None
+    channel = next((item for item in numbered if not _is_playlist(item[2]) and not _is_video(item[2])), None)
+    if channel is None:
+        return _Links(numbered[0][2], [PlaylistSeasonPlan(url, category, number) for number, category, url in numbered],
+                      [], links_only=True)
+    others = [PlaylistSeasonPlan(url, category, number) for number, category, url in numbered if url != channel[2]]
+    return _Links(channel[2], others, [], PlaylistSeasonPlan(channel[2], channel[1], channel[0]))
+
+
 def _link_name(url: str) -> str | None:
     """A name for the season of another channel, such as @handle, until the user gives it one; a playlist is named
     as its Site lists it."""
@@ -265,17 +287,29 @@ def _absolute(value: str) -> date | None:
         return None
 
 
+def _best_audio(sub: Subscription) -> str:
+    """The format ytdl-sub's ``best`` keeps the site's audio in, without converting it: MP3 on Bandcamp, and Opus
+    elsewhere, such as the WebM audio its music presets take from YouTube."""
+    return "mp3" if sub.urls and all((urlsplit(url).hostname or "").endswith(".bandcamp.com") for url in sub.urls) else "opus"
+
+
 def _format_choice(sub: Subscription, warnings: list[ImportWarning]) -> tuple[dict[str, object], bool]:
     """Local Media Profile quality choices for the subscription's format, and whether it is audio only."""
     config = sub.config
     audio = config.get("audio_extract")
     if isinstance(audio, dict):
         codec = str(audio.get("codec", "best")).lower()
-        if codec not in _AUDIO_FORMATS:
-            warnings.append(ImportWarning("audio_extract", f"VODLoft saves audio as M4A, MP3 or Opus, not {codec}; it saves M4A", "close"))
+        formats = _MUSIC_AUDIO_FORMATS if _kind_and_player(sub)[0] == "music" else _AUDIO_FORMATS
+        if codec == "best":
+            audio_format = _best_audio(sub)
+        else:
+            audio_format = formats.get(codec, "m4a")
+            if codec not in formats:
+                names = "M4A, MP3, Opus or FLAC" if "flac" in formats else "M4A, MP3 or Opus"
+                warnings.append(ImportWarning("audio_extract", f"VODLoft saves audio as {names}, not {codec}; it saves M4A", "close"))
         if audio.get("quality") not in (None, 0, "0"):
             warnings.append(ImportWarning("audio_extract", f"VODLoft keeps the best audio the site offers, not {audio['quality']}k", "close"))
-        return {"preferred_format": "format_audio_only", "audio_format": _AUDIO_FORMATS.get(codec, "m4a"),
+        return {"preferred_format": "format_audio_only", "audio_format": audio_format,
                 "subtitle_mode": "no_subtitles"}, True
     format_ = str(config.get("format") or "")
     heights = [int(height) for height in re.findall(r"height\s*<=?\s*(\d+)", format_)]
@@ -324,7 +358,7 @@ def _profile_settings(sub: Subscription, player: str | None, warnings: list[Impo
                                   else "sidecar" if thumbnail else "no_thumbnail")
     # ytdl-sub's base preset saves the info file; a preset can turn it off with an empty name.
     settings["save_info_json"] = bool((config.get("output_options") or {}).get("info_json_name"))
-    settings["collection_scope"] = "both"
+    settings["collection_scope"] = "podcast-and-series"
     overrides = sub.overrides
     settings["download_collection_assets"] = bool(overrides.get("tv_show_poster_file_name") or overrides.get("tv_show_fanart_file_name"))
     return settings, audio, auto
@@ -560,14 +594,15 @@ def _metadata_templates(sub: Subscription, layout: _Layout, warnings: list[Impor
 
 
 _MUSIC_SETTINGS: dict[str, object] = {
-    "type": "music", "collection_scope": "music", "metadata_mode": "embed", "thumbnail_mode": "embed",
+    "collection_scope": "music_tracks", "metadata_mode": "embed", "thumbnail_mode": "embed",
     "show_nfo": False, "kodi_safe_nfo": False, "download_collection_assets": False,
 }
-"""A Music Local Media Profile: tags and a square cover in each file, as ytdl-sub's music presets write them."""
+"""A Local Media Profile for Music tracks: tags and a square cover in each file, as ytdl-sub's music presets write
+them."""
 
 
 _MUSIC_VIDEO_SETTINGS: dict[str, object] = {
-    "episode_nfo": "music_video", "show_nfo": False, "download_collection_assets": False,
+    "collection_scope": "music_videos", "episode_nfo": "music_video", "show_nfo": False, "download_collection_assets": False,
 }
 """A Collection profile of music videos: a musicvideo NFO by the creator as artist, and no show or season files."""
 
@@ -576,6 +611,16 @@ def _music_video_overrides(sub: Subscription) -> dict[str, str]:
     """The artist as ytdl-sub's music video presets set it, as the artist VODLoft's template reads."""
     return {name: value for name, value in MUSIC_VIDEO_VALUES.items()
             if str(sub.overrides.get(name, "")) == "{subscription_name}"}
+
+
+def _artist(sub: Subscription, kind: str | None) -> str | None:
+    """The artist ytdl-sub names a music subscription's files and tags after: its subscription, unless the
+    configuration names them otherwise."""
+    key = {"music": "track_artist", "music_video": "music_video_artist"}.get(kind or "")
+    if key is None:
+        return None
+    value = _render(sub, sub.overrides.get(key, "{subscription_name}"))
+    return value if value and "{" not in value else sub.name
 
 
 def _music_refusal(sub: Subscription) -> str | None:
@@ -616,14 +661,13 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
     kind, player = _kind_and_player(sub)
     if sub.unknown:
         return None, [ImportWarning(sub.name, f"Not imported: VODLoft doesn't know the preset {', '.join(sub.unknown)}")]
-    if sub.map:
-        return None, [ImportWarning(sub.name, "Not imported: VODLoft adds an artist's music videos from one link; "
-                                              "add the others to the artist as collections of their own")]
+    if sub.map and kind != "music_video":
+        return None, [ImportWarning(sub.name, "Not imported: VODLoft reads ytdl-sub's + maps for music videos only")]
     if kind == "music":
         refused = _music_refusal(sub)
         if refused:
             return None, [ImportWarning(sub.name, f"Not imported: {refused}")]
-    links = _links(sub, kind)
+    links = _map_links(sub) if sub.map else _links(sub, kind)
     if links is None:
         return None, [ImportWarning(sub.name, "Not imported: it has no link VODLoft can read")]
     output = sub.config.get("output_options") or {}
@@ -675,7 +719,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
     warnings += _option_warnings(sub)
     directory = _render(sub, output["output_directory"])
     title = _render(sub, sub.overrides.get("tv_show_name", "{subscription_name}")) or sub.name
-    custom: dict[str, object] = {"type": "music" if music else "podcast" if audio else "series", "episode_identifier": "date_based"}
+    custom: dict[str, object] = {"type": "music" if music or music_videos else "podcast" if audio else "series", "episode_identifier": "date_based"}
     if full_albums:
         # Each video is an album, and each of its chapters a track.
         custom["split_chapters"] = True
@@ -707,11 +751,12 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         link_seasons=tuple(links.playlists),
         loose_season=links.channel_season if links.playlists else None,
         links_only=links.links_only,
-        # The artist names the artist of its music videos.
-        creator=(music and not full_albums) or music_videos,
+        # An artist's page is the artist; other music, such as music videos, joins the creator behind its link.
+        creator=music and not full_albums,
+        artist=_artist(sub, kind),
     )
     signature = (report.output_template, report.original, repr(sorted(settings.items())))
-    return _Planned(sub, chain, profile, signature, collection, directory, layout.index), []
+    return _Planned(sub, chain, profile, signature, collection, directory, layout.index, kind), []
 
 
 def _folder(subscriptions: tuple[Subscription, ...]) -> str:
@@ -795,6 +840,44 @@ def _variants(planned: list[_Planned]) -> list[ProfilePlan]:
     return list(profiles.values())
 
 
+def _unique_ids(planned: list[_Planned]) -> list[_Planned]:
+    """Each subscription's Collection known by its name; another subscription of the same name, such as an artist's
+    music videos beside their albums, by its presets too."""
+    seen: set[str] = set()
+    for item in planned:
+        external_id = item.collection.external_id
+        if external_id in seen:
+            external_id = f"{external_id}:{item.chain}"
+            item.collection = replace(item.collection, external_id=external_id)
+        seen.add(external_id)
+    return planned
+
+
+def _same_link(first: str, second: str) -> bool:
+    return first.rstrip("/").lower() == second.rstrip("/").lower()
+
+
+def _artists(planned: list[_Planned]) -> list[_Planned]:
+    """Name an artist's albums and music videos for what they are, and plan the albums first, so the music videos
+    join the artist their albums make. Albums and music videos of the same link are one collection, named after the
+    artist, which keeps both."""
+    by_artist: dict[str, dict[str, list[_Planned]]] = {}
+    for item in planned:
+        if item.collection.artist and item.kind in ("music", "music_video"):
+            by_artist.setdefault(item.collection.artist, {}).setdefault(item.kind, []).append(item)
+    for artist, kinds in by_artist.items():
+        albums, videos = kinds.get("music", []), kinds.get("music_video", [])
+        if not albums or not videos:
+            continue
+        for item in (*albums, *videos):
+            same = any(_same_link(item.collection.url, other.collection.url)
+                       for other in (videos if item.kind == "music" else albums))
+            title = artist if same else f"{artist} albums" if item.kind == "music" else f"{artist} music videos"
+            item.collection = replace(item.collection, title=title)
+    # Albums first: a stable sort keeps the rest in ytdl-sub's order.
+    return sorted(planned, key=lambda item: item.kind != "music")
+
+
 def _settings(data: YtdlSubData, folder: Path | None) -> list[SettingPlan]:
     settings = [SettingPlan(
         "downloads.filename_restriction_mode", "windows",
@@ -820,6 +903,7 @@ def plan_import(data: YtdlSubData, location: ImportLocation) -> ImportPlan:
         warnings += skipped
         if item is not None:
             planned.append(item)
+    planned = _artists(_unique_ids(planned))
     profiles = _variants(planned)
     files: list[FilePlan] = []
     outside = 0

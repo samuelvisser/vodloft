@@ -35,6 +35,8 @@ import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
 import LockedEpisodesFilter from '../../components/Episode/LockedEpisodesFilter'
 import {apiFetch, apiUrl, publicAddress} from '../../lib/api'
+import {collectionWords, downloadsBySeason, fileWordsFor, wordsFor} from '../../lib/collectionWords'
+import {isCollectionLocalMediaProfileAvailableFor, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
 
 const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
 
@@ -127,6 +129,7 @@ export default function CollectionPage() {
   const PAGE_SIZE = 36
 
   const { data: collection, isLoading, error } = useCollection(id)
+  const words = wordsFor(collection)
   // Count each visit once, so the Library can list the most used Collections first.
   const countedVisit = useRef<string | null>(null)
   useEffect(() => {
@@ -142,6 +145,7 @@ export default function CollectionPage() {
   const [syncStarting, setSyncStarting] = useState(false)
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)
   const [fileRenameConfirm, setFileRenameConfirm] = useState(false)
+  const [metadataRewriteConfirm, setMetadataRewriteConfirm] = useState(false)
   const [renameSeasonFolders, setRenameSeasonFolders] = useState(true)
   const [moveReassigned, setMoveReassigned] = useState(false)
   const [fileRenameProfileId, setFileRenameProfileId] = useState<number | undefined>(undefined)
@@ -163,7 +167,7 @@ export default function CollectionPage() {
     data: seasonsData,
     isLoading: seasonsLoading,
     isPlaceholderData: seasonsPlaceholder,
-  } = useCollectionSeasons(isSeasonal || collection?.type === 'series' || collection?.type === 'music' ? id : undefined)
+  } = useCollectionSeasons(isSeasonal || (collection && downloadsBySeason(collection.type)) ? id : undefined)
   const seasons = useMemo(
     () => [...(seasonsData ?? [])].sort((a, b) => b.index - a.index),
     [seasonsData],
@@ -173,11 +177,11 @@ export default function CollectionPage() {
     const values: string[] = []
     for (const season of seasons) {
       const value = String(season.id)
-      spec[value] = {label: season.name?.trim() || `Season ${season.index}`}
+      spec[value] = {label: season.name?.trim() || `${words.season.Singular} ${season.index}`}
       values.push(value)
     }
     return createSelectRegistry('CollectionSeason', spec, values)
-  }, [seasons])
+  }, [seasons, words])
 
   useEffect(() => {
     if (!isSeasonal || seasons.length === 0) {
@@ -228,12 +232,13 @@ export default function CollectionPage() {
   const typeFiltered = episodeTypes.length > 0
   // With one type selected, the count names it, such as "726 livestreams".
   const singleTypeTag = episodeTypes.length === 1 ? episodeTags?.find((tag) => tag.key === episodeTypes[0]) : undefined
-  const countNouns = singleTypeTag ?? {singular: 'episode', plural: 'episodes'}
+  const countNouns = singleTypeTag?.names ?? words.episode
   // Locked episodes start shown, unless the collection's Site mixes them among open ones, such as a
   // YouTube channel's members-only videos. Episodes the account can watch are never hidden.
   const [storedShowLocked, setShowLocked] = useShowLocked(id)
   const showLocked = storedShowLocked ?? collection?.site?.showsLocked ?? true
-  const creatorLabel = collection?.site?.creatorLabel ?? 'creator'
+  // A Music collection's creator is an artist, as VODLoft calls any creator with Music collections.
+  const creatorNames = collection?.creatorNames
   const {data: libraryCreators} = useCreators()
   const {
     data: episodePagesData,
@@ -301,6 +306,10 @@ export default function CollectionPage() {
   } = useCollectionDownloadedLocalMediaProfiles(id)
   const { data: downloadProfiles } = useCollectionDownloadProfilesView(id)
   const { data: localMediaProfiles } = useLocalMediaProfiles()
+  // A Music collection's files are tracks while only profiles for Music tracks, which keep sound, are offered for it.
+  const fileWords = fileWordsFor(collection, localMediaProfiles
+    ?.filter((profile) => isCollectionLocalMediaProfileAvailableFor(profile, collection?.type))
+    .map((profile) => profile.type === 'collection' ? profile.collectionScope : 'video'))
   const { data: streamProfiles } = useCollectionStreamProfilesView(id)
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
 
@@ -312,6 +321,8 @@ export default function CollectionPage() {
   const deleteDownloadsOperation = useActiveOperation('collection.delete_downloads', 'collection', operationResourceId)
   const redownloadOperation = useActiveOperation('collection.redownload_episodes', 'collection', operationResourceId)
   const downloadAllOperation = useActiveOperation('collection.download_all', 'collection', operationResourceId)
+  const metadataRewriteOperation = useActiveOperation('collection.rewrite_metadata', 'collection', operationResourceId)
+  const identificationOperation = useActiveOperation('collection.change_identification', 'collection', operationResourceId)
   const manualSyncing = syncOperation !== undefined
   const syncBusy = syncStarting || manualSyncing
   const metadataRefreshBusy = metadataRefreshOperation !== undefined
@@ -429,23 +440,31 @@ export default function CollectionPage() {
     ? metadataRefreshOperation.status === 'WAITING'
       ? metadataRefreshOperation.message || OPERATION_WAITING_MESSAGE
       : `A metadata refresh is running for ${collection.title}.${metadataRefreshOperation.progressTotal > 0
-        ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} episodes have finished.`
+        ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} ${words.episode.plural} have finished.`
         : ''}`
     : undefined
   const downloadStateUnknown = downloadsLoading && downloadedLocalMediaProfiles === undefined
   const downloadStateFailed = Boolean(downloadsError) && downloadedLocalMediaProfiles === undefined
   const downloadStateDisabledReason = downloadStateUnknown
-    ? 'VODLoft is still checking for downloaded episodes in this show.'
+    ? `VODLoft is still checking for downloaded ${fileWords.episode.plural} in ${collection.title}.`
     : downloadStateFailed
-      ? 'VODLoft could not determine whether this show has downloaded episodes.'
+      ? `VODLoft could not determine whether ${collection.title} has downloaded ${fileWords.episode.plural}.`
       : downloadLocalMediaProfiles.length === 0
-        ? `No downloaded episodes exist for ${collection.title}.`
+        ? `No downloaded ${fileWords.episode.plural} exist for ${collection.title}.`
         : undefined
+  const identificationDisabledReason = identificationOperation
+    ? `VODLoft is numbering the ${words.episode.plural} of ${collection.title} again and renaming their files.`
+    : undefined
   const fileRenameDisabledReason = fileRenameOperation
     ? fileRenameOperation.status === 'WAITING'
       ? fileRenameOperation.message || OPERATION_WAITING_MESSAGE
       : `A File Rename operation is running for ${collection.title}.`
-    : downloadStateDisabledReason
+    : identificationDisabledReason ?? downloadStateDisabledReason
+  const metadataRewriteDisabledReason = metadataRewriteOperation
+    ? metadataRewriteOperation.status === 'WAITING'
+      ? metadataRewriteOperation.message || OPERATION_WAITING_MESSAGE
+      : `A metadata rewrite is running for ${collection.title}.`
+    : identificationDisabledReason ?? downloadStateDisabledReason
   const deleteDownloadsDisabledReason = deleteDownloadsOperation
     ? deleteDownloadsOperation.status === 'WAITING'
       ? deleteDownloadsOperation.message || OPERATION_WAITING_MESSAGE
@@ -556,11 +575,11 @@ export default function CollectionPage() {
       onSelect: () => void checkLockedAgain(),
     }] : []),
     ...(collection.creatorSlug ? [{
-      label: `Remove from ${creatorLabel}`,
+      label: `Remove from ${creatorNames?.singular}`,
       icon: faIcon('fass', 'link-slash') as [string, string],
       onSelect: () => setCreatorDialog('remove'),
     }] : hasSourceFeature(collection, SourceFeature.CREATORS) || (libraryCreators?.length ?? 0) > 0 ? [{
-      label: `Add to ${creatorLabel}`,
+      label: `Add to ${creatorNames?.singular}`,
       icon: faIcon('fass', 'circle-user') as [string, string],
       onSelect: () => setCreatorDialog('add'),
     }] : []),
@@ -575,7 +594,7 @@ export default function CollectionPage() {
       onSelect: () => setMetadataRefreshConfirm(true),
     }] : []),
     {
-      label: 'Rename all episode files',
+      label: `Rename all ${fileWords.episode.singular} files`,
       icon: faIcon('fass', 'file-pen'),
       disabled: fileRenameDisabledReason !== undefined,
       disabledReason: fileRenameDisabledReason,
@@ -583,6 +602,16 @@ export default function CollectionPage() {
       starting: isStarting('collection.rename_files'),
       controls: operationControls(fileRenameOperation?.id, 'File Rename'),
       onSelect: () => setFileRenameConfirm(true),
+    },
+    {
+      label: 'Rewrite metadata of all files',
+      icon: faIcon('fass', 'file-lines'),
+      disabled: metadataRewriteDisabledReason !== undefined,
+      disabledReason: metadataRewriteDisabledReason,
+      operation: metadataRewriteOperation,
+      starting: isStarting('collection.rewrite_metadata'),
+      controls: operationControls(metadataRewriteOperation?.id, 'metadata rewrite'),
+      onSelect: () => setMetadataRewriteConfirm(true),
     },
     {
       label: 'Match existing files',
@@ -641,7 +670,7 @@ export default function CollectionPage() {
             {collection.creatorSlug
               ? <CreatorLink slug={collection.creatorSlug} title={collection.creatorTitle ?? collection.authorName} avatarUrl={collection.creatorAvatarUrl}/>
               : <div className="collection-author">{collection.authorName}</div>}
-            <div className="collection-meta">{[`${total} episodes`, collection.years, addedByLabel(collection.addedBy)].filter(Boolean).join(' • ')}</div>
+            <div className="collection-meta">{[words.count(total), collection.years, addedByLabel(collection.addedBy)].filter(Boolean).join(' • ')}</div>
           </div>
 
           <div className="collection-page-actions">
@@ -675,6 +704,12 @@ export default function CollectionPage() {
                 icon: faIcon('fass', 'list'),
                 operation: indexingOperation,
                 status: indexingOperation ? presentIndexingStatus(indexingOperation) ?? undefined : undefined,
+              },
+              {
+                label: `Changing ${words.episode.singular} identification`,
+                icon: faIcon('fass', 'list-ol'),
+                operation: identificationOperation,
+                controls: operationControls(identificationOperation?.id, `${words.episode.singular} identification change`, false),
               },
               {
                 label: 'Sync',
@@ -758,15 +793,15 @@ export default function CollectionPage() {
         </header>
 
         {isSeasonal && seasons.length > 0 && (
-          <div className="collection-season-filter" aria-label="Season selection">
-            <label htmlFor="collection-season">Season</label>
+          <div className="collection-season-filter" aria-label={`${words.season.Singular} selection`}>
+            <label htmlFor="collection-season">{words.season.Singular}</label>
             <SimpleSelect
               inputId="collection-season"
               className="collection-season-select"
               registry={seasonReg}
               value={selectedSeasonId === null ? null : String(selectedSeasonId)}
               onChange={(value) => setSelectedSeasonId(Number(value))}
-              placeholder="Select a season"
+              placeholder={`Select ${words.season.a}`}
             />
             {displayedTotal !== undefined && (
               <span className="collection-season-count">
@@ -785,7 +820,7 @@ export default function CollectionPage() {
                 onChange={setEpisodeTypeFilter}
               />
             )}
-            <LockedEpisodesFilter lockedTotal={lockedTotal} shown={showLocked} onChange={setShowLocked}/>
+            <LockedEpisodesFilter lockedTotal={lockedTotal} shown={showLocked} onChange={setShowLocked} noun={words.episode}/>
             {(typeFiltered || lockedHidden) && !isSeasonal && displayedTotal !== undefined && (
               <span className="collection-type-count">
                 {displayedTotal} {displayedTotal === 1 ? countNouns.singular : countNouns.plural}
@@ -795,9 +830,9 @@ export default function CollectionPage() {
         )}
 
         {isSeasonal && !seasonViewLoading && seasons.length === 0 ? (
-          <div className="collection-season-empty" role="status">No seasons are available for this show.</div>
+          <div className="collection-season-empty" role="status">No {words.season.plural} are available for {collection.title}.</div>
         ) : episodesViewLoading ? (
-          <div className="episodes-grid" role="status" aria-label="Loading episodes" aria-busy="true">
+          <div className="episodes-grid" role="status" aria-label={`Loading ${words.episode.plural}`} aria-busy="true">
             {Array.from({length: EPISODE_SKELETON_COUNT}, (_, index) => (
               <div className="episode-card episode-card-skeleton" key={index} aria-hidden="true">
                 <div className="episode-skeleton-cover"/>
@@ -809,16 +844,17 @@ export default function CollectionPage() {
         ) : (typeFiltered || lockedHidden) && visibleItems.length === 0 && episodePagesData !== undefined ? (
           <div className="collection-season-empty" role="status">
             {typeFiltered
-              ? `No ${lockedHidden ? 'unlocked ' : ''}episodes of the selected types${isSeasonal ? ' in this season' : ''}.`
-              : `Every episode${isSeasonal ? ' in this season' : ''} is locked. Turn on Locked to show them.`}
+              ? `No ${lockedHidden ? 'unlocked ' : ''}${words.episode.plural} of the selected types${isSeasonal ? ` in this ${words.season.singular}` : ''}.`
+              : `Every ${words.episode.singular}${isSeasonal ? ` in this ${words.season.singular}` : ''} is locked. Turn on Locked to show them.`}
           </div>
         ) : (
-          <div className="episodes-grid" role="list" aria-label={`${collection.title} episodes`}>
+          <div className="episodes-grid" role="list" aria-label={`${collection.title} ${words.episode.plural}`}>
             {visibleItems.map((ep: any) => (
               <EpisodeCard
                 key={ep.id} ep={ep} collectionSlug={id} downloads={downloadsBySlug.get(ep.slug)}
                 moved={movedEpisodes?.has(ep.slug)}
                 reassignedTo={reassignedEpisodes?.get(ep.slug)}
+                words={words}
               />
             ))}
           </div>
@@ -828,8 +864,8 @@ export default function CollectionPage() {
           <div className="episodes-load-more episodes-load-failed" role="alert">
             <span>
               {isFetchNextPageError || visibleItems.length > 0
-                ? `Could not load the rest of the episodes, ${visibleItems.length} of ${total} are shown.`
-                : 'Could not load the episodes.'}
+                ? `Could not load the rest of the ${words.episode.plural}, ${visibleItems.length} of ${total} are shown.`
+                : `Could not load the ${words.episode.plural}.`}
             </span>
             <button type="button" className="btn" onClick={retryEpisodes}>
               <FontAwesomeIcon icon={faIcon('fass', 'rotate-right')} aria-hidden="true"/> Try again
@@ -837,11 +873,11 @@ export default function CollectionPage() {
           </div>
         ) : episodesFromCache && visibleItems.length > 0 ? (
           <div className="episodes-load-more" role="status">
-            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Loading episodes…
+            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Loading {words.episode.plural}…
           </div>
         ) : sentinelShown ? (
           <div ref={sentinelRef} className="episodes-load-more" role="status">
-            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Loading more episodes…
+            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Loading more {words.episode.plural}…
           </div>
         ) : null)}
       </article>
@@ -877,9 +913,10 @@ export default function CollectionPage() {
         <CollectionDownloadAllDialog
           collectionSlug={id}
           collectionTitle={collection.title}
-          collectionType={collection.type === 'series' || collection.type === 'music' ? collection.type : 'podcast'}
+          collectionType={collection.type as CollectionLocalMediaProfileContext}
           siteKey={collection.site?.key}
           seasons={seasons}
+          words={fileWords}
           localMediaProfiles={localMediaProfiles ?? []}
           onDismiss={() => setDownloadAllConfirm(false)}
           onStartingChange={onStartingChange('collection.download_all')}
@@ -891,14 +928,16 @@ export default function CollectionPage() {
         findsCreator={hasSourceFeature(collection, SourceFeature.CREATORS)}
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
-        creatorLabel={creatorLabel}
+        creatorNames={creatorNames}
+        // A Music collection numbers its music videos as tracks too.
+        words={collectionWords(collection.type, 'audio')}
         onDismiss={() => setCreatorDialog(null)}
       />
       <RemoveFromCreatorDialog
         open={creatorDialog === 'remove'}
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
-        creatorLabel={creatorLabel}
+        creatorNames={creatorNames}
         onDismiss={() => setCreatorDialog(null)}
       />
 
@@ -914,7 +953,7 @@ export default function CollectionPage() {
         confirmLabel="Refresh metadata"
         disabled={metadataRefreshBusy}
       >
-        <p>Refresh metadata for every episode in "{collection.title}"? This can take a while and is usually not needed.</p>
+        <p>Refresh metadata for every {words.episode.singular} in "{collection.title}"? This can take a while and is usually not needed.</p>
       </ActionConfirmDialogue>
 
       <ActionConfirmDialogue
@@ -923,7 +962,7 @@ export default function CollectionPage() {
         onStartingChange={onStartingChange('collection.rename_files')}
         requestPath={`/collections/${encodeURIComponent(id)}/rename-files`}
         resourceLabel={collection.title}
-        title="Rename existing episode files"
+        title={`Rename existing ${fileWords.episode.singular} files`}
         onDismiss={() => { setFileRenameConfirm(false); setFileRenameProfileId(undefined) }}
         icon={faIcon('fass', 'file-pen')}
         confirmLabel="Rename files"
@@ -934,7 +973,7 @@ export default function CollectionPage() {
         extraBody={{seasonFolders: renameSeasonFolders, moveReassigned: moveReassigned && !!reassignedEpisodes?.size}}
       >
         <p>
-          Rename existing episode files in "{collection.title}" so their paths match the current Local Media Profile output templates.
+          Rename existing {fileWords.episode.singular} files in "{collection.title}" so their paths match the current Local Media Profile output templates.
         </p>
         <label className="rename-season-folders">
           <Switch
@@ -944,11 +983,13 @@ export default function CollectionPage() {
             height={18} width={34} handleDiameter={14}
           />
           <span>
-            <b>Rename season folders too</b>
+            <b>Rename {words.season.singular} folders too</b>
             <span className="help">
-              Episodes move into the folders of the seasons they are in now, with their season's number, also after
-              seasons were reordered. In a collection with playlist seasons, downloaded videos also move to the
-              playlist they belong in now.
+              {fileWords.episode.Plural} move into the folders of the {words.season.plural} they are in now, with their
+              {' '}{words.season.singular}'s number, also after {words.season.plural} were reordered.{' '}
+              {collection.type === 'music'
+                ? `In a collection of the artist's albums, downloaded ${fileWords.episode.plural} also move to the album they belong in now.`
+                : `In a collection whose ${words.season.plural} come from the site's lists, downloaded ${fileWords.episode.plural} also move to the ${words.season.singular} of the list they belong in now.`}
             </span>
           </span>
         </label>
@@ -961,17 +1002,38 @@ export default function CollectionPage() {
               height={18} width={34} handleDiameter={14}
             />
             <span>
-              <b>Also move reassigned episodes out</b>
+              <b>Also move reassigned {fileWords.episode.plural} out</b>
               <span className="help">
                 {reassignedEpisodes.size === 1
-                  ? 'One downloaded episode belongs in another collection of this creator now. It moves there with its files'
-                  : `${reassignedEpisodes.size} downloaded episodes belong in other collections of this creator now. They move there with their files`},
-                or are downloaded again there when that collection uses another Local Media Profile. Episodes reassigned
+                  ? `One downloaded ${fileWords.episode.singular} belongs in another collection of this ${creatorNames?.singular} now. It moves there with its files`
+                  : `${reassignedEpisodes.size} downloaded ${fileWords.episode.plural} belong in other collections of this ${creatorNames?.singular} now. They move there with their files`},
+                or are downloaded again there when that collection uses another Local Media Profile. {fileWords.episode.Plural} reassigned
                 to this collection from elsewhere stay where they are.
               </span>
             </span>
           </label>
         )}
+      </ActionConfirmDialogue>
+
+      <ActionConfirmDialogue
+        open={metadataRewriteConfirm}
+        operationDefinition={frontendOperationDefinitions['collection.rewrite_metadata']}
+        onStartingChange={onStartingChange('collection.rewrite_metadata')}
+        requestPath={`/collections/${encodeURIComponent(id)}/rewrite-metadata`}
+        resourceLabel={collection.title}
+        title="Rewrite metadata of all files"
+        onDismiss={() => setMetadataRewriteConfirm(false)}
+        icon={faIcon('fass', 'file-lines')}
+        confirmLabel="Rewrite metadata"
+        disabled={metadataRewriteOperation !== undefined}
+        scope_by_local_media_profile
+        localMediaProfiles={actionLocalMediaProfiles}
+      >
+        <p>
+          Write the current titles, descriptions, numbers and other details into the downloaded files of
+          "{collection.title}" and their NFO files, as the Local Media Profile keeps them. Nothing is downloaded again:
+          each file is copied once with its new details, so this needs free space for the largest file.
+        </p>
       </ActionConfirmDialogue>
 
       <ActionConfirmDialogue
@@ -991,11 +1053,11 @@ export default function CollectionPage() {
         localMediaProfiles={actionLocalMediaProfiles}
       >
         <p>
-          Delete downloaded episode files in "{collection.title}".
+          Delete downloaded {fileWords.episode.singular} files in "{collection.title}".
         </p>
         <p>
-          When you delete everything, VODLoft first disables any Download Profiles attached to the selected Local Media Profile or Profiles. Re-enable a disabled Download Profile whenever you want VODLoft to download its eligible episodes again.
-          Deleting only older episodes leaves Download Profiles on, so they may download those episodes again.
+          When you delete everything, VODLoft first disables any Download Profiles attached to the selected Local Media Profile or Profiles. Re-enable a disabled Download Profile whenever you want VODLoft to download its eligible {fileWords.episode.plural} again.
+          Deleting only older {fileWords.episode.plural} leaves Download Profiles on, so they may download those {fileWords.episode.plural} again.
         </p>
       </ActionConfirmDialogue>
 
@@ -1016,7 +1078,7 @@ export default function CollectionPage() {
         localMediaProfiles={actionLocalMediaProfiles}
       >
         <p>
-          Delete existing episode files in "{collection.title}" and re-download them.
+          Delete existing {fileWords.episode.singular} files in "{collection.title}" and re-download them.
           This can take a long time, use significant bandwidth, and is usually not needed.
         </p>
       </ActionConfirmDialogue>

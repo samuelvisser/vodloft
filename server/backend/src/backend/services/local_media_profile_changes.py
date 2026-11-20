@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.db.models import (
-    Collection, CollectionLocalMediaProfile, CustomIndexState, LocalMediaProfileBase, MusicLocalMediaProfile, VideoLocalMediaProfile,
+    Collection, CollectionLocalMediaProfile, CustomIndexState, LocalMediaProfileBase, MediaDownloadBase, VideoLocalMediaProfile,
 )
 from backend.services.collection_assets import request_profile_collection_assets
 from backend.services.custom_indexes import (
@@ -20,8 +20,8 @@ from backend.services.custom_indexes import (
     request_custom_index_reconciliation,
 )
 from backend.services.download_options import effective_filename_mode
-from backend.services.errors import FieldValueError, NotFoundError, ServiceError
-from backend.types.local_media_profile_types import LocalMediaProfileType
+from backend.services.errors import NotFoundError, ServiceError
+from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
 from backend.services.profile_file_renames import request_collection_local_media_profile_file_rename
 from backend.services.local_media_profile_inputs import (
     CollectionLocalMediaProfileInput, LocalMediaProfileInput, VideoLocalMediaProfileInput, NewCollectionLocalMediaProfile,
@@ -166,8 +166,7 @@ def create_collection_local_media_profile(
     fields: NewCollectionLocalMediaProfile,
 ) -> CollectionLocalMediaProfile:
     ensure_unique_profile_settings(s, CollectionLocalMediaProfile, fields)
-    model = MusicLocalMediaProfile if fields.type == LocalMediaProfileType.MUSIC else CollectionLocalMediaProfile
-    item = create_database_fields(model, fields)
+    item = create_database_fields(CollectionLocalMediaProfile, fields)
     s.add(item)
     s.flush()
     replace_indexing_value_definitions(item, fields.indexing_values)
@@ -197,8 +196,7 @@ def update_collection_local_media_profile(
     ensure_unique_profile_settings(s, CollectionLocalMediaProfile, fields, exclude_id=item.id)
     # Missing values on updates are not creation defaults; retain the
     # persisted selection, even if collection_scope was changed.
-    if "type" in fields.model_fields_set and fields.type != item.type:
-        raise FieldValueError("type", f"A {LocalMediaProfileType(item.type).label} profile stays one")
+    _refuse_tracks_switch_with_downloads(s, item, fields)
     excluded_fields = {"type", "indexing_values", *fields.fields_kept_on_update()}
     update_database_fields(item, fields, exclude_fields=excluded_fields)
     replace_indexing_value_definitions(item, fields.indexing_values)
@@ -235,6 +233,22 @@ def update_collection_local_media_profile(
 
     request_profile_collection_assets(s, item.id)
     return item
+
+
+def _refuse_tracks_switch_with_downloads(s: Session, item: CollectionLocalMediaProfile, fields: CollectionLocalMediaProfileInput):
+    """A profile that keeps music as tracks has audio files only, and any other has the files of its own kind, so a
+    profile only switches to or from Music tracks before it downloaded anything."""
+    if "collection_scope" not in fields.model_fields_set:
+        return
+    tracks = CollectionLocalMediaProfileScope.MUSIC_TRACKS.value
+    if (item.collection_scope == tracks) == (fields.collection_scope == tracks):
+        return
+    if s.scalar(select(MediaDownloadBase.id).where(MediaDownloadBase.local_media_profile_id == item.id).limit(1)) is not None:
+        if item.collection_scope == tracks:
+            message = "This profile already has downloaded music tracks, so what it is available for can't change."
+        else:
+            message = "This profile already has downloads, so it can't be changed to Music tracks."
+        raise ServiceError(message, field="collectionScope")
 
 
 def create_video_local_media_profile(s: Session, fields: VideoLocalMediaProfileInput) -> VideoLocalMediaProfile:

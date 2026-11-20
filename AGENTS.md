@@ -171,6 +171,78 @@ live in the `sources` package (`server/sources`), one subpackage each, and regis
   `downloader` package knows nothing about Sources.
 - Collections and media items store their Source's id in `source_key`.
 
+### Site contracts
+A Site is one website as the user knows it (YouTube, The Daily Wire), whichever Source fetches it. What VODLoft
+does differently on a Site lives in that Site's contract, a `Site` from `sources.contract`, and nowhere else.
+- `Site`'s own field defaults are VODLoft's generic fallback. A contract sets only what differs on its Site; never
+  repeat a default in a contract, and never add a default to `Site` just to suit one Source or Site.
+- A Source made for one Site declares it in its `sites` (The Daily Wire, NPO Start).
+- yt-dlp's Sites are classes in `sources/ytdlp/site_contracts/`, one module per Site, registered in `CONTRACTS`
+  there. Each subclasses `OtherSites` and sets only the `Site` fields that differ there, such as Floatplane's name
+  and its name for locked videos. Sites that only need a display name go in `named.py`.
+- `OtherSites` is only for what every yt-dlp site does differently from `Site`'s defaults because yt-dlp does it,
+  such as its quality choices and subtitles. Keep it small: a value that is only true of some yt-dlp sites belongs
+  in their own contracts, and a value true of every site belongs in `Site`.
+- A site without a contract of its own, including a page only yt-dlp's generic extractor handles, gets `OtherSites`.
+- `sites.site_of()` builds each Site once from its contract and keeps it, so contracts are static: no lookups, no
+  settings, nothing that changes while VODLoft runs.
+- Code reads what is special about a Site from its contract (`site.audio_only`, `site.creator_names`,
+  `site.link_seasons`), never by comparing a Site key or domain. Need something new to differ per Site? Add a field
+  to `Site` with the generic default, and set it in the contracts that differ. Do not add lookup tables keyed by
+  Site key beside the contracts.
+- A Site's `section_types` are every type of section its creators have (feeds, lists, shows, items), each a
+  `SectionType` with a stored `key` and its `Names` (singular and plural, no article). Name sections only from them:
+  a combined name such as "albums and playlists" is joined from the types where it is shown, never written into a
+  contract or hardcoded. What VODLoft calls the season it makes itself of what is in no list is `loose_season`, apart from sections.
+- A section type says what a section is: its kind, and for a feed its `role` (main, short or live). A `SectionRef`
+  carries its `SectionType`, and a stored `CreatorSection` only its type `key`, from which it reads its kind, role and,
+  for a feed, its title. Type keys are unique within a Site only; a key a Site's contract does not have is an error.
+- yt-dlp's feeds are `YtdlpFeedSectionType`s, which add the `path` of the feed's page, such as YouTube's `streams`.
+  Adding a feed to a Site is a change to its contract alone.
+- A Site's `episode_tags` are the kinds of episode it tells apart, the main one first. A Site with `audio_only` has
+  sound only: what its contract leaves out of `episode_tags`, `downloads` and `upgrade_checks` becomes the sound
+  version (tracks, no video heights, HLS or subtitles). A value the contract sets itself always wins.
+
+### Site implementations
+The Site contract says what a Site has; a Site implementation says how its Source fetches it. In yt-dlp they are
+classes in `sources/ytdlp/site_implementations/`, one per Site, registered in `IMPLEMENTATIONS` by Site key. Each
+subclasses `OtherSitesImplementation`, the generic one, which reads every feed by its path.
+- `YtDlpSource` finds the link's Site and hands the work to its implementation. What one Site does differently
+  belongs in that Site's implementation, not in a check of the Site in the Source.
+- An implementation answers the contract's types by key: its `feed_types` and `list_keys` together are the keys of
+  its Site's `section_types`, which `test_ytdlp_site_contracts.py` checks.
+- Settings that follow a type, such as what a creator does with a new list, are stored by Site and type key.
+
+### Naming things
+Every contract names things with `Names` from `sources.contract`: `singular`, `plural`, and `a` with its article. The
+API sends it as `{singular, plural, a}` under a `names` field (or a field named for what it names, such as
+`creatorNames`), never flattened. The backend gives every word the UI shows for a Site, a collection or a creator,
+also its fallback; the UI never adds an "s", picks an article, or falls back to a word of its own.
+- Several names shown together are joined in the backend with `Names.joined` ("albums and playlists", "an album or
+  playlist"). A Site offers the usual sets: `section_feed_names`, `section_list_names`, `section_show_names`,
+  `section_item_names`, `section_growing_names`, `section_names` and `names_of(*kinds)`. The
+  UI's `joinedNames` is only for a set the UI picks itself, such as the sections a user ticked.
+- What VODLoft itself calls a kind of link or record lives in `LINK_KIND_NAMES`, `SECTION_KIND_NAMES` and
+  `RESOURCE_NAMES` (`backend.types.resource_names`); a Source overrides only its own kinds in `kind_names`, and the
+  API serves `named_kinds`, the merged table. The UI never keeps a label table of its own for them.
+
+### Collection contracts
+What VODLoft does differently per collection type (Podcast, Series, Music) lives in that type's `CollectionContract`
+in `backend.types.collection_contracts`, the way a Site's lives in its Site contract.
+- `CollectionContract`'s field defaults are the fallback for every type; a type's contract sets only what differs.
+- What a collection calls its seasons and episodes comes from there: `collection_contract(type).words_for(audio)` for a
+  type, `collection_words(collection)` in `backend.services.sites` for a collection on its Site. Words are `Names`, with
+  `singular`, `plural` and `a` (with its article). Do not write season, album, episode or track words into code.
+- A fact of a collection type wins over its Site's: a Music collection calls its creator an artist
+  (`creator_names_on(site)`) whatever the Site calls its creators. Put such a fact in the collection contract, not in
+  a second field on every Site.
+- Other facts of a type live there too, and code reads them instead of comparing the type: `loose_season` (Singles
+  for Music, over the Site's own `loose_season`), `site_order` and `album_lists` (an artist's albums keep their order
+  and are the lists that become seasons), `media_are_episodes`, `downloads_by_season`, and the Local Media Profile
+  scopes a type offers (`profile_scopes`) and starts a new profile with (`profile_scope`, `audio_profile_scope`).
+- The UI gets every contract with the public config and names things only through `ui/src/lib/collectionWords.ts`.
+  A creator's words come from the API (`words`, from `creator_words`), not from the types of its collections.
+
 ## Jinja analysis
 Output template analysis lives in the `jinja_analysis` package (`server/jinja_analysis`), which only depends on
 jinja2 and never imports VODLoft code; its tests use jinja2 and the package alone.

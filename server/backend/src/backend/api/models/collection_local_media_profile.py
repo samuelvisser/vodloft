@@ -28,8 +28,8 @@ class CollectionLocalMediaProfileAPIUpdate(RequestBase, CollectionLocalMediaProf
 class CollectionLocalMediaProfileAPIRead(LocalMediaProfileAPIBaseOut):
     """Read a Collection Local Media Profile."""
 
-    type: Literal["collection", "music"] = LocalMediaProfileType.COLLECTION.value
-    collection_scope: Union[CollectionLocalMediaProfileScope, str] = CollectionLocalMediaProfileScope.BOTH
+    type: Literal["collection"] = LocalMediaProfileType.COLLECTION.value
+    collection_scope: Union[CollectionLocalMediaProfileScope, str] = CollectionLocalMediaProfileScope.PODCAST_AND_SERIES
     download_collection_assets: bool | None = None
     show_nfo: bool
     episode_nfo: EpisodeNfo = EpisodeNfo.EPISODE

@@ -1,25 +1,30 @@
-import {useCallback, useMemo, useState} from 'react'
-import {Link, useParams} from 'react-router-dom'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {can} from '../../lib/access'
+import {apiFetch} from '../../lib/api'
 import {checkCreator, combineCreators, useCreator, useCreatorEpisodes, useCreators} from '../../lib/queries'
 import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import EpisodeCard from '../../components/Episode/EpisodeCard'
+import EpisodeCard, {toImageUrl} from '../../components/Episode/EpisodeCard'
+import {DrmBadge} from '../../components/common/DrmProtected'
 import CollectionTile from '../../components/CollectionTile/CollectionTile'
 import OpenOnSiteLink from '../../components/common/OpenOnSiteLink'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import {postReassignedMove, reassignedMoveMessage} from '../../components/Episode/SeasonPlaceNote'
 import {toast} from 'react-hot-toast'
-import {creatorKindText} from '../../types/creator'
+import {creatorKindText, groupNames, joinedNames} from '../../types/creator'
+import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
+import {placedSections} from './CreatorSectionsEditor'
 import CreatorHeader from './CreatorHeader'
 import CreatorNotInLibrary from './CreatorNotInLibrary'
 import './CreatorPages.css'
+import {CollectionWords, wordsOf} from '../../lib/collectionWords'
 
 /** The places a collection lists, short enough for a card: "Videos, Live and 9 more". */
 function listedSources(titles: string[]) {
@@ -39,7 +44,7 @@ function timeAgo(date: Date) {
 }
 
 /** A row of episodes that scrolls sideways, with buttons to scroll it on a computer. */
-function EpisodeShelf({slug}: {slug: string}) {
+function EpisodeShelf({slug, words}: {slug: string, words: CollectionWords}) {
     const {data, hasNextPage, isFetchingNextPage, fetchNextPage} = useCreatorEpisodes(slug)
     const episodes = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data])
     // The next page loads when the end of the row comes near, as the user scrolls it on.
@@ -50,7 +55,7 @@ function EpisodeShelf({slug}: {slug: string}) {
     return (
         <section className="creator-section-group" aria-labelledby="creator-newest-title">
             <div className="creator-shelf-head">
-                <h2 id="creator-newest-title">Newest episodes</h2>
+                <h2 id="creator-newest-title">Newest {words.episode.plural}</h2>
                 <div className="creator-shelf-arrows">
                     <button type="button" className="btn" onClick={() => scroll(-1)} aria-label="Scroll back">
                         <FontAwesomeIcon icon={faIcon('fass', 'chevron-left')}/>
@@ -62,7 +67,7 @@ function EpisodeShelf({slug}: {slug: string}) {
             </div>
             <div className="episodes-row creator-shelf" role="list" ref={row}>
                 {episodes.map((episode) => (
-                    <EpisodeCard key={episode.id} ep={episode} collectionSlug={episode.collectionSlug} collectionTitle={episode.collectionTitle}/>
+                    <EpisodeCard key={episode.id} ep={episode} collectionSlug={episode.collectionSlug} collectionTitle={episode.collectionTitle} words={words}/>
                 ))}
                 {hasNextPage && <div ref={endRef} className="creator-shelf-more" aria-hidden="true"/>}
             </div>
@@ -73,7 +78,19 @@ function EpisodeShelf({slug}: {slug: string}) {
 export default function CreatorPage() {
     const {slug} = useParams()
     const queryClient = useQueryClient()
+    const navigate = useNavigate()
     const {data: creator, error} = useCreator(slug)
+    // Moving feeds and playlists, started by saving the Edit page.
+    const moveOperation = useActiveOperation('creator.move_sections', 'creator', creator?.id ?? null)
+    // Count each visit once, so the Library can list the most used creators first.
+    const countedVisit = useRef<string | null>(null)
+    useEffect(() => {
+        if (!slug || countedVisit.current === slug) return
+        countedVisit.current = slug
+        apiFetch(`/creators/${encodeURIComponent(slug)}/opened`, {method: 'POST'}).catch(() => {
+            // Only the Library's order misses this visit.
+        })
+    }, [slug])
     const [actionError, setActionError] = useState<string | null>(null)
     const [checking, setChecking] = useState(false)
     const [movingReassigned, setMovingReassigned] = useState(false)
@@ -114,7 +131,7 @@ export default function CreatorPage() {
         setMovingReassigned(true)
         try {
             const result = await postReassignedMove(`/creators/${encodeURIComponent(creator.slug)}/move-reassigned`)
-            toast.success(reassignedMoveMessage(result))
+            toast.success(reassignedMoveMessage(result, fileWords))
             await queryClient.invalidateQueries({queryKey: ['creator', slug]})
             await queryClient.invalidateQueries({queryKey: ['collection']})
         } catch (exc) {
@@ -140,10 +157,15 @@ export default function CreatorPage() {
     }
 
     const several = creator.accounts.length > 1
+    // The feeds and playlists whose place the Edit page changes, named together, such as "feeds and playlists".
+    const placed = placedSections(creator).map(({section}) => section)
+    const placedNames = placed.length ? joinedNames(placed.map((section) => groupNames(section, placed))) : null
     const links = creator.accounts.filter((account) => account.url).map((account) => ({siteName: account.site.name, url: account.url!}))
     // Two sites fit as buttons; more go into the Actions menu.
     const linkButtons = links.length <= 2 ? links : []
     const episodes = creator.collections.reduce((total, collection) => total + collection.episodeCount, 0)
+    const words = wordsOf(creator.words)
+    const fileWords = words
     const firstDates = creator.collections.map((collection) => collection.firstPublishedDate).filter((date): date is Date => !!date)
     const since = firstDates.length ? Math.min(...firstDates.map((date) => date.getFullYear())) : null
     const newest = creator.lastPublishedDate
@@ -155,10 +177,11 @@ export default function CreatorPage() {
                 handle={creator.accounts[0]?.handle}
                 avatarUrl={creator.avatarUrl} bannerUrl={creator.bannerUrl} facts={creator.facts}
                 description={creator.description} titleId="creator-title"
-                stats={creator.collections.length > 0 && (
+                stats={(creator.collections.length > 0 || creator.movies.length > 0) && (
                     <ul className="creator-stats">
                         <li><b>{creator.collections.length}</b> {creator.collections.length === 1 ? 'collection' : 'collections'}</li>
-                        <li><b>{episodes}</b> {episodes === 1 ? 'episode' : 'episodes'}</li>
+                        {creator.movies.length > 0 && <li><b>{creator.movies.length}</b> {creator.movies.length === 1 ? 'movie' : 'movies'}</li>}
+                        <li><b>{episodes}</b> {episodes === 1 ? words.episode.singular : words.episode.plural}</li>
                         {since && <li>Since <b>{since}</b></li>}
                         {newest && <li>Newest <b>{timeAgo(newest)}</b></li>}
                     </ul>
@@ -171,7 +194,7 @@ export default function CreatorPage() {
                                 <PageHeaderAction icon={faIcon('fass', 'pen')} label="Edit" variant="secondary" to={`/edit-creator/${creator.slug}`}/>
                                 <ActionMenu items={[{
                                     label: checking ? 'Looking…' : 'Check now',
-                                    description: `Look for new ${creator.sectionNames.many}`,
+                                    description: `Look for new ${creator.newListNames.plural}`,
                                     icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: checking,
                                     onSelect: () => void check(),
@@ -182,13 +205,13 @@ export default function CreatorPage() {
                                 }))),
                                 // Episodes can only move between collections, so a creator with one has nothing to move.
                                 ...(creator.collections.length > 1 ? [{
-                                    label: 'Move reassigned episodes',
+                                    label: `Move reassigned ${fileWords.episode.plural}`,
                                     description: creator.reassignedCount
-                                        ? `${creator.reassignedCount} downloaded ${creator.reassignedCount === 1 ? 'episode belongs' : 'episodes belong'} in another collection of this ${creator.creatorLabel} now`
-                                        : undefined,
+                                        ? `${creator.reassignedCount} downloaded ${creator.reassignedCount === 1 ? `${fileWords.episode.singular} belongs` : `${fileWords.episode.plural} belong`} in another collection of this ${creator.creatorNames.singular} now`
+                                        : `Moves downloaded ${fileWords.episode.plural} along when this ${creator.creatorNames.singular} puts them in another collection.`,
                                     icon: faIcon('fass', 'arrow-right-from-bracket'),
                                     disabled: movingReassigned || !creator.reassignedCount,
-                                    disabledReason: creator.reassignedCount ? undefined : `No episode of this ${creator.creatorLabel} belongs in another of its collections.`,
+                                    disabledReason: creator.reassignedCount ? undefined : `No ${fileWords.episode.singular} of this ${creator.creatorNames.singular} belongs in another of its collections.`,
                                     onSelect: () => void moveReassigned(),
                                 }] : []), {
                                     label: 'Combine with another creator',
@@ -197,7 +220,14 @@ export default function CreatorPage() {
                                     disabled: !others.length,
                                     disabledReason: others.length ? undefined : 'There is no other creator in your library.',
                                     onSelect: () => setCombining(true),
-                                }]}/>
+                                }, ...(placedNames ? [{
+                                    label: `Move ${placedNames.plural}`,
+                                    description: 'Choose where they go on the Edit page',
+                                    icon: faIcon('fass', 'arrow-right-arrow-left'),
+                                    // Saving the Edit page starts it; while it runs, its progress shows here.
+                                    operation: moveOperation,
+                                    onSelect: () => navigate(`/edit-creator/${creator.slug}`),
+                                }] : [])]}/>
                             </>
                         )}
                     </>
@@ -206,14 +236,14 @@ export default function CreatorPage() {
 
             {checking && (
                 <p className="creator-note" role="status">
-                    VODLoft is looking for new {creator.sectionNames.many}. New ones show under Collections when it is done.
+                    VODLoft is looking for new {creator.newListNames.plural}. New ones show under Collections when it is done.
                 </p>
             )}
             {actionError && <div className="form-error-card" role="alert">{actionError}</div>}
 
-            <EpisodeShelf slug={creator.slug}/>
+            <EpisodeShelf slug={creator.slug} words={words}/>
 
-            <div className="creator-section-group">
+            {(creator.collections.length > 0 || !creator.movies.length) && <div className="creator-section-group">
                 <h2 className="creator-collections-title">Collections</h2>
                 {creator.collections.length ? (
                     <div className="library-collection-grid" role="list" aria-label="Collections">
@@ -228,11 +258,37 @@ export default function CreatorPage() {
                     </div>
                 ) : (
                     <p className="creator-empty">
-                        None of this {creator.creatorLabel}'s collections are in your library any more.
+                        None of this {creator.creatorNames.singular}'s collections are in your library any more.
                         {mayManage && <> Add some on the <Link to={`/edit-creator/${creator.slug}`}>Edit page</Link>.</>}
                     </p>
                 )}
-            </div>
+            </div>}
+
+            {creator.movies.length > 0 && (
+                <div className="creator-section-group">
+                    <h2 className="creator-collections-title">Movies</h2>
+                    <div className="movie-poster-grid" role="list" aria-label="Movies">
+                        {creator.movies.map((movie) => {
+                            const image = toImageUrl(
+                                movie.thumbnailPortraitPath || movie.thumbnailLandscapePath || movie.backgroundImagePath || movie.logoImagePath,
+                            )
+                            const year = (movie.releaseDate ?? '').slice(0, 4) || (movie.publishedAt ? String(movie.publishedAt.getFullYear()) : '')
+                            return (
+                                <Link className="movie-poster-card" to={`/movie/${movie.slug}`} key={movie.slug} role="listitem">
+                                    <span className="movie-poster-art">
+                                        {image
+                                            ? <img src={image} alt="" loading="lazy" decoding="async"/>
+                                            : <FontAwesomeIcon icon={faIcon('fass', 'clapperboard')}/>}
+                                        {movie.drmProtected && <DrmBadge onCover/>}
+                                    </span>
+                                    <span className="movie-poster-title">{movie.title}</span>
+                                    {year && <span className="movie-poster-meta">{year}</span>}
+                                </Link>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
 
             <CreatorNotInLibrary creator={creator}/>
 
@@ -254,7 +310,7 @@ export default function CreatorPage() {
                 </div>
                 <ul className="creator-order-note">
                     <li>Their accounts and collections become {creator.title}'s, and they leave your library as a creator of their own.</li>
-                    <li>Collections keep their seasons, episodes, profiles and files. Nothing is indexed again.</li>
+                    <li>Collections keep their {words.season.plural}, {words.episode.plural}, profiles and files. Nothing is indexed again.</li>
                     <li>{creator.title}'s name, picture and settings stay.</li>
                 </ul>
             </ConfirmDialog>

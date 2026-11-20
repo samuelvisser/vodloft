@@ -94,7 +94,7 @@ def _make_profile(session, *, template: str):
         name="Indexed video",
         output_template=template,
         preferred_format="format_1080p",
-        collection_scope="both",
+        collection_scope="podcast-and-series",
     )
     session.add(profile)
     session.flush()
@@ -374,7 +374,7 @@ def test_profile_save_queues_index_work_before_optional_rename(db_session):
     body = CollectionLocalMediaProfileAPIUpdate(
         name=profile.name, preferred_format=profile.preferred_format,
         output_template="/downloads/{{ 'extras' | custom_index }}-{{ episode }}.ext",
-        collection_scope="both", indexing_values=[{"key": "extras", "name": "Extras"}],
+        collection_scope="podcast-and-series", indexing_values=[{"key": "extras", "name": "Extras"}],
     )
     update_collection_local_media_profile(db_session, profile.slug, body, rename_files=True)
 
@@ -855,7 +855,7 @@ def test_profile_save_skips_index_management_when_assignment_reachability_is_unc
         name=profile.name,
         preferred_format=profile.preferred_format,
         output_template=saved.replace("/downloads/", "/downloads/renamed/"),
-        collection_scope="both",
+        collection_scope="podcast-and-series",
         indexing_values=[{"key": "extras", "name": "Extras"}],
     )
     update_collection_local_media_profile(
@@ -896,7 +896,7 @@ def test_profile_save_ignores_unrelated_unsupported_jinja_for_index_management(d
         name=profile.name,
         preferred_format=profile.preferred_format,
         output_template=changed,
-        collection_scope="both",
+        collection_scope="podcast-and-series",
         indexing_values=[{"key": "extra", "name": "Extras"}],
     )
     update_collection_local_media_profile(
@@ -938,7 +938,7 @@ def test_profile_save_queues_index_management_when_assignment_reachability_chang
         name=profile.name,
         preferred_format=profile.preferred_format,
         output_template=changed,
-        collection_scope="both",
+        collection_scope="podcast-and-series",
         indexing_values=[{"key": "extras", "name": "Extras"}],
     )
     update_collection_local_media_profile(
@@ -972,7 +972,7 @@ def test_profile_save_conservatively_queues_index_management_when_analysis_is_un
         name=profile.name,
         preferred_format=profile.preferred_format,
         output_template=saved.replace("/downloads/", "/downloads/renamed/"),
-        collection_scope="both",
+        collection_scope="podcast-and-series",
         indexing_values=[{"key": "extras", "name": "Extras"}],
     )
     update_collection_local_media_profile(db_session, profile.slug, body)
@@ -1052,7 +1052,7 @@ def test_profile_save_unused_definition_change_does_not_queue_index_management(d
         name=profile.name,
         preferred_format=profile.preferred_format,
         output_template=template,
-        collection_scope="both",
+        collection_scope="podcast-and-series",
         indexing_values=[{"key": "extras", "name": "Extras"}],
     )
     update_collection_local_media_profile(db_session, profile.slug, body)
@@ -1213,3 +1213,16 @@ def test_keep_numbers_round_trips_through_the_api(db_session):
     db_session.flush()
     read = CollectionLocalMediaProfileAPIRead.model_validate(profile)
     assert [(item.key, item.keep_numbers) for item in read.indexing_values] == [("clips", True)]
+
+
+def test_album_variables_alias_the_season_variables(db_session):
+    from backend.utils.output_template import episode_output_template_values
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    episode = _make_episode(db_session, collection, season, index=1, slug="first", identifier="ep.1")
+
+    values = episode_output_template_values(episode)
+
+    assert values["album_slug"] == values["season"] == "season-1"
+    assert values["album_number"] == values["season_number"]

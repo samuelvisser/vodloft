@@ -1,3 +1,4 @@
+import type {ReactNode} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {PageHeaderAction} from '../common/PageHeader'
 import {faIcon} from '../../icons/faIcon'
@@ -60,41 +61,65 @@ type BulkActionBarProps = {
     onDelete: () => void
 }
 
+type BulkBarProps = {
+    /** How many are chosen. */
+    count: number
+    /** What the bar asks for while nothing is chosen, such as "Choose profiles to change". */
+    prompt: string
+    /** How many chosen ones the filters hide. */
+    hidden?: number
+    onClear: () => void
+    onStop: () => void
+    /** Fewer actions, which stay side by side on a phone. */
+    short?: boolean
+    children: ReactNode
+}
+
+/** The bar along the bottom of the screen while bulk edit is on: how many are chosen, the actions, and a close. */
+export function BulkBar({count, prompt, hidden = 0, onClear, onStop, short, children}: BulkBarProps) {
+    return (
+        <div className="bulk-action-bar" role="toolbar" aria-label="Bulk actions">
+            <div className="bulk-action-bar__count" aria-live="polite">
+                <strong>{count ? `${count.toLocaleString()} selected` : prompt}</strong>
+                {hidden > 0 && (
+                    <span className="bulk-action-bar__hidden">{hidden.toLocaleString()} hidden by filters</span>
+                )}
+                {count > 0 && <button type="button" className="filter-chip-reset" onClick={onClear}>Clear</button>}
+            </div>
+            <div className={`bulk-action-bar__actions${short ? ' is-short' : ''}`}>{children}</div>
+            <button type="button" className="bulk-action-bar__close" aria-label="Stop bulk edit" title="Stop bulk edit" onClick={onStop}>
+                <FontAwesomeIcon icon={faIcon('fass', 'xmark')} aria-hidden="true"/>
+            </button>
+        </div>
+    )
+}
+
 /** The actions for the chosen profiles, along the bottom of the screen while bulk edit is on. */
 export function BulkActionBar({selection, noun, busy, onEnable, onChange, onDelete}: BulkActionBarProps) {
     if (!selection.active) return null
     const none = selection.selected.size === 0
     return (
-        <div className="bulk-action-bar" role="toolbar" aria-label="Bulk actions">
-            <div className="bulk-action-bar__count" aria-live="polite">
-                <strong>{none ? `Choose ${noun[1]} to change` : `${selection.selected.size.toLocaleString()} selected`}</strong>
-                {selection.hidden > 0 && (
-                    <span className="bulk-action-bar__hidden">{selection.hidden.toLocaleString()} hidden by filters</span>
-                )}
-                {!none && <button type="button" className="filter-chip-reset" onClick={selection.clear}>Clear</button>}
-            </div>
-            <div className={`bulk-action-bar__actions${onEnable ? '' : ' is-short'}`}>
-                {onEnable && (
-                    <>
-                        <button type="button" className="btn" disabled={none || busy} onClick={() => onEnable(true)}>
-                            <FontAwesomeIcon icon={faIcon('fass', 'play')} aria-hidden="true"/> Enable
-                        </button>
-                        <button type="button" className="btn" disabled={none || busy} onClick={() => onEnable(false)}>
-                            <FontAwesomeIcon icon={faIcon('fass', 'pause')} aria-hidden="true"/> Disable
-                        </button>
-                    </>
-                )}
-                <button type="button" className="btn btn-primary" disabled={none || busy} onClick={onChange}>
-                    <FontAwesomeIcon icon={faIcon('fass', 'pen-to-square')} aria-hidden="true"/> Change settings
-                </button>
-                <button type="button" className="btn btn-danger" disabled={none || busy} onClick={onDelete}>
-                    <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/> Delete
-                </button>
-            </div>
-            <button type="button" className="bulk-action-bar__close" aria-label="Stop bulk edit" title="Stop bulk edit" onClick={selection.stop}>
-                <FontAwesomeIcon icon={faIcon('fass', 'xmark')} aria-hidden="true"/>
+        <BulkBar
+            count={selection.selected.size} prompt={`Choose ${noun[1]} to change`} hidden={selection.hidden}
+            onClear={selection.clear} onStop={selection.stop} short={!onEnable}
+        >
+            {onEnable && (
+                <>
+                    <button type="button" className="btn" disabled={none || busy} onClick={() => onEnable(true)}>
+                        <FontAwesomeIcon icon={faIcon('fass', 'play')} aria-hidden="true"/> Enable
+                    </button>
+                    <button type="button" className="btn" disabled={none || busy} onClick={() => onEnable(false)}>
+                        <FontAwesomeIcon icon={faIcon('fass', 'pause')} aria-hidden="true"/> Disable
+                    </button>
+                </>
+            )}
+            <button type="button" className="btn btn-primary" disabled={none || busy} onClick={onChange}>
+                <FontAwesomeIcon icon={faIcon('fass', 'pen-to-square')} aria-hidden="true"/> Change settings
             </button>
-        </div>
+            <button type="button" className="btn btn-danger" disabled={none || busy} onClick={onDelete}>
+                <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/> Delete
+            </button>
+        </BulkBar>
     )
 }
 

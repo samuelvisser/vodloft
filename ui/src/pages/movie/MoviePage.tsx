@@ -36,11 +36,12 @@ import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {movieExtraTypeLabel} from '../../utils/movieExtras'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import {isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
+import {isLocalMediaProfileAvailableForSite, videoProfileKeeps} from '../../types/local_media_profile'
 import './MoviePage.css'
 import {apiUrl} from '../../lib/api'
 import {type DownloadStarts, startLabel, useDownloadStarts} from '../../lib/downloadStarts'
 import {refreshFrontendPuller} from '../../lib/puller'
+import {addLocalMediaProfilePath} from '../../types/local_media_profile'
 
 type MovieExtraSummary = {
     id?: number
@@ -148,7 +149,7 @@ export default function MoviePage() {
     const videoProfiles = useMemo(
         // A profile limited to other Sites still shows the download it already made. A movie that is not in the
         // library yet comes from The Daily Wire, whose Site has its Source's key.
-        () => profiles?.filter((profile) => profile.type === 'video' && (
+        () => profiles?.filter((profile) => profile.type === 'video' && videoProfileKeeps(profile, 'movies') && (
             isLocalMediaProfileAvailableForSite(profile, localMovie?.site?.key ?? DAILYWIRE_SOURCE_KEY)
             || !!downloads?.some((download) => download.localMediaProfileId === profile.id)
         )) || [],
@@ -662,7 +663,7 @@ export default function MoviePage() {
                     ) : (
                         <div className="movie-profile-empty">
                             <p>Create a Video Local Media Profile for The Daily Wire before downloading a movie or extra.</p>
-                            <Link className="btn" to="/add-local-media-profile?type=video">Create profile</Link>
+                            <Link className="btn" to={addLocalMediaProfilePath({video: 'movies', siteKey: localMovie?.site?.key ?? DAILYWIRE_SOURCE_KEY, from: movie.title})}>Create profile</Link>
                         </div>
                     )}
                 </aside>

@@ -6,7 +6,7 @@ import {useMemo} from "react";
 export const CollectionTypeReg = createSelectRegistry("CollectionType", {
     podcast: {label: "Podcast", help: "Episodes identified by date or number"},
     series: {label: "Series", help: "Episodic series without podcast semantics"},
-    music: {label: "Music", help: "An artist's music: each season an album, each episode a track"},
+    music: {label: "Music", help: "An artist's music: albums of tracks or music videos"},
 });
 export type CollectionTypeValue = (typeof CollectionTypeReg)["values"][number];
 
@@ -18,6 +18,25 @@ export const EpisodeIdentifierReg = createSelectRegistry("EpisodeIdentifier", {
     seasonal: {label: "Seasonal", help: "Parse 'S01E01' from the order of episodes within the season"},
 });
 export type EpisodeIdentifierValue = (typeof EpisodeIdentifierReg)["values"][number];
+
+/** The same choices for a Music collection, whose seasons are its albums. */
+const MusicEpisodeIdentifierReg = createSelectRegistry("MusicEpisodeIdentifier", {
+    numbered: {label: "Numbered", help: "Parse 'Ep. N' from the title"},
+    date_based: {label: "Date-based", help: "Use release date as identity"},
+    seasonal: {label: "By album", help: "Groups the tracks by album, numbered in the album's order"},
+});
+
+/** The episode identifications, in the words of a collection of the type: "By album" for Music. */
+export function episodeIdentifierRegFor(type: string | null | undefined): typeof EpisodeIdentifierReg {
+    return type === CollectionTypeReg.Enum.music ? MusicEpisodeIdentifierReg as typeof EpisodeIdentifierReg : EpisodeIdentifierReg;
+}
+
+/** Advice for a Music collection that isn't identified by album, which always suits music better. */
+export function musicIdentificationAdvice(type: string | null | undefined, identifier: string | null | undefined): string | null {
+    return type === CollectionTypeReg.Enum.music && identifier && identifier !== EpisodeIdentifierReg.Enum.seasonal
+        ? "For a Music collection, By album is always the better choice: the tracks are grouped by album, in the album's order."
+        : null;
+}
 
 // EpisodeOrder: which way a collection lists its episodes, within each season for a seasonal collection
 export const EpisodeOrderReg = createSelectRegistry("EpisodeOrder", {

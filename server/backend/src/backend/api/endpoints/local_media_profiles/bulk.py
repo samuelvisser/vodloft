@@ -23,7 +23,6 @@ from .service import ensure_local_media_profile_can_be_deleted
 
 _DELETE = {
     LocalMediaProfileType.COLLECTION.value: delete_collection_local_media_profile,
-    LocalMediaProfileType.MUSIC.value: delete_collection_local_media_profile,
     LocalMediaProfileType.VIDEO.value: delete_video_local_media_profile,
 }
 

@@ -9,14 +9,15 @@ from dataclasses import replace
 import pytest
 from sqlalchemy import select
 
-from sources import Feature, ItemRef, SectionKind, SectionRef, Site
+from sources import LIST_TYPE, Feature, ItemRef, Names, SectionKind, SectionRef, SectionType, Site
 from test_ytdlp_collections import ListedSource, _video, session  # noqa: F401
 
 CREATOR = "https://seasons.example/@creator/videos"
+PLAYLISTS = SectionType(LIST_TYPE, SectionKind.LIST, Names("playlist", "playlists"))
 
 
 def _list(ref: str, title: str) -> SectionRef:
-    return SectionRef(ref, f"https://seasons.example/playlist?list={ref}", title, SectionKind.LIST, kind_label="Playlist")
+    return SectionRef(ref, f"https://seasons.example/playlist?list={ref}", PLAYLISTS, title)
 
 
 class CreatorSource(ListedSource):
@@ -240,7 +241,7 @@ def test_the_user_renames_and_orders_the_seasons_and_a_new_one_goes_last(source,
 
     view = seasons_view(session, "creator")
     session.rollback()
-    assert (view.names.one, view.names.loose_season, view.link_seasons_offered) == ("playlist", "Videos", True)
+    assert ([t.names.singular for t in view.list_types], view.loose_season, view.link_seasons_offered) == (["playlist"], "Videos", True)
     videos, one = view.seasons
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": one.id, "name": "The One"}, {"id": videos.id, "name": "Uploads"}], custom_season_order=True,
@@ -322,17 +323,19 @@ def test_renaming_files_with_season_folders_moves_downloaded_videos_to_their_pla
 
 
 def test_a_site_can_name_its_link_seasons_itself(source, monkeypatch, session):
-    from backend.services.link_seasons import list_names
-    from sources import ListNames
+    from backend.services.link_seasons import section_list_names, loose_season_name
+    from sources import Names, SectionKind, SectionType
 
-    monkeypatch.setattr(type(source), "sites", (replace(source.sites[0], list_names=ListNames("set", "sets", "Loose")),))
+    monkeypatch.setattr(type(source), "sites", (replace(source.sites[0], section_types=(
+        SectionType("set", SectionKind.LIST, Names("set", "sets")), SectionType("mix", SectionKind.LIST, Names("mix", "mixes")),
+    ), loose_season="Loose"),))
     from backend.services import sites
 
     sites._site_of.cache_clear()
     collection = _collection(session)
-    assert list_names(collection) == ListNames("set", "sets", "Loose")
+    assert (section_list_names(collection), loose_season_name(collection)) == (Names("set or mix", "sets and mixes"), "Loose")
     collection.type = "music"
-    assert list_names(collection) == ListNames("album", "albums", "Singles")
+    assert loose_season_name(collection) == "Singles"
 
 
 def test_a_link_season_keeps_its_sites_order(source, session):
@@ -674,7 +677,7 @@ def _update(session, slug="creator", **changes):
     body = {
         "seasons": [{"id": season.id, "name": season.name} for season in view.seasons],
         "custom_season_order": view.custom_season_order, "link_seasons": view.link_seasons,
-        "new_link_seasons": view.new_link_seasons, "loose_videos": view.loose_videos,
+        "new_lists": {setting.key: setting.action for setting in view.new_lists}, "loose_videos": view.loose_videos,
         "outside_videos": view.outside_videos,
         "playlists": [{"id": playlist.id, "enabled": playlist.enabled} for playlist in view.playlists],
         **changes,

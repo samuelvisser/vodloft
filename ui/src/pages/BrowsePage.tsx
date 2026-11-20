@@ -8,7 +8,8 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import {useDailywireMovieCatalog, useDailywireShowCatalog, useMovies, useCollections, useSourceLookup} from '../lib/queries'
-import {DAILYWIRE_SOURCE_KEY, SourceFeature, kindName, pluralKindName, sourceHas} from '../types/schemas/source'
+import {DAILYWIRE_SOURCE_KEY, SourceFeature, kindNames, sourceHas} from '../types/schemas/source'
+import {capitalized} from '../types/creator'
 import {
     DailywireCatalogMovieRead,
     DailywireCatalogShowRead,
@@ -43,8 +44,8 @@ export default function BrowsePage({onboarding = false, onCollectionSelect, onMo
     const catalogSource = sources.get(DAILYWIRE_SOURCE_KEY)
     const sourceName = catalogSource?.name ?? 'the catalogue'
     // The catalogue is the Source's own, so it uses the Source's word for a collection.
-    const collectionName = kindName(catalogSource, 'collection', 'Collection')
-    const collectionsName = pluralKindName(collectionName)
+    const collectionNames = kindNames(catalogSource, 'collection')
+    const collectionsName = capitalized(collectionNames?.plural ?? '')
     const mayUse = canUseSource(DAILYWIRE_SOURCE_KEY)
     const canBrowse = mayUse && (!catalogSource || sourceHas(catalogSource, SourceFeature.BROWSE))
     const initialType = params.get('type') === 'movies' ? 'movies' : 'collections'
@@ -137,8 +138,8 @@ export default function BrowsePage({onboarding = false, onCollectionSelect, onMo
                     <h1 id="browse-title">{onboarding ? 'Add your first media' : `Browse ${sourceName}`}</h1>
                     <p className="view-description">
                         {onboarding
-                            ? `Choose a ${collectionName.toLowerCase()} or movie. VODLoft will let you confirm its download location before anything is saved.`
-                            : `Choose a ${collectionName.toLowerCase()} or movie to add, view, or download.`}
+                            ? `Choose ${collectionNames?.a ?? ""} or movie. VODLoft will let you confirm its download location before anything is saved.`
+                            : `Choose ${collectionNames?.a ?? ""} or movie to add, view, or download.`}
                     </p>
                 </div>
                 {onSkip && (

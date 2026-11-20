@@ -7,14 +7,16 @@ from pydantic import AliasChoices, AliasPath, computed_field, Field, ValidationI
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
-from backend.api.models.source import SiteAPIRead, SourcedResponse
+from backend.api.models.source import NamesAPIRead, SiteAPIRead, SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
+from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
 from backend.types.link_season_types import OutsideVideos
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
 from backend.api.models.source import checked_ytdlp_options
+from sources import Site, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH
 
 
@@ -246,6 +248,14 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     )
     """The picture of the creator, shown beside their name."""
 
+    @computed_field
+    @property
+    def creator_names(self) -> NamesAPIRead:
+        """What the collection calls the creator behind it: its Site's word, such as host, or artist in a Music
+        collection; VODLoft's own while the Site is not known yet."""
+        site = site_of(self.site.key) if self.site is not None else Site("", "")
+        return NamesAPIRead.model_validate(collection_contract(self.type).creator_names_on(site))
+
 
 class CollectionAPIRead(_CollectionAPIBaseOut):
     """Response body for a collection."""
@@ -281,3 +291,55 @@ class CollectionSyncLogEntryAPIRead(ResponseBase):
 class CollectionSyncLogAPIRead(ResponseBase):
     items: list[CollectionSyncLogEntryAPIRead]
     total: int
+
+
+class CollectionIdentificationChangeAPIRequest(RequestBase):
+    """Number the collection's episodes another way."""
+
+    episode_identifier: EpisodeIdentifier
+    episode_order: Optional[EpisodeOrder] = None
+    """The order the collection lists its episodes in from now on; left out, it keeps its own."""
+
+
+class CollectionIdentificationChangeItemAPIRead(ResponseBase):
+    """One episode that gets a new number."""
+
+    title: str
+    before: str
+    after: str
+
+
+class CollectionIdentificationProfileFilesAPIRead(ResponseBase):
+    name: str
+    files_renamed: int
+    metadata_rewritten: int
+
+
+class CollectionIdentificationDownloadProfileAPIRead(ResponseBase):
+    name: str
+    removed: int
+    """Downloads on disk the profile's cleanup would delete, which it would not have before."""
+    no_longer_wanted: int
+    """Other downloads on disk the profile's filters would leave out; they stay until someone deletes them."""
+    newly_wanted: int
+
+
+class CollectionIdentificationPreviewAPIRead(ResponseBase):
+    """What changing the collection's episode identification would do."""
+
+    episode_identifier: EpisodeIdentifier = Field(validation_alias="identification")
+    episodes: int
+    episodes_renumbered: int
+    changes: list[CollectionIdentificationChangeItemAPIRead]
+    """Every episode that gets a new number, newest first."""
+    become_auxiliary: int
+    profiles: list[CollectionIdentificationProfileFilesAPIRead]
+    download_profiles: list[CollectionIdentificationDownloadProfileAPIRead]
+    busy: Optional[str] = None
+    """Why the change can't start now."""
+
+
+class CollectionMetadataRewriteAPIRequest(RequestBase):
+    """Select one Local Media Profile, or every profile with downloaded files that keeps metadata."""
+
+    local_media_profile_id: Optional[int] = Field(default=None, gt=0)

@@ -20,6 +20,8 @@ import {useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {WithRoot} from '../../types/form'
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import {OriginName, ProfileFitProvider} from '../../components/LocalMediaProfile/ProfileFit'
+import RequestedField, {RequestedFieldsProvider, requestedOrigin} from '../../components/common/RequestedField'
 import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
 import {
     addLocalMediaProfileDraftKey,
@@ -29,8 +31,7 @@ import {
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
 import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
 import {getZodDefaults} from '../../utils/defaultZod'
-import {LocalMediaProfileType, LocalMediaProfileTypeReg, localMediaProfileEndpoint} from '../../types/local_media_profile'
-import {MUSIC_OUTPUT_TEMPLATE} from '../../components/LocalMediaProfile/outputTemplatePresets'
+import {LocalMediaProfileType, LocalMediaProfileTypeReg, PreferredFormatReg, safeReturnPath, localMediaProfileEndpoint} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
 
 
@@ -117,26 +118,6 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
         },
     })
 
-    // A Music profile is a Collection profile for music collections that keeps audio only.
-    const formMusic = useForm<WithRoot<CollectionLocalMediaProfileCreateIn>>({
-        resolver: zodResolver(CollectionLocalMediaProfileCreateSchema),
-        mode: 'onBlur',
-        shouldFocusError: true,
-        defaultValues: {
-            ...getZodDefaults(CollectionLocalMediaProfileCreateSchema),
-            type: 'music',
-            collectionScope: 'music',
-            preferredFormat: 'format_audio_only',
-            subtitleMode: 'no_subtitles',
-            thumbnailMode: 'embed',
-            metadataMode: 'embed',
-            outputTemplate: MUSIC_OUTPUT_TEMPLATE,
-            ...(restoredDraft?.mode === 'music'
-                ? restoredDraft.values as Partial<CollectionLocalMediaProfileCreateIn>
-                : {}),
-        },
-    })
-
     const formVideo = useForm<WithRoot<VideoLocalMediaProfileCreateIn>>({
         resolver: zodResolver(VideoLocalMediaProfileCreateSchema),
         mode: 'onBlur',
@@ -149,8 +130,17 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
         },
     })
 
-    const form = ({collection: formCollection, music: formMusic, video: formVideo}[profileType]) as UseFormReturn<any>
+    const form = ({collection: formCollection, video: formVideo}[profileType]) as UseFormReturn<any>
 
+    // Opened to download a collection, video or movie: the link asks for the profile type, what the profile is
+    // available for and the Site, and each of those fields starts as the broadest choice that fits it.
+    const fitsScope = searchParams.get('for')
+    const fitsSite = searchParams.get('site')
+    const fitsFormat = PreferredFormatReg.normalize(searchParams.get('format'))
+    const fit = useMemo(
+        () => ({type: explicitType, scope: fitsScope, site: fitsSite, format: fitsFormat}),
+        [explicitType, fitsScope, fitsSite, fitsFormat],
+    )
 
     useEffect(() => {
         if (!draftKey) return
@@ -177,16 +167,26 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
         })
     }
 
-    const onSuccess = async () => {
+    // Opened from another form, such as a Download Profile that needs this profile: back there, with the new
+    // profile chosen.
+    const returnTo = source ? undefined : safeReturnPath(searchParams.get('returnTo'))
+    const onSuccess = async (created: {id?: number} | undefined) => {
         await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         if (draftKey) clearLocalMediaProfileDraft(draftKey)
-        navigate('/local-media-profiles')
+        if (returnTo && created?.id != null) {
+            const [path, query = ''] = returnTo.split('?', 2)
+            const params = new URLSearchParams(query)
+            params.set('localMediaProfile', String(created.id))
+            navigate(`${path}?${params}`)
+        } else {
+            navigate('/local-media-profiles')
+        }
     }
 
     const onCancel = useCallback(() => {
         if (draftKey) clearLocalMediaProfileDraft(draftKey)
-        navigate('/local-media-profiles')
-    }, [draftKey, navigate])
+        navigate(returnTo ?? '/local-media-profiles')
+    }, [draftKey, navigate, returnTo])
 
     const onCreate = buildLocalMediaProfileOnSubmit(form, submitFn, {
         onSuccess,
@@ -203,12 +203,24 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
                 {mode === 'collection' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
+            <RequestedFieldsProvider mode="create" origin={requestedOrigin(searchParams)}>
+            <ProfileFitProvider value={fit}>
             <form id={formId} className="form local-media-profile-form" onSubmit={onCreate} noValidate>
                 <div className="form-row">
                     <label>Profile type</label>
                     {source ? (
                         <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(source.type)}</div>
-                    ) : <SegmentedOptions
+                    ) : <RequestedField
+                        id="type"
+                        requested={explicitType}
+                        value={profileType}
+                        apply={() => setProfileType(explicitType!)}
+                        fits={() => profileType === explicitType}
+                        incompatible={explicitType && <>
+                            A {LocalMediaProfileTypeReg.getLabel(profileType)} profile won't be offered <OriginName prefix="for"/>,
+                            which needs a {LocalMediaProfileTypeReg.getLabel(explicitType)} profile.
+                        </>}
+                    ><SegmentedOptions
                         name="local-media-profile-mode"
                         value={profileType}
                         onChange={(value) => setProfileType(value as LocalMediaProfileType)}
@@ -216,12 +228,7 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
                             {
                                 value: 'collection',
                                 label: 'Collection',
-                                description: 'Store downloaded collection episodes',
-                            },
-                            {
-                                value: 'music',
-                                label: 'Music',
-                                description: 'Store the tracks of music collections, as audio with music tags',
+                                description: 'Store the episodes of podcasts and series, and the tracks or music videos of music',
                             },
                             {
                                 value: 'video',
@@ -229,7 +236,7 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
                                 description: 'Store single videos and movies added on their own',
                             },
                         ]}
-                    />}
+                    /></RequestedField>}
                 </div>
 
                 <LocalMediaProfileForm form={form} mode={mode} isCreating/>
@@ -239,6 +246,8 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
                     <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting}/>
                 </div>
             </form>
+            </ProfileFitProvider>
+            </RequestedFieldsProvider>
 
             {showRestored ? (
                 <UnsavedChangesBar

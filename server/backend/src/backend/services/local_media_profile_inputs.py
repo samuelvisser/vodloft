@@ -36,6 +36,7 @@ from backend.types.local_media_profile_types import (
     SubtitleLanguageMode,
     VideoCodec,
     VideoContainer,
+    VideoLocalMediaProfileScope,
     goal_video_codecs,
 )
 from backend.utils.custom_index import INDEXING_VALUE_KEY_MAX_LENGTH, is_valid_custom_index_key
@@ -250,9 +251,10 @@ _KEPT_WHEN_UNSET = {
 class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
     """A Collection Local Media Profile's fields; an update leaves the kept fields it does not send."""
 
-    type: Literal["collection", "music"] = LocalMediaProfileType.COLLECTION.value
-    """A Music profile keeps the episodes as audio tracks with music tags. The type stays what it was created as."""
-    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH
+    type: Literal["collection"] = LocalMediaProfileType.COLLECTION.value
+    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.PODCAST_AND_SERIES
+    """Which collections the profile is offered for. For Music tracks it keeps them as audio tracks with music tags,
+    and for Music videos as music videos."""
     download_collection_assets: bool | None = None
     show_nfo: bool = False
     """Write tvshow.nfo in the collection's folder and season.nfo in each season's folder."""
@@ -273,16 +275,15 @@ class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
 
     @model_validator(mode="after")
     def _music_is_audio(self):
-        if self.type == LocalMediaProfileType.MUSIC:
-            # A Music profile keeps music collections, and only those.
-            self.collection_scope = CollectionLocalMediaProfileScope.MUSIC
+        if self.collection_scope == CollectionLocalMediaProfileScope.MUSIC_TRACKS:
             if self.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY:
-                raise FieldValueError("preferred_format", "A Music profile downloads audio only")
+                raise FieldValueError("preferred_format", "A profile for Music tracks downloads audio only")
         else:
-            if self.collection_scope == CollectionLocalMediaProfileScope.MUSIC:
-                raise FieldValueError("collection_scope", "Music collections take Music profiles")
+            if self.collection_scope == CollectionLocalMediaProfileScope.MUSIC_VIDEOS:
+                # It keeps a Music collection's videos as video, so it calls them music videos.
+                self.episode_nfo = EpisodeNfo.MUSIC_VIDEO
             if self.audio_format == AudioFormat.FLAC:
-                raise FieldValueError("audio_format", "FLAC is for Music profiles")
+                raise FieldValueError("audio_format", "FLAC is for profiles for Music tracks")
         return self
 
     @model_validator(mode="after")
@@ -313,7 +314,7 @@ class NewCollectionLocalMediaProfile(CollectionLocalMediaProfileInput):
         if "subtitle_mode" not in self.model_fields_set:
             self.subtitle_mode = (
                 LocalMediaProfileSubtitleMode.NO_SUBTITLES
-                if self.collection_scope == CollectionLocalMediaProfileScope.PODCAST or self.type == LocalMediaProfileType.MUSIC
+                if self.collection_scope in (CollectionLocalMediaProfileScope.PODCAST, CollectionLocalMediaProfileScope.MUSIC_TRACKS)
                 else LocalMediaProfileSubtitleMode.SIDECAR
             )
         return self
@@ -328,12 +329,14 @@ class VideoLocalMediaProfileInput(LocalMediaProfileInput):
     """A Video Local Media Profile's fields. It keeps single videos, and movies with their extras."""
 
     type: Literal["video"] = LocalMediaProfileType.VIDEO.value
+    video_scope: VideoLocalMediaProfileScope = VideoLocalMediaProfileScope.BOTH
+    """What the profile is offered for: single videos, movies with their extras, or both."""
 
     @field_validator("audio_format")
     @classmethod
     def _no_flac(cls, value: AudioFormat) -> AudioFormat:
         if value == AudioFormat.FLAC:
-            raise ValueError("FLAC is for Music profiles")
+            raise ValueError("FLAC is for profiles for Music tracks")
         return value
 
     @field_validator("preferred_format")

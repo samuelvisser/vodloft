@@ -25,6 +25,7 @@ class UsedFor(StrEnum):
     PODCAST = "podcast"
     SERIES = "series"
     VIDEO = "video"
+    MOVIE = "movie"
     MUSIC = "music"
 
 

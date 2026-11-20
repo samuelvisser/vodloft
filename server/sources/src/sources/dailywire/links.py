@@ -4,10 +4,13 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlsplit
 
-from ..contract import LinkKind, ResolvedLink
+from ..contract import LinkKind, Names, ResolvedLink
 from .api.dw_api.client import MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
 from .auth import DeviceAuthClient
+
+HOST = Names("host", "hosts")
+"""What The Daily Wire calls a creator."""
 
 SITE_URL = "https://www.dailywire.com"
 
@@ -19,6 +22,8 @@ _KIND_BY_SECTION = {
     "movies": LinkKind.MOVIE,
     "episode": LinkKind.EPISODE,
     "episodes": LinkKind.EPISODE,
+    "host": LinkKind.CREATOR,
+    "hosts": LinkKind.CREATOR,
 }
 
 
@@ -46,6 +51,10 @@ def collection_url(slug: str) -> str:
     return f"{SITE_URL}/show/{slug}"
 
 
+def host_url(slug: str) -> str:
+    return f"{SITE_URL}/hosts/{slug}"
+
+
 def resolve_link(url: str) -> ResolvedLink | None:
     parsed = parse_link(url)
     if parsed is None:
@@ -63,6 +72,24 @@ def resolve_link(url: str) -> ResolvedLink | None:
             description=show.description,
             image_url=_first(show.thumbnail_portrait_path, show.thumbnail_landscape_path, show.background_image_path),
             author_name=show.author_name,
+        )
+
+    if kind is LinkKind.CREATOR:
+        # A host's page lists their shows, which the Browse page's catalogue names them by.
+        catalog = MiddlewareClient(access_token=token, request_priority="interactive").get_catalog()
+        host = next((show for show in catalog.collections if show.author_slug == slug), None)
+        movie = next((movie for movie in catalog.movies if movie.author_slug == slug), None)
+        if host is None and movie is None:
+            return None
+        return ResolvedLink(
+            kind=kind,
+            slug=slug,
+            url=host_url(slug),
+            title=(host.author_name if host else None) or (movie.author_name if movie else None) or slug,
+            image_url=host.author_headshot_path if host else None,
+            kind_label="Host",
+            creator_url=host_url(slug),
+            creator_names=HOST,
         )
 
     if kind is LinkKind.MOVIE:

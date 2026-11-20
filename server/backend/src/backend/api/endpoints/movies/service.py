@@ -20,7 +20,10 @@ from backend.services.movies import (
     index_dailywire_movie,
     sync_indexed_dailywire_movie,
 )
+from backend.services.errors import ServiceError
+from sources import DAILYWIRE
 from sources.dailywire.api.records import DwMovieRecord
+from ..dailywire.movies.service import get_movie_for_action
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
 from task_manager.tasks.media_download_operations import attach_redownload_dependencies
@@ -192,3 +195,18 @@ def delete_movie(s: Session, movie_slug: str) -> MovieAPIRead:
     s.delete(item)
     s.flush()
     return payload
+
+
+def look_up_movies(source_key: str, slugs: list[str]) -> list[DwMovieRecord]:
+    """The Source's records of the movies ``slugs``, such as a Daily Wire host's movies a creator adds, looked up
+    before the write transaction that adds them with ``add_movies``."""
+    if not slugs:
+        return []
+    if source_key != DAILYWIRE:
+        raise ServiceError("VODLoft can't add movies from this site")
+    return [get_movie_for_action(slug) for slug in slugs]
+
+
+def add_movies(s: Session, records: list[DwMovieRecord]) -> list[Movie]:
+    """Put movies looked up with ``look_up_movies`` in the Library. ``s`` is a write transaction's session."""
+    return [index_dailywire_movie(s, record)[0] for record in records]

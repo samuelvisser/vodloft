@@ -22,6 +22,14 @@ def source_features(source_key: str) -> list[str]:
     return sorted(feature.value for feature in source.features)
 
 
+class NamesAPIRead(ResponseBase):
+    """A word in lower case: singular, plural, and singular with its article, such as album, albums and an album."""
+
+    singular: str
+    plural: str
+    a: str
+
+
 class SourcedResponse(ResponseBase):
     """A response for something that comes from a Source.
 
@@ -115,18 +123,26 @@ class SourceAPIRead(ResponseBase):
     features: list[str]
     sites_label: Optional[str] = None
     search_label: Optional[str] = None
-    kind_names: dict[str, str] = {}
+    kind_names: dict[str, NamesAPIRead] = Field(validation_alias="named_kinds")
+    """What the Source calls each kind of media, such as show for a Daily Wire collection, or VODLoft's word."""
     release_date: ReleaseDate
     download_options: DownloadOptionsAPIRead
+    site_keys: list[str] = Field(default_factory=list, validation_alias="sites")
+    """The Sites the Source is made for, such as The Daily Wire; none for a Source of many sites, such as yt-dlp."""
 
     @field_validator("features", mode="before")
     @classmethod
     def _sorted_feature_names(cls, features: Iterable[Feature | str]) -> list[str]:
         return sorted(str(feature) for feature in features)
 
+    @field_validator("site_keys", mode="before")
+    @classmethod
+    def _site_keys(cls, sites: Iterable[object]) -> list[str]:
+        return [site if isinstance(site, str) else site.key for site in sites]
+
     @field_validator("kind_names", mode="before")
     @classmethod
-    def _kind_name_keys(cls, kind_names: Mapping[object, str]) -> dict[str, str]:
+    def _kind_name_keys(cls, kind_names: Mapping[object, object]) -> dict[str, object]:
         return {str(kind): name for kind, name in kind_names.items()}
 
 
@@ -167,6 +183,8 @@ class CollectionDetailsAPIRead(ResponseBase):
     author_slug: str
     thumbnail_landscape_path: Optional[str] = None
     probable_collection_type: CollectionType
+    music_reason: Optional[str] = None
+    """Why the collection was taken for music, when it was."""
     # The collection's own seasons, oldest first; empty for a Source that has none.
     seasons: list[CollectionDetailsSeasonAPIRead] = Field(default_factory=list)
 
@@ -259,6 +277,9 @@ class SiteOptionsAPIRead(ResponseBase):
     stream_methods: list[StreamMethod] = []
     """How RSS feeds can stream the collection's episodes without downloading them first; none for downloads only."""
     stream_video_heights: list[int] = []
+    stream_file_height: Optional[int] = None
+    """The one resolution the Site streams as an MP4 file with sound; a feed plays the others once VODLoft has joined
+    them into one."""
     stream_proxy_choice: bool = False
     """A feed can send podcast apps straight to the Site's video, or pass it through VODLoft."""
     video_output_help: dict[str, str] = {}
@@ -275,8 +296,8 @@ class EpisodeTagAPIRead(ResponseBase):
     key: str
     label: str
     help: str
-    singular: str
-    plural: str
+    names: NamesAPIRead
+    """What a count of them is called, such as 1 livestream or 726 livestreams."""
     selected_by_default: bool
     rss_episode_type: Literal["full", "trailer", "bonus"]
     main: bool
@@ -340,7 +361,7 @@ class CookiesAPIUpdate(RequestBase):
 
 class ResolvedLinkAPIRead(ResponseBase):
     source: SourceAPIRead
-    kind: Literal["collection", "movie", "episode", "video"]
+    kind: Literal["collection", "movie", "episode", "video", "creator"]
     slug: str
     url: str
     collection_slug: Optional[str] = None
@@ -358,8 +379,10 @@ class ResolvedLinkAPIRead(ResponseBase):
     preview: ResolvedLinkPreviewAPIRead
     creator_url: Optional[str] = None
     """The creator this link is, on a Site with creators, so it can be added as a creator instead."""
-    creator_label: Optional[str] = None
+    creator_names: Optional[NamesAPIRead] = None
     """What the Site calls that creator, such as creator or artist."""
+    creator_sections: Optional[NamesAPIRead] = None
+    """Every type of section that creator has on the Site, named together, such as "albums and singles"."""
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
 
@@ -379,7 +402,7 @@ class SearchResultAPIRead(ResponseBase):
     access: Optional[str] = None
     access_label: Optional[str] = None
     """What the result's Site calls the access it needs, such as Members only."""
-    creator_label: Optional[str] = None
+    creator_names: Optional[NamesAPIRead] = None
     """What the Site calls a creator, when the result is a creator's own page, such as a YouTube channel, that can be
     added as a creator."""
 
@@ -397,12 +420,26 @@ class SearchResultsAPIRead(ResponseBase):
     notice: Optional[SearchNoticeAPIRead] = None
 
 
-class CreatorSectionNamesAPIRead(ResponseBase):
-    """What a Site calls the things its creators add, which VODLoft looks for, in lower case."""
+class SectionTypeAPIRead(ResponseBase):
+    """One type of section a Site's creators have, such as a feed, or an album or a playlist on SoundCloud, and what
+    the Site calls it, in lower case."""
 
-    one: str
-    """One of them, with its article, such as "a playlist"."""
-    many: str
+    key: str
+    kind: Literal["feed", "list", "show", "item"]
+    names: NamesAPIRead
+
+
+class ListKindAPIRead(ResponseBase):
+    """One kind of list a creator's Sites have, such as a SoundCloud artist's albums or their playlists, with its own
+    setting for what happens with a new one."""
+
+    key: str = Field(validation_alias=AliasPath("kind", "key"))
+    names: NamesAPIRead = Field(validation_alias=AliasPath("kind", "names"))
+    """What the Sites call the lists, such as album and albums."""
+    seasons: bool = Field(validation_alias=AliasPath("kind", "seasons"))
+    """The lists can be seasons of the creator's own collection."""
+    albums: bool = Field(default=False, validation_alias=AliasPath("kind", "albums"))
+    """The kind best describes an artist's albums."""
 
 
 class SiteAPIRead(ResponseBase):
@@ -419,15 +456,40 @@ class SiteAPIRead(ResponseBase):
 
     @computed_field
     @property
-    def creator_label(self) -> str:
-        """What the Site calls a creator, in lower case, such as host on The Daily Wire."""
-        return site_of(self.key).creator_label
+    def media_names(self) -> NamesAPIRead:
+        """What the Site calls one of its videos: a video, or a track on a Site with sound only."""
+        return NamesAPIRead.model_validate(site_of(self.key).media_names)
 
     @computed_field
     @property
-    def creator_sections(self) -> CreatorSectionNamesAPIRead:
-        """What the Site calls the things its creators add, such as playlists on YouTube."""
-        return CreatorSectionNamesAPIRead.model_validate(site_of(self.key).creator_sections)
+    def audio_only(self) -> bool:
+        """The Site has sound only, such as Bandcamp: a Music collection on it holds tracks, not music videos."""
+        return site_of(self.key).audio_only
+
+    @computed_field
+    @property
+    def creator_names(self) -> NamesAPIRead:
+        """What the Site calls a creator, such as host on The Daily Wire."""
+        return NamesAPIRead.model_validate(site_of(self.key).creator_names)
+
+    @computed_field
+    @property
+    def section_types(self) -> list[SectionTypeAPIRead]:
+        """Every type of section the Site's creators have and what the Site calls it, such as YouTube's feeds and
+        playlists."""
+        return [SectionTypeAPIRead.model_validate(type_) for type_ in site_of(self.key).section_types]
+
+    @computed_field
+    @property
+    def section_list_names(self) -> NamesAPIRead:
+        """What the Site calls its lists, all its types of list together, such as albums and playlists."""
+        return NamesAPIRead.model_validate(site_of(self.key).section_list_names)
+
+    @computed_field
+    @property
+    def section_growing_names(self) -> NamesAPIRead:
+        """What the Site calls the lists and shows its creators add, such as playlists or shows."""
+        return NamesAPIRead.model_validate(site_of(self.key).section_growing_names)
 
     @computed_field
     @property

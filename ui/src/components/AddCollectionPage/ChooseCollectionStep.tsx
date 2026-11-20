@@ -4,6 +4,7 @@ import CollectionPreviewCard from "./CollectionPreviewCard";
 import {useDailywireShow, useDailywireUserInfo, useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
 import {DAILYWIRE_SOURCE_KEY, SourceFeature, sourceHas} from "../../types/schemas/source";
 import ReadMore from "../../utils/ReadMore";
+import {collectionWords} from "../../lib/collectionWords";
 import {dailywireShowDefaults, listedCollectionDefaults} from "./collectionDefaults";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
@@ -13,7 +14,7 @@ import {
     CollectionCreatePayloadSchema,
     type CollectionCreateFormIn, CollectionCreatePayloadOut, CollectionCreatePayloadIn,
 } from "../../types/schemas/collection";
-import {EpisodeIdentifierReg, CollectionTypeReg} from "../../types/collection";
+import {CollectionTypeReg, episodeIdentifierRegFor, musicIdentificationAdvice} from "../../types/collection";
 import Select from "react-select";
 import {UseQueryResult} from "@tanstack/react-query";
 import {SeasonDetachedOut, SeasonDetachedSchema} from "../../types/schemas/season";
@@ -56,6 +57,9 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         return () => subscription.unsubscribe();
     }, [watch, onChange]);
 
+    // What a collection of the chosen type calls its seasons and episodes.
+    const typeWords = collectionWords(watch("type"))
+
     // --- Watch the URL and extract the slug when valid
     const watchedUrl = watch("url");
     const urlParsed = useMemo(() => CollectionCreateFormSchema.shape.url.safeParse(watchedUrl ?? ""), [watchedUrl]);
@@ -77,7 +81,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
     useEffect(() => {
         if (!listed.data) return;
         setValue("membershipLevel", DwMembershipLevelReg.Enum.FREE, {shouldValidate: true});
-        // Suggest the type the backend guessed from the name, and identification to match.
+        // Suggest the type the backend guessed, from the name or because it is music, and identification to match.
         if (lastListedUrlRef.current === listed.data.sharingUrl) return;
         lastListedUrlRef.current = listed.data.sharingUrl;
         const suggested = listedCollectionDefaults(listed.data);
@@ -213,9 +217,10 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                 name="episodeIdentifier"
                 render={({field}) => (
                     <Select
+                        classNamePrefix="select"
                         inputId="episode-identification"
-                        options={EpisodeIdentifierReg.options}
-                        value={EpisodeIdentifierReg.options.find(o => o.value === field.value) ?? null}
+                        options={episodeIdentifierRegFor(watch("type")).options}
+                        value={episodeIdentifierRegFor(watch("type")).options.find(o => o.value === field.value) ?? null}
                         onChange={(opt) => field.onChange(opt?.value ?? "")}
                         onBlur={field.onBlur}
                         aria-invalid={!!errors.episodeIdentifier}
@@ -229,17 +234,21 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                     {errors.episodeIdentifier.message as string}
                 </div>
             )}
+            {musicIdentificationAdvice(watch("type"), watch("episodeIdentifier")) && (
+                <div className="help form-advice" role="status">{musicIdentificationAdvice(watch("type"), watch("episodeIdentifier"))}</div>
+            )}
             <div className="help" id="episode-identification-help">
                 <ReadMore summary={<span>How are episodes in this collection identified?</span>}>
                     <p>Determines how collection episodes are grouped in the UI, and how they are indexed.</p>
                     <p><b>Numbered</b> episodes are identified by an episode number. VODLoft will know
                         when an episode is part of another episode (e.g. a clip) and label it as such.</p>
                     <p><b>Date-based</b> episodes are identified simply by their publish date.</p>
-                    <p><b>Seasonal</b> episodes are identified by a season number and an episode number, like "S01E01".
+                    <p><b>{episodeIdentifierRegFor(watch("type")).getLabel('seasonal')}</b> {typeWords.episode.plural} are identified
+                        by {typeWords.season.a} number and {typeWords.episode.a} number, like "S01E01".
                         Auxiliary content like trailers will be identified separately.</p>
                     {listed.data && (seasonsFromSource
                         ? <p>{resolved.data?.source.name} has its own seasons, which VODLoft keeps, and a Seasonal collection keeps its episode numbers too.</p>
-                        : <p>{resolved.data?.source.name ?? 'This site'} has no seasons, so VODLoft puts the videos of each upload year in their own season.</p>)}
+                        : <p>{resolved.data?.source.name ?? 'This site'} has no seasons, so VODLoft puts the {typeWords.episode.plural} of each upload year in their own {typeWords.season.singular}.</p>)}
                     {!listed.data && <p>VODLoft suggests one from the collection itself. If you're unsure, select "Numbered".</p>}
                 </ReadMore>
             </div>
@@ -315,6 +324,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                 name="type"
                                 render={({field}) => (
                                     <Select
+                                        classNamePrefix="select"
                                         inputId="collection-type"
                                         options={CollectionTypeReg.options}
                                         value={CollectionTypeReg.options.find(o => o.value === field.value) ?? null}
@@ -332,6 +342,9 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                 </div>
                             )}
                             <div className="help" id="collection-type-help">
+                                {listed.data?.musicReason && watch("type") === CollectionTypeReg.Enum.music && (
+                                    <p>{listed.data.musicReason}, so VODLoft took it for music. Pick another type if it isn't.</p>
+                                )}
                                 <ReadMore summary={<span>Why do I need to choose this?</span>}>
                                     <p><b>Podcast</b> collections download and stream episodes from <i>newest</i> to <i>oldest</i>,
                                         which suits most channels.</p>
@@ -362,6 +375,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                     name="membershipLevel"
                                     render={({field}) => (
                                         <Select
+                                            classNamePrefix="select"
                                             inputId="membership-level"
                                             options={DwMembershipLevelReg.options}
                                             value={DwMembershipLevelReg.options.find(o => o.value === field.value) ?? null}
@@ -401,6 +415,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                                     name="type"
                                     render={({field}) => (
                                         <Select
+                                            classNamePrefix="select"
                                             inputId="collection-type"
                                             options={CollectionTypeReg.options}
                                             value={CollectionTypeReg.options.find(o => o.value === field.value) ?? null}

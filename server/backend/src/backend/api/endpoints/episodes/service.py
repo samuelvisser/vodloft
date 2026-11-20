@@ -12,11 +12,13 @@ from fastapi import HTTPException
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.episode import *
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
+from backend.api.models.source import NamesAPIRead
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor, keyset_after, KeysetField
 from backend.db.models import Collection, CollectionList, CollectionListItem
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
+from backend.types.collection_contracts import collection_contract
+from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.services.episode_download_delay import episode_download_delay_ready_at
@@ -524,7 +526,7 @@ def _episode_or_404(s: Session, episode_slug: str) -> Episode:
 
 def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPIRead:
     """Where the episode belongs now that its collection's playlists changed. Reading only: nothing is made."""
-    from backend.services.link_seasons import belongs_elsewhere, list_names
+    from backend.services.link_seasons import belongs_elsewhere, section_list_names
 
     from backend.services.reassigned import reassignment_of
 
@@ -537,12 +539,13 @@ def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPI
     if belonging is None:
         return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False)
     collection = episode.collection
-    kind = list_names(collection).one
+    # The Site's own word for the list, such as playlist on YouTube or album on Bandcamp.
+    names = NamesAPIRead.model_validate(section_list_names(collection))
     if belonging.link is not None:
         season = belonging.link.season
         return EpisodeSeasonPlaceAPIRead(
             belongs_elsewhere=True, season_name=season.name if season else belonging.link.title,
-            link_title=belonging.link.title, link_kind=kind,
+            link_title=belonging.link.title, link_names=names,
         )
     season = next((season for season in collection.seasons if season.loose), None) if belonging.loose else None
     if season is None and not belonging.loose and episode.published_date is not None:
@@ -550,7 +553,7 @@ def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPI
     name = season.name if season is not None else (
         str(episode.published_date.year) if not belonging.loose and episode.published_date else None
     )
-    return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=True, season_name=name, link_kind=kind)
+    return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=True, season_name=name, link_names=names)
 
 
 def move_episode_to_its_collection(s: Session, episode_slug: str):
@@ -580,7 +583,7 @@ def move_episode_to_its_season(s: Session, episode_slug: str) -> dict[str, bool 
 
     episode = _episode_or_404(s, episode_slug)
     if not move_to_where_it_belongs(s, episode):
-        raise HTTPException(status_code=409, detail="The episode is already in the season it belongs in")
+        raise HTTPException(status_code=409, detail=f"The episode is already in the {collection_contract(episode.collection.type).words.season.singular} it belongs in")
     operation_id, queued = queue_season_folder_moves(s, episode.collection, [episode.id])
     s.flush()
     return {"queued": queued, "operation_id": operation_id}

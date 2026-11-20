@@ -53,10 +53,10 @@ from backend.db.models import Collection, Episode, Season
 from backend.db.core import run_write_transaction
 from backend.services.media_access import lock_refused
 from backend.services.notifications.emitters import link_seasons_found
-from backend.services.reassigned import placed_elsewhere, settle_creator
+from backend.services.reassigned import list_left_out, lists_left_out, placed_elsewhere, save_left_out, settle_creator
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
-    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, place_in_link_seasons, link_seasons_on,
+    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, own_feeds, section_list_names, place_in_link_seasons, link_seasons_on,
     save_lists,
 )
 from backend.services.metadata_refresh import new_item_metadata_is_final
@@ -68,6 +68,7 @@ from backend.types.collection_types import EpisodeIdentifier
 from backend.utils.helpers import generate_uuid
 from sources import MAIN_TAG, Chapter, Feature, ItemRef, SeasonRef, Source, VideoDetails, get_source, site_for
 from .episodes.events import queue_episode_status_events
+from .episodes.identifier import next_identifier
 from .general import datetime_to_string
 from .progress import update_progress
 from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
@@ -92,29 +93,19 @@ def _order_key(details: VideoDetails, fallback: datetime):
     return _season_number(details, fallback), number, details.published_at or fallback, details.slug
 
 
-def _next(identifiers: set[str], prefix: str) -> str:
-    """The next free ``<prefix>.<number>`` after the highest one the collection has."""
-    numbers = [
-        int(identifier.removeprefix(f"{prefix}."))
-        for identifier in identifiers
-        if identifier.startswith(f"{prefix}.") and identifier.removeprefix(f"{prefix}.").isdigit()
-    ]
-    return f"{prefix}.{max(numbers, default=0) + 1}"
-
-
 def _identifier(
     collection: Collection, season: Season, details: VideoDetails, identifiers: set[str], numbers: SeasonNumbers,
     fallback: datetime,
 ) -> str:
     if details.tag != MAIN_TAG:
-        return _next(identifiers, details.tag)
+        return next_identifier(identifiers, details.tag)
     match EpisodeIdentifier(collection.episode_identifier):
         case EpisodeIdentifier.DATE_BASED:
             identifier = f"ep.{datetime_to_string(details.published_at or fallback)}"
             # Two videos uploaded at the same moment: the second one is auxiliary.
-            return _next(identifiers, "aux") if identifier in identifiers else identifier
+            return next_identifier(identifiers, "aux") if identifier in identifiers else identifier
         case EpisodeIdentifier.NUMBERED:
-            return _next(identifiers, "ep")
+            return next_identifier(identifiers, "ep")
         case EpisodeIdentifier.SEASONAL:
             number = numbers.take(season, details.episode_number if details.season else None)
             return f"ep.S{season.season_number:02d}E{number:02d}"
@@ -129,21 +120,6 @@ def _episode_slug(s: Session, collection: Collection, source_slug: str) -> str:
 def adds_pending(collection: Collection) -> bool:
     """Whether upcoming and live videos of the collection are added before they are published."""
     return get_source(collection.source_key).has(Feature.PENDING_CHECKS) and site_follows_pending(collection.site_key)
-
-
-def date_based_identifier(s: Session, episode: Episode, published_at: datetime) -> str | None:
-    """The identifier a main episode of a date-based collection gets for a new publication date,
-    or None when it keeps its own: an upcoming video that started later than planned moves."""
-    collection = episode.collection
-    if collection.episode_identifier != EpisodeIdentifier.DATE_BASED.value:
-        return None
-    identifier = f"ep.{datetime_to_string(published_at)}"
-    if not episode.episode_identifier.startswith("ep.") or episode.episode_identifier == identifier:
-        return None
-    identifiers = set(s.scalars(select(Episode.episode_identifier).where(
-        Episode.collection_id == collection.id, Episode.id != episode.id,
-    )))
-    return _next(identifiers, "aux") if identifier in identifiers else identifier
 
 
 def known_episode_slugs(s: Session, collection: Collection) -> frozenset[str]:
@@ -171,16 +147,17 @@ def with_chapters(source: Source, details: VideoDetails) -> VideoDetails:
 
 def _list_new_episodes(s: Session, collection: Collection, source: Source, progress) -> list[VideoDetails]:
     title, url = collection.title, collection.sharing_url
-    if url is None or holds_only_link_seasons(collection):
+    if url is None or not lists_own_link(collection):
         # Its link seasons say what it holds, so its own link is not listed.
         return []
+    feeds = own_feeds(collection)
     split = splits_chapters(collection)
     known = known_episode_slugs(s, collection)
     # No transaction stays open while the Source looks videos up.
     s.rollback()
     update_progress(progress, _LISTING_PROGRESS, f"Listing the episodes of '{title}' at {source.name}")
     found: list[VideoDetails] = []
-    for details in source.list_episodes(url, known=known):
+    for details in source.list_episodes(url, known=known, feeds=feeds):
         found.append(with_chapters(source, details) if split else details)
         message = f"Found {len(found)} new {'episode' if len(found) == 1 else 'episodes'} of '{title}' at {source.name}"
         if progress:
@@ -205,19 +182,30 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
             logger.info("Dry run: would add %s (%s)", details.slug, details.title)
         return len(found)
     collection = s.get(Collection, collection_id)
+    # The creator's lists that are not in it keep their videos out, also before their own collections listed them.
+    not_in_it = lists_left_out(s, collection) if collection is not None and lists_own_link(collection) else {}
     listing = None
     if collection is not None and link_seasons_on(collection):
-        update_progress(progress, _PLAYLISTS_PROGRESS, f"Listing the playlists of '{title}' at {source.name}")
+        # The Site's own word for its lists, such as playlists on YouTube or albums on Bandcamp.
+        lists = section_list_names(collection).plural
+        update_progress(progress, _PLAYLISTS_PROGRESS, f"Listing the {lists} of '{title}' at {source.name}")
         listing = list_lists(s, collection, source, also=frozenset(details.slug for details in found))
     s.rollback()
+    left_out = list_left_out(source, not_in_it)
     if found:
         update_progress(progress, _SAVING_PROGRESS, f"Saving {len(found)} new episodes of '{title}'")
 
     outside = listing.outside if listing is not None else []
     if outside:
-        update_progress(progress, _SAVING_PROGRESS, f"Saving {len(outside)} videos of the playlists of '{title}'")
+        update_progress(progress, _SAVING_PROGRESS, f"Saving {len(outside)} videos of the {lists} of '{title}'")
 
     def save(w: Session) -> int:
+        # What the lists have first, so a video that a list not in the collection has stays out, unless one of its
+        # seasons has it too.
+        save_left_out(w, left_out)
+        collection = w.get(Collection, collection_id)
+        if collection is not None and listing is not None:
+            link_seasons_found(w, collection, save_lists(w, collection, listing))
         added = add_listed_episodes(w, collection_id=collection_id, found=[*found, *outside])
         if outside:
             # The collection's own link does not list them, so they leave when no playlist that is a season does.
@@ -225,11 +213,8 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
                 Episode.collection_id == collection_id, Episode.video_slug.in_([details.slug for details in outside]),
             )):
                 episode.from_link_season = True
-        collection = w.get(Collection, collection_id)
         if collection is None:
             return added
-        if listing is not None:
-            link_seasons_found(w, collection, save_lists(w, collection, listing))
         place_in_link_seasons(w, collection)
         settle_creator(w, collection)
         return added
@@ -260,7 +245,7 @@ class _Placer(SeasonFinder):
         """A part's identifier: its chapter's number in its video's season, whatever the collection's numbering, so the
         parts of one video never share a date or a number. A Short or another tag counts on its own as always."""
         if details.tag != MAIN_TAG:
-            identifier = _next(self.identifiers, details.tag)
+            identifier = next_identifier(self.identifiers, details.tag)
         else:
             identifier = f"ep.S{season.season_number:02d}E{self.numbers.take(season, number):02d}"
         self.identifiers.add(identifier)
@@ -395,7 +380,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
         return RefreshCounts()
     title, url = collection.title, collection.sharing_url
     # A collection that only holds its link seasons has no listing of its own to read its videos from.
-    one_by_one = url is None or holds_only_link_seasons(collection)
+    one_by_one = url is None or not lists_own_link(collection)
     # The parts of a split video are asked about once, as their video.
     items = list({
         slug: ItemRef(slug, item_url or "")

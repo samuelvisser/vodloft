@@ -21,12 +21,12 @@ from backend.services.errors import ServiceError
 from backend.services.access_checks import ask_for_check, refused_media
 from backend.services.media_access import locked_clause
 from backend.services.local_media_profile_sites import profile_offered_for_site
-from backend.services.sites import collection_site_key, place_collection
+from backend.services.sites import collection_episode_tags, collection_site_key, collection_words, place_collection
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
-from backend.types.collection_types import CollectionType
+from backend.types.collection_contracts import collection_contract
+from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
 from backend.api.endpoints.media_downloads.service import create_new_episode_download
 from config import get_settings
-from sources import get_source
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.services.metadata_refresh import refreshes_metadata
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -44,6 +44,9 @@ from task_manager.tasks.helpers.download_profiles import (
 from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 from task_manager.scheduler.types import OperationSource
 
+from backend.api.models.operations import CollectionMetadataRewriteOperationAccepted, TaskOperationAccepted
+from backend.services.episode_identification import preview_identification, request_identification_change
+from backend.services.metadata_rewrite import request_metadata_rewrite
 from backend.services.collections import add_collection, add_links_only_collection, index_new_collection
 from backend.services.link_seasons import holds_only_link_seasons, lists_playlists
 from backend.operations.collections import (
@@ -239,14 +242,15 @@ def get_collection(s: Session, collection_slug: str) -> CollectionAPIRead:
 
 
 def get_collection_episode_tags(s: Session, collection_slug: str) -> list[EpisodeTagAPIRead]:
-    """The tags of the collection's Source that at least one of its episodes has, in the Source's order."""
+    """The tags of the collection's Site that at least one of its episodes has, in the Site's order, named as the
+    collection names its episodes (see ``collection_episode_tags``)."""
     collection = s.scalar(select(Collection).where(Collection.slug == collection_slug))
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
 
     return [
         EpisodeTagAPIRead.model_validate(tag)
-        for tag in get_source(collection.source_key).episode_tags_for(collection.sharing_url)
+        for tag in collection_episode_tags(collection)
         if s.scalar(select(exists().where(
             Episode.collection_id == collection.id,
             episode_identifier_type_predicate(Episode.episode_identifier, {tag.key}),
@@ -468,17 +472,20 @@ def request_collection_download_all(
         # Nor can media locked behind an access VODLoft does not have, such as a channel membership.
         ~locked_clause(Episode),
     )
-    if CollectionType(collection.type).by_season:
+    words = collection_words(collection)
+    if collection_contract(collection.type).downloads_by_season:
         if not body.season_ids:
-            raise HTTPException(status_code=422, detail="Select at least one season")
+            raise HTTPException(status_code=422, detail=f"Select at least one {words.season.singular}")
         if body.download_days_in_past or body.download_episode_count or body.download_starting_from:
-            raise HTTPException(status_code=422, detail="Podcast limits cannot be used for series")
+            raise HTTPException(
+                status_code=422, detail=f"Pick {words.season.plural} instead of a date or a number of {words.episode.plural}",
+            )
         selected_ids = set(body.season_ids)
         valid_ids = set(s.scalars(
             select(Season.id).where(Season.collection_id == collection.id, Season.id.in_(selected_ids))
         ))
         if selected_ids != valid_ids:
-            raise HTTPException(status_code=422, detail="A selected season does not belong to this collection")
+            raise HTTPException(status_code=422, detail=f"A selected {words.season.singular} does not belong to this collection")
         statement = (
             statement.where(Episode.season_id.in_(selected_ids))
             .order_by(Episode.season_id.asc(), Episode.index.asc(), Episode.id.asc())
@@ -782,3 +789,38 @@ def request_collection_file_rename(
         "local_media_profiles_queued": len(profile_ids),
         "operation_id": operation.id,
     }
+
+
+def _collection_or_404(s: Session, collection_slug: str) -> Collection:
+    collection = s.query(Collection).filter_by(slug=collection_slug).one_or_none()
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return collection
+
+
+def preview_collection_identification(
+        s: Session, collection_slug: str, identification: EpisodeIdentifier,
+) -> CollectionIdentificationPreviewAPIRead:
+    preview = preview_identification(s, _collection_or_404(s, collection_slug), identification)
+    return CollectionIdentificationPreviewAPIRead.model_validate(preview)
+
+
+def change_collection_identification(
+        s: Session, collection_slug: str, body: CollectionIdentificationChangeAPIRequest,
+) -> TaskOperationAccepted:
+    collection = _collection_or_404(s, collection_slug)
+    # The request model keeps enum values as plain strings.
+    operation = request_identification_change(
+        s, collection, EpisodeIdentifier(body.episode_identifier),
+        episode_order=EpisodeOrder(body.episode_order) if body.episode_order else None,
+    )
+    return TaskOperationAccepted(queued=True, operation_id=operation.id)
+
+
+def request_collection_metadata_rewrite(
+        s: Session, collection_slug: str, local_media_profile_id: int | None,
+) -> CollectionMetadataRewriteOperationAccepted:
+    request = request_metadata_rewrite(s, _collection_or_404(s, collection_slug), local_media_profile_id)
+    return CollectionMetadataRewriteOperationAccepted(
+        queued=True, operation_id=request.operation_id, local_media_profiles_queued=request.local_media_profiles_queued,
+    )

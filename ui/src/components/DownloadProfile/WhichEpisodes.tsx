@@ -1,3 +1,4 @@
+import {collectionWords, type Noun} from '../../lib/collectionWords'
 import {Fragment, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent} from 'react'
 import {Controller, useFieldArray, useWatch, type UseFormReturn} from 'react-hook-form'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
@@ -40,6 +41,8 @@ type Props = {
     seasons: readonly SeasonDetachedOut[]
     /** The saved Collection; counts need its indexed episodes. */
     collectionId?: number
+    /** What the collection calls its seasons: albums in a Music collection. */
+    season?: Noun
 }
 
 /** A date line downloads or keeps; skipping by date would not mean anything. */
@@ -106,7 +109,7 @@ function numberOrNull(value: string): number | null {
 }
 
 /** One list of filters, from top to bottom, that decides which episodes a Download Profile downloads and keeps. */
-export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, collectionId}: Props) {
+export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, collectionId, season = collectionWords(null).season}: Props) {
     const {control, getValues, setValue, trigger} = form
     const {fields, insert, remove, move} = useFieldArray({control, name: 'filters'})
     const seasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
@@ -154,7 +157,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
 
     const typeLabel = (key: string) => tags?.find((tag) => tag.key === key)?.label ?? key
     const seasonLabel = (slug: string) => seasons.find((season) => season.slug === slug)?.name ?? slug
-    const sentenceOf = (filter: EpisodeFilter) => filterSentence(filter, typeLabel, seasonLabel, deleteOlder)
+    const sentenceOf = (filter: EpisodeFilter) => filterSentence(filter, typeLabel, seasonLabel, deleteOlder, undefined, season)
     const tagOptions = createSelectRegistry(
         'WhichEpisodesEpisodeTypes',
         Object.fromEntries((tags ?? []).map((tag) => [tag.key, {label: tag.label}])),
@@ -164,7 +167,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
     const seasonOptions = createSelectRegistry(
         'WhichEpisodesSeasons',
         {
-            [UPCOMING_SEASONS]: {label: 'Upcoming seasons'},
+            [UPCOMING_SEASONS]: {label: `Upcoming ${season.plural}`},
             ...Object.fromEntries(seasons.map((season) => [season.slug, {label: season.name}])),
         },
         [UPCOMING_SEASONS, ...[...seasons].reverse().map((season) => season.slug)],
@@ -176,7 +179,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
             if (field === 'seasons') return seasonal || seasons.length > 0 || filters[index]?.field === 'seasons'
             if (isDateLine({field})) return !filters.some((filter, other) => other !== index && filter.field === field)
             return true
-        }).map((field) => [field, EpisodeFilterFieldReg.spec[field]]),
+        }).map((field) => [field, field === 'seasons' ? {label: season.singular} : EpisodeFilterFieldReg.spec[field]]),
     ))
 
     const openLine = (id: string, index: number) => {
@@ -340,7 +343,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                             setValue(`${name}.seasonSlugs`, picked.filter((value) => value !== UPCOMING_SEASONS), {shouldDirty: true})
                         }}
                     />
-                    <div className="help">With upcoming seasons, a season the collection gets later is added to this filter.</div>
+                    <div className="help">With upcoming {season.plural}, {season.a} the collection gets later is added to this filter.</div>
                 </div>
             )
         }

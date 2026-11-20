@@ -5,7 +5,7 @@ from typing import Literal
 from backend.api.models.base import RequestBase
 from backend.api.models.local_media_profile import LocalMediaProfileAPIBaseOut
 from backend.services.local_media_profile_inputs import VideoLocalMediaProfileInput
-from backend.types.local_media_profile_types import LocalMediaProfileType
+from backend.types.local_media_profile_types import LocalMediaProfileType, VideoLocalMediaProfileScope
 
 
 class VideoLocalMediaProfileAPICreate(RequestBase, VideoLocalMediaProfileInput):
@@ -20,3 +20,4 @@ class VideoLocalMediaProfileAPIRead(LocalMediaProfileAPIBaseOut):
     """Read a Video Local Media Profile: one for single videos, and movies with their extras."""
 
     type: Literal["video"] = LocalMediaProfileType.VIDEO.value
+    video_scope: VideoLocalMediaProfileScope = VideoLocalMediaProfileScope.BOTH

@@ -8,7 +8,7 @@ from pydantic import AwareDatetime, computed_field, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.api.models.pagination import CursorPageRead
-from backend.api.models.source import LockableResponse, SourcedResponse
+from backend.api.models.source import LockableResponse, NamesAPIRead, SourcedResponse
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import EpisodeIdentifierInfo
 
@@ -167,8 +167,8 @@ class EpisodeSeasonPlaceAPIRead(ResponseBase):
     """The season it belongs in now, when it is made already."""
     link_title: Optional[str] = None
     """The playlist it belongs in now; None when it belongs with the videos in no playlist."""
-    link_kind: str = "playlist"
-    """What the collection's Site calls one of its link seasons, such as playlist, or album in a Music collection."""
+    link_names: Optional[NamesAPIRead] = None
+    """What the collection's Site calls its link seasons, such as playlist, or album on Bandcamp."""
     collection_slug: Optional[str] = None
     """Reassigned: the collection of its creator that it belongs in now, when that is another one."""
     collection_title: Optional[str] = None

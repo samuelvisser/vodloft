@@ -100,13 +100,15 @@ def test_a_downloaded_video_a_playlist_of_another_collection_holds_is_reassigned
     ]
     # Tool Reviews leaves it alone until it is moved there, so it is not downloaded twice.
     assert awaiting_move(session, tools) == {_episode(session, tools, "t1").id}
-    # c1 is in a playlist season of the creator's own collection too, so it stays where it is.
+    # A collection made from a playlist keeps every video of its playlist.
     assert reassigned_episodes(session, tools) == []
 
-    # One that is not downloaded simply leaves for its playlist's collection.
-    assert run_write_transaction(lambda w: settle_creator(w, w.get(type(main), main.id))) == 1
+    # One that is not downloaded simply leaves for its playlist's collection, also c1, which a playlist season of the
+    # creator's own collection has too: a playlist that is not in a collection keeps all its videos out of it.
+    assert run_write_transaction(lambda w: settle_creator(w, w.get(type(main), main.id))) == 2
     session.expire_all()
     assert _episode(session, main, "t2") is None and _episode(session, tools, "t2") is not None
+    assert _episode(session, main, "c1") is None and _episode(session, tools, "c1") is not None
     assert _episode(session, main, "t1") is not None
 
 
@@ -226,6 +228,22 @@ def test_the_api_shows_and_moves_reassigned_episodes(creator, client, session):
     assert client.get("/api/creators/workshop").json()["reassignedCount"] == 0
 
 
+def _settled():
+    """Let every queued operation, such as the creator's first indexing, count as done: a move waits for them."""
+    from sqlalchemy import update
+
+    from backend.db.core import run_write_transaction
+    from task_manager.scheduler.db import TaskOperation
+
+    run_write_transaction(lambda w: w.execute(update(TaskOperation).values(status="SUCCEEDED")))
+
+
+def _save(client, ref, target, **body):
+    """Save the creator's Edit page with one feed or list moved elsewhere, once VODLoft finished what it was doing."""
+    _settled()
+    return client.patch("/api/creators/workshop", json={"moves": [{"accountId": 1, "ref": ref, "target": target}], **body})
+
+
 def _cabin_video(session, main):
     """k1, an upload of the creator that only its Building the Cabin playlist season has, downloaded."""
     from backend.db.core import run_write_transaction
@@ -250,7 +268,7 @@ def test_a_playlist_season_moves_to_a_collection_of_its_own_with_its_files(creat
     main, _tools = creator
     _cabin_video(session, main)
 
-    moved = client.post("/api/creators/workshop/accounts/1/sections/PLcabin/move", json={"target": "own"})
+    moved = _save(client, "PLcabin", "own")
 
     assert moved.status_code == 200, moved.text
     session.expire_all()
@@ -278,7 +296,7 @@ def test_a_playlist_collection_becomes_a_season_and_goes_once_it_is_empty(creato
     download_id, tools_id = download.id, tools.id
     session.commit()
 
-    moved = client.post("/api/creators/workshop/accounts/1/sections/PLtools/move", json={"target": "main"})
+    moved = _save(client, "PLtools", "main")
 
     assert moved.status_code == 200, moved.text
     session.expire_all()
@@ -289,12 +307,12 @@ def test_a_playlist_collection_becomes_a_season_and_goes_once_it_is_empty(creato
 
 
 def test_a_playlist_season_leaves_the_library_and_a_collection_of_its_own_must_be_deleted_instead(creator, client, session):
-    out = client.post("/api/creators/workshop/accounts/1/sections/PLcabin/move", json={"target": "skip"})
+    out = _save(client, "PLcabin", "skip")
     assert out.status_code == 200, out.text
     sections = {section["ref"]: section for section in out.json()["accounts"][0]["sections"]}
     assert (sections["PLcabin"]["collectionSlug"], sections["PLcabin"]["status"]) == (None, "ignored")
 
-    refused = client.post("/api/creators/workshop/accounts/1/sections/PLtools/move", json={"target": "skip"})
+    refused = _save(client, "PLtools", "skip")
     assert refused.status_code == 422 and "delete that collection" in refused.text
 
 
@@ -311,8 +329,100 @@ def test_a_video_only_the_playlist_collection_has_joins_the_creators_collection_
     download_id = download.id
     session.commit()
 
-    assert client.post("/api/creators/workshop/accounts/1/sections/PLtools/move", json={"target": "main"}).status_code == 200
+    assert _save(client, "PLtools", "main").status_code == 200
 
     session.expire_all()
     moved = session.get(EpisodeMediaDownload, download_id)
     assert (moved.media.collection_id, moved.media.season.name) == (main_id, "Tool Reviews")
+
+
+def test_a_creators_collection_leaves_a_video_its_feed_lists_to_the_playlist_that_is_a_collection_of_its_own(
+    client, session, tube, monkeypatch,
+):
+    """The creator's collection lists its uploads before Tool Reviews has listed its own videos: t1 and t2 still go
+    to Tool Reviews alone, and so does c1, though Building the Cabin, a season of the creator's collection, has it
+    too."""
+    from backend.db.models import Collection, Episode
+    from sources import ItemRef
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
+
+    tools_url, cabin_url = "https://tube.example/playlist?list=PLtools", "https://tube.example/playlist?list=PLcabin"
+    lists = {tools_url: ["t1", "t2", "c1"], cabin_url: ["c1"]}
+    monkeypatch.setattr(tube, "list_episodes", lambda url, *, known, feeds=None: iter(
+        _video(slug, day) for day, slug in enumerate(lists.get(url, ["t1", "t2", "c1", "v1"]), start=1) if slug not in known
+    ))
+    monkeypatch.setattr(tube, "list_items", lambda url: tuple(
+        ItemRef(slug, f"https://tube.example/watch?v={slug}") for slug in lists[url]
+    ), raising=False)
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "PLcabin", "target": "main"}, {"ref": "PLtools", "target": "own"},
+    ]})
+    assert response.status_code == 201, response.text
+    main_id = session.scalar(select(Collection.id).where(Collection.slug == "UCworkshop"))
+    tools_id = session.scalar(select(Collection.id).where(Collection.slug == "PLtools"))
+    session.commit()
+
+    def slugs(collection_id):
+        session.expire_all()
+        return sorted(session.scalars(select(Episode.source_slug).where(Episode.collection_id == collection_id)))
+
+    index_listed_collection(session, collection_id=main_id, source=tube)
+    assert slugs(main_id) == ["v1"]
+    index_listed_collection(session, collection_id=tools_id, source=tube)
+    assert slugs(tools_id) == ["c1", "t1", "t2"]
+    # A new upload the creator put in Tool Reviews right away goes there too.
+    lists[tools_url].append("t3")
+    lists.setdefault(f"{ROOT}/videos", ["t1", "t2", "c1", "v1", "t3"])
+    index_listed_collection(session, collection_id=main_id, source=tube)
+    assert slugs(main_id) == ["v1"]
+
+
+def test_a_playlist_that_is_in_none_of_the_creators_collections_keeps_its_videos_out_of_them_too(
+    client, session, tube, monkeypatch,
+):
+    """Members' Cuts was skipped: the creator's collection leaves out its videos, also those its Videos feed lists. One
+    it had already goes when the collection syncs, unless it is downloaded."""
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, Episode
+    from sources import ItemRef
+    from task_manager.tasks.helpers.listed_collections import add_listed_episodes, index_listed_collection
+
+    members_url = "https://tube.example/playlist?list=PLmembers"
+    lists = {members_url: ["m1", "m2"]}
+    monkeypatch.setattr(tube, "list_episodes", lambda url, *, known, feeds=None: iter(
+        _video(slug, day) for day, slug in enumerate(["m1", "m2", "m3", "v1"], start=1) if slug not in known
+    ))
+    monkeypatch.setattr(tube, "list_items", lambda url: tuple(
+        ItemRef(slug, f"https://tube.example/watch?v={slug}") for slug in lists[url]
+    ), raising=False)
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "PLmembers", "target": "skip"},
+    ]})
+    assert response.status_code == 201, response.text
+    main_id = session.scalar(select(Collection.id).where(Collection.slug == "UCworkshop"))
+    session.commit()
+    # Indexed before VODLoft knew what Members' Cuts has; m1 was downloaded since.
+    run_write_transaction(lambda w: add_listed_episodes(w, collection_id=main_id, found=[_video("m1"), _video("m2", 2)]))
+    main = session.get(Collection, main_id)
+    local = _profile(session, "shows")
+    _download(session, _episode(session, main, "m1"), local, _download_profile(session, main, local))
+    session.commit()
+
+    lists[members_url].append("m3")
+    index_listed_collection(session, collection_id=main_id, source=tube)
+    session.expire_all()
+
+    assert sorted(session.scalars(select(Episode.source_slug).where(Episode.collection_id == main_id))) == ["m1", "v1"]
+
+
+def test_a_downloaded_video_in_a_season_and_in_a_playlist_of_its_own_is_reassigned_to_that_playlist(creator, session):
+    from backend.services.reassigned import reassigned_episodes
+
+    main, tools = creator
+    local = _profile(session, "shows")
+    _download(session, _episode(session, main, "c1"), local, _download_profile(session, main, local))
+    session.commit()
+
+    assert [(item.episode.source_slug, item.target.collection.slug) for item in reassigned_episodes(session, main)] == [
+        ("c1", "PLtools"),
+    ]

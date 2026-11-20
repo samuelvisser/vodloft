@@ -13,7 +13,9 @@ from sources.ytdlp_options import check_ytdlp_options
 from backend.services.site_cookies import (
     SiteAuthentication, SiteNotKnownError, list_site_authentication, remove_site_cookies, save_site_cookies,
 )
-from backend.services.sites import SiteLinkError, add_site, site_of_link
+from backend.services.sites import SiteLinkError, add_site, episode_tags_named, site_of_link
+from backend.types.collection_contracts import collection_contract
+from backend.types.collection_types import CollectionType
 from backend.services.access_checks import access_changed
 from backend.services.site_settings import download_profile_defaults, offered_settings
 from backend.services.source_options import save_ytdlp_source_options, ytdlp_source_options
@@ -119,13 +121,20 @@ def resolve(body: ResolveAPIRequest, access: Access = signed_in()):
 
 
 @router.get("/sources/{source_id}/episode-tags", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=list[EpisodeTagAPIRead])
-def episode_tags(source_id: str, url: str | None = Query(default=None, max_length=2048)):
-    """The tags a Source gives episodes, such as Video, Short and Livestream, for the collection at ``url`` or for any collection."""
+def episode_tags(
+    source_id: str, url: str | None = Query(default=None, max_length=2048), collection_type: CollectionType | None = None,
+):
+    """The tags a Source gives episodes, such as Video, Short and Livestream, for the collection at ``url`` or for any
+    collection. With ``collection_type``, the main one is named as a collection of that type names its episodes."""
     try:
         source = get_source(source_id)
     except UnknownSourceError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return [EpisodeTagAPIRead.model_validate(tag) for tag in source.episode_tags_for(url)]
+    tags = source.episode_tags_for(url)
+    if collection_type is not None:
+        audio = source_site(url, source_id).audio_only if url else False
+        tags = episode_tags_named(tags, collection_contract(collection_type).words_for(audio))
+    return [EpisodeTagAPIRead.model_validate(tag) for tag in tags]
 
 
 @router.get("/sources/{source_id}/publish-statuses", dependencies=[signed_in()], response_model=list[PublishStatusLabelAPIRead])
@@ -151,7 +160,8 @@ def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)
         profile_defaults=DownloadProfileDefaultsAPIRead.model_validate(download_profile_defaults(site)),
         upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks), site_key=site.key, site_name=site.name,
         stream_methods=site.stream_methods,
-        stream_video_heights=site.stream_video_heights, stream_proxy_choice=site.stream_proxy_choice,
+        stream_video_heights=site.stream_video_heights, stream_file_height=site.stream_file_height,
+            stream_proxy_choice=site.stream_proxy_choice,
         video_output_help=site.video_output_help,
         downloads=DownloadOptionsAPIRead.model_validate(site.downloads),
     )

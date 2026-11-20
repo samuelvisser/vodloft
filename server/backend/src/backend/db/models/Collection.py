@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING, TypeAlias
 
-from sqlalchemy import ForeignKey, Text, UniqueConstraint, func
+from sqlalchemy import JSON, ForeignKey, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
@@ -10,7 +10,7 @@ from backend.db.mixins.MediaContentMetadataMixin import PICTURE_PATH_COMMENT
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.collection_types import EpisodeOrder
-from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, OutsideVideos
+from backend.types.link_season_types import ListLayout, LooseVideos, LinkSeasons, OutsideVideos
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
@@ -54,9 +54,10 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         default=LinkSeasons.OFF.value, server_default=LinkSeasons.OFF.value,
         comment="Whether the creator's playlists are seasons: off, all or selected",
     )
-    new_link_seasons: Mapped[str] = mapped_column(
-        default=NewLinkSeasonAction.ASK.value, server_default=NewLinkSeasonAction.ASK.value,
-        comment="What happens with a playlist the creator adds, when only selected playlists are seasons: ask, add or ignore",
+    new_lists: Mapped[dict[str, str]] = mapped_column(
+        JSON, default=dict, server_default="{}",
+        comment="What happens with a list the creator adds, by the kind of list, when only selected lists are seasons: "
+                "ask, add or ignore",
     )
     list_layout: Mapped[str] = mapped_column(
         default=ListLayout.SEASON_EACH.value, server_default=ListLayout.SEASON_EACH.value,
@@ -71,6 +72,13 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         comment=(
             "What happens with the videos of the playlists that are seasons that the collection's own link does "
             "not list: leave_out, add, or only, which holds nothing but the videos of those playlists"
+        ),
+    )
+    feeds: Mapped[Optional[list[str]]] = mapped_column(
+        JSON, nullable=True,
+        comment=(
+            "For a creator's own collection, the refs of the creator's feeds its link lists, such as only a YouTube "
+            "channel's Videos; null lists all that its link lists"
         ),
     )
     custom_season_order: Mapped[bool] = mapped_column(

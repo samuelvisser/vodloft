@@ -2,28 +2,29 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import threading
 import time
 
 import requests
 from collections.abc import Callable, Iterator, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timezone
-from urllib.parse import parse_qs, urlsplit, urlunsplit
+from urllib.parse import parse_qs, urlsplit
 
 from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 
 from ..contract import (
     Chapter,
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, CreatorDetails, SectionKind, SectionRef, SectionRole, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, RssEpisodeType, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, combined_tags, CreatorDetails, SectionRef, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
 from .. import pacing, ytdlp_runner as runner
-from . import artists, sites, thumbnails, youtube_rss, youtube_search
+from . import sites, thumbnails, youtube_rss, youtube_search
+from .site_contracts import CONTRACTS
+from .site_implementations import IMPLEMENTATIONS, OtherSitesImplementation
+from .site_implementations.youtube import collection_url, picture
 from .youtube_api import ApiKeyError, QuotaExceededError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.client import MAX_RESULTS
@@ -35,18 +36,7 @@ _CACHE_SECONDS = 300
 # Pause between per-video lookups while listing a collection, so a large channel
 # does not look like a scraper to the site.
 _LISTING_PAUSE_SECONDS = 1.0
-_YOUTUBE_CHANNEL = re.compile(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)/?$")
 _UNAVAILABLE_TITLES = {"[Private video]", "[Deleted video]"}
-_VIDEO_TAG = EpisodeTag(MAIN_TAG, "Video", "A normal video", "video", "videos", main=True)
-_YOUTUBE_TAGS = (
-    _VIDEO_TAG,
-    EpisodeTag("short", "Short", "A YouTube Short", "short", "shorts", selected_by_default=False, rss_episode_type=RssEpisodeType.BONUS),
-    EpisodeTag(
-        "livestream", "Livestream",
-        "A livestream: upcoming, live now or finished. Finishing does not change the tag. A premiere is a video.",
-        "livestream", "livestreams",
-    ),
-)
 # yt-dlp reports a livestream that is still live, upcoming or long finished alike.
 _LIVE_STATUSES = {"is_live", "is_upcoming", "was_live", "post_live"}
 # Where a video is in its life, as yt-dlp's live_status says. An upcoming video past its start is delayed.
@@ -60,46 +50,10 @@ _PUBLISH_STATUSES = {
 _GONE_ERRORS = ("video unavailable", "has been removed", "no longer available", "does not exist")
 _STILL_THERE_ERRORS = ("country", "sign in", "--cookies", "members")
 _PRIVATE_ERRORS = ("private video", "this video is private")
-# Without a key, a channel's uploads are listed tab by tab. A channel may have no Shorts or Live tab.
-_CHANNEL_EXTRA_TABS = ("shorts", "streams")
 # The same search within an hour is answered from memory, so going back to the results costs nothing.
 _SEARCH_CACHE_SECONDS = 3600
 # How many of a collection's newest videos a quick check through yt-dlp looks at, per tab.
 _LATEST_COUNT = 15
-
-
-def collection_url(url: str) -> str:
-    """A YouTube channel's link lists its tabs; the collection is its Videos tab."""
-    parts = urlsplit(url)
-    if on_domain(link_host(url), "youtube.com") and _YOUTUBE_CHANNEL.match(parts.path):
-        return urlunsplit(parts._replace(path=parts.path.rstrip("/") + "/videos"))
-    return url
-
-
-# A YouTube channel's feeds, by the tab that lists them: (tab, title, role).
-_CHANNEL_FEEDS = (("videos", "Videos", SectionRole.MAIN), ("streams", "Live", SectionRole.LIVE), ("shorts", "Shorts", SectionRole.SHORT))
-
-
-def channel_root(url: str) -> str | None:
-    """A YouTube channel's own link, without a tab, or None when the link is not a channel."""
-    parts = urlsplit(url)
-    if not on_domain(link_host(url), "youtube.com"):
-        return None
-    match = re.match(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)(?:/(?:videos|shorts|streams|playlists|featured))?/?$", parts.path)
-    if not match:
-        return None
-    return urlunsplit(("https", "www.youtube.com", f"/{match.group(1)}", "", ""))
-
-
-def _listing_urls(url: str) -> list[str]:
-    """The pages that list a collection's videos: for a channel's Videos tab, its Shorts and Live tabs too."""
-    url = collection_url(url)
-    ref = mapping.youtube_ref(url)
-    if ref is None or ref.kind == "playlist" or ref.tab != "videos":
-        return [url]
-    parts = urlsplit(url)
-    base = parts.path.rstrip("/").removesuffix("/videos")
-    return [url] + [urlunsplit(parts._replace(path=f"{base}/{tab}")) for tab in _CHANNEL_EXTRA_TABS]
 
 
 def _site(info: dict) -> str:
@@ -142,6 +96,13 @@ def _feed(ref: mapping.YouTubeRef) -> dict[str, str]:
     if ref.kind == "channel" and ref.tab == "videos":
         return {"channel_id": ref.value}
     return {"playlist_id": ref.value if ref.kind == "playlist" else ref.uploads_playlist(ref.value)}
+
+
+def _feeds(ref: mapping.YouTubeRef, feeds: frozenset[str] | None) -> list[dict[str, str]]:
+    """The RSS feeds that list the newest videos of a YouTube collection, of only ``feeds`` when given."""
+    if feeds is None or ref.kind != "channel" or ref.tab != "videos":
+        return [_feed(ref)]
+    return [{"playlist_id": playlist_id} for playlist_id in ref.feed_playlists(ref.value, feeds)]
 
 
 def _is_youtube(url: str) -> bool:
@@ -407,32 +368,8 @@ def _lookup(*args: str) -> dict:
     return {**info, "_has_drm": True}
 
 
-def _count(number: int) -> str:
-    """A large count the way YouTube shows it, such as 1.2M."""
-    for size, suffix in ((1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")):
-        if number >= size:
-            return f"{number / size:.1f}".rstrip("0").rstrip(".") + suffix
-    return str(number)
-
-
-# A playlist's own picture on YouTube. YouTube serves it only under the signed link it lists it with; yt-dlp adds a
-# widest form without the signature, which YouTube answers with a grey placeholder.
-_UNSIGNED_PLAYLIST_PICTURE = re.compile(r"^https?://i\d?\.ytimg\.com/s_p/[^?]+$")
-
-
-def _picture(info: dict) -> str | None:
-    """The picture yt-dlp names for a video or playlist, as it names it."""
-    if info.get("thumbnail"):
-        return info["thumbnail"]
-    candidates = [
-        t for t in info.get("thumbnails") or []
-        if isinstance(t, dict) and t.get("url") and not _UNSIGNED_PLAYLIST_PICTURE.match(t["url"])
-    ]
-    return candidates[-1]["url"] if candidates else None
-
-
 def _thumbnail(info: dict) -> str | None:
-    return thumbnails.widest_still(_picture(info))
+    return thumbnails.widest_still(picture(info))
 
 
 # What yt-dlp says when a video needs someone signed in: a bot check, an age check, members-only videos.
@@ -489,7 +426,6 @@ class YtDlpSource(Source):
         Feature.FORMAT_CHOICES, Feature.YTDLP_OPTIONS, Feature.METADATA_REFRESH,
         Feature.PENDING_CHECKS, Feature.CREATORS, Feature.CHAPTERS, Feature.LINK_COLLECTIONS,
     })
-    episode_tags = _YOUTUBE_TAGS
     # Search covers YouTube only; other sites are added by link.
     sites_label = "YouTube, and many more"
     api_key_sites = sites.api_key_sites()
@@ -514,8 +450,11 @@ class YtDlpSource(Source):
         return sites.site_of(site_key)
 
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
-        """Shorts and livestreams are YouTube's; other sites only have videos."""
-        return _YOUTUBE_TAGS if url is None or _is_youtube(url) else (_VIDEO_TAG,)
+        """The tags of the link's Site, or without a link, of every site with a contract of its own, such as
+        YouTube's Shorts and Livestreams."""
+        if url is not None:
+            return sites.site_for(url).episode_tags
+        return combined_tags(sites.site_of(key).episode_tags for key in CONTRACTS)
 
     def _info(self, url: str) -> dict:
         """The video info for a link. Adding a video right after looking up its link reuses the lookup."""
@@ -612,17 +551,14 @@ class YtDlpSource(Source):
 
     def resolve(self, url: str) -> ResolvedLink | None:
         url = collection_url(url)
-        youtube = mapping.youtube_ref(url)
-        # A channel's Videos tab is the whole channel too, which can be added as a creator instead.
-        channel = channel_root(url) if youtube is not None and youtube.kind != "playlist" and youtube.tab == "videos" else None
-        if artists.is_artist_page(url):
-            channel = artists.artist_root(url)
-        creator_label = sites.site_for(channel).creator_label if channel else None
+        # A creator's own page can be added as the creator instead.
+        channel = self._implementation(url).creator_page(url)
+        creator_names = sites.site_for(channel).creator_names if channel else None
         if collection := self._api_collection(url):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site="YouTube", creator_url=channel, creator_label=creator_label,
+                site="YouTube", creator_url=channel, creator_names=creator_names,
             )
         try:
             info = self._info(url)
@@ -636,7 +572,7 @@ class YtDlpSource(Source):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site=site, creator_url=channel, creator_label=creator_label,
+                site=site, creator_url=channel, creator_names=creator_names,
             )
         return ResolvedLink(
             kind=LinkKind.VIDEO,
@@ -651,110 +587,49 @@ class YtDlpSource(Source):
             access=_access(info),
         )
 
+    def _implementation(self, url: str) -> OtherSitesImplementation:
+        """How yt-dlp does things on the link's Site, as that Site's implementation says. A bare id is a YouTube
+        channel's, the only Site whose creators VODLoft may know by their id alone."""
+        site = sites.site_for(url) if "://" in url else sites.site_of("youtube")
+        return IMPLEMENTATIONS.get(site.key, OtherSitesImplementation)(site, self._info)
+
     def creator_of(self, url: str) -> str | None:
-        """A channel's tab is the channel; a playlist belongs to the channel that made it, and an album to its artist."""
-        if root := artists.artist_root(url):
+        """A channel's tab is the channel; an album belongs to its artist, and a playlist to the channel that made
+        it."""
+        implementation = self._implementation(url)
+        if root := implementation.creator_root(url):
             return root
-        if root := channel_root(collection_url(url)):
-            return root
-        if mapping.youtube_ref(collection_url(url)) is None:
+        if not implementation.site.creators or mapping.youtube_ref(collection_url(url)) is None:
             return None
         author = self.collection_details(url).author_url
-        return channel_root(author) if author else None
+        return implementation.creator_root(author) if author else None
 
     def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
-        """A YouTube channel through yt-dlp, which costs no API quota: its details, the Videos, Live and Shorts tabs
-        it has, and its playlists. ``ref`` is the channel's link or its ID. A Bandcamp or SoundCloud artist is a
-        channel of their albums.
+        """A creator and the sections of their page, as their Site's implementation finds them: a YouTube channel's
+        tabs and playlists, or a Bandcamp or SoundCloud artist's albums. ``ref`` is the creator's link, or a YouTube
+        channel's ID."""
+        return self._implementation(ref).creator_details(ref, progress)
 
-        Each of the channel's pages is a lookup of its own, of a second or more, so they are all looked up at once."""
-        if artist := artists.artist_root(ref):
-            return artists.artist_details(artist, progress)
-        root = channel_root(ref) if ref.startswith("http") else mapping.channel_url(ref)
-        if root is None:
-            raise runner.YtDlpError("This link is not a YouTube channel")
-        progress("Reading the channel, its videos and its playlists")
-        with ThreadPoolExecutor(max_workers=len(_CHANNEL_FEEDS) + 1, thread_name_prefix="channel-lookup") as pool:
-            tabs = {tab: pool.submit(self._info, f"{root}/{tab}") for tab, _title, _role in _CHANNEL_FEEDS}
-            playlists = pool.submit(self._playlists, root)
-            info = tabs["videos"].result()
-            channel_id = str(info.get("channel_id") or "")
-            if not channel_id:
-                raise runner.YtDlpError("YouTube did not say which channel this is")
-            handle = info.get("uploader_id") if str(info.get("uploader_id") or "").startswith("@") else None
-            # The handle's link is the one people paste, so a collection added from it before is recognised.
-            root = f"https://www.youtube.com/{handle}" if handle else mapping.channel_url(channel_id)
-            sections: list[SectionRef] = []
-            for tab, title, role in _CHANNEL_FEEDS:
-                try:
-                    listing = tabs[tab].result()
-                except runner.YtDlpError as exc:
-                    # A channel without Shorts or livestreams has no such tab.
-                    logger.debug("%s has no %s tab: %s", root, tab, exc)
-                    continue
-                if not listing.get("entries") and tab != "videos":
-                    continue
-                sections.append(SectionRef(
-                    ref=tab, url=f"{root}/{tab}", title=title, kind=SectionKind.FEED, role=role, kind_label="Feed",
-                ))
-            sections += playlists.result()
-        pictures = {str(item.get("id")): item.get("url") for item in info.get("thumbnails") or [] if isinstance(item, dict)}
-        followers = info.get("channel_follower_count")
-        return CreatorDetails(
-            ref=channel_id, url=root, title=str(info.get("channel") or info.get("uploader") or channel_id),
-            handle=handle, description=info.get("description") or None,
-            avatar_url=pictures.get("avatar_uncropped"), banner_url=pictures.get("banner_uncropped"),
-            facts=(f"{_count(followers)} subscribers",) if isinstance(followers, int) else (),
-            sections=tuple(sections),
-        )
-
-    @staticmethod
-    def _playlists(root: str) -> list[SectionRef]:
-        """The playlists a YouTube channel lists, newest first."""
-        try:
-            # A page YouTube refuses part way still leaves the playlists of the pages before it.
-            playlists = runner.run_json("--flat-playlist", "--ignore-errors", f"{root}/playlists", cookies=sites.cookies_for(root))
-        except runner.YtDlpError as exc:
-            logger.info("Not listing the playlists of %s: %s", root, exc)
-            return []
-        entries = [
-            entry for entry in playlists.get("entries") or []
-            if isinstance(entry, dict) and entry.get("id") and entry.get("title")
-        ]
-        # A channel may list hundreds of playlists, whose pictures are checked all at once.
-        images = thumbnails.widest_stills([_picture(entry) for entry in entries])
-        found = []
-        for entry, image in zip(entries, images):
-            count = entry.get("playlist_count")
-            found.append(SectionRef(
-                ref=str(entry["id"]), url=f"https://www.youtube.com/playlist?list={entry['id']}", title=str(entry["title"]),
-                kind=SectionKind.LIST, kind_label="Playlist", item_count=count if isinstance(count, int) else None,
-                image_url=image, description=entry.get("description") or None,
-            ))
-        return found
+    def music_reason(self, url: str, details: CollectionDetails) -> str | None:
+        """A link on a Site of music, such as Bandcamp, or a link its Site's implementation can tell is music, such as
+        an album on YouTube Music."""
+        return self._implementation(url).music_reason(url, details)
 
     def is_creator_page(self, url: str) -> bool:
-        """A YouTube channel's own link or its Videos tab, which stand for all its uploads, or a Bandcamp or SoundCloud
-        artist's page of all their music. Not one playlist or album, nor only a channel's Shorts or Live tab."""
-        if artists.artist_root(url):
-            return artists.lists_all_music(url)
-        ref = mapping.youtube_ref(collection_url(url))
-        return ref is not None and ref.kind != "playlist" and ref.tab == "videos" and channel_root(collection_url(url)) is not None
+        """A link that stands for all of a creator's uploads: a YouTube channel's own link or its Videos tab, or a
+        Bandcamp or SoundCloud artist's page of all their music."""
+        return self._implementation(url).is_creator_page(url)
 
     def season_lists(self, url: str) -> list[SectionRef]:
         """A YouTube channel's playlists, or an artist's albums, newest first."""
-        if artist := artists.artist_root(url):
-            return artists.albums(artist)
-        root = channel_root(collection_url(url))
-        if root is None:
-            raise runner.YtDlpError("This link is not a YouTube channel")
-        return self._playlists(root)
+        return self._implementation(url).season_lists(url)
 
     def list_items(self, url: str) -> tuple[ItemRef, ...]:
         """A playlist's or album's videos; a channel's uploads, for a link that is another channel; or the video
         itself, for a link to one video."""
         items: dict[str, ItemRef] = {}
-        for listing_url in _listing_urls(url) if self.is_creator_page(url) else [url]:
+        implementation = self._implementation(url)
+        for listing_url in implementation.listing_urls(url) if implementation.is_creator_page(url) else [url]:
             listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
             if listing.get("_type") != "playlist" and listing.get("id"):
                 slug = video_slug(listing)
@@ -845,7 +720,9 @@ class YtDlpSource(Source):
             raise runner.YtDlpError("This link is a single video, not a channel or playlist")
         return self._collection(info, url)
 
-    def list_episodes(self, url: str, *, known: frozenset[str]) -> Iterator[VideoDetails]:
+    def list_episodes(
+        self, url: str, *, known: frozenset[str], feeds: frozenset[str] | None = None,
+    ) -> Iterator[VideoDetails]:
         """A YouTube collection's videos come through the API when a key is set, and through yt-dlp otherwise.
 
         The API lists all of a channel's uploads in seconds. yt-dlp lists the
@@ -860,7 +737,10 @@ class YtDlpSource(Source):
         if catalogue is not None:
             try:
                 ref = self._channel_ref(collection_url(url), catalogue)
-                ids = catalogue.video_ids(catalogue.playlist_id(ref)) if ref is not None else None
+                ids = (
+                    [video_id for playlist_id in catalogue.playlist_ids(ref, feeds) for video_id in catalogue.video_ids(playlist_id)]
+                    if ref is not None else None
+                )
             except (YouTubeApiError, runner.YtDlpError) as exc:
                 logger.info("Listing %s with yt-dlp, because the YouTube API could not: %s", url, exc)
                 ids = None
@@ -873,7 +753,7 @@ class YtDlpSource(Source):
                 if ref.kind != "playlist":
                     try:
                         # Also what the API listed but would not give details of, which yt-dlp may still see.
-                        entries = self._unseen_entries(url, frozenset(listed))
+                        entries = self._unseen_entries(url, frozenset(listed), feeds)
                     except runner.YtDlpError as exc:
                         logger.info("Not listing %s's members-only videos: %s", url, exc)
                         return
@@ -884,7 +764,7 @@ class YtDlpSource(Source):
                         if details := self._from_entry(entry):
                             yield details
                 return
-        yield from self._list_with_ytdlp(url, known)
+        yield from self._list_with_ytdlp(url, known, feeds)
 
     def _details_from_api(self, catalogue: Catalogue, ids: list[str]) -> Iterator[VideoDetails]:
         for start in range(0, len(ids), MAX_RESULTS):
@@ -961,25 +841,25 @@ class YtDlpSource(Source):
             details[ref.slug] = self._video(info, ref.url)
         return ItemRefresh(details=details, removed=frozenset(removed))
 
-    def _list_with_ytdlp(self, url: str, known: frozenset[str]) -> Iterator[VideoDetails]:
-        for entry in self._unseen_entries(url, known).values():
+    def _list_with_ytdlp(self, url: str, known: frozenset[str], feeds: frozenset[str] | None = None) -> Iterator[VideoDetails]:
+        for entry in self._unseen_entries(url, known, feeds).values():
             if details := self._from_entry(entry):
                 yield details
 
-    @staticmethod
-    def _unseen_entries(url: str, known: frozenset[str]) -> dict[str, dict]:
+    def _unseen_entries(self, url: str, known: frozenset[str], feeds: frozenset[str] | None = None) -> dict[str, dict]:
         """The collection's listed videos VODLoft does not know yet, by slug, in the listing's order.
 
         YouTube's listing only says how long ago a video came out, which yt-dlp
         turns into a date when asked: the only date a video it cannot look up has.
         """
         entries: dict[str, dict] = {}
-        if artists.artist_root(url) and artists.lists_all_music(url):
-            for entry in artists.all_tracks(url):
+        implementation = self._implementation(url)
+        if (music := implementation.all_music(url)) is not None:
+            for entry in music:
                 if video_slug(entry) not in known:
                     entries.setdefault(video_slug(entry), entry)
             return entries
-        for index, listing_url in enumerate(_listing_urls(url)):
+        for index, listing_url in enumerate(implementation.listing_urls(url, feeds)):
             try:
                 listing = runner.run_json(
                     "--flat-playlist", "--extractor-args", "youtubetab:approximate_date", listing_url,
@@ -1008,28 +888,28 @@ class YtDlpSource(Source):
             return self._video(entry, entry_url)
         return None
 
-    def latest_items(self, url: str) -> list[ItemRef]:
+    def latest_items(self, url: str, *, feeds: frozenset[str] | None = None) -> list[ItemRef]:
         """A YouTube collection's 50 newest videos through the API, else its RSS feed's 15, else yt-dlp's listing."""
         url = collection_url(url)
         if mapping.youtube_ref(url) is None:
-            return self._latest_with_ytdlp(url)
+            return self._latest_with_ytdlp(url, feeds)
         catalogue = self._catalogue(adding=False)
         if catalogue is not None:
             try:
                 ref = self._channel_ref(url, catalogue)
                 if ref is not None:
                     return [ItemRef(video_id, mapping.video_url(video_id))
-                            for video_id in catalogue.latest_ids(catalogue.playlist_id(ref))]
+                            for playlist_id in catalogue.playlist_ids(ref, feeds) for video_id in catalogue.latest_ids(playlist_id)]
             except (YouTubeApiError, runner.YtDlpError) as exc:
                 logger.info("Checking %s without the YouTube API, because it could not: %s", url, exc)
         try:
             ref = self._channel_ref(url, None)
             if ref is not None:
-                ids = youtube_rss.latest_video_ids(**_feed(ref))
+                ids = [video_id for feed in _feeds(ref, feeds) for video_id in youtube_rss.latest_video_ids(**feed)]
                 return [ItemRef(video_id, mapping.video_url(video_id)) for video_id in ids]
         except (youtube_rss.FeedError, runner.YtDlpError) as exc:
             logger.info("Checking %s with yt-dlp, because its RSS feed could not be read: %s", url, exc)
-        return self._latest_with_ytdlp(url)
+        return self._latest_with_ytdlp(url, feeds)
 
     def newest_episodes(self, url: str) -> list[VideoDetails]:
         """A YouTube collection's 50 newest videos through the API, for 2 units, else its RSS feed's 15,
@@ -1052,7 +932,8 @@ class YtDlpSource(Source):
             except (youtube_rss.FeedError, runner.YtDlpError) as exc:
                 logger.info("Reading the newest videos of %s with yt-dlp, because its RSS feed could not be read: %s", url, exc)
         listing = runner.run_json(
-            "--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", _listing_urls(url)[0], cookies=sites.cookies_for(url),
+            "--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", self._implementation(url).listing_urls(url)[0],
+            cookies=sites.cookies_for(url),
         )
         return [
             self._video(entry, entry.get("url") or entry.get("webpage_url"))
@@ -1061,15 +942,13 @@ class YtDlpSource(Source):
             and entry.get("title") not in _UNAVAILABLE_TITLES
         ]
 
-    def _latest_with_ytdlp(self, url: str) -> list[ItemRef]:
-        if artists.artist_root(url) and artists.lists_all_music(url):
+    def _latest_with_ytdlp(self, url: str, feeds: frozenset[str] | None = None) -> list[ItemRef]:
+        implementation = self._implementation(url)
+        if (music := implementation.all_music(url, newest_albums=1)) is not None:
             # An artist's newest music is on their newest album.
-            return [
-                ItemRef(video_slug(entry), entry["url"])
-                for entry in artists.all_tracks(url, newest_albums=1)[:_LATEST_COUNT] if entry.get("url")
-            ]
+            return [ItemRef(video_slug(entry), entry["url"]) for entry in music[:_LATEST_COUNT] if entry.get("url")]
         items: dict[str, ItemRef] = {}
-        for index, listing_url in enumerate(_listing_urls(url)):
+        for index, listing_url in enumerate(implementation.listing_urls(url, feeds)):
             try:
                 listing = runner.run_json(
                     "--flat-playlist", "--playlist-items", f"1:{_LATEST_COUNT}", listing_url, cookies=sites.cookies_for(listing_url),
@@ -1233,7 +1112,7 @@ class YtDlpSource(Source):
         """
         details: dict[str, VideoDetails] = {}
         listed_open: set[str] = set()
-        for listing_url in _listing_urls(url):
+        for listing_url in self._implementation(url).listing_urls(url):
             try:
                 listing = runner.run_json("--flat-playlist", listing_url, cookies=sites.cookies_for(listing_url))
             except runner.YtDlpError as exc:

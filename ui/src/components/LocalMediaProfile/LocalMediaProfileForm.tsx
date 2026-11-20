@@ -1,11 +1,12 @@
-import type {ReactNode} from 'react'
+import {type ReactNode, useCallback, useRef} from 'react'
 import {type FieldValues, UseFormReturn} from 'react-hook-form'
 
 import {LocalMediaProfileServerErrors} from '../../types/schemas/local_media_profile'
 import type {LocalMediaProfileType} from '../../types/local_media_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import LocalMediaProfileCommonFields from './LocalMediaProfileCommonFields'
-import LocalMediaProfileSection, {RevealFieldsProvider} from './LocalMediaProfileSection'
+import LocalMediaProfileSection, {RevealFieldsProvider, useRevealFields} from './LocalMediaProfileSection'
+import {RequestedFieldsProvider} from '../common/RequestedField'
 import MediaFilesFields from './MediaFilesFields'
 import CollectionLocalMediaProfileForm from './CollectionLocalMediaProfileForm'
 import {ExampleEpisodeProvider} from './ExampleEpisodeContext'
@@ -29,13 +30,13 @@ type Props = {
 
 export type LocalMediaProfileMode = 'collection' | 'video'
 
-/** Which form a profile type uses: a Music profile is a Collection profile that keeps audio only. */
+/** Which form a profile type uses. */
 export function profileMode(type: LocalMediaProfileType): LocalMediaProfileMode {
     return type === 'video' ? 'video' : 'collection'
 }
 
 // The form fields in each section, so a section with an error opens.
-const PROFILE_FIELDS = ['name', 'slug', 'collectionScope', 'siteKeys', 'includeUpcomingSites'] as const
+const PROFILE_FIELDS = ['name', 'slug', 'collectionScope', 'videoScope', 'siteKeys', 'includeUpcomingSites'] as const
 const QUALITY_FIELDS = ['preferredFormat', 'qualityGoal', 'videoCodecs', 'codecFallback', 'container', 'audioCodec', 'audioFormat', 'audioLanguage'] as const
 const FILES_FIELDS = ['thumbnailMode', 'metadataMode', 'kodiSafeNfo', 'showNfo', 'episodeNfo', 'downloadCollectionAssets', 'fileDateFromPublishDate', 'saveInfoJson', 'episodeTitleTemplate', 'episodeDescriptionTemplate', 'downloadMode'] as const
 const SUBTITLE_FIELDS = ['subtitleMode', 'subtitleLanguageMode', 'subtitleLanguages', 'autoSubtitles'] as const
@@ -58,6 +59,26 @@ export function buildLocalMediaProfileOnSubmit<TIn extends FieldValues, TOut ext
     })
 }
 
+/** The sections holding fields a link changed open, so the user sees what it set. */
+function RevealRequestedFields({children}: {children: ReactNode}) {
+    const reveal = useRevealFields()
+    // The fields a link sets apply one after another as the form opens; they open their sections together.
+    const pending = useRef<string[] | null>(null)
+    const onApplied = useCallback((fields: readonly string[]) => {
+        if (pending.current) {
+            pending.current.push(...fields)
+            return
+        }
+        pending.current = [...fields]
+        queueMicrotask(() => {
+            const all = pending.current ?? []
+            pending.current = null
+            reveal(all)
+        })
+    }, [reveal])
+    return <RequestedFieldsProvider onApplied={onApplied}>{children}</RequestedFieldsProvider>
+}
+
 /**
  * The Local Media Profile form, in folding sections. A new profile opens the sections that need a choice; the others
  * start from good defaults and show their values while folded.
@@ -72,6 +93,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating, onCollect
 
     return (
         <RevealFieldsProvider>
+            <RevealRequestedFields>
             <ExampleEpisodeProvider>
                 {errors.root && (
                     <div className="form-error-card" role="alert" aria-live="polite">
@@ -140,6 +162,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating, onCollect
                     {mode === 'collection' && <CollectionLocalMediaProfileForm form={form} isCreating={isCreating} onCollectionRoot={onCollectionRoot} outputTemplateActions={outputTemplateActions}/>}
                 </LocalMediaProfileSection>
             </ExampleEpisodeProvider>
+            </RevealRequestedFields>
         </RevealFieldsProvider>
     )
 }

@@ -49,6 +49,12 @@ class MediaServerMetadata:
     def is_music_video(self) -> bool:
         return self.kind == "musicvideo"
 
+    def cleared_ffmpeg_tags(self) -> tuple[str, ...]:
+        """The tags VODLoft writes that this metadata has no value for, so rewriting a file's tags clears them
+        instead of leaving an old value behind, such as an episode number once a collection numbers by date."""
+        tags = self.ffmpeg_tags()
+        return tuple(key for key in REWRITTEN_FFMPEG_TAGS if key not in tags)
+
     def ffmpeg_tags(self) -> dict[str, str]:
         tags: dict[str, str] = {"title": self.title}
         if self.description:
@@ -101,6 +107,14 @@ class MediaServerMetadata:
         if self.media_type:
             tags["media_type"] = self.media_type
         return tags
+
+
+# Every tag ffmpeg_tags writes, apart from the Source's own id, whose name depends on the Source.
+REWRITTEN_FFMPEG_TAGS = (
+    "title", "description", "comment", "album", "track", "show", "artist", "album_artist", "date", "season_number",
+    "episode_id", "episode_sort", "genre", "director", "writer", "actor", "publisher", "language", "country",
+    "rating", "purl", "media_type",
+)
 
 
 def write_nfo(media_path: str, metadata: MediaServerMetadata) -> str:

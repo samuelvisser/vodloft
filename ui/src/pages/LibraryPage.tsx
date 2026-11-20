@@ -5,7 +5,6 @@ import {Link, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
-import CollectionIndexingProgress from '../components/CollectionIndexingProgress/CollectionIndexingProgress'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import SourceBadge from '../components/Source/SourceBadge'
 import CollectionTile from '../components/CollectionTile/CollectionTile'
@@ -15,6 +14,7 @@ import FilterBar, {ChipFilter} from '../components/common/FilterBar'
 import DownloadStatusBadge from '../components/DownloadProgress/DownloadStatusBadge'
 import CollectionSort, {
     type CollectionSortOrder,
+    type LibrarySortable,
     compareCollections,
     DEFAULT_COLLECTION_SORT,
     isCollectionSortOrder,
@@ -27,18 +27,33 @@ import {CollectionTypeReg} from '../types/collection'
 import DurationPill from '../components/common/DurationPill'
 import './LibraryPage.css'
 import {capitalized, creatorKindText} from '../types/creator'
+import type {Names} from '../types/schemas/source'
+import type {CollectionReadView} from '../types/schemas/collection'
+import type {CreatorRead} from '../types/schemas/creator'
 import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
+import {wordsOf} from '../lib/collectionWords'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SITE_FILTER_STORAGE_KEY = 'librarySiteFilter'
 const LIBRARY_KIND_FILTER_STORAGE_KEY = 'libraryKindFilter'
 const KIND_VALUES = ['creator', 'collection']
 
-/** Creators and collections, with creators named as their Sites call them when they all call them the same. */
-function kindOptions(creatorLabels: string[]) {
-    const labels = new Set(creatorLabels)
-    const creators = labels.size === 1 ? `${capitalized([...labels][0])}s` : 'Creators'
-    return [{value: 'creator', label: creators}, {value: 'collection', label: 'Collections'}]
+type Noun = {singular: string, plural: string}
+
+/** What the library's creators are called: as their Sites call them when they all call them the same, such as hosts. */
+function creatorNoun(creatorNames: Names[]): Noun {
+    const kinds = new Map(creatorNames.map((names) => [names.plural, names]))
+    return kinds.size === 1 ? [...kinds.values()][0] : {singular: 'creator', plural: 'creators'}
+}
+/** Creators and collections. */
+function kindOptions(creators: Noun) {
+    return [{value: 'creator', label: capitalized(creators.plural)}, {value: 'collection', label: 'Collections'}]
+}
+const COLLECTION_NOUN: Noun = {singular: 'collection', plural: 'collections'}
+const MEDIA_TYPE_NOUNS: Record<MediaType, Noun> = {
+    collections: COLLECTION_NOUN,
+    movies: {singular: 'movie', plural: 'movies'},
+    videos: {singular: 'video', plural: 'videos'},
 }
 const LIBRARY_COLLECTION_SORT_STORAGE_KEY = 'libraryCollectionSort'
 
@@ -233,6 +248,39 @@ export default function LibraryPage() {
             (ranks.get(a.slug) ?? 0) - (ranks.get(b.slug) ?? 0) || compareCollections(a, b, collectionSort)
         ))
     }, [collections, filteredCreators, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords, collectionSort])
+    // Creators and collections share the chosen order: a creator counts as opened when its page or one of its
+    // collections was, and was released when its first collection was. While searching, creators come first.
+    const collectionTiles = useMemo(() => {
+        const firstPublished = new Map<string, Date>()
+        for (const collection of collections ?? []) {
+            const date = collection.firstPublishedDate
+            if (!collection.creatorSlug || !date) continue
+            const known = firstPublished.get(collection.creatorSlug)
+            if (!known || date < known) firstPublished.set(collection.creatorSlug, date)
+        }
+        type Tile = {sortable: LibrarySortable} & (
+            {kind: 'creator', creator: CreatorRead} | {kind: 'collection', collection: CollectionReadView})
+        const creatorTiles: Tile[] = filteredCreators.map((creator) => ({
+            kind: 'creator', creator,
+            sortable: {
+                title: creator.title, openCount: creator.openCount, lastOpenedAt: creator.lastOpenedAt,
+                firstPublishedDate: firstPublished.get(creator.slug) ?? null, createdAt: new Date(creator.createdAt),
+            },
+        }))
+        const tiles: Tile[] = filteredCollections.map((collection) => ({kind: 'collection', collection, sortable: collection}))
+        if (searchWords.length > 0) return [...creatorTiles, ...tiles]
+        // The collections are in order already; each creator goes in before the first collection it comes before.
+        const sortedCreators = creatorTiles.sort((a, b) => compareCollections(a.sortable, b.sortable, collectionSort))
+        const merged: Tile[] = []
+        let next = 0
+        for (const tile of tiles) {
+            while (next < sortedCreators.length && compareCollections(sortedCreators[next].sortable, tile.sortable, collectionSort) <= 0) {
+                merged.push(sortedCreators[next++])
+            }
+            merged.push(tile)
+        }
+        return [...merged, ...sortedCreators.slice(next)]
+    }, [collections, filteredCreators, filteredCollections, searchWords, collectionSort])
     const filteredMovies = useMemo(
         () => movies?.filter((movie) => (
             matchesSiteFilter(movie, activeSiteFilter) && matchesLibrarySearch(movie, searchWords)
@@ -321,6 +369,13 @@ export default function LibraryPage() {
     const matchingCount = activeType === 'collections' ? filteredCreators.length + filteredCollections.length
         : activeType === 'movies' ? filteredMovies.length
             : filteredVideos.length
+    // Name what the count holds: one kind of tile when the kind filter picks one, "items" when creators and
+    // collections show together.
+    const creatorsNoun = creatorNoun((creators ?? []).map((creator) => creator.creatorNames))
+    const matchingNoun = activeType !== 'collections' ? MEDIA_TYPE_NOUNS[activeType]
+        : !showKindFilter ? COLLECTION_NOUN
+            : activeKindFilter.length !== 1 ? {singular: 'item', plural: 'items'}
+                : activeKindFilter[0] === 'creator' ? creatorsNoun : COLLECTION_NOUN
     const resetFilters = () => {
         setSiteFilter([])
         setCollectionTypeFilter([])
@@ -360,7 +415,7 @@ export default function LibraryPage() {
                     activeCount={activeFilterCount}
                     footer={filtered && (
                         <div className="filter-bar-count" aria-live="polite">
-                            <strong>{matchingCount.toLocaleString()} matching {activeType}</strong>
+                            <strong>{matchingCount.toLocaleString()} matching {matchingCount === 1 ? matchingNoun.singular : matchingNoun.plural}</strong>
                             <button type="button" className="filter-chip-reset" onClick={resetFilters}>Reset filters</button>
                         </div>
                     )}
@@ -368,7 +423,7 @@ export default function LibraryPage() {
                     {showChips && (
                         <>
                             {showKindFilter && (
-                                <ChipFilter label="Kind" options={kindOptions((creators ?? []).map((creator) => creator.creatorLabel))} selected={activeKindFilter} onChange={setKindFilter}/>
+                                <ChipFilter label="Kind" options={kindOptions(creatorsNoun)} selected={activeKindFilter} onChange={setKindFilter}/>
                             )}
                             <ChipFilter label="Site" options={siteOptions} selected={activeSiteFilter} onChange={setSiteFilter}/>
                             {showTypeFilter && (
@@ -399,7 +454,18 @@ export default function LibraryPage() {
             ) : activeType === 'collections' && hasCollections ? (
                 filteredCreators.length + filteredCollections.length > 0 ? (
                     <div className="library-collection-grid" role="list" aria-label="Collections">
-                        {filteredCreators.map((creator) => {
+                        {collectionTiles.map((tile) => {
+                            if (tile.kind === 'collection') {
+                                const collection = tile.collection
+                                return (
+                                    <CollectionTile
+                                        key={collection.slug} collection={collection}
+                                        // A yt-dlp creator's author is usually the creator itself: do not say its name twice.
+                                        subtitle={collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null}
+                                    />
+                                )
+                            }
+                            const creator = tile.creator
                             const avatar = toImageUrl(creator.avatarUrl)
                             const banner = toImageUrl(creator.bannerUrl)
                             return (
@@ -415,26 +481,12 @@ export default function LibraryPage() {
                                         <span className="library-tile-author">{creatorKindText(creator)}</span>
                                         <span className="library-tile-meta">
                                             <span>{creator.collectionCount} {creator.collectionCount === 1 ? 'collection' : 'collections'}</span>
-                                            <span>{creator.episodeCount} videos</span>
+                                            <span>{wordsOf(creator.words).count(creator.episodeCount)}</span>
                                         </span>
                                     </span>
                                 </Link>
                             )
                         })}
-                        {filteredCollections.map((collection) => (
-                            <CollectionTile
-                                key={collection.slug} collection={collection}
-                                // A yt-dlp creator's author is usually the creator itself: do not say its name twice.
-                                subtitle={collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null}
-                            >
-                                <CollectionIndexingProgress
-                                    collectionId={collection.id}
-                                    collectionSlug={collection.slug}
-                                    pollForStart={collection.episodeCount === 0}
-                                    className="library-collection-indexing"
-                                />
-                            </CollectionTile>
-                        ))}
                     </div>
                 ) : (
                     <NoMatches search={searchWords.length > 0} what="collections"/>

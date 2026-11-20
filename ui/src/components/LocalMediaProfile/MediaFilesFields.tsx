@@ -137,6 +137,9 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
     const {control, formState: {errors}} = form
     const {data: defaults} = useLibraryDefaults()
     const [metadataMode, showNfo] = useWatch({control, name: ['metadataMode', 'showNfo']}) as [string | undefined, boolean | undefined]
+    const collectionScope = useWatch({control, name: 'collectionScope'}) as string | undefined
+    // A profile for the music videos of Music collections calls each one a music video.
+    const musicVideos = collectionScope === 'music_videos'
     const effectiveMetadata = (metadataMode ?? 'system') === 'system' ? defaults?.metadataMode : metadataMode
     const offersInfoFile = useOffersInfoFile(form, mode)
     const writesNfo = isBeside(METADATA, effectiveMetadata) || (mode === 'collection' && !!showNfo)
@@ -176,10 +179,12 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                             <SimpleSelect
                                 inputId="local-media-episode-nfo" registry={EpisodeNfoReg} value={field.value ?? 'episode'}
                                 onChange={(value) => field.onChange(value)}
+                                isDisabled={musicVideos}
                             />
                         )}
                     />
                     <div className="help">
+                        {musicVideos ? 'A profile for the music videos of Music collections calls each one a music video. ' : ''}
                         Music videos get a musicvideo NFO with the creator's artist, which Jellyfin, Emby and Kodi keep in a Music Videos library.
                     </div>
                     {errors.episodeNfo && <div className="error" role="alert">{String(errors.episodeNfo.message)}</div>}
@@ -401,9 +406,13 @@ function MetadataExample({id, text, error, loading, multiline}: {
 function MetadataTextFields({form}: {form: UseFormReturn<any>}) {
     const {formState: {errors}} = form
     const variableQuery = useLocalMediaProfileTemplateVariables('collection')
+    const collectionScope = useWatch({control: form.control, name: 'collectionScope'}) as string | undefined
     const variables = useMemo(
-        () => [...getOutputTemplateVariables('collection', (variableQuery.data ?? []) as OutputTemplateVariable[]), ...METADATA_VARIABLES],
-        [variableQuery.data],
+        () => [
+            ...getOutputTemplateVariables('collection', (variableQuery.data ?? []) as OutputTemplateVariable[], collectionScope),
+            ...METADATA_VARIABLES,
+        ],
+        [variableQuery.data, collectionScope],
     )
     const completions = useJinjaCompletions(variables, false)
     const example = useExampleEpisode()

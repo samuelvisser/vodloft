@@ -69,6 +69,19 @@ def media_duration(media_path: str, *, ffmpeg_path: str = "ffmpeg") -> float | N
     return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
 
+def has_attached_picture(media_path: str, *, ffmpeg_path: str = "ffmpeg") -> bool:
+    """Whether the media file carries artwork, such as an MP4's cover."""
+    try:
+        result = subprocess.run(
+            [ffmpeg_path, "-hide_banner", "-nostdin", "-i", media_path],
+            capture_output=True, text=True, errors="replace", timeout=_DURATION_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        logger.warning("Could not tell whether %s has artwork", media_path, exc_info=True)
+        return False
+    return "(attached pic)" in result.stderr
+
+
 def remux_to_mp4(
         src_path: str,
         dest_path: str,
@@ -239,15 +252,16 @@ def embed_thumbnail(
 
 
 def embed_metadata(
-    media_path: str, metadata: Mapping[str, str], *,
+    media_path: str, metadata: Mapping[str, str], *, cleared_metadata: tuple[str, ...] = (),
     ffmpeg_path: str = "ffmpeg", should_cancel: Optional[CancelCheck] = None,
 ) -> None:
-    embed_media(media_path, metadata=metadata, ffmpeg_path=ffmpeg_path,
+    embed_media(media_path, metadata=metadata, cleared_metadata=cleared_metadata, ffmpeg_path=ffmpeg_path,
                 should_cancel=should_cancel)
 
 
 def embed_media(
     media_path: str, *, metadata: Mapping[str, str] | None = None,
+    cleared_metadata: tuple[str, ...] = (),
     thumbnail_path: str | None = None, audio_only: bool = False,
     subtitles: tuple[tuple[str, str, bool, str | None], ...] = (),
     default_subtitle: int | None = None, square_artwork: bool = False,
@@ -257,6 +271,9 @@ def embed_media(
 
     ``square_artwork`` cuts the artwork to a square from its middle, as music players show album covers.
 
+    ``cleared_metadata`` names tags to remove from the file, as rewriting a file's tags does for the ones that no
+    longer apply. Every stream of the file is copied as it is, so artwork and subtitles it has stay.
+
     Each subtitle is (language, SRT path, forced, track title or None);
     ``default_subtitle`` is the index of the one players pick by default.
 
@@ -264,7 +281,7 @@ def embed_media(
     rewrite a full file after that output has reached its apparent final size.
     The coordinator reports this as an indeterminate activity until it returns.
     """
-    if not metadata and thumbnail_path is None and not subtitles:
+    if not metadata and not cleared_metadata and thumbnail_path is None and not subtitles:
         return
     if not ffmpeg_available(ffmpeg_path):
         raise FfmpegNotFoundError(f"ffmpeg binary '{ffmpeg_path}' not found on PATH")
@@ -321,12 +338,20 @@ def embed_media(
         for key, value in (metadata or {}).items():
             if value:
                 command += ["-metadata", f"{key}={value}"]
+        for key in cleared_metadata:
+            # An empty value removes the tag.
+            command += ["-metadata", f"{key}="]
         if muxer == "mp4":
             # FFmpeg's mdta writer does not emit the covr atom. Selecting it
             # alongside attached_pic silently drops the requested artwork even
             # though FFmpeg exits successfully. Use native MP4 tags when writing
-            # artwork; metadata-only downloads can retain arbitrary mdta keys.
-            flags = "+faststart+use_metadata_tags" if metadata and thumbnail_path is None else "+faststart"
+            # artwork, or when the file already has artwork it keeps; metadata-only
+            # downloads can retain arbitrary mdta keys.
+            arbitrary_keys = (
+                (metadata or cleared_metadata) and thumbnail_path is None
+                and not has_attached_picture(media_path, ffmpeg_path=ffmpeg_path)
+            )
+            flags = "+faststart+use_metadata_tags" if arbitrary_keys else "+faststart"
             command += ["-movflags", flags]
         command += ["-f", muxer, part_path]
         result = (_run_cancellable(command, should_cancel) if should_cancel is not None

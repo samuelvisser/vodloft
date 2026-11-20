@@ -30,6 +30,7 @@ from typing import Any, Literal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.services.new_lists import list_kinds, skipped_kinds
 from backend.services.site_settings import download_profile_defaults, local_media_profile_defaults
 from backend.services.sites import CollectionAlreadyAddedError, collection_site
 
@@ -46,8 +47,8 @@ from sources.ytdlp_options import check_ytdlp_options
 
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import (
-    Collection, CollectionLocalMediaProfile, DownloadProfile, Episode, ExistingFileScan, ImportLink, ImportRun, ImportStep,
-    LocalMediaProfileBase, MediaDownloadBase, VideoLocalMediaProfile,
+    Collection, CollectionLocalMediaProfile, Creator, DownloadProfile, Episode, ExistingFileScan, ImportLink, ImportRun,
+    ImportStep, LocalMediaProfileBase, MediaDownloadBase, VideoLocalMediaProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.adoption import AdoptionError, FoundFile, adopt, download_root, find_file, real_path
@@ -1046,8 +1047,11 @@ def _settle_field_keys(session: Session, plan: ImportPlan, links, library: Mappi
     return replace(plan, profiles=profiles, collections=tuple(collections))
 
 
-def _create_collection(session: Session, plan: CollectionPlan, as_creators: bool = True) -> Collection:
-    """A new yt-dlp Collection for the plan, looked up the way Add Collection does."""
+def _create_collection(
+    session: Session, plan: CollectionPlan, as_creators: bool = True, artists: dict[str, Creator] | None = None,
+) -> Collection:
+    """A new yt-dlp Collection for the plan, looked up the way Add Collection does. ``artists`` are the artists this
+    import has already put in the library, by the name the other program gives them."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
     from backend.utils.helpers import generate_uuid, slugify
@@ -1057,9 +1061,15 @@ def _create_collection(session: Session, plan: CollectionPlan, as_creators: bool
     if plan.creator:
         return _create_creator_collection(session, plan) if as_creators else _create_artist_collection(session, plan)
     if plan.links_only:
-        return _create_links_only_collection(session, plan)
+        collection = _create_links_only_collection(session, plan)
+        if as_creators and plan.artist and plan.artist in (artists or {}):
+            from backend.services.creators import add_to_creator
+
+            add_to_creator(session, collection, artists[plan.artist])
+        return collection
     details = source.collection_details(plan.url)
-    author = details.author_name or details.title
+    # Music is by the artist the other program names, whoever uploaded it.
+    author = plan.artist or details.author_name or details.title
     collection = Collection(
         uuid=generate_uuid(), slug=details.slug, source_key=source.id, title=plan.title or details.title,
         description=details.description, sharing_url=details.url,
@@ -1071,9 +1081,29 @@ def _create_collection(session: Session, plan: CollectionPlan, as_creators: bool
     add_collection(session, collection)
     _add_link_seasons(session, collection, plan)
     if as_creators:
-        _join_creator(session, collection)
+        _join_artist(session, collection, plan, artists or {})
     index_new_collection(session, collection)
     return collection
+
+
+def _join_artist(session: Session, collection: Collection, plan: CollectionPlan, artists: dict[str, Creator]) -> None:
+    """Make a new Collection one of its creator's. Music joins the artist the import already added for the same
+    artist, such as music videos their albums' artist, also from another Site or a label's playlist. Otherwise it joins
+    the creator behind its link, and a creator the import adds there takes the other program's name for the artist."""
+    from backend.services.creators import add_to_creator, rename_creator
+
+    artist = artists.get(plan.artist) if plan.artist else None
+    if artist is None:
+        creator, made = _join_creator(session, collection)
+        if creator is not None and made and plan.artist and creator.title != plan.artist:
+            rename_creator(creator, plan.artist)
+        return
+    if collection.sharing_url is not None and any(section.url == collection.sharing_url for section in artist.sections):
+        # A part of the artist's own page, such as one of their playlists, joins through its link.
+        _join_creator(session, collection)
+    else:
+        with session.begin_nested():
+            add_to_creator(session, collection, artist)
 
 
 def _create_links_only_collection(session: Session, plan: CollectionPlan) -> Collection:
@@ -1086,28 +1116,34 @@ def _create_links_only_collection(session: Session, plan: CollectionPlan) -> Col
         episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
     )
     collection.split_chapters = bool(plan.settings.get("split_chapters", False))
+    if plan.artist:
+        collection.author_name = plan.artist
     _add_link_seasons(session, collection, plan)
     reindex_collection(session, collection)
     return collection
 
 
-def _join_creator(session: Session, collection: Collection) -> None:
-    """Make a new Collection one of the creator behind its link, as Add to creator does, when it has one."""
-    from backend.services.creators import join_creator
+def _join_creator(session: Session, collection: Collection) -> tuple[Creator | None, bool]:
+    """Make a new Collection one of the creator behind its link, as Add to creator does, when it has one. Returns the
+    creator, and whether it was added to the library for it."""
+    from backend.services.creators import account_in_library, creator_site, join_creator
     from sources import Feature, get_source
 
     source = get_source(collection.source_key)
     if not source.has(Feature.CREATORS) or collection.sharing_url is None:
-        return
+        return None, False
     try:
         ref = source.creator_of(collection.sharing_url)
         if ref is None:
-            return
+            return None, False
         details = source.creator_details(ref)
         with session.begin_nested():
-            join_creator(session, collection, source_key=source.id, details=details)
+            known = account_in_library(session, creator_site(source.id, details.url or collection.sharing_url).key, details.ref)
+            creator = join_creator(session, collection, source_key=source.id, details=details)
+        return creator, known is None
     except Exception as exc:  # noqa: BLE001  (a creator that can't be looked up leaves a plain collection)
         logger.info("Imported %s without its creator: %s", collection.title, exc)
+        return None, False
 
 
 def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collection:
@@ -1115,7 +1151,7 @@ def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collect
     of its own, for an import that adds no creators."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
-    from backend.types.link_season_types import LinkSeasons
+    from backend.types.link_season_types import LinkSeasons, NewLinkSeasonAction
     from backend.utils.helpers import generate_uuid, slugify
     from sources import SectionKind, get_source
 
@@ -1129,13 +1165,19 @@ def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collect
         uuid=generate_uuid(), slug=slugify(details.handle or details.title) or details.ref, source_key=source.id,
         title=plan.title or details.title, description=details.description,
         sharing_url=feed.url if feed is not None else details.url or plan.url,
-        membership_level="FREE", type=(CollectionType.MUSIC if details.music else CollectionType(plan.settings.get("type", "series"))).value,
+        membership_level="FREE", type=(CollectionType.MUSIC if details.music and details.music_known else CollectionType(plan.settings.get("type", "series"))).value,
         episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
-        author_name=details.title, author_slug=slugify(details.handle or details.title) or details.ref,
+        author_name=plan.artist or details.title, author_slug=slugify(details.handle or details.title) or details.ref,
         thumbnail_landscape_path=details.avatar_url or next((section.image_url for section in sections if section.image_url), None),
-        # Every album is a season, the ones to come too.
-        link_seasons=LinkSeasons.ALL.value,
+        link_seasons=LinkSeasons.SELECTED.value,
     )
+    # Every album is a season, the ones to come too; a kind of list an artist skips, such as a SoundCloud playlist,
+    # is not, as the other program took only albums.
+    kinds = list_kinds([collection_site(collection)])
+    skipped = skipped_kinds(collection_site(collection), collection.type == CollectionType.MUSIC.value)
+    collection.new_lists = {
+        kind.key: (NewLinkSeasonAction.IGNORE if kind.key in skipped else NewLinkSeasonAction.ADD).value for kind in kinds
+    }
     add_collection(session, collection)
     index_new_collection(session, collection)
     return collection
@@ -1145,10 +1187,10 @@ def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collec
     """The collection of the creator whose page the plan's link is, such as a Bandcamp artist: the creator is added
     with everything on it in one collection, each list a season of its own, and takes the plan's genre and rating
     for the collections it makes later."""
-    from backend.services.creators import NewCollectionSettings, SectionPlan, add_creator
-    from backend.types.creator_types import SectionTarget
+    from backend.services.creators import NewCollectionSettings, SectionPlan, add_creator, rename_creator
+    from backend.types.creator_types import NewSectionAction, SectionTarget
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
-    from sources import get_source
+    from sources import SectionKind, get_source
 
     from backend.services.creators import account_in_library, creator_site
 
@@ -1159,16 +1201,30 @@ def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collec
     if existing is not None and existing.main_collection is not None:
         # The artist is in the Library already: the import links their collection.
         raise CollectionAlreadyAddedError(existing.main_collection, existing.site)
-    plans = [SectionPlan(section.ref, SectionTarget.MAIN) for section in details.sections if section.access is None]
-    kind = CollectionType.MUSIC if details.music else CollectionType(plan.settings.get("type", CollectionType.SERIES.value))
+    kind = CollectionType.MUSIC if details.music and details.music_known else CollectionType(plan.settings.get("type", CollectionType.SERIES.value))
+    music = kind is CollectionType.MUSIC
+    # An artist's discography is their albums, not the kinds of list an artist skips, such as the playlists they put
+    # together on SoundCloud.
+    kinds = list_kinds([site])
+    skipped = skipped_kinds(site, music)
+    plans = [SectionPlan(section.ref, SectionTarget.MAIN) for section in details.sections if section.access is None
+             and not (section.kind is SectionKind.LIST and section.type.key in skipped)]
     creator, _made = add_creator(session, source_key=source.id, details=details, plans=plans, settings=NewCollectionSettings(
         type=kind, episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
         membership_level="FREE",
-    ))
+    # The other program downloaded every new album as it came out.
+    ), new_lists={site.key: {
+        kind.key: (NewSectionAction.IGNORE if kind.key in skipped else NewSectionAction.SEASON).value
+        for kind in kinds if kind.seasons
+    }})
     creator.genre, creator.content_rating = plan.settings.get("genre"), plan.settings.get("content_rating")
     main = creator.accounts[0].main_collection
     if main is None:
         raise ValueError(f"{details.title} has nothing VODLoft can add")
+    if plan.artist and creator.title != plan.artist:
+        rename_creator(creator, plan.artist)
+    if plan.title:
+        main.title = plan.title
     return main
 
 
@@ -1234,6 +1290,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
 
 def _upsert_collection(
     session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report, as_creators: bool = True,
+    artists: dict[str, Creator] | None = None,
 ) -> tuple[Collection | None, bool]:
     """The Collection, and whether it was just created (and so is being indexed)."""
     link = links.get(("collection", plan.external_id))
@@ -1247,7 +1304,7 @@ def _upsert_collection(
     if existing is None:
         try:
             with session.begin_nested():
-                existing = _create_collection(session, plan, as_creators)
+                existing = _create_collection(session, plan, as_creators, artists)
         except CollectionAlreadyAddedError as exc:
             # The same collection, through another Source or under another link.
             existing = exc.existing
@@ -1262,6 +1319,9 @@ def _upsert_collection(
                 library[_normalise_url(existing.sharing_url)] = existing
             report.add("created", plan.title, "Added to the Library", warnings=[_warning(warning) for warning in plan.warnings])
             report.counts["collections_created"] += 1
+    if artists is not None and plan.artist and existing.creator is not None:
+        # The artist's other music, such as their music videos, joins this artist.
+        artists.setdefault(plan.artist, existing.creator)
     if plan.added_at is not None and (existing.created_at is None or plan.added_at < existing.created_at):
         # The Collection has been in your library since the other program added it.
         existing.created_at = plan.added_at
@@ -1289,9 +1349,11 @@ def _upsert_collection(
         _report_changes(report, plan.title, changes)
         if added := _add_link_seasons(session, existing, plan):
             from backend.operations.collections import CollectionIndexOperation
+            from backend.services.link_seasons import section_list_names
             from task_manager.scheduler.operation_factory import create_operation
 
-            report.add("updated", plan.title, f"Updated: {added} {'playlist' if added == 1 else 'playlists'} added as seasons")
+            names = section_list_names(existing)
+            report.add("updated", plan.title, f"Updated: {added} {names.singular if added == 1 else names.plural} added as seasons")
             create_operation(session, CollectionIndexOperation(existing))
     if "check_frequency" in write or "check_cron" in write:
         session.flush()
@@ -1430,12 +1492,13 @@ def _apply_loaded_plan(
         files_by_collection[file.collection_external_id].append(file)
     library = _library_collections(session)
     steps: list[ImportStep] = []
+    artists: dict[str, Creator] = {}
     for collection_plan in selected:
         profile = profiles.get(collection_plan.profile_external_id or "")
         if profile is None:
             continue
         collection, created = _upsert_collection(
-            session, collection_plan, library, links, run, report, plan.creators and options.as_creators,
+            session, collection_plan, library, links, run, report, plan.creators and options.as_creators, artists,
         )
         if collection is None:
             continue

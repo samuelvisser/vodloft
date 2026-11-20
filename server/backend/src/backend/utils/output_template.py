@@ -56,7 +56,7 @@ COLLECTION_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "episode_published_time", "episode_published_datetime", "episode_index", "extra_index",
     "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
     "creator_title", "creator_handle", "creator_kind", "section_title", "section_kind",
-    "artist", "album", "track_number", "track_number_padded",
+    "artist", "album", "album_slug", "album_number", "track_number", "track_number_padded",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
 # A Video profile keeps single videos and movies with their extras. The movie_* values are empty for a
@@ -390,6 +390,9 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "season_index": str(episode.season.index) if episode.season else "",
         "season_type": episode.season.season_type if episode.season else "",
         "season_number": str(episode.season.season_number) if episode.season else "",
+        # A Music collection's albums are its seasons, so a Music profile can name them as albums.
+        "album_slug": episode.season.slug if episode.season else "",
+        "album_number": str(episode.season.season_number) if episode.season else "",
         "episode": episode.slug,
         "episode_index": str(episode.index),
         "extra_index": str(episode.extra_index) if episode.extra_index is not None else "",

@@ -19,7 +19,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, MediaDownloadBase, Season
-from backend.types.collection_types import CollectionType, EpisodeIdentifier
+from backend.types.collection_contracts import collection_contract
+from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonType
 
 _SEASONAL = re.compile(r"^ep\.S(\d+)E(\d+)$")
@@ -65,7 +66,7 @@ def _dated_order(s: Session, collection: Collection) -> list[Season]:
     ).all())
 
     # An artist's albums follow the order the artist gives them at the Site, after the singles.
-    site_order = collection.type == CollectionType.MUSIC.value
+    site_order = collection_contract(collection.type).site_order
     album_places: dict[int, int] = {}
     for link in collection.lists if site_order else ():
         if link.season_id is not None:

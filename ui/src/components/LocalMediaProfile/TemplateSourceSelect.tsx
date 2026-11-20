@@ -11,6 +11,8 @@ import './TemplateSourceSelect.css'
 
 type Props = {
     mode: LocalMediaProfileTemplateSourceMode
+    /** What the example is, such as Example track for a profile for Music tracks. */
+    label?: string
     sources: LocalMediaProfileTemplateSource[]
     selectedSource: LocalMediaProfileTemplateSource | null
     isLoading: boolean
@@ -62,6 +64,7 @@ function optionForSource(
 
 export default function TemplateSourceSelect({
     mode,
+    label,
     sources,
     selectedSource,
     isLoading,
@@ -103,7 +106,7 @@ export default function TemplateSourceSelect({
             onLoadPrevious={onLoadPrevious}
             placeholder="Search media…"
             noOptionsMessage="No matching media found"
-            ariaLabel={mode === 'collection' ? 'Example episode' : 'Example video or movie'}
+            ariaLabel={label ?? (mode === 'collection' ? 'Example episode' : 'Example video or movie')}
         />
     )
 }

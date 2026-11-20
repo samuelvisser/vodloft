@@ -8,6 +8,8 @@ import {Link, useNavigate} from 'react-router-dom'
 import {apiUrl} from '../../lib/api'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {faIcon} from '../../icons/faIcon'
+import {collectionWords, CollectionWords} from '../../lib/collectionWords'
+import {NamesSchema} from '../../types/schemas/source'
 import '../common/DrmProtected.css'
 import './SeasonPlaceNote.css'
 
@@ -15,7 +17,8 @@ const SeasonPlaceSchema = z.object({
     belongsElsewhere: z.boolean(),
     seasonName: z.string().nullable().optional(),
     linkTitle: z.string().nullable().optional(),
-    linkKind: z.string().default('playlist'),
+    /** What the collection's Site calls its link seasons, such as playlists. */
+    linkNames: NamesSchema.nullable().optional(),
     /** Reassigned: the collection of its creator that the episode belongs in now. */
     collectionSlug: z.string().nullable().optional(),
     collectionTitle: z.string().nullable().optional(),
@@ -32,7 +35,10 @@ const ReassignedMoveSchema = z.object({
 })
 export type ReassignedMove = z.infer<typeof ReassignedMoveSchema>
 
-export const MOVED_MESSAGE = 'Belongs in another season now; it stays where it is until you move it, files and all'
+
+/** What the Moved badge explains, in the collection's words. */
+export const movedMessage = (words: CollectionWords = collectionWords(null)) =>
+    `Belongs in another ${words.season.singular} now; it stays where it is until you move it, files and all`
 
 const placeKey = (episodeSlug: string) => ['episode', episodeSlug, 'seasonPlace']
 const movedKey = (collectionSlug: string) => ['collection', collectionSlug, 'movedEpisodes']
@@ -83,13 +89,13 @@ export function useReassignedEpisodes(collectionSlug: string | undefined) {
 }
 
 /** What moving reassigned episodes did, in words. */
-export function reassignedMoveMessage(result: ReassignedMove): string {
-    if (!result.episodes) return 'No episodes to move'
+export function reassignedMoveMessage(result: ReassignedMove, words: CollectionWords = collectionWords(null)): string {
+    if (!result.episodes) return `No ${words.episode.plural} to move`
     const parts = [
         result.renamed ? `renaming ${result.renamed} ${result.renamed === 1 ? 'download' : 'downloads'} into ${result.episodes === 1 ? 'its' : 'their'} new collection` : null,
         result.downloading ? `downloading ${result.downloading} again with the new collection's Local Media Profile; the old files go once that succeeded` : null,
     ].filter(Boolean)
-    return `Moving ${result.episodes} ${result.episodes === 1 ? 'episode' : 'episodes'}${parts.length ? `: ${parts.join(', and ')}` : ''}`
+    return `Moving ${result.episodes} ${result.episodes === 1 ? words.episode.singular : words.episode.plural}${parts.length ? `: ${parts.join(', and ')}` : ''}`
 }
 
 /** Move reassigned episodes to the collections their creator places them in now. */
@@ -103,7 +109,7 @@ export async function postReassignedMove(path: string): Promise<ReassignedMove> 
 }
 
 /** Move a reassigned episode, files and all, to the collection it belongs in now. */
-export function useMoveToCollection(episodeSlug: string, collectionSlug?: string) {
+export function useMoveToCollection(episodeSlug: string, collectionSlug?: string, words: CollectionWords = collectionWords(null)) {
     const queryClient = useQueryClient()
     const navigate = useNavigate()
     const [moving, setMoving] = useState(false)
@@ -111,7 +117,7 @@ export function useMoveToCollection(episodeSlug: string, collectionSlug?: string
         setMoving(true)
         try {
             const result = await postReassignedMove(`/episodes/${encodeURIComponent(episodeSlug)}/move-to-collection`)
-            toast.success(reassignedMoveMessage(result))
+            toast.success(reassignedMoveMessage(result, words))
             if (result.episodes && result.downloading === 0 && result.episodeSlug && result.collectionSlug) {
                 // The episode lives in its new collection now.
                 navigate(`/collection/${result.collectionSlug}/episode/${result.episodeSlug}`, {replace: true})
@@ -125,7 +131,7 @@ export function useMoveToCollection(episodeSlug: string, collectionSlug?: string
                 ] : []),
             ])
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Could not move the episode')
+            toast.error(error instanceof Error ? error.message : `Could not move the ${words.episode.singular}`)
         } finally {
             setMoving(false)
         }
@@ -134,7 +140,7 @@ export function useMoveToCollection(episodeSlug: string, collectionSlug?: string
 }
 
 /** Move an episode, files and all, to the season it belongs in now. */
-export function useMoveToSeason(episodeSlug: string, collectionSlug?: string) {
+export function useMoveToSeason(episodeSlug: string, collectionSlug?: string, words: CollectionWords = collectionWords(null)) {
     const queryClient = useQueryClient()
     const startOperation = useStartOperation()
     const [moving, setMoving] = useState(false)
@@ -142,14 +148,14 @@ export function useMoveToSeason(episodeSlug: string, collectionSlug?: string) {
         setMoving(true)
         try {
             await startOperation(`${apiUrl()}/episodes/${encodeURIComponent(episodeSlug)}/move-to-season`, {method: 'POST'})
-            toast.success('Moving the episode and its files')
+            toast.success(`Moving the ${words.episode.singular} and its files`)
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: placeKey(episodeSlug)}),
                 queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}),
                 ...(collectionSlug ? [queryClient.invalidateQueries({queryKey: movedKey(collectionSlug)})] : []),
             ])
         } catch (error) {
-            toast.error(error instanceof OperationStartError ? error.message : 'Could not move the episode')
+            toast.error(error instanceof OperationStartError ? error.message : `Could not move the ${words.episode.singular}`)
         } finally {
             setMoving(false)
         }
@@ -158,18 +164,20 @@ export function useMoveToSeason(episodeSlug: string, collectionSlug?: string) {
 }
 
 /** Where the episode belongs now, in words. */
-export function newPlace(place: SeasonPlace): string {
+export function newPlace(place: SeasonPlace, words: CollectionWords = collectionWords(null)): string {
+    const season = words.season.singular
     if (place.linkTitle) {
-        const season = place.seasonName && place.seasonName !== place.linkTitle ? ` (${place.seasonName})` : ''
-        return `the season of the ${place.linkKind} ${place.linkTitle}${season}`
+        if (place.linkNames?.singular === season) return `the ${season} ${place.linkTitle}`
+        const name = place.seasonName && place.seasonName !== place.linkTitle ? ` (${place.seasonName})` : ''
+        return `the ${season} of the ${place.linkNames?.singular} ${place.linkTitle}${name}`
     }
-    return place.seasonName ? `the season ${place.seasonName}` : 'another season'
+    return place.seasonName ? `the ${season} ${place.seasonName}` : `another ${season}`
 }
 
 /** Marks an episode that belongs in another season now; as text, a label on a details line. */
-export function MovedBadge({onCover = false, asText = false}: {onCover?: boolean, asText?: boolean}) {
+export function MovedBadge({onCover = false, asText = false, words}: {onCover?: boolean, asText?: boolean, words?: CollectionWords}) {
     return (
-        <span className={asText ? 'episode-summary-item episode-summary-label moved-label' : `drm-badge moved-badge${onCover ? ' drm-badge-cover' : ''}`} title={MOVED_MESSAGE}>
+        <span className={asText ? 'episode-summary-item episode-summary-label moved-label' : `drm-badge moved-badge${onCover ? ' drm-badge-cover' : ''}`} title={movedMessage(words)}>
             <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-arrow-left')} aria-hidden="true"/>
             Moved
         </span>
@@ -191,16 +199,21 @@ export function ReassignedBadge({collectionTitle, onCover = false, asText = fals
 
 /** A note on a downloaded episode that its collection's link seasons now put in another season, or that its creator
  * places in another collection, with a way to move it. */
-export default function SeasonPlaceNote({episodeSlug, collectionSlug, canManage}: {episodeSlug: string, collectionSlug?: string, canManage: boolean}) {
+export default function SeasonPlaceNote({episodeSlug, collectionSlug, canManage, words = collectionWords(null), fileWords = words}: {
+    episodeSlug: string, collectionSlug?: string, canManage: boolean,
+    /** What the collection calls its seasons and episodes, and the downloads of them. */
+    words?: CollectionWords, fileWords?: CollectionWords,
+}) {
     const {data: place} = useSeasonPlace(episodeSlug)
-    const {move, moving} = useMoveToSeason(episodeSlug, collectionSlug)
-    const toCollection = useMoveToCollection(episodeSlug, collectionSlug)
+    const {move, moving} = useMoveToSeason(episodeSlug, collectionSlug, words)
+    const toCollection = useMoveToCollection(episodeSlug, collectionSlug, words)
+    const {season, episode} = words
     if (place?.collectionSlug) {
         return (
             <div className="season-place-note" role="note">
                 <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-from-bracket')} aria-hidden="true"/>
                 <p>
-                    <strong>Reassigned.</strong> Its creator places this episode in{' '}
+                    <strong>Reassigned.</strong> Its creator places this {episode.singular} in{' '}
                     <Link to={`/collection/${place.collectionSlug}`}>{place.collectionTitle}</Link> now. It is downloaded,
                     so it stays here, files and all, until you move it. Moving it renames its files into that collection,
                     or downloads it again there when that collection downloads it with another Local Media Profile; the
@@ -220,11 +233,11 @@ export default function SeasonPlaceNote({episodeSlug, collectionSlug, canManage}
         <div className="season-place-note" role="note">
             <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-arrow-left')} aria-hidden="true"/>
             <p>
-                <strong>Moved.</strong> The {place.linkKind}s of this collection changed, and this episode belongs in{' '}
-                {newPlace(place)} now. It is downloaded, so it stays in its old season until you move it: moving it
-                renames its files and puts them in the folder of its new season. Move it here, or move every such
-                episode of the collection at once with <em>Rename all episode files</em> and <em>Rename season folders
-                too</em> in the collection's Actions menu.
+                <strong>Moved.</strong> The {place.linkNames?.plural} of this collection changed, and this {episode.singular} belongs in{' '}
+                {newPlace(place, words)} now. It is downloaded, so it stays in its old {season.singular} until you move it: moving it
+                renames its files and puts them in the folder of its new {season.singular}. Move it here, or move every such
+                {' '}{episode.singular} of the collection at once with <em>Rename all {fileWords.episode.singular} files</em> and{' '}
+                <em>Rename {season.singular} folders too</em> in the collection's Actions menu.
             </p>
             {canManage && (
                 <button type="button" className="btn btn-small" onClick={() => void move()} disabled={moving}>

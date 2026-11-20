@@ -7,6 +7,8 @@ from typing import Optional
 from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.api.models.collection_contract import CollectionWordsAPIRead
+from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead
 from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 
 
@@ -49,10 +51,10 @@ class CollectionListAPIRead(ResponseBase):
     creator."""
 
 
-class ListNamesAPIRead(ResponseBase):
-    one: str
-    many: str
-    loose_season: str
+class CollectionNewListAPIRead(ListKindAPIRead):
+    """What the collection does with a new list of one kind, when only selected lists are seasons."""
+
+    action: NewLinkSeasonAction
 
 
 class CollectionSeasonsAPIRead(ResponseBase):
@@ -69,7 +71,8 @@ class CollectionSeasonsAPIRead(ResponseBase):
     """The collection can hold only what its link seasons have, with links the user adds from any Site of its
     Source."""
     link_seasons: LinkSeasons
-    new_link_seasons: NewLinkSeasonAction
+    new_lists: list[CollectionNewListAPIRead]
+    """What happens with a list the creator adds, for each kind of list of the collection's Site."""
     list_layout: ListLayout
     loose_videos: LooseVideos
     outside_videos: OutsideVideos
@@ -81,13 +84,25 @@ class CollectionSeasonsAPIRead(ResponseBase):
     """The videos that no playlist that is a season has now, which leave, files and all, when the collection is set
     to hold only what its playlists have."""
     only_leaving_with_files: int = 0
-    names: ListNamesAPIRead
+    list_types: list[SectionTypeAPIRead]
+    """The types of list of the collection's Site, which its link seasons come from, such as playlists, or albums and
+    playlists on SoundCloud."""
+    section_list_names: NamesAPIRead
+    """Those types of list named together, such as albums and playlists."""
+    loose_season: str
+    """The name of the season of the videos in none of the lists, such as Videos, Singles or Tracks."""
     creator_slug: Optional[str] = None
     """For a creator's own collection: the creator, which finds its new lists and decides what happens with them."""
     creator_title: Optional[str] = None
-    """What the collection's Site calls its link seasons, such as playlists or albums."""
-    music: bool = False
-    """A Music collection, of an artist's tracks rather than a creator's videos."""
+    site_order: bool = False
+    """The link seasons keep the order the Site gives the lists, as an artist's albums do, instead of by date."""
+    words: CollectionWordsAPIRead
+    """What the collection calls its seasons and episodes."""
+    creator_names: NamesAPIRead
+    """What the collection calls the creator behind it, such as artist in a Music collection."""
+    media_names: NamesAPIRead
+    """What the collection calls what its lists hold: the Site's videos, tracks on a Site with sound only, or the
+    music videos of a Music collection."""
     playlists: list[CollectionListAPIRead]
 
 
@@ -144,7 +159,8 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     custom_season_order: bool
     """False puts the seasons back in VODLoft's order by date, whatever ``seasons`` says about their order."""
     link_seasons: LinkSeasons = LinkSeasons.OFF
-    new_link_seasons: NewLinkSeasonAction = NewLinkSeasonAction.ASK
+    new_lists: dict[str, NewLinkSeasonAction] = Field(default_factory=dict, max_length=20)
+    """What happens with a list the creator adds, by the key of its kind; a kind left out keeps its setting."""
     list_layout: ListLayout = ListLayout.SEASON_EACH
     loose_videos: LooseVideos = LooseVideos.ONE_SEASON
     outside_videos: OutsideVideos = OutsideVideos.LEAVE_OUT

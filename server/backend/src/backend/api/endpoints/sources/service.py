@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
     ApiKeyNoteAPIRead, ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
-    SourceAPIRead, SourceSiteAPIRead,
+    NamesAPIRead, SourceAPIRead, SourceSiteAPIRead,
 )
 from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase, Settings
 from backend.security.access import Access
@@ -16,6 +16,7 @@ from backend.types.collection_types import CollectionType
 from backend.services.media_access import access_locked, link_access
 from backend.services.sites import preferred_sources, site_record
 from backend.services.source_requests import asking_source
+from config.network import is_no_internet_error
 from backend.services.users import settings_row
 from backend.utils.helpers import slugify
 from sources import (
@@ -61,6 +62,13 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
     access.check_link(source, url)
     with asking_source(f"{source.name} could not look up this collection"):
         details = source.collection_details(url)
+    try:
+        music = source.music_reason(url, details)
+    except Exception as exc:  # A guess: a failed look leaves the type to the name.
+        if is_no_internet_error(exc):
+            raise
+        logger.info("Could not tell whether %s is music: %s", url, exc)
+        music = None
     author = details.author_name or details.title
     return CollectionDetailsAPIRead(
         source_key=source.id,
@@ -71,7 +79,10 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
         author_name=author,
         author_slug=slugify(author) or details.slug,
         thumbnail_landscape_path=details.image_url,
-        probable_collection_type=CollectionType.PODCAST if names_a_podcast(details.title) else CollectionType.SERIES,
+        probable_collection_type=(
+            CollectionType.MUSIC if music else CollectionType.PODCAST if names_a_podcast(details.title) else CollectionType.SERIES
+        ),
+        music_reason=music,
         seasons=details.seasons,
     )
 
@@ -86,19 +97,25 @@ def search_source(access: Access, source: Source, query: str) -> SearchResultsAP
         "results": [
             result.model_copy(update={
                 "access_label": _access_label(source, result.url, result.access),
-                "creator_label": _creator_label(source, result.kind, result.url),
+                "creator_names": _creator_names(source, result.kind, result.url),
             })
             for result in results.results if access.allows_link(source.id, result.url)
         ],
     })
 
 
-def _creator_label(source: Source, kind: str, url: str) -> str | None:
+def _creator_names(source: Source, kind: str, url: str) -> NamesAPIRead | None:
     """What the Site calls a creator, when a collection result is a creator's own page that can be added as one."""
     if kind != "collection" or not source.has(Feature.CREATORS) or not source.is_creator_page(url):
         return None
     site = source.site_for(url)
-    return site.creator_label if site is not None and site.creators else None
+    return NamesAPIRead.model_validate(site.creator_names) if site is not None and site.creators else None
+
+
+def _creator_sections(source: Source, url: str) -> NamesAPIRead | None:
+    """Every type of section a creator has on the link's Site, named together."""
+    site = source.site_for(url)
+    return NamesAPIRead.model_validate(site.section_names) if site is not None else None
 
 
 def _access_label(source: Source, url: str, key: str | None) -> str | None:
@@ -203,7 +220,9 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         access_description=found.description if found is not None else None,
         access_locked=access_locked(source.id, link.access, None),
         preview=ResolvedLinkPreviewAPIRead.model_validate(link),
-        creator_url=link.creator_url, creator_label=link.creator_label,
+        creator_url=link.creator_url,
+        creator_names=NamesAPIRead.model_validate(link.creator_names) if link.creator_names else None,
+        creator_sections=_creator_sections(source, link.creator_url or link.url) if link.creator_names else None,
         candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],
     )
 

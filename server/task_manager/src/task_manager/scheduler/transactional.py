@@ -12,7 +12,8 @@ from task_manager.after_commit import keep_until_commit
 
 
 logger = logging.getLogger(__name__)
-_PENDING_DISPATCHES_KEY = "vodloft.pending_task_dispatches"
+QUEUED_TASKS_KEY = "vodloft.pending_task_dispatches"
+"""Where a session keeps the tasks it queued until it commits."""
 
 
 @dataclass(frozen=True)
@@ -44,9 +45,18 @@ def queue_task_after_commit(
         operation_slot=operation_slot,
         kwargs=dict(kwargs),
     )
-    pending: list[PendingTaskDispatch] = session.info.setdefault(_PENDING_DISPATCHES_KEY, [])
+    pending: list[PendingTaskDispatch] = session.info.setdefault(QUEUED_TASKS_KEY, [])
     if dispatch not in pending:
         pending.append(dispatch)
+
+
+def take_queued_tasks(session: Session, *, since: int) -> list[PendingTaskDispatch]:
+    """Take the tasks queued after the first ``since`` without an operation out of the queue, so that an operation
+    can run them as its own targets instead."""
+    queued: list[PendingTaskDispatch] = session.info.get(QUEUED_TASKS_KEY, [])
+    taken = [task for task in queued[since:] if not task.operation_ids]
+    session.info[QUEUED_TASKS_KEY] = queued[:since] + [task for task in queued[since:] if task.operation_ids]
+    return taken
 
 
 @event.listens_for(Session, "after_commit")
@@ -55,7 +65,7 @@ def _dispatch_committed_tasks(session: Session) -> None:
     if session.in_nested_transaction():
         return
 
-    pending: list[PendingTaskDispatch] = session.info.pop(_PENDING_DISPATCHES_KEY, [])
+    pending: list[PendingTaskDispatch] = session.info.pop(QUEUED_TASKS_KEY, [])
     if not pending:
         return
 
@@ -84,8 +94,8 @@ def _dispatch_committed_tasks(session: Session) -> None:
 
 @event.listens_for(Session, "after_rollback")
 def _discard_rolled_back_tasks(session: Session) -> None:
-    session.info.pop(_PENDING_DISPATCHES_KEY, None)
+    session.info.pop(QUEUED_TASKS_KEY, None)
 
 
 # A SAVEPOINT that rolls back only drops what was queued inside it.
-keep_until_commit(_PENDING_DISPATCHES_KEY)
+keep_until_commit(QUEUED_TASKS_KEY)

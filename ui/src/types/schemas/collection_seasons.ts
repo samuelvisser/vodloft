@@ -1,7 +1,9 @@
 import {z} from 'zod'
+import {NamesSchema, SectionTypeSchema} from './source'
 
 export const LinkSeasonModeValues = ['all', 'selected'] as const
 export const NewLinkSeasonValues = ['ask', 'add', 'ignore'] as const
+export type NewLinkSeason = typeof NewLinkSeasonValues[number]
 export const ListLayoutValues = ['season_each', 'by_year'] as const
 export const LooseVideosValues = ['one_season', 'by_year'] as const
 export const OutsideVideosValues = ['leave_out', 'add', 'only'] as const
@@ -53,7 +55,11 @@ export const CollectionSeasonsReadSchema = z.object({
     /** The collection can hold only what its playlists have, with links you add from any site. */
     linksOnlyOffered: z.boolean().default(false),
     linkSeasons: z.enum(['off', ...LinkSeasonModeValues]),
-    newLinkSeasons: z.enum(NewLinkSeasonValues),
+    /** What happens with a list the creator adds, for each kind of list of the collection's Site. */
+    newLists: z.array(z.object({
+        key: z.string(), names: NamesSchema, seasons: z.boolean(), albums: z.boolean().default(false),
+        action: z.enum(NewLinkSeasonValues),
+    })),
     listLayout: z.enum(ListLayoutValues).default('season_each'),
     looseVideos: z.enum(LooseVideosValues),
     outsideVideos: z.enum(OutsideVideosValues),
@@ -62,13 +68,23 @@ export const CollectionSeasonsReadSchema = z.object({
     /** The videos no playlist that is a season has now, which leave once the collection holds only what they have. */
     onlyLeavingCount: z.number().default(0),
     onlyLeavingWithFiles: z.number().default(0),
-    /** What the collection's Site calls them: playlist and Videos, or album and Singles in a Music collection. */
-    names: z.object({one: z.string(), many: z.string(), looseSeason: z.string()}),
+    /** The types of list of the collection's Site, which its link seasons come from. */
+    listTypes: z.array(SectionTypeSchema),
+    /** Those types of list named together, such as albums and playlists. */
+    sectionListNames: NamesSchema,
+    /** The season of the videos in none of the lists, such as Videos, Singles or Tracks. */
+    looseSeason: z.string(),
+    /** What the collection's Site calls the creator behind it, such as artist in a Music collection. */
+    creatorNames: NamesSchema,
+    /** What the collection's Site calls its media: videos, or tracks on a Site with sound only. */
+    mediaNames: NamesSchema,
     /** For a creator's own collection: the creator, which finds its new playlists and decides what happens with them. */
     creatorSlug: z.string().nullable().default(null),
     creatorTitle: z.string().nullable().default(null),
-    /** A Music collection, of an artist's tracks rather than a creator's videos. */
-    music: z.boolean().default(false),
+    /** The link seasons keep the order the Site gives the lists, as an artist's albums do, instead of by date. */
+    siteOrder: z.boolean().default(false),
+    /** What the collection calls its seasons and episodes. */
+    words: z.object({season: NamesSchema, episode: NamesSchema}),
     playlists: z.array(CollectionListReadSchema),
 })
 export type CollectionSeasonsRead = z.infer<typeof CollectionSeasonsReadSchema>
@@ -82,7 +98,8 @@ export const CollectionSeasonsFormSchema = z.object({
     customSeasonOrder: z.boolean().default(false),
     linkSeasonsOn: z.boolean().default(false),
     linkSeasonMode: z.enum(LinkSeasonModeValues).default('all'),
-    newLinkSeasons: z.enum(NewLinkSeasonValues).default('ask'),
+    /** What happens with a new list, by the key of its kind. */
+    newLists: z.record(z.string(), z.enum(NewLinkSeasonValues)).default({}),
     listLayout: z.enum(ListLayoutValues).default('season_each'),
     looseVideos: z.enum(LooseVideosValues).default('one_season'),
     outsideVideos: z.enum(OutsideVideosValues).default('leave_out'),
@@ -107,7 +124,7 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         customSeasonOrder: view.customSeasonOrder,
         linkSeasonsOn: view.linkSeasons !== 'off',
         linkSeasonMode: view.linkSeasons === 'off' ? 'all' : view.linkSeasons,
-        newLinkSeasons: view.newLinkSeasons,
+        newLists: Object.fromEntries(view.newLists.map((setting) => [setting.key, setting.action])),
         listLayout: view.listLayout,
         looseVideos: view.looseVideos,
         outsideVideos: view.outsideVideos,

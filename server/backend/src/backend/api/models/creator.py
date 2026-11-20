@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal, Optional
 
 from pydantic import AliasChoices, AliasPath, Field
@@ -8,7 +8,11 @@ from pydantic import AliasChoices, AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.pagination import CursorPageRead
-from backend.api.models.source import CreatorSectionNamesAPIRead, SiteAPIRead
+from backend.api.models.collection import (
+    CollectionIdentificationChangeItemAPIRead, CollectionIdentificationProfileFilesAPIRead,
+)
+from backend.api.models.collection_contract import CollectionWordsAPIRead
+from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead, SiteAPIRead
 from backend.types.creator_types import NewSectionAction, SectionTarget
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -29,7 +33,12 @@ class CreatorSectionAPIRead(ResponseBase):
     title: str
     kind: Literal["feed", "list", "show", "item"]
     role: str
-    kind_label: Optional[str] = None
+    type: str = Field(validation_alias=AliasPath("section_type", "key"))
+    """The key of the Site's section type the section is, such as album."""
+    names: NamesAPIRead = Field(validation_alias=AliasPath("section_type", "names"))
+    """What the Site calls the section's type, or VODLoft's own word for its kind where the Site names none."""
+    kind_names: NamesAPIRead = Field(validation_alias=AliasPath("section_type", "kind_names"))
+    """VODLoft's own word for the section's kind, such as feed, which names several types of feed together."""
     item_count: Optional[int] = None
     image_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("image_path", "image_url"))
     description: Optional[str] = None
@@ -39,6 +48,11 @@ class CreatorSectionAPIRead(ResponseBase):
     collection_slug: Optional[str] = None
     """The collection that keeps the section, when one does."""
     collection_title: Optional[str] = None
+    movie_slug: Optional[str] = None
+    """The movie in the Library that this single item is, when it is one."""
+    movie_title: Optional[str] = None
+    movie_joined: bool = False
+    """The movie is one of this creator's already."""
     status: Literal["known", "new", "ignored"] = "known"
     """For a creator in the Library: "new" when the daily look found it and it waits for a choice."""
 
@@ -48,9 +62,19 @@ class SectionPlanAPIRead(ResponseBase):
     target: SectionTarget
 
 
+class CreatorNewListAPIRead(ListKindAPIRead):
+    """What the creator does with a new list of one type on one of their Sites, such as a new YouTube playlist."""
+
+    site_key: str = Field(validation_alias=AliasPath("kind", "site_key"))
+    site_name: str = Field(validation_alias=AliasPath("kind", "site_name"))
+    action: NewSectionAction
+
+
 class CreatorPresetAPIRead(ResponseBase):
     key: CreatorPreset
     plan: list[SectionPlanAPIRead]
+    music_plan: list[SectionPlanAPIRead]
+    """The plan when the creator is added as a music artist."""
 
 
 class CreatorLookupAPIRead(ResponseBase):
@@ -62,9 +86,19 @@ class CreatorLookupAPIRead(ResponseBase):
     source_key: str
     site_key: str
     site_name: str
-    creator_label: str
+    creator_names: NamesAPIRead
+    section_types: list[SectionTypeAPIRead]
+    """Every type of section the Site's creators have, such as playlists on YouTube or shows on The Daily Wire."""
+    audio_only: bool = False
+    """The Site has sound only, such as Bandcamp, so what its lists hold are tracks."""
+    media_names: NamesAPIRead = Field(validation_alias=AliasPath("site", "media_names"))
+    """What the Site calls one of its videos: a video, or a track on a Site with sound only."""
+    section_growing_names: NamesAPIRead = Field(validation_alias=AliasPath("site", "section_growing_names"))
+    """What the Site calls the lists and shows its creators add, such as playlists or shows."""
     link_seasons: bool = False
     """The creator's lists can be seasons of its own collection."""
+    movies: bool = False
+    """The creator's single items are movies, which VODLoft adds to the Library and joins to the creator."""
     ref: str
     url: Optional[str] = None
     title: str
@@ -76,15 +110,31 @@ class CreatorLookupAPIRead(ResponseBase):
     facts: list[str] = Field(default_factory=list)
     sections: list[CreatorSectionAPIRead]
     presets: list[CreatorPresetAPIRead]
+    new_lists: list[CreatorNewListAPIRead]
+    """What the creator does with a new list of each kind of its Site until the user chooses otherwise."""
+    music_new_lists: list[CreatorNewListAPIRead]
+    """The same, when the creator is added as a music artist: their albums are added, and where the Site tells albums
+    from other lists, those others are skipped."""
+    new_list_names: NamesAPIRead
+    """Those kinds of list named together, such as albums and playlists."""
     creator_slug: Optional[str] = None
     """The creator's slug, when it is already in the Library."""
     music: bool = False
-    """A music artist, whose lists are albums and whose collections are Music collections."""
+    """A music artist, whose lists are albums and whose collections are Music collections. Unless ``music_known``, it
+    is a guess the user can change by adding the creator with ``type`` music or another type."""
+    music_known: bool = False
+    """The Site makes ``music`` certain, so the user isn't asked."""
+    music_reason: Optional[str] = None
+    """Why the creator was taken for a music artist, when that was a guess."""
 
 
 class SectionPlanAPIIn(RequestBase):
     ref: str
     target: SectionTarget
+    type: Optional[CollectionType] = None
+    """For a section that becomes a collection of its own: its type; left out, the creator's."""
+    episode_identifier: Optional[EpisodeIdentifier] = None
+    """For a section that becomes a collection of its own: how it identifies its episodes; left out, the creator's."""
 
 
 class CreatorAPICreate(RequestBase):
@@ -95,9 +145,12 @@ class CreatorAPICreate(RequestBase):
     ref: Optional[str] = None
     sections: list[SectionPlanAPIIn] = Field(max_length=500)
     type: CollectionType = CollectionType.SERIES
+    """The type of the creator's own collection, and of each collection of its own whose plan gives none."""
     episode_identifier: EpisodeIdentifier = EpisodeIdentifier.SEASONAL
+    """How the creator's own collection identifies its episodes, and each collection whose plan says nothing."""
     membership_level: DwMembershipLevel = DwMembershipLevel.HIGHEST_ALLOWED
-    new_sections: NewSectionAction = NewSectionAction.ASK
+    new_lists: dict[str, dict[str, NewSectionAction]] = Field(default_factory=dict, max_length=20)
+    """What the creator does with a new list, by Site and the key of its type; a type left out takes its default."""
     lookup_id: Optional[str] = Field(default=None, max_length=64)
     """The lookup's id, to use what it found instead of asking the Site again."""
     into: Optional[str] = Field(default=None, max_length=255)
@@ -106,6 +159,7 @@ class CreatorAPICreate(RequestBase):
 
 
 class CreatorCollectionAPIRead(ResponseBase):
+    id: int
     slug: str
     title: str
     type: str
@@ -145,12 +199,14 @@ class CreatorAPIRead(ResponseBase):
 
     id: int
     slug: str
-    creator_label: str
-    """What VODLoft calls the creator: artist, the word of their one Site, such as host, or creator."""
-    section_names: CreatorSectionNamesAPIRead
-    """What VODLoft looks for: what their one Site calls it, such as playlists, or playlists and shows."""
+    creator_names: NamesAPIRead
+    """What VODLoft calls the creator: the word of their one Site, such as host, or artist for a music artist."""
+    music: bool = False
+    """A music artist: they have a Music collection."""
     kind: str
     """The label with their Site, when they are on one only, such as "The Daily Wire host"."""
+    words: CollectionWordsAPIRead
+    """What the creator's page calls their seasons and episodes, such as albums and tracks for an artist."""
     accounts: list[CreatorAccountAPIRead]
     title: str
     description: Optional[str] = None
@@ -161,7 +217,14 @@ class CreatorAPIRead(ResponseBase):
     created_at: datetime
     collection_count: int = 0
     episode_count: int = 0
-    new_sections: NewSectionAction
+    open_count: int = 0
+    """How often its page and its collections' pages were opened, for the Library's Often used order."""
+    last_opened_at: Optional[datetime] = None
+    """When its page or one of its collections' pages was last opened, for the Library's Recently used order."""
+    new_lists: list[CreatorNewListAPIRead]
+    """What the creator does with a new list, for each kind of list of their Sites."""
+    new_list_names: NamesAPIRead
+    """Those kinds of list named together, such as albums and playlists, or lists when there are none."""
     genre: Optional[str] = None
     content_rating: Optional[str] = None
 
@@ -170,6 +233,22 @@ class CreatorPageAccountAPIRead(CreatorAccountAPIRead):
     """An account on the creator's page, with its sections and the collection that keeps each."""
 
     sections: list[CreatorSectionAPIRead]
+    movies: bool = False
+    """The account's single items are movies, which VODLoft adds to the Library and joins to the creator."""
+
+
+class CreatorMovieAPIRead(ResponseBase):
+    """One of the creator's movies in the Library."""
+
+    slug: str
+    title: str
+    thumbnail_portrait_path: Optional[str] = None
+    thumbnail_landscape_path: Optional[str] = None
+    background_image_path: Optional[str] = None
+    logo_image_path: Optional[str] = None
+    release_date: Optional[date] = None
+    published_at: Optional[datetime] = None
+    drm_protected: bool = False
 
 
 class CreatorEpisodeAPIRead(EpisodeAPIReadView):
@@ -187,6 +266,7 @@ class CreatorPageAPIRead(CreatorAPIRead):
     """A creator's page: their collections, and the sections of each account with the collection that keeps each."""
 
     collections: list[CreatorCollectionAPIRead]
+    movies: list[CreatorMovieAPIRead] = Field(default_factory=list)
     last_published_date: Optional[datetime] = None
     """When the newest episode of all of the creator's collections came out."""
     accounts: list[CreatorPageAccountAPIRead]
@@ -195,9 +275,64 @@ class CreatorPageAPIRead(CreatorAPIRead):
 
 
 class CreatorSectionMoveAPIIn(RequestBase):
-    """Where one of the creator's playlists goes now, with its videos."""
+    """Where one of the creator's feeds or lists goes now, with its videos: into the creator's own collection, a
+    collection of its own, or out of the Library."""
 
-    target: Literal["main", "own", "skip"]
+    account_id: int
+    ref: str = Field(min_length=1)
+    target: SectionTarget
+
+
+class CreatorSectionMovesAPIIn(RequestBase):
+    """Feeds and lists of the creator that go elsewhere, to see what moving them does."""
+
+    moves: list[CreatorSectionMoveAPIIn] = Field(min_length=1, max_length=200)
+
+
+class CreatorMovedPartAPIRead(ResponseBase):
+    """The videos of one feed or list that leave a collection or join it."""
+
+    section_title: str
+    section_kind: Literal["feed", "list", "show", "item"]
+    names: NamesAPIRead
+    """What moves, in the Site's words: shorts for a feed, videos for a list."""
+    direction: Literal["out", "in", "leave"]
+    """out to another collection, in from another one, or leave the Library."""
+    count: int
+    other_title: Optional[str] = None
+    examples: list[str]
+    """The titles of the videos, newest first, up to a few dozen."""
+    downloads_deleted: int = 0
+    kept_deleted: int = 0
+    deleting_profiles: list[str] = Field(default_factory=list)
+    """The Local Media Profiles whose files are deleted."""
+    files_moved: int = 0
+
+
+class CreatorMoveCollectionAPIRead(ResponseBase):
+    """What the moves do to one of the creator's collections."""
+
+    slug: str
+    title: str
+    type: str
+    state: Literal["existing", "new", "deleted"]
+    episode_identifier: EpisodeIdentifier
+    parts: list[CreatorMovedPartAPIRead]
+    new_seasons: list[str]
+    episodes: int
+    renumber_offered: bool
+    """It can number its episodes again; the user can say not to."""
+    changes: list["CollectionIdentificationChangeItemAPIRead"]
+    """The episodes that get a new number when it numbers them again, newest first."""
+    profiles: list["CollectionIdentificationProfileFilesAPIRead"]
+    """What numbering again does to each Local Media Profile's files; the metadata is rewritten either way."""
+    files_follow: bool
+    """Files moved into it, so its files are renamed and their metadata rewritten also when it keeps its numbers."""
+    indexed: bool
+
+
+class CreatorSectionMovesPreviewAPIRead(ResponseBase):
+    collections: list[CreatorMoveCollectionAPIRead]
 
 
 class CreatorAPIUpdate(RequestBase):
@@ -206,15 +341,26 @@ class CreatorAPIUpdate(RequestBase):
     title: Optional[str] = Field(default=None, min_length=1, max_length=255)
     """The creator's name, which their collections take as author; left out, it stays as it is. A name given here
     is kept when the Site's name changes."""
-    new_sections: NewSectionAction
+    new_lists: dict[str, dict[str, NewSectionAction]] = Field(default_factory=dict, max_length=20)
+    """What the creator does with a new list, by Site and the key of its type; a type left out keeps its setting."""
     genre: Optional[str] = Field(default=None, max_length=200)
     content_rating: Optional[str] = Field(default=None, max_length=50)
+    moves: list[CreatorSectionMoveAPIIn] = Field(default_factory=list, max_length=200)
+    """Feeds and lists that go elsewhere, with their videos."""
+    renumber: dict[str, bool] = Field(default_factory=dict, max_length=200)
+    """By collection slug, whether a collection the moves change numbers its episodes again; left out, it does."""
 
 
 class CreatorCombineAPIIn(RequestBase):
     """Another creator in the Library who is the same person or group, whose accounts and collections move over."""
 
     other_slug: str = Field(min_length=1, max_length=255)
+
+
+class CreatorSectionsAPIShow(RequestBase):
+    """Show sections of a creator that were hidden on the creator page there again."""
+
+    refs: list[str] = Field(min_length=1, max_length=500)
 
 
 class CreatorSectionsAPIAdd(RequestBase):
@@ -234,8 +380,11 @@ class CollectionCreatorMatchAPIRead(ResponseBase):
     """Adding the collection with this id uses what this lookup found, instead of asking the Site again."""
 
     site_name: str
-    creator_label: str
-    section_names: CreatorSectionNamesAPIRead
+    creator_names: NamesAPIRead
+    section_types: list[SectionTypeAPIRead]
+    """Every type of section the creator's Site has, such as playlists on YouTube."""
+    section_growing_names: NamesAPIRead
+    """What the Site calls the lists and shows its creators add, such as playlists or shows."""
     ref: str
     url: Optional[str] = None
     title: str
@@ -245,7 +394,8 @@ class CollectionCreatorMatchAPIRead(ResponseBase):
     """The creator's slug, when it is already in the Library."""
     section_title: Optional[str] = Field(default=None, validation_alias=AliasPath("section", "title"))
     """The creator's section the collection is, when it is one."""
-    section_kind_label: Optional[str] = Field(default=None, validation_alias=AliasPath("section", "kind_label"))
+    section_type: Optional[str] = None
+    """The key of the type of that section, such as list."""
     kept_by: Optional[str] = None
     """The title of another of the creator's collections that keeps this section already, which can't let it go."""
     overlaps: list["JoinOverlapAPIRead"] = Field(default_factory=list)

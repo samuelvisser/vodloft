@@ -23,6 +23,9 @@ _CHANNEL_PATH = re.compile(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)(?:/(vid
 _THUMBNAIL_SIZES = ("maxres", "standard", "high", "medium", "default")
 # The playlists YouTube keeps per channel: all uploads, Shorts only, livestreams only.
 _TAB_PLAYLIST_PREFIXES = {"videos": "UU", "shorts": "UUSH", "streams": "UULV"}
+# The playlist of each of a channel's feeds on its own, by the tab that lists it: its videos without Shorts and
+# livestreams, its Shorts, its livestreams.
+_FEED_PLAYLIST_PREFIXES = {"videos": "UULF", "shorts": "UUSH", "streams": "UULV"}
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,13 @@ class YouTubeRef:
 
     def uploads_playlist(self, channel_id: str) -> str:
         return _TAB_PLAYLIST_PREFIXES[self.tab] + channel_id.removeprefix("UC")
+
+    def feed_playlists(self, channel_id: str, feeds: frozenset[str] | None) -> list[str]:
+        """The playlists that list the collection's videos: all its uploads, or for a channel that takes only some of
+        its feeds, by their tabs, the playlist of each."""
+        if feeds is None or self.kind == "playlist" or self.tab != "videos":
+            return [self.uploads_playlist(channel_id)]
+        return [prefix + channel_id.removeprefix("UC") for tab, prefix in _FEED_PLAYLIST_PREFIXES.items() if tab in feeds]
 
 
 def youtube_ref(url: str) -> YouTubeRef | None:

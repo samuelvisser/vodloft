@@ -25,7 +25,7 @@ import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/
 import {
     CreatorEpisodePageReadSchema, CreatorLookupReadSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorLookupRead, type CreatorPageRead, type CreatorRead,
     CollectionCreatorLeaveSchema, CollectionCreatorMatchSchema, type CollectionCreatorLeave, type CollectionCreatorMatch,
-    type SectionPlan,
+    type SectionPlan, SectionMovesPreviewSchema, type SectionMove, type SectionMovesPreview,
 } from '../types/schemas/creator'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
@@ -75,7 +75,7 @@ import {
     ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
     ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
-    SourceReadSchema,
+    SourceReadSchema, type Names, NamesSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
 import {
@@ -546,14 +546,16 @@ export async function saveSourceYtdlpOptions(sourceId: string, text: string): Pr
 }
 
 /** The tags a Source gives episodes of the show at ``url``, or of any of its shows without one. */
-export function useEpisodeTags(sourceKey?: string | null, url?: string | null) {
-    return useQuery<EpisodeTagRead[], Error, EpisodeTagRead[], readonly ['episodeTags', string, string | null]>({
-        queryKey: ['episodeTags', sourceKey ?? '', url ?? null] as const,
+/** A Source's episode tags for the collection at ``url``; with ``collectionType``, the main one is named as a collection
+ *  of that type names its episodes. */
+export function useEpisodeTags(sourceKey?: string | null, url?: string | null, collectionType?: string | null) {
+    return useQuery<EpisodeTagRead[], Error, EpisodeTagRead[], readonly ['episodeTags', string, string | null, string | null]>({
+        queryKey: ['episodeTags', sourceKey ?? '', url ?? null, collectionType ?? null] as const,
         enabled: !!sourceKey,
         staleTime: Infinity,
         queryFn: ({signal}) => fetchParsed(
-            `${apiUrl()}/sources/${encodeURIComponent(sourceKey ?? '')}/episode-tags`
-            + (url ? `?url=${encodeURIComponent(url)}` : ''),
+            `${apiUrl()}/sources/${encodeURIComponent(sourceKey ?? '')}/episode-tags?`
+            + new URLSearchParams({...(url ? {url} : {}), ...(collectionType ? {collection_type: collectionType} : {})}),
             EpisodeTagReadSchema.array(),
             signal,
         ),
@@ -583,7 +585,7 @@ export function useCollectionEpisodeTags({collectionId, collectionSlug, sourceKe
     const collection = collectionId !== undefined
         ? collections?.find((item) => item.id === collectionId)
         : collectionSlug ? collections?.find((item) => item.slug === collectionSlug) : undefined
-    return useEpisodeTags(collection?.sourceKey ?? sourceKey, collection?.sharingUrl ?? url)
+    return useEpisodeTags(collection?.sourceKey ?? sourceKey, collection?.sharingUrl ?? url, collection?.type)
 }
 
 /** The episode tags that a saved collection's episodes actually have, in its Source's order. */
@@ -814,7 +816,7 @@ async function readSteps(
 
 export async function lookUpCreator(
     body: {sourceKey: string, url?: string | null, ref?: string | null},
-    onStep: (step: string, creatorLabel?: string) => void,
+    onStep: (step: string, creatorNames?: Names) => void,
     signal?: AbortSignal,
 ): Promise<CreatorLookupRead> {
     const response = await fetch(`${apiUrl()}/creators/lookup`, {
@@ -824,7 +826,7 @@ export async function lookUpCreator(
         body: JSON.stringify(body),
         signal,
     })
-    const result = await readSteps(response, (step, line) => onStep(step, line.creatorLabel as string | undefined))
+    const result = await readSteps(response, (step, line) => onStep(step, line.creatorNames ? NamesSchema.parse(line.creatorNames) : undefined))
     return CreatorLookupReadSchema.parse(result.creator)
 }
 
@@ -833,6 +835,8 @@ export function useCreators() {
         queryKey: ['creators'] as const,
         enabled: can('library'),
         queryFn: ({signal}) => fetchParsed(`${apiUrl()}/creators`, CreatorReadSchema.array(), signal),
+        // Opening a creator or one of its collections changes the Library's Recently used order.
+        refetchOnMount: 'always',
     })
 }
 
@@ -886,21 +890,30 @@ export async function addCreatorSections(slug: string, accountId: number, sectio
     return CreatorPageReadSchema.parse(await response.json())
 }
 
-/** Move one of the playlists of a creator's account, with its videos and their files: a season of the account's own
- * collection, a collection of its own, or out of the Library. */
-export async function moveCreatorSection(
-    slug: string, accountId: number, ref: string, target: 'main' | 'own' | 'skip',
-): Promise<CreatorPageRead> {
-    const response = await fetch(
-        `${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections/${encodeURIComponent(ref)}/move`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({target}),
-        },
-    )
+/** Show sections of a creator's account that were hidden on the creator page there again. */
+export async function showCreatorSections(slug: string, accountId: number, refs: string[]): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections/show`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({refs}),
+    })
     if (!response.ok) throw await responseError(response)
     return CreatorPageReadSchema.parse(await response.json())
+}
+
+/** What moving feeds and lists of a creator elsewhere does to each of its collections. Changes nothing: saving the
+ * creator with the moves makes them. */
+export async function previewCreatorMoves(slug: string, moves: SectionMove[], signal?: AbortSignal): Promise<SectionMovesPreview> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/moves/preview`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({moves}),
+        signal,
+    })
+    if (!response.ok) throw await responseError(response)
+    return SectionMovesPreviewSchema.parse(await response.json())
 }
 
 /** Make one of a creator's accounts a creator of their own again, with its collections. Answers with the new

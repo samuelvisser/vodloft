@@ -113,3 +113,7 @@ class LocalMediaProfileMoveEpisodesOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
     collections_queued: int
     download_profiles_paused: int
+
+
+class CollectionMetadataRewriteOperationAccepted(TaskOperationAccepted):
+    local_media_profiles_queued: int

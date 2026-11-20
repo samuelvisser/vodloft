@@ -58,7 +58,7 @@ from backend.services.media_access import media_access, media_locked
 from backend.services.local_media_profile_sites import profile_offered_for_site
 from backend.services.removed_downloads import answer_keep_question, downloads_awaiting_keep_answer
 from backend.services.sites import collection_site, collection_site_key, movie_site_key, video_site_key
-from backend.types.local_media_profile_types import LocalMediaProfileType
+from backend.types.local_media_profile_types import LocalMediaProfileType, VideoLocalMediaProfileScope
 from backend.types.media_types import MediaType
 from downloader.storage.artifacts import remove_download_artifacts
 from backend.services.episode_download_delay import episode_download_delay_passed
@@ -656,7 +656,7 @@ def create_movie_download(
 ) -> MovieMediaDownload:
     """Persist a download target for an indexed movie."""
     _ensure_downloadable(movie)
-    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO, movie_site_key(movie))
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO, movie_site_key(movie), VideoLocalMediaProfileScope.MOVIES)
     # The Daily Wire's isDownloadable only says whether its own apps offer offline downloads.
     # VODLoft downloads the stream its web player uses, so a movie only needs a video.
     if not movie.has_video:
@@ -713,7 +713,7 @@ def create_movie_extra_download(
     body: MediaDownloadAPICreate,
 ) -> MovieExtraMediaDownload:
     """Persist a download target for an extra of an indexed movie."""
-    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO, movie_site_key(movie))
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO, movie_site_key(movie), VideoLocalMediaProfileScope.MOVIES)
     movie_extra: Optional[MovieExtra] = (
         s.query(MovieExtra)
         .filter(MovieExtra.movie_id == movie.id, MovieExtra.slug == movie_extra_slug)
@@ -772,7 +772,7 @@ def create_video_download(
 ) -> VideoMediaDownload:
     """Persist a download target for a single video."""
     _ensure_downloadable(video)
-    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO, video_site_key(video))
+    profile = _get_profile(s, body.local_media_profile_id, LocalMediaProfileType.VIDEO, video_site_key(video), VideoLocalMediaProfileScope.VIDEOS)
     existing: Optional[VideoMediaDownload] = (
         s.query(VideoMediaDownload)
         .filter(
@@ -822,14 +822,18 @@ _PROFILE_TYPE_LABELS = {
 }
 
 
-def _get_profile(s: Session, profile_id: int, expected_type: LocalMediaProfileType, site_key: Optional[str]) -> LocalMediaProfileBase:
+def _get_profile(
+    s: Session, profile_id: int, expected_type: LocalMediaProfileType, site_key: Optional[str],
+    video_kind: Optional[VideoLocalMediaProfileScope] = None,
+) -> LocalMediaProfileBase:
     profile: Optional[LocalMediaProfileBase] = s.get(LocalMediaProfileBase, profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Local media profile not found")
     if LocalMediaProfileType(profile.type).for_collections != expected_type.for_collections:
         label = _PROFILE_TYPE_LABELS[expected_type]
-        wanted = "Collection or Music" if expected_type.for_collections else expected_type.label
-        raise HTTPException(status_code=422, detail=f"{label} require a {wanted} Local Media Profile")
+        raise HTTPException(status_code=422, detail=f"{label} require a {expected_type.label} Local Media Profile")
+    if video_kind is not None and not VideoLocalMediaProfileScope(getattr(profile, "video_scope", "both")).keeps(video_kind):
+        raise HTTPException(status_code=422, detail=f"Local Media Profile '{profile.name}' is not available for {video_kind.value}")
     if not profile_offered_for_site(s, profile, site_key):
         raise HTTPException(status_code=422, detail=f"Local Media Profile '{profile.name}' is not available for this Site")
     return profile

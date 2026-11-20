@@ -25,3 +25,4 @@ def generate_uuid() -> str:
 def generate_stream_profile_token() -> str:
     """An unguessable secret used to serve a stream profile's feed without authentication."""
     return secrets.token_urlsafe(24)
+

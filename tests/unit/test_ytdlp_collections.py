@@ -50,7 +50,7 @@ class ListedSource(Source):
     def collection_details(self, url):
         return CollectionDetails(slug="PL1", url=url, title="A playlist", author_name="A Channel")
 
-    def list_episodes(self, url, *, known):
+    def list_episodes(self, url, *, known, feeds=None):
         self.known_seen.append(known)
         return iter([video for video in self.videos if video.slug not in known])
 
@@ -445,6 +445,38 @@ def test_the_collection_lookup_suggests_a_podcast_from_its_name(listed, monkeypa
     assert body["probableCollectionType"] == "podcast"
 
 
+def test_the_collection_lookup_suggests_music_when_the_source_takes_it_for_music(listed, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend.api.endpoints.sources import router as source_router_module
+
+    monkeypatch.setattr(ListedSource, "music_reason", lambda self, url, details: "Its channel has releases", raising=False)
+    app = FastAPI()
+    app.include_router(source_router_module.router, prefix="/api")
+    with TestClient(app) as client:
+        body = client.get("/api/sources/listed/collection", params={"url": "https://listed.example/PL1"}).json()
+    assert (body["probableCollectionType"], body["musicReason"]) == ("music", "Its channel has releases")
+
+
+def test_youtube_takes_albums_artist_channels_and_music_sites_for_music(monkeypatch):
+    from dataclasses import replace
+
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    asked: list[str] = []
+    from sources.ytdlp.site_implementations import YouTubeImplementation
+
+    monkeypatch.setattr(YouTubeImplementation, "has_releases", lambda self, root: asked.append(root) or root.endswith("@artist"))
+    playlist = CollectionDetails(slug="PL1", url="https://www.youtube.com/playlist?list=PL1", title="Live", author_url="https://www.youtube.com/@artist")
+    assert source.music_reason("https://www.youtube.com/playlist?list=PL1", playlist) == "Its channel has releases on YouTube Music"
+    assert source.music_reason("https://www.youtube.com/@vlogs/videos", replace(playlist, author_url=None)) is None
+    assert source.music_reason("https://www.youtube.com/playlist?list=OLAK5uy_abc", playlist) == "It is an album on YouTube Music"
+    assert source.music_reason("https://artist.bandcamp.com/album/first", playlist) == "It is on Bandcamp, a site for music"
+    assert asked == ["https://www.youtube.com/@artist", "https://www.youtube.com/@vlogs"]
+
+
 def test_a_collection_bundle_can_use_an_existing_profile(listed, session):
     from backend.api.endpoints.collections.as_bundle.service import create_collection_bundle
     from backend.api.models.collection_as_bundle import CollectionAPICreateBundle
@@ -622,3 +654,56 @@ def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(lis
     session.commit()
     with pytest.raises(DownloadError, match="yt-dlp Source can no longer be used. Line 1: -o"):
         download_plans.prepare_download_plan(session, download.id, DownloadTracker())
+
+
+def test_a_creators_collection_lists_only_the_feeds_placed_in_it():
+    from sources.ytdlp.source import YtDlpSource, _feeds
+    from sources.ytdlp.youtube_api import mapping
+
+    url = "https://www.youtube.com/@artist/videos"
+    youtube = YtDlpSource()._implementation(url)
+    assert youtube.listing_urls(url, None) == [url, "https://www.youtube.com/@artist/shorts", "https://www.youtube.com/@artist/streams"]
+    assert youtube.listing_urls(url, frozenset({"videos"})) == [url]
+    assert youtube.listing_urls(url, frozenset({"streams"})) == ["https://www.youtube.com/@artist/streams"]
+    assert youtube.listing_urls(url, frozenset()) == []
+
+    ref = mapping.YouTubeRef("channel", "UCabc")
+    assert ref.feed_playlists("UCabc", None) == ["UUabc"]
+    # Each feed has a playlist of its own: the videos without Shorts and livestreams, the Shorts, the livestreams.
+    assert ref.feed_playlists("UCabc", frozenset({"videos", "streams"})) == ["UULFabc", "UULVabc"]
+    assert _feeds(ref, frozenset({"shorts"})) == [{"playlist_id": "UUSHabc"}]
+    assert _feeds(ref, None) == [{"channel_id": "UCabc"}]
+
+
+def test_a_music_collection_has_a_setting_for_new_albums_and_one_for_new_playlists(session):
+    from backend.services.link_seasons import LinkListing, collection_new_lists, save_lists
+    from sources import SectionRef
+    from sources.ytdlp.sites import site_of
+
+    collection = _collection(session, "PLartist", source_key="ytdlp")
+    collection.sharing_url = "https://soundcloud.com/artist"
+    collection.type, collection.link_seasons = "music", "selected"
+    # Until the user chooses, a Music collection asks about new albums and skips new playlists.
+    assert [(setting.key, setting.action) for setting in collection_new_lists(collection)] == [
+        ("album", "ask"), ("playlist", "ignore"),
+    ]
+    collection.new_lists = {"album": "add", "playlist": "ask"}
+
+    def listed(ref, album):
+        return SectionRef(
+            ref, f"https://soundcloud.com/artist/sets/{ref}", site_of("soundcloud").section_type("album" if album else "playlist"),
+            ref.title(),
+        )
+
+    # On the first look every list is a season, as the collection skips no kind.
+    assert save_lists(session, collection, LinkListing([listed("first", True), listed("mix", False)])) == []
+    assert {link.ref: (link.enabled, link.status) for link in collection.lists} == {
+        "first": (True, "known"), "mix": (True, "known"),
+    }
+    asked = save_lists(session, collection, LinkListing([
+        listed("second", True), listed("faves", False), listed("first", True), listed("mix", False),
+    ]))
+    assert [link.ref for link in asked] == ["faves"]
+    assert {link.ref: (link.enabled, link.status) for link in collection.lists if link.ref in ("second", "faves")} == {
+        "second": (True, "known"), "faves": (False, "new"),
+    }

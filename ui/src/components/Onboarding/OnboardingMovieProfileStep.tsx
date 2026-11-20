@@ -13,7 +13,7 @@ import {
     VideoLocalMediaProfileCreateSchema,
 } from '../../types/schemas/video_local_media_profile'
 import {DAILYWIRE_SOURCE_KEY} from '../../types/schemas/source'
-import {isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
+import {isLocalMediaProfileAvailableForSite, videoProfileKeeps} from '../../types/local_media_profile'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {apiUrl} from '../../lib/api'
@@ -31,6 +31,7 @@ const MOVIE_SITE_KEY = DAILYWIRE_SOURCE_KEY
 const NEW_PROFILE_DEFAULTS: VideoLocalMediaProfileCreateIn = {
     ...getZodDefaults(VideoLocalMediaProfileCreateSchema),
     name: 'My Movies',
+    videoScope: 'movies',
     outputTemplate: DEFAULT_MOVIE_OUTPUT_TEMPLATE,
     subtitleMode: 'sidecar',
     siteKeys: [MOVIE_SITE_KEY],
@@ -52,7 +53,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
 
     const movieProfiles = useMemo(
         () => profilesQuery.data?.filter((profile) => (
-            profile.type === 'video' && isLocalMediaProfileAvailableForSite(profile, MOVIE_SITE_KEY)
+            profile.type === 'video' && videoProfileKeeps(profile, 'movies') && isLocalMediaProfileAvailableForSite(profile, MOVIE_SITE_KEY)
         )) ?? [],
         [profilesQuery.data],
     )
@@ -63,6 +64,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
         form.reset({
             ...getZodDefaults(VideoLocalMediaProfileCreateSchema),
             name: profile.name,
+            videoScope: profile.videoScope,
             outputTemplate: profile.outputTemplate,
             preferredFormat: profile.preferredFormat as VideoLocalMediaProfileCreateIn['preferredFormat'],
             subtitleMode: profile.subtitleMode,

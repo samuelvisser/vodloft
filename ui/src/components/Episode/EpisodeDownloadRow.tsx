@@ -1,3 +1,4 @@
+import type {Noun} from '../../lib/collectionWords'
 import {useState} from 'react'
 
 import {isPublicationDelayWait} from '../../lib/downloadProgress'
@@ -48,6 +49,7 @@ export function EpisodeDownloadRow({
     safeDelayReadyAt,
     skippedBy,
     waitsForCountdown = false,
+    season,
 }: {
     profile: LocalMediaProfileRead
     download?: MediaDownloadViewRead
@@ -60,6 +62,8 @@ export function EpisodeDownloadRow({
     skippedBy?: EpisodeFilter
     /** Whether its Download Profile downloads this episode by itself once the countdown is gone. */
     waitsForCountdown?: boolean
+    /** What the collection calls its seasons: albums in a Music collection. */
+    season?: Noun
 }) {
     const {busy, request, cancel, retry, present, isStarting} = useDownloadRowRequest(['episodeDownloads', episodeSlug])
     const starting = isStarting(download)
@@ -229,7 +233,7 @@ export function EpisodeDownloadRow({
         </button>
     ) : null
     const skippedNote = skippedBy && !download ? (
-        <span title="Which episodes on its Download Profile">Skipped by filter: {plainText(filterSentence(skippedBy)).replace(/^\w/, (c) => c.toLowerCase())}</span>
+        <span title="Which episodes on its Download Profile">Skipped by filter: {plainText(filterSentence(skippedBy, undefined, undefined, undefined, undefined, season)).replace(/^\w/, (c) => c.toLowerCase())}</span>
     ) : waitsForCountdown && !download ? (
         <span title="Its Download Profile does not download episodes that still contain the countdown">Waiting for the countdown to be removed</span>
     ) : kept ? <span>Marked to never be deleted automatically</span> : null

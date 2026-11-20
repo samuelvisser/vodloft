@@ -3,6 +3,7 @@
  * values that matter in bold.
  */
 import {describeMatch} from '../RegexEditor/regexModel'
+import {collectionWords, type Noun} from '../../lib/collectionWords'
 import {isDateLine, splitIgnoreCase, type FilterLike} from './episodeFilters'
 
 /** A piece of a sentence; strong pieces are the values you chose. */
@@ -114,14 +115,16 @@ export function filterSentence(
     seasonLabel: (slug: string) => string = (slug) => slug,
     deleteOlder = false,
     today: Date = new Date(),
+    /** What the collection calls its seasons: albums in a Music collection. */
+    season: Pick<Noun, 'singular' | 'plural'> = collectionWords(null).season,
 ): Part[] {
     if (isDateLine(filter)) return dateLineSentence(filter, deleteOlder, today)
     const lead = {text: `${ACTION_WORDS[filter.action] ?? ACTION_WORDS.skip} `}
     if (filter.field === 'types' || filter.field === 'seasons') {
         const labels = filter.field === 'types'
             ? (filter.episodeTypes ?? []).map(typeLabel)
-            : [...(filter.seasonSlugs ?? []).map(seasonLabel), ...(filter.includeUpcoming ? ['upcoming seasons'] : [])]
-        const parts: Part[] = [lead, {text: filter.field === 'types' ? 'episode type' : 'season', strong: true}]
+            : [...(filter.seasonSlugs ?? []).map(seasonLabel), ...(filter.includeUpcoming ? [`upcoming ${season.plural}`] : [])]
+        const parts: Part[] = [lead, {text: filter.field === 'types' ? 'episode type' : season.singular, strong: true}]
         if (!labels.length) return [...parts, {text: ' is …'}]
         return [...parts, {text: ' is '}, ...strongList(labels).flatMap((part) => (
             part.text === ' and ' ? [{text: ' or '}] : [part]

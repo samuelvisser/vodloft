@@ -7,6 +7,8 @@ the Site's own id for it is unique per Site.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
+from dataclasses import replace
 from functools import lru_cache
 from typing import Optional
 
@@ -14,9 +16,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, Episode, Movie, Site, Video
+from backend.types.collection_contracts import CollectionWords, collection_contract
 from backend.types.link_season_types import OutsideVideos
 from backend.services.local_media_profile_sites import add_upcoming_site
-from sources import Site as SourceSite, collection_on_site, site_for, source_site, sources_for
+from sources import EpisodeTag, Names, Site as SourceSite, collection_on_site, get_source, site_for, source_site, sources_for
 
 
 class CollectionAlreadyAddedError(ValueError):
@@ -77,6 +80,37 @@ def collection_site(collection: Collection) -> SourceSite:
         (link.url for link in sorted(collection.lists, key=lambda link: link.id or 0)), None,
     )
     return _site_of(url, collection.source_key) if url else NO_SITE
+
+
+def collection_creator_names(collection: Collection) -> Names:
+    """What the collection's Site calls the creator behind it, such as host on The Daily Wire, or artist when the
+    collection is a Music collection."""
+    return collection_contract(collection.type).creator_names_on(collection_site(collection))
+
+
+def collection_words(collection: Collection, *, audio: bool | None = None) -> CollectionWords:
+    """What a collection calls its seasons and episodes, by its type's contract: the tracks of a Music collection on a
+    Site with sound only, such as Bandcamp, and its music videos elsewhere. Pass ``audio`` where the files are meant,
+    which a profile for Music tracks keeps as sound."""
+    return collection_contract(collection.type).words_for(collection_site(collection).audio_only if audio is None else audio)
+
+
+def collection_episode_tags(collection: Collection) -> tuple[EpisodeTag, ...]:
+    """The tags of a collection's episodes, the main one named as the collection names its episodes
+    (``collection_words``), such as tracks in a Music collection on Bandcamp."""
+    tags = get_source(collection.source_key).episode_tags_for(collection.sharing_url)
+    return episode_tags_named(tags, collection_words(collection))
+
+
+def episode_tags_named(tags: Iterable[EpisodeTag], words: CollectionWords) -> tuple[EpisodeTag, ...]:
+    """A Site's episode tags with the main one named by a collection's ``words``. Its key stays the Site's, so
+    profiles select it the same everywhere."""
+    episode = words.episode
+    return tuple(
+        replace(tag, label=episode.singular.capitalize(), help=f"{episode.a.capitalize()} of the collection", names=episode)
+        if tag.main else tag
+        for tag in tags
+    )
 
 
 def episode_site(episode: Episode) -> SourceSite:

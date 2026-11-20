@@ -1,0 +1,128 @@
+{
+  "words": {
+    "season": {
+      "singular": "season",
+      "plural": "seasons",
+      "a": "a season"
+    },
+    "episode": {
+      "singular": "episode",
+      "plural": "episodes",
+      "a": "an episode"
+    }
+  },
+  "types": [
+    {
+      "type": "podcast",
+      "words": {
+        "season": {
+          "singular": "season",
+          "plural": "seasons",
+          "a": "a season"
+        },
+        "episode": {
+          "singular": "episode",
+          "plural": "episodes",
+          "a": "an episode"
+        }
+      },
+      "audioWords": {
+        "season": {
+          "singular": "season",
+          "plural": "seasons",
+          "a": "a season"
+        },
+        "episode": {
+          "singular": "episode",
+          "plural": "episodes",
+          "a": "an episode"
+        }
+      },
+      "creatorNames": null,
+      "looseSeason": null,
+      "profileScope": "podcast",
+      "audioProfileScope": "podcast",
+      "profileScopes": [
+        "podcast-and-series",
+        "podcast"
+      ],
+      "downloadsBySeason": false
+    },
+    {
+      "type": "series",
+      "words": {
+        "season": {
+          "singular": "season",
+          "plural": "seasons",
+          "a": "a season"
+        },
+        "episode": {
+          "singular": "episode",
+          "plural": "episodes",
+          "a": "an episode"
+        }
+      },
+      "audioWords": {
+        "season": {
+          "singular": "season",
+          "plural": "seasons",
+          "a": "a season"
+        },
+        "episode": {
+          "singular": "episode",
+          "plural": "episodes",
+          "a": "an episode"
+        }
+      },
+      "creatorNames": null,
+      "looseSeason": null,
+      "profileScope": "series",
+      "audioProfileScope": "series",
+      "profileScopes": [
+        "podcast-and-series",
+        "series"
+      ],
+      "downloadsBySeason": true
+    },
+    {
+      "type": "music",
+      "words": {
+        "season": {
+          "singular": "album",
+          "plural": "albums",
+          "a": "an album"
+        },
+        "episode": {
+          "singular": "music video",
+          "plural": "music videos",
+          "a": "a music video"
+        }
+      },
+      "audioWords": {
+        "season": {
+          "singular": "album",
+          "plural": "albums",
+          "a": "an album"
+        },
+        "episode": {
+          "singular": "track",
+          "plural": "tracks",
+          "a": "a track"
+        }
+      },
+      "creatorNames": {
+        "singular": "artist",
+        "plural": "artists",
+        "a": "an artist"
+      },
+      "looseSeason": "Singles",
+      "profileScope": "music_videos",
+      "audioProfileScope": "music_tracks",
+      "profileScopes": [
+        "music_tracks",
+        "music_videos"
+      ],
+      "downloadsBySeason": true
+    }
+  ]
+}

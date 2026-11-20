@@ -74,7 +74,7 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
     const [presetOpen, setPresetOpen] = useState(isCreating)
     const preferredFormat = useWatch({control, name: 'preferredFormat'})
     const [pendingPreset, setPendingPreset] = useState<string | null>(null)
-    const music = useWatch({control, name: 'type'}) === 'music'
+    const music = useWatch({control, name: 'collectionScope'}) === 'music_tracks'
     const revealFields = useRevealFields()
     const outputTemplate = useWatch({control, name: 'outputTemplate'}) as string | undefined
     const choiceValues = useWatch({control, name: [...PRESET_CHOICE_FIELDS]}) as unknown[]
