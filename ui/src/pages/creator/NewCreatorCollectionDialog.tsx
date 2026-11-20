@@ -20,18 +20,23 @@ import {
     type CreatorPageRead,
 } from '../../types/schemas/creator'
 import type {AccountSection} from './CreatorSectionsEditor'
+import {TitleList, namedSections} from './sectionNames'
 
 /**
- * Asks how a creator's playlist or show that becomes a collection of its own identifies its episodes, and what type
- * of collection it is, before adding it. It suggests what Add collection suggests for the same link.
+ * Asks how a creator's playlists or shows that each become a collection of their own identify their episodes, and
+ * what type of collection they are, before adding them. It suggests what Add collection suggests for the first one's
+ * link.
  */
-export default function NewCreatorCollectionDialog({creator, item, onDismiss}: {
+export default function NewCreatorCollectionDialog({creator, items, onDismiss, onAdded}: {
     creator: CreatorPageRead
-    item: AccountSection
+    items: AccountSection[]
     onDismiss: () => void
+    onAdded?: () => void
 }) {
     const queryClient = useQueryClient()
-    const {account, section} = item
+    const {account, section} = items[0]
+    const one = items.length === 1
+    const named = namedSections(items)
     const suggestion = useCollectionDefaults(section.url)
     const form = useForm<CreatorCollectionFormIn, unknown, CreatorCollectionFormOut>({
         resolver: zodResolver(CreatorCollectionFormSchema),
@@ -49,9 +54,17 @@ export default function NewCreatorCollectionDialog({creator, item, onDismiss}: {
 
     const submit = buildServerAwareSubmit<CreatorCollectionFormIn, CreatorCollectionFormOut, CreatorPageRead>(
         form,
-        (values) => creatorSectionsRequest(creator.slug, account.id, {
-            sections: [{ref: section.ref, target: 'own'}], ...values,
-        }),
+        async (values) => {
+            // One request for each account, as the sections of an account are added together.
+            const accounts = [...new Set(items.map((item) => item.account.id))]
+            let response: Response | undefined
+            for (const id of accounts) {
+                const sections = items.filter((item) => item.account.id === id).map((item) => ({ref: item.section.ref, target: 'own' as const}))
+                response = await creatorSectionsRequest(creator.slug, id, {sections, ...values})
+                if (!response.ok) break
+            }
+            return response as Response
+        },
         {
             parseSuccess: async (response) => CreatorPageReadSchema.parse(await response.json()),
             onSuccess: async (page) => {
@@ -61,7 +74,8 @@ export default function NewCreatorCollectionDialog({creator, item, onDismiss}: {
                     queryClient.invalidateQueries({queryKey: ['collection']}),
                     queryClient.invalidateQueries({queryKey: ['collectionsView']}),
                 ])
-                toast.success(`Added ${section.title}`)
+                toast.success(`Added ${named}`)
+                onAdded?.()
                 onDismiss()
             },
         },
@@ -99,19 +113,29 @@ export default function NewCreatorCollectionDialog({creator, item, onDismiss}: {
     return (
         <ConfirmDialog
             open
-            title={`Add ${section.title}`}
+            title={`Add ${named}`}
             icon={faIcon('fass', 'plus')}
             onDismiss={() => {if (!isSubmitting) onDismiss()}}
             confirmButton={{
-                label: isSubmitting ? 'Adding…' : 'Add collection',
+                label: isSubmitting ? 'Adding…' : one ? 'Add collection' : `Add ${items.length} collections`,
                 onClick: () => void submit(),
                 disabled: suggestion.isLoading || isSubmitting,
             }}
         >
-            <p>
-                {section.title} becomes a collection of its own in your library, and VODLoft keeps adding what {creator.title}
-                {' '}puts in it.
-            </p>
+            {one ? (
+                <p>
+                    {section.title} becomes a collection of its own in your library, and VODLoft keeps adding what {creator.title}
+                    {' '}puts in it.
+                </p>
+            ) : (
+                <>
+                    <p>
+                        Each becomes a collection of its own in your library, with the type and episode identification you
+                        choose here, and VODLoft keeps adding what {creator.title} puts in them.
+                    </p>
+                    <TitleList titles={items.map((item) => item.section.title)}/>
+                </>
+            )}
             {suggestion.isLoading && (
                 <p className="help"><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/> Looking {section.title} up on {account.site.name}…</p>
             )}

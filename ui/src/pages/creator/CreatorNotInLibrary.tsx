@@ -12,6 +12,9 @@ import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import type {CreatorPageRead, SectionPlan} from '../../types/schemas/creator'
 import {choices, isMovie, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
+import CreatorBulkBar from './CreatorBulkEdit'
+import {PageHeaderAction} from '../../components/common/PageHeader'
+import '../../components/ProfileBulkEdit/ProfileBulkEdit.css'
 
 // Tiles shown before "Show all": two rows on a computer, two on a phone.
 const DESKTOP_TILES = 12
@@ -42,6 +45,9 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const [open, setOpen] = useState(false)
     const [showAll, setShowAll] = useState(false)
     const [busy, setBusy] = useState<string | null>(null)
+    // Bulk edit: whether it is on, and the keys of the chosen sections.
+    const [selecting, setSelecting] = useState(false)
+    const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
     // The section that becomes a collection of its own, while the user chooses its type and identification.
     const [adding, setAdding] = useState<AccountSection | null>(null)
     // Whether a tile's menu was open when the pointer went down on the tile.
@@ -69,13 +75,30 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const arts = items.map(({section}) => toImageUrl(section.imageUrl)).filter((url): url is string => !!url).slice(0, 4)
     const key = ({account, section}: AccountSection) => `${account.id}:${section.ref}`
 
-    const toggle = () => setOpen(!open)
+    const toggle = () => {
+        if (open) setSelecting(false)
+        setOpen(!open)
+    }
+    const chosen = items.filter((item) => selected.has(key(item)))
+    const startSelecting = () => {
+        setSelected(new Set())
+        setSelecting(true)
+        setOpen(true)
+    }
+    const choose = (item: AccountSection) => {
+        const next = new Set(selected)
+        if (!next.delete(key(item))) next.add(key(item))
+        setSelected(next)
+    }
+    const allChosen = chosen.length === items.length
+    const chooseAll = () => setSelected(allChosen ? new Set() : new Set(items.map(key)))
     // A click anywhere on a tile does what its + does: add it, or open its menu. A click that only closes the open
     // menu leaves it closed.
     const tileDown = (event: PointerEvent<HTMLDivElement>) => {
         menuWasOpen.current = !!event.currentTarget.querySelector('.action-menu.is-open')
     }
     const tileClick = (event: MouseEvent<HTMLDivElement>) => {
+        if (selecting) return
         if ((event.target as Element).closest('.creator-more-add') || menuWasOpen.current) return
         event.currentTarget.querySelector<HTMLButtonElement>('.creator-more-plus, .action-menu-trigger')?.click()
     }
@@ -131,6 +154,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const away = items.some(({section}) => section.movieSlug) ? `not with ${creator.title}` : 'not in your library'
     return (
         <section className={`creator-more${open ? ' is-open' : ''}`} aria-label="Not in your library">
+            <div className="creator-more-head">
             <button type="button" className="creator-more-summary" aria-expanded={open} onClick={toggle}>
                 {arts.length > 0 && (
                     <span className="creator-more-stack" aria-hidden="true">
@@ -149,21 +173,47 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                             : `${listed(titles)} ${items.length === 1 ? 'is' : 'are'} ${away}`}
                     </span>
                 </span>
-                <span className="btn btn-secondary creator-more-toggle">
-                    <span className="creator-more-toggle-label">{open ? 'Hide' : 'Show'}</span>
-                    <FontAwesomeIcon icon={faIcon('fass', open ? 'chevron-up' : 'chevron-down')} aria-hidden="true"/>
-                </span>
             </button>
+            {open && mayAdd && (
+                <PageHeaderAction
+                    icon={selecting ? faIcon('fass', 'check') : faIcon('fass', 'list-check')}
+                    label={selecting ? 'Done' : 'Bulk edit'}
+                    variant="secondary"
+                    toggled={selecting}
+                    onClick={selecting ? () => setSelecting(false) : startSelecting}
+                />
+            )}
+            <button type="button" className="btn btn-secondary creator-more-toggle" aria-expanded={open} onClick={toggle} tabIndex={-1}>
+                <span className="creator-more-toggle-label">{open ? 'Hide' : 'Show'}</span>
+                <FontAwesomeIcon icon={faIcon('fass', open ? 'chevron-up' : 'chevron-down')} aria-hidden="true"/>
+            </button>
+            </div>
             {open && (
                 <div className="creator-more-body">
-                    <div className={`creator-more-grid${showAll ? '' : ' is-cut'}`} role="list">
+                    {selecting && (
+                        <div className="creator-more-select">
+                            <label className="bulk-select-all">
+                                <input
+                                    type="checkbox" className="bulk-check" checked={allChosen}
+                                    ref={(element) => { if (element) element.indeterminate = chosen.length > 0 && !allChosen }}
+                                    onChange={chooseAll}
+                                />
+                                <span>{allChosen ? 'Deselect all' : 'Select all'}</span>
+                            </label>
+                            <b>{items.length} {nouns}</b>
+                        </div>
+                    )}
+                    <div className={`creator-more-grid${showAll || selecting ? '' : ' is-cut'}`} role="list">
                         {items.map((item) => {
                             const image = toImageUrl(item.section.imageUrl)
+                            const isChosen = selected.has(key(item))
                             const facts = [sectionFacts(item.section, item.account.site), item.section.movieSlug ? 'In your library' : null, several ? item.account.site.name : null].filter(Boolean).join(' · ')
                             return (
                                 <div
-                                    key={key(item)} className={`creator-more-tile${mayAdd ? ' is-addable' : ''}`} role="listitem"
-                                    onPointerDownCapture={mayAdd ? tileDown : undefined} onClick={mayAdd ? tileClick : undefined}
+                                    key={key(item)} role="listitem"
+                                    className={`creator-more-tile${mayAdd ? ' is-addable' : ''}${selecting ? ' bulk-tile' : ''}${isChosen ? ' is-selected' : ''}`}
+                                    onPointerDownCapture={mayAdd && !selecting ? tileDown : undefined}
+                                    onClick={selecting ? () => choose(item) : mayAdd ? tileClick : undefined}
                                 >
                                     <span className="library-tile-art creator-more-art">
                                         {image
@@ -171,7 +221,14 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                                             : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', item.section.kind === 'feed' ? 'rss' : item.section.kind === 'item' ? 'film' : 'list')}/></span>}
                                     </span>
                                     {item.section.status === 'new' && <span className="creator-more-new creator-more-tile-new">New</span>}
-                                    {mayAdd && <div className="creator-more-add">{addButton(item)}</div>}
+                                    {selecting ? (
+                                        <label className="creator-more-check" onClick={(event) => event.stopPropagation()}>
+                                            <input
+                                                type="checkbox" className="bulk-check" checked={isChosen}
+                                                aria-label={`Choose ${item.section.title}`} onChange={() => choose(item)}
+                                            />
+                                        </label>
+                                    ) : mayAdd && <div className="creator-more-add">{addButton(item)}</div>}
                                     <span className="library-tile-copy">
                                         <span className="library-tile-title">{item.section.title}</span>
                                         {facts && <span className="library-tile-meta"><span>{facts}</span></span>}
@@ -180,14 +237,25 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                             )
                         })}
                     </div>
-                    {!showAll && items.length > PHONE_TILES && (
+                    {!showAll && !selecting && items.length > PHONE_TILES && (
                         <div className={`creator-more-all${items.length > DESKTOP_TILES ? '' : ' is-phone-only'}`}>
                             <button type="button" className="btn btn-secondary" onClick={() => setShowAll(true)}>Show all {items.length}</button>
                         </div>
                     )}
                 </div>
             )}
-            {adding && <NewCreatorCollectionDialog creator={creator} item={adding} onDismiss={() => setAdding(null)}/>}
+            {open && selecting && (
+                <CreatorBulkBar
+                    creator={creator} items={items} chosen={chosen}
+                    onClear={() => setSelected(new Set())} onStop={() => setSelecting(false)}
+                    onDone={(done) => setSelected((current) => {
+                        const next = new Set(current)
+                        for (const item of done) next.delete(key(item))
+                        return next
+                    })}
+                />
+            )}
+            {adding && <NewCreatorCollectionDialog creator={creator} items={[adding]} onDismiss={() => setAdding(null)}/>}
         </section>
     )
 }

@@ -357,7 +357,7 @@ export default function CreatorSectionsEditor({creator, part}: {
                 )}
             </ConfirmDialog>
 
-            {adding && <NewCreatorCollectionDialog creator={creator} item={adding} onDismiss={() => setAdding(null)}/>}
+            {adding && <NewCreatorCollectionDialog creator={creator} items={[adding]} onDismiss={() => setAdding(null)}/>}
         </>
     )
 }
