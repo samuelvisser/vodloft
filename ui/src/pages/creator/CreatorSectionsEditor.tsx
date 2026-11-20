@@ -8,6 +8,10 @@ import {can} from '../../lib/access'
 import {addCreatorSections, moveCreatorSection, splitCreatorAccount} from '../../lib/queries'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
+import CreatorBulkBar from './CreatorBulkEdit'
+import {sectionNouns} from './sectionNames'
+import {PageHeaderAction} from '../../components/common/PageHeader'
+import '../../components/ProfileBulkEdit/ProfileBulkEdit.css'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {capitalized, groupNames, joinedNames} from '../../types/creator'
@@ -137,6 +141,9 @@ export default function CreatorSectionsEditor({creator, part}: {
     const [splitting, setSplitting] = useState<CreatorPageAccountRead | null>(null)
     // The section that becomes a collection of its own, while the user chooses its type and identification.
     const [adding, setAdding] = useState<AccountSection | null>(null)
+    // Bulk edit of what is not in the library: whether it is on, and the keys of the chosen sections.
+    const [selecting, setSelecting] = useState(false)
+    const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
 
     const mayAdd = can('add_media')
     const mayManage = can('library', 'manage')
@@ -202,6 +209,14 @@ export default function CreatorSectionsEditor({creator, part}: {
     const left = all.filter(({account, section}) => section.status !== 'new' && (
         section.kind === 'item' ? isMovie(account, section) && !section.movieJoined : !section.collectionSlug
     ))
+    const leftKey = ({account, section}: AccountSection) => sectionKey(account, section.ref)
+    const chosen = left.filter((item) => selected.has(leftKey(item)))
+    const allChosen = left.length > 0 && chosen.length === left.length
+    const choose = (item: AccountSection) => setSelected((current) => {
+        const next = new Set(current)
+        if (!next.delete(leftKey(item))) next.add(leftKey(item))
+        return next
+    })
     const checkedAt = creator.accounts.map((account) => account.checkedAt).filter(Boolean).sort().pop()
 
     const sectionArt = (section: CreatorSectionRead) => section.imageUrl
@@ -283,10 +298,45 @@ export default function CreatorSectionsEditor({creator, part}: {
 
             {part === 'rest' && left.length > 0 && (
                 <div className="creator-section-group">
-                    <h2>Not in your library</h2>
+                    <div className="creator-section-group-head">
+                        <h2>Not in your library</h2>
+                        {mayAdd && (
+                            <PageHeaderAction
+                                icon={selecting ? faIcon('fass', 'check') : faIcon('fass', 'list-check')}
+                                label={selecting ? 'Done' : 'Bulk edit'}
+                                variant="secondary"
+                                toggled={selecting}
+                                onClick={() => { setSelected(new Set()); setSelecting(!selecting) }}
+                            />
+                        )}
+                    </div>
+                    {selecting && (
+                        <div className="creator-more-select">
+                            <label className="bulk-select-all">
+                                <input
+                                    type="checkbox" className="bulk-check" checked={allChosen}
+                                    ref={(element) => { if (element) element.indeterminate = chosen.length > 0 && !allChosen }}
+                                    onChange={() => setSelected(allChosen ? new Set() : new Set(left.map(leftKey)))}
+                                />
+                                <span>{allChosen ? 'Deselect all' : 'Select all'}</span>
+                            </label>
+                            <b>{left.length} {sectionNouns(left).plural}</b>
+                        </div>
+                    )}
                     <div className="creator-section-list">
                         {left.map((item) => (
-                            <div key={sectionKey(item.account, item.section.ref)} className="creator-section-row">
+                            <div
+                                key={leftKey(item)}
+                                className={`creator-section-row${selecting ? ' bulk-row' : ''}${selected.has(leftKey(item)) ? ' is-selected' : ''}`}
+                                onClick={selecting ? () => choose(item) : undefined}
+                            >
+                                {selecting && (
+                                    <input
+                                        type="checkbox" className="bulk-check" checked={selected.has(leftKey(item))}
+                                        aria-label={`Choose ${item.section.title}`}
+                                        onClick={(event) => event.stopPropagation()} onChange={() => choose(item)}
+                                    />
+                                )}
                                 {sectionArt(item.section)}
                                 <div className="creator-section-copy">
                                     <b>{item.section.title}</b>
@@ -296,10 +346,21 @@ export default function CreatorSectionsEditor({creator, part}: {
                                             : facts(item, item.section.movieSlug ? 'In your library' : null, item.section.status === 'ignored' ? 'Hidden on the creator page' : null)}
                                     </span>
                                 </div>
-                                {addButtons(item, false)}
+                                {!selecting && addButtons(item, false)}
                             </div>
                         ))}
                     </div>
+                    {selecting && (
+                        <CreatorBulkBar
+                            creator={creator} items={left} chosen={chosen} onEdit
+                            onClear={() => setSelected(new Set())} onStop={() => setSelecting(false)}
+                            onDone={(done) => setSelected((current) => {
+                                const next = new Set(current)
+                                for (const item of done) next.delete(leftKey(item))
+                                return next
+                            })}
+                        />
+                    )}
                 </div>
             )}
 
@@ -357,7 +418,7 @@ export default function CreatorSectionsEditor({creator, part}: {
                 )}
             </ConfirmDialog>
 
-            {adding && <NewCreatorCollectionDialog creator={creator} item={adding} onDismiss={() => setAdding(null)}/>}
+            {adding && <NewCreatorCollectionDialog creator={creator} items={[adding]} onDismiss={() => setAdding(null)}/>}
         </>
     )
 }

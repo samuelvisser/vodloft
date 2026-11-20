@@ -68,6 +68,10 @@
 .creator-preset:focus-within { outline: 2px solid #3b82f6; outline-offset: 2px; }
 
 .creator-section-group h2 { font-size: 1rem; margin: 0 0 .5rem; }
+.creator-section-group-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: .5rem; }
+.creator-section-group-head h2 { margin: 0; }
+.creator-section-row.bulk-row { cursor: pointer; }
+.creator-section-row.is-selected { background: rgba(59, 130, 246, .12); }
 .creator-section-list { display: flex; flex-direction: column; border: 1px solid rgba(100, 116, 139, 0.24); border-radius: 12px; }
 .creator-section-row { display: flex; align-items: center; gap: .75rem; padding: .6rem .75rem; }
 .creator-section-row + .creator-section-row { border-top: 1px solid rgba(100, 116, 139, 0.24); }
@@ -178,8 +182,9 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
 
 /* Not in your library: one folded line, then faded Library tiles with a button to add each. */
 .creator-more { margin-top: 1.5rem; border: 1px solid rgba(100, 116, 139, .3); border-radius: 14px; background: rgba(148, 163, 184, .035); }
+.creator-more-head { display: flex; align-items: center; gap: 8px; padding-right: 14px; }
 .creator-more-summary {
-    display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 14px; border: 0; background: none;
+    display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 14px; padding: 12px 14px; border: 0; background: none;
     color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 14px;
 }
 .creator-more-summary:hover { background: rgba(148, 163, 184, .06); }
@@ -196,7 +201,22 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
     display: inline-block; margin-left: 8px; padding: 2px 7px; border-radius: 999px; background: #f59e0b; color: #1f1300;
     font-size: .68rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; vertical-align: 2px;
 }
-.creator-more-toggle { flex: 0 0 auto; gap: 6px; pointer-events: none; }
+.creator-more-toggle { flex: 0 0 auto; gap: 6px; }
+.creator-more-head .page-header-action { flex: 0 0 auto; }
+/* Bulk edit: select all above the tiles, and a check on each tile instead of its + */
+.creator-more-select { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
+.creator-more-check {
+    position: absolute; top: 8px; right: 8px; z-index: 2; display: grid; place-items: center; width: 34px; height: 34px;
+    border-radius: 50%; background: rgba(15, 23, 42, .65); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); cursor: pointer;
+}
+.creator-more-check .bulk-check { width: 20px; height: 20px; }
+.creator-more-tile.bulk-tile { cursor: pointer; }
+.creator-more-tile.is-selected { border-style: solid; border-color: #3b82f6; background: rgba(59, 130, 246, .10); }
+.creator-more-tile.is-selected .creator-more-art > * { filter: none; }
+.bulk-action-count {
+    min-width: 20px; padding: 0 6px; border-radius: 999px; background: rgba(255, 255, 255, .25); font-size: 12px; line-height: 20px; text-align: center;
+}
+.btn:not(.btn-primary):not(.btn-danger) .bulk-action-count { background: rgba(148, 163, 184, .25); }
 .creator-more-body { border-top: 1px solid rgba(100, 116, 139, .3); padding: 14px; }
 .creator-more-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
 .creator-more-grid.is-cut > :nth-child(n + 13) { display: none; }
@@ -222,6 +242,9 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
     .creator-more-long { display: none; }
     .creator-more-short { display: inline; }
     .creator-more-summary { padding: 10px; gap: 10px; }
+    .creator-more-head { padding-right: 10px; gap: 6px; }
+    .creator-more-head .page-header-action { width: 34px; height: 34px; padding: 0; justify-content: center; border-radius: 50%; }
+    .creator-more-head .page-header-action-label { display: none; }
     .creator-more-stack img { width: 36px; height: 36px; }
     .creator-more-toggle { width: 34px; height: 34px; padding: 0; justify-content: center; border-radius: 50%; }
     .creator-more-toggle-label { display: none; }
