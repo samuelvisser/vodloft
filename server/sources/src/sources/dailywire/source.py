@@ -215,14 +215,15 @@ class DailyWireSource(Source):
         first = shows[0] if shows else None
         sections = tuple(
             SectionRef(
-                ref=show.slug, url=collection_url(show.slug), title=show.title, kind=SectionKind.SHOW,
+                ref=show.slug, url=collection_url(show.slug), title=show.title, type=self.sites[0].section_type("show"),
                 image_url=_first(show.thumbnail_landscape_path, show.background_image_path),
                 description=show.description,
             )
             for show in shows
         ) + tuple(
             SectionRef(
-                ref=movie.slug, url=f"https://www.dailywire.com/videos/{movie.slug}", title=movie.title, kind=SectionKind.ITEM,
+                ref=movie.slug, url=f"https://www.dailywire.com/videos/{movie.slug}", title=movie.title,
+                type=self.sites[0].section_type("movie"),
                 image_url=_first(movie.thumbnail_landscape_path, movie.thumbnail_portrait_path),
                 description=movie.description,
             )

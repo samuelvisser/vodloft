@@ -45,6 +45,9 @@ export type NewSectionAction = typeof NewSectionActionValues[number]
 
 /** One kind of list a creator's Sites have, such as a SoundCloud artist's albums, with what happens with a new one. */
 export const CreatorNewListSchema = z.object({
+    /** The Site the kind is on: each of a creator's Sites has settings of its own. */
+    siteKey: z.string(),
+    siteName: z.string(),
     key: z.string(),
     names: NamesSchema,
     /** The lists can be seasons of the creator's own collection. */
@@ -55,12 +58,21 @@ export const CreatorNewListSchema = z.object({
 })
 export type CreatorNewList = z.infer<typeof CreatorNewListSchema>
 
-/** What happens with a new list, by the key of its kind, as a form keeps it. */
-export const NewListsSchema = z.record(z.string(), z.enum(NewSectionActionValues))
+/** What happens with a new list, by Site and the key of its kind, as a form keeps it. */
+export const NewListsSchema = z.record(z.string(), z.record(z.string(), z.enum(NewSectionActionValues)))
+export type NewLists = z.infer<typeof NewListsSchema>
 
 /** A form's settings for new lists, from what the server says of each kind. */
-export function newListsValues(settings: readonly CreatorNewList[]): Record<string, CreatorNewList['action']> {
-    return Object.fromEntries(settings.map((setting) => [setting.key, setting.action]))
+export function newListsValues(settings: readonly CreatorNewList[]): NewLists {
+    const values: NewLists = {}
+    for (const setting of settings) values[setting.siteKey] = {...values[setting.siteKey], [setting.key]: setting.action}
+    return values
+}
+
+/** The settings with one kind's changed. */
+export function withNewList(values: NewLists, kind: {siteKey?: string, key: string}, action: NewSectionAction): NewLists {
+    const site = kind.siteKey ?? ''
+    return {...values, [site]: {...values[site], [kind.key]: action}}
 }
 
 export const CreatorLookupReadSchema = z.object({
@@ -106,7 +118,7 @@ export const CreatorLookupReadSchema = z.object({
     /** The kinds of list named together, such as albums and playlists. */
     newListNames: NamesSchema,
     /** What the Site calls the lists and shows its creators add, such as playlists, or shows on The Daily Wire. */
-    growingNames: NamesSchema,
+    sectionGrowingNames: NamesSchema,
 })
 export type CreatorLookupRead = z.infer<typeof CreatorLookupReadSchema>
 
@@ -119,7 +131,7 @@ const SiteSchema = z.object({
     /** Every type of section the Site's creators have, such as feeds and playlists on YouTube. */
     sectionTypes: z.array(SectionTypeSchema),
     /** What the Site calls the lists and shows its creators add, such as playlists, or shows on The Daily Wire. */
-    growingNames: NamesSchema,
+    sectionGrowingNames: NamesSchema,
 })
 
 /** A creator's account on one Site, such as their YouTube channel. */
@@ -260,7 +272,7 @@ export const CollectionCreatorMatchSchema = z.object({
     /** Every type of section the creator's Site has, such as feeds and playlists on YouTube. */
     sectionTypes: z.array(SectionTypeSchema),
     /** What the Site calls the lists and shows its creators add, such as playlists, or shows on The Daily Wire. */
-    growingNames: NamesSchema,
+    sectionGrowingNames: NamesSchema,
     ref: z.string(),
     url: z.string().nullable().optional(),
     title: z.string(),

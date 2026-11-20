@@ -200,7 +200,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                         : (
                             <ul className="creator-order-note">
                                 <li>{words.season.Plural}, {words.episode.singular} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
-                                {!creator.creatorSlug && <li>The {creatorNames?.singular}'s other {creator.growingNames.plural} start as not in your library, so you can add them from the {creatorNames?.singular}'s Edit page.</li>}
+                                {!creator.creatorSlug && <li>The {creatorNames?.singular}'s other {creator.sectionGrowingNames.plural} start as not in your library, so you can add them from the {creatorNames?.singular}'s Edit page.</li>}
                             </ul>
                         )}
                 </div>

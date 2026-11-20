@@ -9,6 +9,7 @@ from backend.db.datetime_types import UTCDateTime
 
 if TYPE_CHECKING:
     from backend.db.models import Collection, Movie, Site
+    from sources import SectionKind, SectionRole, SectionType
 
 
 class Creator(Base):
@@ -34,9 +35,9 @@ class Creator(Base):
     links: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", comment="The creator's own links")
     facts: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", comment='Short facts, such as "1.2M subscribers"')
     added_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    new_lists: Mapped[dict[str, str]] = mapped_column(
+    new_lists: Mapped[dict[str, dict[str, str]]] = mapped_column(
         JSON, default=dict, server_default="{}",
-        comment="What happens when the creator adds a list, by the kind of list: ask, season, own or ignore",
+        comment="What happens when the creator adds a list, by Site and type of list: ask, season, own or ignore",
     )
     genre: Mapped[Optional[str]] = mapped_column(comment="Given to the creator's collections, for their NFO files")
     content_rating: Mapped[Optional[str]] = mapped_column(comment="Given to the creator's collections, for their NFO files")
@@ -108,10 +109,10 @@ class CreatorSection(Base):
     account_id: Mapped[int] = mapped_column(ForeignKey("creator_accounts.id", ondelete="CASCADE"), index=True)
     ref: Mapped[str] = mapped_column(comment="The Site's own id for the section")
     url: Mapped[str]
-    title: Mapped[str]
-    kind: Mapped[str] = mapped_column(comment="feed, list, show or item")
-    role: Mapped[str] = mapped_column(default="main", server_default="main", comment="main, short or live")
-    type: Mapped[str] = mapped_column(comment="The key of the Site's section type it is, such as feed, list or album")
+    own_title: Mapped[Optional[str]] = mapped_column(
+        "title", comment="The title the Site gives a list, show or item; a feed is named after its type",
+    )
+    type: Mapped[str] = mapped_column(comment="The key of the Site's section type it is, such as videos, list or album")
     item_count: Mapped[Optional[int]]
     image_path: Mapped[Optional[str]]
     description: Mapped[Optional[str]]
@@ -125,5 +126,29 @@ class CreatorSection(Base):
 
     account: Mapped["CreatorAccount"] = relationship(back_populates="sections")
 
+    @property
+    def section_type(self) -> "SectionType":
+        """The section's type in its account's Site contract, which says what kind of section it is."""
+        from sources import UnknownSourceError, get_source, site_of
+
+        try:
+            site = get_source(self.account.source_key).site_of(self.account.site_key)
+        except UnknownSourceError:
+            site = None
+        return (site or site_of(self.account.site_key)).section_type(self.type)
+
+    @property
+    def kind(self) -> "SectionKind":
+        return self.section_type.kind
+
+    @property
+    def role(self) -> "SectionRole":
+        return self.section_type.role
+
+    @property
+    def title(self) -> str:
+        """The section's name: the title the Site gives it, or a feed's type's, such as Shorts."""
+        return self.own_title or self.section_type.title
+
     def __repr__(self) -> str:
-        return f"<CreatorSection(id={self.id}, account_id={self.account_id}, ref={self.ref!r}, kind={self.kind})>"
+        return f"<CreatorSection(id={self.id}, account_id={self.account_id}, ref={self.ref!r}, type={self.type})>"

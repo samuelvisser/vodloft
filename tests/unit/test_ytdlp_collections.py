@@ -466,7 +466,9 @@ def test_youtube_takes_albums_artist_channels_and_music_sites_for_music(monkeypa
 
     source = YtDlpSource()
     asked: list[str] = []
-    monkeypatch.setattr(YtDlpSource, "_has_releases", lambda self, root: asked.append(root) or root.endswith("@artist"))
+    from sources.ytdlp.site_implementations import YouTubeImplementation
+
+    monkeypatch.setattr(YouTubeImplementation, "has_releases", lambda self, root: asked.append(root) or root.endswith("@artist"))
     playlist = CollectionDetails(slug="PL1", url="https://www.youtube.com/playlist?list=PL1", title="Live", author_url="https://www.youtube.com/@artist")
     assert source.music_reason("https://www.youtube.com/playlist?list=PL1", playlist) == "Its channel has releases on YouTube Music"
     assert source.music_reason("https://www.youtube.com/@vlogs/videos", replace(playlist, author_url=None)) is None
@@ -655,14 +657,15 @@ def test_a_youtube_download_profile_marks_sponsors_and_adds_your_own_options(lis
 
 
 def test_a_creators_collection_lists_only_the_feeds_placed_in_it():
-    from sources.ytdlp.source import _feeds, _listing_urls
+    from sources.ytdlp.source import YtDlpSource, _feeds
     from sources.ytdlp.youtube_api import mapping
 
     url = "https://www.youtube.com/@artist/videos"
-    assert _listing_urls(url) == [url, "https://www.youtube.com/@artist/shorts", "https://www.youtube.com/@artist/streams"]
-    assert _listing_urls(url, frozenset({"videos"})) == [url]
-    assert _listing_urls(url, frozenset({"streams"})) == ["https://www.youtube.com/@artist/streams"]
-    assert _listing_urls(url, frozenset()) == []
+    youtube = YtDlpSource()._implementation(url)
+    assert youtube.listing_urls(url, None) == [url, "https://www.youtube.com/@artist/shorts", "https://www.youtube.com/@artist/streams"]
+    assert youtube.listing_urls(url, frozenset({"videos"})) == [url]
+    assert youtube.listing_urls(url, frozenset({"streams"})) == ["https://www.youtube.com/@artist/streams"]
+    assert youtube.listing_urls(url, frozenset()) == []
 
     ref = mapping.YouTubeRef("channel", "UCabc")
     assert ref.feed_playlists("UCabc", None) == ["UUabc"]
@@ -674,7 +677,8 @@ def test_a_creators_collection_lists_only_the_feeds_placed_in_it():
 
 def test_a_music_collection_has_a_setting_for_new_albums_and_one_for_new_playlists(session):
     from backend.services.link_seasons import LinkListing, collection_new_lists, save_lists
-    from sources import SectionKind, SectionRef
+    from sources import SectionRef
+    from sources.ytdlp.sites import site_of
 
     collection = _collection(session, "PLartist", source_key="ytdlp")
     collection.sharing_url = "https://soundcloud.com/artist"
@@ -687,8 +691,8 @@ def test_a_music_collection_has_a_setting_for_new_albums_and_one_for_new_playlis
 
     def listed(ref, album):
         return SectionRef(
-            ref, f"https://soundcloud.com/artist/sets/{ref}", ref.title(), SectionKind.LIST,
-            type="album" if album else "playlist",
+            ref, f"https://soundcloud.com/artist/sets/{ref}", site_of("soundcloud").section_type("album" if album else "playlist"),
+            ref.title(),
         )
 
     # On the first look every list is a season, as the collection skips no kind.

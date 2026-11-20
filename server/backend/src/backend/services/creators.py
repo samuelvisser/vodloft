@@ -10,7 +10,7 @@ Wire host, and collections from any other link can join them too.
 """
 from __future__ import annotations
 
-from collections.abc import Collection as Refs, Mapping, Sequence
+from collections.abc import Collection as Refs, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 
@@ -23,7 +23,8 @@ from backend.services.collections import add_collection, index_new_collection, r
 from backend.services.errors import ServiceError
 from backend.services.sites import collection_site, site_record
 from backend.services.new_lists import (
-    ListKind, NewListSetting, checked_new_sections, link_season_action, list_kinds, new_sections_settings, section_kind,
+    ListKind, NewListSetting, SiteSettings, checked_new_sections, link_season_action, list_kinds, merged_settings,
+    new_sections_settings, site_settings,
 )
 from backend.types.creator_types import NewSectionAction, SectionStatus, SectionTarget
 from backend.types.dailywire_user_info import DwMembershipLevel
@@ -32,7 +33,7 @@ from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
 from backend.utils.helpers import generate_uuid, slugify
 from sources import (
-    CreatorDetails, CreatorPreset, Feature, Names, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source,
+    CreatorDetails, CreatorPreset, Feature, Names, SectionKind, SectionRef, SectionRole, SectionType, Site, UnknownSourceError, get_source,
     site_of,
 )
 
@@ -244,12 +245,20 @@ class NewCollectionSettings:
     membership_level: str
 
 
-def _section_record(
-    site: Site, section: SectionRef, position: int, status: SectionStatus = SectionStatus.KNOWN,
-) -> CreatorSection:
+def type_of(section: SectionRef | CreatorSection) -> SectionType:
+    """The Site's type of a section, whether it was just looked up or is stored."""
+    return section.type if isinstance(section, SectionRef) else section.section_type
+
+
+def _own_title(section: SectionRef) -> str | None:
+    """The title a section keeps: a feed is named after its type."""
+    return None if section.kind is SectionKind.FEED else section.title
+
+
+def _section_record(section: SectionRef, position: int, status: SectionStatus = SectionStatus.KNOWN) -> CreatorSection:
     return CreatorSection(
-        ref=section.ref, url=section.url, title=section.title, kind=section.kind.value, role=section.role.value,
-        type=site.section_type_of(section).key, item_count=section.item_count, image_path=section.image_url,
+        ref=section.ref, url=section.url, own_title=_own_title(section), type=section.type.key,
+        item_count=section.item_count, image_path=section.image_url,
         description=section.description, access=section.access,
         site_position=position, status=status.value,
     )
@@ -260,7 +269,7 @@ def _new_account(s: Session, creator: Creator, source_key: str, site_key: str, d
         source_key=source_key, site_key=site_key, site_ref=details.ref, url=details.url, handle=details.handle,
     )
     account.sections = [
-        _section_record(_site(source_key, site_key), section, position) for position, section in enumerate(details.sections)
+        _section_record(section, position) for position, section in enumerate(details.sections)
     ]
     creator.accounts.append(account)
     s.flush()
@@ -269,7 +278,7 @@ def _new_account(s: Session, creator: Creator, source_key: str, site_key: str, d
 
 def _new_creator(
     s: Session, source_key: str, site_key: str, details: CreatorDetails, *, added_by_id: int | None,
-    new_lists: Mapping[str, str] | None = None,
+    new_lists: SiteSettings | None = None,
 ) -> CreatorAccount:
     """A new creator with their first account, which is returned. ``new_lists`` is what they do with each kind of new
     list; left out, each kind starts with its default."""
@@ -277,7 +286,7 @@ def _new_creator(
         uuid=generate_uuid(), slug=_unique_slug(s, Creator, slugify(details.handle or details.title) or details.ref),
         title=details.title, description=details.description, avatar_path=details.avatar_url,
         banner_path=details.banner_url, links=list(details.links), facts=list(details.facts), added_by_id=added_by_id,
-        new_lists=dict(new_lists or {}),
+        new_lists={site: dict(actions) for site, actions in (new_lists or {}).items()},
     )
     s.add(creator)
     return _new_account(s, creator, source_key, site_key, details)
@@ -285,11 +294,12 @@ def _new_creator(
 
 def add_creator(
     s: Session, *, source_key: str, details: CreatorDetails, plans: list[SectionPlan], settings: NewCollectionSettings,
-    added_by_id: int | None = None, new_lists: Mapping[str, str] | None = None, into: Creator | None = None,
+    added_by_id: int | None = None, new_lists: SiteSettings | None = None, into: Creator | None = None,
 ) -> tuple[Creator, list[Collection]]:
     """Put a creator in the Library with the collections their sections go to, and start indexing them. With
     ``into``, the account joins that creator in the Library instead, such as a host's YouTube channel joining the
-    host, and follows that creator's settings. ``new_lists`` is what the creator does with each kind of new list, over
+    host, and follows that creator's settings. ``new_lists`` is what the creator does with each type of new list by
+    Site, over
     the defaults of an artist when ``settings`` makes Music collections, and of anyone else otherwise.
 
     ``details`` was looked up before the write transaction. Sections already kept by a collection are left where they
@@ -323,9 +333,10 @@ def creator_new_lists(creator: Creator) -> list[NewListSetting]:
     return new_sections_settings(creator_list_kinds(creator), creator.new_lists, is_music_creator(creator))
 
 
-def new_link_seasons(creator: Creator) -> dict[str, str]:
-    """What the creator's own collection does with a new list of each kind: what the creator does with it."""
-    return {setting.key: link_season_action(setting.action).value for setting in creator_new_lists(creator)}
+def new_link_seasons(creator: Creator, site_key: str) -> dict[str, str]:
+    """What the creator's own collection on ``site_key`` does with a new list of each type: what the creator does
+    with it there."""
+    return {key: link_season_action(action).value for key, action in site_settings(creator_new_lists(creator), site_key).items()}
 
 
 def _make_seasons(account: CreatorAccount, main: Collection, refs: set[str]) -> None:
@@ -333,7 +344,7 @@ def _make_seasons(account: CreatorAccount, main: Collection, refs: set[str]) -> 
     # The creator decides which of their lists are seasons, the ones to come too, so the collection only takes the
     # ones the creator gives it.
     main.link_seasons = LinkSeasons.SELECTED.value
-    main.new_lists = new_link_seasons(account.creator)
+    main.new_lists = new_link_seasons(account.creator, account.site_key)
     known = {playlist.ref: playlist for playlist in main.lists}
     for section in account.sections:
         if section.kind != SectionKind.LIST:
@@ -513,14 +524,14 @@ def place_sections(
 
 def _as_ref(section: CreatorSection) -> SectionRef:
     return SectionRef(
-        ref=section.ref, url=section.url, title=section.title, kind=SectionKind(section.kind), role=SectionRole(section.role),
+        ref=section.ref, url=section.url, type=section.section_type, title=section.own_title or "",
     )
 
 
 @dataclass(frozen=True)
 class CreatorSettings:
-    new_lists: Mapping[str, str]
-    """What the creator does with a new list, by the key of its kind."""
+    new_lists: SiteSettings
+    """What the creator does with a new list, by Site and the key of its type."""
     genre: str | None
     content_rating: str | None
 
@@ -530,13 +541,15 @@ def update_creator_settings(s: Session, creator: Creator, settings: CreatorSetti
     collection that had the creator's old genre or rating gets the new one; one with its own keeps it.
 
     ``s`` is a write transaction's session."""
-    current = {setting.key: setting.action for setting in creator_new_lists(creator)}
+    current: dict[str, dict[str, str]] = {}
+    for setting in creator_new_lists(creator):
+        current.setdefault(setting.site_key, {})[setting.key] = setting.action
     creator.new_lists = checked_new_sections(
-        creator_list_kinds(creator), {**current, **settings.new_lists}, is_music_creator(creator),
+        creator_list_kinds(creator), merged_settings(current, settings.new_lists), is_music_creator(creator),
     )
     for account in creator.accounts:
         if account.main_collection is not None:
-            account.main_collection.new_lists = new_link_seasons(creator)
+            account.main_collection.new_lists = new_link_seasons(creator, account.site_key)
     for field in ("genre", "content_rating"):
         old, new = getattr(creator, field), getattr(settings, field) or None
         if old == new:
@@ -584,14 +597,14 @@ def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails,
     for position, section in enumerate(details.sections):
         record = known.get(section.ref)
         if record is None:
-            record = _section_record(_site(account.source_key, account.site_key), section, position, SectionStatus.NEW)
+            record = _section_record(section, position, SectionStatus.NEW)
             account.sections.append(record)
             found.append(record)
             continue
         for field, value in (
-            ("title", section.title), ("url", section.url), ("item_count", section.item_count),
+            ("own_title", _own_title(section)), ("url", section.url), ("item_count", section.item_count),
             ("image_path", section.image_url), ("description", section.description), ("site_position", position),
-            ("access", section.access), ("type", _site(account.source_key, account.site_key).section_type_of(section).key),
+            ("access", section.access), ("type", section.type.key),
         ):
             if getattr(record, field) != value:
                 setattr(record, field, value)
@@ -607,9 +620,8 @@ def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails,
     if not found:
         return FollowResult([], [], [])
     # Each kind of list has a setting of its own, such as a SoundCloud artist's albums and their playlists.
-    site = _site(account.source_key, account.site_key)
-    actions = {setting.key: NewSectionAction(setting.action) for setting in creator_new_lists(creator)}
-    kinds = {section.ref: section_kind(site, section) for section in details.sections}
+    actions = {key: NewSectionAction(action) for key, action in site_settings(creator_new_lists(creator), account.site_key).items()}
+    kinds = {section.ref: section.type.key for section in details.sections}
     asked, added, ignored = [], [], []
     plans = []
     for record in found:
@@ -891,7 +903,7 @@ def combine_creators(s: Session, creator: Creator, other: Creator) -> None:
     s.flush()
     for account in creator.accounts:
         if account.main_collection is not None:
-            account.main_collection.new_lists = new_link_seasons(creator)
+            account.main_collection.new_lists = new_link_seasons(creator, account.site_key)
 
 
 def split_account(s: Session, account: CreatorAccount, details: CreatorDetails | None) -> Creator:
@@ -914,7 +926,7 @@ def split_account(s: Session, account: CreatorAccount, details: CreatorDetails |
         avatar_path=details.avatar_url if details else creator.avatar_path,
         banner_path=details.banner_url if details else creator.banner_path,
         links=list(details.links) if details else [], facts=list(details.facts) if details else [],
-        added_by_id=creator.added_by_id, new_lists=dict(creator.new_lists), genre=creator.genre,
+        added_by_id=creator.added_by_id, new_lists={site: dict(actions) for site, actions in creator.new_lists.items()}, genre=creator.genre,
         content_rating=creator.content_rating,
     )
     s.add(own)

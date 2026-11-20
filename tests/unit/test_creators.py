@@ -9,18 +9,24 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from sources import (
-    CreatorDetails, CreatorPreset, Feature, Names, SectionKind, SectionRef, SectionRole, Site, registry,
+    CreatorDetails, CreatorPreset, Feature, Names, SectionKind, SectionRef, SectionRole, SectionType, Site, registry,
 )
 from test_ytdlp_collections import ListedSource, session  # noqa: F401
 
 ROOT = "https://tube.example/@workshop"
+VIDEOS = SectionType("videos", SectionKind.FEED, Names("video", "videos"))
+LIVE = SectionType("live", SectionKind.FEED, Names("livestream", "livestreams"), role=SectionRole.LIVE)
+SHORTS = SectionType("shorts", SectionKind.FEED, Names("short", "shorts"), role=SectionRole.SHORT)
+PLAYLISTS = SectionType("list", SectionKind.LIST, Names("playlist", "playlists"))
+SHOWS = SectionType("show", SectionKind.SHOW, Names("show", "shows"))
+MOVIES = SectionType("movie", SectionKind.ITEM, Names("movie", "movies"))
 SECTIONS = (
-    SectionRef("videos", f"{ROOT}/videos", "Videos", SectionKind.FEED),
-    SectionRef("shorts", f"{ROOT}/shorts", "Shorts", SectionKind.FEED, SectionRole.SHORT),
-    SectionRef("streams", f"{ROOT}/streams", "Live", SectionKind.FEED, SectionRole.LIVE),
-    SectionRef("PLcabin", "https://tube.example/playlist?list=PLcabin", "Building the Cabin", SectionKind.LIST, item_count=38),
-    SectionRef("PLtools", "https://tube.example/playlist?list=PLtools", "Tool Reviews", SectionKind.LIST, item_count=61),
-    SectionRef("PLmembers", "https://tube.example/playlist?list=PLmembers", "Members' Cuts", SectionKind.LIST, access="members"),
+    SectionRef("videos", f"{ROOT}/videos", VIDEOS),
+    SectionRef("shorts", f"{ROOT}/shorts", SHORTS),
+    SectionRef("streams", f"{ROOT}/streams", LIVE),
+    SectionRef("PLcabin", "https://tube.example/playlist?list=PLcabin", PLAYLISTS, "Building the Cabin", item_count=38),
+    SectionRef("PLtools", "https://tube.example/playlist?list=PLtools", PLAYLISTS, "Tool Reviews", item_count=61),
+    SectionRef("PLmembers", "https://tube.example/playlist?list=PLmembers", PLAYLISTS, "Members' Cuts", access="members"),
 )
 
 
@@ -30,7 +36,7 @@ class CreatorSource(ListedSource):
     domains = ("tube.example",)
     features = ListedSource.features | {Feature.CREATORS}
     sites = (Site(
-        "tube", "Tube", ("tube.example",), creators=True,
+        "tube", "Tube", ("tube.example",), creators=True, section_types=(VIDEOS, LIVE, SHORTS, PLAYLISTS),
         creator_presets=(CreatorPreset.ONE_SHOW, CreatorPreset.PER_LIST, CreatorPreset.PICK), link_seasons=True,
     ),)
 
@@ -127,7 +133,7 @@ def test_adding_a_creator_makes_its_collection_with_its_playlists_as_seasons(cli
     assert page["slug"] == "workshop"
     # Its Videos page lists the Shorts too, so the Shorts collection of their own is the user's extra choice.
     assert [(c["title"], c["links"]) for c in page["collections"]] == [
-        ("Northwind Workshop", ["Videos", "Live", "Building the Cabin"]),
+        ("Northwind Workshop", ["Videos", "Livestreams", "Building the Cabin"]),
         ("Northwind Workshop Shorts", ["Shorts"]),
         ("Tool Reviews", ["Tool Reviews"]),
     ]
@@ -313,7 +319,7 @@ def test_a_youtube_creator_page_opens_with_its_collections(client, monkeypatch):
 
 
 NEW_LIST = SectionRef(
-    "PLbarn", "https://tube.example/playlist?list=PLbarn", "Timber Frame Barn", SectionKind.LIST, item_count=4,
+    "PLbarn", "https://tube.example/playlist?list=PLbarn", PLAYLISTS, "Timber Frame Barn", item_count=4,
 )
 
 
@@ -354,7 +360,7 @@ def test_a_new_playlist_waits_for_a_choice_and_says_so(client, session, tube):
     # Adding it to the creator's own collection makes it a season of it.
     page = client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLbarn", "target": "main"}]}).json()
     assert next(c for c in page["collections"] if c["slug"] == page["accounts"][0]["mainCollectionSlug"])["links"] == [
-        "Timber Frame Barn", "Videos", "Live",
+        "Timber Frame Barn", "Videos", "Livestreams",
     ]
     assert next(s for s in page["accounts"][0]["sections"] if s["ref"] == "PLbarn")["status"] == "known"
 
@@ -397,7 +403,7 @@ def test_a_creator_set_to_make_new_playlists_seasons_adds_them_to_its_own_collec
 
     _one_show(client)
     client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
-    assert client.patch("/api/creators/workshop", json={"newLists": {"list": "season"}}).status_code == 200
+    assert client.patch("/api/creators/workshop", json={"newLists": {"tube": {"list": "season"}}}).status_code == 200
 
     result = _follow(session, tube, (NEW_LIST, *SECTIONS))
 
@@ -410,7 +416,7 @@ def test_a_creator_set_to_make_new_playlists_seasons_adds_them_to_its_own_collec
 
 def test_a_creator_set_to_add_new_playlists_as_collections_adds_them(client, session, tube):
     _one_show(client)
-    assert client.patch("/api/creators/workshop", json={"newLists": {"list": "own"}, "genre": "DIY"}).status_code == 200
+    assert client.patch("/api/creators/workshop", json={"newLists": {"tube": {"list": "own"}}, "genre": "DIY"}).status_code == 200
 
     result = _follow(session, tube, (NEW_LIST, *SECTIONS))
 
@@ -441,7 +447,7 @@ def test_the_creators_genre_follows_to_collections_that_had_it(client, session):
     session.execute(Collection.__table__.update().where(Collection.slug == "UCworkshop-shorts").values(genre="Shorts"))
     session.commit()
 
-    client.patch("/api/creators/workshop", json={"newLists": {"list": "ask"}, "genre": "Woodworking", "contentRating": "TV-G"})
+    client.patch("/api/creators/workshop", json={"newLists": {"tube": {"list": "ask"}}, "genre": "Woodworking", "contentRating": "TV-G"})
 
     session.expire_all()
     genres = dict(session.execute(select(Collection.slug, Collection.genre)).all())
@@ -670,29 +676,29 @@ def test_a_site_names_its_creators_in_its_own_words(client, tube, monkeypatch):
 
 
 def test_a_creator_lookup_says_what_its_site_calls_the_creators_sections(client, tube, monkeypatch):
-    from dataclasses import replace
 
-    from sources import Names, SectionKind, SectionType
-
-    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], section_types=(
-        SectionType("feed", SectionKind.FEED, Names("feed", "feeds")), SectionType("show", SectionKind.LIST, Names("show", "shows")),
-    )),))
     response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
     found = json.loads(response.text.splitlines()[-1])["creator"]
 
-    assert [(t["key"], t["kind"], t["names"]["singular"], t["names"]["plural"]) for t in found["sectionTypes"]] == [
-        ("feed", "feed", "feed", "feeds"), ("show", "list", "show", "shows"),
+    assert [(t["key"], t["kind"], t["names"]["plural"]) for t in found["sectionTypes"]] == [
+        ("videos", "feed", "videos"), ("live", "feed", "livestreams"), ("shorts", "feed", "shorts"), ("list", "list", "playlists"),
     ]
-    assert {section["type"] for section in found["sections"]} == {"feed", "show"}
+    assert [(section["ref"], section["type"], section["kind"], section["role"], section["title"]) for section in found["sections"]][:3] == [
+        ("videos", "videos", "feed", "main", "Videos"), ("shorts", "shorts", "feed", "short", "Shorts"),
+        ("streams", "live", "feed", "live", "Livestreams"),
+    ]
 
 
-def test_a_creators_sections_keep_their_type(client, session):
+def test_a_creators_sections_keep_their_type_and_a_feed_no_title_of_its_own(client, session):
     from backend.db.models import CreatorSection
 
     _one_show(client)
-    assert {section.type for section in session.scalars(select(CreatorSection))} == {"feed", "list"}
+    stored = {section.ref: (section.type, section.own_title) for section in session.scalars(select(CreatorSection))}
+    assert stored["streams"] == ("live", None) and stored["PLcabin"] == ("list", "Building the Cabin")
     page = client.get("/api/creators/workshop").json()
-    assert [(t["key"], t["names"]["plural"]) for t in page["accounts"][0]["site"]["sectionTypes"]] == [("feed", "feeds"), ("list", "playlists")]
+    assert {(section["ref"], section["type"], section["title"]) for section in page["accounts"][0]["sections"]} >= {
+        ("streams", "live", "Livestreams"), ("PLcabin", "list", "Building the Cabin"),
+    }
 
 
 def test_a_playlist_that_is_a_season_of_the_creators_collection_moves_to_a_collection_that_joins(client, session):
@@ -786,12 +792,12 @@ class CastSource(ListedSource):
     name = "Cast"
     domains = ("cast.example",)
     features = ListedSource.features | {Feature.CREATORS}
-    sites = (Site("cast", "Cast", ("cast.example",), creators=True, creator_names=Names("host", "hosts")),)
+    sites = (Site("cast", "Cast", ("cast.example",), creators=True, creator_names=Names("host", "hosts"), section_types=(SHOWS,)),)
 
     def creator_details(self, ref, progress=lambda step: None):
         return CreatorDetails(
             ref="northwind", url=CAST_ROOT, title="Northwind Workshop Live", handle="@nw-live",
-            sections=(SectionRef("workbench", "https://cast.example/shows/workbench", "The Workbench", SectionKind.SHOW),),
+            sections=(SectionRef("workbench", "https://cast.example/shows/workbench", SHOWS, "The Workbench"),),
         )
 
 
@@ -938,7 +944,7 @@ def test_a_renamed_creator_keeps_its_name_and_gives_it_to_its_collections_as_aut
     from backend.db.models import Collection
 
     _one_show(client)
-    assert client.patch("/api/creators/workshop", json={"title": "Northwind", "newLists": {"list": "ask"}}).status_code == 200
+    assert client.patch("/api/creators/workshop", json={"title": "Northwind", "newLists": {"tube": {"list": "ask"}}}).status_code == 200
     authors = {collection.author_name for collection in session.scalars(select(Collection))}
     assert authors == {"Northwind"}
 
@@ -964,21 +970,21 @@ def test_new_sections_only_become_seasons_where_a_creators_site_can_make_lists_s
 
     monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], link_seasons=False),))
     plan = [{"ref": "videos", "target": "own"}]
-    refused = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newLists": {"list": "season"}})
+    refused = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newLists": {"tube": {"list": "season"}}})
     assert refused.status_code == 422
     assert "can't be added as seasons" in str(refused.json())
 
-    assert client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newLists": {"list": "own"}}).status_code == 201
-    refused = client.patch("/api/creators/workshop", json={"newLists": {"list": "season"}})
+    assert client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan, "newLists": {"tube": {"list": "own"}}}).status_code == 201
+    refused = client.patch("/api/creators/workshop", json={"newLists": {"tube": {"list": "season"}}})
     assert refused.status_code == 422
     assert "playlists can't be added as seasons" in str(refused.json())
 
 
 FILM_ROOT = "https://film.example/hosts/marsh"
 FILM_SECTIONS = (
-    SectionRef("evenings", "https://film.example/shows/evenings", "Evenings", SectionKind.SHOW),
-    SectionRef("tribute", "https://film.example/videos/tribute", "A Tribute", SectionKind.ITEM),
-    SectionRef("harbour", "https://film.example/videos/harbour", "The Harbour", SectionKind.ITEM),
+    SectionRef("evenings", "https://film.example/shows/evenings", SHOWS, "Evenings"),
+    SectionRef("tribute", "https://film.example/videos/tribute", MOVIES, "A Tribute"),
+    SectionRef("harbour", "https://film.example/videos/harbour", MOVIES, "The Harbour"),
 )
 
 
@@ -990,7 +996,7 @@ class FilmSource(ListedSource):
     domains = ("film.example",)
     features = ListedSource.features | {Feature.CREATORS, Feature.MOVIES}
     sites = (Site(
-        "film", "Film", ("film.example",), creators=True, creator_names=Names("host", "hosts"),
+        "film", "Film", ("film.example",), creators=True, creator_names=Names("host", "hosts"), section_types=(SHOWS, MOVIES),
         creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)
 
@@ -1129,31 +1135,32 @@ def test_each_new_collection_takes_the_type_and_identification_chosen_for_it(cli
 def test_each_kind_of_list_has_its_own_setting_for_new_ones(client, session, tube, monkeypatch):
     from dataclasses import replace
 
-    from backend.db.models import Collection, Creator
-    from sources import Names, SectionKind, SectionType
+    import sys
 
-    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], section_types=(
-        SectionType("feed", SectionKind.FEED, Names("feed", "feeds")),
-        SectionType("album", SectionKind.LIST, Names("album", "albums"), albums=True),
-        SectionType("playlist", SectionKind.LIST, Names("playlist", "playlists")),
-    )),))
+    from backend.db.models import Collection, Creator
+
+    albums = SectionType("album", SectionKind.LIST, Names("album", "albums"), albums=True)
+    playlists = SectionType("playlist", SectionKind.LIST, Names("playlist", "playlists"))
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], section_types=(VIDEOS, LIVE, SHORTS, albums, playlists)),))
+    sections = tuple(replace(section, type=playlists) if section.kind is SectionKind.LIST else section for section in SECTIONS)
+    monkeypatch.setattr(sys.modules[__name__], "SECTIONS", sections)
     _one_show(client)
     client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
-    page = client.patch("/api/creators/workshop", json={"newLists": {"album": "season"}}).json()
+    page = client.patch("/api/creators/workshop", json={"newLists": {"tube": {"album": "season"}}}).json()
     assert [(setting["key"], setting["names"]["plural"], setting["albums"], setting["action"]) for setting in page["newLists"]] == [
         ("album", "albums", True, "season"), ("playlist", "playlists", False, "ask"),
     ]
-    refused = client.patch("/api/creators/workshop", json={"newLists": {"list": "season"}})
+    refused = client.patch("/api/creators/workshop", json={"newLists": {"tube": {"list": "season"}}})
     assert refused.status_code == 422
-    assert refused.json()["detail"] == "This creator's sites have no lists of the kind list"
+    assert refused.json()["detail"] == "This creator's sites have no lists of the kind list on tube"
     main = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
     session.refresh(main)
     assert main.new_lists == {"album": "add", "playlist": "ask"}
-    assert session.scalar(select(Creator)).new_lists == {"album": "season", "playlist": "ask"}
-    album = replace(NEW_LIST, ref="PLalbum", url="https://tube.example/playlist?list=PLalbum", title="Album", type="album")
-    playlist = replace(NEW_LIST, type="playlist")
+    assert session.scalar(select(Creator)).new_lists == {"tube": {"album": "season", "playlist": "ask"}}
+    album = replace(NEW_LIST, ref="PLalbum", url="https://tube.example/playlist?list=PLalbum", title="Album", type=albums)
+    playlist = replace(NEW_LIST, type=playlists)
 
-    result = _follow(session, tube, (album, playlist, *SECTIONS))
+    result = _follow(session, tube, (album, playlist, *sections))
 
     # The album is added by itself; the playlist waits for the user's choice.
     assert ([section.ref for section in result.added], [section.ref for section in result.asked]) == (["PLalbum"], ["PLbarn"])

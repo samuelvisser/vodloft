@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "f3df05c49000"
+HEAD_REVISION = "684e98f029ec"
 
 
 @pytest.fixture
@@ -1380,7 +1380,7 @@ def test_a_channel_knows_its_own_collection_and_installations_get_the_new_sectio
     with engine.connect() as connection:
         assert connection.execute(text(
             "SELECT a.main_collection_id, c.new_lists FROM creators c JOIN creator_accounts a ON a.creator_id = c.id"
-        )).one() == (2, '{"list": "ask"}')
+        )).one() == (2, '{"youtube": {"list": "ask"}}')
         rules = connection.execute(text("SELECT default_key, position FROM notification_rules ORDER BY position")).all()
         assert rules[-1] == ("creator_sections_found", rules[-2].position + 1)
 
@@ -1462,7 +1462,7 @@ def test_each_creator_gets_an_account_with_their_site_sections_and_collection(mi
             "VALUES (3, 4, 'videos', 'https://youtube.test/@w/videos', 'Videos', 'feed')"
         ))
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, "7d3b9e41a6c2")
 
     with engine.connect() as connection:
         account = connection.execute(text(
@@ -1797,7 +1797,7 @@ def test_each_creator_section_keeps_its_section_type_and_shows_and_albums_get_th
                 "'series', 'seasonal', 'A', 'a', 'ytdlp', 'newest_first', :site, '{\"list\": \"ask\"}')"
             ), {"id": collection_id, "site": site_key})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, "7d3b9e41a6c2")
 
     with engine.connect() as connection:
         assert connection.execute(text("SELECT id, type FROM creator_sections ORDER BY id")).all() == [
@@ -1818,6 +1818,62 @@ def test_each_creator_section_keeps_its_section_type_and_shows_and_albums_get_th
             (1, "Show"), (2, "Movie"),
         ]
         assert connection.execute(text("SELECT id, new_lists FROM creators ORDER BY id")).all()[0] == (1, '{"list": "own"}')
+
+
+def test_feeds_get_their_types_and_creators_keep_their_new_list_settings_per_site(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "7d3b9e41a6c2")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        # A creator on YouTube and The Daily Wire, a SoundCloud artist and a creator on Vimeo.
+        for creator_id, settings in ((1, '{"list": "own", "show": "ask"}'), (2, '{"album": "season", "playlist": "ignore"}'),
+                                     (3, '{"list": "season"}')):
+            connection.execute(text("INSERT INTO creators (id, uuid, slug, title, new_lists) VALUES (:id, :id, :id, :id, :s)"),
+                               {"id": creator_id, "s": settings})
+        for account_id, creator_id, site_key in ((1, 1, "youtube"), (2, 1, "dailywire"), (3, 2, "soundcloud"), (4, 3, "vimeo")):
+            connection.execute(text(
+                "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref) VALUES (:id, :creator, 's', :site, :id)"
+            ), {"id": account_id, "creator": creator_id, "site": site_key})
+        for section_id, account_id, ref, kind, role, type_ in (
+            (1, 1, "videos", "feed", "main", "feed"), (2, 1, "streams", "feed", "live", "feed"),
+            (3, 1, "shorts", "feed", "short", "feed"), (4, 1, "PL1", "list", "main", "list"),
+            (5, 2, "show", "show", "main", "show"), (6, 3, "tracks", "feed", "main", "feed"),
+            (7, 4, "videos", "feed", "main", "feed"),
+        ):
+            connection.execute(text(
+                "INSERT INTO creator_sections (id, account_id, ref, url, title, kind, role, type) "
+                "VALUES (:id, :account, :ref, :ref, :title, :kind, :role, :type)"
+            ), {"id": section_id, "account": account_id, "ref": ref, "title": f"Title {section_id}", "kind": kind,
+                "role": role, "type": type_})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id, type, title FROM creator_sections ORDER BY id")).all() == [
+            (1, "videos", None), (2, "live", None), (3, "shorts", None), (4, "list", "Title 4"), (5, "show", "Title 5"),
+            (6, "tracks", None), (7, "videos", None),
+        ]
+        columns = {column["name"] for column in inspect(connection).get_columns("creator_sections")}
+        assert not {"kind", "role"} & columns
+        assert [(id_, json.loads(value)) for id_, value in connection.execute(
+            text("SELECT id, new_lists FROM creators ORDER BY id")
+        ).all()] == [
+            (1, {"youtube": {"list": "own"}, "dailywire": {"show": "ask"}}),
+            (2, {"soundcloud": {"album": "season", "playlist": "ignore"}}),
+            (3, {"vimeo": {"list": "season"}}),
+        ]
+
+    command.downgrade(config, "7d3b9e41a6c2")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id, kind, role, type FROM creator_sections ORDER BY id")).all()[:3] == [
+            (1, "feed", "main", "feed"), (2, "feed", "live", "feed"), (3, "feed", "short", "feed"),
+        ]
+        assert json.loads(connection.execute(text("SELECT new_lists FROM creators WHERE id = 1")).scalar_one()) == {
+            "list": "own", "show": "ask",
+        }
 
 
 def test_movies_that_a_creators_account_lists_join_that_creator(migration_database):

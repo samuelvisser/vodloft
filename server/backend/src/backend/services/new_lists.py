@@ -1,37 +1,43 @@
-"""What happens with the lists a creator adds later, such as a new playlist or album: one setting for each kind of
-list the creator's Sites have (see ``Site.growing_types``), and with each kind of show. Most Sites have one kind; SoundCloud keeps an artist's
-albums apart from their playlists, so a SoundCloud artist has a setting for each.
+"""What happens with the lists a creator adds later, such as a new playlist or album: one setting for each type of
+list and show on each of the creator's Sites (see ``Site.growing_types``). Most Sites have one type; SoundCloud keeps
+an artist's albums apart from their playlists, so a SoundCloud artist has a setting for each.
 
-A creator keeps its settings in ``Creator.new_lists`` and a collection in ``Collection.new_lists``, by the kind's
-key. A kind without a setting yet, such as one of a Site an account joined from later, starts with its default.
+A creator keeps its settings in ``Creator.new_lists`` by Site and type key, as ``{site: {type: action}}``, as type keys
+are only unique within a Site. A collection is on one Site, and keeps its settings in ``Collection.new_lists`` by type
+key alone. A type without a setting yet, such as one of a Site an account joined from later, starts with its default.
 """
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from sources import SECTION_KIND_NAMES, Names, SectionKind, SectionRef, Site
+from sources import SECTION_KIND_NAMES, Names, SectionKind, Site
 
 from backend.services.errors import ServiceError
 from backend.types.creator_types import NewSectionAction
 from backend.types.link_season_types import NewLinkSeasonAction
 
+SiteSettings = Mapping[str, Mapping[str, str]]
+"""Settings by Site key, then by type key."""
+
 
 @dataclass(frozen=True)
 class ListKind:
-    """One kind of list a creator's Sites have, as the settings show it."""
+    """One type of list or show on one Site, as the settings show it."""
 
+    site_key: str
+    site_name: str
     key: str
     names: Names
     seasons: bool
-    """One of these Sites can make the lists seasons of the creator's own collection."""
+    """The Site can make the lists seasons of the creator's own collection."""
     albums: bool = False
-    """The kind best describes an artist's albums."""
+    """The type best describes an artist's albums."""
 
 
 @dataclass(frozen=True)
 class NewListSetting:
-    """What happens with a new list of one kind."""
+    """What happens with a new list of one type."""
 
     kind: ListKind
     action: str
@@ -40,32 +46,33 @@ class NewListSetting:
     def key(self) -> str:
         return self.kind.key
 
+    @property
+    def site_key(self) -> str:
+        return self.kind.site_key
+
 
 def list_kinds(sites: Iterable[Site]) -> list[ListKind]:
-    """The types of list and show of ``sites``, in their order. Sites that share a type, such as YouTube's and
-    Floatplane's playlists, share its setting, named for all of them."""
+    """The types of list and show of ``sites``, in their order, each Site's apart."""
+    return [
+        ListKind(site.key, site.name, type_.key, type_.names, site.link_seasons and type_.kind is SectionKind.LIST, type_.albums)
+        for site in sites for type_ in site.growing_types
+    ]
 
-    kinds: dict[str, ListKind] = {}
-    for site in sites:
-        for type_ in site.growing_types:
-            seasons = site.link_seasons and type_.kind is SectionKind.LIST
-            known = kinds.get(type_.key)
-            if known is None:
-                kinds[type_.key] = ListKind(type_.key, type_.names, seasons, type_.albums)
-            else:
-                kinds[type_.key] = ListKind(
-                    type_.key, Names.joined((known.names, type_.names)), known.seasons or seasons, known.albums or type_.albums,
-                )
-    return list(kinds.values())
+
+def _by_site(kinds: Iterable[ListKind]) -> dict[str, list[ListKind]]:
+    sites: dict[str, list[ListKind]] = {}
+    for kind in kinds:
+        sites.setdefault(kind.site_key, []).append(kind)
+    return sites
 
 
 _ALBUM_NAMES = frozenset({"album", "albums"})
 
 
 def album_kinds(kinds: Iterable[ListKind]) -> set[str]:
-    """The keys of the kinds that best describe an artist's albums: the ones their Site says do, or, where it says
-    none does and has more than one kind, the ones called album. Empty when no kind stands out, as on a Site with one
-    kind or with several of other names."""
+    """The keys of the types of one Site that best describe an artist's albums: the ones the Site says do, or, where
+    it says none does and has more than one type, the ones called album. Empty when no type stands out, as on a Site
+    with one type or with several of other names."""
     kinds = list(kinds)
     marked = {kind.key for kind in kinds if kind.albums}
     if marked or len(kinds) < 2:
@@ -74,11 +81,10 @@ def album_kinds(kinds: Iterable[ListKind]) -> set[str]:
                                            kind.names.plural.lower()} & _ALBUM_NAMES}
 
 
-def default_new_sections(kinds: Iterable[ListKind], music: bool) -> dict[str, str]:
-    """What a new creator does with each kind of new list. An artist adds them to their own collection, as albums;
-    where some kinds best describe albums (``album_kinds``), only those, and skips the others. Anyone else is
-    asked."""
-    kinds = list(kinds)
+def _default_new_sections(kinds: list[ListKind], music: bool) -> dict[str, str]:
+    """What a new creator does with each type of new list of one Site. An artist adds them to their own collection,
+    as albums; where some types best describe albums (``album_kinds``), only those, and skips the others. Anyone else
+    is asked."""
     albums = album_kinds(kinds)
 
     def action(kind: ListKind) -> NewSectionAction:
@@ -89,38 +95,57 @@ def default_new_sections(kinds: Iterable[ListKind], music: bool) -> dict[str, st
     return {kind.key: action(kind).value for kind in kinds}
 
 
+def default_new_sections(kinds: Iterable[ListKind], music: bool) -> dict[str, dict[str, str]]:
+    """What a new creator does with each type of new list, by Site."""
+    return {site: _default_new_sections(site_kinds, music) for site, site_kinds in _by_site(kinds).items()}
+
+
 def kinds_names(kinds: Iterable[ListKind]) -> Names:
-    """The kinds named together, such as "albums and playlists"; VODLoft's own word for lists when there are none."""
+    """The types named together, such as "albums and playlists"; VODLoft's own word for lists when there are none.
+    Sites that share a type, such as YouTube's and Floatplane's playlists, name it once."""
     kinds = list(kinds)
-    return Names.joined(kind.names for kind in kinds) if kinds else SECTION_KIND_NAMES[SectionKind.LIST]
+    return Names.joined(dict.fromkeys(kind.names for kind in kinds)) if kinds else SECTION_KIND_NAMES[SectionKind.LIST]
 
 
-def new_sections_settings(kinds: Iterable[ListKind], stored: Mapping[str, str] | None, music: bool) -> list[NewListSetting]:
-    """The creator's setting for each kind: the one stored, or the kind's default."""
+def new_sections_settings(kinds: Iterable[ListKind], stored: SiteSettings | None, music: bool) -> list[NewListSetting]:
+    """The creator's setting for each type: the one stored, or the type's default."""
     kinds = list(kinds)
     defaults = default_new_sections(kinds, music)
-    return [NewListSetting(kind, (stored or {}).get(kind.key) or defaults[kind.key]) for kind in kinds]
+    stored = stored or {}
+    return [
+        NewListSetting(kind, stored.get(kind.site_key, {}).get(kind.key) or defaults[kind.site_key][kind.key])
+        for kind in kinds
+    ]
 
 
-def checked_new_sections(kinds: Iterable[ListKind], wanted: Mapping[str, str], music: bool) -> dict[str, str]:
-    """Every kind's setting, ``wanted`` over the defaults. Refuses a kind the Sites don't have, and "Add it as a season"
-    for a kind whose lists can't be seasons, such as The Daily Wire's shows."""
-    kinds = {kind.key: kind for kind in kinds}
-    unknown = sorted(set(wanted) - set(kinds))
-    if unknown:
-        raise ServiceError(f"This creator's sites have no lists of the kind {unknown[0]}", field="new_lists")
-    settings = default_new_sections(kinds.values(), music)
-    for key, action in wanted.items():
-        kind = kinds[key]
-        if NewSectionAction(action) is NewSectionAction.SEASON and not kind.seasons:
-            raise ServiceError(f"New {kind.names.plural} can't be added as seasons", field="new_lists")
-        settings[key] = NewSectionAction(action).value
+def checked_new_sections(kinds: Iterable[ListKind], wanted: SiteSettings, music: bool) -> dict[str, dict[str, str]]:
+    """Every type's setting, ``wanted`` over the defaults, by Site. Refuses a type the Sites don't have, and "Add it as
+    a season" for a type whose lists can't be seasons, such as The Daily Wire's shows."""
+    kinds = list(kinds)
+    known = {(kind.site_key, kind.key): kind for kind in kinds}
+    settings = default_new_sections(kinds, music)
+    for site_key, actions in wanted.items():
+        for key, action in actions.items():
+            kind = known.get((site_key, key))
+            if kind is None:
+                raise ServiceError(f"This creator's sites have no lists of the kind {key} on {site_key}", field="new_lists")
+            if NewSectionAction(action) is NewSectionAction.SEASON and not kind.seasons:
+                raise ServiceError(f"New {kind.names.plural} can't be added as seasons", field="new_lists")
+            settings[site_key][key] = NewSectionAction(action).value
     return settings
 
 
-def section_kind(site: Site, section: SectionRef) -> str:
-    """The key of the type a section is on its Site, such as album."""
-    return site.section_type_of(section).key
+def merged_settings(current: SiteSettings, wanted: SiteSettings) -> dict[str, dict[str, str]]:
+    """``wanted`` over ``current``, Site by Site."""
+    merged = {site: dict(actions) for site, actions in current.items()}
+    for site, actions in wanted.items():
+        merged.setdefault(site, {}).update(actions)
+    return merged
+
+
+def site_settings(settings: Iterable[NewListSetting], site_key: str) -> dict[str, str]:
+    """The settings of one Site, by type key."""
+    return {setting.key: setting.action for setting in settings if setting.site_key == site_key}
 
 
 def link_season_action(action: str) -> NewLinkSeasonAction:
@@ -164,6 +189,7 @@ def checked_new_link_seasons(kinds: Iterable[ListKind], wanted: Mapping[str, str
     return {key: NewLinkSeasonAction(wanted.get(key, action)).value for key, action in settings.items()}
 
 
-def skipped_kinds(kinds: Iterable[ListKind], music: bool) -> set[str]:
-    """The kinds a new creator skips by default, such as a SoundCloud artist's playlists."""
-    return {key for key, action in default_new_sections(kinds, music).items() if action == NewSectionAction.IGNORE.value}
+def skipped_kinds(site: Site, music: bool) -> set[str]:
+    """The keys of the types of ``site`` a new creator skips by default, such as a SoundCloud artist's playlists."""
+    defaults = _default_new_sections(list_kinds([site]), music)
+    return {key for key, action in defaults.items() if action == NewSectionAction.IGNORE.value}

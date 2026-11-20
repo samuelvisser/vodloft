@@ -481,15 +481,15 @@ class SiteAPIRead(ResponseBase):
 
     @computed_field
     @property
-    def list_names(self) -> NamesAPIRead:
+    def section_list_names(self) -> NamesAPIRead:
         """What the Site calls its lists, all its types of list together, such as albums and playlists."""
-        return NamesAPIRead.model_validate(site_of(self.key).list_names)
+        return NamesAPIRead.model_validate(site_of(self.key).section_list_names)
 
     @computed_field
     @property
-    def growing_names(self) -> NamesAPIRead:
+    def section_growing_names(self) -> NamesAPIRead:
         """What the Site calls the lists and shows its creators add, such as playlists or shows."""
-        return NamesAPIRead.model_validate(site_of(self.key).growing_names)
+        return NamesAPIRead.model_validate(site_of(self.key).section_growing_names)
 
     @computed_field
     @property

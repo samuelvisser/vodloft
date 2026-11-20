@@ -71,7 +71,7 @@ export const CollectionSeasonsReadSchema = z.object({
     /** The types of list of the collection's Site, which its link seasons come from. */
     listTypes: z.array(SectionTypeSchema),
     /** Those types of list named together, such as albums and playlists. */
-    listNames: NamesSchema,
+    sectionListNames: NamesSchema,
     /** The season of the videos in none of the lists, such as Videos, Singles or Tracks. */
     looseSeason: z.string(),
     /** What the collection's Site calls the creator behind it, such as artist in a Music collection. */

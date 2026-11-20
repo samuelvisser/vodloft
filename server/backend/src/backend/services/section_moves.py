@@ -157,7 +157,7 @@ def move_section(
     main = account.main_collection
     a_season = (collection_words(main) if main is not None else DEFAULT_WORDS).season.a
     if section.kind != SectionKind.LIST or not lists_are_seasons(site):
-        raise ServiceError(f"{section.title} can't move: only {site.list_names.a} can be {a_season} or a collection of its own", field="target")
+        raise ServiceError(f"{section.title} can't move: only {site.section_list_names.a} can be {a_season} or a collection of its own", field="target")
     in_main = _season_of_main(account, ref) is not None
     own = _own_collection(account, section)
     if target is SectionTarget.OWN:

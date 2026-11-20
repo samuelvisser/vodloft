@@ -1,4 +1,5 @@
 from ...contract import Names, SectionKind, SectionType
+from .feed_section_type import YtdlpFeedSectionType
 from .other_sites import CREATOR_PRESETS, OtherSites
 
 ALBUM_LIST = "album"
@@ -12,10 +13,10 @@ class SoundCloud(OtherSites):
     creators = True
     creator_names = Names("artist", "artists")
     creator_presets = CREATOR_PRESETS
-    # An account has its tracks, and its sets: albums and playlists, which SoundCloud tells apart. A track on its own
+    # An account has its Tracks, and its sets: albums and playlists, which SoundCloud tells apart. A track on its own
     # is a single.
     section_types = (
-        SectionType("feed", SectionKind.FEED, Names("feed", "feeds")),
+        YtdlpFeedSectionType("tracks", Names("track", "tracks"), "tracks"),
         SectionType(ALBUM_LIST, SectionKind.LIST, Names("album", "albums"), albums=True),
         SectionType(PLAYLIST_LIST, SectionKind.LIST, Names("playlist", "playlists")),
         SectionType("single", SectionKind.ITEM, Names("single", "singles")),

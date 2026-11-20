@@ -52,7 +52,7 @@ const dialogWords = (collection: CollectionWords, view: CollectionSeasonsRead | 
 /** What the collection's Site calls its lists, all its types of list together, such as "albums and playlists" on
  * SoundCloud, and the season of the videos in none of them. */
 type ListNames = {singular: string, plural: string, a: string, looseSeason: string}
-const namesOf = (view: CollectionSeasonsRead): ListNames => ({...view.listNames, looseSeason: view.looseSeason})
+const namesOf = (view: CollectionSeasonsRead): ListNames => ({...view.sectionListNames, looseSeason: view.looseSeason})
 
 const counted = (count: number, singular: string, plural: string) => `${count} ${count === 1 ? singular : plural}`
 
@@ -427,9 +427,9 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         <div className="form-row">
                                                             <label>When the {words.creator} adds {names.a}</label>
                                                             <NewListSettings
-                                                                kinds={view.newLists} values={newLists}
+                                                                kinds={view.newLists} valueOf={(kind) => newLists[kind.key]}
                                                                 fallback="ask" idPrefix="seasons-new-links" registryFor={regs.newLinks}
-                                                                onChange={(key, value) => setValue('newLists', {...newLists, [key]: value as NewLinkSeason}, {shouldDirty: true})}
+                                                                onChange={(kind, value) => setValue('newLists', {...newLists, [kind.key]: value as NewLinkSeason}, {shouldDirty: true})}
                                                             />
                                                             {errors.newLists && <div className="error" role="alert">{(errors.newLists as {message?: string}).message}</div>}
                                                             <div className="help">VODLoft looks once a day.</div>

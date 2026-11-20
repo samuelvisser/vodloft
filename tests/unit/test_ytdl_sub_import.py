@@ -459,7 +459,7 @@ def _artist_import(monkeypatch):
     """The music example uploaded, and a yt-dlp Source that knows Emily Hopkins on Bandcamp."""
     from backend.services import import_uploads
     from sources import registry
-    from sources.contract import CreatorDetails, Feature, Names, SectionKind, SectionRef, Site
+    from sources.contract import CreatorDetails, Feature, Names, SectionKind, SectionRef, SectionType, Site
 
     subscriptions = MUSIC.encode()
     import_uploads.begin_upload(ytdl_sub.IMPORTER, [("subscriptions.yaml", len(subscriptions))], include_secrets=False)
@@ -470,13 +470,15 @@ def _artist_import(monkeypatch):
     class Artists(type(ytdlp)):
         domains = ("bandcamp.com",)
         features = ytdlp.features | {Feature.CREATORS}
-        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_names=Names("artist", "artists"), link_seasons=True),)
+        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_names=Names("artist", "artists"), link_seasons=True,
+                      section_types=(SectionType("album", SectionKind.LIST, Names("album", "albums")),
+                                     SectionType("single", SectionKind.ITEM, Names("single", "singles")))),)
 
         def creator_details(self, ref, progress=lambda step: None):
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
-                               kind=SectionKind.LIST)
+                               type=self.sites[0].section_type("album"))
             single = SectionRef(ref="track/one", url="https://emilyharpist.bandcamp.com/track/one", title="One",
-                                kind=SectionKind.ITEM)
+                                type=self.sites[0].section_type("single"))
             return CreatorDetails(ref="emilyharpist", url="https://emilyharpist.bandcamp.com", title="Emily Hopkins",
                                   sections=(album, single), music=True)
 
@@ -522,7 +524,7 @@ def test_an_import_without_creators_makes_the_artist_one_plain_collection(instal
     assert (collection.title, collection.type, collection.creator_id) == ("Emily Hopkins", "music", None)
     # Every album is a season, the ones to come too.
     assert (collection.sharing_url, collection.link_seasons, collection.new_lists) == (
-        "https://emilyharpist.bandcamp.com", "selected", {"list": "add"},
+        "https://emilyharpist.bandcamp.com", "selected", {"album": "add"},
     )
 
 
@@ -530,7 +532,7 @@ def test_an_imported_collection_joins_the_creator_behind_its_link(installation, 
     from backend.db.models import Creator, Collection
     from backend.services import imports
     from sources import registry
-    from sources.contract import CreatorDetails, Feature, SectionKind, SectionRef, Site
+    from sources.contract import CreatorDetails, Feature, Names, SectionKind, SectionRef, SectionType, Site
 
     session = installation
     ytdlp = registry._sources["ytdlp"]
@@ -544,7 +546,7 @@ def test_an_imported_collection_joins_the_creator_behind_its_link(installation, 
 
         def creator_details(self, ref, progress=lambda step: None):
             return CreatorDetails(ref=ref, url="https://www.youtube.com/c/BeyondTheGuitar", title="Beyond the Guitar", sections=(
-                SectionRef(ref="videos", url="https://www.youtube.com/c/BeyondTheGuitar", title="Videos", kind=SectionKind.FEED),
+                SectionRef(ref="videos", url="https://www.youtube.com/c/BeyondTheGuitar", type=SectionType("videos", SectionKind.FEED, Names("video", "videos"))),
             ))
 
     monkeypatch.setattr(registry, "_sources", {**registry._sources, "ytdlp": Creators()})
@@ -837,9 +839,9 @@ Jellyfin Music Videos:
 
         def creator_details(self, ref, progress=lambda step: None):
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
-                               kind=SectionKind.LIST, type="album")
+                               type=self.sites[0].section_type("album"))
             playlist = SectionRef(ref="sets/favourites", url="https://emilyharpist.bandcamp.com/sets/favourites",
-                                  title="Favourites", kind=SectionKind.LIST, type="playlist")
+                                  title="Favourites", type=self.sites[0].section_type("playlist"))
             # The site names the artist by their handle; ytdl-sub by the subscription.
             return CreatorDetails(ref="emilyharpist", url="https://emilyharpist.bandcamp.com", title="emilyharpist",
                                   sections=(album, playlist), music=True)
@@ -854,7 +856,7 @@ Jellyfin Music Videos:
 
     creator = session.scalar(select(Creator))
     # New albums are added as they come out, as the other program did; new playlists are skipped.
-    assert (creator.title, creator.new_lists) == ("Emily Hopkins", {"album": "season", "playlist": "ignore"})
+    assert (creator.title, creator.new_lists) == ("Emily Hopkins", {"bandcamp": {"album": "season", "playlist": "ignore"}})
     collections = {collection.title: collection for collection in session.scalars(select(Collection))}
     assert set(collections) == {"Emily Hopkins albums", "Emily Hopkins music videos"}
     albums, videos = collections["Emily Hopkins albums"], collections["Emily Hopkins music videos"]

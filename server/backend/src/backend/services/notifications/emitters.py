@@ -87,9 +87,7 @@ def creator_sections_found(session: Session, creator: Creator, sections: list[Cr
         return
     names = ", ".join(section.title for section in sections[:3]) + (f" and {len(sections) - 3} more" if len(sections) > 3 else "")
     # In the Site's words, such as "album", or "albums and playlists" for several types.
-    from backend.services.creators import account_site
-
-    names_of = Names.joined(account_site(section.account).section_type_of(section).names for section in sections)
+    names_of = Names.joined(section.section_type.names for section in sections)
     what = names_of.singular if len(sections) == 1 else names_of.plural
     emit(
         session, Event.CREATOR_SECTIONS_FOUND,
@@ -108,8 +106,8 @@ def link_seasons_found(session: Session, collection: Collection, playlists: list
     one = len(playlists) == 1
     season = collection_contract(collection.type).words.season
     # The Site's own word for what it found, such as playlist on YouTube or album on Bandcamp.
-    from backend.services.link_seasons import list_names
-    lists = list_names(collection)
+    from backend.services.link_seasons import section_list_names
+    lists = section_list_names(collection)
     emit(
         session, Event.CREATOR_SECTIONS_FOUND,
         title=f"New {lists.singular} for {collection.title}" if one else f"{len(playlists)} new {lists.plural} for {collection.title}",

@@ -17,7 +17,7 @@ from backend.services.errors import ServiceError
 from backend.services.new_lists import checked_new_link_seasons
 from backend.services.link_seasons import (
     collection_list_kinds, collection_new_lists,
-    LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists, loose_season_name,
+    LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, section_list_names, lists_playlists, loose_season_name,
     offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists, active_lists,
 )
 from backend.services.sites import collection_creator_names, collection_site, collection_words
@@ -71,7 +71,7 @@ class _View:
     seasons: list
     link_seasons_offered: bool
     list_types: object
-    list_names: Names
+    section_list_names: Names
     loose_season: str
     site_order: bool
     words: object
@@ -144,7 +144,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
             for season in sorted(collection.seasons, key=lambda season: season.index)
         ],
         link_seasons_offered=offers_link_seasons(collection),
-        list_types=collection_site(collection).types_of(SectionKind.LIST), list_names=list_names(collection),
+        list_types=collection_site(collection).types_of(SectionKind.LIST), section_list_names=section_list_names(collection),
         loose_season=loose_season_name(collection), site_order=contract.site_order, words=collection_words(collection),
         creator_names=collection_creator_names(collection), media_names=contract.media_names_on(collection_site(collection)),
         playlists=[_Playlist(playlist, firsts.get(playlist.id), *leaving.get(playlist.id, (0, 0))) for playlist in playlists],
@@ -186,7 +186,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         season = collection_contract(collection.type).words.season
         raise ServiceError(f"The {season.plural} must name each {season.singular} of the collection exactly once", field="seasons")
     playlists = {playlist.id: playlist for playlist in collection.lists}
-    lists = list_names(collection)
+    lists = section_list_names(collection)
     unknown = [change.id for change in [*body.playlists] if change.id not in playlists]
     unknown += [link_id for link_id in body.removed_links if link_id not in playlists]
     if unknown:
@@ -336,10 +336,10 @@ def links_lookup(s: Session, collection_slug: str) -> _Lookup:
     """What listing the collection's playlists needs, read before the slow lookup."""
     collection = _collection(s, collection_slug)
     if not lists_playlists(collection):
-        raise ServiceError(f"This collection's link is not a creator with {list_names(collection).plural}", field="link_seasons")
+        raise ServiceError(f"This collection's link is not a creator with {section_list_names(collection).plural}", field="link_seasons")
     if follows_creator(collection):
         raise ServiceError(
-            f"{collection.creator.title} looks for new {list_names(collection).plural} itself: check the creator", field="link_seasons",
+            f"{collection.creator.title} looks for new {section_list_names(collection).plural} itself: check the creator", field="link_seasons",
         )
     return _Lookup(collection.source_key, collection.sharing_url)
 
@@ -391,7 +391,7 @@ def link_to_add(s: Session, collection_slug: str, url: str) -> _AddLookup:
     collection = _collection(s, collection_slug)
     if not holds_only_link_seasons(collection):
         raise ServiceError(
-            f"Only a collection that holds only what its {list_names(collection).plural} have can take links you add", field="url",
+            f"Only a collection that holds only what its {section_list_names(collection).plural} have can take links you add", field="url",
         )
     source = get_source(collection.source_key)
     if not source.handles(url):
