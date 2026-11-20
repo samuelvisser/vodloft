@@ -460,41 +460,54 @@ def move_sections(
     collections keep their numbers instead.
 
     ``s`` is a write transaction's session."""
-    from task_manager.scheduler.transactional import queue_task_after_commit
-
     # Every operation and task the move starts is a part of one operation for the whole move, which tells the user
     # when it is done and shows its progress on the creator's page.
     with spun_off_work(s) as work:
         done = _apply(s, creator, moves, added_by_id=added_by_id)
-        for collection_id in sorted(done.result.sources):
-            queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=collection_id)
-        for collection_id in sorted(done.touched):
-            collection = s.get(Collection, collection_id)
-            if collection is None:
-                continue
-            again = _numbered_again(collection, renumber)
-            if collection_id in done.result.rename or (again and plan_identification(
-                s, collection, EpisodeIdentifier(collection.episode_identifier),
-            ).identifiers):
-                queue_renumber(s, collection, renumber=again, sections=sorted(
-                    f"{flow.section.account_id}:{flow.section.ref}" for flow in done.flows
-                    if collection_id in (flow.source_id, flow.target_id)
-                ))
-        for collection_id in done.new:
-            collection = s.get(Collection, collection_id)
-            if collection is not None:
-                index_new_collection(s, collection)
-    if not work.operations and not work.tasks:
-        return
-    # The whole move tells the user it is done, not each part.
-    for operation in work.operations:
-        operation.source = OperationSource.SYSTEM.value
+        follow_up(s, done, renumber)
     moved = [section for move in moves if (section := s.scalar(select(CreatorSection).where(
         CreatorSection.account_id == move.account_id, CreatorSection.ref == move.ref,
     ))) is not None]
+    as_one_operation(s, creator, work, moved)
+
+
+def follow_up(s: Session, done: _Moves, renumber: Mapping[str, bool]) -> None:
+    """After the moves: let the old files of what moved go once their new downloads succeeded, number the videos of
+    every collection that gained or lost some again, rename their files and rewrite their metadata, and index the new
+    collections. ``renumber`` says, by collection slug, which collections keep their numbers instead."""
+    from task_manager.scheduler.transactional import queue_task_after_commit
+
+    for collection_id in sorted(done.result.sources):
+        queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=collection_id)
+    for collection_id in sorted(done.touched):
+        collection = s.get(Collection, collection_id)
+        if collection is None:
+            continue
+        again = _numbered_again(collection, renumber)
+        if collection_id in done.result.rename or (again and plan_identification(
+            s, collection, EpisodeIdentifier(collection.episode_identifier),
+        ).identifiers):
+            queue_renumber(s, collection, renumber=again, sections=sorted({
+                f"{flow.section.account_id}:{flow.section.ref}" for flow in done.flows
+                if collection_id in (flow.source_id, flow.target_id)
+            }))
+    for collection_id in done.new:
+        collection = s.get(Collection, collection_id)
+        if collection is not None:
+            index_new_collection(s, collection)
+
+
+def as_one_operation(s: Session, creator: Creator, work, sections: Sequence[CreatorSection]) -> None:
+    """Make the operations and tasks ``work`` gathered the parts of one "creator.move_sections" operation, which tells
+    the user when the whole move is done, named by the feeds and lists that moved."""
+    if not work.operations and not work.tasks:
+        return
+    for operation in work.operations:
+        operation.source = OperationSource.SYSTEM.value
     dispatch_operation_targets(s, create_operation(s, CreatorMoveSectionsOperation(
-        creator, parts=work.operations, tasks=work.tasks, sections=[f"{move.account_id}:{move.ref}" for move in moves],
-        names=section_type_names(section.section_type for section in moved),
+        creator, parts=work.operations, tasks=work.tasks,
+        sections=[f"{section.account_id}:{section.ref}" for section in sections],
+        names=section_type_names(section.section_type for section in sections),
     )))
 
 
@@ -560,8 +573,9 @@ class _Before:
     """The Local Media Profile name of each download on disk, and whether it is marked Keep."""
 
 
-def _snapshot(s: Session, creator: Creator) -> dict[int, _Before]:
-    ids = [collection.id for collection in creator.collections]
+def snapshot(s: Session, collections: Sequence[Collection]) -> dict[int, _Before]:
+    """The collections' videos as they are before the moves, for ``preview``."""
+    ids = [collection.id for collection in collections]
     found: dict[int, _Before] = {}
     for episode in s.scalars(select(Episode).where(Episode.collection_id.in_(ids), Episode.part_of.is_(None))):
         found[episode.id] = _Before(
@@ -586,11 +600,19 @@ def preview_section_moves(s: Session, creator: Creator, moves: Sequence[SectionM
 
     ``s`` is a write transaction's session; it is rolled back."""
     titles = {collection.id: (collection.slug, collection.title, collection.type) for collection in creator.collections}
-    before = _snapshot(s, creator)
+    before = snapshot(s, creator.collections)
     done = _apply(s, creator, moves, added_by_id=None)
+    return preview(s, creator.id, titles, before, done)
+
+
+def preview(
+    s: Session, creator_id: int, titles: dict[int, tuple[str, str, str]], before: dict[int, _Before], done: _Moves,
+) -> SectionMovesPreview:
+    """What ``done`` did to each collection it touched, from the videos ``before`` it, and rolls it all back.
+    ``titles`` has the slug, title and type of each collection before."""
     s.flush()
     s.expire_all()
-    creator = s.get(Creator, creator.id)
+    creator = s.get(Creator, creator_id)
     after = {collection.id: collection for collection in creator.collections}
     for collection_id in done.new:
         collection = s.get(Collection, collection_id)

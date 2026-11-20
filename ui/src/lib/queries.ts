@@ -977,13 +977,26 @@ export function useCollectionCreatorLeave(slug: string, enabled: boolean) {
 }
 
 /** Add a collection to the creator behind its links, or take it out of its creator again. */
+/** Add the collection to the creator behind its link, or take it out of its creator. ``renumber`` says, by
+ * collection slug, which of the creator's collections number their episodes again after what joining moves. */
 export async function setCollectionCreator(
-    slug: string, inCreator: boolean, moveHere: string[] = [], lookupId?: string | null,
+    slug: string, inCreator: boolean, renumber: Record<string, boolean> = {}, lookupId?: string | null,
 ): Promise<void> {
     const response = await fetch(collectionCreatorPath(slug), inCreator
-        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moveHere, lookupId})}
+        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({renumber, lookupId})}
         : {method: 'DELETE', credentials: 'include'})
     if (!response.ok) throw await responseError(response)
+}
+
+/** What adding the collection to the creator behind its link moves between the creator's collections, without
+ * changing anything. No collections when nothing moves. */
+export async function previewCollectionJoin(slug: string, lookupId?: string | null, signal?: AbortSignal): Promise<SectionMovesPreview> {
+    const response = await fetch(collectionCreatorPath(slug, '/preview'), {
+        method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({lookupId}), signal,
+    })
+    if (!response.ok) throw await responseError(response)
+    return SectionMovesPreviewSchema.parse(await response.json())
 }
 
 /** Add a collection to a creator in the Library that its link is not on, such as an artist whose music videos are

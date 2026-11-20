@@ -1,16 +1,19 @@
 import type {CollectionWords} from '../../lib/collectionWords'
-import {useMemo, useState} from 'react'
-import {useQueryClient} from '@tanstack/react-query'
+import {useEffect, useMemo, useState} from 'react'
+import {useQuery, useQueryClient} from '@tanstack/react-query'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {toast} from 'react-hot-toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'
-import {addCollectionToCreator, setCollectionCreator, useCreators, useCollectionCreatorLeave, useCollectionCreatorMatch} from '../../lib/queries'
+import {addCollectionToCreator, previewCollectionJoin, setCollectionCreator, useCreators, useCollectionCreatorLeave, useCollectionCreatorMatch} from '../../lib/queries'
 import type {CollectionCreatorMatch} from '../../types/schemas/creator'
 import type {Names} from '../../types/schemas/source'
 import {capitalized} from '../../types/creator'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import LookupSteps from '../creator/LookupSteps'
+import {CollectionMoves} from '../creator/MoveSectionsDialog'
+import '../../components/ChangeIdentificationDialog/ChangeIdentificationDialog.css'
 import '../creator/CreatorPages.css'
 
 type DialogProps = {
@@ -70,8 +73,21 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
     const refresh = useRefresh(collectionSlug)
     const creator = match.data
     const matched = !!creator?.sectionTitle
-    /** The overlapping playlists the user moves here; the rest stay where they are. */
-    const [moveHere, setMoveHere] = useState<Set<string>>(new Set())
+    /** Joining a creator in the Library moves videos between its collections: what moves, before it does. */
+    const joinsKnown = !!creator?.creatorSlug && matched
+    const moves = useQuery({
+        queryKey: ['collection-creator-join-preview', collectionSlug, creator?.lookupId],
+        enabled: open && target === 'behind' && joinsKnown,
+        gcTime: 0,
+        retry: false,
+        queryFn: ({signal}) => previewCollectionJoin(collectionSlug, creator?.lookupId, signal),
+    })
+    const moved = moves.data?.collections ?? []
+    const [renumber, setRenumber] = useState<Record<string, boolean>>({})
+    useEffect(() => {
+        if (open) setRenumber({})
+    }, [open])
+    const deletes = moved.some((collection) => collection.parts.some((part) => part.downloadsDeleted > 0))
 
     const addElsewhere = async () => {
         if (!chosen) return
@@ -89,9 +105,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
         if (chosen) return addElsewhere()
         if (!creator) return
         try {
-            await setCollectionCreator(collectionSlug, true, [...moveHere].filter((ref) => (
-                creator.overlaps.some((overlap) => overlap.ref === ref && overlap.canMoveHere)
-            )), creator.lookupId)
+            await setCollectionCreator(collectionSlug, true, renumber, creator.lookupId)
             await refresh()
             toast.success(`${collectionTitle} is now part of ${creator.title}`)
             onDismiss()
@@ -106,10 +120,14 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
             title={`Add ${collectionTitle} to ${creatorNames?.a}`}
             icon={faIcon('fass', 'circle-user')}
             onDismiss={onDismiss}
+            className={!chosen && moved.length > 0 ? 'change-identification-dialog move-sections-dialog' : undefined}
+            iconTone={!chosen && deletes ? 'danger' : 'default'}
             confirmButton={{
-                label: chosen ? `Add to ${chosen.title}` : creator ? `Add to ${creator.title}` : `Add to ${creatorNames?.singular}`,
+                label: chosen ? `Add to ${chosen.title}` : creator
+                    ? `Add to ${creator.title}${moved.length > 0 ? ' and move' : ''}` : `Add to ${creatorNames?.singular}`,
                 onClick: add,
-                disabled: chosen ? false : !creator || !matched,
+                className: !chosen && deletes ? 'btn btn-danger' : undefined,
+                disabled: chosen ? false : !creator || !matched || (joinsKnown && !moves.data),
             }}
         >
             {(libraryCreators?.length ?? 0) > 0 && (
@@ -173,75 +191,48 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                             </div>
                         </div>
                     </div>
-                    {matched && creator.overlaps.length > 0 && (
-                        <div className="creator-join-overlaps">
-                            <p>
-                                These playlists of {collectionTitle} are also somewhere else in
-                                the {creatorNames?.singular}. Once it joins, each is in one place only.
-                            </p>
-                            {creator.overlaps.map((overlap) => (
-                                <OverlapChoice
-                                    key={overlap.ref} title={overlap.title} keptBy={overlap.keptBy}
-                                    collectionTitle={collectionTitle} canMoveHere={overlap.canMoveHere}
-                                    fitLabels={creator.overlaps.flatMap((item) => overlapLabels(item.keptBy, collectionTitle))}
-                                    movesHere={moveHere.has(overlap.ref)}
-                                    onChange={(here) => setMoveHere((current) => {
-                                        const next = new Set(current)
-                                        if (here) next.add(overlap.ref)
-                                        else next.delete(overlap.ref)
-                                        return next
-                                    })}
-                                />
-                            ))}
-                        </div>
-                    )}
                     {!matched
                         ? null
-                        : (
-                            <ul className="creator-order-note">
-                                <li>{words.season.Plural}, {words.episode.singular} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
-                                {!creator.creatorSlug && <li>The {creatorNames?.singular}'s other {creator.sectionGrowingNames.plural} start as not in your library, so you can add them from the {creatorNames?.singular}'s Edit page.</li>}
-                            </ul>
-                        )}
+                        : !creator.creatorSlug
+                            ? (
+                                <ul className="creator-order-note">
+                                    <li>{words.season.Plural}, {words.episode.singular} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
+                                    <li>The {creatorNames?.singular}'s other {creator.sectionGrowingNames.plural} start as not in your library, so you can add them from the {creatorNames?.singular}'s Edit page.</li>
+                                </ul>
+                            )
+                            : (
+                                <>
+                                    <p className="help">
+                                        Each video of {creator.title} is in one of its collections only.
+                                        {moved.length > 0
+                                            ? ` What another of its collections keeps already moves there, and what ${collectionTitle} takes over moves here, with its files.`
+                                            : moves.data ? ` Nothing moves: ${collectionTitle} joins as it is.` : ''}
+                                    </p>
+                                    {moves.isLoading && (
+                                        <p className="change-identification-loading" role="status">
+                                            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
+                                            Looking at what changes…
+                                        </p>
+                                    )}
+                                    {moves.error && (
+                                        <p className="error" role="alert">
+                                            {moves.error instanceof Error && !(moves.error instanceof TypeError) && moves.error.message
+                                                ? moves.error.message : 'VODLoft could not look up what joining moves.'}
+                                        </p>
+                                    )}
+                                    {moved.map((collection) => (
+                                        <CollectionMoves
+                                            key={collection.slug}
+                                            collection={collection}
+                                            renumber={renumber[collection.slug] ?? true}
+                                            onRenumber={(again) => setRenumber((current) => ({...current, [collection.slug]: again}))}
+                                        />
+                                    ))}
+                                </>
+                            )}
                 </div>
             )}
         </ConfirmDialog>
-    )
-}
-
-/** Where a playlist that is in two places can go, in words. */
-function overlapLabels(keptBy: string, collectionTitle: string): [string, string] {
-    return [`Stays in ${keptBy}`, `Moves to ${collectionTitle}`]
-}
-
-/** Where one playlist that is in two places goes once the collection joins its creator. */
-function OverlapChoice({title, keptBy, collectionTitle, canMoveHere, movesHere, fitLabels, onChange}: {
-    title: string, keptBy: string, collectionTitle: string, canMoveHere: boolean, movesHere: boolean,
-    fitLabels: readonly string[], onChange: (here: boolean) => void,
-}) {
-    const registry = useMemo(() => {
-        const [stays, here] = overlapLabels(keptBy, collectionTitle)
-        return createSelectRegistry(`JoinOverlap-${keptBy}-${collectionTitle}`, {stays: {label: stays}, here: {label: here}})
-    }, [keptBy, collectionTitle])
-    const inputId = `join-overlap-${title}`
-    return (
-        <div className="creator-section-row">
-            <div className="creator-section-copy">
-                <strong>{title}</strong>
-                {!canMoveHere && <span>Stays in {keptBy}, a collection of its own. It leaves {collectionTitle}.</span>}
-            </div>
-            {canMoveHere && (
-                <div className="creator-join-overlap-select">
-                    <label className="sr-only" htmlFor={inputId}>Where {title} goes</label>
-                    <SimpleSelect
-                        inputId={inputId} registry={registry} value={movesHere ? 'here' : 'stays'} fitLabels={fitLabels}
-                        menuPortalTarget={document.body} menuPlacement="auto"
-                        styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
-                        onChange={(value) => onChange(value === 'here')}
-                    />
-                </div>
-            )}
-        </div>
     )
 }
 

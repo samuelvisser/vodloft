@@ -109,7 +109,8 @@ export default function MoveSectionsDialog({open, creatorSlug, changes, onDismis
     )
 }
 
-function CollectionMoves({collection, renumber, onRenumber}: {
+/** What a move does to one collection, with its switch to number its episodes again. */
+export function CollectionMoves({collection, renumber, onRenumber}: {
     collection: MoveCollection, renumber: boolean, onRenumber: (again: boolean) => void
 }) {
     const words = collectionWords(collection.type)
