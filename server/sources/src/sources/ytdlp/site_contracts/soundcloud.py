@@ -11,7 +11,7 @@ class SoundCloud(OtherSites):
     name = "SoundCloud"
     audio_only = True
     creators = True
-    creator_names = Names("artist", "artists")
+    # An account may be a music artist or anyone else, such as a podcast; a Music collection calls it an artist.
     creator_presets = CREATOR_PRESETS
     # An account has its Tracks, and its sets: albums and playlists, which SoundCloud tells apart. A track on its own
     # is a single.

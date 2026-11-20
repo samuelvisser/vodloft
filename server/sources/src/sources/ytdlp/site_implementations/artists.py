@@ -2,12 +2,16 @@
 albums, or a SoundCloud account, which may be a musician or a podcast, whose sections are its albums and playlists."""
 from __future__ import annotations
 
+import html
 import logging
+import re
 from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import ClassVar
 from urllib.parse import urlsplit
+
+import requests
 
 from ...contract import CreatorDetails, SectionKind, SectionRef
 from ... import ytdlp_runner as runner
@@ -19,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 # Albums are looked up a few at a time: one lookup per album, as the artist's page only lists their links.
 _LOOKUPS_AT_ONCE = 6
+_PAGE_TIMEOUT_SECONDS = 15
+_BROWSER = "Mozilla/5.0"
+_OG_IMAGE = re.compile(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"')
 
 
 class ArtistImplementation(OtherSitesImplementation):
@@ -77,6 +84,7 @@ class ArtistImplementation(OtherSitesImplementation):
         links = self.release_links(root)
         found: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE) as pool:
+            avatar = pool.submit(self.avatar, root)
             lookups = {pool.submit(self.look_up, url, cookies): url for url in links}
             for done, lookup in enumerate(as_completed(lookups), start=1):
                 progress(f"Reading the albums: {done} of {len(links)}")
@@ -95,13 +103,17 @@ class ArtistImplementation(OtherSitesImplementation):
         counts = Counter(section.type for section in sections if section.kind is SectionKind.LIST)
         facts = tuple(f"{count} {type_.names.singular if count == 1 else type_.names.plural}" for type_, count in counts.items())
         return CreatorDetails(
-            ref=handle, url=root, title=str(name or handle),
+            ref=handle, url=root, title=str(name or handle), avatar_url=avatar.result(),
             facts=facts or (f"0 {self.site.types_of(SectionKind.LIST)[0].names.plural}",),
             sections=tuple(sections), **self.music(sections),
         )
 
     def handle(self, root: str) -> str:
         raise NotImplementedError
+
+    def avatar(self, root: str) -> str | None:
+        """The artist's picture, where the Site shows one that yt-dlp does not give."""
+        return None
 
     def music(self, sections: list[SectionRef]) -> dict:
         """Whether the creator is a music artist, and how sure the Site is."""
@@ -208,6 +220,17 @@ class SoundCloudImplementation(ArtistImplementation):
 
     def handle(self, root: str) -> str:
         return root.rstrip("/").rsplit("/", 1)[-1]
+
+    def avatar(self, root: str) -> str | None:
+        """The account's profile picture, which yt-dlp leaves out: its page shares it as its og:image."""
+        try:
+            response = requests.get(root, headers={"User-Agent": _BROWSER}, timeout=_PAGE_TIMEOUT_SECONDS)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            logger.info("No picture for %s: %s", root, exc)
+            return None
+        found = _OG_IMAGE.search(response.text)
+        return html.unescape(found.group(1)) if found else None
 
     def release_links(self, root: str) -> list[str]:
         listing = runner.run_json("--flat-playlist", "--ignore-errors", f"{root}/sets", cookies=sites.cookies_for(root))

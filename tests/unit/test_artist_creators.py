@@ -9,6 +9,20 @@ from sources.ytdlp import sites
 from sources.ytdlp.site_implementations import IMPLEMENTATIONS, OtherSitesImplementation
 
 
+@pytest.fixture(autouse=True)
+def soundcloud_page(monkeypatch):
+    """SoundCloud's account page, which shares the account's picture."""
+    from sources.ytdlp.site_implementations import artists
+
+    class Page:
+        text = '<meta property="og:image" content="https://i1.sndcdn.com/avatars-flume-t500x500.jpg">'
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(artists.requests, "get", lambda url, **kwargs: Page())
+
+
 def _implementation(url):
     """The yt-dlp implementation of the link's Site, reading feeds as the Source would."""
     site = sites.site_for(url)
@@ -73,7 +87,7 @@ def test_a_soundcloud_artist_has_its_albums_and_a_feed_of_all_its_tracks(monkeyp
     monkeypatch.setattr(runner, "run_json", soundcloud)
     details = _implementation("https://soundcloud.com/flume").creator_details("https://soundcloud.com/flume", lambda step: None)
 
-    assert (details.ref, details.title) == ("flume", "Flume")
+    assert (details.ref, details.title, details.avatar_url) == ("flume", "Flume", "https://i1.sndcdn.com/avatars-flume-t500x500.jpg")
     assert [(s.ref, s.kind) for s in details.sections] == [("flume/sets/palaces", SectionKind.LIST), ("tracks", SectionKind.FEED)]
 
 
