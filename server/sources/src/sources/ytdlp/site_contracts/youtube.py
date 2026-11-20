@@ -2,7 +2,11 @@ from dataclasses import replace
 from types import MappingProxyType
 
 from ...contract import (
+    LIST_TYPE,
     VIDEO_TAGS,
+    SectionKind,
+    SectionRole,
+    SectionType,
     Names,
     Access,
     EpisodeTag,
@@ -13,6 +17,7 @@ from ...contract import (
     UpgradeChecks,
     UpgradeImprovement,
 )
+from .feed_section_type import YtdlpFeedSectionType
 from .other_sites import CREATOR_PRESETS, MEMBERS_KEY, PREMIUM_KEY, OtherSites
 
 
@@ -68,5 +73,12 @@ class YouTube(OtherSites):
     shows_locked = False
     creators = True
     creator_presets = CREATOR_PRESETS
+    # A channel's Videos, Live and Shorts tabs, and its playlists.
+    section_types = (
+        YtdlpFeedSectionType("videos", Names("video", "videos"), "videos"),
+        YtdlpFeedSectionType("shorts", Names("short", "shorts"), "shorts", role=SectionRole.SHORT),
+        YtdlpFeedSectionType("live", Names("livestream", "livestreams"), "streams", role=SectionRole.LIVE),
+        SectionType(LIST_TYPE, SectionKind.LIST, Names("playlist", "playlists")),
+    )
     # A channel's playlists can be the seasons of a collection made from the channel.
     link_seasons = True

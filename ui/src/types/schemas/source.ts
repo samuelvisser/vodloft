@@ -211,9 +211,9 @@ export const SiteReadSchema = z.object({
     /** Every type of section the Site's creators have, such as YouTube's feeds and playlists. */
     sectionTypes: z.array(SectionTypeSchema),
     /** What the Site calls its lists, all its types of list together, such as albums and playlists. */
-    listNames: NamesSchema,
+    sectionListNames: NamesSchema,
     /** What the Site calls the lists and shows its creators add, such as playlists, or shows on The Daily Wire. */
-    growingNames: NamesSchema,
+    sectionGrowingNames: NamesSchema,
 })
 export type SiteRead = z.infer<typeof SiteReadSchema>
 

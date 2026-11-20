@@ -58,7 +58,7 @@ def test_soundcloud_and_bandcamp_name_their_sections_and_seasons():
     soundcloud, bandcamp = site_of("soundcloud"), site_of("bandcamp")
 
     assert [(t.key, t.names.plural) for t in soundcloud.section_types] == [
-        ("feed", "feeds"), ("album", "albums"), ("playlist", "playlists"), ("single", "singles"),
+        ("tracks", "tracks"), ("album", "albums"), ("playlist", "playlists"), ("single", "singles"),
     ]
     assert [(t.key, t.names.plural) for t in bandcamp.section_types] == [("album", "albums"), ("single", "singles")]
     assert soundcloud.loose_season == bandcamp.loose_season == "Tracks"
@@ -66,3 +66,14 @@ def test_soundcloud_and_bandcamp_name_their_sections_and_seasons():
     from backend.types.collection_contracts import MUSIC
 
     assert MUSIC.loose_season_on(soundcloud) == MUSIC.loose_season_on(bandcamp) == "Singles"
+
+
+def test_every_site_implementation_answers_the_section_types_of_its_contract():
+    from sources.ytdlp.site_implementations import IMPLEMENTATIONS
+
+    for key, implementation in IMPLEMENTATIONS.items():
+        site = site_of(key)
+        answered = implementation(site, lambda url: {})
+        assert {type_.key for type_ in site.section_types} == (
+            {type_.key for type_ in answered.feed_types} | implementation.list_keys
+        ), key

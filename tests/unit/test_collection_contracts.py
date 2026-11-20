@@ -58,12 +58,13 @@ def test_only_a_podcast_downloads_its_newest_episodes_instead_of_by_season():
 
 
 def test_a_site_names_its_media_and_every_section_kind():
-    from sources import SectionKind
+    from sources import SECTION_KIND_NAMES, SectionKind
     from sources.ytdlp.sites import site_of
 
     assert (site_of("youtube").media_names.plural, site_of("bandcamp").media_names.plural) == ("videos", "tracks")
-    # YouTube names no type for single items, so they get VODLoft's own word, with its article.
-    assert site_of("youtube").section_type(None, SectionKind.ITEM).names.a == "a video"
+    assert site_of("youtube").section_type("shorts").names.a == "a short"
+    # VODLoft's own word for single items, with its article.
+    assert SECTION_KIND_NAMES[SectionKind.ITEM].a == "a video"
 
 
 def test_a_music_collection_calls_its_creator_an_artist_on_every_site():

@@ -147,6 +147,38 @@ def _joined(words: list[str], conjunction: str) -> str:
     return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} {conjunction} {words[-1]}"
 
 
+class SectionKind(StrEnum):
+    """What one part of a creator is, whatever the Site calls it."""
+
+    FEED = "feed"
+    """Grows forever, ordered by date: Videos, Shorts, Live, Reels."""
+    LIST = "list"
+    """Finite and curated, with a title and artwork of its own, that can be a season of a collection: a playlist or
+    an album. Each Source names lists in its own words."""
+    SHOW = "show"
+    """A show with seasons of its own, such as a Daily Wire show: it grows like a feed, has a title and artwork of its
+    own, and is always a collection of its own."""
+    ITEM = "item"
+    """One movie or video, such as a movie on a Daily Wire host's page."""
+
+
+SECTION_KIND_NAMES = {
+    SectionKind.FEED: Names("feed", "feeds"),
+    SectionKind.LIST: Names("list", "lists"),
+    SectionKind.SHOW: Names("show", "shows"),
+    SectionKind.ITEM: Names("video", "videos"),
+}
+"""VODLoft's own word for each kind of section, for a kind a Site names no section type for."""
+
+
+class SectionRole(StrEnum):
+    """What a section holds, which only steers the defaults when a creator is added."""
+
+    MAIN = "main"
+    SHORT = "short"
+    LIVE = "live"
+
+
 LIST_TYPE = "list"
 """The key of VODLoft's own kind of list, the playlist, which most Sites have."""
 
@@ -160,9 +192,20 @@ class SectionType:
     key: str
     kind: SectionKind
     names: Names
+    """What the Site calls a section of the type. A creator has one section of each type of feed, which is named
+    after its type, such as Shorts, and holds what it names, such as "12 shorts"."""
     albums: bool = False
     """The type of list that best describes an artist's albums. A new artist on a Site with such types adds new
     lists of those types and skips the others; on any other Site, an artist adds every type."""
+    role: SectionRole = SectionRole.MAIN
+    """What a feed of the type holds, which steers what a new creator adds by default: a channel's main videos, or
+    its Shorts or livestreams."""
+
+    @property
+    def title(self) -> str:
+        """The name of the one section of a feed type, such as Shorts."""
+        plural = self.names.plural
+        return plural[:1].upper() + plural[1:]
 
     @property
     def grows(self) -> bool:
@@ -430,50 +473,16 @@ LINK_KIND_NAMES = {
 """VODLoft's own word for each kind of media a link can be."""
 
 
-class SectionKind(StrEnum):
-    """What one part of a creator is, whatever the Site calls it."""
-
-    FEED = "feed"
-    """Grows forever, ordered by date: Videos, Shorts, Live, Reels."""
-    LIST = "list"
-    """Finite and curated, with a title and artwork of its own, that can be a season of a collection: a playlist or
-    an album. Each Source names lists in its own words."""
-    SHOW = "show"
-    """A show with seasons of its own, such as a Daily Wire show: it grows like a feed, has a title and artwork of its
-    own, and is always a collection of its own."""
-    ITEM = "item"
-    """One movie or video, such as a movie on a Daily Wire host's page."""
-
-
-SECTION_KIND_NAMES = {
-    SectionKind.FEED: Names("feed", "feeds"),
-    SectionKind.LIST: Names("list", "lists"),
-    SectionKind.SHOW: Names("show", "shows"),
-    SectionKind.ITEM: Names("video", "videos"),
-}
-"""VODLoft's own word for each kind of section, for a kind a Site names no section type for."""
-
-
-class SectionRole(StrEnum):
-    """What a section holds, which only steers the defaults when a creator is added."""
-
-    MAIN = "main"
-    SHORT = "short"
-    LIVE = "live"
-
-
 @dataclass(frozen=True)
 class SectionRef:
-    """One section of a creator. ``ref`` is the Site's own id for it, which stays the same when it is renamed."""
+    """One section of a creator. ``ref`` is the Site's own id for it, which stays the same when it is renamed.
+    ``type`` is one of the Site's section types, which says what kind of section it is and what it holds; a feed is
+    named after its type, and only a list, show or item has a ``title`` of its own."""
 
     ref: str
     url: str
-    title: str
-    kind: SectionKind
-    role: SectionRole = SectionRole.MAIN
-    type: str | None = None
-    """The key of the Site's ``SectionType`` the section is, such as album or playlist on SoundCloud; None for the
-    Site's first type of its kind."""
+    type: SectionType
+    title: str = ""
     item_count: int | None = None
     image_url: str | None = None
     description: str | None = None
@@ -482,6 +491,18 @@ class SectionRef:
     """A list with seasons of its own, such as a Daily Wire show, keeps them."""
     year: str | None = None
     """The year an album came out."""
+
+    def __post_init__(self) -> None:
+        if self.kind is SectionKind.FEED or not self.title:
+            object.__setattr__(self, "title", self.type.title)
+
+    @property
+    def kind(self) -> SectionKind:
+        return self.type.kind
+
+    @property
+    def role(self) -> SectionRole:
+        return self.type.role
 
 
 @dataclass(frozen=True)
@@ -884,11 +905,12 @@ class Site:
     creator_presets: tuple[CreatorPreset, ...] = ()
     """The ways the Site offers to keep a creator, the first one the default."""
     section_types: tuple[SectionType, ...] = (
-        SectionType("feed", SectionKind.FEED, Names("feed", "feeds")),
+        SectionType("videos", SectionKind.FEED, Names("video", "videos")),
         SectionType(LIST_TYPE, SectionKind.LIST, Names("playlist", "playlists")),
     )
-    """Every type of section the Site's creators have, in the order VODLoft shows them, such as YouTube's feeds and
-    playlists, or The Daily Wire's shows and movies. VODLoft names sections by them everywhere."""
+    """Every type of section the Site's creators have, in the order VODLoft shows them, such as YouTube's Videos,
+    Live and Shorts and its playlists, or The Daily Wire's shows and movies. Each section a Source finds is one of
+    them, by its key; VODLoft names sections and keeps settings by them everywhere."""
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
@@ -929,20 +951,35 @@ class Site:
         return tuple(type_ for type_ in self.section_types if type_.grows)
 
     @property
-    def list_names(self) -> Names:
+    def section_feed_names(self) -> Names:
+        """What the Site calls its feeds, all its types of feed together, such as "videos, livestreams and shorts"."""
+        return self.names_of(SectionKind.FEED)
+
+    @property
+    def section_list_names(self) -> Names:
         """What the Site calls its lists, all its types of list together, such as "albums and playlists" on
         SoundCloud; VODLoft's own word on a Site whose creators have none."""
         return self.names_of(SectionKind.LIST)
 
     @property
-    def growing_names(self) -> Names:
+    def section_show_names(self) -> Names:
+        """What the Site calls its shows, such as The Daily Wire's."""
+        return self.names_of(SectionKind.SHOW)
+
+    @property
+    def section_item_names(self) -> Names:
+        """What the Site calls the single items a creator has, such as The Daily Wire's movies or Bandcamp's singles."""
+        return self.names_of(SectionKind.ITEM)
+
+    @property
+    def section_growing_names(self) -> Names:
         """What the Site calls the lists and shows its creators add, which VODLoft looks for every day, such as
         "playlists" on YouTube or "shows" on The Daily Wire."""
         return self.names_of(SectionKind.LIST, SectionKind.SHOW)
 
     @property
     def section_names(self) -> Names:
-        """Every type of section the Site's creators have, named together, such as "feeds and playlists"."""
+        """Every type of section the Site's creators have, named together, such as "albums and singles"."""
         return Names.joined(type_.names for type_ in self.section_types)
 
     def names_of(self, *kinds: SectionKind) -> Names:
@@ -950,18 +987,13 @@ class Site:
         types = self.types_of(*kinds)
         return Names.joined(type_.names for type_ in types) if types else SECTION_KIND_NAMES[kinds[0]]
 
-    def section_type_of(self, section: SectionRef) -> SectionType:
-        """The type a section is: the one it names, or else the Site's first of its kind. Also takes a section
-        VODLoft stored, which has a ``type`` and ``kind`` too."""
-        return self.section_type(section.type, section.kind)
-
-    def section_type(self, key: str | None, kind: SectionKind) -> SectionType:
-        """The Site's section type by its key, or else its first of ``kind``. A kind the Site names no type for gets
-        VODLoft's own word for it."""
-        kind = SectionKind(kind)
-        return next((type_ for type_ in self.section_types if type_.key == key), None) or next(
-            (type_ for type_ in self.section_types if type_.kind == kind), None,
-        ) or SectionType(kind.value, kind, SECTION_KIND_NAMES[kind])
+    def section_type(self, key: str) -> SectionType:
+        """The Site's section type by its key. A section of a type the Site does not have is a mistake in its Source,
+        so it raises ``KeyError``."""
+        found = next((type_ for type_ in self.section_types if type_.key == key), None)
+        if found is None:
+            raise KeyError(f"{self.name} has no type of section {key!r}")
+        return found
 
     def access(self, key: str | None) -> Access | None:
         """One of ``accesses`` by its key."""

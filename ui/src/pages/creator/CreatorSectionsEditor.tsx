@@ -18,8 +18,10 @@ import {collectionWords, type Noun} from '../../lib/collectionWords'
 
 /** What the section is and holds, in the words of its Site: "Album · 12 tracks", "Playlist · 4 videos". */
 export function sectionFacts(section: CreatorSectionRead, site: {mediaNames: Names}) {
-    const media = site.mediaNames
-    return [capitalized(section.names.singular), section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? media.singular : media.plural}` : null]
+    // A feed is named after its type already, so it only counts what it has in its own words: "12 shorts".
+    const feed = section.kind === 'feed'
+    const media = feed ? section.names : site.mediaNames
+    return [feed ? null : capitalized(section.names.singular), section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? media.singular : media.plural}` : null]
         .filter(Boolean).join(' · ')
 }
 
@@ -349,7 +351,7 @@ export default function CreatorSectionsEditor({creator, part}: {
                 {splitting && (
                     <ul className="creator-order-note">
                         <li>The account on {splitting.site.name} becomes a creator of its own, named as {splitting.site.name} names them.</li>
-                        <li>Its own collection and the collections of its {splitting.site.growingNames.plural} go along. Collections that joined {creator.title} by another link stay.</li>
+                        <li>Its own collection and the collections of its {splitting.site.sectionGrowingNames.plural} go along. Collections that joined {creator.title} by another link stay.</li>
                         <li>Collections keep their {creator.words.season.plural}, {creator.words.episode.plural}, profiles and files. Nothing is indexed again.</li>
                     </ul>
                 )}

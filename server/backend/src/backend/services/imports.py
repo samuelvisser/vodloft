@@ -30,7 +30,7 @@ from typing import Any, Literal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.services.new_lists import list_kinds, section_kind, skipped_kinds
+from backend.services.new_lists import list_kinds, skipped_kinds
 from backend.services.site_settings import download_profile_defaults, local_media_profile_defaults
 from backend.services.sites import CollectionAlreadyAddedError, collection_site
 
@@ -1174,7 +1174,7 @@ def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collect
     # Every album is a season, the ones to come too; a kind of list an artist skips, such as a SoundCloud playlist,
     # is not, as the other program took only albums.
     kinds = list_kinds([collection_site(collection)])
-    skipped = skipped_kinds(kinds, collection.type == CollectionType.MUSIC.value)
+    skipped = skipped_kinds(collection_site(collection), collection.type == CollectionType.MUSIC.value)
     collection.new_lists = {
         kind.key: (NewLinkSeasonAction.IGNORE if kind.key in skipped else NewLinkSeasonAction.ADD).value for kind in kinds
     }
@@ -1206,17 +1206,17 @@ def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collec
     # An artist's discography is their albums, not the kinds of list an artist skips, such as the playlists they put
     # together on SoundCloud.
     kinds = list_kinds([site])
-    skipped = skipped_kinds(kinds, music)
+    skipped = skipped_kinds(site, music)
     plans = [SectionPlan(section.ref, SectionTarget.MAIN) for section in details.sections if section.access is None
-             and not (section.kind is SectionKind.LIST and section_kind(site, section) in skipped)]
+             and not (section.kind is SectionKind.LIST and section.type.key in skipped)]
     creator, _made = add_creator(session, source_key=source.id, details=details, plans=plans, settings=NewCollectionSettings(
         type=kind, episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
         membership_level="FREE",
     # The other program downloaded every new album as it came out.
-    ), new_lists={
+    ), new_lists={site.key: {
         kind.key: (NewSectionAction.IGNORE if kind.key in skipped else NewSectionAction.SEASON).value
         for kind in kinds if kind.seasons
-    })
+    }})
     creator.genre, creator.content_rating = plan.settings.get("genre"), plan.settings.get("content_rating")
     main = creator.accounts[0].main_collection
     if main is None:
@@ -1349,10 +1349,10 @@ def _upsert_collection(
         _report_changes(report, plan.title, changes)
         if added := _add_link_seasons(session, existing, plan):
             from backend.operations.collections import CollectionIndexOperation
-            from backend.services.link_seasons import list_names
+            from backend.services.link_seasons import section_list_names
             from task_manager.scheduler.operation_factory import create_operation
 
-            names = list_names(existing)
+            names = section_list_names(existing)
             report.add("updated", plan.title, f"Updated: {added} {names.singular if added == 1 else names.plural} added as seasons")
             create_operation(session, CollectionIndexOperation(existing))
     if "check_frequency" in write or "check_cron" in write:

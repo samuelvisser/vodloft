@@ -526,7 +526,7 @@ def _episode_or_404(s: Session, episode_slug: str) -> Episode:
 
 def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPIRead:
     """Where the episode belongs now that its collection's playlists changed. Reading only: nothing is made."""
-    from backend.services.link_seasons import belongs_elsewhere, list_names
+    from backend.services.link_seasons import belongs_elsewhere, section_list_names
 
     from backend.services.reassigned import reassignment_of
 
@@ -540,7 +540,7 @@ def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPI
         return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False)
     collection = episode.collection
     # The Site's own word for the list, such as playlist on YouTube or album on Bandcamp.
-    names = NamesAPIRead.model_validate(list_names(collection))
+    names = NamesAPIRead.model_validate(section_list_names(collection))
     if belonging.link is not None:
         season = belonging.link.season
         return EpisodeSeasonPlaceAPIRead(

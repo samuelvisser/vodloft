@@ -11,7 +11,7 @@ import {lookUpCreator, useCreators, useSourceLookup} from '../../lib/queries'
 import {SourceFeature, sourceHas} from '../../types/schemas/source'
 import {
     CreatorCreateSchema, type CreatorCreateIn, type CreatorCreateOut, type CreatorLookupRead, type CreatorSectionRead,
-    type NewSectionAction, type SectionPlan, newListsValues,
+    type NewLists, type NewSectionAction, type SectionPlan, newListsValues, withNewList,
 } from '../../types/schemas/creator'
 import {DwMembershipLevelReg} from '../../types/dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg, type CollectionTypeValue, type EpisodeIdentifierValue} from '../../types/collection'
@@ -31,7 +31,7 @@ import './CreatorPages.css'
 /** The starting points, in the words of what this creator has: playlists on YouTube, shows on The Daily Wire. */
 function presetText(key: CreatorCreateIn['preset'], hasFeeds: boolean, creator: CreatorLookupRead, music: boolean) {
     // What the Site calls the lists and shows its creators add, such as shows on The Daily Wire.
-    const {singular, plural} = creator.growingNames
+    const {singular, plural} = creator.sectionGrowingNames
     const skipped = {
         label: 'Only what I pick',
         help: `All ${hasFeeds ? `feeds and ${plural}` : plural} start skipped.`,
@@ -62,7 +62,7 @@ function choiceOf(plan: SectionPlan | undefined): Choice {
 
 /** What happens with a list of each kind the creator adds later, to start with, as the server says: an artist's new
  *  albums are new albums of theirs, and kinds that aren't albums are skipped; anyone else is asked. */
-function newListsFor(creator: CreatorLookupRead, music: boolean): Record<string, NewSectionAction> {
+function newListsFor(creator: CreatorLookupRead, music: boolean): NewLists {
     return newListsValues(music ? creator.musicNewLists : creator.newLists)
 }
 
@@ -90,11 +90,13 @@ function isMovie(creator: CreatorLookupRead, section: CreatorSectionRead) {
     return section.kind === 'item' && creator.movies
 }
 
-/** What the section is and holds, in the words of its Site: "Album · 2016 · 12 tracks". */
+/** What the section is and holds, in the words of its Site: "Album · 2016 · 12 tracks", or "12 shorts" for a feed,
+ * which is named after its type already. */
 function sectionFacts(creator: CreatorLookupRead, section: CreatorSectionRead): string {
-    const media = creator.mediaNames
+    const feed = section.kind === 'feed'
+    const media = feed ? section.names : creator.mediaNames
     return [
-        capitalized(section.names.singular),
+        feed ? null : capitalized(section.names.singular),
         section.year,
         section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? media.singular : media.plural}` : null,
     ].filter(Boolean).join(' · ')
@@ -344,7 +346,7 @@ export default function AddCreatorPage() {
     }
 
     // What the creator's Site calls its lists and shows, such as "albums and playlists" on SoundCloud.
-    const lists = creator.growingNames.plural
+    const lists = creator.sectionGrowingNames.plural
     const media = (type: string) => collectionWords(type, creator.audioOnly ? 'audio' : 'video')
     const hasFeeds = creator.sections.some((section) => section.kind === 'feed')
     const feeds = new Set(creator.sections.filter((section) => section.kind === 'feed').map((section) => section.ref))
@@ -517,9 +519,9 @@ export default function AddCreatorPage() {
                 {!into && <div className="creator-section-group">
                     <h2>New {creator.newListNames.plural}</h2>
                     <NewListSettings
-                        kinds={newListKinds} values={newLists} fallback="ask" idPrefix="creator-new-lists"
-                        registryFor={(kind) => newListActionReg(creatorWord, kind, music)}
-                        onChange={(key, value) => setValue('newLists', {...newLists, [key]: value as NewSectionAction})}
+                        kinds={newListKinds} valueOf={(kind) => newLists[kind.siteKey ?? '']?.[kind.key]} fallback="ask"
+                        idPrefix="creator-new-lists" registryFor={(kind) => newListActionReg(creatorWord, kind, music)}
+                        onChange={(kind, value) => setValue('newLists', withNewList(newLists, kind, value as NewSectionAction))}
                     />
                     {errors.newLists && <div className="error" role="alert">{(errors.newLists as {message?: string}).message}</div>}
                     <div className="help">VODLoft looks for new ones once a day.</div>

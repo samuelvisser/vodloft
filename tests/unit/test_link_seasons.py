@@ -9,14 +9,15 @@ from dataclasses import replace
 import pytest
 from sqlalchemy import select
 
-from sources import Feature, ItemRef, SectionKind, SectionRef, Site
+from sources import LIST_TYPE, Feature, ItemRef, Names, SectionKind, SectionRef, SectionType, Site
 from test_ytdlp_collections import ListedSource, _video, session  # noqa: F401
 
 CREATOR = "https://seasons.example/@creator/videos"
+PLAYLISTS = SectionType(LIST_TYPE, SectionKind.LIST, Names("playlist", "playlists"))
 
 
 def _list(ref: str, title: str) -> SectionRef:
-    return SectionRef(ref, f"https://seasons.example/playlist?list={ref}", title, SectionKind.LIST)
+    return SectionRef(ref, f"https://seasons.example/playlist?list={ref}", PLAYLISTS, title)
 
 
 class CreatorSource(ListedSource):
@@ -322,7 +323,7 @@ def test_renaming_files_with_season_folders_moves_downloaded_videos_to_their_pla
 
 
 def test_a_site_can_name_its_link_seasons_itself(source, monkeypatch, session):
-    from backend.services.link_seasons import list_names, loose_season_name
+    from backend.services.link_seasons import section_list_names, loose_season_name
     from sources import Names, SectionKind, SectionType
 
     monkeypatch.setattr(type(source), "sites", (replace(source.sites[0], section_types=(
@@ -332,7 +333,7 @@ def test_a_site_can_name_its_link_seasons_itself(source, monkeypatch, session):
 
     sites._site_of.cache_clear()
     collection = _collection(session)
-    assert (list_names(collection), loose_season_name(collection)) == (Names("set or mix", "sets and mixes"), "Loose")
+    assert (section_list_names(collection), loose_season_name(collection)) == (Names("set or mix", "sets and mixes"), "Loose")
     collection.type = "music"
     assert loose_season_name(collection) == "Singles"
 

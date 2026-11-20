@@ -31,7 +31,7 @@ export function creatorKindText(creator: {kind: string, accounts: {site: {name: 
 /** One kind of list a creator's Sites have, such as a SoundCloud artist's albums or their playlists, which has a
  * setting of its own for what happens with a new one: what the Sites call it, and whether it can be a season of the
  * creator's own collection. */
-export type ListKind = {key: string, names: Names, seasons: boolean}
+export type ListKind = {key: string, names: Names, seasons: boolean, siteKey?: string, siteName?: string}
 
 const newListActionRegs = new Map<string, ReturnType<typeof makeNewListActionReg>>()
 

@@ -194,9 +194,24 @@ does differently on a Site lives in that Site's contract, a `Site` from `sources
   `SectionType` with a stored `key` and its `Names` (singular and plural, no article). Name sections only from them:
   a combined name such as "albums and playlists" is joined from the types where it is shown, never written into a
   contract or hardcoded. What VODLoft calls the season it makes itself of what is in no list is `loose_season`, apart from sections.
+- A section type says what a section is: its kind, and for a feed its `role` (main, short or live). A `SectionRef`
+  carries its `SectionType`, and a stored `CreatorSection` only its type `key`, from which it reads its kind, role and,
+  for a feed, its title. Type keys are unique within a Site only; a key a Site's contract does not have is an error.
+- yt-dlp's feeds are `YtdlpFeedSectionType`s, which add the `path` of the feed's page, such as YouTube's `streams`.
+  Adding a feed to a Site is a change to its contract alone.
 - A Site's `episode_tags` are the kinds of episode it tells apart, the main one first. A Site with `audio_only` has
   sound only: what its contract leaves out of `episode_tags`, `downloads` and `upgrade_checks` becomes the sound
   version (tracks, no video heights, HLS or subtitles). A value the contract sets itself always wins.
+
+### Site implementations
+The Site contract says what a Site has; a Site implementation says how its Source fetches it. In yt-dlp they are
+classes in `sources/ytdlp/site_implementations/`, one per Site, registered in `IMPLEMENTATIONS` by Site key. Each
+subclasses `OtherSitesImplementation`, the generic one, which reads every feed by its path.
+- `YtDlpSource` finds the link's Site and hands the work to its implementation. What one Site does differently
+  belongs in that Site's implementation, not in a check of the Site in the Source.
+- An implementation answers the contract's types by key: its `feed_types` and `list_keys` together are the keys of
+  its Site's `section_types`, which `test_ytdlp_site_contracts.py` checks.
+- Settings that follow a type, such as what a creator does with a new list, are stored by Site and type key.
 
 ### Naming things
 Every contract names things with `Names` from `sources.contract`: `singular`, `plural`, and `a` with its article. The
@@ -204,7 +219,8 @@ API sends it as `{singular, plural, a}` under a `names` field (or a field named 
 `creatorNames`), never flattened. The backend gives every word the UI shows for a Site, a collection or a creator,
 also its fallback; the UI never adds an "s", picks an article, or falls back to a word of its own.
 - Several names shown together are joined in the backend with `Names.joined` ("albums and playlists", "an album or
-  playlist"). A Site offers the usual sets: `list_names`, `growing_names`, `section_names` and `names_of(*kinds)`. The
+  playlist"). A Site offers the usual sets: `section_feed_names`, `section_list_names`, `section_show_names`,
+  `section_item_names`, `section_growing_names`, `section_names` and `names_of(*kinds)`. The
   UI's `joinedNames` is only for a set the UI picks itself, such as the sections a user ticked.
 - What VODLoft itself calls a kind of link or record lives in `LINK_KIND_NAMES`, `SECTION_KIND_NAMES` and
   `RESOURCE_NAMES` (`backend.types.resource_names`); a Source overrides only its own kinds in `kind_names`, and the

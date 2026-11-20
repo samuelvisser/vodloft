@@ -7,7 +7,7 @@ import time
 
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlalchemy import and_, func, or_, select
@@ -118,8 +118,11 @@ class _Section:
     collection_title: str | None = None
     movie: Movie | None = None
     creator_id: int | None = None
-    section_type: SectionType | None = None
-    """The Site's type of the section, which names it."""
+
+    @property
+    def section_type(self) -> SectionType:
+        """The Site's type of the section, which names it."""
+        return creators.type_of(self.section)
 
     @property
     def movie_slug(self) -> str | None:
@@ -182,8 +185,7 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
         link_seasons=creators.lists_are_seasons(site), movies=movies,
         sections=[
             _Section(
-                replace(section, type=site.section_type_of(section).key), kept.get(section.ref),
-                titles.get(kept.get(section.ref)), movies_kept.get(section.ref), section_type=site.section_type_of(section),
+                section, kept.get(section.ref), titles.get(kept.get(section.ref)), movies_kept.get(section.ref),
             )
             for section in details.sections
         ],
@@ -396,7 +398,6 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
             _Section(
                 section, kept[account.id].get(section.ref), titles.get(kept[account.id].get(section.ref)),
                 movies_kept[account.id].get(section.ref), creator.id,
-                section_type=creators.account_site(account).section_type_of(section),
             )
             for section in account.sections
         ], creators.takes_movies(account.source_key))
@@ -637,7 +638,7 @@ class _Match:
     creator_slug: str | None = None
     overlaps: list = field(default_factory=list)
     section_type: str | None = None
-    growing_names: Names | None = None
+    section_growing_names: Names | None = None
 
     def __getattr__(self, name):
         return getattr(self.details, name)
@@ -654,7 +655,7 @@ def collection_creator_match(s: Session, collection_slug: str, source_key: str, 
         details, site.name, site.creator_names, site.section_types, section if keeper is None or movable else None,
         keeper.title if keeper is not None and not movable else None,
         existing.creator.slug if existing is not None else None,
-        overlaps, site.section_type_of(section).key if section is not None else None, site.growing_names,
+        overlaps, creators.type_of(section).key if section is not None else None, site.section_growing_names,
     ))
 
 

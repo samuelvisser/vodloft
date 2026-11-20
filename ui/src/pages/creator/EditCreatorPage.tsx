@@ -15,7 +15,7 @@ import PageHeader from '../../components/common/PageHeader'
 import {creatorKindText, newListActionReg} from '../../types/creator'
 import NewListSettings from '../../components/common/NewListSettings'
 import {
-    CreatorPageReadSchema, CreatorUpdateSchema, newListsValues, type CreatorUpdateIn, type CreatorUpdateOut,
+    CreatorPageReadSchema, CreatorUpdateSchema, newListsValues, withNewList, type CreatorUpdateIn, type CreatorUpdateOut,
     type NewSectionAction,
 } from '../../types/schemas/creator'
 import CreatorSectionsEditor from './CreatorSectionsEditor'
@@ -108,9 +108,9 @@ export default function EditCreatorPage() {
                 <div className="creator-section-group">
                     <h2>New {creator.newListNames.plural}</h2>
                     <NewListSettings
-                        kinds={creator.newLists} values={newLists} fallback="ask" idPrefix="creator-new-lists"
-                        registryFor={(kind) => newListActionReg(creator.creatorNames.singular, kind, creator.music)}
-                        onChange={(key, value) => setValue('newLists', {...newLists, [key]: value as NewSectionAction}, {shouldDirty: true})}
+                        kinds={creator.newLists} valueOf={(kind) => newLists[kind.siteKey ?? '']?.[kind.key]} fallback="ask"
+                        idPrefix="creator-new-lists" registryFor={(kind) => newListActionReg(creator.creatorNames.singular, kind, creator.music)}
+                        onChange={(kind, value) => setValue('newLists', withNewList(newLists, kind, value as NewSectionAction), {shouldDirty: true})}
                     />
                     {errors.newLists && <div className="error" role="alert">{(errors.newLists as {message?: string}).message}</div>}
                     <div className="help">VODLoft looks for new ones once a day.</div>

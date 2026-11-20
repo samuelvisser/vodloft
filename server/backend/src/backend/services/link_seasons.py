@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, MediaDownloadBase, Season
 from backend.services.season_order import arrange_seasons, link_first_videos, match_seasons_of_downloaded, season_year
 from backend.services.seasons import create_season_record
-from backend.services.new_lists import ListKind, NewListSetting, list_kinds, new_link_seasons_settings, section_kind
+from backend.services.new_lists import ListKind, NewListSetting, list_kinds, new_link_seasons_settings
 from backend.services.sites import collection_site
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import EpisodeIdentifier
@@ -45,10 +45,10 @@ _FIRST_YEAR = 1900
 _LISTS_AT_ONCE = 4
 
 
-def list_names(collection: Collection) -> Names:
+def section_list_names(collection: Collection) -> Names:
     """What the collection's Site calls the lists its link seasons come from, such as playlists, or albums and
     playlists on SoundCloud."""
-    return collection_site(collection).list_names
+    return collection_site(collection).section_list_names
 
 
 def loose_season_name(collection: Collection) -> str:
@@ -184,11 +184,10 @@ def _new_list_actions(collection: Collection):
     """What the collection does with a new list, by the list: a function of its ``SectionRef``. When the collection
     is set up, it takes every list but those of a kind it skips; when it skips every kind, that is about the lists to
     come, and it takes all it found."""
-    site = collection_site(collection)
     actions = {setting.key: NewLinkSeasonAction(setting.action) for setting in collection_new_lists(collection)}
     if not collection.lists and all(action is NewLinkSeasonAction.IGNORE for action in actions.values()):
         actions = dict.fromkeys(actions, NewLinkSeasonAction.ASK)
-    return lambda found: actions.get(section_kind(site, found), NewLinkSeasonAction.ASK)
+    return lambda found: actions.get(found.type.key, NewLinkSeasonAction.ASK)
 
 
 def known_video_slugs(s: Session, collection: Collection, also: frozenset[str] = frozenset()) -> frozenset[str]:

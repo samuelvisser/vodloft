@@ -30,7 +30,7 @@ class CreatorSectionAPIRead(ResponseBase):
     title: str
     kind: Literal["feed", "list", "show", "item"]
     role: str
-    type: str
+    type: str = Field(validation_alias=AliasPath("section_type", "key"))
     """The key of the Site's section type the section is, such as album."""
     names: NamesAPIRead = Field(validation_alias=AliasPath("section_type", "names"))
     """What the Site calls the section's type, or VODLoft's own word for its kind where the Site names none."""
@@ -58,8 +58,10 @@ class SectionPlanAPIRead(ResponseBase):
 
 
 class CreatorNewListAPIRead(ListKindAPIRead):
-    """What the creator does with a new list of one kind, such as a new playlist."""
+    """What the creator does with a new list of one type on one of their Sites, such as a new YouTube playlist."""
 
+    site_key: str = Field(validation_alias=AliasPath("kind", "site_key"))
+    site_name: str = Field(validation_alias=AliasPath("kind", "site_name"))
     action: NewSectionAction
 
 
@@ -86,7 +88,7 @@ class CreatorLookupAPIRead(ResponseBase):
     """The Site has sound only, such as Bandcamp, so what its lists hold are tracks."""
     media_names: NamesAPIRead = Field(validation_alias=AliasPath("site", "media_names"))
     """What the Site calls one of its videos: a video, or a track on a Site with sound only."""
-    growing_names: NamesAPIRead = Field(validation_alias=AliasPath("site", "growing_names"))
+    section_growing_names: NamesAPIRead = Field(validation_alias=AliasPath("site", "section_growing_names"))
     """What the Site calls the lists and shows its creators add, such as playlists or shows."""
     link_seasons: bool = False
     """The creator's lists can be seasons of its own collection."""
@@ -142,8 +144,8 @@ class CreatorAPICreate(RequestBase):
     episode_identifier: EpisodeIdentifier = EpisodeIdentifier.SEASONAL
     """How the creator's own collection identifies its episodes, and each collection whose plan says nothing."""
     membership_level: DwMembershipLevel = DwMembershipLevel.HIGHEST_ALLOWED
-    new_lists: dict[str, NewSectionAction] = Field(default_factory=dict, max_length=20)
-    """What the creator does with a new list, by the key of its kind; a kind left out takes its default."""
+    new_lists: dict[str, dict[str, NewSectionAction]] = Field(default_factory=dict, max_length=20)
+    """What the creator does with a new list, by Site and the key of its type; a type left out takes its default."""
     lookup_id: Optional[str] = Field(default=None, max_length=64)
     """The lookup's id, to use what it found instead of asking the Site again."""
     into: Optional[str] = Field(default=None, max_length=255)
@@ -275,8 +277,8 @@ class CreatorAPIUpdate(RequestBase):
     title: Optional[str] = Field(default=None, min_length=1, max_length=255)
     """The creator's name, which their collections take as author; left out, it stays as it is. A name given here
     is kept when the Site's name changes."""
-    new_lists: dict[str, NewSectionAction] = Field(default_factory=dict, max_length=20)
-    """What the creator does with a new list, by the key of its kind; a kind left out keeps its setting."""
+    new_lists: dict[str, dict[str, NewSectionAction]] = Field(default_factory=dict, max_length=20)
+    """What the creator does with a new list, by Site and the key of its type; a type left out keeps its setting."""
     genre: Optional[str] = Field(default=None, max_length=200)
     content_rating: Optional[str] = Field(default=None, max_length=50)
 
@@ -307,7 +309,7 @@ class CollectionCreatorMatchAPIRead(ResponseBase):
     creator_names: NamesAPIRead
     section_types: list[SectionTypeAPIRead]
     """Every type of section the creator's Site has, such as playlists on YouTube."""
-    growing_names: NamesAPIRead
+    section_growing_names: NamesAPIRead
     """What the Site calls the lists and shows its creators add, such as playlists or shows."""
     ref: str
     url: Optional[str] = None

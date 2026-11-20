@@ -87,7 +87,7 @@ class CollectionSeasonsAPIRead(ResponseBase):
     list_types: list[SectionTypeAPIRead]
     """The types of list of the collection's Site, which its link seasons come from, such as playlists, or albums and
     playlists on SoundCloud."""
-    list_names: NamesAPIRead
+    section_list_names: NamesAPIRead
     """Those types of list named together, such as albums and playlists."""
     loose_season: str
     """The name of the season of the videos in none of the lists, such as Videos, Singles or Tracks."""
