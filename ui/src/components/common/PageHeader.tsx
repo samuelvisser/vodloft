@@ -39,12 +39,14 @@ type PageHeaderActionProps = {
     variant?: 'primary' | 'secondary'
     /** Keep the words while the header has room for them, after the other buttons have become icons. */
     keepLabel?: boolean
+    /** When the header is narrow, show the words in small type under the icon, on a plain button without a pill. */
+    caption?: boolean
     /** For a button that switches something on and off: whether it is on. Switching plays a short swap animation. */
     toggled?: boolean
 } & ({to: string, onClick?: never} | {onClick: () => void, to?: never})
 
 /** A button in a PageHeader: a link with `to`, or a button with `onClick`. */
-export function PageHeaderAction({icon, label, variant = 'primary', keepLabel, toggled, to, onClick}: PageHeaderActionProps) {
+export function PageHeaderAction({icon, label, variant = 'primary', keepLabel, caption, toggled, to, onClick}: PageHeaderActionProps) {
     // A toggle animates only once it has been switched, not when the page first shows it.
     const [firstToggled, setFirstToggled] = useState(toggled)
     const [switched, setSwitched] = useState(false)
@@ -55,6 +57,7 @@ export function PageHeaderAction({icon, label, variant = 'primary', keepLabel, t
     const className = [
         `btn btn-${variant} page-header-action`,
         keepLabel && 'keeps-label',
+        caption && 'has-caption',
         switched && 'is-switching',
     ].filter(Boolean).join(' ')
     // The key makes the icon and words new elements on each switch, so their entrance animation plays again.
