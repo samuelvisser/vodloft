@@ -518,7 +518,7 @@ export default function AddCreatorPage() {
 
 
                 {!into && <div className="creator-section-group">
-                    <h2>New {creator.newListNames.plural}</h2>
+                    <h2>When a new {creator.newListNames.singular} is added</h2>
                     <NewListSettings
                         kinds={newListKinds} valueOf={(kind) => newLists[kind.siteKey ?? '']?.[kind.key]} fallback="ask"
                         idPrefix="creator-new-lists" registryFor={(kind) => newListActionReg(creatorWord, kind, music)}

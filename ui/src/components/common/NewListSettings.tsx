@@ -35,7 +35,7 @@ export default function NewListSettings({kinds, valueOf, onChange, registryFor, 
                     <div key={id} className="new-list-setting" role="listitem">
                         <span className="new-list-setting-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'list')}/></span>
                         <div className="new-list-setting-copy">
-                            <label htmlFor={id}><b>New {severalSites ? `${kind.siteName} ` : ''}{kind.names.plural}</b></label>
+                            <label htmlFor={id}><b>New {severalSites ? `${kind.siteName} ` : ''}{kind.names.singular}</b></label>
                             <span>{registry.getHelp(value)}</span>
                         </div>
                         <div className="new-list-setting-choice">
