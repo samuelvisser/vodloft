@@ -10,7 +10,8 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import CollectionTileArt from '../../components/CollectionTileArt/CollectionTileArt'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import type {CreatorPageRead, SectionPlan} from '../../types/schemas/creator'
-import {choices, isMovie, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
+import {choices, isMovie, placeMove, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
+import AnotherCollectionDialog, {otherCollections} from './AnotherCollectionDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import CreatorBulkBar from './CreatorBulkEdit'
 import {PageHeaderAction} from '../../components/common/PageHeader'
@@ -50,6 +51,8 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
     // The section that becomes a collection of its own, while the user chooses its type and identification.
     const [adding, setAdding] = useState<AccountSection | null>(null)
+    // The feed or list that goes into another of the creator's collections, while the user picks which.
+    const [picking, setPicking] = useState<AccountSection | null>(null)
     // Whether a tile's menu was open when the pointer went down on the tile.
     const menuWasOpen = useRef(false)
     if (!items.length) return null
@@ -138,6 +141,10 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                         label: option.label, description: option.description, disabled: busy !== null,
                         onSelect: () => void add(item, option.plan),
                     })),
+                    ...(item.section.kind !== 'item' && otherCollections(creator, item).length > 0 ? [{
+                        label: 'Another collection…', description: `Into one of ${creator.title}'s other collections`,
+                        disabled: busy !== null, onSelect: () => setPicking(item),
+                    }] : []),
                     {
                         label: 'Do not show here again',
                         description: `It leaves this list${isNew ? ' and stays out of your library' : ''}. You can still add it from the Edit page`,
@@ -253,6 +260,12 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                         for (const item of done) next.delete(key(item))
                         return next
                     })}
+                />
+            )}
+            {picking && (
+                <AnotherCollectionDialog
+                    creator={creator} item={picking} confirmLabel="Add" onDismiss={() => setPicking(null)}
+                    onPick={async (place) => { setPicking(null); await add(picking, {ref: picking.section.ref, ...placeMove(place)}) }}
                 />
             )}
             {adding && <NewCreatorCollectionDialog creator={creator} items={[adding]} onDismiss={() => setAdding(null)}/>}

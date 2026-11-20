@@ -230,7 +230,7 @@ def _plans(body: CreatorAPICreate | CreatorSectionsAPIAdd) -> list[SectionPlan]:
     return [
         SectionPlan(
             plan.ref, SectionTarget(plan.target), CollectionType(plan.type) if plan.type else None,
-            EpisodeIdentifier(plan.episode_identifier) if plan.episode_identifier else None,
+            EpisodeIdentifier(plan.episode_identifier) if plan.episode_identifier else None, plan.collection_slug,
         )
         for plan in body.sections
     ]
@@ -276,6 +276,14 @@ class _AccountRead:
     account: CreatorAccount
     sections: list
     movies: bool = False
+
+    @property
+    def gathering_slugs(self) -> list[str]:
+        return [collection.slug for collection in self.account.gatherers]
+
+    @property
+    def gatherable_slugs(self) -> list[str]:
+        return [collection.slug for collection in creators.gatherable(self.account)]
 
     def __getattr__(self, name):
         return getattr(self.account, name)
@@ -401,14 +409,15 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
     }
     kept = {
         account.id: creators.sections_in_library(
-            s, account.source_key, account.site_ref, account.sections, account.main_collection,
+            s, account.source_key, account.site_ref, account.sections, account.gatherers,
         )
         for account in creator.accounts
     }
     as_seasons = {
         account.id: {
-            link.ref: link.as_season for link in account.main_collection.lists if is_in(account.main_collection, link)
-        } if account.main_collection is not None else {}
+            link.ref: link.as_season
+            for collection in account.gatherers for link in collection.lists if is_in(collection, link)
+        }
         for account in creator.accounts
     }
     slugs = {slug for found in kept.values() for slug in found.values()}
@@ -493,7 +502,7 @@ def creator_episodes(s: Session, slug: str, *, cursor: str | None, limit: int) -
 def _moves(body: CreatorSectionMovesAPIIn | CreatorAPIUpdate) -> list["SectionMove"]:
     from backend.services.section_moves import SectionMove
 
-    return [SectionMove(move.account_id, move.ref, SectionTarget(move.target)) for move in body.moves]
+    return [SectionMove(move.account_id, move.ref, SectionTarget(move.target), move.collection_slug) for move in body.moves]
 
 
 def preview_creator_moves(s: Session, slug: str, body: CreatorSectionMovesAPIIn) -> CreatorSectionMovesPreviewAPIRead:

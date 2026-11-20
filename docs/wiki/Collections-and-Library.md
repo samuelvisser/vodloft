@@ -300,14 +300,28 @@ How the files move depends on the new collection's Download Profiles:
 
 When several Download Profiles download it, the first one in the collection's order decides.
 
-### Moving a playlist between the main collection and its own
+### Moving a playlist or feed to another place
 
 Under **Where the playlists go**, the creator's **Edit** page lists each playlist that is in your Library, and where it is: a **Season of** the main collection, **In** the main collection **not as a season**, or a **Collection of its own**. Pick another place to move it, videos and all:
 
 - **Collection of its own**: the playlist becomes a new collection, and its videos leave the main collection. The new collection starts without Download Profiles, like every collection made from a creator.
 - **Season of** the main collection: the playlist becomes a season again, and its collection goes once its videos have moved. A video in that collection that the playlist no longer lists stays there.
 - **Not as a season** in the main collection: the playlist's videos stay in, or join, the main collection, in the seasons of the videos in no playlist. Turned back into a **Season of** the main collection, they get their season again. Either way, downloaded videos move their files into their new season.
-- **Exclude from library**, for a playlist in the main collection only: the playlist leaves the main collection and moves to **Not in your library** on the creator's **Edit** page, and keeps its videos out. To take a playlist with a collection of its own out of your Library, delete that collection.
+- **Exclude from library**, for a playlist in the main collection or another collection that holds several: the playlist leaves that collection and moves to **Not in your library** on the creator's **Edit** page, and keeps its videos out. To take a playlist with a collection of its own out of your Library, delete that collection.
+
+#### Several feeds and playlists in another collection
+
+The creator's main collection is not the only one that can hold several feeds and playlists. Once the creator has
+another collection, such as one made from their Shorts or from a playlist, each feed and playlist also offers
+**Another collection…**, on the **Edit** page and in the **+** menu of what is not in your Library yet. It asks which
+of the creator's collections it goes into, and for a playlist whether it becomes a season of that collection or not.
+This way, the livestreams can join the Shorts collection, or a few playlists can share one collection apart from the
+main one.
+
+A collection made from one feed or playlist keeps that feed or playlist as it was: a playlist that was a collection of
+its own stays in it, not as a season, with its videos where they are. That first feed or playlist stays in the
+collection; move the others out of it instead. The channel's main feed, such as YouTube's Videos, always stays in the
+main collection.
 
 Videos that are not downloaded just move. Downloaded videos move their files the way a Reassigned video does, see the section above, so a video the new place downloads with another Local Media Profile is downloaded again there before its old files go. The window that asks you to confirm the move says which of these will happen.
 

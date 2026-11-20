@@ -8,6 +8,7 @@ import {can} from '../../lib/access'
 import {addCreatorSections, showCreatorSections, splitCreatorAccount} from '../../lib/queries'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
+import AnotherCollectionDialog, {otherCollections} from './AnotherCollectionDialog'
 import CreatorBulkBar from './CreatorBulkEdit'
 import {sectionNouns} from './sectionNames'
 import {PageHeaderAction} from '../../components/common/PageHeader'
@@ -73,18 +74,29 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
     return options
 }
 
-export type Place = 'main' | 'main_loose' | 'own' | 'exclude'
+/** Where a feed or list goes: one of the targets, or main@<slug> and main_loose@<slug> for another of the creator's
+ * collections, as a season of it or not. */
+export type Place = string
+type Target = SectionPlan['target']
+
+/** The move to a place, as the API takes it. */
+export function placeMove(place: Place): {target: Target, collectionSlug?: string} {
+    const at = place.indexOf('@')
+    return at < 0 ? {target: place as Target} : {target: place.slice(0, at) as Target, collectionSlug: place.slice(at + 1)}
+}
 
 /** The key of a feed or list of one of the creator's accounts, by which the Edit page keeps where it goes. */
 export function placeKey(account: CreatorPageAccountRead, ref: string) {
     return `${account.id}:${ref}`
 }
 
-/** Where a feed or list in the Library is now: in the creator's own collection, as a season or not, or in a
- *  collection of its own. */
+/** Where a feed or list in the Library is now: in the creator's own collection or another one that holds several,
+ *  as a season or not, or in a collection of its own. */
 export function placeOf({account, section}: AccountSection): Place {
-    if (section.collectionSlug !== account.mainCollectionSlug) return 'own'
-    return section.asSeason === false ? 'main_loose' : 'main'
+    const target = section.asSeason === false ? 'main_loose' : 'main'
+    if (section.collectionSlug === account.mainCollectionSlug) return target
+    if (section.collectionSlug && account.gatheringSlugs.includes(section.collectionSlug)) return `${target}@${section.collectionSlug}`
+    return 'own'
 }
 
 /** The feeds and lists in the Library whose place can change: a feed, and a list where lists can be seasons. */
@@ -96,46 +108,55 @@ export function placedSections(creator: CreatorPageRead): AccountSection[] {
     )).sort((a, b) => Number(a.section.kind !== 'feed') - Number(b.section.kind !== 'feed'))
 }
 
-/** The places a feed or a playlist in the Library can go, in words. */
-export function placeLabels(section: CreatorSectionRead, mainTitle: string, season: Noun): Record<Place, string> {
+/** The choice that asks which other collection a feed or list goes into. */
+const PICK = 'pick'
+
+/** A place of a feed or a playlist, in words. */
+export function placeLabel(creator: CreatorPageRead, {account, section}: AccountSection, place: Place): string {
+    if (place === PICK) return 'Another collection…'
+    const {target, collectionSlug} = placeMove(place)
+    const collection = creator.collections.find((collection) => collection.slug === (collectionSlug ?? account.mainCollectionSlug))
+    const title = collection?.title ?? creator.title
+    const season = collectionWords(collection?.type).season
     return {
-        main: section.kind === 'feed' ? `In ${mainTitle}` : `${season.Singular} of ${mainTitle}`,
-        main_loose: `In ${mainTitle}, not as ${season.a}`,
+        main: section.kind === 'feed' ? `In ${title}` : `${season.Singular} of ${title}`,
+        main_loose: `In ${title}, not as ${season.a}`,
         own: 'Collection of its own',
         exclude: 'Exclude from library',
-    }
+    }[target]
 }
 
-/** The places a feed or list can go from where it is: a feed or list in the creator's own collection can leave the
- * Library, one in a collection of its own goes there by deleting that collection. A list in the creator's own
- * collection is a season of it, or has its videos with the ones in no list. The main feed, such as YouTube's Videos,
- * has the own collection's link, so it never becomes a collection of its own. */
-function placeChoices(section: CreatorSectionRead, current: Place): Place[] {
+/** The places a feed or list can go from where it is: one in a collection that holds several can leave the Library,
+ * one in a collection of its own goes elsewhere by deleting that collection. A list is a season of the collection it
+ * is in, or has its videos with the ones in no list. The main feed, such as YouTube's Videos, has the own collection's
+ * link, so it never goes anywhere else. When the creator has other collections, the last choice asks for one. */
+function placeChoices(creator: CreatorPageRead, item: AccountSection, current: Place, value: Place): Place[] {
+    const {section} = item
+    const list = section.kind === 'list'
     const own = !(section.kind === 'feed' && section.role === 'main')
-    const inMain = current === 'main' || current === 'main_loose'
-    return [
-        'main' as const,
-        ...(section.kind === 'list' ? ['main_loose' as const] : []),
-        ...(own || current === 'own' ? ['own' as const] : []),
-        ...(inMain ? ['exclude' as const] : []),
-    ]
+    const elsewhere = [current, value].map((place) => placeMove(place).collectionSlug).filter((slug): slug is string => !!slug)
+    return [...new Set([
+        'main',
+        ...(list ? ['main_loose'] : []),
+        ...elsewhere.flatMap((slug) => list ? [`main@${slug}`, `main_loose@${slug}`] : [`main@${slug}`]),
+        ...(otherCollections(creator, item).length > 0 ? [PICK] : []),
+        ...(own || current === 'own' ? ['own'] : []),
+        ...(current !== 'own' ? ['exclude'] : []),
+    ])]
 }
 
 /** Where one of the creator's feeds or playlists goes. A change moves it when the Edit page is saved; while the
  * collection it moved to numbers its episodes again and renames their files, the field shows that progress. */
-function SectionPlace({item, current, value, mainTitle, season, fitLabels, collectionId, onChange}: {
-    item: AccountSection, current: Place, value: Place, mainTitle: string, season: Noun, fitLabels: readonly string[],
-    collectionId?: number, onChange: (to: Place) => void,
+function SectionPlace({creator, item, current, value, fitLabels, collectionId, onChange, onPick}: {
+    creator: CreatorPageRead, item: AccountSection, current: Place, value: Place, fitLabels: readonly string[],
+    collectionId?: number, onChange: (to: Place) => void, onPick: () => void,
 }) {
     const {account, section} = item
-    const choices = placeChoices(section, current)
-    const registry = useMemo(() => {
-        const labels = placeLabels(section, mainTitle, season)
-        return createSelectRegistry(
-            `SectionPlace-${section.kind}-${choices.join('-')}-${mainTitle}-${season.singular}`,
-            Object.fromEntries(choices.map((place) => [place, {label: labels[place]}])) as Record<Place, {label: string}>,
-        )
-    }, [section, choices.join('-'), mainTitle, season])
+    const choices = placeChoices(creator, item, current, value)
+    const registry = useMemo(() => createSelectRegistry(
+        `SectionPlace-${account.id}-${section.ref}-${choices.join('-')}`,
+        Object.fromEntries(choices.map((place) => [place, {label: placeLabel(creator, item, place)}])) as Record<Place, {label: string}>,
+    ), [creator, item, choices.join('-')])
     const inputId = `section-place-${account.id}-${section.ref}`
     const key = placeKey(account, section.ref)
     return (
@@ -154,7 +175,7 @@ function SectionPlace({item, current, value, mainTitle, season, fitLabels, colle
                 }}
                 activeLabel={`Moving ${section.kind === 'feed' ? section.names.plural : account.site.mediaNames.plural}`}
                 busyReason={`VODLoft is still moving ${section.title} into place: numbering the episodes again, renaming their files and rewriting their metadata.`}
-                onChange={(place) => { if (place) onChange(place as Place) }}
+                onChange={(place) => { if (place === PICK) onPick(); else if (place) onChange(place as Place) }}
             />
         </div>
     )
@@ -182,6 +203,8 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
     const [splitting, setSplitting] = useState<CreatorPageAccountRead | null>(null)
     // The section that becomes a collection of its own, while the user chooses its type and identification.
     const [adding, setAdding] = useState<AccountSection | null>(null)
+    // The feed or list that goes into another of the creator's collections, while the user picks which.
+    const [picking, setPicking] = useState<{item: AccountSection, confirm: string, pick: (place: Place) => void | Promise<void>} | null>(null)
     // Bulk edit of what is not in the library: whether it is on, and the keys of the chosen sections.
     const [selecting, setSelecting] = useState(false)
     const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
@@ -240,7 +263,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
     const placedFeeds = placed.filter(({section}) => section.kind === 'feed')
     const placedLists = placed.filter(({section}) => section.kind !== 'feed')
     // Every select in the list is as wide as the longest choice of any of them, where the row has room for it.
-    const placeChoiceLabels = placed.flatMap((item) => Object.values(placeLabels(item.section, mainTitleOf(creator, item.account), mainSeasonOf(creator, item.account))))
+    const placeChoiceLabels = placed.flatMap((item) => placeChoices(creator, item, placeOf(item), places[placeKey(item.account, item.section.ref)] ?? placeOf(item)).map((place) => placeLabel(creator, item, place)))
     const collectionIdOf = (slug?: string | null) => creator.collections.find((collection) => collection.slug === slug)?.id
     const found = all.filter(({section}) => section.status === 'new' && !section.collectionSlug)
     // Movies that aren't the creator's yet are here too, so one hidden on the creator page can still be added.
@@ -266,12 +289,10 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
     const placeRows = (items: AccountSection[]) => (
         <div className="creator-section-list">
             {items.map((item) => {
-                const mainTitle = mainTitleOf(creator, item.account)
-                const season = mainSeasonOf(creator, item.account)
                 const key = placeKey(item.account, item.section.ref)
                 const current = placeOf(item)
                 const value = places[key] ?? current
-                const labels = placeLabels(item.section, mainTitle, season)
+                const was = current === 'own' ? 'a collection of its own' : placeLabel(creator, item, current).replace(/^In /, 'in ')
                 return (
                     <div key={key} className="creator-section-row">
                         {sectionArt(item.section)}
@@ -280,16 +301,17 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                                 {item.section.title}
                                 {value !== current && <span className="creator-section-changed">Changed</span>}
                             </b>
-                            <span>{facts(item, value !== current ? `Was ${current === 'own' ? 'a collection of its own' : labels[current].replace(/^In /, 'in ')}` : null)}</span>
+                            <span>{facts(item, value !== current ? `Was ${was}` : null)}</span>
                         </div>
                         {mayManage && onPlace ? (
                             <SectionPlace
-                                item={item} current={current} value={value} mainTitle={mainTitle} season={season}
+                                creator={creator} item={item} current={current} value={value}
                                 fitLabels={placeChoiceLabels} collectionId={collectionIdOf(item.section.collectionSlug)}
                                 onChange={(to) => onPlace(key, to === current ? null : to)}
+                                onPick={() => setPicking({item, confirm: 'Choose', pick: (to) => onPlace(key, to === current ? null : to)})}
                             />
                         ) : (
-                            <span className="creator-section-note">{labels[current]}</span>
+                            <span className="creator-section-note">{placeLabel(creator, item, current)}</span>
                         )}
                     </div>
                 )
@@ -304,6 +326,12 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                     {busy === sectionKey(item.account, item.section.ref) ? 'Adding…' : choice.label}
                 </button>
             ))}
+            {item.section.kind !== 'item' && otherCollections(creator, item).length > 0 && (
+                <button type="button" className="btn" disabled={busy !== null}
+                        onClick={() => setPicking({item, confirm: 'Add', pick: (to) => place(item.account, {ref: item.section.ref, ...placeMove(to)})})}>
+                    Another collection…
+                </button>
+            )}
             {ignore && (
                 <button type="button" className="btn btn-link" disabled={busy !== null}
                         onClick={() => void place(item.account, {ref: item.section.ref, target: 'exclude'})}>
@@ -471,6 +499,12 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                 )}
             </ConfirmDialog>
 
+            {picking && (
+                <AnotherCollectionDialog
+                    creator={creator} item={picking.item} confirmLabel={picking.confirm} onDismiss={() => setPicking(null)}
+                    onPick={async (to) => { await picking.pick(to); setPicking(null) }}
+                />
+            )}
             {adding && <NewCreatorCollectionDialog creator={creator} items={[adding]} onDismiss={() => setAdding(null)}/>}
         </>
     )

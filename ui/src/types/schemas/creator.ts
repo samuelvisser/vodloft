@@ -42,6 +42,8 @@ export type CreatorSectionRead = z.infer<typeof CreatorSectionReadSchema>
 export const SectionPlanSchema = z.object({
     ref: z.string(),
     target: z.enum(SectionTargetValues),
+    /** With main or main_loose: another of the creator's collections it goes into instead of their own. */
+    collectionSlug: z.string().optional(),
 })
 export type SectionPlan = z.infer<typeof SectionPlanSchema>
 
@@ -189,6 +191,10 @@ export type CreatorRead = z.infer<typeof CreatorReadSchema>
 
 export const CreatorPageAccountReadSchema = CreatorAccountReadSchema.extend({
     sections: z.array(CreatorSectionReadSchema),
+    /** The collections that hold several of the account's feeds and lists, its own collection first. */
+    gatheringSlugs: z.array(z.string()).default([]),
+    /** The collections a feed or list of the account can go into besides a collection of its own. */
+    gatherableSlugs: z.array(z.string()).default([]),
     /** The account's single items are movies, which VODLoft adds to the Library and joins to the creator. */
     movies: z.boolean().default(false),
 })
@@ -264,7 +270,9 @@ export type CreatorCreateOut = z.output<typeof CreatorCreateSchema>
 
 /** The form that changes how VODLoft follows a creator. */
 /** Where the creator's feeds and lists go, by "<account id>:<ref>": only the ones the user changed. */
-export const SectionPlacesSchema = z.record(z.string(), z.enum(SectionTargetValues))
+/** Where the user moved each feed or list to: a target, or main@<slug> and main_loose@<slug> for another of the
+ * creator's collections. */
+export const SectionPlacesSchema = z.record(z.string(), z.string())
 export type SectionPlaces = z.infer<typeof SectionPlacesSchema>
 
 export const CreatorUpdateSchema = z.object({
@@ -318,7 +326,7 @@ export type CreatorCollectionFormIn = z.input<typeof CreatorCollectionFormSchema
 export type CreatorCollectionFormOut = z.output<typeof CreatorCollectionFormSchema>
 
 /** One feed or list of the creator that goes elsewhere. */
-export type SectionMove = {accountId: number, ref: string, target: typeof SectionTargetValues[number]}
+export type SectionMove = {accountId: number, ref: string, target: typeof SectionTargetValues[number], collectionSlug?: string}
 
 /** The videos of one feed or list that leave a collection or join it. */
 export const MovedPartSchema = z.object({

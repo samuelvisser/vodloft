@@ -35,7 +35,7 @@ from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonType
 from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 from backend.utils.helpers import slugify
-from sources import Feature, ItemRef, Names, SectionRef, Source, VideoDetails, get_source
+from sources import Feature, ItemRef, Names, SectionKind, SectionRef, SectionRole, Source, VideoDetails, get_source
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +72,23 @@ def holds_only_link_seasons(collection: Collection) -> bool:
     return collection.outside_videos == OutsideVideos.ONLY.value
 
 
+def own_link(collection: Collection) -> str | None:
+    """The link that lists the collection's own videos: its own link, or for another collection of a creator's than
+    an account's own collection that gathers feeds and lists of that account, the account's page, of which it lists
+    only its own feeds."""
+    account = collection.creator_account
+    if account is None or account.main_collection_id == collection.id:
+        return collection.sharing_url
+    main_feed = next((
+        section for section in account.sections if section.kind == SectionKind.FEED and section.role == SectionRole.MAIN
+    ), None)
+    return main_feed.url if main_feed is not None else account.url
+
+
 def lists_own_link(collection: Collection) -> bool:
     """Whether the collection's own link lists its videos: it has one, it holds more than its link seasons, and when it
-    is a creator's own collection, at least one of the creator's feeds is placed in it."""
-    return collection.sharing_url is not None and not holds_only_link_seasons(collection) and collection.feeds != []
+    gathers a creator's feeds, at least one of them is placed in it."""
+    return own_link(collection) is not None and not holds_only_link_seasons(collection) and collection.feeds != []
 
 
 def own_feeds(collection: Collection) -> frozenset[str] | None:
@@ -86,24 +99,25 @@ def own_feeds(collection: Collection) -> frozenset[str] | None:
 def lists_playlists(collection: Collection) -> bool:
     """Whether the collection's own link is a creator's whole channel, on a Site whose playlists can be seasons, so
     its playlists are listed for it."""
-    if collection.sharing_url is None:
+    url = own_link(collection)
+    if url is None:
         return False
     site = collection_site(collection)
-    return site.link_seasons and get_source(collection.source_key).is_creator_page(collection.sharing_url)
+    return site.link_seasons and get_source(collection.source_key).is_creator_page(url)
 
 
 def follows_creator(collection: Collection) -> bool:
     """Whether the collection is its creator's own collection, whose lists the creator finds and places: the
     collection does not look for new lists itself, and takes the ones the creator gives it."""
     creator = collection.creator
-    return creator is not None and collection.id in creator.main_collection_ids
+    return creator is not None and collection.id in creator.gathering_ids
 
 
 def offers_link_seasons(collection: Collection) -> bool:
     """Whether the collection's playlists could be its seasons: its Site offers it, and its link is a whole channel.
     A collection that only holds its link seasons can have them whenever its Source lists the links it is given."""
-    if holds_only_link_seasons(collection):
-        return get_source(collection.source_key).has(Feature.LINK_COLLECTIONS)
+    if holds_only_link_seasons(collection) and get_source(collection.source_key).has(Feature.LINK_COLLECTIONS):
+        return True
     return lists_playlists(collection)
 
 
@@ -212,7 +226,7 @@ def list_lists(s: Session, collection: Collection, source: Source, also: frozens
     that adds them, look up the videos it has not got that are neither in ``also``, the ones its own link just
     listed. Slow, so no transaction stays open."""
     # The creator's daily look finds the lists of its own collection; the collection only lists their videos.
-    url = collection.sharing_url if lists_playlists(collection) and not follows_creator(collection) else None
+    url = own_link(collection) if lists_playlists(collection) and not follows_creator(collection) else None
     every = collection.link_seasons == LinkSeasons.ALL.value
     action_of = _new_list_actions(collection)
     first = not collection.lists
