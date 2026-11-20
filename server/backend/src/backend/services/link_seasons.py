@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import or_, delete, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, MediaDownloadBase, Season
@@ -558,13 +558,16 @@ def place_in_link_seasons(
 
 def leaving_outside(s: Session, collection: Collection) -> list[Episode]:
     """The videos the collection added from its playlists that no playlist in it lists any more, or all of them when
-    it no longer adds such videos. They leave the collection, files and all."""
+    it no longer adds such videos, and the videos of a list of its creator that the user keeps out, whatever lists
+    them. They leave the collection, files and all."""
+    from backend.services.reassigned import kept_out
+
     held = _holders(s, lists_in(collection)) if adds_outside_videos(collection) else {}
+    out = kept_out(s, collection)
+    leaving = Episode.from_link_season if not out else or_(Episode.from_link_season, Episode.video_slug.in_(out))
     return [
-        episode for episode in s.scalars(
-            select(Episode).where(Episode.collection_id == collection.id, Episode.from_link_season)
-        )
-        if episode.video_slug not in held
+        episode for episode in s.scalars(select(Episode).where(Episode.collection_id == collection.id, leaving))
+        if episode.video_slug in out or (episode.from_link_season and episode.video_slug not in held)
     ]
 
 

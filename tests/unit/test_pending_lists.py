@@ -67,14 +67,65 @@ def test_a_waiting_list_keeps_nothing_out(waiting, session):
     assert _episode(session, main, "t1") is not None and _episode(session, main, "t2") is not None
 
 
-def test_ignoring_a_waiting_list_keeps_its_videos_out_again(waiting, session):
+def test_skipping_a_list_keeps_nothing_out_and_keeping_it_out_does(waiting, client, session):
     from backend.services.reassigned import left_out
 
     from backend.db.models import CreatorSection
 
-    session.scalar(select(CreatorSection).where(CreatorSection.ref == "PLtools")).status = "ignored"
+    skipped = client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLtools", "target": "exclude"}]})
+    assert skipped.status_code == 200, skipped.text
+    session.expire_all()
+    assert session.scalar(select(CreatorSection.status).where(CreatorSection.ref == "PLtools")) == "ignored"
+    assert left_out(session, waiting) == frozenset()
+
+    session.scalar(select(CreatorSection).where(CreatorSection.ref == "PLtools")).status = "kept_out"
     session.commit()
     assert left_out(session, waiting) == frozenset({"t1", "t2"})
+
+
+def test_keeping_a_waiting_list_out_takes_its_videos_and_files_out(waiting, client, session):
+    from backend.db.models import Collection, CreatorSection
+    from backend.services.link_seasons import leaving_outside
+
+    main_id = waiting.id
+    preview = client.post("/api/creators/workshop/moves/preview", json={"moves": [
+        {"accountId": 1, "ref": "PLtools", "target": "keep_out"},
+    ]})
+    assert preview.status_code == 200, preview.text
+    [collection] = preview.json()["collections"]
+    [part] = collection["parts"]
+    assert (part["direction"], part["count"], part["downloadsDeleted"]) == ("leave", 2, 1)
+
+    answered = _answer(client, "keep_out")
+
+    assert answered.status_code == 200, answered.text
+    session.expire_all()
+    main = session.get(Collection, main_id)
+    assert session.scalar(select(CreatorSection.status).where(CreatorSection.ref == "PLtools")) == "kept_out"
+    # t2 had no files and went at once; t1 goes once its files are deleted.
+    assert _episode(session, main, "t2") is None and _episode(session, main, "v1") is not None
+    assert [episode.source_slug for episode in leaving_outside(session, main)] == ["t1"]
+
+
+def test_a_season_kept_out_leaves_with_its_videos(waiting, client, session):
+    from backend.db.models import Collection, CreatorSection
+
+    main_id = waiting.id
+    assert _answer(client, "main").status_code == 200
+    session.expire_all()
+    assert _episode(session, session.get(Collection, main_id), "t2").season.name == "Tool Reviews"
+
+    kept = _answer(client, "keep_out")
+
+    assert kept.status_code == 200, kept.text
+    session.expire_all()
+    main = session.get(Collection, main_id)
+    assert session.scalar(select(CreatorSection.status).where(CreatorSection.ref == "PLtools")) == "kept_out"
+    assert _episode(session, main, "t2") is None
+    from backend.services.link_seasons import leaving_outside
+
+    # The downloaded one goes once its files are deleted.
+    assert [episode.source_slug for episode in leaving_outside(session, main)] == ["t1"]
 
 
 def test_a_waiting_list_that_becomes_a_season_takes_its_videos_and_files_along(waiting, client, session):

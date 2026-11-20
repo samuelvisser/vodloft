@@ -37,7 +37,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
         .flatMap((account) => account.sections.map((section) => ({account, section})))
         // A movie that isn't one of the creator's yet, also when it is in the library, can join them from here. What
         // the user no longer wants to see here is only on the Edit page.
-        .filter(({account, section}) => section.status !== 'ignored' && (
+        .filter(({account, section}) => section.status !== 'ignored' && section.status !== 'kept_out' && (
             section.kind === 'item' ? isMovie(account, section) && !section.movieJoined : !section.collectionSlug
         ))
         // The new ones, which wait for a choice, first.
@@ -158,6 +158,12 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                         separatorBefore: true, disabled: busy !== null,
                         onSelect: () => void add(item, {ref: item.section.ref, target: 'exclude'}),
                     },
+                    ...(item.section.kind === 'list' ? [{
+                        label: 'Keep its videos out',
+                        description: `Its ${item.account.site.mediaNames.plural} leave every collection of ${creator.title} too, also when another feed or list has them`,
+                        disabled: busy !== null,
+                        onSelect: () => answer(item, {target: 'keep_out'}, 'Skip, and keep its videos out'),
+                    }] : []),
                 ]}
             />
         )

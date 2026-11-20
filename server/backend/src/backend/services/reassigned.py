@@ -2,10 +2,11 @@
 
 A creator keeps each of its videos in one of its collections. A list, such as a playlist, beats a feed:
 a video is in the collection whose lists hold it, which is the creator's own collection for the playlists that are its
-seasons and a collection of its own for a playlist that is one. A list of the creator that is not in a collection
-keeps every one of its videos out of it, whether the list is a collection of its own or was skipped: also when a feed
-of that collection lists them, and also when one of its own seasons has them too. A list that waits for the user's
-choice changes nothing yet: its videos stay where they are until the user answers, which moves them at once.
+seasons and a collection of its own for a playlist that is one. A list of the creator that is in another collection,
+or that the user keeps out, keeps every one of its videos out of a collection: also when a feed of that collection
+lists them, and also when one of its own seasons has them too. A skipped list changes nothing: its videos stay where
+the creator's other feeds and lists put them. Neither does a list that waits for the user's choice: its videos stay
+where they are until the user answers, which moves them at once.
 Each collection of the creator lists those lists when it syncs, so it knows their videos before their own collections
 do.
 
@@ -205,8 +206,8 @@ def placed_elsewhere(s: Session, collection: Collection) -> frozenset[str]:
 def lists_left_out(s: Session, collection: Collection) -> dict[int, str]:
     """The creator's lists on the collection's Source that are not in the collection, by the id of their section,
     with their links, whose videos the collection keeps listed: whether a list is a collection of its own, was
-    excluded from the Library or waits for the user's choice. All but the waiting ones keep their videos out of the
-    collection (``blocking_lists``); a waiting one is listed too, so that answering it can move its videos at once.
+    skipped or kept out, or waits for the user's choice. Only some keep their videos out of the collection
+    (``blocking_lists``); the others are listed too, so that answering or keeping one out can move its videos at once.
     Empty for a collection made from a list, which adds every video of its list, and for one without a creator."""
     creator = collection.creator
     if creator is None or collection.id in _list_collection_ids(creator, _main_lists(creator)):
@@ -238,14 +239,31 @@ def save_left_out(s: Session, listed: dict[int, tuple[ItemRef, ...]]) -> None:
 
 
 def blocking_lists(s: Session, collection: Collection) -> list[int]:
-    """The ids of the sections of ``lists_left_out`` that keep their videos out of the collection: every one but a
-    list that waits for the user's choice, which changes nothing until it is answered."""
+    """The ids of the sections of ``lists_left_out`` that keep their videos out of the collection: a list in another
+    of the creator's collections, and a list the user keeps out. A skipped list, and one that waits for the user's
+    choice, change nothing."""
     lists = lists_left_out(s, collection)
     if not lists:
         return []
-    return list(s.scalars(select(CreatorSection.id).where(
-        CreatorSection.id.in_(lists), CreatorSection.status != SectionStatus.NEW.value,
-    )))
+    creator = collection.creator
+    held = _main_lists(creator)
+    own = {key for c in creator.collections if c.id in _list_collection_ids(creator, held) for key in (c.sharing_url, c.slug)}
+    return [
+        section.id for section in s.scalars(select(CreatorSection).where(CreatorSection.id.in_(lists)))
+        if section.status == SectionStatus.KEPT_OUT.value
+        or (section.status == SectionStatus.KNOWN.value and (section.ref in held or section.url in own or section.ref in own))
+    ]
+
+
+def kept_out(s: Session, collection: Collection) -> frozenset[str]:
+    """The videos of the creator's lists that the user keeps out: they leave the collection, files and all."""
+    lists = lists_left_out(s, collection)
+    if not lists:
+        return frozenset()
+    return frozenset(s.scalars(
+        select(CreatorSectionItem.source_slug).join(CreatorSection, CreatorSection.id == CreatorSectionItem.section_id)
+        .where(CreatorSection.id.in_(lists), CreatorSection.status == SectionStatus.KEPT_OUT.value)
+    ))
 
 
 def left_out(s: Session, collection: Collection) -> frozenset[str]:

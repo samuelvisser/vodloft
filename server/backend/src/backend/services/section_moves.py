@@ -27,7 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import (
-    Creator, CreatorAccount, CreatorSection, CreatorSectionItem, Collection, CollectionListItem, Episode,
+    Creator, CreatorAccount, CreatorSection, CreatorSectionItem, Collection, CollectionList, CollectionListItem, Episode,
     EpisodeMediaDownload,
 )
 from backend.services.creators import (
@@ -524,10 +524,13 @@ def _list_regrouped(
     moves.touched.add(collection.id)
 
 
-def _list_out(s: Session, account: CreatorAccount, section: CreatorSection, source: Collection, moves: _Moves) -> None:
+def _list_out(
+    s: Session, account: CreatorAccount, section: CreatorSection, source: Collection, moves: _Moves,
+    status: SectionStatus = SectionStatus.IGNORED,
+) -> None:
     before = {episode.id for episode in _whole(s, source).values()}
     _switch_off(source, section.ref)
-    section.status = SectionStatus.IGNORED.value
+    section.status = status.value
     s.flush()
     place_in_link_seasons(s, source, by_user=True)
     leaving = {episode.id for episode in leaving_outside(s, source)}
@@ -536,6 +539,38 @@ def _list_out(s: Session, account: CreatorAccount, section: CreatorSection, sour
     # A sync lets the videos only this list kept out come back, and the list's other videos leave.
     reindex_collection(s, source)
     moves.touched.add(source.id)
+
+
+def _keep_out(s: Session, account: CreatorAccount, section: CreatorSection, moves: _Moves) -> None:
+    """The list keeps its videos out of every collection of the creator: they leave each one, files and all, also
+    the seasons of its other lists."""
+    from backend.services.link_seasons import _drop_outside
+
+    creator = account.creator
+    slugs = _pending_items(s, section)
+    if not slugs:
+        # It was in a collection until now, which listed it, so its videos are known from there.
+        slugs = list(dict.fromkeys(s.scalars(
+            select(CollectionListItem.source_slug).join(CollectionList, CollectionList.id == CollectionListItem.list_id)
+            .where(CollectionList.collection_id.in_([c.id for c in creator.collections]), CollectionList.ref == section.ref)
+            .order_by(CollectionListItem.position)
+        )))
+        s.add_all(CreatorSectionItem(section_id=section.id, source_slug=slug) for slug in slugs)
+    section.status = SectionStatus.KEPT_OUT.value
+    s.flush()
+    for collection in list(creator.collections):
+        leaving = [episode.id for episode in leaving_outside(s, collection) if episode.video_slug in set(slugs)]
+        if not leaving:
+            continue
+        _drop_outside(s, collection, by_user=True)
+        left = next((flow for flow in moves.flows if flow.section is section and flow.source_id == collection.id
+                     and flow.target_id is None), None)
+        if left is not None:
+            # It also left the collection it was in: one part says what leaves.
+            left.episode_ids.extend(episode_id for episode_id in leaving if episode_id not in left.episode_ids)
+        else:
+            moves.flows.append(Flow(section, _media_names(account), collection.id, None, leaving))
+        moves.touched.add(collection.id)
 
 
 def _media_names(account: CreatorAccount) -> Names:
@@ -609,9 +644,13 @@ def _checked(creator: Creator, moves: Sequence[SectionMove]) -> list[_Checked]:
         if origin is move.target and (target is None or target is source):
             continue
         pending = _pending_list(section, origin)
-        if origin is SectionTarget.EXCLUDE and not pending:
+        if move.target is SectionTarget.KEEP_OUT and section.kind != SectionKind.LIST:
+            raise ServiceError(f"Only a list keeps its videos out; skip {section.title} instead", field=_FIELD)
+        if move.target is SectionTarget.KEEP_OUT and section.status == SectionStatus.KEPT_OUT.value:
+            continue
+        if origin is SectionTarget.EXCLUDE and not pending and move.target is not SectionTarget.KEEP_OUT:
             raise ServiceError(f"{section.title} is not in your library; add it from the creator's page", field=_FIELD)
-        if origin is SectionTarget.OWN and move.target is SectionTarget.EXCLUDE:
+        if origin is SectionTarget.OWN and move.target in (SectionTarget.EXCLUDE, SectionTarget.KEEP_OUT):
             raise ServiceError(
                 f"{section.title} is the collection {source.title}; delete that collection to take it out of your library",
                 field=_FIELD,
@@ -654,7 +693,11 @@ def _apply(
         account, section, source, target = item.account, item.section, item.source, item.target
         if target is not None:
             target = gather(s, account, target)
-        if item.pending:
+        if item.move.target is SectionTarget.KEEP_OUT:
+            if source is not None:
+                _list_out(s, account, section, source, done, SectionStatus.KEPT_OUT)
+            _keep_out(s, account, section, done)
+        elif item.pending:
             if item.move.target is SectionTarget.OWN:
                 _pending_to_own(s, account, section, item.move, done, added_by_id)
             else:

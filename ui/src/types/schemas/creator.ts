@@ -6,7 +6,7 @@ import {ApiDateTimeSchema} from './datetime'
 import {EpisodeReadViewSchema} from './episode'
 import {NamesSchema, SectionTypeSchema} from './source'
 
-export const SectionTargetValues = ['main', 'main_loose', 'own', 'exclude'] as const
+export const SectionTargetValues = ['main', 'main_loose', 'own', 'exclude', 'keep_out'] as const
 export const CreatorPresetValues = ['one_show', 'per_list', 'pick'] as const
 
 export const CreatorSectionReadSchema = z.object({
@@ -36,7 +36,7 @@ export const CreatorSectionReadSchema = z.object({
     movieTitle: z.string().nullable().default(null),
     /** The movie is one of this creator's already. */
     movieJoined: z.boolean().default(false),
-    status: z.enum(['known', 'new', 'ignored']).default('known'),
+    status: z.enum(['known', 'new', 'ignored', 'kept_out']).default('known'),
 })
 export type CreatorSectionRead = z.infer<typeof CreatorSectionReadSchema>
 
@@ -263,7 +263,7 @@ export const CreatorCreateSchema = z.object({
     into: z.string().default(''),
     /** What the creator's collections are: Music for a music artist. */
     type: z.enum(['series', 'music']).default('series'),
-}).refine((value) => value.sections.some((section) => section.target !== 'exclude'), {
+}).refine((value) => value.sections.some((section) => section.target !== 'exclude' && section.target !== 'keep_out'), {
     message: 'Pick at least one section to keep',
     path: ['sections'],
 })

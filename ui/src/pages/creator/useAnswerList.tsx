@@ -8,7 +8,8 @@ import MoveSectionsDialog, {type PlaceChange} from './MoveSectionsDialog'
 import type {AccountSection} from './CreatorSectionsEditor'
 
 /** A list the creator added that waits for the user's choice. Its videos stay where they would be without it, also
- *  when downloaded, so answering moves them at once: through the same dialog as moving lists on the Edit page. */
+ *  when downloaded, so answering moves them at once: through the same dialog as moving lists on the Edit page, which
+ *  also asks before a list keeps its videos out. */
 export function isWaitingList({section}: AccountSection): boolean {
     return section.status === 'new' && section.kind === 'list' && !section.collectionSlug
 }
@@ -23,7 +24,8 @@ export function useAnswerList(creator: CreatorPageRead) {
         setError(null)
         setAnswering({
             move: {accountId: item.account.id, ref: item.section.ref, ...move},
-            title: item.section.title, names: item.section.names, from: 'Waiting for your choice', to,
+            title: item.section.title, names: item.section.names,
+            from: item.section.status === 'new' ? 'Waiting for your choice' : 'Skipped', to,
         })
     }
 
@@ -38,7 +40,7 @@ export function useAnswerList(creator: CreatorPageRead) {
                 queryClient.invalidateQueries({queryKey: ['collectionsView']}),
                 queryClient.invalidateQueries({queryKey: ['movesWaiting']}),
             ])
-            toast.success(`Added ${answering.title}`)
+            toast.success(answering.move.target === 'keep_out' ? `${answering.title} keeps its videos out` : `Added ${answering.title}`)
             setAnswering(null)
         } catch (exc) {
             setError(exc instanceof Error ? exc.message : String(exc))

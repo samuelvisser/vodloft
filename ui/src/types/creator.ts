@@ -58,8 +58,8 @@ function makeNewListActionReg(label: string, kind: ListKind, music: boolean) {
         }} : {}),
         own: {label: 'Add it as a collection', help: `Each new ${kind.names.singular} becomes a collection of its own.`},
         ignore: {
-            label: 'Exclude it from library',
-            help: `The new ${kind.names.singular} is only listed on the ${label}'s Edit page, and keeps its ${episode.plural} out of the ${label}'s collections.`,
+            label: 'Skip it',
+            help: `The new ${kind.names.singular} is only listed on the ${label}'s Edit page. Its ${episode.plural} stay where the ${label}'s other feeds and lists put them.`,
         },
     } as Record<'ask' | 'season' | 'loose' | 'own' | 'ignore', {label: string, help: string}>)
 }

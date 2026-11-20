@@ -123,7 +123,8 @@ export function placeLabel(creator: CreatorPageRead, {account, section}: Account
         main: section.kind === 'feed' ? `In ${title}` : `${season.Singular} of ${title}`,
         main_loose: `In ${title}, not as ${season.a}`,
         own: 'Collection of its own',
-        exclude: 'Exclude from library',
+        exclude: 'Skip',
+        keep_out: 'Skip, and keep its videos out',
     }[target]
 }
 
@@ -143,6 +144,8 @@ function placeChoices(creator: CreatorPageRead, item: AccountSection, current: P
         ...(otherCollections(creator, item).length > 0 ? [PICK] : []),
         ...(own || current === 'own' ? ['own'] : []),
         ...(current !== 'own' ? ['exclude'] : []),
+        // Its videos also leave the creator's other collections, such as a list of reuploads.
+        ...(current !== 'own' && list ? ['keep_out'] : []),
     ])]
 }
 
@@ -341,10 +344,24 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                     Another collection…
                 </button>
             )}
+            {item.section.kind === 'list' && item.section.status !== 'kept_out' && (
+                <button type="button" className="btn" disabled={busy !== null}
+                        title="Its videos leave every collection of this creator too, also when another feed or list has them"
+                        onClick={() => answer(item, {target: 'keep_out'}, placeLabel(creator, item, 'keep_out'))}>
+                    Keep its videos out
+                </button>
+            )}
+            {item.section.status === 'kept_out' && (
+                <button type="button" className="btn" disabled={busy !== null}
+                        title="Its videos come back where the creator's other feeds and lists put them"
+                        onClick={() => void place(item.account, {ref: item.section.ref, target: 'exclude'})}>
+                    Let its videos in
+                </button>
+            )}
             {ignore && (
                 <button type="button" className="btn btn-link" disabled={busy !== null}
                         onClick={() => void place(item.account, {ref: item.section.ref, target: 'exclude'})}>
-                    Ignore
+                    Skip
                 </button>
             )}
             {item.section.status === 'ignored' && (
@@ -443,7 +460,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                                     <span>
                                         {item.section.access
                                             ? 'Only some members can watch this.'
-                                            : facts(item, item.section.movieSlug ? 'In your library' : null, item.section.status === 'ignored' ? 'Hidden on the creator page' : null)}
+                                            : facts(item, item.section.movieSlug ? 'In your library' : null, item.section.status === 'ignored' ? 'Hidden on the creator page' : null, item.section.status === 'kept_out' ? 'Keeps its videos out' : null)}
                                     </span>
                                 </div>
                                 {!selecting && addButtons(item, false)}

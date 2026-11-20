@@ -142,7 +142,7 @@ class CreatorSection(Base):
     site_position: Mapped[int] = mapped_column(default=0, server_default="0", comment="Where the Site lists it")
     status: Mapped[str] = mapped_column(
         default="known", server_default="known",
-        comment="known; new, found by the daily look and waiting for a choice; or ignored",
+        comment="known; new, found by the daily look and waiting for a choice; ignored, skipped; or kept_out, a list that keeps its videos out",
     )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
