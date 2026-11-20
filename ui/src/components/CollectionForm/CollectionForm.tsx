@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { capitalized } from '../../types/creator'
 
 export type CollectionFormValue = {
   name: string
@@ -25,8 +26,8 @@ export const defaultCollectionFormValue: CollectionFormValue = {
 type Props = {
   value: CollectionFormValue
   onChange: (value: CollectionFormValue) => void
-  /** The creator the collection belongs to, whose name is its author. */
-  creator?: { slug: string, title: string } | null
+  /** The creator the collection belongs to, whose name is its author, and what its Site calls a creator, such as host. */
+  creator?: { slug: string, title: string, word: string } | null
 }
 
 export default function CollectionForm({ value, onChange, creator }: Props) {
@@ -46,7 +47,7 @@ export default function CollectionForm({ value, onChange, creator }: Props) {
       </div>
 
       <div className="form-row">
-        <label htmlFor="collection-author">Author</label>
+        <label htmlFor="collection-author">{creator ? capitalized(creator.word) : 'Author'}</label>
         <input
           id="collection-author"
           className="input"
@@ -59,8 +60,8 @@ export default function CollectionForm({ value, onChange, creator }: Props) {
         />
         {creator && (
           <div className="help" id="collection-author-help">
-            The name of its creator, {creator.title}. Change it on the{' '}
-            <Link to={`/edit-creator/${creator.slug}`}>creator's Edit page</Link>.
+            The name of its {creator.word}. Change it on the{' '}
+            <Link to={`/edit-creator/${creator.slug}`}>{creator.word}'s Edit page</Link>.
           </div>
         )}
       </div>

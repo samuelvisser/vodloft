@@ -208,7 +208,7 @@ export default function CreatorPage() {
                                     label: `Move reassigned ${fileWords.episode.plural}`,
                                     description: creator.reassignedCount
                                         ? `${creator.reassignedCount} downloaded ${creator.reassignedCount === 1 ? `${fileWords.episode.singular} belongs` : `${fileWords.episode.plural} belong`} in another collection of this ${creator.creatorNames.singular} now`
-                                        : `Moves downloaded ${fileWords.episode.plural} along when this ${creator.creatorNames.singular} puts them in another collection.`,
+                                        : `Moves ${fileWords.episode.plural} this ${creator.creatorNames.singular} puts elsewhere`,
                                     icon: faIcon('fass', 'arrow-right-from-bracket'),
                                     disabled: movingReassigned || !creator.reassignedCount,
                                     disabledReason: creator.reassignedCount ? undefined : `No ${fileWords.episode.singular} of this ${creator.creatorNames.singular} belongs in another of its collections.`,
