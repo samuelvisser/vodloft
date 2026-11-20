@@ -56,8 +56,9 @@ class CreatorSectionAPIRead(ResponseBase):
     movie_title: Optional[str] = None
     movie_joined: bool = False
     """The movie is one of this creator's already."""
-    status: Literal["known", "new", "ignored"] = "known"
-    """For a creator in the Library: "new" when the daily look found it and it waits for a choice."""
+    status: Literal["known", "new", "ignored", "kept_out"] = "known"
+    """For a creator in the Library: "new" when the daily look found it and it waits for a choice, "ignored" when it
+    was skipped, "kept_out" for a list that keeps its videos out of every collection of the creator."""
 
 
 class SectionPlanAPIRead(ResponseBase):

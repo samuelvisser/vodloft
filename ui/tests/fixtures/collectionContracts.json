@@ -9,7 +9,8 @@
       "singular": "episode",
       "plural": "episodes",
       "a": "an episode"
-    }
+    },
+    "inSeason": "in"
   },
   "types": [
     {
@@ -24,7 +25,8 @@
           "singular": "episode",
           "plural": "episodes",
           "a": "an episode"
-        }
+        },
+        "inSeason": "in"
       },
       "audioWords": {
         "season": {
@@ -36,7 +38,8 @@
           "singular": "episode",
           "plural": "episodes",
           "a": "an episode"
-        }
+        },
+        "inSeason": "in"
       },
       "creatorNames": null,
       "looseSeason": null,
@@ -60,7 +63,8 @@
           "singular": "episode",
           "plural": "episodes",
           "a": "an episode"
-        }
+        },
+        "inSeason": "in"
       },
       "audioWords": {
         "season": {
@@ -72,7 +76,8 @@
           "singular": "episode",
           "plural": "episodes",
           "a": "an episode"
-        }
+        },
+        "inSeason": "in"
       },
       "creatorNames": null,
       "looseSeason": null,
@@ -96,7 +101,8 @@
           "singular": "music video",
           "plural": "music videos",
           "a": "a music video"
-        }
+        },
+        "inSeason": "on"
       },
       "audioWords": {
         "season": {
@@ -108,7 +114,8 @@
           "singular": "track",
           "plural": "tracks",
           "a": "a track"
-        }
+        },
+        "inSeason": "on"
       },
       "creatorNames": {
         "singular": "artist",

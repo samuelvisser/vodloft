@@ -20,6 +20,8 @@ export interface Noun {
 export interface CollectionWords {
     season: Noun
     episode: Noun
+    /** The word for being in one of its seasons, such as in a season, or on an album. */
+    inSeason: string
     /** A number with the word it counts, such as 1 track or 12 tracks. */
     count: (count: number, noun?: Noun) => string
 }
@@ -36,10 +38,10 @@ function noun({singular, plural, a}: BackendNames): Noun {
 }
 
 /** A collection's words as the backend gives them, such as a creator's, in the forms a sentence needs. */
-export function wordsOf(names: {season: BackendNames, episode: BackendNames}): CollectionWords {
+export function wordsOf(names: {season: BackendNames, episode: BackendNames, inSeason: string}): CollectionWords {
     const episode = noun(names.episode)
     return {
-        season: noun(names.season), episode,
+        season: noun(names.season), episode, inSeason: names.inSeason,
         count: (count, counted = episode) => `${count.toLocaleString()} ${count === 1 ? counted.singular : counted.plural}`,
     }
 }
@@ -71,7 +73,9 @@ export function loadCollectionContracts(loaded: CollectionContracts | undefined)
     }
     let stored: string | null = null
     try { stored = localStorage.getItem(STORAGE_KEY) } catch { /* nothing kept */ }
-    if (stored) setCollectionContracts(CollectionContractsSchema.parse(JSON.parse(stored)))
+    // A copy kept by an older VODLoft may not fit any more; then there are no words until the backend answers.
+    const parsed = stored ? CollectionContractsSchema.safeParse(JSON.parse(stored)) : null
+    if (parsed?.success) setCollectionContracts(parsed.data)
 }
 
 /** The words for a collection type, from its contract. A Music collection's episodes are tracks when they are sound,

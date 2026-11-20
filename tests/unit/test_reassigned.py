@@ -409,10 +409,11 @@ def test_a_creators_collection_leaves_a_video_its_feed_lists_to_the_playlist_tha
     assert slugs(main_id) == ["v1"]
 
 
-def test_a_playlist_that_is_in_none_of_the_creators_collections_keeps_its_videos_out_of_them_too(
-    client, session, tube, monkeypatch,
+@pytest.mark.parametrize(("target", "kept"), [("keep_out", ["m1", "v1"]), ("exclude", ["m1", "m2", "m3", "v1"])])
+def test_a_playlist_kept_out_keeps_its_videos_out_of_the_creators_collections_and_a_skipped_one_does_not(
+    client, session, tube, monkeypatch, target, kept,
 ):
-    """Members' Cuts was skipped: the creator's collection leaves out its videos, also those its Videos feed lists. One
+    """Members' Cuts is kept out: the creator's collection leaves out its videos, also those its Videos feed lists. One
     it had already goes when the collection syncs, unless it is downloaded."""
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection, Episode
@@ -428,7 +429,7 @@ def test_a_playlist_that_is_in_none_of_the_creators_collections_keeps_its_videos
         ItemRef(slug, f"https://tube.example/watch?v={slug}") for slug in lists[url]
     ), raising=False)
     response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
-        {"ref": "videos", "target": "main"}, {"ref": "PLmembers", "target": "exclude"},
+        {"ref": "videos", "target": "main"}, {"ref": "PLmembers", "target": target},
     ]})
     assert response.status_code == 201, response.text
     main_id = session.scalar(select(Collection.id).where(Collection.slug == "UCworkshop"))
@@ -444,7 +445,8 @@ def test_a_playlist_that_is_in_none_of_the_creators_collections_keeps_its_videos
     index_listed_collection(session, collection_id=main_id, source=tube)
     session.expire_all()
 
-    assert sorted(session.scalars(select(Episode.source_slug).where(Episode.collection_id == main_id))) == ["m1", "v1"]
+    # Skipped, it changes nothing: its videos are uploads like any other.
+    assert sorted(session.scalars(select(Episode.source_slug).where(Episode.collection_id == main_id))) == kept
 
 
 def test_a_downloaded_video_in_a_season_and_in_a_playlist_of_its_own_is_reassigned_to_that_playlist(creator, session):
@@ -463,3 +465,25 @@ def test_a_downloaded_video_in_a_season_and_in_a_playlist_of_its_own_is_reassign
 def _ok(response):
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def test_a_collection_that_repeats_videos_keeps_its_seasons_whole_and_lets_go_of_its_feeds_videos(creator, session):
+    from backend.db.core import run_write_transaction
+    from backend.services.reassigned import reassigned_episodes, settle_creator
+
+    main, tools = creator
+    main_id = main.id
+    main.repeat_videos = "each_season"
+    session.commit()
+    local = _profile(session, "shows")
+    _download(session, _episode(session, main, "c1"), local, _download_profile(session, main, local))
+    session.commit()
+
+    # c1 is in a season of the collection, which shows its list whole; Tool Reviews has it too.
+    assert reassigned_episodes(session, session.get(type(main), main_id)) == []
+    # t2 only came from its feeds, so it leaves for Tool Reviews; t1 too, which a download of its own does not hold.
+    assert run_write_transaction(lambda w: settle_creator(w, w.get(type(main), main_id))) == 2
+    session.expire_all()
+    main = session.get(type(main), main_id)
+    assert _episode(session, main, "c1") is not None and _episode(session, tools, "c1") is not None
+    assert _episode(session, main, "t1") is None and _episode(session, main, "t2") is None

@@ -111,9 +111,20 @@ A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundClo
 - **Videos in no playlist**: one season called **Videos** (**Singles** for music), or a season per year.
 - **How playlist content fits in the collection** (in the site's own word, such as album), for videos of other channels in these playlists: **Only include media already in the collection** (the default), **Include media that is not in the collection**, in their playlist's season, or **Include only what the playlists contain** (see [Collections of only playlists](#collections-of-only-playlists)).
 
-Each playlist season is named after its playlist, and its videos keep the order of the playlist, as do their episode numbers. An album's tracks keep the album's track order. Playlist seasons go in the order of their first video, so with a season per year a 2025 playlist comes after the 2025 season. An artist's albums come after Singles, in the order the artist lists them; you can still reorder them, and **Automatic order** brings back the artist's order. A video that is in more than one playlist goes to the season that comes first. Files you already downloaded keep their numbers.
+Each playlist season is named after its playlist, and its videos keep the order of the playlist, as do their episode numbers. An album's tracks keep the album's track order. Playlist seasons go in the order of their first video, so with a season per year a 2025 playlist comes after the 2025 season. An artist's albums come after Singles, in the order the artist lists them; you can still reorder them, and **Automatic order** brings back the artist's order. A video that is in more than one playlist goes to the season that comes first, unless the collection is set to put it in each (see [A video in several seasons](#a-video-in-several-seasons)). Files you already downloaded keep their numbers.
 
 **Playlists** (**Albums**) chooses how the playlist seasons are laid out: **A season per playlist**, or **Together in seasons by year**. By year, the playlists still decide which videos are in the collection, but every video goes to the season of the year it came out, as do the videos in no playlist. Inside a year, videos go by date. Videos you already downloaded stay where they are, marked **Moved**, until you move them. Output templates still get the playlist a video came from as `section_title`, so files can be named by playlist inside a year folder.
+
+#### A video in several seasons
+
+In the Seasons window, **When an episode belongs in several seasons** (in a Music collection, **When a track belongs on several albums**) decides what happens with a video that more than one of the collection's playlist seasons have, such as a track that is on an album and on a "Best of":
+
+- **Only in the first season** (**Only on the first album**): it is one episode, in the season that comes first in the order shown in the window. This is where a Podcast or Series starts.
+- **In each season** (**On each album**): it is an episode in each of those seasons, with its own number and its own files, so every season is whole. Each one downloads on its own, so a track on two albums is two files, each tagged with its own album and track number. This is where a Music collection starts.
+
+Two playlists that share one season still give a video one episode there, and with **Together in seasons by year** a video has one upload year, so it is in one season. When a playlist no longer has a video, only its episode in that season leaves. Switching back to **Only in the first season** removes the extra episodes: ones without downloads go at once, and downloaded ones stay, marked **Removed**, until you answer on Home whether to keep them.
+
+In a creator's collection set to **In each season**, a playlist that is a collection of its own does not take a video out of one of its seasons: an artist's album keeps its tracks when a "Best of" gets a collection of its own. It still takes the videos the collection only had from its feeds.
 
 Several playlists can share one season, such as a "Part 1" and a "Part 2" of the same series. In the Seasons window, pick the other season under **Together with** on a playlist's season. The season keeps its name and holds the videos of its first playlist first, then those of the next, numbered in that order. **Own season** gives a playlist a season of its own again. Either way, downloaded videos move with their files.
 
@@ -217,9 +228,10 @@ The Add creator page lists the YouTube channel's feeds (Videos, Live and Shorts 
 - **Main collection**: one collection named after the creator. Feeds become a season per year, and a playlist becomes a playlist season (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)). The main collection takes only the feeds you put in it: with only Videos, the channel's livestreams and Shorts stay out until you add those feeds too. A Daily Wire show has seasons of its own, so it always gets a collection of its own.
 - **Add its contents to the main collection**, for a playlist: its videos go into the main collection, but in the seasons the videos in no playlist go to, such as the season per year, instead of a season of their own. Use this for a playlist whose videos you want, without it being excluded from the library.
 - **A collection of its own**: the part becomes a separate collection, for example Shorts that you want to keep apart from the rest.
-- **Exclude from library**: nothing is added. A playlist you exclude also keeps its videos out of the creator's other collections (see [A video that moves to another collection](#a-video-that-moves-to-another-collection-reassigned)). The part stays listed on the creator's **Edit** page, so you can add it later.
+- **Skip**: nothing is added, and nothing else changes: the videos of a skipped playlist stay where the creator's other feeds and playlists put them. The part stays listed on the creator's **Edit** page, so you can add it later.
+- **Skip, and keep its videos out**, for a playlist: nothing is added, and its videos also stay out of every collection of the creator, even when the Videos feed or another playlist has them. Use it for a playlist of reuploads or sponsored videos. Videos that are already in your Library leave, files and all; the window that asks you to confirm says which.
 
-The **Presets** for the creator fill these choices in for you, and you can still change any of them: **One collection** (YouTube only) puts everything in the main collection, with the playlists as named seasons and the rest as seasons by year; **A collection per playlist** (or per show) gives every playlist or show its own collection; **Only what I pick** starts with all feeds and playlists, or all shows, excluded from the library. A playlist or show that is already in your Library stays where it is.
+The **Presets** for the creator fill these choices in for you, and you can still change any of them: **One collection** (YouTube only) puts everything in the main collection, with the playlists as named seasons and the rest as seasons by year; **A collection per playlist** (or per show) gives every playlist or show its own collection; **Only what I pick** starts with all feeds and playlists, or all shows, skipped. A playlist or show that is already in your Library stays where it is.
 
 A video that appears in more than one place is kept once, and a playlist is always in one place only: the main collection, as a season or not, or a collection of its own. In the main collection a video in a playlist season is in that season and not in the season of videos in no playlist. The creator decides which playlists are seasons of its main collection, so that collection's Seasons window doesn't look for new playlists itself; it still lets you name, order and group the seasons, and turn a playlist season off.
 
@@ -267,9 +279,9 @@ Once a day VODLoft looks at each creator for playlists or shows it did not have 
 - **Add it as a season**: a new playlist becomes a season of the creator's main collection. A new Daily Wire show gets a collection of its own, because it has seasons of its own.
 - **Add its contents**: a new playlist's videos go into the creator's main collection, in the seasons of the videos in no playlist.
 - **Add it as a collection**: each new playlist or show becomes a collection.
-- **Exclude it from library**: nothing is added, and you are not asked. The playlist keeps its videos out of the creator's collections.
+- **Skip it**: nothing is added, and you are not asked. Nothing else changes either: the playlist's videos stay where the creator's other feeds and playlists put them.
 
-A music artist starts with every kind of list set to **Add it as an album**. Where the site tells albums from other lists, as SoundCloud does, only the albums are added, and the other kinds, such as the artist's playlists, start at **Exclude it from library**.
+A music artist starts with every kind of list set to **Add it as an album**. Where the site tells albums from other lists, as SoundCloud does, only the albums are added, and the other kinds, such as the artist's playlists, start at **Skip it**.
 
 Playlists or shows you skipped stay under **Not in your library** on the creator's **Edit** page, each with buttons to add them.
 
@@ -284,7 +296,7 @@ The creator's **Edit** page holds:
 
 A creator keeps each of their videos in one of its collections, and a playlist wins over a feed: a video in a playlist that is a collection of its own belongs in that collection, not in the main collection with the rest of the uploads. A video that is not downloaded yet just goes there. The main collection doesn't add a video that such a playlist has, and leaves one it had.
 
-The same goes for a playlist you excluded from the library: it keeps its videos out of the creator's main collection too, even though the creator's Videos feed lists them. This always wins, so a video stays out even when a playlist that is a season of the main collection has it too. That way each video of a creator ends up in only one collection. A video that was already downloaded stays where it is, with its files, until you remove it.
+The same goes for a playlist you chose to keep out (**Skip, and keep its videos out**): it keeps its videos out of the creator's main collection too, even though the creator's Videos feed lists them. This always wins, so a video stays out even when a playlist that is a season of the main collection has it too. That way each video of a creator ends up in only one collection. A video that was already downloaded stays where it is, with its files, until you remove it.
 
 A new playlist that waits for your choice changes nothing yet: its videos stay where they would be without it, and keep downloading there, so you don't have to answer right away. When you do answer, on the creator's **Edit** page or in the **Not in your library** list, VODLoft first shows what your choice moves, the same way as moving playlists on the Edit page (see below), and then moves the playlist's videos to their new place at once, downloaded files and all.
 
@@ -311,7 +323,7 @@ Under **Where the playlists go**, the creator's **Edit** page lists each playlis
 - **Collection of its own**: the playlist becomes a new collection, and its videos leave the main collection. The new collection starts without Download Profiles, like every collection made from a creator.
 - **Season of** the main collection: the playlist becomes a season again, and its collection goes once its videos have moved. A video in that collection that the playlist no longer lists stays there.
 - **Add its contents to** the main collection: the playlist's videos stay in, or join, the main collection, in the seasons of the videos in no playlist. Turned back into a **Season of** the main collection, they get their season again. Either way, downloaded videos move their files into their new season.
-- **Exclude from library**, for a playlist in the main collection or another collection that holds several: the playlist leaves that collection and moves to **Not in your library** on the creator's **Edit** page, and keeps its videos out. To take a playlist with a collection of its own out of your Library, delete that collection.
+- **Skip**, for a playlist in the main collection or another collection that holds several: the playlist leaves that collection and moves to **Not in your library** on the creator's **Edit** page. Its videos that the creator's feeds list stay, where the videos in no playlist go. **Skip, and keep its videos out** also takes those out. To take a playlist with a collection of its own out of your Library, delete that collection.
 
 #### Several feeds and playlists in another collection
 

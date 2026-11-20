@@ -37,6 +37,9 @@ from sources import (
     site_of,
 )
 
+# Where a section goes that is not added, and its status then: skipped, or a list that keeps its videos out.
+_NOT_ADDED = {SectionTarget.EXCLUDE: SectionStatus.IGNORED.value, SectionTarget.KEEP_OUT: SectionStatus.KEPT_OUT.value}
+
 
 FOLLOW_TASK_KEY = "follow_creators"
 
@@ -215,7 +218,7 @@ def movies_to_add(
         return []
     items = {section.ref for section in sections if section.kind == SectionKind.ITEM}
     kept = movies_in_library(s, source_key, sections)
-    return [plan.ref for plan in plans if plan.target is not SectionTarget.EXCLUDE and plan.ref in items and plan.ref not in kept]
+    return [plan.ref for plan in plans if plan.target not in _NOT_ADDED and plan.ref in items and plan.ref not in kept]
 
 
 def join_movies(s: Session, account: CreatorAccount, plans: Sequence[SectionPlan]) -> list[Movie]:
@@ -223,7 +226,7 @@ def join_movies(s: Session, account: CreatorAccount, plans: Sequence[SectionPlan
     stays as it is. Returns the movies that joined.
 
     ``s`` is a write transaction's session."""
-    picked = {plan.ref for plan in plans if plan.target is not SectionTarget.EXCLUDE}
+    picked = {plan.ref for plan in plans if plan.target not in _NOT_ADDED}
     joined = []
     for ref, movie in movies_in_library(s, account.source_key, account.sections).items():
         if ref in picked and movie.creator_id != account.creator.id:
@@ -418,7 +421,9 @@ def _place(
     site = get_source(account.source_key).site_of(account.site_key)
     wanted = []
     for plan in plans:
-        if plan.target is SectionTarget.EXCLUDE or plan.ref in kept:
+        if plan.target is SectionTarget.KEEP_OUT and sections[plan.ref].kind == SectionKind.LIST:
+            sections[plan.ref].status = SectionStatus.KEPT_OUT.value
+        if plan.target in _NOT_ADDED or plan.ref in kept:
             continue
         section = sections[plan.ref]
         section.status = SectionStatus.KNOWN.value
@@ -548,16 +553,22 @@ def place_sections(
     unknown = [plan.ref for plan in plans if plan.ref not in sections]
     if unknown:
         raise ServiceError(f"{creator.title} has no section {unknown[0]}", field="sections")
+    changed = False
     for plan in plans:
-        if plan.target is SectionTarget.EXCLUDE:
-            sections[plan.ref].status = SectionStatus.IGNORED.value
-    if any(plan.target is SectionTarget.EXCLUDE and sections[plan.ref].kind == SectionKind.LIST for plan in plans):
-        # A skipped list keeps its videos out of the creator's collections, also the ones their feeds list.
+        section = sections[plan.ref]
+        if plan.target is SectionTarget.KEEP_OUT and section.kind != SectionKind.LIST:
+            raise ServiceError(f"Only a list keeps its videos out; skip {section.title} instead", field="sections")
+        if plan.target in _NOT_ADDED:
+            # A list kept out keeps its videos out of the creator's collections, also the ones their feeds list; one
+            # that stops keeping them out lets them back in. A skipped list changes nothing.
+            changed = changed or SectionStatus.KEPT_OUT.value in (section.status, _NOT_ADDED[plan.target])
+            section.status = _NOT_ADDED[plan.target]
+    if changed:
         list_urls = {section.url for section in creator.sections if section.kind == SectionKind.LIST}
         for collection in creator.collections:
             if lists_own_link(collection) and collection.sharing_url not in list_urls:
                 reindex_collection(s, collection)
-    adding = [plan for plan in plans if plan.target is not SectionTarget.EXCLUDE]
+    adding = [plan for plan in plans if plan.target not in _NOT_ADDED]
     if not adding:
         return []
     settings = _settings_of(creator)

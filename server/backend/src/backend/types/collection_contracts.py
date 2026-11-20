@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from sources import Names, Site
 
 from .collection_types import CollectionType
+from .link_season_types import RepeatVideos
 from .local_media_profile_types import CollectionLocalMediaProfileScope as ProfileScope
 
 
@@ -17,6 +18,8 @@ class CollectionWords:
 
     season: Names
     episode: Names
+    in_season: str = "in"
+    """The word for being in one of its seasons, such as on for a track on an album."""
 
 
 DEFAULT_WORDS = CollectionWords(Names("season", "seasons"), Names("episode", "episodes"))
@@ -61,6 +64,10 @@ class CollectionContract:
     """Downloads pick the collection's seasons, as for a series or an artist's albums; otherwise its newest episodes,
     by a number of days or of episodes, as for a podcast."""
 
+    repeat_videos: RepeatVideos = RepeatVideos.ONE_SEASON
+    """What a new collection of the type does with a video that belongs in several of its seasons: one episode, or
+    one in each, as an artist's albums each show every track they have."""
+
     def __post_init__(self) -> None:
         if self.audio_words is None:
             object.__setattr__(self, "audio_words", self.words)
@@ -98,8 +105,8 @@ SERIES = CollectionContract(CollectionType.SERIES, profile_scope=ProfileScope.SE
 
 MUSIC = CollectionContract(
     CollectionType.MUSIC,
-    words=CollectionWords(Names("album", "albums"), Names("music video", "music videos")),
-    audio_words=CollectionWords(Names("album", "albums"), Names("track", "tracks")),
+    words=CollectionWords(Names("album", "albums"), Names("music video", "music videos"), in_season="on"),
+    audio_words=CollectionWords(Names("album", "albums"), Names("track", "tracks"), in_season="on"),
     creator_names=Names("artist", "artists"),
     loose_season="Singles",
     media_are_episodes=True,
@@ -107,9 +114,11 @@ MUSIC = CollectionContract(
     album_lists=True,
     profile_scope=ProfileScope.MUSIC_VIDEOS,
     audio_profile_scope=ProfileScope.MUSIC_TRACKS,
+    repeat_videos=RepeatVideos.EACH_SEASON,
 )
 """An artist's music: each season an album, each episode a music video, or a track where it is sound only. Its
-creator is an artist on every Site, and what is in none of its albums is Singles."""
+creator is an artist on every Site, what is in none of its albums is Singles, and a track on several albums is on
+each."""
 
 CONTRACTS = {contract.type: contract for contract in (PODCAST, SERIES, MUSIC)}
 

@@ -59,3 +59,12 @@ class LooseVideos(StrEnum):
     """All in one season, named as the Site calls it, such as Videos, shown before the playlists."""
     BY_YEAR = "by_year"
     """A season per upload year, between the playlists by date."""
+
+
+class RepeatVideos(StrEnum):
+    """What a collection does with a video that belongs in several of its seasons, such as a track on several albums."""
+
+    ONE_SEASON = "one_season"
+    """One episode, in the season that comes first."""
+    EACH_SEASON = "each_season"
+    """An episode in each of those seasons, with files of its own, so every season is whole."""
