@@ -934,3 +934,22 @@ def test_an_episode_of_a_list_laid_out_by_year_names_its_list_in_templates(sourc
         for slug in ("a", "b")
     }
     assert titles == {"a": "The Tour", "b": ""}
+
+
+def test_the_list_of_seasons_says_when_each_ones_newest_episode_came_out(source, session):
+    """A collection page opens on the season with the newest episode, such as Videos beside a season per year that
+    only holds downloaded videos waiting to move."""
+    from datetime import datetime, timezone
+
+    from backend.api.endpoints.seasons.service import get_seasons_list
+
+    source.videos = [_video("a", 2023, 1), _video("b", 2024, 2), _video("c", 2026, 11)]
+    source.lists = [_list("PLone", "Builds")]
+    source.items = {"PLone": ("a", "b")}
+    collection = _collection(session)
+    _index(session, collection, source)
+
+    newest = {season.name: season.newest_published_at for season in get_seasons_list(session, collection.slug)}
+    assert newest == {
+        "Builds": datetime(2024, 2, 1, tzinfo=timezone.utc), "Videos": datetime(2026, 11, 1, tzinfo=timezone.utc),
+    }

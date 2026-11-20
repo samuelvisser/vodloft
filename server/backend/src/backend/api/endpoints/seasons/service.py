@@ -2,17 +2,21 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, with_expression
 from fastapi import HTTPException
 
 from backend.db.model_mapping import update_database_fields
 from backend.api.models.season import *
-from backend.db.models import Season
+from backend.db.models import Episode, Season
 
 
 def get_seasons_list(s: Session, collection_slug: str) -> list[SeasonAPIRead]:
+    # Its newest episode tells which season a collection page opens on.
+    newest = select(func.max(Episode.published_date)).where(Episode.season_id == Season.id).scalar_subquery()
     seasons = (
         s.query(Season)
+        .options(with_expression(Season.newest_published_at, newest))
         .filter(
             Season.collection.has(slug=collection_slug)
         )

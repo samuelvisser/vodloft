@@ -200,7 +200,12 @@ export default function CollectionPage() {
 
     setSelectedSeasonId((current) => {
       if (current !== null && seasons.some((season) => season.id === current)) return current
-      return seasons[0].id
+      // It opens on the season with the newest episode, which is the last one unless a season such as a
+      // channel's Videos keeps growing beside the others.
+      const newest = seasons.reduce((best, season) => (
+        (season.newestPublishedAt?.getTime() ?? 0) > (best.newestPublishedAt?.getTime() ?? 0) ? season : best
+      ), seasons[0])
+      return newest.id
     })
   }, [isSeasonal, seasons])
 
