@@ -52,7 +52,7 @@ function EpisodeShelf({slug, words}: {slug: string, words: CollectionWords}) {
     return (
         <section className="creator-section-group" aria-labelledby="creator-newest-title">
             <div className="creator-shelf-head">
-                <h2 id="creator-newest-title">Newest {words.episode.many}</h2>
+                <h2 id="creator-newest-title">Newest {words.episode.plural}</h2>
                 <div className="creator-shelf-arrows">
                     <button type="button" className="btn" onClick={() => scroll(-1)} aria-label="Scroll back">
                         <FontAwesomeIcon icon={faIcon('fass', 'chevron-left')}/>
@@ -165,7 +165,7 @@ export default function CreatorPage() {
                     <ul className="creator-stats">
                         <li><b>{creator.collections.length}</b> {creator.collections.length === 1 ? 'collection' : 'collections'}</li>
                         {creator.movies.length > 0 && <li><b>{creator.movies.length}</b> {creator.movies.length === 1 ? 'movie' : 'movies'}</li>}
-                        <li><b>{episodes}</b> {episodes === 1 ? words.episode.one : words.episode.many}</li>
+                        <li><b>{episodes}</b> {episodes === 1 ? words.episode.singular : words.episode.plural}</li>
                         {since && <li>Since <b>{since}</b></li>}
                         {newest && <li>Newest <b>{timeAgo(newest)}</b></li>}
                     </ul>
@@ -178,7 +178,7 @@ export default function CreatorPage() {
                                 <PageHeaderAction icon={faIcon('fass', 'pen')} label="Edit" variant="secondary" to={`/edit-creator/${creator.slug}`}/>
                                 <ActionMenu items={[{
                                     label: checking ? 'Looking…' : 'Check now',
-                                    description: `Look for new ${joinedNames(creator.newLists).many || 'lists'}`,
+                                    description: `Look for new ${joinedNames(creator.newLists.map((kind) => kind.names)).plural || 'lists'}`,
                                     icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: checking,
                                     onSelect: () => void check(),
@@ -189,13 +189,13 @@ export default function CreatorPage() {
                                 }))),
                                 // Episodes can only move between collections, so a creator with one has nothing to move.
                                 ...(creator.collections.length > 1 ? [{
-                                    label: `Move reassigned ${fileWords.episode.many}`,
+                                    label: `Move reassigned ${fileWords.episode.plural}`,
                                     description: creator.reassignedCount
-                                        ? `${creator.reassignedCount} downloaded ${creator.reassignedCount === 1 ? `${fileWords.episode.one} belongs` : `${fileWords.episode.many} belong`} in another collection of this ${creator.creatorLabel} now`
+                                        ? `${creator.reassignedCount} downloaded ${creator.reassignedCount === 1 ? `${fileWords.episode.singular} belongs` : `${fileWords.episode.plural} belong`} in another collection of this ${creator.creatorNames.singular} now`
                                         : undefined,
                                     icon: faIcon('fass', 'arrow-right-from-bracket'),
                                     disabled: movingReassigned || !creator.reassignedCount,
-                                    disabledReason: creator.reassignedCount ? undefined : `No ${fileWords.episode.one} of this ${creator.creatorLabel} belongs in another of its collections.`,
+                                    disabledReason: creator.reassignedCount ? undefined : `No ${fileWords.episode.singular} of this ${creator.creatorNames.singular} belongs in another of its collections.`,
                                     onSelect: () => void moveReassigned(),
                                 }] : []), {
                                     label: 'Combine with another creator',
@@ -213,7 +213,7 @@ export default function CreatorPage() {
 
             {checking && (
                 <p className="creator-note" role="status">
-                    VODLoft is looking for new {joinedNames(creator.newLists).many || 'lists'}. New ones show under Collections when it is done.
+                    VODLoft is looking for new {joinedNames(creator.newLists.map((kind) => kind.names)).plural || 'lists'}. New ones show under Collections when it is done.
                 </p>
             )}
             {actionError && <div className="form-error-card" role="alert">{actionError}</div>}
@@ -235,7 +235,7 @@ export default function CreatorPage() {
                     </div>
                 ) : (
                     <p className="creator-empty">
-                        None of this {creator.creatorLabel}'s collections are in your library any more.
+                        None of this {creator.creatorNames.singular}'s collections are in your library any more.
                         {mayManage && <> Add some on the <Link to={`/edit-creator/${creator.slug}`}>Edit page</Link>.</>}
                     </p>
                 )}
@@ -287,7 +287,7 @@ export default function CreatorPage() {
                 </div>
                 <ul className="creator-order-note">
                     <li>Their accounts and collections become {creator.title}'s, and they leave your library as a creator of their own.</li>
-                    <li>Collections keep their {words.season.many}, {words.episode.many}, profiles and files. Nothing is indexed again.</li>
+                    <li>Collections keep their {words.season.plural}, {words.episode.plural}, profiles and files. Nothing is indexed again.</li>
                     <li>{creator.title}'s name, picture and settings stay.</li>
                 </ul>
             </ConfirmDialog>

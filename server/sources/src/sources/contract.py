@@ -124,14 +124,14 @@ class Names:
     """A word in its singular and plural forms, in lower case and without an article, such as album and albums.
     ``article`` is only set where the first letter does not tell it, as for an hour."""
 
-    one: str
-    many: str
+    singular: str
+    plural: str
     article: str = ""
 
     @property
     def a(self) -> str:
         """The word with its article, such as an album or a playlist."""
-        return f"{self.article or ('an' if self.one[:1] in 'aeiou' else 'a')} {self.one}"
+        return f"{self.article or ('an' if self.singular[:1] in 'aeiou' else 'a')} {self.singular}"
 
 
 LIST_TYPE = "list"
@@ -249,22 +249,22 @@ class EpisodeTag:
     The key is the first part of an episode's identifier (``short.12``) and what
     Download and RSS profiles select. Episodes with the ``main`` tag follow the
     collection's numbering scheme; every other tag counts on its own across the collection.
-    ``singular`` and ``plural`` name a count of them, such as "1 livestream" or "726 livestreams".
+    ``names`` name a count of them, such as "1 livestream" or "726 livestreams"; ``label`` is the tag itself, such as
+    Ep. Extra.
     """
 
     key: str
     label: str
     help: str
-    singular: str
-    plural: str
+    names: Names
     selected_by_default: bool = True
     rss_episode_type: RssEpisodeType = RssEpisodeType.FULL
     main: bool = False
 
 
-VIDEO_TAGS = (EpisodeTag(MAIN_TAG, "Video", "A normal video", "video", "videos", main=True),)
+VIDEO_TAGS = (EpisodeTag(MAIN_TAG, "Video", "A normal video", Names("video", "videos"), main=True),)
 """VODLoft's own episode tags: every video is a normal one."""
-TRACK_TAGS = (EpisodeTag(MAIN_TAG, "Track", "A normal track", "track", "tracks", main=True),)
+TRACK_TAGS = (EpisodeTag(MAIN_TAG, "Track", "A normal track", Names("track", "tracks"), main=True),)
 """VODLoft's own episode tags on a Site with sound only."""
 _VIDEO_DOWNLOADS = DownloadOptions()
 
@@ -433,6 +433,15 @@ class SectionKind(StrEnum):
     """One movie or video, such as a movie on a Daily Wire host's page."""
 
 
+SECTION_KIND_NAMES = {
+    SectionKind.FEED: Names("feed", "feeds"),
+    SectionKind.LIST: Names("list", "lists"),
+    SectionKind.SHOW: Names("show", "shows"),
+    SectionKind.ITEM: Names("video", "videos"),
+}
+"""VODLoft's own word for each kind of section, for a kind a Site names no section type for."""
+
+
 class SectionRole(StrEnum):
     """What a section holds, which only steers the defaults when a creator is added."""
 
@@ -532,7 +541,7 @@ class ResolvedLink:
     """Short facts for a search result, such as "412 videos" or "19:05"."""
     creator_url: str | None = None
     """The creator this link is, on a Site with creators, so it can be added as a creator instead."""
-    creator_label: str | None = None
+    creator_names: Names | None = None
     """What the Site calls that creator, such as creator or artist."""
 
 
@@ -857,12 +866,9 @@ class Site:
     """The Site has sound only, such as Bandcamp's tracks. A Music collection on it holds tracks rather than music
     videos, and what the Site leaves out of ``downloads`` and ``episode_tags`` is for sound: tracks, downloaded as
     audio."""
-    creator_label: str = "creator"
-    """What the Site calls a creator, in lower case, such as host on The Daily Wire or artist on Bandcamp. VODLoft
-    names the Site's creators by it everywhere."""
-    music_creator_label: str = "artist"
-    """What VODLoft calls a creator with a Music collection on the Site, in lower case, whatever ``creator_label``
-    says."""
+    creator_names: Names = Names("creator", "creators")
+    """What the Site calls a creator, such as host on The Daily Wire or artist on Bandcamp. VODLoft names the Site's
+    creators by it everywhere."""
     creator_presets: tuple[CreatorPreset, ...] = ()
     """The ways the Site offers to keep a creator, the first one the default."""
     section_types: tuple[SectionType, ...] = (
@@ -893,8 +899,7 @@ class Site:
     def media_names(self) -> Names:
         """What the Site calls one of its videos, from its main episode tag: a video, or a track on a Site with sound
         only, such as the items a playlist holds."""
-        main = self.episode_tags[0]
-        return Names(main.singular, main.plural)
+        return self.episode_tags[0].names
 
     def episode_tag(self, key: str | None) -> EpisodeTag | None:
         """One of the Site's episode tags by its key."""
@@ -921,7 +926,7 @@ class Site:
         kind = SectionKind(kind)
         return next((type_ for type_ in self.section_types if type_.key == key), None) or next(
             (type_ for type_ in self.section_types if type_.kind == kind), None,
-        ) or SectionType(kind.value, kind, Names("video", "videos") if kind is SectionKind.ITEM else Names(kind.value, f"{kind.value}s"))
+        ) or SectionType(kind.value, kind, SECTION_KIND_NAMES[kind])
 
     def access(self, key: str | None) -> Access | None:
         """One of ``accesses`` by its key."""

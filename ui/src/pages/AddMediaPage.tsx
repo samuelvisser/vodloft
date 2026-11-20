@@ -270,10 +270,10 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                             <div className="add-media-preview-actions">
                                 {creatorChoice && (
                                     <button className="btn btn-primary" type="button" onClick={addCreator}
-                                            title={link.creatorLabel === 'artist'
+                                            title={link.creatorNames?.singular === 'artist'
                                                 ? 'Add their albums, and choose where each goes'
                                                 : 'Add its videos, livestreams and playlists, and choose where each goes'}>
-                                        Add the {link.creatorLabel ?? 'creator'}
+                                        Add the {link.creatorNames?.singular}
                                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                                     </button>
                                 )}
@@ -294,12 +294,12 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                                 <div className="add-media-preview-actions">
                                     <button className="btn btn-primary" type="button" onClick={addCreator}
                                             title="Add their shows and movies, and choose where each goes">
-                                        Add the {link.creatorLabel ?? 'creator'}
+                                        Add the {link.creatorNames?.singular}
                                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                                     </button>
                                 </div>
                             ) : (
-                                <p role="alert">Add a {link.creatorLabel ?? 'creator'} from Add media once you are done here.</p>
+                                <p role="alert">Add {link.creatorNames?.a} from Add media once you are done here.</p>
                             )
                         ) : collectionsUnsupported ? (
                             <p role="alert">

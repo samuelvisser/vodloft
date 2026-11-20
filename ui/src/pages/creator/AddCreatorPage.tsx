@@ -6,6 +6,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
+import {creatorNamesFor} from '../../lib/collectionWords'
 import {lookUpCreator, useCreators} from '../../lib/queries'
 import {
     CreatorCreateSchema, type CreatorCreateIn, type CreatorCreateOut, type CreatorLookupRead, type CreatorSectionRead,
@@ -29,24 +30,24 @@ import './CreatorPages.css'
 /** The starting points, in the words of what this creator has: playlists on YouTube, shows on The Daily Wire. */
 function presetText(key: CreatorCreateIn['preset'], hasFeeds: boolean, creator: CreatorLookupRead, music: boolean) {
     // What the Site calls the lists and shows its creators add, such as shows on The Daily Wire.
-    const {one, many} = growingNames(creator.sectionTypes)
+    const {singular, plural} = growingNames(creator.sectionTypes)
     const skipped = {
         label: 'Only what I pick',
-        help: `All ${hasFeeds ? `feeds and ${many}` : many} start skipped.`,
+        help: `All ${hasFeeds ? `feeds and ${plural}` : plural} start skipped.`,
     }
     if (music) {
-        if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with ${one === 'album' ? 'every album' : `each ${one} as an album`}${hasFeeds ? ' and the other tracks by year' : ''}.`}
-        if (key === 'per_list') return {label: 'A collection per album', help: `Each ${one} is a Music collection of its own.`}
+        if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with ${singular === 'album' ? 'every album' : `each ${singular} as an album`}${hasFeeds ? ' and the other tracks by year' : ''}.`}
+        if (key === 'per_list') return {label: 'A collection per album', help: `Each ${singular} is a Music collection of its own.`}
         return skipped
     }
     if (key === 'one_show') {
         // A Site offers it only where its lists can be seasons, so not The Daily Wire's shows.
-        return {label: 'One collection', help: `${capitalize(many)} as named seasons, the rest as seasons based on their year.`}
+        return {label: 'One collection', help: `${capitalize(plural)} as named seasons, the rest as seasons based on their year.`}
     }
     if (key === 'per_list') {
         return {
-            label: `A collection per ${one}`,
-            help: hasFeeds ? `Each of the ${many} is a collection of its own, plus one for the other videos.` : `Each of the ${many} is a collection of its own.`,
+            label: `A collection per ${singular}`,
+            help: hasFeeds ? `Each of the ${plural} is a collection of its own, plus one for the other videos.` : `Each of the ${plural} is a collection of its own.`,
         }
     }
     return skipped
@@ -93,9 +94,9 @@ function isMovie(creator: CreatorLookupRead, section: CreatorSectionRead) {
 function sectionFacts(creator: CreatorLookupRead, section: CreatorSectionRead): string {
     const media = creator.mediaNames
     return [
-        capitalize(section.names.one),
+        capitalize(section.names.singular),
         section.year,
-        section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? media.one : media.many}` : null,
+        section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? media.singular : media.plural}` : null,
     ].filter(Boolean).join(' · ')
 }
 
@@ -103,7 +104,7 @@ function sectionFacts(creator: CreatorLookupRead, section: CreatorSectionRead): 
 function AddCreatorSkeleton({steps, label}: {steps: string[], label: string}) {
     return (
         <div className="creator-skeleton" aria-busy="true">
-            <LookupSteps steps={steps} first={`Looking the ${label} up`}/>
+            <LookupSteps steps={steps} first={label ? `Looking the ${label} up` : 'Looking it up'}/>
             <div className="creator-header" aria-hidden="true">
                 <div className="creator-banner skeleton-block"/>
                 <span className="creator-avatar skeleton-block"/>
@@ -203,7 +204,8 @@ export default function AddCreatorPage() {
     const [creator, setCreator] = useState<CreatorLookupRead | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [steps, setSteps] = useState<string[]>([])
-    const [label, setLabel] = useState('creator')
+    // What the Site calls the creator, which the backend tells with the lookup's first step.
+    const [label, setLabel] = useState('')
     // The type and episode identification of each collection the creator adds, by MAIN_KEY or the section's ref.
     const [collectionSettings, setCollectionSettings] = useState<Record<string, CollectionSettings>>({})
     const setSettings = useMemo(() => (key: string, value: CollectionSettings) => {
@@ -217,9 +219,9 @@ export default function AddCreatorPage() {
     const {watch, setValue, formState: {errors, isSubmitting}} = form
     const {data: libraryCreators} = useCreators()
     const into = watch('into') ?? ''
-    // A music artist is called an artist everywhere on the page, whatever their site calls its creators.
     const music = watch('type') === 'music'
-    const creatorWord = creator && music ? creator.musicCreatorLabel : label
+    // A music artist is called an artist everywhere on the page, whatever their site calls its creators.
+    const creatorWord = creator ? creatorNamesFor(watch('type'), creator.creatorNames).singular : label
     const intoRegistry = useMemo(() => createSelectRegistry(`AddCreatorInto-${(libraryCreators ?? []).length}-${creatorWord}`, {
         '': {label: `A new ${creatorWord} in your library`},
         ...Object.fromEntries((libraryCreators ?? []).map((other) => [
@@ -231,13 +233,13 @@ export default function AddCreatorPage() {
     useEffect(() => {
         const controller = new AbortController()
         setSteps([])
-        lookUpCreator({sourceKey, url, ref}, (step, creatorLabel) => {
-            if (creatorLabel) setLabel(creatorLabel)
+        lookUpCreator({sourceKey, url, ref}, (step, creatorNames) => {
+            if (creatorNames) setLabel(creatorNames.singular)
             setSteps((done) => [...done, step])
         }, controller.signal)
             .then((found) => {
                 setCreator(found)
-                setLabel(found.creatorLabel)
+                setLabel(found.creatorNames.singular)
                 setValue('type', found.music ? 'music' : 'series')
                 setValue('newLists', newListsFor(found, found.music))
                 const preset = found.presets[0]
@@ -312,7 +314,7 @@ export default function AddCreatorPage() {
     if (error) {
         return (
             <section className="view" aria-labelledby="add-creator-title">
-                <div className="view-header"><h1 id="add-creator-title">Add {label}</h1></div>
+                <div className="view-header"><h1 id="add-creator-title">{label ? `Add ${label}` : 'Add'}</h1></div>
                 <div className="form-error-card" role="alert">{error}</div>
                 <div className="actions"><button type="button" className="btn" onClick={() => navigate(-1)}>Back</button></div>
             </section>
@@ -321,7 +323,7 @@ export default function AddCreatorPage() {
     if (!creator) {
         return (
             <section className="view creator-view" aria-labelledby="add-creator-title">
-                <div className="view-header"><h1 id="add-creator-title">Add {label}</h1></div>
+                <div className="view-header"><h1 id="add-creator-title">{label ? `Add ${label}` : 'Add'}</h1></div>
                 <AddCreatorSkeleton steps={steps} label={label}/>
             </section>
         )
@@ -329,11 +331,11 @@ export default function AddCreatorPage() {
     if (creator.creatorSlug) {
         return (
             <section className="view" aria-labelledby="add-creator-title">
-                <div className="view-header"><h1 id="add-creator-title">Add {label}</h1></div>
+                <div className="view-header"><h1 id="add-creator-title">{label ? `Add ${label}` : 'Add'}</h1></div>
                 <p>{creator.title} on {creator.siteName} is already in your library.</p>
                 <div className="actions">
                     <button type="button" className="btn btn-primary" onClick={() => navigate(`/creator/${creator.creatorSlug}`)}>
-                        Open {creator.creatorLabel}
+                        Open {creator.creatorNames.singular}
                     </button>
                 </div>
             </section>
@@ -341,7 +343,7 @@ export default function AddCreatorPage() {
     }
 
     // What the creator's Site calls its lists and shows, such as "albums and playlists" on SoundCloud.
-    const lists = growingNames(creator.sectionTypes).many
+    const lists = growingNames(creator.sectionTypes).plural
     const hasFeeds = creator.sections.some((section) => section.kind === 'feed')
     const feeds = new Set(creator.sections.filter((section) => section.kind === 'feed').map((section) => section.ref))
     const keepsFeeds = (plan: SectionPlan[]) => plan.some((item) => feeds.has(item.ref) && item.target !== 'skip')
@@ -350,12 +352,12 @@ export default function AddCreatorPage() {
     // A group for each type of section the Site has, in its words and order: Feeds and Playlists on YouTube, or
     // Albums, Playlists and Singles on SoundCloud.
     const groups: [string, CreatorSectionRead[]][] = creator.sectionTypes.map((type) => [
-        capitalize(type.many), creator.sections.filter((section) => section.type === type.key),
+        capitalize(type.names.plural), creator.sections.filter((section) => section.type === type.key),
     ])
     // A section of a kind the Site names no type for goes under the backend's word for its kind.
     const unnamed = creator.sections.filter((section) => !creator.sectionTypes.some((type) => type.key === section.type))
-    for (const many of new Set(unnamed.map((section) => section.names.many))) {
-        groups.push([capitalize(many), unnamed.filter((section) => section.names.many === many)])
+    for (const many of new Set(unnamed.map((section) => section.names.plural))) {
+        groups.push([capitalize(many), unnamed.filter((section) => section.names.plural === many)])
     }
     // What is in the library already stays where it is, so it makes no collection.
     const inLibrary = new Set(creator.sections.filter((section) => section.collectionSlug).map((section) => section.ref))
@@ -420,7 +422,7 @@ export default function AddCreatorPage() {
                             options={[
                                 {
                                     value: 'series',
-                                    label: capitalize(creator.creatorLabel),
+                                    label: capitalize(creator.creatorNames.singular),
                                     description: `Series collections of their videos, with ${lists} as seasons`,
                                 },
                                 {
@@ -432,7 +434,7 @@ export default function AddCreatorPage() {
                         />
                         <div className="help">
                             {creator.music && creator.musicReason
-                                ? `${creator.musicReason}, so VODLoft took it for a music artist. Pick ${capitalize(creator.creatorLabel)} if it isn't.`
+                                ? `${creator.musicReason}, so VODLoft took it for a music artist. Pick ${capitalize(creator.creatorNames.singular)} if it isn't.`
                                 : `${creator.siteName} doesn't say whether this is a music artist. Pick Music artist if it is.`}
                         </div>
                         {errors.type && <div className="error" role="alert">{errors.type.message}</div>}

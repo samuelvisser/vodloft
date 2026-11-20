@@ -75,7 +75,7 @@ export default function SourceSearchPage({sourceId: givenSourceId, onChoose}: So
             if (local) navigate(`/collection/${local.slug}`)
             // A creator's own page, such as a YouTube channel, can be added as the creator or as only its videos:
             // Add media asks which.
-            else if (result.creatorLabel) navigate(`/add?url=${encodeURIComponent(result.url)}`)
+            else if (result.creatorNames) navigate(`/add?url=${encodeURIComponent(result.url)}`)
             else navigate(`/add-collection?url=${encodeURIComponent(result.url)}`)
             return
         }

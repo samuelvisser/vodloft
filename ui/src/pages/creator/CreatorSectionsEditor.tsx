@@ -19,7 +19,7 @@ import {collectionWords, type Noun} from '../../lib/collectionWords'
 /** What the section is and holds, in the words of its Site: "Album · 12 tracks", "Playlist · 4 videos". */
 export function sectionFacts(section: CreatorSectionRead, site: {mediaNames: Names}) {
     const media = site.mediaNames
-    return [capitalized(section.names.one), section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? media.one : media.many}` : null]
+    return [capitalized(section.names.singular), section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? media.singular : media.plural}` : null]
         .filter(Boolean).join(' · ')
 }
 
@@ -45,7 +45,7 @@ export function mainSeasonOf(creator: CreatorPageRead, account: CreatorPageAccou
 export function choices(creator: CreatorPageRead, {account, section}: AccountSection): {label: string, description: string, plan: SectionPlan}[] {
     const mainTitle = mainTitleOf(creator, account)
     const season = mainSeasonOf(creator, account)
-    const main = `the ${creator.creatorLabel}'s main collection`
+    const main = `the ${creator.creatorNames.singular}'s main collection`
     const options: {label: string, description: string, plan: SectionPlan}[] = []
     if (isMovie(account, section)) {
         // A movie in the library joins the creator; another one goes into the library as one of theirs.
@@ -56,7 +56,7 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
     if (section.kind === 'feed') {
         options.push({label: `Add to ${mainTitle}`, description: `Its videos go into ${main}`, plan: {ref: section.ref, target: 'main'}})
     } else if (section.kind === 'list' && account.site.linkSeasons) {
-        options.push({label: `${season.One} of ${mainTitle}`, description: `${capitalized(season.a)} of ${main}`, plan: {ref: section.ref, target: 'main'}})
+        options.push({label: `${season.Singular} of ${mainTitle}`, description: `${capitalized(season.a)} of ${main}`, plan: {ref: section.ref, target: 'main'}})
     }
     options.push({label: 'Own collection', description: 'A collection of its own in your library', plan: {ref: section.ref, target: 'own'}})
     return options
@@ -66,7 +66,7 @@ type Place = 'main' | 'own' | 'skip'
 
 /** What moving a playlist does, in words, before the user says yes. */
 function moveNote({section}: AccountSection, to: Place, mainTitle: string, season: Noun): string {
-    const noun = section.names.one
+    const noun = section.names.singular
     if (to === 'own') {
         return `${section.title} becomes a collection of its own, and takes its videos out of ${mainTitle}. Downloaded videos `
             + 'take their files along, renamed into the new collection as manual downloads, since it has no Download '
@@ -78,14 +78,14 @@ function moveNote({section}: AccountSection, to: Place, mainTitle: string, seaso
             + `downloaded again there when it uses another one; the old files go once that succeeded. The collection `
             + `${section.collectionTitle ?? section.title} goes once it is empty.`
     }
-    return `${section.title} is no longer ${season.a} of ${mainTitle}. Its videos go to the ${season.one} of videos in no ${noun}, `
+    return `${section.title} is no longer ${season.a} of ${mainTitle}. Its videos go to the ${season.singular} of videos in no ${noun}, `
         + `and videos of other creators that only this ${noun} brought in leave ${mainTitle}, files and all. It stays listed `
         + 'on this page, so you can add it again.'
 }
 
 /** The places a playlist in the Library can go, in words. */
 function placeLabels(mainTitle: string, season: Noun): Record<Place, string> {
-    return {main: `${season.One} of ${mainTitle}`, own: 'Collection of its own', skip: 'Not in your library'}
+    return {main: `${season.Singular} of ${mainTitle}`, own: 'Collection of its own', skip: 'Not in your library'}
 }
 
 /** Where one of the creator's playlists is, and a select to move it, with its videos, somewhere else. */
@@ -95,7 +95,7 @@ function SectionPlace({section, place, mainTitle, season, busy, fitLabels, onMov
 }) {
     const registry = useMemo(() => {
         const labels = placeLabels(mainTitle, season)
-        return createSelectRegistry(`SectionPlace-${place}-${mainTitle}-${season.one}`, {
+        return createSelectRegistry(`SectionPlace-${place}-${mainTitle}-${season.singular}`, {
             main: {label: labels.main},
             own: {label: labels.own},
             ...(place === 'main' ? {skip: {label: labels.skip}} : {}),
@@ -247,7 +247,7 @@ export default function CreatorSectionsEditor({creator, part}: {
 
             {part === 'rest' && placed.length > 0 && (
                 <div className="creator-section-group">
-                    <h2>Where the {joinedNames(placed.map(({section}) => section.names)).many} go</h2>
+                    <h2>Where the {joinedNames(placed.map(({section}) => section.names)).plural} go</h2>
                     <div className="creator-section-list">
                         {placed.map((item) => {
                             const mainTitle = mainTitleOf(creator, item.account)
@@ -323,7 +323,7 @@ export default function CreatorSectionsEditor({creator, part}: {
 
             {part === 'rest' && checkedAt && (
                 <p className="creator-note">
-                    VODLoft looks for new {joinedNames(creator.newLists).many || 'lists'} once a day. Last look: {new Date(checkedAt).toLocaleString()}.
+                    VODLoft looks for new {joinedNames(creator.newLists.map((kind) => kind.names)).plural || 'lists'} once a day. Last look: {new Date(checkedAt).toLocaleString()}.
                 </p>
             )}
 
@@ -347,7 +347,7 @@ export default function CreatorSectionsEditor({creator, part}: {
                 {splitting && (
                     <ul className="creator-order-note">
                         <li>The account on {splitting.site.name} becomes a creator of its own, named as {splitting.site.name} names them.</li>
-                        <li>Its own collection and the collections of its {growingNames(splitting.site.sectionTypes).many || 'lists'} go along. Collections that joined {creator.title} by another link stay.</li>
+                        <li>Its own collection and the collections of its {growingNames(splitting.site.sectionTypes).plural || 'lists'} go along. Collections that joined {creator.title} by another link stay.</li>
                         <li>Collections keep their {creator.collections.length > 0 && creator.collections.every((collection) => collection.type === 'music') ? 'albums, tracks' : 'seasons, episodes'}, profiles and files. Nothing is indexed again.</li>
                     </ul>
                 )}

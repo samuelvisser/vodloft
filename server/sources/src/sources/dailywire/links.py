@@ -4,10 +4,13 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlsplit
 
-from ..contract import LinkKind, ResolvedLink
+from ..contract import LinkKind, Names, ResolvedLink
 from .api.dw_api.client import MiddlewareClient
 from .api.dw_api.movie import MovieMiddlewareClient
 from .auth import DeviceAuthClient
+
+HOST = Names("host", "hosts")
+"""What The Daily Wire calls a creator."""
 
 SITE_URL = "https://www.dailywire.com"
 
@@ -86,7 +89,7 @@ def resolve_link(url: str) -> ResolvedLink | None:
             image_url=host.author_headshot_path if host else None,
             kind_label="Host",
             creator_url=host_url(slug),
-            creator_label="host",
+            creator_names=HOST,
         )
 
     if kind is LinkKind.MOVIE:

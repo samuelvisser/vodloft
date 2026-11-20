@@ -116,15 +116,15 @@ export function filterSentence(
     deleteOlder = false,
     today: Date = new Date(),
     /** What the collection calls its seasons: albums in a Music collection. */
-    season: Pick<Noun, 'one' | 'many'> = collectionWords(null).season,
+    season: Pick<Noun, 'singular' | 'plural'> = collectionWords(null).season,
 ): Part[] {
     if (isDateLine(filter)) return dateLineSentence(filter, deleteOlder, today)
     const lead = {text: `${ACTION_WORDS[filter.action] ?? ACTION_WORDS.skip} `}
     if (filter.field === 'types' || filter.field === 'seasons') {
         const labels = filter.field === 'types'
             ? (filter.episodeTypes ?? []).map(typeLabel)
-            : [...(filter.seasonSlugs ?? []).map(seasonLabel), ...(filter.includeUpcoming ? [`upcoming ${season.many}`] : [])]
-        const parts: Part[] = [lead, {text: filter.field === 'types' ? 'episode type' : season.one, strong: true}]
+            : [...(filter.seasonSlugs ?? []).map(seasonLabel), ...(filter.includeUpcoming ? [`upcoming ${season.plural}`] : [])]
+        const parts: Part[] = [lead, {text: filter.field === 'types' ? 'episode type' : season.singular, strong: true}]
         if (!labels.length) return [...parts, {text: ' is …'}]
         return [...parts, {text: ' is '}, ...strongList(labels).flatMap((part) => (
             part.text === ' and ' ? [{text: ' or '}] : [part]

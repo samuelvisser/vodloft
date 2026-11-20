@@ -34,7 +34,7 @@ from backend.services.sites import collection_site
 from backend.types.creator_types import SectionTarget
 from task_manager.scheduler.transactional import queue_task_after_commit
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
-from sources import CreatorDetails, Feature, SectionRef, SectionType, Site, get_source
+from sources import CreatorDetails, Feature, Names, SectionRef, SectionType, Site, get_source
 from backend.services.source_requests import asking_source
 
 
@@ -45,12 +45,12 @@ class CreatorNotFoundError(LookupError):
     pass
 
 
-def lookup_creator_label(source_key: str, url: str | None) -> str:
+def lookup_creator_names(source_key: str, url: str | None) -> Names:
     """What the Site of a creator about to be looked up calls it, told without a network request."""
     if url:
-        return creators.creator_site(source_key, url).creator_label
+        return creators.creator_site(source_key, url).creator_names
     source = get_source(source_key)
-    return next((site.creator_label for site in source.sites if site.creators), "creator")
+    return next((site.creator_names for site in source.sites if site.creators), Site.creator_names)
 
 
 # A creator's lookup takes seconds. Looking a creator up takes what a lookup of the same creator started in the last
@@ -150,8 +150,7 @@ class _Lookup:
     source_key: str
     site_key: str
     site_name: str
-    creator_label: str
-    music_creator_label: str
+    creator_names: Names
     section_types: tuple[SectionType, ...]
     audio_only: bool
     link_seasons: bool
@@ -178,7 +177,7 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
     existing = creators.account_in_library(s, site.key, details.ref)
     return CreatorLookupAPIRead.model_validate(_Lookup(
         details=details, source_key=source_key, site_key=site.key, site_name=site.name,
-        creator_label=site.creator_label, music_creator_label=site.music_creator_label, section_types=site.section_types, audio_only=site.audio_only,
+        creator_names=site.creator_names, section_types=site.section_types, audio_only=site.audio_only,
         link_seasons=creators.lists_are_seasons(site), movies=movies,
         sections=[
             _Section(
@@ -288,8 +287,8 @@ class _CreatorRead:
     last_published_date: datetime | None = None
 
     @property
-    def creator_label(self) -> str:
-        return creators.creator_label(self.creator)
+    def creator_names(self) -> Names:
+        return creators.creator_names(self.creator)
 
     @property
     def music(self) -> bool:
@@ -607,7 +606,7 @@ def look_up_collection_creator(
     if not source.has(Feature.CREATORS):
         raise ServiceError(f"{source.name} has no creators")
     site = source.site_for(link.url)
-    label = site.creator_label if site is not None else "creator"
+    label = (site.creator_names if site is not None else Site.creator_names).singular
     progress(f"Finding the {label} behind the link")
     with asking_source(f"Could not look up the {label}"):
         ref = source.creator_of(link.url)
@@ -621,7 +620,7 @@ def look_up_collection_creator(
 class _Match:
     details: CreatorDetails
     site_name: str
-    creator_label: str
+    creator_names: Names
     section_types: object
     section: object | None
     kept_by: str | None
@@ -641,7 +640,7 @@ def collection_creator_match(s: Session, collection_slug: str, source_key: str, 
     overlaps = creators.join_overlaps(s, collection, source_key, details, existing)
     movable = keeper is not None and any(overlap.ref == section.ref and overlap.can_move_here for overlap in overlaps)
     return CollectionCreatorMatchAPIRead.model_validate(_Match(
-        details, site.name, site.creator_label, site.section_types, section if keeper is None or movable else None,
+        details, site.name, site.creator_names, site.section_types, section if keeper is None or movable else None,
         keeper.title if keeper is not None and not movable else None,
         existing.creator.slug if existing is not None else None,
         overlaps, site.section_type_of(section).key if section is not None else None,
@@ -675,7 +674,7 @@ def add_collection_to_creator(s: Session, collection_slug: str, creator_slug: st
 def collection_creator_leave(s: Session, collection_slug: str) -> CollectionCreatorLeaveAPIRead:
     collection = _collection(s, collection_slug)
     if collection.creator is None:
-        raise ServiceError(f"{collection.title} is not in a {collection_site(collection).creator_label}")
+        raise ServiceError(f"{collection.title} is not in {collection_site(collection).creator_names.a}")
     return CollectionCreatorLeaveAPIRead(creator_title=collection.creator.title)
 
 

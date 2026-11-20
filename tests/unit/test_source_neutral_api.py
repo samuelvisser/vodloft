@@ -138,7 +138,7 @@ def test_a_daily_wire_host_link_is_their_creator(monkeypatch):
     found = links.resolve_link("https://www.dailywire.com/hosts/jordan-b-peterson")
     assert (found.kind, found.slug, found.title) == (LinkKind.CREATOR, "jordan-b-peterson", "Jordan B Peterson")
     assert found.creator_url == "https://www.dailywire.com/hosts/jordan-b-peterson"
-    assert found.creator_label == "host"
+    assert found.creator_names.singular == "host"
     assert links.resolve_link("https://www.dailywire.com/hosts/nobody") is None
 
 
@@ -326,7 +326,7 @@ def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
         "results": [{
             "kind": "collection", "slug": "clips", "url": "https://stub.example/collection/clips", "title": "clip collection",
             "description": None, "imageUrl": None, "authorName": None, "collectionSlug": None, "collectionUrl": None,
-            "kindLabel": "Channel", "facts": ["3 videos"], "access": None, "accessLabel": None, "creatorLabel": None,
+            "kindLabel": "Channel", "facts": ["3 videos"], "access": None, "accessLabel": None, "creatorNames": None,
         }],
         "notice": {
             "badge": "Search via stub", "text": "Answered by the stub", "tone": "neutral",

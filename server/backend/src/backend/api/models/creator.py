@@ -78,9 +78,7 @@ class CreatorLookupAPIRead(ResponseBase):
     source_key: str
     site_key: str
     site_name: str
-    creator_label: str
-    music_creator_label: str
-    """What the Site calls the creator when they are added as a music artist."""
+    creator_names: NamesAPIRead
     section_types: list[SectionTypeAPIRead]
     """Every type of section the Site's creators have, such as playlists on YouTube or shows on The Daily Wire."""
     audio_only: bool = False
@@ -189,7 +187,7 @@ class CreatorAPIRead(ResponseBase):
 
     id: int
     slug: str
-    creator_label: str
+    creator_names: NamesAPIRead
     """What VODLoft calls the creator: the word of their one Site, such as host, or artist for a music artist."""
     music: bool = False
     """A music artist: they have a Music collection."""
@@ -297,7 +295,7 @@ class CollectionCreatorMatchAPIRead(ResponseBase):
     """Adding the collection with this id uses what this lookup found, instead of asking the Site again."""
 
     site_name: str
-    creator_label: str
+    creator_names: NamesAPIRead
     section_types: list[SectionTypeAPIRead]
     """Every type of section the creator's Site has, such as playlists on YouTube."""
     ref: str

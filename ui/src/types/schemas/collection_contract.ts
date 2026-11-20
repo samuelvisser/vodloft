@@ -8,6 +8,8 @@ export const CollectionContractSchema = z.object({
     type: z.string(),
     words: CollectionWordsSchema,
     audioWords: CollectionWordsSchema,
+    /** What a collection of the type calls the creator behind it, such as artist; null where it is the Site's word. */
+    creatorNames: NamesSchema.nullable(),
     /** Downloads pick the collection's seasons; otherwise its newest episodes, by days or a number of episodes. */
     downloadsBySeason: z.boolean(),
 })

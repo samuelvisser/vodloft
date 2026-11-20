@@ -73,7 +73,7 @@ export default function EditCreatorPage() {
         const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(creator.slug)}`, {method: 'DELETE', credentials: 'include'})
         if (!response.ok) {
             const data = await response.json().catch(() => null)
-            toast.error(typeof data?.detail === 'string' ? data.detail : `The ${creator.creatorLabel} could not be deleted (HTTP ${response.status})`)
+            toast.error(typeof data?.detail === 'string' ? data.detail : `The ${creator.creatorNames.singular} could not be deleted (HTTP ${response.status})`)
             return
         }
         setDeleting(false)
@@ -100,7 +100,7 @@ export default function EditCreatorPage() {
                     <input id="creator-title" className="input" {...register('title')} aria-invalid={!!errors.title}/>
                     {errors.title && <div className="error" role="alert">{errors.title.message}</div>}
                     <div className="help">
-                        The author of each collection of this {creator.creatorLabel}. A name you give here stays, also
+                        The author of each collection of this {creator.creatorNames.singular}. A name you give here stays, also
                         when the name on {creator.accounts[0]?.site.name ?? 'their site'} changes.
                     </div>
                 </div>
@@ -109,7 +109,7 @@ export default function EditCreatorPage() {
                     <h2>New {listKindNames(creator.newLists)}</h2>
                     <NewListSettings
                         kinds={creator.newLists} values={newLists} fallback="ask" idPrefix="creator-new-lists"
-                        registryFor={(kind) => newListActionReg(creator.creatorLabel, kind, creator.music)}
+                        registryFor={(kind) => newListActionReg(creator.creatorNames.singular, kind, creator.music)}
                         onChange={(key, value) => setValue('newLists', {...newLists, [key]: value as NewSectionAction}, {shouldDirty: true})}
                     />
                     {errors.newLists && <div className="error" role="alert">{(errors.newLists as {message?: string}).message}</div>}
@@ -121,7 +121,7 @@ export default function EditCreatorPage() {
                     <input id="creator-genre" className="input" placeholder="Such as DIY, Woodworking" {...register('genre')}
                            aria-invalid={!!errors.genre}/>
                     {errors.genre && <div className="error" role="alert">{errors.genre.message}</div>}
-                    <div className="help">Written to the NFO file of each collection of this {creator.creatorLabel} that has no genre of its own.</div>
+                    <div className="help">Written to the NFO file of each collection of this {creator.creatorNames.singular} that has no genre of its own.</div>
                 </div>
 
                 <div className="form-row creator-membership">
@@ -135,7 +135,7 @@ export default function EditCreatorPage() {
                 <div className="actions">
                     <button type="button" className="btn btn-danger" style={{marginRight: 'auto'}} onClick={() => setDeleting(true)}>
                         <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
-                        <span>Delete {creator.creatorLabel}</span>
+                        <span>Delete {creator.creatorNames.singular}</span>
                     </button>
                     <button type="button" className="btn" onClick={() => navigate(`/creator/${creator.slug}`)}>Cancel</button>
                     <button type="submit" className="btn btn-primary" disabled={isSubmitting || !isDirty}>
@@ -148,7 +148,7 @@ export default function EditCreatorPage() {
 
             <ConfirmDialog
                 open={deleting}
-                title={`Delete ${creator.creatorLabel}`}
+                title={`Delete ${creator.creatorNames.singular}`}
                 onDismiss={() => setDeleting(false)}
                 icon={faIcon('fass', 'trash')}
                 iconTone="danger"
@@ -156,8 +156,8 @@ export default function EditCreatorPage() {
             >
                 <p>
                     Delete {creator.title}? {creator.collections.length > 0
-                        ? `${creator.collections.length === 1 ? 'Its collection stays' : `Its ${creator.collections.length} collections stay`} in your library with their episodes and files, but VODLoft stops looking for new ${joinedNames(creator.newLists).many || 'lists'} of this ${creator.creatorLabel}.`
-                        : `VODLoft stops looking for new ${joinedNames(creator.newLists).many || 'lists'} of this ${creator.creatorLabel}.`}
+                        ? `${creator.collections.length === 1 ? 'Its collection stays' : `Its ${creator.collections.length} collections stay`} in your library with their episodes and files, but VODLoft stops looking for new ${joinedNames(creator.newLists.map((kind) => kind.names)).plural || 'lists'} of this ${creator.creatorNames.singular}.`
+                        : `VODLoft stops looking for new ${joinedNames(creator.newLists.map((kind) => kind.names)).plural || 'lists'} of this ${creator.creatorNames.singular}.`}
                 </p>
             </ConfirmDialog>
         </section>

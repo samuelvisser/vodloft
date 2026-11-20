@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
     ApiKeyNoteAPIRead, ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
-    SourceAPIRead, SourceSiteAPIRead,
+    NamesAPIRead, SourceAPIRead, SourceSiteAPIRead,
 )
 from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase, Settings
 from backend.security.access import Access
@@ -97,19 +97,19 @@ def search_source(access: Access, source: Source, query: str) -> SearchResultsAP
         "results": [
             result.model_copy(update={
                 "access_label": _access_label(source, result.url, result.access),
-                "creator_label": _creator_label(source, result.kind, result.url),
+                "creator_names": _creator_names(source, result.kind, result.url),
             })
             for result in results.results if access.allows_link(source.id, result.url)
         ],
     })
 
 
-def _creator_label(source: Source, kind: str, url: str) -> str | None:
+def _creator_names(source: Source, kind: str, url: str) -> NamesAPIRead | None:
     """What the Site calls a creator, when a collection result is a creator's own page that can be added as one."""
     if kind != "collection" or not source.has(Feature.CREATORS) or not source.is_creator_page(url):
         return None
     site = source.site_for(url)
-    return site.creator_label if site is not None and site.creators else None
+    return NamesAPIRead.model_validate(site.creator_names) if site is not None and site.creators else None
 
 
 def _access_label(source: Source, url: str, key: str | None) -> str | None:
@@ -214,7 +214,8 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         access_description=found.description if found is not None else None,
         access_locked=access_locked(source.id, link.access, None),
         preview=ResolvedLinkPreviewAPIRead.model_validate(link),
-        creator_url=link.creator_url, creator_label=link.creator_label,
+        creator_url=link.creator_url,
+        creator_names=NamesAPIRead.model_validate(link.creator_names) if link.creator_names else None,
         candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],
     )
 

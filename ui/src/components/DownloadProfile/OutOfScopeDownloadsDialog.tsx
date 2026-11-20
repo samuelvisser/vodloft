@@ -62,7 +62,7 @@ export function useDeleteOutOfScope(profileId: number, resourceLabel: string) {
 /** "Left out by: skip if the duration is shorter than 4 minutes" */
 export function leftOutByText(
     filter: FilterLike | undefined, typeLabel: (key: string) => string, seasonLabel: (slug: string) => string,
-    deleteOlder: boolean, season?: Pick<Noun, 'one' | 'many'>,
+    deleteOlder: boolean, season?: Pick<Noun, 'singular' | 'plural'>,
 ): string {
     if (!filter) return ''
     const sentence = plainText(filterSentence(filter, typeLabel, seasonLabel, deleteOlder, undefined, season))

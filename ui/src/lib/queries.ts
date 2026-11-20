@@ -75,7 +75,7 @@ import {
     ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
     ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
-    SourceReadSchema,
+    SourceReadSchema, type Names, NamesSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
 import {
@@ -816,7 +816,7 @@ async function readSteps(
 
 export async function lookUpCreator(
     body: {sourceKey: string, url?: string | null, ref?: string | null},
-    onStep: (step: string, creatorLabel?: string) => void,
+    onStep: (step: string, creatorNames?: Names) => void,
     signal?: AbortSignal,
 ): Promise<CreatorLookupRead> {
     const response = await fetch(`${apiUrl()}/creators/lookup`, {
@@ -826,7 +826,7 @@ export async function lookUpCreator(
         body: JSON.stringify(body),
         signal,
     })
-    const result = await readSteps(response, (step, line) => onStep(step, line.creatorLabel as string | undefined))
+    const result = await readSteps(response, (step, line) => onStep(step, line.creatorNames ? NamesSchema.parse(line.creatorNames) : undefined))
     return CreatorLookupReadSchema.parse(result.creator)
 }
 

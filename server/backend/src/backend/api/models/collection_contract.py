@@ -21,6 +21,8 @@ class CollectionContractAPIRead(ResponseBase):
     type: CollectionType
     words: CollectionWordsAPIRead
     audio_words: CollectionWordsAPIRead
+    creator_names: NamesAPIRead | None
+    """What a collection of the type calls the creator behind it, such as artist; none where it is the Site's word."""
     downloads_by_season: bool
     """Downloads pick the collection's seasons; otherwise its newest episodes, by days or a number of episodes."""
 

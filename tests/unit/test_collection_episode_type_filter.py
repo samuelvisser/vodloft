@@ -69,7 +69,7 @@ def test_the_main_tag_is_named_as_the_collection_names_its_episodes(session, col
     collection = Collection(source_key="ytdlp", type=collection_type, sharing_url=url)
     tags = collection_episode_tags(collection)
     assert (tags[0].key, tags[0].label) == ("ep", main)
-    assert tags[0].singular == main.lower()
+    assert tags[0].names.singular == main.lower()
 
 
 def test_episode_pages_of_one_type_follow_the_cursor(session):

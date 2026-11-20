@@ -52,16 +52,16 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const several = creator.accounts.length > 1
     // What is not in the library, by the type of section in the words of its Site: "3 more feeds", "1 more show", or
     // "4 more feeds, albums and playlists".
-    const counts = new Map<string, {count: number, one: string, many: string}>()
+    const counts = new Map<string, {count: number, singular: string, plural: string}>()
     for (const {section} of items) {
         const names = section.names
-        const known = counts.get(names.many) ?? {count: 0, ...names}
-        counts.set(names.many, {...known, count: known.count + 1})
+        const known = counts.get(names.plural) ?? {count: 0, ...names}
+        counts.set(names.plural, {...known, count: known.count + 1})
     }
     const kinds = [...counts.values()]
     const nouns = kinds.length === 1
-        ? (items.length === 1 ? kinds[0].one : kinds[0].many)
-        : `${kinds.slice(0, -1).map((kind) => kind.many).join(', ')} and ${kinds[kinds.length - 1].many}`
+        ? (items.length === 1 ? kinds[0].singular : kinds[0].plural)
+        : `${kinds.slice(0, -1).map((kind) => kind.plural).join(', ')} and ${kinds[kinds.length - 1].plural}`
     const counted = `${items.length} more ${nouns}`
     const onSite = sites.size === 1 ? ` on ${items[0].account.site.name}` : ''
     const arts = items.map(({section}) => toImageUrl(section.imageUrl)).filter((url): url is string => !!url).slice(0, 4)

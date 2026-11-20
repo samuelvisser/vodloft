@@ -1,13 +1,13 @@
 {
   "words": {
     "season": {
-      "one": "season",
-      "many": "seasons",
+      "singular": "season",
+      "plural": "seasons",
       "a": "a season"
     },
     "episode": {
-      "one": "episode",
-      "many": "episodes",
+      "singular": "episode",
+      "plural": "episodes",
       "a": "an episode"
     }
   },
@@ -16,83 +16,90 @@
       "type": "podcast",
       "words": {
         "season": {
-          "one": "season",
-          "many": "seasons",
+          "singular": "season",
+          "plural": "seasons",
           "a": "a season"
         },
         "episode": {
-          "one": "episode",
-          "many": "episodes",
+          "singular": "episode",
+          "plural": "episodes",
           "a": "an episode"
         }
       },
       "audioWords": {
         "season": {
-          "one": "season",
-          "many": "seasons",
+          "singular": "season",
+          "plural": "seasons",
           "a": "a season"
         },
         "episode": {
-          "one": "episode",
-          "many": "episodes",
+          "singular": "episode",
+          "plural": "episodes",
           "a": "an episode"
         }
       },
+      "creatorNames": null,
       "downloadsBySeason": false
     },
     {
       "type": "series",
       "words": {
         "season": {
-          "one": "season",
-          "many": "seasons",
+          "singular": "season",
+          "plural": "seasons",
           "a": "a season"
         },
         "episode": {
-          "one": "episode",
-          "many": "episodes",
+          "singular": "episode",
+          "plural": "episodes",
           "a": "an episode"
         }
       },
       "audioWords": {
         "season": {
-          "one": "season",
-          "many": "seasons",
+          "singular": "season",
+          "plural": "seasons",
           "a": "a season"
         },
         "episode": {
-          "one": "episode",
-          "many": "episodes",
+          "singular": "episode",
+          "plural": "episodes",
           "a": "an episode"
         }
       },
+      "creatorNames": null,
       "downloadsBySeason": true
     },
     {
       "type": "music",
       "words": {
         "season": {
-          "one": "album",
-          "many": "albums",
+          "singular": "album",
+          "plural": "albums",
           "a": "an album"
         },
         "episode": {
-          "one": "music video",
-          "many": "music videos",
+          "singular": "music video",
+          "plural": "music videos",
           "a": "a music video"
         }
       },
       "audioWords": {
         "season": {
-          "one": "album",
-          "many": "albums",
+          "singular": "album",
+          "plural": "albums",
           "a": "an album"
         },
         "episode": {
-          "one": "track",
-          "many": "tracks",
+          "singular": "track",
+          "plural": "tracks",
           "a": "a track"
         }
+      },
+      "creatorNames": {
+        "singular": "artist",
+        "plural": "artists",
+        "a": "an artist"
       },
       "downloadsBySeason": true
     }

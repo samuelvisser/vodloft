@@ -19,7 +19,7 @@ from .api.types.user_info import DwMembershipLevel
 from .api.utils.validators.available_for_list import parse_tiers
 from .auth import DeviceAuthClient
 from .auth.storage import TokenStore
-from .links import _access_token, _first, collection_url, parse_link, resolve_link
+from .links import HOST, _access_token, _first, collection_url, parse_link, resolve_link
 from . import membership
 from .membership import account_level, check_after_refusal, gives
 from .playback import resolve_movie_playback
@@ -111,22 +111,22 @@ class DailyWireSource(Source):
         accesses=MEMBERSHIP_ACCESSES,
         # A host has no feed to fold into one show: each of their shows keeps its own seasons.
         creators=True,
-        creator_label="host",
+        creator_names=HOST,
         section_types=(
             SectionType("show", SectionKind.SHOW, Names("show", "shows")),
             SectionType("movie", SectionKind.ITEM, Names("movie", "movies")),
         ),
         episode_tags=(
-            EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", "episode", "episodes", main=True),
+            EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", Names("episode", "episodes"), main=True),
             EpisodeTag(
-                "ep-extra", "Ep. Extra", "Extra content for a specific episode", "episode extra", "episode extras", selected_by_default=False,
+                "ep-extra", "Ep. Extra", "Extra content for a specific episode", Names("episode extra", "episode extras"), selected_by_default=False,
                 rss_episode_type=RssEpisodeType.BONUS,
             ),
             EpisodeTag(
-                "trailer", "Trailer", "A trailer for the show or its extra content", "trailer", "trailers", selected_by_default=False,
+                "trailer", "Trailer", "A trailer for the show or its extra content", Names("trailer", "trailers"), selected_by_default=False,
                 rss_episode_type=RssEpisodeType.TRAILER,
             ),
-            EpisodeTag("aux", "Auxiliary", "Extra content for the show", "auxiliary episode", "auxiliary episodes", rss_episode_type=RssEpisodeType.BONUS),
+            EpisodeTag("aux", "Auxiliary", "Extra content for the show", Names("auxiliary episode", "auxiliary episodes"), rss_episode_type=RssEpisodeType.BONUS),
         ),
         creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)

@@ -141,9 +141,9 @@ def artist_details(root: str, progress: Callable[[str], None]) -> CreatorDetails
     # How many of each type of list the artist has, in the Site's words, such as "2 albums" and "1 playlist".
     site = sites.site_of("bandcamp" if bandcamp else "soundcloud")
     counts = Counter(site.section_type_of(section) for section in sections if section.kind is SectionKind.LIST)
-    facts = tuple(f"{count} {type_.names.one if count == 1 else type_.names.many}" for type_, count in counts.items())
+    facts = tuple(f"{count} {type_.names.singular if count == 1 else type_.names.plural}" for type_, count in counts.items())
     return CreatorDetails(
-        ref=handle, url=root, title=str(name or handle), facts=facts or (f"0 {site.types_of(SectionKind.LIST)[0].names.many}",),
+        ref=handle, url=root, title=str(name or handle), facts=facts or (f"0 {site.types_of(SectionKind.LIST)[0].names.plural}",),
         # Bandcamp only has music; a SoundCloud account may as well be a podcast.
         sections=tuple(sections), music=bandcamp or has_albums, music_known=bandcamp,
         music_reason="It has albums on SoundCloud" if has_albums else None,

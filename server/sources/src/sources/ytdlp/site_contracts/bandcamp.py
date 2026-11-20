@@ -7,7 +7,7 @@ class Bandcamp(OtherSites):
     name = "Bandcamp"
     audio_only = True
     creators = True
-    creator_label = "artist"
+    creator_names = Names("artist", "artists")
     creator_presets = CREATOR_PRESETS
     # An artist has albums, and tracks of their own: singles.
     section_types = (

@@ -3,6 +3,7 @@ from types import MappingProxyType
 
 from ...contract import (
     VIDEO_TAGS,
+    Names,
     Access,
     EpisodeTag,
     RssEpisodeType,
@@ -21,11 +22,11 @@ class YouTube(OtherSites):
     # yt-dlp tells YouTube's Shorts and livestreams apart from its videos.
     episode_tags = (
         *VIDEO_TAGS,
-        EpisodeTag("short", "Short", "A YouTube Short", "short", "shorts", selected_by_default=False, rss_episode_type=RssEpisodeType.BONUS),
+        EpisodeTag("short", "Short", "A YouTube Short", Names("short", "shorts"), selected_by_default=False, rss_episode_type=RssEpisodeType.BONUS),
         EpisodeTag(
             "livestream", "Livestream",
             "A livestream: upcoming, live now or finished. Finishing does not change the tag. A premiere is a video.",
-            "livestream", "livestreams",
+            Names("livestream", "livestreams"),
         ),
     )
     # YouTube has its 360p MP4 with sound as one file, and every other resolution as separate H.264 video and M4A

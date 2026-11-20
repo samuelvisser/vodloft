@@ -71,8 +71,8 @@ def album_kinds(kinds: Iterable[ListKind]) -> set[str]:
     marked = {kind.key for kind in kinds if kind.albums}
     if marked or len(kinds) < 2:
         return marked
-    return {kind.key for kind in kinds if {kind.key.lower(), kind.names.one.lower(),
-                                           kind.names.many.lower()} & _ALBUM_NAMES}
+    return {kind.key for kind in kinds if {kind.key.lower(), kind.names.singular.lower(),
+                                           kind.names.plural.lower()} & _ALBUM_NAMES}
 
 
 def default_new_sections(kinds: Iterable[ListKind], music: bool) -> dict[str, str]:
@@ -108,7 +108,7 @@ def checked_new_sections(kinds: Iterable[ListKind], wanted: Mapping[str, str], m
     for key, action in wanted.items():
         kind = kinds[key]
         if NewSectionAction(action) is NewSectionAction.SEASON and not kind.seasons:
-            raise ServiceError(f"New {kind.names.many} can't be added as seasons", field="new_lists")
+            raise ServiceError(f"New {kind.names.plural} can't be added as seasons", field="new_lists")
         settings[key] = NewSectionAction(action).value
     return settings
 

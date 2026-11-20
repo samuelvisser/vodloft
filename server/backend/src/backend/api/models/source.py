@@ -22,6 +22,14 @@ def source_features(source_key: str) -> list[str]:
     return sorted(feature.value for feature in source.features)
 
 
+class NamesAPIRead(ResponseBase):
+    """A word in lower case: singular, plural, and singular with its article, such as album, albums and an album."""
+
+    singular: str
+    plural: str
+    a: str
+
+
 class SourcedResponse(ResponseBase):
     """A response for something that comes from a Source.
 
@@ -277,8 +285,8 @@ class EpisodeTagAPIRead(ResponseBase):
     key: str
     label: str
     help: str
-    singular: str
-    plural: str
+    names: NamesAPIRead
+    """What a count of them is called, such as 1 livestream or 726 livestreams."""
     selected_by_default: bool
     rss_episode_type: Literal["full", "trailer", "bonus"]
     main: bool
@@ -360,7 +368,7 @@ class ResolvedLinkAPIRead(ResponseBase):
     preview: ResolvedLinkPreviewAPIRead
     creator_url: Optional[str] = None
     """The creator this link is, on a Site with creators, so it can be added as a creator instead."""
-    creator_label: Optional[str] = None
+    creator_names: Optional[NamesAPIRead] = None
     """What the Site calls that creator, such as creator or artist."""
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
@@ -381,7 +389,7 @@ class SearchResultAPIRead(ResponseBase):
     access: Optional[str] = None
     access_label: Optional[str] = None
     """What the result's Site calls the access it needs, such as Members only."""
-    creator_label: Optional[str] = None
+    creator_names: Optional[NamesAPIRead] = None
     """What the Site calls a creator, when the result is a creator's own page, such as a YouTube channel, that can be
     added as a creator."""
 
@@ -399,24 +407,13 @@ class SearchResultsAPIRead(ResponseBase):
     notice: Optional[SearchNoticeAPIRead] = None
 
 
-class NamesAPIRead(ResponseBase):
-    """A word in lower case: one, many, and one with its article, such as album, albums and an album."""
-
-    one: str
-    many: str
-    a: str
-
-
 class SectionTypeAPIRead(ResponseBase):
     """One type of section a Site's creators have, such as a feed, or an album or a playlist on SoundCloud, and what
     the Site calls it, in lower case."""
 
     key: str
     kind: Literal["feed", "list", "show", "item"]
-    one: str = Field(validation_alias=AliasPath("names", "one"))
-    many: str = Field(validation_alias=AliasPath("names", "many"))
-    a: str = Field(validation_alias=AliasPath("names", "a"))
-    """One of them with its article, such as "an album"."""
+    names: NamesAPIRead
 
 
 class ListKindAPIRead(ResponseBase):
@@ -424,11 +421,8 @@ class ListKindAPIRead(ResponseBase):
     setting for what happens with a new one."""
 
     key: str = Field(validation_alias=AliasPath("kind", "key"))
-    one: str = Field(validation_alias=AliasPath("kind", "names", "one"))
-    """One of them, without an article, such as "album"."""
-    many: str = Field(validation_alias=AliasPath("kind", "names", "many"))
-    a: str = Field(validation_alias=AliasPath("kind", "names", "a"))
-    """One of them with its article, such as "an album"."""
+    names: NamesAPIRead = Field(validation_alias=AliasPath("kind", "names"))
+    """What the Sites call the lists, such as album and albums."""
     seasons: bool = Field(validation_alias=AliasPath("kind", "seasons"))
     """The lists can be seasons of the creator's own collection."""
     albums: bool = Field(default=False, validation_alias=AliasPath("kind", "albums"))
@@ -461,15 +455,9 @@ class SiteAPIRead(ResponseBase):
 
     @computed_field
     @property
-    def creator_label(self) -> str:
-        """What the Site calls a creator, in lower case, such as host on The Daily Wire."""
-        return site_of(self.key).creator_label
-
-    @computed_field
-    @property
-    def music_creator_label(self) -> str:
-        """What the Site calls a creator with a Music collection, such as artist."""
-        return site_of(self.key).music_creator_label
+    def creator_names(self) -> NamesAPIRead:
+        """What the Site calls a creator, such as host on The Daily Wire."""
+        return NamesAPIRead.model_validate(site_of(self.key).creator_names)
 
     @computed_field
     @property
