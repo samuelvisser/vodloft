@@ -687,6 +687,7 @@ def test_a_creator_lookup_says_what_its_site_calls_the_creators_sections(client,
         ("videos", "videos", "feed", "main", "Videos"), ("shorts", "shorts", "feed", "short", "Shorts"),
         ("streams", "live", "feed", "live", "Livestreams"),
     ]
+    assert {section["kindNames"]["plural"] for section in found["sections"] if section["kind"] == "feed"} == {"feeds"}
 
 
 def test_a_creators_sections_keep_their_type_and_a_feed_no_title_of_its_own(client, session):

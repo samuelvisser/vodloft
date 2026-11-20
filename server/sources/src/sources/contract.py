@@ -212,6 +212,20 @@ class SectionType:
         """The creator adds new ones of the type, each with a setting for what happens with it: lists and shows."""
         return self.kind in (SectionKind.LIST, SectionKind.SHOW)
 
+    @property
+    def kind_names(self) -> Names:
+        """VODLoft's own word for the type's kind, such as feed, which names several types of feed together."""
+        return SECTION_KIND_NAMES[self.kind]
+
+
+def section_type_names(types: Iterable[SectionType]) -> Names:
+    """Several section types named together. Lists, shows and items keep their Site's words, such as "albums and
+    playlists"; several types of feed are named by their kind, "feeds", as each feed is named after its type already."""
+    types = list(dict.fromkeys(types))
+    several_feeds = len([type_ for type_ in types if type_.kind is SectionKind.FEED]) > 1
+    names = [type_.kind_names if several_feeds and type_.kind is SectionKind.FEED else type_.names for type_ in types]
+    return Names.joined(names)
+
 
 @dataclass(frozen=True)
 class SiteSettings:
@@ -952,7 +966,7 @@ class Site:
 
     @property
     def section_feed_names(self) -> Names:
-        """What the Site calls its feeds, all its types of feed together, such as "videos, livestreams and shorts"."""
+        """What the Site calls its feeds together: its one type of feed, such as tracks, or "feeds" for several."""
         return self.names_of(SectionKind.FEED)
 
     @property
@@ -980,12 +994,12 @@ class Site:
     @property
     def section_names(self) -> Names:
         """Every type of section the Site's creators have, named together, such as "albums and singles"."""
-        return Names.joined(type_.names for type_ in self.section_types)
+        return section_type_names(self.section_types)
 
     def names_of(self, *kinds: SectionKind) -> Names:
         """The Site's section types of these kinds named together, or VODLoft's word for the first kind."""
         types = self.types_of(*kinds)
-        return Names.joined(type_.names for type_ in types) if types else SECTION_KIND_NAMES[kinds[0]]
+        return section_type_names(types) if types else SECTION_KIND_NAMES[kinds[0]]
 
     def section_type(self, key: str) -> SectionType:
         """The Site's section type by its key. A section of a type the Site does not have is a mistake in its Source,

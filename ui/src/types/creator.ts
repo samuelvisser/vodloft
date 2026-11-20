@@ -21,6 +21,14 @@ export function joinedNames(names: Names[]): Names {
     return {singular, plural: joined(names.map((name) => name.plural), 'and'), a: `${article}${singular}`}
 }
 
+/** The name a section goes by among ``sections``: its type's, but where several types of feed are shown together,
+ * the feeds' kind, "feeds", as each feed is named after its type already. Lists keep their Site's words. */
+export function groupNames<S extends {kind: string, type: string, names: Names, kindNames: Names}>(section: S, sections: readonly S[]): Names {
+    if (section.kind !== 'feed') return section.names
+    const feedTypes = new Set(sections.filter((other) => other.kind === 'feed').map((other) => other.type))
+    return feedTypes.size > 1 ? section.kindNames : section.names
+}
+
 /** What a creator is, for a label: "YouTube creator" on one Site, "Creator on YouTube and The Daily Wire" on several. */
 export function creatorKindText(creator: {kind: string, accounts: {site: {name: string}}[]}): string {
     const names = [...new Set(creator.accounts.map((account) => account.site.name))]
@@ -39,14 +47,14 @@ function makeNewListActionReg(label: string, kind: ListKind, music: boolean) {
     // An artist's lists are albums of their own collection.
     const season = collectionWords(music ? 'music' : null).season
     return createSelectRegistry(`NewListAction-${label}-${music}-${kind.key}-${kind.names.plural}-${kind.seasons}`, {
-        ask: {label: 'Ask me', help: `Sends a message, and shows the new one on the ${label}'s Edit page with the choices.`},
+        ask: {label: 'Ask me', help: `Sends a message and shows the new ${kind.names.singular} on the ${label}'s Edit page with the choices.`},
         // Only where the kind's lists can be seasons, unlike The Daily Wire's shows.
         ...(kind.seasons ? {season: {
             label: `Add it as ${season.a}`,
             help: `New ${kind.names.plural} become ${season.plural} of the ${label}'s own collection.`,
         }} : {}),
-        own: {label: 'Add it as a collection', help: `Each new one becomes a collection of its own.`},
-        ignore: {label: 'Always skip it', help: `It is only listed on the ${label}'s Edit page.`},
+        own: {label: 'Add it as a collection', help: `Each new ${kind.names.singular} becomes a collection of its own.`},
+        ignore: {label: 'Always skip it', help: `The new ${kind.names.singular} is only listed on the ${label}'s Edit page.`},
     } as Record<'ask' | 'season' | 'own' | 'ignore', {label: string, help: string}>)
 }
 

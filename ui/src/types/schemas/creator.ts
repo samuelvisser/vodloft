@@ -18,6 +18,8 @@ export const CreatorSectionReadSchema = z.object({
     type: z.string(),
     /** What the Site calls the section's type, or VODLoft's own word for its kind where the Site names none. */
     names: NamesSchema,
+    /** VODLoft's own word for the section's kind, such as feed, which names several types of feed together. */
+    kindNames: NamesSchema,
     itemCount: z.number().nullable(),
     imageUrl: z.string().nullable(),
     description: z.string().nullable(),

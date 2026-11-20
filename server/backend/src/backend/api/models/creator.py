@@ -34,6 +34,8 @@ class CreatorSectionAPIRead(ResponseBase):
     """The key of the Site's section type the section is, such as album."""
     names: NamesAPIRead = Field(validation_alias=AliasPath("section_type", "names"))
     """What the Site calls the section's type, or VODLoft's own word for its kind where the Site names none."""
+    kind_names: NamesAPIRead = Field(validation_alias=AliasPath("section_type", "kind_names"))
+    """VODLoft's own word for the section's kind, such as feed, which names several types of feed together."""
     item_count: Optional[int] = None
     image_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("image_path", "image_url"))
     description: Optional[str] = None

@@ -16,7 +16,7 @@ import {
 import {DwMembershipLevelReg} from '../../types/dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg, type CollectionTypeValue, type EpisodeIdentifierValue} from '../../types/collection'
 import {useCollectionDefaults} from '../../components/AddCollectionPage/collectionDefaults'
-import {capitalized, newListActionReg} from '../../types/creator'
+import {capitalized, groupNames, newListActionReg} from '../../types/creator'
 import NewListSettings from '../../components/common/NewListSettings'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
@@ -355,14 +355,15 @@ export default function AddCreatorPage() {
     const hasMain = [...registries.values()].some((registry) => registry.options.some((option) => option.value === 'main'))
     // A group for each type of section the Site has, in its words and order: Feeds and Playlists on YouTube, or
     // Albums, Playlists and Singles on SoundCloud.
-    const groups: [string, CreatorSectionRead[]][] = creator.sectionTypes.map((type) => [
-        capitalized(type.names.plural), creator.sections.filter((section) => section.type === type.key),
-    ])
-    // A section of a kind the Site names no type for goes under the backend's word for its kind.
-    const unnamed = creator.sections.filter((section) => !creator.sectionTypes.some((type) => type.key === section.type))
-    for (const many of new Set(unnamed.map((section) => section.names.plural))) {
-        groups.push([capitalized(many), unnamed.filter((section) => section.names.plural === many)])
+    // Several types of feed share one group, Feeds, as each feed is named after its type already.
+    const named = new Map<string, CreatorSectionRead[]>()
+    for (const type of creator.sectionTypes) {
+        for (const section of creator.sections.filter((section) => section.type === type.key)) {
+            const many = capitalized(groupNames(section, creator.sections).plural)
+            named.set(many, [...(named.get(many) ?? []), section])
+        }
     }
+    const groups: [string, CreatorSectionRead[]][] = [...named.entries()]
     // What is in the library already stays where it is, so it makes no collection.
     const inLibrary = new Set(creator.sections.filter((section) => section.collectionSlug).map((section) => section.ref))
     const sectionOf = new Map(creator.sections.map((section) => [section.ref, section]))

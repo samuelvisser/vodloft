@@ -1,5 +1,5 @@
 import {useRef, useState, type MouseEvent, type PointerEvent} from 'react'
-import {capitalized} from '../../types/creator'
+import {capitalized, groupNames} from '../../types/creator'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {toast} from 'react-hot-toast'
@@ -51,11 +51,12 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const mayAdd = can('add_media')
     const sites = new Set(items.map(({account}) => account.site.key))
     const several = creator.accounts.length > 1
-    // What is not in the library, by the type of section in the words of its Site: "3 more feeds", "1 more show", or
-    // "4 more feeds, albums and playlists".
+    // What is not in the library, by the type of section in the words of its Site: "1 more show", "2 more albums and
+    // playlists", or "3 more feeds" for several types of feed.
     const counts = new Map<string, {count: number, singular: string, plural: string}>()
-    for (const {section} of items) {
-        const names = section.names
+    const sections = items.map(({section}) => section)
+    for (const section of sections) {
+        const names = groupNames(section, sections)
         const known = counts.get(names.plural) ?? {count: 0, ...names}
         counts.set(names.plural, {...known, count: known.count + 1})
     }

@@ -77,3 +77,13 @@ def test_every_site_implementation_answers_the_section_types_of_its_contract():
         assert {type_.key for type_ in site.section_types} == (
             {type_.key for type_ in answered.feed_types} | implementation.list_keys
         ), key
+
+
+def test_several_types_of_feed_are_named_feeds_together_and_lists_keep_their_sites_words():
+    from sources import Names
+
+    youtube, soundcloud = site_of("youtube"), site_of("soundcloud")
+    assert youtube.section_feed_names == Names("feed", "feeds")
+    assert youtube.section_names.plural == "feeds and playlists"
+    assert soundcloud.section_feed_names == Names("track", "tracks")
+    assert soundcloud.section_list_names.plural == "albums and playlists"

@@ -10,7 +10,7 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import {capitalized, joinedNames} from '../../types/creator'
+import {capitalized, groupNames, joinedNames} from '../../types/creator'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import type {CreatorPageAccountRead, CreatorPageRead, CreatorSectionRead, SectionPlan} from '../../types/schemas/creator'
 import type {Names} from '../../types/schemas/source'
@@ -251,7 +251,7 @@ export default function CreatorSectionsEditor({creator, part}: {
 
             {part === 'rest' && placed.length > 0 && (
                 <div className="creator-section-group">
-                    <h2>Where the {joinedNames(placed.map(({section}) => section.names)).plural} go</h2>
+                    <h2>Where the {joinedNames(placed.map(({section}) => groupNames(section, placed.map((item) => item.section)))).plural} go</h2>
                     <div className="creator-section-list">
                         {placed.map((item) => {
                             const mainTitle = mainTitleOf(creator, item.account)
