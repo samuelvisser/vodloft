@@ -164,7 +164,7 @@ export default function CollectionPage() {
     Number.isInteger(existingFilesParam) && existingFilesParam > 0 ? existingFilesParam : null,
   )
   const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
-  const [redownloadConfirm, setRedownloadConfirm] = useState(false)
+  const [redownloadAfterDelete, setRedownloadAfterDelete] = useState(false)
   const [downloadAllConfirm, setDownloadAllConfirm] = useState(false)
   const [creatorDialog, setCreatorDialog] = useState<'add' | 'remove' | null>(null)
   const [syncLogOpen, setSyncLogOpen] = useState(false)
@@ -474,20 +474,14 @@ export default function CollectionPage() {
       ? metadataRewriteOperation.message || OPERATION_WAITING_MESSAGE
       : `A metadata rewrite is running for ${collection.title}.`
     : identificationDisabledReason ?? downloadStateDisabledReason
-  const deleteDownloadsDisabledReason = deleteDownloadsOperation
-    ? deleteDownloadsOperation.status === 'WAITING'
-      ? deleteDownloadsOperation.message || OPERATION_WAITING_MESSAGE
-      : `A bulk delete downloads operation is running for ${collection.title}.`
-    : redownloadOperation
-      ? `A bulk delete and re-download operation is running for ${collection.title}.`
-      : downloadStateDisabledReason
-  const redownloadDisabledReason = redownloadOperation
-    ? redownloadOperation.status === 'WAITING'
-      ? redownloadOperation.message || OPERATION_WAITING_MESSAGE
-      : `A bulk delete and re-download operation is running for ${collection.title}.`
-    : deleteDownloadsOperation
-      ? `A bulk delete downloads operation is running for ${collection.title}.`
-      : downloadStateDisabledReason
+  const bulkDeleteOperation = deleteDownloadsOperation ?? redownloadOperation
+  const deleteDownloadsDisabledReason = bulkDeleteOperation
+    ? bulkDeleteOperation.status === 'WAITING'
+      ? bulkDeleteOperation.message || OPERATION_WAITING_MESSAGE
+      : deleteDownloadsOperation
+        ? `A bulk delete downloads operation is running for ${collection.title}.`
+        : `A bulk delete and re-download operation is running for ${collection.title}.`
+    : downloadStateDisabledReason
 
   const controlTaskOperation = async (
     operationId: string,
@@ -641,21 +635,15 @@ export default function CollectionPage() {
       tone: 'danger',
       disabled: deleteDownloadsDisabledReason !== undefined,
       disabledReason: deleteDownloadsDisabledReason,
-      operation: deleteDownloadsOperation,
-      starting: isStarting('collection.delete_downloads'),
-      controls: operationControls(deleteDownloadsOperation?.id, 'bulk delete downloads'),
-      onSelect: () => setDeleteDownloadsConfirm(true),
-    },
-    {
-      label: 'Bulk delete and re-download',
-      icon: faIcon('fass', 'trash'),
-      tone: 'danger',
-      disabled: redownloadDisabledReason !== undefined,
-      disabledReason: redownloadDisabledReason,
-      operation: redownloadOperation,
-      starting: isStarting('collection.redownload_episodes'),
-      controls: operationControls(redownloadOperation?.id, 'bulk delete and re-download', false),
-      onSelect: () => setRedownloadConfirm(true),
+      operation: bulkDeleteOperation,
+      starting: isStarting('collection.delete_downloads') || isStarting('collection.redownload_episodes'),
+      controls: deleteDownloadsOperation
+        ? operationControls(deleteDownloadsOperation.id, 'bulk delete downloads')
+        : operationControls(redownloadOperation?.id, 'bulk delete and re-download', false),
+      onSelect: () => {
+        setRedownloadAfterDelete(false)
+        setDeleteDownloadsConfirm(true)
+      },
     },
     {
       label: 'Create download profile',
@@ -1040,15 +1028,15 @@ export default function CollectionPage() {
 
       <ActionConfirmDialogue
         open={deleteDownloadsConfirm}
-        operationDefinition={frontendOperationDefinitions['collection.delete_downloads']}
-        onStartingChange={onStartingChange('collection.delete_downloads')}
-        requestPath={`/collections/${encodeURIComponent(id)}/delete-downloads`}
+        operationDefinition={frontendOperationDefinitions[redownloadAfterDelete ? 'collection.redownload_episodes' : 'collection.delete_downloads']}
+        onStartingChange={onStartingChange(redownloadAfterDelete ? 'collection.redownload_episodes' : 'collection.delete_downloads')}
+        requestPath={`/collections/${encodeURIComponent(id)}/${redownloadAfterDelete ? 'redownload-episodes' : 'delete-downloads'}`}
         resourceLabel={collection.title}
         title="Bulk delete downloads"
         onDismiss={() => setDeleteDownloadsConfirm(false)}
         icon={faIcon('fass', 'trash')}
         iconTone="danger"
-        confirmLabel="Bulk delete downloads"
+        confirmLabel={redownloadAfterDelete ? 'Delete and re-download' : 'Bulk delete downloads'}
         disabled={deleteDownloadsBusy || redownloadBusy}
         scope_by_local_media_profile
         showDeleteOlderThan
@@ -1057,32 +1045,30 @@ export default function CollectionPage() {
         <p>
           Delete downloaded {fileWords.episode.singular} files in "{collection.title}".
         </p>
-        <p>
-          When you delete everything, VODLoft first disables any Download Profiles attached to the selected Local Media Profile or Profiles. Re-enable a disabled Download Profile whenever you want VODLoft to download its eligible {fileWords.episode.plural} again.
-          Deleting only older {fileWords.episode.plural} leaves Download Profiles on, so they may download those {fileWords.episode.plural} again.
-        </p>
-      </ActionConfirmDialogue>
-
-      <ActionConfirmDialogue
-        open={redownloadConfirm}
-        operationDefinition={frontendOperationDefinitions['collection.redownload_episodes']}
-        onStartingChange={onStartingChange('collection.redownload_episodes')}
-        requestPath={`/collections/${encodeURIComponent(id)}/redownload-episodes`}
-        resourceLabel={collection.title}
-        title="Bulk delete and re-download"
-        onDismiss={() => setRedownloadConfirm(false)}
-        icon={faIcon('fass', 'arrows-rotate')}
-        iconTone="danger"
-        confirmLabel="Bulk delete and re-download"
-        disabled={deleteDownloadsBusy || redownloadBusy}
-        scope_by_local_media_profile
-        showDeleteOlderThan
-        localMediaProfiles={actionLocalMediaProfiles}
-      >
-        <p>
-          Delete existing {fileWords.episode.singular} files in "{collection.title}" and re-download them.
-          This can take a long time, use significant bandwidth, and is usually not needed.
-        </p>
+        <div className="form-row">
+          <div className="bulk-delete-redownload">
+            <label htmlFor="bulk-delete-redownload">Re-download the deleted {fileWords.episode.plural}</label>
+            <Switch
+              id="bulk-delete-redownload"
+              checked={redownloadAfterDelete}
+              onChange={setRedownloadAfterDelete}
+              onColor="#0ea5e9" offColor="#d1d5db" uncheckedIcon={false} checkedIcon={false}
+            />
+          </div>
+          <div className="help">
+            {redownloadAfterDelete ? (
+              <>
+                VODLoft downloads each deleted {fileWords.episode.singular} again right away.
+                This can take a long time, use significant bandwidth, and is usually not needed.
+              </>
+            ) : (
+              <>
+                When you delete everything, VODLoft first disables any Download Profiles attached to the selected Local Media Profile or Profiles. Re-enable a disabled Download Profile whenever you want VODLoft to download its eligible {fileWords.episode.plural} again.
+                Deleting only older {fileWords.episode.plural} leaves Download Profiles on, so they may download those {fileWords.episode.plural} again.
+              </>
+            )}
+          </div>
+        </div>
       </ActionConfirmDialogue>
 
     </section>

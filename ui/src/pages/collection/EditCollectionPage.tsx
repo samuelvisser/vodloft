@@ -292,8 +292,8 @@ export default function EditCollectionPage() {
         title="Edit collection" titleId="edit-collection-title"
         actions={collection && (
           <>
-            <PageHeaderAction icon={faIcon('fass', 'layer-group')} label={words.season.Plural} variant="secondary" keepLabel onClick={() => setSeasonsOpen(true)}/>
-            <PageHeaderAction icon={faIcon('fass', 'list')} label="Metadata" variant="secondary" keepLabel onClick={() => setMetadataOpen(true)}/>
+            <PageHeaderAction icon={faIcon('fass', 'layer-group')} label={words.season.Plural} variant="secondary" caption onClick={() => setSeasonsOpen(true)}/>
+            <PageHeaderAction icon={faIcon('fass', 'list')} label="Metadata" variant="secondary" caption onClick={() => setMetadataOpen(true)}/>
           </>
         )}
       />
