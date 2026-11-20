@@ -33,7 +33,7 @@ type Props = {
     collectionSlug?: string
     canOpenDownloadProfiles?: boolean
     /** The collection's Source, named in the streaming advice. */
-    sourceName?: string
+    sourceName: string
     /** Whether the collection's Source can stream episodes that are not downloaded. */
     canStreamFromSource?: boolean
     /** Whether Download Profiles can keep the Site's video as HLS. Without, HLS video only comes from streaming. */
@@ -318,7 +318,7 @@ export default function StreamProfileAdvisory({
     downloadProfileDefaults,
     collectionSlug,
     canOpenDownloadProfiles = true,
-    sourceName = 'The Daily Wire',
+    sourceName,
     canStreamFromSource = true,
     hlsDownloads = true,
     onEnableSourceStream,

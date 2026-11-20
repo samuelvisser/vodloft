@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from sources import Names, SectionKind, SectionRef, Site
+from sources import SECTION_KIND_NAMES, Names, SectionKind, SectionRef, Site
 
 from backend.services.errors import ServiceError
 from backend.types.creator_types import NewSectionAction
@@ -44,7 +44,6 @@ class NewListSetting:
 def list_kinds(sites: Iterable[Site]) -> list[ListKind]:
     """The types of list and show of ``sites``, in their order. Sites that share a type, such as YouTube's and
     Floatplane's playlists, share its setting, named for all of them."""
-    from backend.services.sites import joined_names
 
     kinds: dict[str, ListKind] = {}
     for site in sites:
@@ -55,7 +54,7 @@ def list_kinds(sites: Iterable[Site]) -> list[ListKind]:
                 kinds[type_.key] = ListKind(type_.key, type_.names, seasons, type_.albums)
             else:
                 kinds[type_.key] = ListKind(
-                    type_.key, joined_names((known.names, type_.names)), known.seasons or seasons, known.albums or type_.albums,
+                    type_.key, Names.joined((known.names, type_.names)), known.seasons or seasons, known.albums or type_.albums,
                 )
     return list(kinds.values())
 
@@ -88,6 +87,12 @@ def default_new_sections(kinds: Iterable[ListKind], music: bool) -> dict[str, st
         return NewSectionAction.SEASON if kind.key in albums or not albums else NewSectionAction.IGNORE
 
     return {kind.key: action(kind).value for kind in kinds}
+
+
+def kinds_names(kinds: Iterable[ListKind]) -> Names:
+    """The kinds named together, such as "albums and playlists"; VODLoft's own word for lists when there are none."""
+    kinds = list(kinds)
+    return Names.joined(kind.names for kind in kinds) if kinds else SECTION_KIND_NAMES[SectionKind.LIST]
 
 
 def new_sections_settings(kinds: Iterable[ListKind], stored: Mapping[str, str] | None, music: bool) -> list[NewListSetting]:

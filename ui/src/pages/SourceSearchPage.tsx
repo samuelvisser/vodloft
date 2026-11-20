@@ -7,15 +7,9 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import {useCollections, useSourceLookup, useSourceSearch} from '../lib/queries'
-import {SearchNoticeRead, SearchResultRead, SourceFeature, kindName, searchName, sourceHas} from '../types/schemas/source'
+import {SearchNoticeRead, SearchResultRead, SourceFeature, kindNames, searchName, sourceHas} from '../types/schemas/source'
+import {capitalized} from '../types/creator'
 import {AccessBadge} from '../components/common/AccessLocked'
-
-const KIND_LABEL: Record<SearchResultRead['kind'], string> = {
-    collection: 'Collection',
-    movie: 'Movie',
-    episode: 'Episode',
-    video: 'Video',
-}
 
 /** How the search was answered, such as through an API or a slower fallback. */
 function SearchNotice({notice}: {notice: SearchNoticeRead}) {
@@ -141,7 +135,7 @@ export default function SourceSearchPage({sourceId: givenSourceId, onChoose}: So
                                 </span>
                                 <span className="collection-summary-copy">
                                     <strong className="collection-summary-title">{result.title}</strong>
-                                    <span className="collection-summary-author">{[result.kindLabel ?? kindName(source, result.kind, KIND_LABEL[result.kind]), result.authorName, ...(result.facts ?? [])].filter(Boolean).join(' · ')}</span>
+                                    <span className="collection-summary-author">{[result.kindLabel ?? capitalized(kindNames(source, result.kind)?.singular ?? ''), result.authorName, ...(result.facts ?? [])].filter(Boolean).join(' · ')}</span>
                                     {result.description && <span className="collection-summary-description">{result.description}</span>}
                                     {result.access && <span><AccessBadge label={result.accessLabel}/></span>}
                                 </span>

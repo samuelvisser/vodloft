@@ -1,4 +1,4 @@
-from ...contract import Names, SeasonNames, SectionKind, SectionType
+from ...contract import Names, SectionKind, SectionType
 from .other_sites import CREATOR_PRESETS, OtherSites
 
 ALBUM_LIST = "album"
@@ -22,4 +22,4 @@ class SoundCloud(OtherSites):
     )
     link_seasons = True
     # What is in none of a collection's albums and playlists is its tracks.
-    season_names = SeasonNames("Tracks")
+    loose_season = "Tracks"

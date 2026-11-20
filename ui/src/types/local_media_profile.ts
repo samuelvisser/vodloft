@@ -3,6 +3,7 @@ import {useMemo} from "react";
 import type {LocalMediaProfileRead} from "./schemas/local_media_profile";
 import type {LocalMediaProfileSiteRead, LocalMediaProfileSitesRead, LocalMediaProfileSubtitleMode} from "./schemas/local_media_profile_base";
 import type {DownloadOptions} from "./schemas/source";
+import {newProfileScope, profileScopesFor} from "../lib/collectionWords";
 
 
 export const PreferredFormatReg = createSelectRegistry("PreferredFormat", {
@@ -107,10 +108,8 @@ export function isCollectionLocalMediaProfileAvailableFor(
     collectionType: string | null | undefined,
 ): boolean {
     if (!isCollectionProfileType(profile.type)) return false
-    if (collectionType !== 'podcast' && collectionType !== 'series' && collectionType !== 'music') return true
-    const scope = profile.collectionScope ?? 'podcast-and-series'
-    if (collectionType === 'music') return scope === 'music_tracks' || scope === 'music_videos'
-    return scope === collectionType || scope === 'podcast-and-series'
+    if (!isCollectionContext(collectionType)) return true
+    return profileScopesFor(collectionType).includes(String(profile.collectionScope ?? 'podcast-and-series'))
 }
 
 /** What a new Local Media Profile has to fit: a collection of a type, or a video or movie, on a Site. */
@@ -145,8 +144,7 @@ export function addLocalMediaProfilePath({collectionType, video, siteKey, audio 
     }
     else {
         params.set('type', 'collection')
-        if (collectionType === 'music') params.set('for', audio ? 'music_tracks' : 'music_videos')
-        else if (isCollectionContext(collectionType)) params.set('for', collectionType)
+        if (isCollectionContext(collectionType)) params.set('for', newProfileScope(collectionType, audio))
     }
     if (siteKey) params.set('site', siteKey)
     if (format) params.set('format', format)

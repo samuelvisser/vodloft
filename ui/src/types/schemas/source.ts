@@ -97,8 +97,10 @@ export const SourceReadSchema = z.object({
     /** What the Source downloads from, when its name does not say so, such as YouTube, and many more. */
     sitesLabel: z.string().nullable().optional(),
     searchLabel: z.string().nullable().optional(),
-    /** What the Source calls a kind of media in its own catalogue, such as Show for a Daily Wire collection. */
-    kindNames: z.record(z.string(), z.string()).optional(),
+    /** What the Source calls each kind of media, such as show for a Daily Wire collection, or VODLoft's word. */
+    kindNames: z.record(z.string(), NamesSchema),
+    /** The Sites the Source is made for, such as The Daily Wire; none for a Source of many sites. */
+    siteKeys: z.array(z.string()).default([]),
     /** Which moment the Source's release dates mark: when an item came out or began (Released), or when it was
      *  finished and put up, such as after a livestream ended (Published). */
     releaseDate: z.enum(['start', 'end']),
@@ -134,6 +136,8 @@ export const ResolvedLinkReadSchema = z.object({
     /** The creator this link is, on a Site with creators. */
     creatorUrl: z.string().nullable().optional().default(null),
     creatorNames: NamesSchema.nullable().optional().default(null),
+    /** Every type of section that creator has on the Site, named together, such as albums and singles. */
+    creatorSections: NamesSchema.nullable().optional().default(null),
     /** Every Source that claims the link's site, preferred first. */
     candidates: z.array(SourceReadSchema),
 })
@@ -178,14 +182,9 @@ export function searchName(source: SourceRead | null | undefined): string | unde
     return source?.searchLabel ?? source?.name
 }
 
-/** What the Source calls a kind of media where it shows its own catalogue, or VODLoft's word for it. */
-export function kindName(source: SourceRead | null | undefined, kind: string, vodloftName: string): string {
-    return source?.kindNames?.[kind] ?? vodloftName
-}
-
-/** The plural of a kind name, such as Shows for Show; Series stays Series. */
-export function pluralKindName(name: string): string {
-    return name.endsWith('s') ? name : `${name}s`
+/** What the Source calls a kind of media, such as show for a Daily Wire collection; none until the Source is known. */
+export function kindNames(source: SourceRead | null | undefined, kind: string): Names | undefined {
+    return source?.kindNames[kind]
 }
 
 /** The website a collection or video is on, such as YouTube, whichever Source fetches it. */
@@ -211,6 +210,10 @@ export const SiteReadSchema = z.object({
     creatorNames: NamesSchema,
     /** Every type of section the Site's creators have, such as YouTube's feeds and playlists. */
     sectionTypes: z.array(SectionTypeSchema),
+    /** What the Site calls its lists, all its types of list together, such as albums and playlists. */
+    listNames: NamesSchema,
+    /** What the Site calls the lists and shows its creators add, such as playlists, or shows on The Daily Wire. */
+    growingNames: NamesSchema,
 })
 export type SiteRead = z.infer<typeof SiteReadSchema>
 

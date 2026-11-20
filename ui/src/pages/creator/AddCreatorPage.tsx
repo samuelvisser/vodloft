@@ -6,8 +6,9 @@ import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
-import {creatorNamesFor} from '../../lib/collectionWords'
-import {lookUpCreator, useCreators} from '../../lib/queries'
+import {collectionWords, creatorNamesFor} from '../../lib/collectionWords'
+import {lookUpCreator, useCreators, useSourceLookup} from '../../lib/queries'
+import {SourceFeature, sourceHas} from '../../types/schemas/source'
 import {
     CreatorCreateSchema, type CreatorCreateIn, type CreatorCreateOut, type CreatorLookupRead, type CreatorSectionRead,
     type NewSectionAction, type SectionPlan, newListsValues,
@@ -15,8 +16,8 @@ import {
 import {DwMembershipLevelReg} from '../../types/dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg, type CollectionTypeValue, type EpisodeIdentifierValue} from '../../types/collection'
 import {useCollectionDefaults} from '../../components/AddCollectionPage/collectionDefaults'
-import {growingNames, newListActionReg} from '../../types/creator'
-import NewListSettings, {listKindNames} from '../../components/common/NewListSettings'
+import {capitalized, newListActionReg} from '../../types/creator'
+import NewListSettings from '../../components/common/NewListSettings'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -30,7 +31,7 @@ import './CreatorPages.css'
 /** The starting points, in the words of what this creator has: playlists on YouTube, shows on The Daily Wire. */
 function presetText(key: CreatorCreateIn['preset'], hasFeeds: boolean, creator: CreatorLookupRead, music: boolean) {
     // What the Site calls the lists and shows its creators add, such as shows on The Daily Wire.
-    const {singular, plural} = growingNames(creator.sectionTypes)
+    const {singular, plural} = creator.growingNames
     const skipped = {
         label: 'Only what I pick',
         help: `All ${hasFeeds ? `feeds and ${plural}` : plural} start skipped.`,
@@ -42,7 +43,7 @@ function presetText(key: CreatorCreateIn['preset'], hasFeeds: boolean, creator: 
     }
     if (key === 'one_show') {
         // A Site offers it only where its lists can be seasons, so not The Daily Wire's shows.
-        return {label: 'One collection', help: `${capitalize(plural)} as named seasons, the rest as seasons based on their year.`}
+        return {label: 'One collection', help: `${capitalized(plural)} as named seasons, the rest as seasons based on their year.`}
     }
     if (key === 'per_list') {
         return {
@@ -65,7 +66,6 @@ function newListsFor(creator: CreatorLookupRead, music: boolean): Record<string,
     return newListsValues(music ? creator.musicNewLists : creator.newLists)
 }
 
-const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
 
 /** What the Site's sections can become, in the words of this creator. */
 function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, music: boolean) {
@@ -94,7 +94,7 @@ function isMovie(creator: CreatorLookupRead, section: CreatorSectionRead) {
 function sectionFacts(creator: CreatorLookupRead, section: CreatorSectionRead): string {
     const media = creator.mediaNames
     return [
-        capitalize(section.names.singular),
+        capitalized(section.names.singular),
         section.year,
         section.itemCount != null ? `${section.itemCount} ${section.itemCount === 1 ? media.singular : media.plural}` : null,
     ].filter(Boolean).join(' · ')
@@ -218,6 +218,7 @@ export default function AddCreatorPage() {
     })
     const {watch, setValue, formState: {errors, isSubmitting}} = form
     const {data: libraryCreators} = useCreators()
+    const sources = useSourceLookup()
     const into = watch('into') ?? ''
     const music = watch('type') === 'music'
     // A music artist is called an artist everywhere on the page, whatever their site calls its creators.
@@ -343,7 +344,8 @@ export default function AddCreatorPage() {
     }
 
     // What the creator's Site calls its lists and shows, such as "albums and playlists" on SoundCloud.
-    const lists = growingNames(creator.sectionTypes).plural
+    const lists = creator.growingNames.plural
+    const media = (type: string) => collectionWords(type, creator.audioOnly ? 'audio' : 'video')
     const hasFeeds = creator.sections.some((section) => section.kind === 'feed')
     const feeds = new Set(creator.sections.filter((section) => section.kind === 'feed').map((section) => section.ref))
     const keepsFeeds = (plan: SectionPlan[]) => plan.some((item) => feeds.has(item.ref) && item.target !== 'skip')
@@ -352,12 +354,12 @@ export default function AddCreatorPage() {
     // A group for each type of section the Site has, in its words and order: Feeds and Playlists on YouTube, or
     // Albums, Playlists and Singles on SoundCloud.
     const groups: [string, CreatorSectionRead[]][] = creator.sectionTypes.map((type) => [
-        capitalize(type.names.plural), creator.sections.filter((section) => section.type === type.key),
+        capitalized(type.names.plural), creator.sections.filter((section) => section.type === type.key),
     ])
     // A section of a kind the Site names no type for goes under the backend's word for its kind.
     const unnamed = creator.sections.filter((section) => !creator.sectionTypes.some((type) => type.key === section.type))
     for (const many of new Set(unnamed.map((section) => section.names.plural))) {
-        groups.push([capitalize(many), unnamed.filter((section) => section.names.plural === many)])
+        groups.push([capitalized(many), unnamed.filter((section) => section.names.plural === many)])
     }
     // What is in the library already stays where it is, so it makes no collection.
     const inLibrary = new Set(creator.sections.filter((section) => section.collectionSlug).map((section) => section.ref))
@@ -388,7 +390,7 @@ export default function AddCreatorPage() {
     ].filter((part): part is string => !!part)
     const summaryTitles = [...collectionTitles, ...newMovies, ...joiningMovies]
     const summary = summaryParts.length
-        ? `${capitalize(summaryParts.length > 1 ? `${summaryParts.slice(0, -1).join(', ')} and ${summaryParts[summaryParts.length - 1]}` : summaryParts[0])}: ${
+        ? `${capitalized(summaryParts.length > 1 ? `${summaryParts.slice(0, -1).join(', ')} and ${summaryParts[summaryParts.length - 1]}` : summaryParts[0])}: ${
             summaryTitles.length > 4 ? `${summaryTitles.slice(0, 3).join(', ')} and ${summaryTitles.length - 3} more` : summaryTitles.join(', ')}`
         : 'Nothing picked yet'
 
@@ -400,7 +402,7 @@ export default function AddCreatorPage() {
                     <p className="view-description">
                         Choose where each part of this {creatorWord} goes.
                         {hasMain ? ` The main collection is called ${creator.title}; anything you give a collection of its own gets one.` : ''}
-                        {' '}A {music ? 'track' : 'video'} that is in several places is kept once.
+                        {' '}{capitalized(media(music ? 'music' : 'series').episode.a)} that is in several places is kept once.
                     </p>
                 </div>
             </div>
@@ -422,19 +424,19 @@ export default function AddCreatorPage() {
                             options={[
                                 {
                                     value: 'series',
-                                    label: capitalize(creator.creatorNames.singular),
-                                    description: `Series collections of their videos, with ${lists} as seasons`,
+                                    label: capitalized(creator.creatorNames.singular),
+                                    description: `Series collections of their ${creator.mediaNames.plural}, with ${lists} as ${media('series').season.plural}`,
                                 },
                                 {
                                     value: 'music',
-                                    label: 'Music artist',
-                                    description: `Music collections, with ${lists} as albums and their videos as tracks or music videos`,
+                                    label: `Music ${creatorNamesFor('music', creator.creatorNames).singular}`,
+                                    description: `Music collections, with ${lists} as ${media('music').season.plural} and their ${creator.mediaNames.plural} as ${media('music').episode.plural}`,
                                 },
                             ]}
                         />
                         <div className="help">
                             {creator.music && creator.musicReason
-                                ? `${creator.musicReason}, so VODLoft took it for a music artist. Pick ${capitalize(creator.creatorNames.singular)} if it isn't.`
+                                ? `${creator.musicReason}, so VODLoft took it for a music artist. Pick ${capitalized(creator.creatorNames.singular)} if it isn't.`
                                 : `${creator.siteName} doesn't say whether this is a music artist. Pick Music artist if it is.`}
                         </div>
                         {errors.type && <div className="error" role="alert">{errors.type.message}</div>}
@@ -513,7 +515,7 @@ export default function AddCreatorPage() {
 
 
                 {!into && <div className="creator-section-group">
-                    <h2>New {listKindNames(newListKinds)}</h2>
+                    <h2>New {creator.newListNames.plural}</h2>
                     <NewListSettings
                         kinds={newListKinds} values={newLists} fallback="ask" idPrefix="creator-new-lists"
                         registryFor={(kind) => newListActionReg(creatorWord, kind, music)}
@@ -523,7 +525,7 @@ export default function AddCreatorPage() {
                     <div className="help">VODLoft looks for new ones once a day.</div>
                 </div>}
 
-                {sourceKey === 'dailywire' && (
+                {sourceHas(sources.get(sourceKey), SourceFeature.MEMBERSHIP_LEVELS) && (
                     <div className="form-row creator-membership">
                         <label htmlFor="creator-membership">Membership level</label>
                         <SimpleSelect

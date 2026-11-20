@@ -15,7 +15,7 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry, type SelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
 import NewListSettings from '../common/NewListSettings'
-import {type ListKind, listNames} from '../../types/creator'
+import {capitalized, type ListKind} from '../../types/creator'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {
     CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, seasonsFormValues,
@@ -23,7 +23,7 @@ import {
     type LinkSeasonAddFormIn, type LinkSeasonAddFormOut, type NewLinkSeason,
 } from '../../types/schemas/collection_seasons'
 import './SeasonsDialog.css'
-import {collectionWords, CollectionWords, Noun} from '../../lib/collectionWords'
+import {collectionWords, CollectionWords, Noun, wordsOf} from '../../lib/collectionWords'
 
 type Props = {
     open: boolean
@@ -40,11 +40,11 @@ type Leaving = {episodes: number, withFiles: number, asked?: boolean}
 /** A creator's videos, or an artist's tracks or music videos, and what the collection calls its seasons. In a Music
  * collection an artist's albums are albums here too, so ``here`` tells them apart where both are meant. */
 type Words = {creator: string, video: string, videos: string, creators: string, season: Noun, here: string}
-const dialogWords = (collection: CollectionWords, music: boolean, view: CollectionSeasonsRead | undefined): Words => ({
-    // What the collection's Site calls its creator, such as artist in a Music collection.
-    // Shown once the view is there, which brings the Site's words.
+const dialogWords = (collection: CollectionWords, view: CollectionSeasonsRead | undefined): Words => ({
+    // What the collection calls its creator and what its lists hold, such as an artist's music videos.
+    // Shown once the view is there, which brings the words.
     creator: view?.creatorNames.singular ?? '', creators: view?.creatorNames.plural ?? '',
-    ...(music ? {video: collection.episode.singular, videos: collection.episode.plural} : {video: view?.mediaNames.singular ?? '', videos: view?.mediaNames.plural ?? ''}),
+    video: view?.mediaNames.singular ?? '', videos: view?.mediaNames.plural ?? '',
     season: collection.season,
     here: view && namesOf(view).singular === collection.season.singular ? ' here' : '',
 })
@@ -52,9 +52,8 @@ const dialogWords = (collection: CollectionWords, music: boolean, view: Collecti
 /** What the collection's Site calls its lists, all its types of list together, such as "albums and playlists" on
  * SoundCloud, and the season of the videos in none of them. */
 type ListNames = {singular: string, plural: string, a: string, looseSeason: string}
-const namesOf = (view: CollectionSeasonsRead): ListNames => ({...listNames(view.listTypes), looseSeason: view.looseSeason})
+const namesOf = (view: CollectionSeasonsRead): ListNames => ({...view.listNames, looseSeason: view.looseSeason})
 
-const capitalized = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
 const counted = (count: number, singular: string, plural: string) => `${count} ${count === 1 ? singular : plural}`
 
 async function readSeasons(response: Response): Promise<CollectionSeasonsRead> {
@@ -142,7 +141,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
     // What the Site calls its lists, such as playlists on YouTube, also in a Music collection, whose seasons are albums.
     const names = useMemo(() => view ? namesOf(view) : undefined, [view])
-    const words = dialogWords(collectionWordsGiven ?? collectionWords(view?.music ? 'music' : null), view?.music ?? false, view)
+    const words = dialogWords(collectionWordsGiven ?? (view ? wordsOf(view.words) : collectionWords(null)), view)
     const {season} = words
     const regs = useMemo(() => view && names ? registries(names, words, view) : null, [view, names, words])
     const linkSeasonsOn = watch('linkSeasonsOn') ?? false
@@ -233,7 +232,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
             })), {shouldDirty: true})
         } catch (exc) {
-            toast.error(exc instanceof Error ? exc.message : `Could not list the ${names ? names.plural : 'playlists'}`)
+            toast.error(exc instanceof Error ? exc.message : String(exc))
         } finally {
             setRefreshing(false)
         }
@@ -262,7 +261,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             })))
             setValue('seasons', fresh.seasons.map((season) => form.getValues('seasons')?.find((x) => x.id === season.id) ?? {id: season.id, name: season.name}))
             linkForm.reset({url: ''})
-            toast.success('Link added. VODLoft is listing its videos.')
+            toast.success(`Link added. VODLoft is listing its ${fresh.mediaNames.plural}.`)
         },
     })
     const addingLink = linkForm.formState.isSubmitting
@@ -332,7 +331,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                             <div className="seasons-dialog-switch-row">
                                                 <div>
                                                     <h3 id="seasons-dialog-links">
-                                                        {words.here || view.music ? `The ${words.creator}'s ${names.plural}` : `${capitalized(names.plural)} as ${season.plural}`}
+                                                        {words.here || view.siteOrder ? `The ${words.creator}'s ${names.plural}` : `${capitalized(names.plural)} as ${season.plural}`}
                                                     </h3>
                                                     <p className="seasons-dialog-muted">
                                                         Each {names.singular} becomes {season.a}{words.here} of its own, with its {words.videos} in the
@@ -420,7 +419,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         <p className="seasons-dialog-muted">
                                                             The creator <Link className="quiet-link" to={`/creator/${view.creatorSlug}`}>{view.creatorTitle}</Link> looks
                                                             for new {names.plural} once a day and decides what happens with them. Change that
-                                                            on the creator's <Link to={`/edit-creator/${view.creatorSlug}`}>Edit</Link> page.
+                                                            on the {view.creatorNames.singular}'s <Link to={`/edit-creator/${view.creatorSlug}`}>Edit</Link> page.
                                                         </p>
                                                     )}
 
@@ -503,7 +502,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                 <div className="seasons-dialog-add-link">
                                                                     <input
                                                                         id="seasons-add-link" className="input" type="url" inputMode="url"
-                                                                        placeholder="https://… a playlist, channel or video"
+                                                                        placeholder="https://…"
                                                                         aria-invalid={!!linkForm.formState.errors.url}
                                                                         {...linkForm.register('url')}
                                                                         onKeyDown={(event) => {
@@ -540,7 +539,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 <p className="seasons-dialog-muted">
                                                     {customOrder
                                                         ? `In your own order. A new ${season.singular} goes last.`
-                                                        : `In VODLoft's order: by date${view.music ? `, ${season.plural} as the ${words.creator} orders them` : ''}. Drag ${season.a} to put them in your own order.`}
+                                                        : `In VODLoft's order: by date${view.siteOrder ? `, ${season.plural} as the ${words.creator} orders them` : ''}. Drag ${season.a} to put them in your own order.`}
                                                     {' '}Reordering renumbers the {season.plural}. Files keep their names until you rename the collection's files.
                                                 </p>
                                             </div>
@@ -553,7 +552,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                         <ol className="seasons-dialog-seasons">
                                             {fields.map((field, index) => {
                                                 const season = seasonsById.get(field.id)
-                                                const extra = season?.seasonType === 'EXTRA' || season?.seasonType === 'extra'
+                                                const extra = season?.seasonType === 'extra'
                                                 return (
                                                     <li
                                                         key={field.key}

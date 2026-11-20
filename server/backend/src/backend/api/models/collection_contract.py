@@ -23,6 +23,14 @@ class CollectionContractAPIRead(ResponseBase):
     audio_words: CollectionWordsAPIRead
     creator_names: NamesAPIRead | None
     """What a collection of the type calls the creator behind it, such as artist; none where it is the Site's word."""
+    loose_season: str | None
+    """What the season of what is in none of a collection's lists is called, such as Singles; none for the Site's."""
+    profile_scope: str
+    """What a new Local Media Profile for a collection of the type keeps, such as podcast."""
+    audio_profile_scope: str
+    """What it keeps when it is made for sound, such as music_tracks."""
+    profile_scopes: list[str]
+    """What a Local Media Profile can keep to be offered for a collection of the type."""
     downloads_by_season: bool
     """Downloads pick the collection's seasons; otherwise its newest episodes, by days or a number of episodes."""
 

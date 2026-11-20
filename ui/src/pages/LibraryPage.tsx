@@ -28,6 +28,7 @@ import './LibraryPage.css'
 import {capitalized, creatorKindText} from '../types/creator'
 import type {Names} from '../types/schemas/source'
 import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
+import {wordsOf} from '../lib/collectionWords'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SITE_FILTER_STORAGE_KEY = 'librarySiteFilter'
@@ -415,7 +416,7 @@ export default function LibraryPage() {
                                         <span className="library-tile-author">{creatorKindText(creator)}</span>
                                         <span className="library-tile-meta">
                                             <span>{creator.collectionCount} {creator.collectionCount === 1 ? 'collection' : 'collections'}</span>
-                                            <span>{creator.episodeCount} videos</span>
+                                            <span>{wordsOf(creator.words).count(creator.episodeCount)}</span>
                                         </span>
                                     </span>
                                 </Link>

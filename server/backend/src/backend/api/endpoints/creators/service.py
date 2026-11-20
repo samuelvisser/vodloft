@@ -29,7 +29,7 @@ from backend.db.models import Creator, CreatorAccount, Collection, Episode, Movi
 from backend.services import creators
 from backend.services.creators import NewCollectionSettings, SectionPlan
 from backend.services.errors import ServiceError
-from backend.services.new_lists import list_kinds, new_sections_settings
+from backend.services.new_lists import kinds_names, list_kinds, new_sections_settings
 from backend.services.sites import collection_site
 from backend.types.creator_types import SectionTarget
 from task_manager.scheduler.transactional import queue_task_after_commit
@@ -159,6 +159,7 @@ class _Lookup:
     presets: list[_Preset]
     new_lists: list
     music_new_lists: list
+    new_list_names: Names
     site: Site
     creator_slug: str | None = None
     links: list[str] = field(default_factory=list)
@@ -196,6 +197,7 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
         ],
         new_lists=new_sections_settings(list_kinds([site]), None, music=False),
         music_new_lists=new_sections_settings(list_kinds([site]), None, music=True),
+        new_list_names=kinds_names(list_kinds([site])),
         site=site,
         creator_slug=existing.creator.slug if existing is not None else None,
         links=list(details.links), facts=list(details.facts),
@@ -299,8 +301,16 @@ class _CreatorRead:
         return creators.creator_kind(self.creator)
 
     @property
+    def words(self):
+        return creators.creator_words(self.creator)
+
+    @property
     def new_lists(self):
         return creators.creator_new_lists(self.creator)
+
+    @property
+    def new_list_names(self) -> Names:
+        return kinds_names(creators.creator_list_kinds(self.creator))
 
     def __getattr__(self, name):
         if name == "accounts":
@@ -627,6 +637,7 @@ class _Match:
     creator_slug: str | None = None
     overlaps: list = field(default_factory=list)
     section_type: str | None = None
+    growing_names: Names | None = None
 
     def __getattr__(self, name):
         return getattr(self.details, name)
@@ -643,7 +654,7 @@ def collection_creator_match(s: Session, collection_slug: str, source_key: str, 
         details, site.name, site.creator_names, site.section_types, section if keeper is None or movable else None,
         keeper.title if keeper is not None and not movable else None,
         existing.creator.slug if existing is not None else None,
-        overlaps, site.section_type_of(section).key if section is not None else None,
+        overlaps, site.section_type_of(section).key if section is not None else None, site.growing_names,
     ))
 
 

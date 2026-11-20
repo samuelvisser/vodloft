@@ -24,7 +24,7 @@ import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {apiUrl} from '../../lib/api'
 import SeasonsDialog from '../../components/CollectionSeasons/SeasonsDialog'
 import PageHeader, {PageHeaderAction} from '../../components/common/PageHeader'
-import {wordsFor} from '../../lib/collectionWords'
+import {collectionWords, wordsFor} from '../../lib/collectionWords'
 
 const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
   default: {label: 'Like other Collections'},
@@ -82,7 +82,7 @@ export default function EditCollectionPage() {
   const initializedCollectionId = useRef<string | undefined>(undefined)
 
   const [form, setForm] = useState<FormState>(() => ({
-    url: id ? `https://www.dailywire.com/show/${id}` : '',
+    url: '',
     ytdlpOptions: '',
     checkFrequency: 'default',
     checkCron: '0 */6 * * *',
@@ -96,6 +96,9 @@ export default function EditCollectionPage() {
   }))
   // What the collection calls its seasons and episodes, by the type chosen here.
   const words = wordsFor({type: form.type, site: collection?.site})
+  // What the parts of a video split by its chapters are: sound in a Music collection, such as an album of tracks.
+  const parts = collectionWords(form.type, 'audio')
+  const musicParts = collectionWords('music', 'audio')
 
   useEffect(() => {
     if (!id || !collection || collection.slug !== id || initializedCollectionId.current === id) return
@@ -515,14 +518,12 @@ export default function EditCollectionPage() {
             <div className="help">
               <ReadMore summary={
                 form.splitChapters
-                  ? form.type === 'music'
-                    ? 'Each new video with chapters becomes an album of its own, named after the video, with a track per chapter.'
-                    : 'Each new video with chapters becomes a season of its own, named after the video, with an episode per chapter.'
+                  ? `Each new video with chapters becomes ${parts.season.a} of its own, named after the video, with ${parts.episode.a} per chapter.`
                   : `Each video is one ${words.episode.singular}, chapters and all.`
               }>
-                <p>Splitting suits full albums uploaded as one video: in a Music Collection each video becomes an album and
-                  each chapter a track. Each part downloads only its own stretch of the video and has its own file, so a
-                  podcast app or music player plays it like any other {form.type === 'music' ? 'track' : 'episode'}. A feed can't stream a part straight from
+                <p>Splitting suits full albums uploaded as one video: in a Music Collection each video becomes {musicParts.season.a} and
+                  each chapter {musicParts.episode.a}. Each part downloads only its own stretch of the video and has its own file, so a
+                  podcast app or music player plays it like any other {parts.episode.singular}. A feed can't stream a part straight from
                   the site, because the site only has the whole video.</p>
                 <p>This only changes videos found from now on. Videos already in the Collection stay as they are.</p>
               </ReadMore>

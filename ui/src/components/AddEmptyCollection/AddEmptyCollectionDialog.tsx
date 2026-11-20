@@ -7,6 +7,7 @@ import {z} from 'zod'
 
 import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
+import {collectionWords} from '../../lib/collectionWords'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -70,7 +71,7 @@ export default function AddEmptyCollectionDialog({onDismiss}: Props) {
                 </div>
                 <p className="modal-text">
                     The collection starts without videos. Next, add the playlists, channels or videos it should hold,
-                    from any site. Each link becomes {watch('type') === 'music' ? 'an album' : 'a season'}.
+                    from any site. Each link becomes {collectionWords(watch('type')).season.a}.
                 </p>
                 <div className="empty-collection-fields">
                     <div className="form-row">

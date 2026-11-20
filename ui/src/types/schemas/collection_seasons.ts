@@ -68,10 +68,10 @@ export const CollectionSeasonsReadSchema = z.object({
     /** The videos no playlist that is a season has now, which leave once the collection holds only what they have. */
     onlyLeavingCount: z.number().default(0),
     onlyLeavingWithFiles: z.number().default(0),
-    /** What the collection's Site calls its lists, such as playlists on YouTube, and the season of what is in none
-     * of them: Videos, or Singles in a Music collection. */
     /** The types of list of the collection's Site, which its link seasons come from. */
     listTypes: z.array(SectionTypeSchema),
+    /** Those types of list named together, such as albums and playlists. */
+    listNames: NamesSchema,
     /** The season of the videos in none of the lists, such as Videos, Singles or Tracks. */
     looseSeason: z.string(),
     /** What the collection's Site calls the creator behind it, such as artist in a Music collection. */
@@ -81,8 +81,10 @@ export const CollectionSeasonsReadSchema = z.object({
     /** For a creator's own collection: the creator, which finds its new playlists and decides what happens with them. */
     creatorSlug: z.string().nullable().default(null),
     creatorTitle: z.string().nullable().default(null),
-    /** A Music collection, of an artist's tracks rather than a creator's videos. */
-    music: z.boolean().default(false),
+    /** The link seasons keep the order the Site gives the lists, as an artist's albums do, instead of by date. */
+    siteOrder: z.boolean().default(false),
+    /** What the collection calls its seasons and episodes. */
+    words: z.object({season: NamesSchema, episode: NamesSchema}),
     playlists: z.array(CollectionListReadSchema),
 })
 export type CollectionSeasonsRead = z.infer<typeof CollectionSeasonsReadSchema>

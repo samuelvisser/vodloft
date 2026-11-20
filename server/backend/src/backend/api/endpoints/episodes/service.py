@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.episode import *
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
+from backend.api.models.source import NamesAPIRead
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor, keyset_after, KeysetField
 from backend.db.models import Collection, CollectionList, CollectionListItem
 from backend.db.models.media_item import Episode
@@ -539,12 +540,12 @@ def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPI
         return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False)
     collection = episode.collection
     # The Site's own word for the list, such as playlist on YouTube or album on Bandcamp.
-    kind = list_names(collection).singular
+    names = NamesAPIRead.model_validate(list_names(collection))
     if belonging.link is not None:
         season = belonging.link.season
         return EpisodeSeasonPlaceAPIRead(
             belongs_elsewhere=True, season_name=season.name if season else belonging.link.title,
-            link_title=belonging.link.title, link_kind=kind,
+            link_title=belonging.link.title, link_names=names,
         )
     season = next((season for season in collection.seasons if season.loose), None) if belonging.loose else None
     if season is None and not belonging.loose and episode.published_date is not None:
@@ -552,7 +553,7 @@ def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPI
     name = season.name if season is not None else (
         str(episode.published_date.year) if not belonging.loose and episode.published_date else None
     )
-    return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=True, season_name=name, link_kind=kind)
+    return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=True, season_name=name, link_names=names)
 
 
 def move_episode_to_its_collection(s: Session, episode_slug: str):

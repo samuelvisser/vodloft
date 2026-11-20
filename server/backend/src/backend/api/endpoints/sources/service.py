@@ -112,6 +112,12 @@ def _creator_names(source: Source, kind: str, url: str) -> NamesAPIRead | None:
     return NamesAPIRead.model_validate(site.creator_names) if site is not None and site.creators else None
 
 
+def _creator_sections(source: Source, url: str) -> NamesAPIRead | None:
+    """Every type of section a creator has on the link's Site, named together."""
+    site = source.site_for(url)
+    return NamesAPIRead.model_validate(site.section_names) if site is not None else None
+
+
 def _access_label(source: Source, url: str, key: str | None) -> str | None:
     found = link_access(source.id, url, key)
     return found.label if found is not None else None
@@ -216,6 +222,7 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         preview=ResolvedLinkPreviewAPIRead.model_validate(link),
         creator_url=link.creator_url,
         creator_names=NamesAPIRead.model_validate(link.creator_names) if link.creator_names else None,
+        creator_sections=_creator_sections(source, link.creator_url or link.url) if link.creator_names else None,
         candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],
     )
 

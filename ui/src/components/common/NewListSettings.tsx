@@ -19,12 +19,6 @@ type Props = {
     idPrefix: string
 }
 
-/** The kinds' names together, such as "albums and playlists". */
-export function listKindNames(kinds: readonly ListKind[]): string {
-    const names = kinds.map((kind) => kind.names.plural)
-    return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
-}
-
 /** What happens with each kind of list a creator adds later, one row each, next to each other in a column: a Site
  * that tells an artist's albums from their playlists has a row for each. */
 export default function NewListSettings({kinds, values, onChange, registryFor, fallback, idPrefix}: Props) {

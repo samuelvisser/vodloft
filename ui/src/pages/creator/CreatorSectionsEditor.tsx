@@ -10,7 +10,7 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
-import {capitalized, growingNames, joinedNames} from '../../types/creator'
+import {capitalized, joinedNames} from '../../types/creator'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import type {CreatorPageAccountRead, CreatorPageRead, CreatorSectionRead, SectionPlan} from '../../types/schemas/creator'
 import type {Names} from '../../types/schemas/source'
@@ -54,7 +54,7 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
             : {label: 'Add to your library', description: `The movie goes into your library, as one of ${creator.title}'s`, plan: {ref: section.ref, target: 'own'}}]
     }
     if (section.kind === 'feed') {
-        options.push({label: `Add to ${mainTitle}`, description: `Its videos go into ${main}`, plan: {ref: section.ref, target: 'main'}})
+        options.push({label: `Add to ${mainTitle}`, description: `Its ${account.site.mediaNames.plural} go into ${main}`, plan: {ref: section.ref, target: 'main'}})
     } else if (section.kind === 'list' && account.site.linkSeasons) {
         options.push({label: `${season.Singular} of ${mainTitle}`, description: `${capitalized(season.a)} of ${main}`, plan: {ref: section.ref, target: 'main'}})
     }
@@ -65,21 +65,23 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
 type Place = 'main' | 'own' | 'skip'
 
 /** What moving a playlist does, in words, before the user says yes. */
-function moveNote({section}: AccountSection, to: Place, mainTitle: string, season: Noun): string {
+function moveNote({account, section}: AccountSection, to: Place, mainTitle: string, season: Noun): string {
     const noun = section.names.singular
+    const media = account.site.mediaNames.plural
+    const others = account.site.creatorNames.plural
     if (to === 'own') {
-        return `${section.title} becomes a collection of its own, and takes its videos out of ${mainTitle}. Downloaded videos `
+        return `${section.title} becomes a collection of its own, and takes its ${media} out of ${mainTitle}. Downloaded ${media} `
             + 'take their files along, renamed into the new collection as manual downloads, since it has no Download '
             + 'Profiles yet.'
     }
     if (to === 'main') {
-        return `${section.title} becomes ${season.a} of ${mainTitle}, and its videos move there. Downloaded videos take their `
+        return `${section.title} becomes ${season.a} of ${mainTitle}, and its ${media} move there. Downloaded ${media} take their `
             + `files along: renamed when ${mainTitle} downloads them with the same Local Media Profile or not at all, and `
             + `downloaded again there when it uses another one; the old files go once that succeeded. The collection `
             + `${section.collectionTitle ?? section.title} goes once it is empty.`
     }
-    return `${section.title} is no longer ${season.a} of ${mainTitle}. Its videos go to the ${season.singular} of videos in no ${noun}, `
-        + `and videos of other creators that only this ${noun} brought in leave ${mainTitle}, files and all. It stays listed `
+    return `${section.title} is no longer ${season.a} of ${mainTitle}. Its ${media} go to the ${season.singular} of ${media} in no ${noun}, `
+        + `and ${media} of other ${others} that only this ${noun} brought in leave ${mainTitle}, files and all. It stays listed `
         + 'on this page, so you can add it again.'
 }
 
@@ -323,7 +325,7 @@ export default function CreatorSectionsEditor({creator, part}: {
 
             {part === 'rest' && checkedAt && (
                 <p className="creator-note">
-                    VODLoft looks for new {joinedNames(creator.newLists.map((kind) => kind.names)).plural || 'lists'} once a day. Last look: {new Date(checkedAt).toLocaleString()}.
+                    VODLoft looks for new {creator.newListNames.plural} once a day. Last look: {new Date(checkedAt).toLocaleString()}.
                 </p>
             )}
 
@@ -347,8 +349,8 @@ export default function CreatorSectionsEditor({creator, part}: {
                 {splitting && (
                     <ul className="creator-order-note">
                         <li>The account on {splitting.site.name} becomes a creator of its own, named as {splitting.site.name} names them.</li>
-                        <li>Its own collection and the collections of its {growingNames(splitting.site.sectionTypes).plural || 'lists'} go along. Collections that joined {creator.title} by another link stay.</li>
-                        <li>Collections keep their {creator.collections.length > 0 && creator.collections.every((collection) => collection.type === 'music') ? 'albums, tracks' : 'seasons, episodes'}, profiles and files. Nothing is indexed again.</li>
+                        <li>Its own collection and the collections of its {splitting.site.growingNames.plural} go along. Collections that joined {creator.title} by another link stay.</li>
+                        <li>Collections keep their {creator.words.season.plural}, {creator.words.episode.plural}, profiles and files. Nothing is indexed again.</li>
                     </ul>
                 )}
             </ConfirmDialog>

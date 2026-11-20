@@ -144,7 +144,7 @@ class NpoSource(Source):
         ),
     ),)
     features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
-    kind_names = MappingProxyType({LinkKind.COLLECTION: "Series"})
+    kind_names = MappingProxyType({LinkKind.COLLECTION: Names("series", "series")})
 
     def collection_ref(self, url: str) -> str | None:
         parsed = parse_link(url)

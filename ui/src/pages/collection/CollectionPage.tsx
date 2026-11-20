@@ -35,8 +35,8 @@ import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
 import LockedEpisodesFilter from '../../components/Episode/LockedEpisodesFilter'
 import {apiFetch, apiUrl, publicAddress} from '../../lib/api'
-import {collectionWords, fileWordsFor, wordsFor} from '../../lib/collectionWords'
-import {isCollectionLocalMediaProfileAvailableFor} from '../../types/local_media_profile'
+import {collectionWords, downloadsBySeason, fileWordsFor, wordsFor} from '../../lib/collectionWords'
+import {isCollectionLocalMediaProfileAvailableFor, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
 
 const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
 
@@ -167,7 +167,7 @@ export default function CollectionPage() {
     data: seasonsData,
     isLoading: seasonsLoading,
     isPlaceholderData: seasonsPlaceholder,
-  } = useCollectionSeasons(isSeasonal || collection?.type === 'series' || collection?.type === 'music' ? id : undefined)
+  } = useCollectionSeasons(isSeasonal || (collection && downloadsBySeason(collection.type)) ? id : undefined)
   const seasons = useMemo(
     () => [...(seasonsData ?? [])].sort((a, b) => b.index - a.index),
     [seasonsData],
@@ -913,7 +913,7 @@ export default function CollectionPage() {
         <CollectionDownloadAllDialog
           collectionSlug={id}
           collectionTitle={collection.title}
-          collectionType={collection.type === 'series' || collection.type === 'music' ? collection.type : 'podcast'}
+          collectionType={collection.type as CollectionLocalMediaProfileContext}
           siteKey={collection.site?.key}
           seasons={seasons}
           words={fileWords}

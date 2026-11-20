@@ -8,7 +8,6 @@ left, and that has nothing left, goes.
 """
 from __future__ import annotations
 
-from backend.types.collection_types import CollectionType
 
 from dataclasses import dataclass
 
@@ -23,10 +22,10 @@ from backend.services.creators import (
 from backend.services.collections import index_new_collection, reindex_collection
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import place_in_link_seasons
-from backend.services.sites import list_names
 from backend.services.reassigned import MoveResult, move_and_rename, reassigned_episodes, settle_creator
 from backend.types.creator_types import SectionStatus, SectionTarget
-from backend.types.collection_contracts import collection_contract
+from backend.services.sites import collection_words
+from backend.types.collection_contracts import DEFAULT_WORDS
 from sources import MAIN_TAG, SectionKind, VideoDetails, get_source
 
 
@@ -155,10 +154,10 @@ def move_section(
         raise ServiceError(f"{creator.title} has no section {ref}", field="target")
     site = get_source(account.source_key).site_of(account.site_key)
     # What the creator's collection calls a season: an album in an artist's.
-    music = account.main_collection is not None and account.main_collection.type == CollectionType.MUSIC.value
-    a_season = collection_contract(CollectionType.MUSIC if music else CollectionType.SERIES).words.season.a
+    main = account.main_collection
+    a_season = (collection_words(main) if main is not None else DEFAULT_WORDS).season.a
     if section.kind != SectionKind.LIST or not lists_are_seasons(site):
-        raise ServiceError(f"{section.title} can't move: only {list_names(site).a if lists_are_seasons(site) else 'a playlist'} can be {a_season} or a collection of its own", field="target")
+        raise ServiceError(f"{section.title} can't move: only {site.list_names.a} can be {a_season} or a collection of its own", field="target")
     in_main = _season_of_main(account, ref) is not None
     own = _own_collection(account, section)
     if target is SectionTarget.OWN:

@@ -17,11 +17,11 @@ import {PageHeaderAction} from '../../components/common/PageHeader'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import {postReassignedMove, reassignedMoveMessage} from '../../components/Episode/SeasonPlaceNote'
 import {toast} from 'react-hot-toast'
-import {creatorKindText, joinedNames} from '../../types/creator'
+import {creatorKindText} from '../../types/creator'
 import CreatorHeader from './CreatorHeader'
 import CreatorNotInLibrary from './CreatorNotInLibrary'
 import './CreatorPages.css'
-import {collectionWords, CollectionWords} from '../../lib/collectionWords'
+import {CollectionWords, wordsOf} from '../../lib/collectionWords'
 
 /** The places a collection lists, short enough for a card: "Videos, Live and 9 more". */
 function listedSources(titles: string[]) {
@@ -146,9 +146,7 @@ export default function CreatorPage() {
     // Two sites fit as buttons; more go into the Actions menu.
     const linkButtons = links.length <= 2 ? links : []
     const episodes = creator.collections.reduce((total, collection) => total + collection.episodeCount, 0)
-    // An artist whose collections are all Music collections has albums, and tracks on a Site with sound only.
-    const music = creator.collections.length > 0 && creator.collections.every((collection) => collection.type === 'music')
-    const words = collectionWords(music ? 'music' : null, creator.accounts.every((account) => account.site.audioOnly) ? 'audio' : 'video')
+    const words = wordsOf(creator.words)
     const fileWords = words
     const firstDates = creator.collections.map((collection) => collection.firstPublishedDate).filter((date): date is Date => !!date)
     const since = firstDates.length ? Math.min(...firstDates.map((date) => date.getFullYear())) : null
@@ -178,7 +176,7 @@ export default function CreatorPage() {
                                 <PageHeaderAction icon={faIcon('fass', 'pen')} label="Edit" variant="secondary" to={`/edit-creator/${creator.slug}`}/>
                                 <ActionMenu items={[{
                                     label: checking ? 'Looking…' : 'Check now',
-                                    description: `Look for new ${joinedNames(creator.newLists.map((kind) => kind.names)).plural || 'lists'}`,
+                                    description: `Look for new ${creator.newListNames.plural}`,
                                     icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: checking,
                                     onSelect: () => void check(),
@@ -213,7 +211,7 @@ export default function CreatorPage() {
 
             {checking && (
                 <p className="creator-note" role="status">
-                    VODLoft is looking for new {joinedNames(creator.newLists.map((kind) => kind.names)).plural || 'lists'}. New ones show under Collections when it is done.
+                    VODLoft is looking for new {creator.newListNames.plural}. New ones show under Collections when it is done.
                 </p>
             )}
             {actionError && <div className="form-error-card" role="alert">{actionError}</div>}

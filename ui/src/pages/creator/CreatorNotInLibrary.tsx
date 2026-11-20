@@ -1,4 +1,5 @@
 import {useRef, useState, type MouseEvent, type PointerEvent} from 'react'
+import {capitalized} from '../../types/creator'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {toast} from 'react-hot-toast'
@@ -127,7 +128,6 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const titles = items.map(({section}) => section.title)
     // A movie in the library that isn't the creator's is only away from them.
     const away = items.some(({section}) => section.movieSlug) ? `not with ${creator.title}` : 'not in your library'
-    const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
     return (
         <section className={`creator-more${open ? ' is-open' : ''}`} aria-label="Not in your library">
             <button type="button" className="creator-more-summary" aria-expanded={open} onClick={toggle}>
@@ -144,7 +144,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                     </b>
                     <span className="creator-more-sub">
                         {open
-                            ? `${capitalize(away)} yet${mayAdd ? `: add ${items.length === 1 ? 'it' : 'any of them'} with its + button` : ''}`
+                            ? `${capitalized(away)} yet${mayAdd ? `: add ${items.length === 1 ? 'it' : 'any of them'} with its + button` : ''}`
                             : `${listed(titles)} ${items.length === 1 ? 'is' : 'are'} ${away}`}
                     </span>
                 </span>
