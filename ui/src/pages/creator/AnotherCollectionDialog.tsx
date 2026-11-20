@@ -64,8 +64,8 @@ export default function AnotherCollectionDialog({creator, item, confirmLabel, on
                     </label>
                     <label className={`creator-preset${!asSeason ? ' is-on' : ''}`}>
                         <input type="radio" name="another-collection-season" checked={!asSeason} onChange={() => setAsSeason(false)}/>
-                        <b>Add its content</b>
-                        <span>Its {media} join the others in {chosen.title}</span>
+                        <b>Add its contents only</b>
+                        <span>Its {media} join the others in {chosen.title}, without {season.a} of their own</span>
                     </label>
                 </fieldset>
             )}

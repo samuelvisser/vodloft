@@ -66,7 +66,7 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
     } else if (section.kind === 'list' && account.site.linkSeasons) {
         options.push({label: `${season.Singular} of ${mainTitle}`, description: `${capitalized(season.a)} of ${main}`, plan: {ref: section.ref, target: 'main'}})
         options.push({
-            label: `Add its content to ${mainTitle}`, description: `Not as ${season.a}: its ${account.site.mediaNames.plural} join the others in ${main}`,
+            label: `Add its contents to ${mainTitle}`, description: `Its ${account.site.mediaNames.plural} join the others in ${main}, without ${season.a} of their own`,
             plan: {ref: section.ref, target: 'main_loose'},
         })
     }
@@ -120,7 +120,7 @@ export function placeLabel(creator: CreatorPageRead, {account, section}: Account
     const season = collectionWords(collection?.type).season
     return {
         main: section.kind === 'feed' ? `In ${title}` : `${season.Singular} of ${title}`,
-        main_loose: `Add its content to ${title}`,
+        main_loose: `Add its contents to ${title}`,
         own: 'Collection of its own',
         exclude: 'Exclude from library',
     }[target]
@@ -296,7 +296,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                 const {target, collectionSlug} = placeMove(current)
                 const holder = creator.collections.find((collection) => collection.slug === (collectionSlug ?? item.account.mainCollectionSlug))
                 const was = current === 'own' ? 'a collection of its own' : target === 'main_loose'
-                    ? `in ${holder?.title ?? creator.title}, not as ${collectionWords(holder?.type).season.a}`
+                    ? `its contents added to ${holder?.title ?? creator.title}`
                     : placeLabel(creator, item, current).replace(/^In /, 'in ')
                 return (
                     <div key={key} className="creator-section-row">

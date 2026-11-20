@@ -53,7 +53,7 @@ function makeNewListActionReg(label: string, kind: ListKind, music: boolean) {
             label: `Add it as ${season.a}`,
             help: `New ${kind.names.plural} become ${season.plural} of the ${label}'s own collection.`,
         }, loose: {
-            label: `Add it, not as ${season.a}`,
+            label: 'Add its contents',
             help: `The ${episode.plural} of new ${kind.names.plural} join the ${label}'s own collection, where its ${episode.plural} in no ${kind.names.singular} go.`,
         }} : {}),
         own: {label: 'Add it as a collection', help: `Each new ${kind.names.singular} becomes a collection of its own.`},

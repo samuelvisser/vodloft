@@ -82,7 +82,7 @@ function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, mus
     else if (section.kind === 'list' && creator.linkSeasons) {
         const {season} = collectionWords(music ? 'music' : 'series')
         spec.main = {label: `Main collection, as ${season.a}`}
-        spec.main_loose = {label: 'Add its content to the main collection'}
+        spec.main_loose = {label: 'Add its contents to the main collection'}
     }
     spec.own = {label: 'A collection of its own'}
     spec.exclude = {label: 'Exclude from library'}
