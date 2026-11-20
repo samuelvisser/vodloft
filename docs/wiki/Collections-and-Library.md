@@ -215,7 +215,7 @@ Paste a link to a YouTube channel in **Add media** and choose **Add the creator*
 The Add creator page lists the YouTube channel's feeds (Videos, Live and Shorts on YouTube) and its playlists or shows. For each one you choose where it goes:
 
 - **Main collection**: one collection named after the creator. Feeds become a season per year, and a playlist becomes a playlist season (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)). The main collection takes only the feeds you put in it: with only Videos, the channel's livestreams and Shorts stay out until you add those feeds too. A Daily Wire show has seasons of its own, so it always gets a collection of its own.
-- **Main collection, not as a season**, for a playlist: its videos go into the main collection, but in the seasons the videos in no playlist go to, such as the season per year, instead of a season of their own. Use this for a playlist whose videos you want, without it being excluded from the library.
+- **Add its content to the main collection**, for a playlist: its videos go into the main collection, but in the seasons the videos in no playlist go to, such as the season per year, instead of a season of their own. Use this for a playlist whose videos you want, without it being excluded from the library.
 - **A collection of its own**: the part becomes a separate collection, for example Shorts that you want to keep apart from the rest.
 - **Exclude from library**: nothing is added. A playlist you exclude also keeps its videos out of the creator's other collections (see [A video that moves to another collection](#a-video-that-moves-to-another-collection-reassigned)). The part stays listed on the creator's **Edit** page, so you can add it later.
 
@@ -302,11 +302,11 @@ When several Download Profiles download it, the first one in the collection's or
 
 ### Moving a playlist or feed to another place
 
-Under **Where the playlists go**, the creator's **Edit** page lists each playlist that is in your Library, and where it is: a **Season of** the main collection, **In** the main collection **not as a season**, or a **Collection of its own**. Pick another place to move it, videos and all:
+Under **Where the playlists go**, the creator's **Edit** page lists each playlist that is in your Library, and where it is: a **Season of** the main collection, **Add its content to** the main collection (in it, not as a season), or a **Collection of its own**. Pick another place to move it, videos and all:
 
 - **Collection of its own**: the playlist becomes a new collection, and its videos leave the main collection. The new collection starts without Download Profiles, like every collection made from a creator.
 - **Season of** the main collection: the playlist becomes a season again, and its collection goes once its videos have moved. A video in that collection that the playlist no longer lists stays there.
-- **Not as a season** in the main collection: the playlist's videos stay in, or join, the main collection, in the seasons of the videos in no playlist. Turned back into a **Season of** the main collection, they get their season again. Either way, downloaded videos move their files into their new season.
+- **Add its content to** the main collection: the playlist's videos stay in, or join, the main collection, in the seasons of the videos in no playlist. Turned back into a **Season of** the main collection, they get their season again. Either way, downloaded videos move their files into their new season.
 - **Exclude from library**, for a playlist in the main collection or another collection that holds several: the playlist leaves that collection and moves to **Not in your library** on the creator's **Edit** page, and keeps its videos out. To take a playlist with a collection of its own out of your Library, delete that collection.
 
 #### Several feeds and playlists in another collection
