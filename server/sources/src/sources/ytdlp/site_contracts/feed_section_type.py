@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...contract import Names, SectionKind, SectionRole, SectionType
+from ...contract import MAIN_TAG, Names, SectionKind, SectionRole, SectionType
 
 
 @dataclass(frozen=True, init=False)
@@ -14,6 +14,8 @@ class YtdlpFeedSectionType(SectionType):
 
     path: str
 
-    def __init__(self, key: str, names: Names, path: str, role: SectionRole = SectionRole.MAIN) -> None:
-        super().__init__(key, SectionKind.FEED, names, role=role)
+    def __init__(
+        self, key: str, names: Names, path: str, role: SectionRole = SectionRole.MAIN, episode_tag: str = MAIN_TAG,
+    ) -> None:
+        super().__init__(key, SectionKind.FEED, names, role=role, episode_tag=episode_tag)
         object.__setattr__(self, "path", path)

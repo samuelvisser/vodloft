@@ -17,7 +17,7 @@ from backend.api.models.collection_seasons import ReassignedMoveAPIRead
 from backend.services.reassigned import move_and_rename, reassigned_in_creator
 from backend.api.models.creator import (
     CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorPageAPIRead,
-    CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd, CreatorSectionsAPIShow, CollectionCreatorLeaveAPIRead, CollectionCreatorMatchAPIRead,
+    CreatorSectionMovesAPIIn, CreatorSectionMovesPreviewAPIRead, CreatorSectionsAPIAdd, CreatorSectionsAPIShow, CollectionCreatorLeaveAPIRead, CollectionCreatorMatchAPIRead,
     CreatorEpisodeAPIRead, CreatorEpisodePageAPIRead,
 )
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
@@ -482,18 +482,19 @@ def creator_episodes(s: Session, slug: str, *, cursor: str | None, limit: int) -
     )
 
 
-def move_creator_section(
-    s: Session, slug: str, account_id: int, ref: str, body: CreatorSectionMoveAPIIn, *, added_by_id: int | None,
-) -> CreatorPageAPIRead:
-    """Move one of the playlists of a creator's account, with its videos and their files, and show the creator again.
+def _moves(body: CreatorSectionMovesAPIIn | CreatorAPIUpdate) -> list["SectionMove"]:
+    from backend.services.section_moves import SectionMove
+
+    return [SectionMove(move.account_id, move.ref, SectionTarget(move.target)) for move in body.moves]
+
+
+def preview_creator_moves(s: Session, slug: str, body: CreatorSectionMovesAPIIn) -> CreatorSectionMovesPreviewAPIRead:
+    """What moving the creator's feeds and lists does to each of its collections. The moves are made and rolled back.
 
     ``s`` is a write transaction's session."""
-    from backend.services.section_moves import move_section
+    from backend.services.section_moves import preview_section_moves
 
-    move_section(s, _account(s, slug, account_id), ref, SectionTarget(body.target), added_by_id=added_by_id)
-    s.flush()
-    s.expire_all()
-    return creator_page(s, slug)
+    return CreatorSectionMovesPreviewAPIRead.model_validate(preview_section_moves(s, _creator(s, slug), _moves(body)))
 
 
 def move_creator_reassigned(s: Session, slug: str) -> ReassignedMoveAPIRead:
@@ -521,7 +522,7 @@ def _account(s: Session, slug: str, account_id: int) -> CreatorAccount:
     return account
 
 
-def update_creator(s: Session, slug: str, body: CreatorAPIUpdate) -> CreatorPageAPIRead:
+def update_creator(s: Session, slug: str, body: CreatorAPIUpdate, *, added_by_id: int | None = None) -> CreatorPageAPIRead:
     creator = _creator(s, slug)
     title = (body.title or "").strip()
     if title and title != creator.title:
@@ -531,6 +532,12 @@ def update_creator(s: Session, slug: str, body: CreatorAPIUpdate) -> CreatorPage
         dict(body.new_lists), body.genre, body.content_rating,
     ))
     s.flush()
+    if body.moves:
+        from backend.services.section_moves import move_sections
+
+        move_sections(s, creator, _moves(body), renumber=body.renumber, added_by_id=added_by_id)
+        s.flush()
+        s.expire_all()
     return creator_page(s, slug)
 
 

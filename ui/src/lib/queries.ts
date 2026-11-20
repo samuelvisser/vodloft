@@ -25,7 +25,7 @@ import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/
 import {
     CreatorEpisodePageReadSchema, CreatorLookupReadSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorLookupRead, type CreatorPageRead, type CreatorRead,
     CollectionCreatorLeaveSchema, CollectionCreatorMatchSchema, type CollectionCreatorLeave, type CollectionCreatorMatch,
-    type SectionPlan,
+    type SectionPlan, SectionMovesPreviewSchema, type SectionMove, type SectionMovesPreview,
 } from '../types/schemas/creator'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
@@ -902,21 +902,18 @@ export async function showCreatorSections(slug: string, accountId: number, refs:
     return CreatorPageReadSchema.parse(await response.json())
 }
 
-/** Move one of the playlists of a creator's account, with its videos and their files: a season of the account's own
- * collection, a collection of its own, or out of the Library. */
-export async function moveCreatorSection(
-    slug: string, accountId: number, ref: string, target: 'main' | 'own' | 'skip',
-): Promise<CreatorPageRead> {
-    const response = await fetch(
-        `${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections/${encodeURIComponent(ref)}/move`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({target}),
-        },
-    )
+/** What moving feeds and lists of a creator elsewhere does to each of its collections. Changes nothing: saving the
+ * creator with the moves makes them. */
+export async function previewCreatorMoves(slug: string, moves: SectionMove[], signal?: AbortSignal): Promise<SectionMovesPreview> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/moves/preview`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({moves}),
+        signal,
+    })
     if (!response.ok) throw await responseError(response)
-    return CreatorPageReadSchema.parse(await response.json())
+    return SectionMovesPreviewSchema.parse(await response.json())
 }
 
 /** Make one of a creator's accounts a creator of their own again, with its collections. Answers with the new

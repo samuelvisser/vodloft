@@ -228,6 +228,22 @@ def test_the_api_shows_and_moves_reassigned_episodes(creator, client, session):
     assert client.get("/api/creators/workshop").json()["reassignedCount"] == 0
 
 
+def _settled():
+    """Let every queued operation, such as the creator's first indexing, count as done: a move waits for them."""
+    from sqlalchemy import update
+
+    from backend.db.core import run_write_transaction
+    from task_manager.scheduler.db import TaskOperation
+
+    run_write_transaction(lambda w: w.execute(update(TaskOperation).values(status="SUCCEEDED")))
+
+
+def _save(client, ref, target, **body):
+    """Save the creator's Edit page with one feed or list moved elsewhere, once VODLoft finished what it was doing."""
+    _settled()
+    return client.patch("/api/creators/workshop", json={"moves": [{"accountId": 1, "ref": ref, "target": target}], **body})
+
+
 def _cabin_video(session, main):
     """k1, an upload of the creator that only its Building the Cabin playlist season has, downloaded."""
     from backend.db.core import run_write_transaction
@@ -252,7 +268,7 @@ def test_a_playlist_season_moves_to_a_collection_of_its_own_with_its_files(creat
     main, _tools = creator
     _cabin_video(session, main)
 
-    moved = client.post("/api/creators/workshop/accounts/1/sections/PLcabin/move", json={"target": "own"})
+    moved = _save(client, "PLcabin", "own")
 
     assert moved.status_code == 200, moved.text
     session.expire_all()
@@ -280,7 +296,7 @@ def test_a_playlist_collection_becomes_a_season_and_goes_once_it_is_empty(creato
     download_id, tools_id = download.id, tools.id
     session.commit()
 
-    moved = client.post("/api/creators/workshop/accounts/1/sections/PLtools/move", json={"target": "main"})
+    moved = _save(client, "PLtools", "main")
 
     assert moved.status_code == 200, moved.text
     session.expire_all()
@@ -291,12 +307,12 @@ def test_a_playlist_collection_becomes_a_season_and_goes_once_it_is_empty(creato
 
 
 def test_a_playlist_season_leaves_the_library_and_a_collection_of_its_own_must_be_deleted_instead(creator, client, session):
-    out = client.post("/api/creators/workshop/accounts/1/sections/PLcabin/move", json={"target": "skip"})
+    out = _save(client, "PLcabin", "skip")
     assert out.status_code == 200, out.text
     sections = {section["ref"]: section for section in out.json()["accounts"][0]["sections"]}
     assert (sections["PLcabin"]["collectionSlug"], sections["PLcabin"]["status"]) == (None, "ignored")
 
-    refused = client.post("/api/creators/workshop/accounts/1/sections/PLtools/move", json={"target": "skip"})
+    refused = _save(client, "PLtools", "skip")
     assert refused.status_code == 422 and "delete that collection" in refused.text
 
 
@@ -313,7 +329,7 @@ def test_a_video_only_the_playlist_collection_has_joins_the_creators_collection_
     download_id = download.id
     session.commit()
 
-    assert client.post("/api/creators/workshop/accounts/1/sections/PLtools/move", json={"target": "main"}).status_code == 200
+    assert _save(client, "PLtools", "main").status_code == 200
 
     session.expire_all()
     moved = session.get(EpisodeMediaDownload, download_id)

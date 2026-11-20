@@ -8,6 +8,9 @@ from pydantic import AliasChoices, AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.pagination import CursorPageRead
+from backend.api.models.collection import (
+    CollectionIdentificationChangeItemAPIRead, CollectionIdentificationProfileFilesAPIRead,
+)
 from backend.api.models.collection_contract import CollectionWordsAPIRead
 from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead, SiteAPIRead
 from backend.types.creator_types import NewSectionAction, SectionTarget
@@ -272,9 +275,64 @@ class CreatorPageAPIRead(CreatorAPIRead):
 
 
 class CreatorSectionMoveAPIIn(RequestBase):
-    """Where one of the creator's playlists goes now, with its videos."""
+    """Where one of the creator's feeds or lists goes now, with its videos: into the creator's own collection, a
+    collection of its own, or out of the Library."""
 
-    target: Literal["main", "own", "skip"]
+    account_id: int
+    ref: str = Field(min_length=1)
+    target: SectionTarget
+
+
+class CreatorSectionMovesAPIIn(RequestBase):
+    """Feeds and lists of the creator that go elsewhere, to see what moving them does."""
+
+    moves: list[CreatorSectionMoveAPIIn] = Field(min_length=1, max_length=200)
+
+
+class CreatorMovedPartAPIRead(ResponseBase):
+    """The videos of one feed or list that leave a collection or join it."""
+
+    section_title: str
+    section_kind: Literal["feed", "list", "show", "item"]
+    names: NamesAPIRead
+    """What moves, in the Site's words: shorts for a feed, videos for a list."""
+    direction: Literal["out", "in", "leave"]
+    """out to another collection, in from another one, or leave the Library."""
+    count: int
+    other_title: Optional[str] = None
+    examples: list[str]
+    """The titles of the videos, newest first, up to a few dozen."""
+    downloads_deleted: int = 0
+    kept_deleted: int = 0
+    deleting_profiles: list[str] = Field(default_factory=list)
+    """The Local Media Profiles whose files are deleted."""
+    files_moved: int = 0
+
+
+class CreatorMoveCollectionAPIRead(ResponseBase):
+    """What the moves do to one of the creator's collections."""
+
+    slug: str
+    title: str
+    type: str
+    state: Literal["existing", "new", "deleted"]
+    episode_identifier: EpisodeIdentifier
+    parts: list[CreatorMovedPartAPIRead]
+    new_seasons: list[str]
+    episodes: int
+    renumber_offered: bool
+    """It can number its episodes again; the user can say not to."""
+    changes: list["CollectionIdentificationChangeItemAPIRead"]
+    """The episodes that get a new number when it numbers them again, newest first."""
+    profiles: list["CollectionIdentificationProfileFilesAPIRead"]
+    """What numbering again does to each Local Media Profile's files; the metadata is rewritten either way."""
+    files_follow: bool
+    """Files moved into it, so its files are renamed and their metadata rewritten also when it keeps its numbers."""
+    indexed: bool
+
+
+class CreatorSectionMovesPreviewAPIRead(ResponseBase):
+    collections: list[CreatorMoveCollectionAPIRead]
 
 
 class CreatorAPIUpdate(RequestBase):
@@ -287,6 +345,10 @@ class CreatorAPIUpdate(RequestBase):
     """What the creator does with a new list, by Site and the key of its type; a type left out keeps its setting."""
     genre: Optional[str] = Field(default=None, max_length=200)
     content_rating: Optional[str] = Field(default=None, max_length=50)
+    moves: list[CreatorSectionMoveAPIIn] = Field(default_factory=list, max_length=200)
+    """Feeds and lists that go elsewhere, with their videos."""
+    renumber: dict[str, bool] = Field(default_factory=dict, max_length=200)
+    """By collection slug, whether a collection the moves change numbers its episodes again; left out, it does."""
 
 
 class CreatorCombineAPIIn(RequestBase):

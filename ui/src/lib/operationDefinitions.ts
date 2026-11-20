@@ -531,6 +531,21 @@ export const frontendOperationDefinitions = {
         : `${collectionTitle} numbers its episodes the new way`
     },
   },
+  'collection.renumber': {
+    kind: 'collection.renumber',
+    resourceType: 'collection',
+    label: 'Numbering again',
+    invalidate: (operation, invalidations) => {
+      invalidateCollectionStructure(operation, invalidations)
+      invalidateCollectionFiles(operation, invalidations)
+    },
+    success: (operation) => {
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      return operation.result?.summary
+        ? `${collectionTitle}: ${operation.result.summary}`
+        : `${collectionTitle} has its moved episodes in place`
+    },
+  },
   'collection.scan_existing_files': {
     kind: 'collection.scan_existing_files',
     resourceType: 'collection',

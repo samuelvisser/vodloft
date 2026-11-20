@@ -76,8 +76,10 @@ class YouTube(OtherSites):
     # A channel's Videos, Live and Shorts tabs, and its playlists.
     section_types = (
         YtdlpFeedSectionType("videos", Names("video", "videos"), "videos"),
-        YtdlpFeedSectionType("shorts", Names("short", "shorts"), "shorts", role=SectionRole.SHORT),
-        YtdlpFeedSectionType("live", Names("livestream", "livestreams"), "streams", role=SectionRole.LIVE),
+        YtdlpFeedSectionType("shorts", Names("short", "shorts"), "shorts", role=SectionRole.SHORT, episode_tag="short"),
+        YtdlpFeedSectionType(
+            "live", Names("livestream", "livestreams"), "streams", role=SectionRole.LIVE, episode_tag="livestream",
+        ),
         SectionType(LIST_TYPE, SectionKind.LIST, Names("playlist", "playlists")),
     )
     # A channel's playlists can be the seasons of a collection made from the channel.

@@ -308,6 +308,15 @@ class MoveResult:
     sources: set[int] = field(default_factory=set)
     """The collections that keep a video until its new downloads succeed."""
 
+    def merge(self, other: "MoveResult") -> None:
+        """Add what another move did."""
+        self.renamed += other.renamed
+        self.downloading += other.downloading
+        self.episodes += other.episodes
+        for collection_id, episode_ids in other.rename.items():
+            self.rename.setdefault(collection_id, []).extend(episode_ids)
+        self.sources |= other.sources
+
 
 def _taking_profiles(s: Session, target: Episode) -> list[DownloadProfile]:
     """The new collection's Download Profiles whose filters take the video, in the collection's order."""
@@ -347,10 +356,11 @@ def _download_again(s: Session, target: Episode, profile: DownloadProfile) -> No
     })
 
 
-def move_reassigned(s: Session, items: Sequence[Reassignment]) -> MoveResult:
+def move_reassigned(s: Session, items: Sequence[Reassignment], *, download_again: bool = True) -> MoveResult:
     """Hand each reassigned video's downloads to the same video in its new collection: renamed, or downloaded again
-    there when the new collection downloads it with another Local Media Profile. A video that keeps no download goes.
-    The caller renames the files of ``rename`` and lets the downloads of ``sources`` finish.
+    there when the new collection downloads it with another Local Media Profile. Without ``download_again``, as for a
+    creator's feed that moves, every download is renamed and keeps its Local Media Profile. A video that keeps no
+    download goes. The caller renames the files of ``rename`` and lets the downloads of ``sources`` finish.
 
     ``s`` is a write transaction's session."""
     from task_manager.events.transactional import queue_event
@@ -371,7 +381,7 @@ def move_reassigned(s: Session, items: Sequence[Reassignment]) -> MoveResult:
             else:
                 profiles = _taking_profiles(s, target) if profiles is None else profiles
                 same = [profile for profile in profiles if profile.local_media_profile_id == download.local_media_profile_id]
-                if not same and profiles:
+                if not same and profiles and download_again:
                     again = profiles[0]
                     if again.local_media_profile_id not in has:
                         _download_again(s, target, again)

@@ -105,6 +105,9 @@ type Props = Omit<ComponentProps<typeof SimpleSelect>, 'components'> & {
      *  can't be stopped halfway. */
     onCancel?: () => void
     cancelLabel?: string
+    /** Shows only an operation this says is about the field, when one operation changes several fields, such as the
+     *  feeds and playlists that moved into a collection. */
+    appliesTo?: (operation: NonNullable<ReturnType<typeof useActiveOperation>>) => boolean
 }
 
 /**
@@ -114,9 +117,10 @@ type Props = Omit<ComponentProps<typeof SimpleSelect>, 'components'> & {
  */
 export default function ProgressSelect({
     definition, resourceId, busyReason, targetValueKey, activeLabel, onCancel, cancelLabel, isDisabled, className = '',
-    value, ...props
+    value, appliesTo, ...props
 }: Props) {
-    const operation = useActiveOperation(definition.kind, definition.resourceType, resourceId ?? null)
+    const active = useActiveOperation(definition.kind, definition.resourceType, resourceId ?? null)
+    const operation = active && (!appliesTo || appliesTo(active)) ? active : undefined
     const presentation = presentOperationProgress(operation)
     const running = presentation?.active ? presentation : undefined
     const target = running && targetValueKey ? operation?.context?.[targetValueKey] : undefined

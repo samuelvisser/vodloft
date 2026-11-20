@@ -1,5 +1,4 @@
-import {useCallback, useEffect, useState, type ReactNode} from 'react'
-import type {IconProp} from '@fortawesome/fontawesome-svg-core'
+import {useEffect, useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import Switch from 'react-switch'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
@@ -10,11 +9,11 @@ import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
 import {OperationStartError, useStartOperation} from '../../lib/operations'
 import {episodeIdentifierRegFor, EpisodeOrderReg, type EpisodeIdentifierValue, type EpisodeOrderValue} from '../../types/collection'
-import {useLoadMoreOnScroll} from '../../lib/useLoadMoreOnScroll'
+import {ChangeList, names, Step} from './ChangeSteps'
 import './ChangeIdentificationDialog.css'
 import {collectionWords, CollectionWords} from '../../lib/collectionWords'
 
-type IdentificationChange = {title: string; before: string; after: string}
+import type {IdentificationChange} from './ChangeSteps'
 
 type Preview = {
     episodeIdentifier: EpisodeIdentifierValue
@@ -45,67 +44,6 @@ type Props = {
     words?: CollectionWords
 }
 
-// Shown before the list is opened up.
-const EXAMPLES = 3
-// Rows added each time the end of the opened list scrolls into view.
-const PAGE = 50
-
-/** A few renumbered episodes, which open up into a list of all of them that renders more as it scrolls. */
-function ChangeList({changes}: {changes: IdentificationChange[]}) {
-    const [shown, setShown] = useState(EXAMPLES)
-    const all = shown > EXAMPLES
-    const more = useCallback(() => setShown((current) => Math.min(changes.length, current + PAGE)), [changes.length])
-    const {rootRef, endRef} = useLoadMoreOnScroll<HTMLUListElement, HTMLLIElement>(all && shown < changes.length, more)
-    return (
-        <>
-            <ul ref={rootRef} className={`change-identification-examples${all ? ' is-all' : ''}`}>
-                {changes.slice(0, shown).map((change, index) => (
-                    <li key={index}>
-                        <span className="change-identification-before">{change.before}</span>
-                        <span className="change-identification-arrow" aria-label="becomes">→</span>
-                        <b className="change-identification-after">{change.after}</b>
-                        <span className="change-identification-title">{change.title}</span>
-                    </li>
-                ))}
-                {all && shown < changes.length && (
-                    <li ref={endRef} className="change-identification-end" role="status">
-                        <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
-                        Loading more…
-                    </li>
-                )}
-            </ul>
-            {changes.length > EXAMPLES && (all ? (
-                <button type="button" className="change-identification-show-fewer" aria-expanded={true} onClick={() => setShown(EXAMPLES)}>
-                    Show fewer
-                    <FontAwesomeIcon icon={faIcon('fass', 'chevron-up')}/>
-                </button>
-            ) : (
-                <button type="button" className="btn change-identification-show-all" aria-expanded={false} onClick={more}>
-                    Show all {changes.length.toLocaleString()}
-                    <FontAwesomeIcon icon={faIcon('fass', 'chevron-down')}/>
-                </button>
-            ))}
-        </>
-    )
-}
-
-/** One thing the change does: an icon, what it is, and how many it touches. */
-function Step({icon, headline, detail, value, danger = false, children}: {
-    icon: IconProp; headline: string; detail: ReactNode; value: number; danger?: boolean; children?: ReactNode
-}) {
-    return (
-        <li className={`change-identification-step${danger ? ' is-danger' : ''}`}>
-            <span className="change-identification-step-icon" aria-hidden="true"><FontAwesomeIcon icon={icon}/></span>
-            <span className="change-identification-step-text">
-                <b>{headline}</b>
-                <span>{detail}</span>
-            </span>
-            <span className="change-identification-step-count">{value.toLocaleString()}</span>
-            {children && <div className="change-identification-step-more">{children}</div>}
-        </li>
-    )
-}
-
 const how = (target: EpisodeIdentifierValue, words: CollectionWords) => ({
     date_based: 'by date',
     numbered: 'by number',
@@ -116,10 +54,6 @@ function defaultOrder(identification: EpisodeIdentifierValue): EpisodeOrderValue
     return identification === 'seasonal' ? 'oldest_first' : 'newest_first'
 }
 
-function names(items: string[]) {
-    if (items.length <= 1) return items.join('')
-    return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
-}
 
 /** Asks before a collection numbers its episodes another way, saying what that does to its files and profiles. */
 export default function ChangeIdentificationDialog({
