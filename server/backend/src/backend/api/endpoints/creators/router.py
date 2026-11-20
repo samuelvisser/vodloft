@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from backend.api.models.creator import (
     CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorLookupAPIRequest,
-    CreatorEpisodePageAPIRead, CreatorPageAPIRead, CreatorSectionMoveAPIIn, CreatorSectionsAPIAdd,
+    CreatorEpisodePageAPIRead, CreatorPageAPIRead, CreatorSectionMovesAPIIn, CreatorSectionMovesPreviewAPIRead,
+    CreatorSectionsAPIAdd,
     CreatorSectionsAPIShow,
 )
 from backend.api.pagination import InvalidCursorError
@@ -20,7 +21,7 @@ from backend.api.endpoints.movies.service import look_up_movies
 from . import lookups
 from .service import (
     CreatorNotFoundError, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
-    look_up_creator, lookup_creator_names, move_creator_reassigned, record_creator_opened, move_creator_section, show_sections, update_creator,
+    look_up_creator, lookup_creator_names, move_creator_reassigned, record_creator_opened, preview_creator_moves, show_sections, update_creator,
 )
 
 router = APIRouter(prefix="/creators", tags=["Creators"])
@@ -108,9 +109,11 @@ def _found(work):
 
 
 @router.patch("/{slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=CreatorPageAPIRead)
-def creator_update(slug: str, body: CreatorAPIUpdate):
-    """Change what happens with the creator's new sections, the genre and rating of its collections, and its order."""
-    return _found(lambda: run_write_transaction(lambda s: update_creator(s, slug, body)))
+def creator_update(slug: str, body: CreatorAPIUpdate, access: Access = signed_in()):
+    """Change what happens with the creator's new sections, the genre and rating of its collections, and where its
+    feeds and lists go: those move with their videos, after which each collection that changed numbers its episodes
+    again, renames its files and rewrites their metadata."""
+    return _found(lambda: run_write_transaction(lambda s: update_creator(s, slug, body, added_by_id=access.user_id)))
 
 
 @router.post(
@@ -141,15 +144,14 @@ def creator_show_sections(slug: str, account_id: int, body: CreatorSectionsAPISh
 
 
 @router.post(
-    "/{slug}/accounts/{account_id}/sections/{ref}/move", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
-    response_model=CreatorPageAPIRead,
+    "/{slug}/moves/preview", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CreatorSectionMovesPreviewAPIRead,
 )
-def creator_move_section(slug: str, account_id: int, ref: str, body: CreatorSectionMoveAPIIn, access: Access = signed_in()):
-    """Move one of the playlists of a creator's account to a season of the account's own collection, to a collection
-    of its own, or out of the Library, with its videos and their files."""
-    return _found(lambda: run_write_transaction(
-        lambda s: move_creator_section(s, slug, account_id, ref, body, added_by_id=access.user_id),
-    ))
+def creator_preview_moves(slug: str, body: CreatorSectionMovesAPIIn):
+    """What moving feeds and lists of the creator elsewhere does to each of its collections: the videos that move or
+    leave the Library, the downloads deleted, the files renamed, and the episodes that get a new number. Changes
+    nothing: saving the creator with these moves makes them."""
+    return _found(lambda: run_write_transaction(lambda s: preview_creator_moves(s, slug, body)))
 
 
 @router.post(

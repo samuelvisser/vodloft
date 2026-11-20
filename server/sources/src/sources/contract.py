@@ -183,6 +183,9 @@ LIST_TYPE = "list"
 """The key of VODLoft's own kind of list, the playlist, which most Sites have."""
 
 
+MAIN_TAG = "ep"
+
+
 @dataclass(frozen=True)
 class SectionType:
     """One type of section a Site's creators have, such as a feed, an album or a playlist on SoundCloud, and what
@@ -200,6 +203,10 @@ class SectionType:
     role: SectionRole = SectionRole.MAIN
     """What a feed of the type holds, which steers what a new creator adds by default: a channel's main videos, or
     its Shorts or livestreams."""
+    episode_tag: str = MAIN_TAG
+    """The key of the Site's episode tag that the videos of a feed of the type get, such as YouTube's short, by which
+    VODLoft tells a feed's videos apart in a collection that lists several feeds. The main feed's videos get the
+    main tag."""
 
     @property
     def title(self) -> str:
@@ -297,8 +304,6 @@ class RssEpisodeType(StrEnum):
     TRAILER = "trailer"
     BONUS = "bonus"
 
-
-MAIN_TAG = "ep"
 
 
 @dataclass(frozen=True)

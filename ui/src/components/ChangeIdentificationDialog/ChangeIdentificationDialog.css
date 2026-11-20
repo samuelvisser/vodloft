@@ -278,3 +278,18 @@
 .change-identification-dialog .change-identification-steps + .help {
     margin-top: 10px;
 }
+
+/* A word in place of a count, such as Then */
+.change-identification-dialog .change-identification-step-count.is-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Episodes named by their titles alone */
+.change-identification-dialog .change-identification-examples li.is-title-only .change-identification-title {
+    grid-column: 1 / -1;
+    padding-left: 0;
+}

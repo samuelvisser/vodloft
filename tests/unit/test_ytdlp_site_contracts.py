@@ -87,3 +87,16 @@ def test_several_types_of_feed_are_named_feeds_together_and_lists_keep_their_sit
     assert youtube.section_names.plural == "feeds and playlists"
     assert soundcloud.section_feed_names == Names("track", "tracks")
     assert soundcloud.section_list_names.plural == "albums and playlists"
+
+
+def test_each_feed_gives_its_videos_a_tag_of_its_site_and_youtube_tells_its_feeds_apart():
+    from sources import SectionKind
+
+    for key in CONTRACTS:
+        site = site_of(key)
+        tags = {tag.key for tag in site.episode_tags}
+        feeds = [type_ for type_ in site.section_types if type_.kind is SectionKind.FEED]
+        assert all(type_.episode_tag in tags for type_ in feeds), key
+        assert len({type_.episode_tag for type_ in feeds}) == len(feeds), key
+    youtube = {type_.key: type_.episode_tag for type_ in site_of("youtube").section_types if type_.kind is SectionKind.FEED}
+    assert youtube == {"videos": "ep", "shorts": "short", "live": "livestream"}

@@ -260,11 +260,16 @@ export type CreatorCreateIn = z.input<typeof CreatorCreateSchema>
 export type CreatorCreateOut = z.output<typeof CreatorCreateSchema>
 
 /** The form that changes how VODLoft follows a creator. */
+/** Where the creator's feeds and lists go, by "<account id>:<ref>": only the ones the user changed. */
+export const SectionPlacesSchema = z.record(z.string(), z.enum(SectionTargetValues))
+export type SectionPlaces = z.infer<typeof SectionPlacesSchema>
+
 export const CreatorUpdateSchema = z.object({
     title: z.string().trim().min(1, 'Give them a name').max(255).default(''),
     newLists: NewListsSchema.default({}),
     genre: z.string().trim().max(200).default(''),
     contentRating: z.string().trim().max(50).default(''),
+    places: SectionPlacesSchema.default({}),
 })
 export type CreatorUpdateIn = z.input<typeof CreatorUpdateSchema>
 export type CreatorUpdateOut = z.output<typeof CreatorUpdateSchema>
@@ -316,3 +321,45 @@ export const CreatorCollectionFormSchema = z.object({
 })
 export type CreatorCollectionFormIn = z.input<typeof CreatorCollectionFormSchema>
 export type CreatorCollectionFormOut = z.output<typeof CreatorCollectionFormSchema>
+
+/** One feed or list of the creator that goes elsewhere. */
+export type SectionMove = {accountId: number, ref: string, target: typeof SectionTargetValues[number]}
+
+/** The videos of one feed or list that leave a collection or join it. */
+export const MovedPartSchema = z.object({
+    sectionTitle: z.string(),
+    sectionKind: z.enum(['feed', 'list', 'show', 'item']),
+    /** What moves, in the Site's words: shorts for a feed, videos for a list. */
+    names: NamesSchema,
+    direction: z.enum(['out', 'in', 'leave']),
+    count: z.number(),
+    otherTitle: z.string().nullable().optional(),
+    examples: z.array(z.string()),
+    downloadsDeleted: z.number().default(0),
+    keptDeleted: z.number().default(0),
+    deletingProfiles: z.array(z.string()).default([]),
+    filesMoved: z.number().default(0),
+})
+export type MovedPart = z.infer<typeof MovedPartSchema>
+
+/** What moving feeds and lists does to one of the creator's collections. */
+export const MoveCollectionSchema = z.object({
+    slug: z.string(),
+    title: z.string(),
+    type: z.string(),
+    state: z.enum(['existing', 'new', 'deleted']),
+    episodeIdentifier: z.string(),
+    parts: z.array(MovedPartSchema),
+    newSeasons: z.array(z.string()),
+    episodes: z.number(),
+    renumberOffered: z.boolean(),
+    changes: z.array(z.object({title: z.string(), before: z.string(), after: z.string()})),
+    profiles: z.array(z.object({name: z.string(), filesRenamed: z.number(), metadataRewritten: z.number()})),
+    /** Files moved into it, so its files are renamed and their metadata rewritten also when it keeps its numbers. */
+    filesFollow: z.boolean(),
+    indexed: z.boolean(),
+})
+export type MoveCollection = z.infer<typeof MoveCollectionSchema>
+
+export const SectionMovesPreviewSchema = z.object({collections: z.array(MoveCollectionSchema)})
+export type SectionMovesPreview = z.infer<typeof SectionMovesPreviewSchema>

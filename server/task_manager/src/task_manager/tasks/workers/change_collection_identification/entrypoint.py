@@ -43,8 +43,8 @@ class _Share:
 @task(
     key="change_collection_identification",
     title="Change episode identification",
-    description="Number a collection's episodes another way, then move its files to their new names and rewrite "
-                "their metadata.",
+    description="Number a collection's episodes another way, or again after episodes moved in or out of it, then "
+                "move its files to their new names and rewrite their metadata.",
     allowed_resource_types=("collection",),
     default_max_retries=0,
     tracks_progress=True,
@@ -55,6 +55,7 @@ async def change_collection_identification(
     progress=None,
     episode_identifier: str | None = None,
     episode_order: str | None = None,
+    renumber: bool = True,
 ) -> TaskResult:
     if resource_id is None or episode_identifier is None:
         raise ValueError("Changing episode identification requires a Collection and an identification")
@@ -63,7 +64,7 @@ async def change_collection_identification(
     update_progress(progress, 0, "Numbering the episodes")
 
     def renumber(w):
-        result = change_identification(w, resource_id, identification, episode_order=order)
+        result = change_identification(w, resource_id, identification, episode_order=order, renumber=renumber)
         request_collection_custom_index_reconciliation(w, resource_id)
         queue_event(w, "collection.updated", {"resource_id": resource_id, "id": resource_id})
         return result

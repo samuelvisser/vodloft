@@ -18,6 +18,7 @@ names and get their new metadata.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import PurePath
@@ -27,7 +28,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadProfile, Episode, Season
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
-from backend.operations.collections import CollectionIdentificationChangeOperation
+from backend.operations.collections import CollectionIdentificationChangeOperation, CollectionRenumberOperation
 from backend.services.download_options import effective_metadata_mode
 from backend.services.episode_filters import EpisodeSelection, evaluate, filter_leaving_out, retention_removes
 from backend.services.errors import ServiceError
@@ -54,7 +55,7 @@ _ACTIVE = (OperationStatus.QUEUED.value, OperationStatus.RUNNING.value, Operatio
 # Work on the collection that reads or writes its episodes' numbers or files while it runs.
 _BUSY_KINDS = (
     "collection.index", "collection.sync", "collection.rename_files", "collection.rewrite_metadata",
-    "collection.change_identification", "collection.download_all", "collection.redownload_episodes",
+    "collection.change_identification", "collection.renumber", "collection.download_all", "collection.redownload_episodes",
     "collection.delete_downloads",
 )
 _PHYSICAL = (
@@ -271,6 +272,12 @@ def apply_identification(s: Session, collection: Collection, plan: Identificatio
 
 
 def _busy(s: Session, collection: Collection) -> str | None:
+    return collection_busy(s, collection, "changing how its episodes are numbered")
+
+
+def collection_busy(s: Session, collection: Collection, doing: str) -> str | None:
+    """Why ``doing`` something that numbers the collection's episodes again can't start now: its episodes are
+    downloading, or VODLoft is working on its episodes or files. None when it can."""
     downloads = s.scalar(
         select(TaskOperation.id).where(
             TaskOperation.kind == "media.download",
@@ -284,7 +291,7 @@ def _busy(s: Session, collection: Collection) -> str | None:
     if downloads is not None:
         return (
             f"Episodes of {collection.title} are downloading or waiting to download. "
-            "Let them finish, or cancel them, before changing how its episodes are numbered."
+            f"Let them finish, or cancel them, before {doing}."
         )
     work = s.scalar(
         select(TaskOperation.kind).where(
@@ -374,7 +381,19 @@ def preview_identification(
         and _tag(episode.episode_identifier) in {EpIdType.EP.value, EpIdType.EP_EXTRA.value}
     )
 
-    changed_ids = set(plan.identifiers)
+    profiles = profile_file_changes(s, collection, set(plan.identifiers))
+
+    download_profiles = _download_profile_changes(s, collection, list(episodes.values()), plan)
+    return IdentificationPreview(
+        identification=identification, episodes=len(episodes), episodes_renumbered=len(changed), changes=changes,
+        become_auxiliary=become_auxiliary, profiles=profiles, download_profiles=download_profiles,
+        busy=busy,
+    )
+
+
+def profile_file_changes(s: Session, collection: Collection, changed_ids: set[int]) -> list[ProfileFilesChange]:
+    """What giving the episodes ``changed_ids`` new numbers does to each Local Media Profile's files: the files of
+    those episodes that are named by their number move, and every file gets its metadata written again."""
     profiles: list[ProfileFilesChange] = []
     for profile_id in _profiles_with_files(s, collection):
         profile = s.get(CollectionLocalMediaProfile, profile_id)
@@ -388,13 +407,36 @@ def preview_identification(
         retagged = _metadata_rewrites(s, collection, profile)
         if renamed or retagged:
             profiles.append(ProfileFilesChange(name=profile.name, files_renamed=renamed, metadata_rewritten=retagged))
+    return profiles
 
-    download_profiles = _download_profile_changes(s, collection, list(episodes.values()), plan)
-    return IdentificationPreview(
-        identification=identification, episodes=len(episodes), episodes_renumbered=len(changed), changes=changes,
-        become_auxiliary=become_auxiliary, profiles=profiles, download_profiles=download_profiles,
-        busy=busy,
-    )
+
+def renumber_changes(s: Session, collection: Collection) -> tuple[list[IdentificationChange], set[int]]:
+    """The episodes that get a new number when the collection numbers its episodes again the way it numbers them,
+    as after episodes moved in or out of it: newest first, and their ids."""
+    plan = plan_identification(s, collection, EpisodeIdentifier(collection.episode_identifier))
+    if not plan.identifiers:
+        return [], set()
+    episodes = list(s.scalars(select(Episode).where(Episode.id.in_(plan.identifiers))))
+    newest_first = sorted(episodes, key=lambda episode: (_published(episode), episode.id), reverse=True)
+    return [
+        IdentificationChange(
+            title=episode.title, before=_label(episode.episode_identifier), after=_label(plan.identifiers[episode.id]),
+        )
+        for episode in newest_first
+    ], set(plan.identifiers)
+
+
+def queue_renumber(s: Session, collection: Collection, *, renumber: bool, sections: Sequence[str] = ()) -> TaskOperation:
+    """Number the collection's episodes again the way it numbers them, unless ``renumber`` is False, then rename its
+    files and rewrite their metadata, as after episodes moved in or out of it. Runs as the task that changes a
+    collection's identification, so the collection page shows its progress, and the creator's Edit page on the rows of
+    ``sections``, the feeds and lists that moved.
+
+    ``s`` is a write transaction's session."""
+    operation = create_operation(s, CollectionRenumberOperation(collection, renumber=renumber, sections=sections))
+    queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
+    s.flush()
+    return operation
 
 
 def _download_profile_changes(
@@ -483,17 +525,22 @@ def request_identification_change(
 
 def change_identification(
         s: Session, collection_id: int, identification: EpisodeIdentifier, *, episode_order: EpisodeOrder | None,
+        renumber: bool = True,
 ) -> tuple[int, list[int]]:
-    """Give the collection's episodes their new identifiers. Returns how many changed, and the Local Media Profiles
-    whose files then move to their new names and get their new metadata.
+    """Give the collection's episodes their new identifiers: under a new identification, or again under the one it
+    has, as after episodes moved in or out of it. Without ``renumber`` they keep them. Returns how many changed, and
+    the Local Media Profiles whose files then move to their new names and get their new metadata.
 
     ``s`` is a write transaction's session."""
     collection = s.get(Collection, collection_id)
-    if collection is None or EpisodeIdentifier(collection.episode_identifier) is identification:
+    if collection is None:
         return 0, []
-    plan = plan_identification(s, collection, identification)
-    apply_identification(s, collection, plan)
+    renumbered = 0
+    if renumber:
+        plan = plan_identification(s, collection, identification)
+        apply_identification(s, collection, plan)
+        renumbered = len(plan.identifiers)
     if episode_order is not None:
         collection.episode_order = episode_order.value
     s.flush()
-    return len(plan.identifiers), _profiles_with_files(s, collection)
+    return renumbered, _profiles_with_files(s, collection)
