@@ -36,6 +36,9 @@ class CollectionListAPIRead(ResponseBase):
     enabled: bool
     status: ListStatus
     """new while it waits for the user's choice."""
+    as_season: bool = True
+    """Whether the list is a season of its own when it is on; one that is not adds its videos to the other seasons,
+    as its creator's Edit page sets it."""
     season_id: Optional[int] = None
     """The list's season, which other lists may share."""
     season_name: Optional[str] = Field(default=None, validation_alias=AliasPath("season", "name"))

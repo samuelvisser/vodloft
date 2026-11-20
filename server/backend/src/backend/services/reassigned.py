@@ -37,14 +37,14 @@ from backend.db.models import (
     Creator, CreatorSection, CreatorSectionItem, Collection, DownloadProfile, Episode, MediaDownloadBase,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.services.link_seasons import _holders, active_lists, link_seasons_on, list_each, remove_left_episode
+from backend.services.link_seasons import _holders, link_seasons_on, list_each, lists_in, remove_left_episode
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from sources import ItemRef, SectionKind, Source
 
 
 def _list_collection_ids(creator: Creator, seasons: frozenset[str] = frozenset()) -> set[int]:
     """The creator's collections of their own made from one of its lists. One whose list the creator placed in its
-    own collection as a season, ``seasons``, is left over from before, and holds nothing any more."""
+    own collection, ``seasons``, is left over from before, and holds nothing any more."""
     lists = [section for section in creator.sections if section.kind == SectionKind.LIST and section.ref not in seasons]
     urls = {section.url for section in lists}
     refs = {section.ref for section in lists}
@@ -54,11 +54,11 @@ def _list_collection_ids(creator: Creator, seasons: frozenset[str] = frozenset()
     }
 
 
-def _main_seasons(s: Session, creator: Creator) -> frozenset[str]:
-    """The lists that are seasons of the creator's own collections, one for each account that has one."""
+def _main_lists(creator: Creator) -> frozenset[str]:
+    """The lists in the creator's own collections, as seasons or not, one collection for each account that has one."""
     return frozenset(
         link.ref for account in creator.accounts if account.main_collection is not None
-        for link in active_lists(s, account.main_collection)
+        for link in lists_in(account.main_collection)
     )
 
 
@@ -111,7 +111,7 @@ class CreatorPlaces:
 def creator_places(s: Session, creator: Creator) -> CreatorPlaces:
     mains = creator.main_collection_ids
     order = sorted(creator.collections, key=lambda collection: (collection.id not in mains, collection.id))
-    lists = _list_collection_ids(creator, _main_seasons(s, creator))
+    lists = _list_collection_ids(creator, _main_lists(creator))
     places = CreatorPlaces(s=s, order=order, held={})
     ids = [collection.id for collection in order]
     for collection in order:
@@ -126,7 +126,7 @@ def creator_places(s: Session, creator: Creator) -> CreatorPlaces:
             gone.add(episode_id)
     for collection in order:
         if collection.id in mains:
-            places.held[collection.id] = set(_holders(s, active_lists(s, collection))) if link_seasons_on(collection) else set()
+            places.held[collection.id] = set(_holders(s, lists_in(collection))) if link_seasons_on(collection) else set()
         elif collection.id in lists:
             # Its own link is the list: every video it has that the list still lists.
             places.held[collection.id] = {
@@ -197,7 +197,7 @@ def placed_elsewhere(s: Session, collection: Collection) -> frozenset[str]:
     """The videos a collection does not add, because a list of another collection of its creator holds them, or a
     list of its creator that is not in it has them. A collection made from a list adds every video of its list."""
     creator = collection.creator
-    if creator is None or collection.id in _list_collection_ids(creator, _main_seasons(s, creator)):
+    if creator is None or collection.id in _list_collection_ids(creator, _main_lists(creator)):
         return frozenset()
     places = creator_places(s, creator)
     return places.elsewhere(collection.id) | places.blocked.get(collection.id, frozenset())
@@ -206,13 +206,13 @@ def placed_elsewhere(s: Session, collection: Collection) -> frozenset[str]:
 def lists_left_out(s: Session, collection: Collection) -> dict[int, str]:
     """The creator's lists on the collection's Source that are not in the collection, by the id of their section,
     with their links: the collection leaves out every video they have, also one its feeds list. Each list counts that
-    is not one of the collection's seasons, whether it is a collection of its own, was skipped or waits for the
-    user's choice. Empty for a collection made from a list, which adds every video of its list, and for one without a
+    is not in the collection, as a season or with its videos in the other seasons, whether it is a collection of its
+    own, was excluded from the Library or waits for the user's choice. Empty for a collection made from a list, which adds every video of its list, and for one without a
     creator."""
     creator = collection.creator
-    if creator is None or collection.id in _list_collection_ids(creator, _main_seasons(s, creator)):
+    if creator is None or collection.id in _list_collection_ids(creator, _main_lists(creator)):
         return {}
-    seasons = {link.ref for link in active_lists(s, collection)}
+    seasons = {link.ref for link in lists_in(collection)}
     return {
         section.id: section.url for account in creator.accounts if account.source_key == collection.source_key
         for section in account.sections if section.kind == SectionKind.LIST and section.ref not in seasons

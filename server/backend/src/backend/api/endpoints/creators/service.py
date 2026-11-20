@@ -29,6 +29,7 @@ from backend.db.models import Creator, CreatorAccount, Collection, Episode, Movi
 from backend.services import creators
 from backend.services.creators import NewCollectionSettings, SectionPlan
 from backend.services.errors import ServiceError
+from backend.services.link_seasons import is_in
 from backend.services.new_lists import kinds_names, list_kinds, new_sections_settings
 from backend.services.sites import collection_site
 from backend.types.creator_types import SectionTarget
@@ -118,6 +119,7 @@ class _Section:
     collection_title: str | None = None
     movie: Movie | None = None
     creator_id: int | None = None
+    as_season: bool | None = None
 
     @property
     def section_type(self) -> SectionType:
@@ -403,6 +405,12 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
         )
         for account in creator.accounts
     }
+    as_seasons = {
+        account.id: {
+            link.ref: link.as_season for link in account.main_collection.lists if is_in(account.main_collection, link)
+        } if account.main_collection is not None else {}
+        for account in creator.accounts
+    }
     slugs = {slug for found in kept.values() for slug in found.values()}
     titles = dict(s.execute(select(Collection.slug, Collection.title).where(Collection.slug.in_(slugs))).all())
     movies_kept = {
@@ -424,7 +432,7 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
         _AccountRead(account, [
             _Section(
                 section, kept[account.id].get(section.ref), titles.get(kept[account.id].get(section.ref)),
-                movies_kept[account.id].get(section.ref), creator.id,
+                movies_kept[account.id].get(section.ref), creator.id, as_seasons[account.id].get(section.ref),
             )
             for section in account.sections
         ], creators.takes_movies(account.source_key))

@@ -118,11 +118,24 @@ def loose_in_one_season(collection: Collection) -> bool:
     return collection.loose_videos == LooseVideos.ONE_SEASON.value and collection.list_layout != ListLayout.BY_YEAR.value
 
 
-def is_season(collection: Collection, playlist: CollectionList) -> bool:
-    """Whether the playlist is one of the collection's seasons, as the collection is set."""
+def is_in(collection: Collection, playlist: CollectionList) -> bool:
+    """Whether the playlist is in the collection, as the collection is set: as one of its seasons, or with its videos
+    in the collection's other seasons."""
     if collection.link_seasons == LinkSeasons.ALL.value:
         return True
     return playlist.enabled and playlist.status == ListStatus.KNOWN.value
+
+
+def is_season(collection: Collection, playlist: CollectionList) -> bool:
+    """Whether the playlist is one of the collection's seasons, as the collection is set."""
+    return playlist.as_season and is_in(collection, playlist)
+
+
+def lists_in(collection: Collection) -> list[CollectionList]:
+    """The playlists in the collection, whether or not they are seasons, when its playlists are on."""
+    if not link_seasons_on(collection):
+        return []
+    return [playlist for playlist in collection.lists if is_in(collection, playlist)]
 
 
 def active_lists(s: Session, collection: Collection) -> list[CollectionList]:
@@ -530,9 +543,9 @@ def place_in_link_seasons(
 
 
 def leaving_outside(s: Session, collection: Collection) -> list[Episode]:
-    """The videos the collection added from its link seasons that no link season that is on lists any more, or all of
-    them when it no longer adds such videos. They leave the collection, files and all."""
-    held = _holders(s, active_lists(s, collection)) if adds_outside_videos(collection) else {}
+    """The videos the collection added from its playlists that no playlist in it lists any more, or all of them when
+    it no longer adds such videos. They leave the collection, files and all."""
+    held = _holders(s, lists_in(collection)) if adds_outside_videos(collection) else {}
     return [
         episode for episode in s.scalars(
             select(Episode).where(Episode.collection_id == collection.id, Episode.from_link_season)
@@ -542,9 +555,9 @@ def leaving_outside(s: Session, collection: Collection) -> list[Episode]:
 
 
 def outside_only_in(s: Session, collection: Collection) -> dict[int, tuple[int, int]]:
-    """For each link season, how many of the videos the collection added from the link seasons only it lists, and so
-    would leave with it, and how many of those have files. By link season id."""
-    active = {link.id for link in active_lists(s, collection)}
+    """For each playlist in the collection, how many of the videos the collection added from its playlists only it
+    lists, and so would leave with it, and how many of those have files. By playlist id."""
+    active = {link.id for link in lists_in(collection)}
     with_files = _with_files(s, collection)
     listed: dict[str, list[int]] = {}
     for link_id, slug in s.execute(

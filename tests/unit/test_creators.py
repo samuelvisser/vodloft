@@ -113,10 +113,10 @@ def test_one_show_folds_feeds_and_playlists_into_one_collection(client):
     assert _plan(body, "one_show") == {
         "videos": "main", "shorts": "main", "streams": "main", "PLcabin": "main", "PLtools": "main",
         # Only members can watch it, so it is left for the user to pick.
-        "PLmembers": "skip",
+        "PLmembers": "exclude",
     }
     assert _plan(body, "per_list")["PLtools"] == "own"
-    assert set(_plan(body, "pick").values()) == {"skip"}
+    assert set(_plan(body, "pick").values()) == {"exclude"}
 
 
 def test_adding_a_creator_makes_its_collection_with_its_playlists_as_seasons(client, session):
@@ -124,7 +124,7 @@ def test_adding_a_creator_makes_its_collection_with_its_playlists_as_seasons(cli
 
     plan = [
         {"ref": "videos", "target": "main"}, {"ref": "streams", "target": "main"}, {"ref": "PLcabin", "target": "main"},
-        {"ref": "shorts", "target": "own"}, {"ref": "PLtools", "target": "own"}, {"ref": "PLmembers", "target": "skip"},
+        {"ref": "shorts", "target": "own"}, {"ref": "PLtools", "target": "own"}, {"ref": "PLmembers", "target": "exclude"},
     ]
     response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan})
 
@@ -451,7 +451,7 @@ def test_ignoring_a_new_playlist_keeps_it_on_the_creator_page(client, session, t
     _one_show(client)
     _follow(session, tube, (NEW_LIST, *SECTIONS))
 
-    page = client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLbarn", "target": "skip"}]}).json()
+    page = client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLbarn", "target": "exclude"}]}).json()
 
     assert next(s for s in page["accounts"][0]["sections"] if s["ref"] == "PLbarn")["status"] == "ignored"
     # The next look does not ask again.
@@ -460,7 +460,7 @@ def test_ignoring_a_new_playlist_keeps_it_on_the_creator_page(client, session, t
 
 def test_a_hidden_playlist_shows_on_the_creator_page_again(client, session, tube):
     _one_show(client)
-    client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLtools", "target": "skip"}]})
+    client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLtools", "target": "exclude"}]})
 
     page = client.post("/api/creators/workshop/accounts/1/sections/show", json={"refs": ["PLtools", "PLcabin"]})
 
@@ -658,7 +658,7 @@ def test_an_artist_on_a_video_site_keeps_only_their_albums(client, session):
     for preset in ("one_show", "per_list"):
         music = {item["ref"]: item["target"] for item in next(p for p in body["presets"] if p["key"] == preset)["musicPlan"]}
         # The channel's uploads are much more than the artist's albums, so its feeds start skipped.
-        assert {music[ref] for ref in ("videos", "streams", "shorts")} == {"skip"}
+        assert {music[ref] for ref in ("videos", "streams", "shorts")} == {"exclude"}
     music = {item["ref"]: item["target"] for item in next(p for p in body["presets"] if p["key"] == "one_show")["musicPlan"]}
     assert music["PLcabin"] == "main"
 
@@ -1087,11 +1087,11 @@ def test_a_hosts_movies_are_added_with_them_and_a_movie_in_the_library_joins_the
     assert by_ref["harbour"]["movieSlug"] is None
     # Every preset adds the movies, and the one in the library joins the host even when the user picks.
     assert _plan(found, "per_list") == {"evenings": "own", "tribute": "own", "harbour": "own"}
-    assert _plan(found, "pick") == {"evenings": "skip", "tribute": "own", "harbour": "skip"}
+    assert _plan(found, "pick") == {"evenings": "exclude", "tribute": "own", "harbour": "exclude"}
 
     response = client.post("/api/creators", json={
         "sourceKey": "film", "url": FILM_ROOT, "lookupId": found["lookupId"],
-        "sections": [{"ref": "evenings", "target": "skip"}, {"ref": "tribute", "target": "own"}, {"ref": "harbour", "target": "own"}],
+        "sections": [{"ref": "evenings", "target": "exclude"}, {"ref": "tribute", "target": "own"}, {"ref": "harbour", "target": "own"}],
     })
     assert response.status_code == 201, response.text
     page = response.json()
@@ -1111,7 +1111,7 @@ def test_a_movie_that_stays_apart_keeps_out_of_the_host_and_can_join_later(clien
     _movie(session, "tribute", "A Tribute")
     response = client.post("/api/creators", json={
         "sourceKey": "film", "url": FILM_ROOT,
-        "sections": [{"ref": "evenings", "target": "own"}, {"ref": "tribute", "target": "skip"}, {"ref": "harbour", "target": "skip"}],
+        "sections": [{"ref": "evenings", "target": "own"}, {"ref": "tribute", "target": "exclude"}, {"ref": "harbour", "target": "exclude"}],
     })
     assert response.status_code == 201, response.text
     page = response.json()

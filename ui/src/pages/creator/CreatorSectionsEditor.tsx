@@ -64,21 +64,27 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
         options.push({label: `Add to ${mainTitle}`, description: `Its ${account.site.mediaNames.plural} go into ${main}`, plan: {ref: section.ref, target: 'main'}})
     } else if (section.kind === 'list' && account.site.linkSeasons) {
         options.push({label: `${season.Singular} of ${mainTitle}`, description: `${capitalized(season.a)} of ${main}`, plan: {ref: section.ref, target: 'main'}})
+        options.push({
+            label: `Add to ${mainTitle}`, description: `Not as ${season.a}: its ${account.site.mediaNames.plural} join the others in ${main}`,
+            plan: {ref: section.ref, target: 'main_loose'},
+        })
     }
     options.push({label: 'Own collection', description: 'A collection of its own in your library', plan: {ref: section.ref, target: 'own'}})
     return options
 }
 
-export type Place = 'main' | 'own' | 'skip'
+export type Place = 'main' | 'main_loose' | 'own' | 'exclude'
 
 /** The key of a feed or list of one of the creator's accounts, by which the Edit page keeps where it goes. */
 export function placeKey(account: CreatorPageAccountRead, ref: string) {
     return `${account.id}:${ref}`
 }
 
-/** Where a feed or list in the Library is now: in the creator's own collection, or in a collection of its own. */
+/** Where a feed or list in the Library is now: in the creator's own collection, as a season or not, or in a
+ *  collection of its own. */
 export function placeOf({account, section}: AccountSection): Place {
-    return section.collectionSlug === account.mainCollectionSlug ? 'main' : 'own'
+    if (section.collectionSlug !== account.mainCollectionSlug) return 'own'
+    return section.asSeason === false ? 'main_loose' : 'main'
 }
 
 /** The feeds and lists in the Library whose place can change: a feed, and a list where lists can be seasons. */
@@ -94,20 +100,24 @@ export function placedSections(creator: CreatorPageRead): AccountSection[] {
 export function placeLabels(section: CreatorSectionRead, mainTitle: string, season: Noun): Record<Place, string> {
     return {
         main: section.kind === 'feed' ? `In ${mainTitle}` : `${season.Singular} of ${mainTitle}`,
+        main_loose: `In ${mainTitle}, not as ${season.a}`,
         own: 'Collection of its own',
-        skip: 'Not in your library',
+        exclude: 'Exclude from library',
     }
 }
 
 /** The places a feed or list can go from where it is: a feed or list in the creator's own collection can leave the
- * Library, one in a collection of its own goes there by deleting that collection. The main feed, such as YouTube's
- * Videos, has the own collection's link, so it never becomes a collection of its own. */
+ * Library, one in a collection of its own goes there by deleting that collection. A list in the creator's own
+ * collection is a season of it, or has its videos with the ones in no list. The main feed, such as YouTube's Videos,
+ * has the own collection's link, so it never becomes a collection of its own. */
 function placeChoices(section: CreatorSectionRead, current: Place): Place[] {
     const own = !(section.kind === 'feed' && section.role === 'main')
+    const inMain = current === 'main' || current === 'main_loose'
     return [
         'main' as const,
+        ...(section.kind === 'list' ? ['main_loose' as const] : []),
         ...(own || current === 'own' ? ['own' as const] : []),
-        ...(current === 'main' ? ['skip' as const] : []),
+        ...(inMain ? ['exclude' as const] : []),
     ]
 }
 
@@ -270,7 +280,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                                 {item.section.title}
                                 {value !== current && <span className="creator-section-changed">Changed</span>}
                             </b>
-                            <span>{facts(item, value !== current ? `Was ${current === 'own' ? 'a collection of its own' : labels.main.replace(/^In /, 'in ')}` : null)}</span>
+                            <span>{facts(item, value !== current ? `Was ${current === 'own' ? 'a collection of its own' : labels[current].replace(/^In /, 'in ')}` : null)}</span>
                         </div>
                         {mayManage && onPlace ? (
                             <SectionPlace
@@ -296,7 +306,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
             ))}
             {ignore && (
                 <button type="button" className="btn btn-link" disabled={busy !== null}
-                        onClick={() => void place(item.account, {ref: item.section.ref, target: 'skip'})}>
+                        onClick={() => void place(item.account, {ref: item.section.ref, target: 'exclude'})}>
                     Ignore
                 </button>
             )}

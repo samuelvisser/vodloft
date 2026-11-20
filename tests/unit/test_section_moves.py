@@ -133,7 +133,7 @@ def test_livestreams_leave_the_library_with_their_files(feeds, client, session):
     from backend.db.models import Collection, CreatorSection
 
     main_id = feeds.id
-    out = _save(client, "streams", "skip")
+    out = _save(client, "streams", "exclude")
 
     assert out.status_code == 200, out.text
     session.expire_all()
@@ -159,7 +159,7 @@ def test_the_preview_shows_what_saving_does_and_changes_nothing(feeds, client, s
 
     main_id = feeds.id
     preview = client.post("/api/creators/workshop/moves/preview", json={"moves": [
-        {"accountId": 1, "ref": "shorts", "target": "own"}, {"accountId": 1, "ref": "streams", "target": "skip"},
+        {"accountId": 1, "ref": "shorts", "target": "own"}, {"accountId": 1, "ref": "streams", "target": "exclude"},
     ]})
 
     assert preview.status_code == 200, preview.text

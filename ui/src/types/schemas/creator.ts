@@ -5,7 +5,7 @@ import {ApiDateTimeSchema} from './datetime'
 import {EpisodeReadViewSchema} from './episode'
 import {NamesSchema, SectionTypeSchema} from './source'
 
-export const SectionTargetValues = ['main', 'own', 'skip'] as const
+export const SectionTargetValues = ['main', 'main_loose', 'own', 'exclude'] as const
 export const CreatorPresetValues = ['one_show', 'per_list', 'pick'] as const
 
 export const CreatorSectionReadSchema = z.object({
@@ -26,6 +26,9 @@ export const CreatorSectionReadSchema = z.object({
     access: z.string().nullable(),
     year: z.string().nullable().optional(),
     collectionSlug: z.string().nullable(),
+    /** For a list in the creator's own collection: whether it is a season of its own, rather than having its videos
+     *  where the ones in no list go. */
+    asSeason: z.boolean().nullable().optional(),
     collectionTitle: z.string().nullable(),
     /** The movie in the Library that this single item is, when it is one. */
     movieSlug: z.string().nullable().default(null),
@@ -42,7 +45,7 @@ export const SectionPlanSchema = z.object({
 })
 export type SectionPlan = z.infer<typeof SectionPlanSchema>
 
-export const NewSectionActionValues = ['ask', 'season', 'own', 'ignore'] as const
+export const NewSectionActionValues = ['ask', 'season', 'loose', 'own', 'ignore'] as const
 export type NewSectionAction = typeof NewSectionActionValues[number]
 
 /** One kind of list a creator's Sites have, such as a SoundCloud artist's albums, with what happens with a new one. */
@@ -252,7 +255,7 @@ export const CreatorCreateSchema = z.object({
     into: z.string().default(''),
     /** What the creator's collections are: Music for a music artist. */
     type: z.enum(['series', 'music']).default('series'),
-}).refine((value) => value.sections.some((section) => section.target !== 'skip'), {
+}).refine((value) => value.sections.some((section) => section.target !== 'exclude'), {
     message: 'Pick at least one section to keep',
     path: ['sections'],
 })
@@ -331,7 +334,7 @@ export const MovedPartSchema = z.object({
     sectionKind: z.enum(['feed', 'list', 'show', 'item']),
     /** What moves, in the Site's words: shorts for a feed, videos for a list. */
     names: NamesSchema,
-    direction: z.enum(['out', 'in', 'leave']),
+    direction: z.enum(['out', 'in', 'leave', 'season', 'loose']),
     count: z.number(),
     otherTitle: z.string().nullable().optional(),
     examples: z.array(z.string()),

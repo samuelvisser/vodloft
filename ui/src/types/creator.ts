@@ -45,17 +45,23 @@ const newListActionRegs = new Map<string, ReturnType<typeof makeNewListActionReg
 
 function makeNewListActionReg(label: string, kind: ListKind, music: boolean) {
     // An artist's lists are albums of their own collection.
-    const season = collectionWords(music ? 'music' : null).season
+    const {season, episode} = collectionWords(music ? 'music' : null)
     return createSelectRegistry(`NewListAction-${label}-${music}-${kind.key}-${kind.names.plural}-${kind.seasons}`, {
         ask: {label: 'Ask me', help: `Sends a message and shows the new ${kind.names.singular} on the ${label}'s Edit page with the choices.`},
         // Only where the kind's lists can be seasons, unlike The Daily Wire's shows.
         ...(kind.seasons ? {season: {
             label: `Add it as ${season.a}`,
             help: `New ${kind.names.plural} become ${season.plural} of the ${label}'s own collection.`,
+        }, loose: {
+            label: `Add it, not as ${season.a}`,
+            help: `The ${episode.plural} of new ${kind.names.plural} join the ${label}'s own collection, where its ${episode.plural} in no ${kind.names.singular} go.`,
         }} : {}),
         own: {label: 'Add it as a collection', help: `Each new ${kind.names.singular} becomes a collection of its own.`},
-        ignore: {label: 'Always skip it', help: `The new ${kind.names.singular} is only listed on the ${label}'s Edit page.`},
-    } as Record<'ask' | 'season' | 'own' | 'ignore', {label: string, help: string}>)
+        ignore: {
+            label: 'Exclude it from library',
+            help: `The new ${kind.names.singular} is only listed on the ${label}'s Edit page, and keeps its ${episode.plural} out of the ${label}'s collections.`,
+        },
+    } as Record<'ask' | 'season' | 'loose' | 'own' | 'ignore', {label: string, help: string}>)
 }
 
 /** What to do when a creator adds a list of one kind, such as a playlist, show or album. "Add it as a season" is only

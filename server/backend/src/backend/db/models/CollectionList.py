@@ -39,6 +39,10 @@ class CollectionList(Base):
         default=ListStatus.KNOWN.value, server_default=ListStatus.KNOWN.value,
         comment="known, or new while it waits for the user's choice",
     )
+    as_season: Mapped[bool] = mapped_column(
+        default=True, server_default="1",
+        comment="Whether the list is a season of its own, or its videos join the collection's other seasons",
+    )
     added_by_user: Mapped[bool] = mapped_column(
         default=False, server_default="0",
         comment="The user added the link, rather than it being one of the playlists of the collection's creator",

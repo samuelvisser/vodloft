@@ -7,7 +7,7 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {names, Step, ChangeList, TitleList} from '../../components/ChangeIdentificationDialog/ChangeSteps'
 import '../../components/ChangeIdentificationDialog/ChangeIdentificationDialog.css'
 import {faIcon} from '../../icons/faIcon'
-import {collectionWords} from '../../lib/collectionWords'
+import {collectionWords, type Noun} from '../../lib/collectionWords'
 import {previewCreatorMoves} from '../../lib/queries'
 import {capitalized, joinedNames} from '../../types/creator'
 import type {MoveCollection, MovedPart, SectionMove} from '../../types/schemas/creator'
@@ -127,7 +127,7 @@ function CollectionMoves({collection, renumber, onRenumber}: {
                 {tag && <span className={`move-sections-state is-${collection.state}`}>{tag}</span>}
             </h3>
             <ul className="change-identification-steps">
-                {collection.parts.map((part, index) => <PartSteps key={index} part={part}/>)}
+                {collection.parts.map((part, index) => <PartSteps key={index} part={part} season={season}/>)}
                 {collection.newSeasons.length > 0 && (
                     <Step
                         icon={faIcon('fass', 'folder-plus')}
@@ -193,7 +193,7 @@ function CollectionMoves({collection, renumber, onRenumber}: {
     )
 }
 
-function PartSteps({part}: {part: MovedPart}) {
+function PartSteps({part, season}: {part: MovedPart, season: Noun}) {
     const what = part.count === 1 ? part.names.singular : part.names.plural
     // The feed or list they are of, unless that is what they are called already, such as Shorts.
     const section = part.sectionTitle.toLocaleLowerCase() === part.names.plural.toLocaleLowerCase() ? '' : `${part.sectionTitle}. `
@@ -205,6 +205,22 @@ function PartSteps({part}: {part: MovedPart}) {
                 headline={`${capitalized(what)} join`}
                 detail={`From ${part.otherTitle && part.otherTitle !== part.sectionTitle ? `${part.sectionTitle} in ${part.otherTitle}` : part.sectionTitle}${part.filesMoved > 0
                     ? `, with ${part.filesMoved.toLocaleString()} ${part.filesMoved === 1 ? 'file' : 'files'}, which are moved, not downloaded again` : ''}.`}
+                value={part.count}
+            >
+                {examples}
+            </Step>
+        )
+    }
+    if (part.direction === 'season' || part.direction === 'loose') {
+        const files = part.filesMoved > 0
+            ? ` Their ${part.filesMoved.toLocaleString()} ${part.filesMoved === 1 ? 'file moves' : 'files move'} along, without downloading them again.` : ''
+        return (
+            <Step
+                icon={faIcon('fass', part.direction === 'season' ? 'folder-plus' : 'folder-minus')}
+                headline={part.direction === 'season'
+                    ? `${capitalized(what)} get ${season.a} of their own`
+                    : `${capitalized(what)} join the other ${season.plural}`}
+                detail={`${section}${part.direction === 'season' ? `${part.sectionTitle} becomes ${season.a}.` : `${part.sectionTitle} is no longer ${season.a}.`}${files}`}
                 value={part.count}
             >
                 {examples}

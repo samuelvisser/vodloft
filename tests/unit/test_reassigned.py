@@ -307,12 +307,12 @@ def test_a_playlist_collection_becomes_a_season_and_goes_once_it_is_empty(creato
 
 
 def test_a_playlist_season_leaves_the_library_and_a_collection_of_its_own_must_be_deleted_instead(creator, client, session):
-    out = _save(client, "PLcabin", "skip")
+    out = _save(client, "PLcabin", "exclude")
     assert out.status_code == 200, out.text
     sections = {section["ref"]: section for section in out.json()["accounts"][0]["sections"]}
     assert (sections["PLcabin"]["collectionSlug"], sections["PLcabin"]["status"]) == (None, "ignored")
 
-    refused = _save(client, "PLtools", "skip")
+    refused = _save(client, "PLtools", "exclude")
     assert refused.status_code == 422 and "delete that collection" in refused.text
 
 
@@ -396,7 +396,7 @@ def test_a_playlist_that_is_in_none_of_the_creators_collections_keeps_its_videos
         ItemRef(slug, f"https://tube.example/watch?v={slug}") for slug in lists[url]
     ), raising=False)
     response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
-        {"ref": "videos", "target": "main"}, {"ref": "PLmembers", "target": "skip"},
+        {"ref": "videos", "target": "main"}, {"ref": "PLmembers", "target": "exclude"},
     ]})
     assert response.status_code == 201, response.text
     main_id = session.scalar(select(Collection.id).where(Collection.slug == "UCworkshop"))

@@ -215,12 +215,13 @@ Paste a link to a YouTube channel in **Add media** and choose **Add the creator*
 The Add creator page lists the YouTube channel's feeds (Videos, Live and Shorts on YouTube) and its playlists or shows. For each one you choose where it goes:
 
 - **Main collection**: one collection named after the creator. Feeds become a season per year, and a playlist becomes a playlist season (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)). The main collection takes only the feeds you put in it: with only Videos, the channel's livestreams and Shorts stay out until you add those feeds too. A Daily Wire show has seasons of its own, so it always gets a collection of its own.
+- **Main collection, not as a season**, for a playlist: its videos go into the main collection, but in the seasons the videos in no playlist go to, such as the season per year, instead of a season of their own. Use this for a playlist whose videos you want, without it being excluded from the library.
 - **A collection of its own**: the part becomes a separate collection, for example Shorts that you want to keep apart from the rest.
-- **Skip**: nothing is added. The part stays listed on the creator's **Edit** page, so you can add it later.
+- **Exclude from library**: nothing is added. A playlist you exclude also keeps its videos out of the creator's other collections (see [A video that moves to another collection](#a-video-that-moves-to-another-collection-reassigned)). The part stays listed on the creator's **Edit** page, so you can add it later.
 
-The **Presets** for the creator fill these choices in for you, and you can still change any of them: **One collection** (YouTube only) puts everything in the main collection, with the playlists as named seasons and the rest as seasons by year; **A collection per playlist** (or per show) gives every playlist or show its own collection; **Only what I pick** starts with all feeds and playlists, or all shows, skipped. A playlist or show that is already in your Library stays where it is.
+The **Presets** for the creator fill these choices in for you, and you can still change any of them: **One collection** (YouTube only) puts everything in the main collection, with the playlists as named seasons and the rest as seasons by year; **A collection per playlist** (or per show) gives every playlist or show its own collection; **Only what I pick** starts with all feeds and playlists, or all shows, excluded from the library. A playlist or show that is already in your Library stays where it is.
 
-A video that appears in more than one place is kept once, and a playlist is always in one place only: a season of the main collection or a collection of its own. In the main collection a video in a playlist season is in that season and not in the season of videos in no playlist. The creator decides which playlists are seasons of its main collection, so that collection's Seasons window doesn't look for new playlists itself; it still lets you name, order and group the seasons, and turn a playlist season off.
+A video that appears in more than one place is kept once, and a playlist is always in one place only: the main collection, as a season or not, or a collection of its own. In the main collection a video in a playlist season is in that season and not in the season of videos in no playlist. The creator decides which playlists are seasons of its main collection, so that collection's Seasons window doesn't look for new playlists itself; it still lets you name, order and group the seasons, and turn a playlist season off.
 
 You can change where a feed or playlist goes later, on the creator's **Edit** page, under **Where the feeds and playlists go**: in the main collection, a collection of its own, or out of your Library. The main feed, such as YouTube's Videos, always stays with the main collection. Nothing moves until you save. Before it does, VODLoft shows for each collection what leaves and joins it, which downloads are deleted, which episodes get a new number, and which files are renamed and get their metadata rewritten. Downloaded files move along without downloading them again. You can tell a collection to keep its numbers instead. While the move runs, the dropdowns of what moved show its progress.
 
@@ -262,12 +263,13 @@ Each part downloads only its own stretch of the video, so it works with everythi
 
 Once a day VODLoft looks at each creator for playlists or shows it did not have before, also for a main collection that has playlist seasons. **Check now** on the creator's page looks right away. What happens with a new one is up to you, under **New playlists** (or shows, or albums) on the Add creator page or in the creator's **Edit** page. A site that knows more than one kind of list has a setting for each, next to each other: a SoundCloud artist has one for **New albums** and one for **New playlists**. The choices are:
 
-- **Ask me** (the default): VODLoft sends a message and shows the new playlist or show at the top of the creator's **Edit** page, where you choose to add it to the main collection as a season, give it a collection of its own, or ignore it.
+- **Ask me** (the default): VODLoft sends a message and shows the new playlist or show at the top of the creator's **Edit** page, where you choose to add it to the main collection as a season or not, give it a collection of its own, or ignore it.
 - **Add it as a season**: a new playlist becomes a season of the creator's main collection. A new Daily Wire show gets a collection of its own, because it has seasons of its own.
+- **Add it, not as a season**: a new playlist's videos go into the creator's main collection, in the seasons of the videos in no playlist.
 - **Add it as a collection**: each new playlist or show becomes a collection.
-- **Always skip it**: nothing is added, and you are not asked.
+- **Exclude it from library**: nothing is added, and you are not asked. The playlist keeps its videos out of the creator's collections.
 
-A music artist starts with every kind of list set to **Add it as an album**. Where the site tells albums from other lists, as SoundCloud does, only the albums are added, and the other kinds, such as the artist's playlists, start at **Always skip it**.
+A music artist starts with every kind of list set to **Add it as an album**. Where the site tells albums from other lists, as SoundCloud does, only the albums are added, and the other kinds, such as the artist's playlists, start at **Exclude it from library**.
 
 Playlists or shows you skipped stay under **Not in your library** on the creator's **Edit** page, each with buttons to add them.
 
@@ -282,7 +284,7 @@ The creator's **Edit** page holds:
 
 A creator keeps each of their videos in one of its collections, and a playlist wins over a feed: a video in a playlist that is a collection of its own belongs in that collection, not in the main collection with the rest of the uploads. A video that is not downloaded yet just goes there. The main collection doesn't add a video that such a playlist has, and leaves one it had.
 
-The same goes for every playlist that isn't in a collection: one you skipped, or one that waits for your choice, keeps its videos out of the creator's main collection too, even though the creator's Videos feed lists them. This always wins, so a video stays out even when a playlist that is a season of the main collection has it too. That way each video of a creator ends up in only one collection. A video that was already downloaded stays where it is, with its files, until you remove it.
+The same goes for every playlist that isn't in a collection: one you excluded from the library, or one that waits for your choice, keeps its videos out of the creator's main collection too, even though the creator's Videos feed lists them. This always wins, so a video stays out even when a playlist that is a season of the main collection has it too. That way each video of a creator ends up in only one collection. A video that was already downloaded stays where it is, with its files, until you remove it.
 
 When a video is already downloaded, for example because the creator put it in a playlist only after VODLoft downloaded it, it stays where it is, files and all, with a **Reassigned** badge. Its page says which collection it belongs in now. That collection doesn't download it again while it waits. You choose when it moves:
 
@@ -300,11 +302,12 @@ When several Download Profiles download it, the first one in the collection's or
 
 ### Moving a playlist between the main collection and its own
 
-Under **Where the playlists go**, the creator's **Edit** page lists each playlist that is in your Library, and where it is: a **Season of** the main collection, or a **Collection of its own**. Pick another place to move it, videos and all:
+Under **Where the playlists go**, the creator's **Edit** page lists each playlist that is in your Library, and where it is: a **Season of** the main collection, **In** the main collection **not as a season**, or a **Collection of its own**. Pick another place to move it, videos and all:
 
 - **Collection of its own**: the playlist becomes a new collection, and its videos leave the main collection. The new collection starts without Download Profiles, like every collection made from a creator.
 - **Season of** the main collection: the playlist becomes a season again, and its collection goes once its videos have moved. A video in that collection that the playlist no longer lists stays there.
-- **Not in your library**, for a season only: the season is turned off and the playlist moves to **Not in your library** on the creator's **Edit** page. To take a playlist with a collection of its own out of your Library, delete that collection.
+- **Not as a season** in the main collection: the playlist's videos stay in, or join, the main collection, in the seasons of the videos in no playlist. Turned back into a **Season of** the main collection, they get their season again. Either way, downloaded videos move their files into their new season.
+- **Exclude from library**, for a playlist in the main collection only: the playlist leaves the main collection and moves to **Not in your library** on the creator's **Edit** page, and keeps its videos out. To take a playlist with a collection of its own out of your Library, delete that collection.
 
 Videos that are not downloaded just move. Downloaded videos move their files the way a Reassigned video does, see the section above, so a video the new place downloads with another Local Media Profile is downloaded again there before its old files go. The window that asks you to confirm the move says which of these will happen.
 
