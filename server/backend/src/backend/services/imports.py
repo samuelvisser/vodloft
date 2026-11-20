@@ -1126,7 +1126,8 @@ def _create_links_only_collection(session: Session, plan: CollectionPlan) -> Col
 def _join_creator(session: Session, collection: Collection) -> tuple[Creator | None, bool]:
     """Make a new Collection one of the creator behind its link, as Add to creator does, when it has one. Returns the
     creator, and whether it was added to the library for it."""
-    from backend.services.creators import account_in_library, creator_site, join_creator
+    from backend.services.creator_joins import join_creator
+    from backend.services.creators import account_in_library, creator_site
     from sources import Feature, get_source
 
     source = get_source(collection.source_key)

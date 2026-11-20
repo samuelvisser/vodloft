@@ -566,7 +566,8 @@ def test_a_collection_of_a_section_another_collection_keeps_cannot_join(client, 
     _plain_collection(session, "tools", SECTIONS[4].url)
     _plain_collection(session, "my-videos", ROOT)
 
-    assert client.post("/api/collections/tools/creator").status_code == 200
+    joined = client.post("/api/collections/tools/creator")
+    assert joined.status_code == 200, joined.text
     # The creator's own collection keeps all its uploads already.
     match, _steps = _match(client, "my-videos")
     assert match["creatorSlug"] == "workshop"
@@ -744,14 +745,8 @@ def test_a_playlist_that_is_a_season_of_the_creators_collection_moves_to_a_colle
 
     match, _steps = _match(client, "cabin")
     assert (match["sectionTitle"], match["keptBy"]) == ("Building the Cabin", None)
-    assert match["overlaps"] == [
-        {"ref": "PLcabin", "title": "Building the Cabin", "keptBy": "Northwind Workshop", "canMoveHere": True},
-    ]
-    # Without the user's choice the playlist stays where it is, and the collection can't join.
-    refused = client.post("/api/collections/cabin/creator")
-    assert refused.status_code == 422 and "already keeps" in refused.json()["detail"]
-
-    joined = client.post("/api/collections/cabin/creator", json={"moveHere": ["PLcabin"]})
+    # The collection of the playlist takes it from the creator's own collection.
+    joined = client.post("/api/collections/cabin/creator")
 
     assert joined.status_code == 200, joined.text
     session.expire_all()

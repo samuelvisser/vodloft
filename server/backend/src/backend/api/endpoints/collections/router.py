@@ -7,10 +7,11 @@ from .seasons.router import router as collection_seasons_router
 from .sync_log import collection_scans
 from backend.api.endpoints.creators.service import (
     CollectionNotFoundError, add_collection_to_creator, collection_creator_leave, collection_creator_match, collection_link, join_collection_creator,
-    leave_collection_creator, look_up_collection_creator,
+    leave_collection_creator, look_up_collection_creator, preview_collection_join,
 )
 from backend.api.models.creator import (
-    CollectionCreatorJoinAPIIn, CollectionCreatorLeaveAPIRead,
+    CollectionCreatorJoinAPIIn, CollectionCreatorJoinPreviewAPIIn, CollectionCreatorLeaveAPIRead,
+    CreatorSectionMovesPreviewAPIRead,
 )
 from .service import (
     get_collections_list,
@@ -394,6 +395,28 @@ def collection_creator_match_get(collection_slug: str):
     return stream_steps(match, "Could not look up the creator")
 
 
+def _collection_details(collection_slug: str, lookup_id: str | None):
+    """The collection's Source and the creator behind its link: what its match found, or looked up again."""
+    with db_session() as s:
+        link = _collection_found(lambda: collection_link(s, collection_slug))
+    details = creator_lookups.found(lookup_id, ("collection", collection_slug, link.source_key, link.url))
+    return link.source_key, details if details is not None else look_up_collection_creator(link)
+
+
+@router.post(
+    "/{collection_slug}/creator/preview",
+    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CreatorSectionMovesPreviewAPIRead,
+)
+def collection_creator_join_preview(collection_slug: str, body: CollectionCreatorJoinPreviewAPIIn | None = None):
+    """What adding the collection to the creator behind its link does to the creator's collections: the videos that
+    move between them, their files and their new numbers. Changes nothing; no collections when nothing moves."""
+    source_key, details = _collection_details(collection_slug, body.lookup_id if body is not None else None)
+    return _collection_found(lambda: run_write_transaction(
+        lambda s: preview_collection_join(s, collection_slug, source_key, details)
+    ))
+
+
 @router.post(
     "/{collection_slug}/creator",
     dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
@@ -402,26 +425,20 @@ def collection_creator_match_get(collection_slug: str):
 def collection_creator_join(
     collection_slug: str, body: CollectionCreatorJoinAPIIn | None = None, access: Access = signed_in(),
 ):
-    """Add the collection to the creator behind its links, adding the creator when it is not in the Library. A list
-    that would be in two places stays in one: the ones in ``move_here`` move to this collection. With
+    """Add the collection to the creator behind its links, adding the creator when it is not in the Library. Each of
+    the creator's videos stays in one collection: what the collection takes from the creator's other collections, or
+    leaves to them, moves with its files, and ``renumber`` says which collections keep their numbers. With
     ``creator_slug``, it joins that creator in the Library instead, whatever its link is."""
     if body is not None and body.creator_slug:
         creator_slug = body.creator_slug
         return _collection_found(lambda: run_write_transaction(
             lambda s: add_collection_to_creator(s, collection_slug, creator_slug)
         ))
-    with db_session() as s:
-        link = _collection_found(lambda: collection_link(s, collection_slug))
-    details = creator_lookups.found(
-        body.lookup_id if body is not None else None, ("collection", collection_slug, link.source_key, link.url),
-    )
-    if details is None:
-        details = look_up_collection_creator(link)
-    source_key = link.source_key
-    move_here = frozenset(body.move_here if body is not None else ())
+    source_key, details = _collection_details(collection_slug, body.lookup_id if body is not None else None)
+    renumber = dict(body.renumber) if body is not None else {}
     return _collection_found(lambda: run_write_transaction(
         lambda s: join_collection_creator(
-            s, collection_slug, source_key, details, added_by_id=access.user_id, move_here=move_here,
+            s, collection_slug, source_key, details, added_by_id=access.user_id, renumber=renumber,
         )
     ))
 

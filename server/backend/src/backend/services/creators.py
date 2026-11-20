@@ -753,49 +753,6 @@ def join_overlaps(
     return overlaps
 
 
-def join_creator(
-    s: Session, collection: Collection, *, source_key: str, details: CreatorDetails, added_by_id: int | None = None,
-    move_here: frozenset[str] = frozenset(),
-) -> Creator:
-    """Make a collection one of a creator's, adding the creator when it is not in the Library yet. Nothing is indexed
-    again and no file moves. A list that would be in two places stays in one: in the collection when its ref is in
-    ``move_here`` and the creator's own collection can let it go, and otherwise where it was.
-
-    ``details`` was looked up before the write transaction. ``s`` is a write transaction's session."""
-    if collection.creator_id is not None:
-        raise ServiceError(f"{collection.title} is already in {collection.creator.title}")
-    site = creator_site(source_key, details.url or _site_key_of(source_key))
-    record = site_record(s, site)
-    account = account_in_library(s, record.key, details.ref)
-    if account is None:
-        account = _new_creator(s, source_key, record.key, details, added_by_id=added_by_id)
-    creator = account.creator
-    section, keeper = collection_section(s, collection, source_key, details, account)
-    if not isinstance(section, CreatorSection):
-        raise ServiceError(f"{collection.title} is not a playlist, show or the videos of {creator.title}")
-    overlaps = join_overlaps(s, collection, source_key, details, account)
-    if keeper is not None and not any(overlap.ref == section.ref and overlap.ref in move_here for overlap in overlaps):
-        raise ServiceError(f"{keeper.title} already keeps this part of {creator.title}")
-    changed: set[int] = set()
-    for overlap in overlaps:
-        if overlap.ref in move_here and overlap.can_move_here:
-            _switch_off(overlap.kept_by, overlap.ref)
-            changed.add(overlap.kept_by.id)
-        else:
-            _switch_off(collection, overlap.ref)
-            changed.add(collection.id)
-    section.status = SectionStatus.KNOWN.value
-    belong_to(collection, creator)
-    if section.kind == SectionKind.FEED and section.role == SectionRole.MAIN and account.main_collection is None:
-        account.main_collection = collection
-    s.flush()
-    for collection_id in changed:
-        from backend.services.link_seasons import place_in_link_seasons
-
-        place_in_link_seasons(s, s.get(Collection, collection_id), by_user=True)
-    return creator
-
-
 def _switch_off(collection: Collection, ref: str) -> None:
     """Take a list out of the collection. One that made every list a season keeps the others on. Switched on again,
     the list is a season."""

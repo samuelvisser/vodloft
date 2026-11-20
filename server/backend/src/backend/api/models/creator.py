@@ -401,26 +401,22 @@ class CollectionCreatorMatchAPIRead(ResponseBase):
     """The key of the type of that section, such as list."""
     kept_by: Optional[str] = None
     """The title of another of the creator's collections that keeps this section already, which can't let it go."""
-    overlaps: list["JoinOverlapAPIRead"] = Field(default_factory=list)
-    """The lists that would be in two places once the collection joins: each stays in one, as the user chooses."""
-
-
-class JoinOverlapAPIRead(ResponseBase):
-    ref: str
-    title: str
-    kept_by: str = Field(validation_alias=AliasPath("kept_by", "title"))
-    can_move_here: bool
-    """The creator's own collection keeps it, and can let it go; a collection of its own keeps what it has."""
 
 
 class CollectionCreatorJoinAPIIn(RequestBase):
     lookup_id: Optional[str] = Field(default=None, max_length=64)
     """The match's id, to use what it found instead of asking the Site again."""
-    move_here: list[str] = Field(default_factory=list, max_length=5000)
-    """The lists, by ref, that leave the creator's own collection for the joining one."""
+    renumber: dict[str, bool] = Field(default_factory=dict, max_length=200)
+    """By collection slug, whether a collection that gains or loses videos by joining numbers them again; one left
+    out does."""
     creator_slug: Optional[str] = Field(default=None, max_length=255)
     """A creator in the Library to join instead of the one behind the collection's link, such as an artist whose
     music videos are on their label's channel."""
+
+
+class CollectionCreatorJoinPreviewAPIIn(RequestBase):
+    lookup_id: Optional[str] = Field(default=None, max_length=64)
+    """The match's id, to use what it found instead of asking the Site again."""
 
 
 class CollectionCreatorLeaveAPIRead(ResponseBase):

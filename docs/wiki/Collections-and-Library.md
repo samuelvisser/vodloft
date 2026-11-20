@@ -332,9 +332,16 @@ on their page still shows its own site.
 
 ### Adding a collection to a creator, and removing it
 
-A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its creator later. Choose **Add to creator** (**Add to host** for a Daily Wire show) in the collection's **Actions** menu. VODLoft finds the creator behind the collection's links, adds the creator to your Library if they are not there yet, and shows which of the creator's playlists or shows the collection becomes. The collection keeps its seasons, episode numbers, profiles and files; nothing is indexed again. A collection that another of the creator's collections already covers can't join.
+A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its creator later. Choose **Add to creator** (**Add to host** for a Daily Wire show) in the collection's **Actions** menu. VODLoft finds the creator behind the collection's links, adds the creator to your Library if they are not there yet, and shows which of the creator's playlists or shows the collection becomes.
 
-When some of the collection's playlists are already somewhere else under the creator, the window lists them, because once the collection joins each playlist is in one place only. A playlist that is a season of the creator's main collection can stay there or move to the joining collection, as you choose. A playlist that is a collection of its own stays where it is and leaves the joining collection.
+When the creator is new to your Library, the collection joins as it is: it keeps its seasons, episode numbers, profiles and files, and nothing is indexed again.
+
+When the creator is in your Library already, their other collections already hold some of their videos, and each video stays in one collection only:
+
+- A collection of the creator's whole channel becomes the creator's main collection, and keeps only what no other collection of the creator has. Feeds such as Shorts and playlists that are collections of their own keep their videos, so those leave the joining collection.
+- A collection of one playlist (or one feed, such as Shorts) takes it over, also when it was in the creator's main collection. Its videos leave the main collection and move to the joining one.
+
+Before anything changes, the window shows per collection which videos leave or join it, which files move along, and which episodes get a new number, the same as when you move feeds and playlists on the creator's Edit page. Downloaded videos keep their files: they are moved and renamed, not downloaded again. Each collection that gains or loses videos is numbered again afterwards, unless you switch that off for it. A collection whose playlist or channel another collection of the creator already has as its own can't join.
 
 **Add it to** at the top of that window can also choose another creator or artist in your Library. The collection then
 joins it with its own link, for example an artist's music videos that are on their label's channel. The creator's

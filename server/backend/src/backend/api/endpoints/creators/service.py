@@ -684,7 +684,6 @@ class _Match:
     section: object | None
     kept_by: str | None
     creator_slug: str | None = None
-    overlaps: list = field(default_factory=list)
     section_type: str | None = None
     section_growing_names: Names | None = None
 
@@ -693,28 +692,42 @@ class _Match:
 
 
 def collection_creator_match(s: Session, collection_slug: str, source_key: str, details: CreatorDetails) -> CollectionCreatorMatchAPIRead:
+    from backend.services.creator_joins import takes_over
+
     collection = _collection(s, collection_slug)
     site = creators.creator_site(source_key, details.url or collection.site_key or get_source(source_key).sites[0].key)
     existing = creators.account_in_library(s, site.key, details.ref)
     section, keeper = creators.collection_section(s, collection, source_key, details, existing)
-    overlaps = creators.join_overlaps(s, collection, source_key, details, existing)
-    movable = keeper is not None and any(overlap.ref == section.ref and overlap.can_move_here for overlap in overlaps)
+    # A list or feed takes itself from the creator's own collection; anything else another collection keeps can't join.
+    joins = keeper is None or takes_over(existing, section, keeper)
     return CollectionCreatorMatchAPIRead.model_validate(_Match(
-        details, site.name, site.creator_names, site.section_types, section if keeper is None or movable else None,
-        keeper.title if keeper is not None and not movable else None,
-        existing.creator.slug if existing is not None else None,
-        overlaps, creators.type_of(section).key if section is not None else None, site.section_growing_names,
+        details, site.name, site.creator_names, site.section_types, section if joins else None,
+        keeper.title if not joins else None, existing.creator.slug if existing is not None else None,
+        creators.type_of(section).key if section is not None else None, site.section_growing_names,
     ))
+
+
+def preview_collection_join(
+    s: Session, collection_slug: str, source_key: str, details: CreatorDetails,
+) -> CreatorSectionMovesPreviewAPIRead:
+    """What joining the creator does to each of the creator's collections, made and rolled back.
+
+    ``s`` is a write transaction's session."""
+    from backend.services.creator_joins import preview_join
+
+    return CreatorSectionMovesPreviewAPIRead.model_validate(
+        preview_join(s, _collection(s, collection_slug), source_key=source_key, details=details)
+    )
 
 
 def join_collection_creator(
     s: Session, collection_slug: str, source_key: str, details: CreatorDetails, *, added_by_id: int | None,
-    move_here: frozenset[str] = frozenset(),
+    renumber: dict[str, bool],
 ) -> CollectionAPIRead:
+    from backend.services.creator_joins import join_creator
+
     collection = _collection(s, collection_slug)
-    creators.join_creator(
-        s, collection, source_key=source_key, details=details, added_by_id=added_by_id, move_here=move_here,
-    )
+    join_creator(s, collection, source_key=source_key, details=details, added_by_id=added_by_id, renumber=renumber)
     s.flush()
     s.refresh(collection)
     return CollectionAPIRead.model_validate(collection)

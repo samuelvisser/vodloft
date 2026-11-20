@@ -299,14 +299,6 @@ export const CollectionCreatorMatchSchema = z.object({
     sectionType: z.string().nullable().optional(),
     /** Another of the creator's collections that keeps this section already, and can't let it go. */
     keptBy: z.string().nullable().optional(),
-    /** The playlists that would be in two places once the collection joins; each stays in one, as you choose. */
-    overlaps: z.array(z.object({
-        ref: z.string(),
-        title: z.string(),
-        keptBy: z.string(),
-        /** The creator's own collection keeps it and can let it go; a collection of its own keeps what it has. */
-        canMoveHere: z.boolean(),
-    })).default([]),
 })
 export type CollectionCreatorMatch = z.infer<typeof CollectionCreatorMatchSchema>
 
