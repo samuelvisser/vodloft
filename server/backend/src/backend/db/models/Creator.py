@@ -41,6 +41,12 @@ class Creator(Base):
     )
     genre: Mapped[Optional[str]] = mapped_column(comment="Given to the creator's collections, for their NFO files")
     content_rating: Mapped[Optional[str]] = mapped_column(comment="Given to the creator's collections, for their NFO files")
+    open_count: Mapped[int] = mapped_column(
+        default=0, server_default="0", comment="How often the creator's page was opened",
+    )
+    last_opened_at: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(), comment="When the creator's page was last opened",
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now(), onupdate=func.now())
 

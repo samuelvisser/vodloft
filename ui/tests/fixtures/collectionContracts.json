@@ -43,7 +43,7 @@
       "profileScope": "podcast",
       "audioProfileScope": "podcast",
       "profileScopes": [
-        "both",
+        "podcast-and-series",
         "podcast"
       ],
       "downloadsBySeason": false
@@ -79,7 +79,7 @@
       "profileScope": "series",
       "audioProfileScope": "series",
       "profileScopes": [
-        "both",
+        "podcast-and-series",
         "series"
       ],
       "downloadsBySeason": true

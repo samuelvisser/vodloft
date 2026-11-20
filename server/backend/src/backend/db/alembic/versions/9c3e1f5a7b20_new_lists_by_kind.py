@@ -5,7 +5,7 @@ kind has a setting of its own. ``creators.new_sections`` and ``collections.new_l
 which keep the setting by the kind's key: every kind of the Sites starts with the setting it had.
 
 Revision ID: 9c3e1f5a7b20
-Revises: 5e0c7a2b91d4
+Revises: bb1c178245cc
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "9c3e1f5a7b20"
-down_revision = "5e0c7a2b91d4"
+down_revision = "bb1c178245cc"
 branch_labels = None
 depends_on = None
 

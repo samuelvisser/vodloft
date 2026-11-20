@@ -25,12 +25,20 @@ export function useProfileFit(mode: LocalMediaProfileType): ProfileFit {
 
 /** The choices of Available for that fit what a link asks for, broadest last, and how to name them. */
 const SCOPE_FITS: Record<string, {fits: readonly string[], needs: string}> = {
-    podcast: {fits: ['podcast', 'both'], needs: 'Podcasts, or Podcasts and Series'},
-    series: {fits: ['series', 'both'], needs: 'Series, or Podcasts and Series'},
+    podcast: {fits: ['podcast', 'podcast-and-series'], needs: 'Podcasts, or Podcasts and Series'},
+    series: {fits: ['series', 'podcast-and-series'], needs: 'Series, or Podcasts and Series'},
     music_tracks: {fits: ['music_tracks'], needs: 'Music tracks'},
     music_videos: {fits: ['music_videos'], needs: 'Music videos'},
     videos: {fits: ['videos', 'both'], needs: 'Videos, or Videos and movies'},
     movies: {fits: ['movies', 'both'], needs: 'Movies, or Videos and movies'},
+}
+
+/** What a profile of this type is available for when it hasn't chosen yet. */
+const DEFAULT_SCOPE: Record<LocalMediaProfileType, string> = {collection: 'podcast-and-series', video: 'both'}
+
+/** The default Available for of the profile type a link's ``asked`` belongs to. */
+function defaultScope(asked: string | null | undefined): string {
+    return asked === 'videos' || asked === 'movies' ? DEFAULT_SCOPE.video : DEFAULT_SCOPE.collection
 }
 
 /** Where the user came from, for a note: the name the link gives, or "where you came from". */
@@ -42,7 +50,7 @@ export function OriginName({prefix}: {prefix: string}) {
 /** Whether a profile available for ``scope`` is offered for what the link asks for. */
 export function scopeFits(asked: string | null | undefined, scope: string | null | undefined): boolean {
     const wanted = asked ? SCOPE_FITS[asked] : undefined
-    return !wanted || wanted.fits.includes(scope ?? 'both')
+    return !wanted || wanted.fits.includes(scope ?? defaultScope(asked))
 }
 
 /**
@@ -50,7 +58,7 @@ export function scopeFits(asked: string | null | undefined, scope: string | null
  * choice; one for something else becomes available for both kinds, and for music it has to be the one asked for.
  */
 export function fittingScope(asked: string, scope: string | null | undefined): string {
-    if (scopeFits(asked, scope)) return scope ?? 'both'
+    if (scopeFits(asked, scope)) return scope ?? defaultScope(asked)
     const fits = SCOPE_FITS[asked]?.fits
     return fits ? fits[fits.length - 1] : asked
 }
@@ -74,7 +82,7 @@ export function ScopeRequestedField({mode, scope, apply, children}: {
             fields={[field]}
             apply={() => {
                 const next = fittingScope(fit.scope!, scope)
-                return next === (scope ?? 'both') ? [] : apply(next)
+                return next === (scope ?? DEFAULT_SCOPE[mode]) ? [] : apply(next)
             }}
             fits={() => scopeFits(fit.scope, scope)}
             incompatible={wanted && <>This profile won't be offered <OriginName prefix="for"/>, which needs {wanted.needs}.</>}

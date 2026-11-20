@@ -231,10 +231,10 @@ def _filtered(s: Session, filters: LocalMediaProfileListQuery):
     video_scope = profile.VideoLocalMediaProfile.video_scope
     used_for = {
         UsedFor.PODCAST: is_collection & scope.in_([
-            CollectionLocalMediaProfileScope.PODCAST.value, CollectionLocalMediaProfileScope.BOTH.value,
+            CollectionLocalMediaProfileScope.PODCAST.value, CollectionLocalMediaProfileScope.PODCAST_AND_SERIES.value,
         ]),
         UsedFor.SERIES: is_collection & scope.in_([
-            CollectionLocalMediaProfileScope.SERIES.value, CollectionLocalMediaProfileScope.BOTH.value,
+            CollectionLocalMediaProfileScope.SERIES.value, CollectionLocalMediaProfileScope.PODCAST_AND_SERIES.value,
         ]),
         UsedFor.VIDEO: is_video & video_scope.in_([VideoLocalMediaProfileScope.VIDEOS.value, VideoLocalMediaProfileScope.BOTH.value]),
         UsedFor.MOVIE: is_video & video_scope.in_([VideoLocalMediaProfileScope.MOVIES.value, VideoLocalMediaProfileScope.BOTH.value]),

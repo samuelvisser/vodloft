@@ -162,7 +162,7 @@ def _site_keys(sites: str | None) -> list[str] | None:
 @router.get("/template/sources", dependencies=[requires_any((Area.LOCAL_MEDIA_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW), (Area.LIBRARY, Level.MANAGE))], response_model=LocalMediaProfileTemplateSourcePage)
 def local_media_profile_template_sources(
     type: LocalMediaProfileType = Query(...),
-    collection_scope: CollectionLocalMediaProfileScope = Query(CollectionLocalMediaProfileScope.BOTH),
+    collection_scope: CollectionLocalMediaProfileScope = Query(CollectionLocalMediaProfileScope.PODCAST_AND_SERIES),
     search: str | None = Query(None, max_length=200),
     cursor: str | None = Query(None, max_length=4096),
     limit: int = Query(30, ge=1, le=100),
@@ -192,7 +192,7 @@ def local_media_profile_template_sources(
     response_model=LocalMediaProfileTemplateSource | None,
 )
 def local_media_profile_random_collection_template_source(
-    collection_scope: CollectionLocalMediaProfileScope = Query(CollectionLocalMediaProfileScope.BOTH),
+    collection_scope: CollectionLocalMediaProfileScope = Query(CollectionLocalMediaProfileScope.PODCAST_AND_SERIES),
     local_media_profile_id: int | None = Query(None, description="Prefer a Collection that uses this profile"),
     sites: str | None = Query(None, max_length=4096, description=_SITES_HELP),
 ):

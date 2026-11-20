@@ -504,7 +504,7 @@ def _collection_source_page(
 
 def get_random_collection_template_source(
     session: Session,
-    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH,
+    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.PODCAST_AND_SERIES,
     *,
     local_media_profile_id: int | None = None,
     site_keys: list[str] | None = None,
@@ -828,7 +828,7 @@ def _video_profile_source_page(
 def get_output_template_source_page(
     session: Session,
     profile_type: LocalMediaProfileType,
-    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH,
+    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.PODCAST_AND_SERIES,
     *,
     search: str | None = None,
     cursor: str | None = None,

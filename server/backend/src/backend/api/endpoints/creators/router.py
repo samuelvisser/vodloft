@@ -19,7 +19,7 @@ from backend.api.endpoints.movies.service import look_up_movies
 from . import lookups
 from .service import (
     CreatorNotFoundError, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
-    look_up_creator, lookup_creator_names, move_creator_reassigned, move_creator_section, update_creator,
+    look_up_creator, lookup_creator_names, move_creator_reassigned, record_creator_opened, move_creator_section, update_creator,
 )
 
 router = APIRouter(prefix="/creators", tags=["Creators"])
@@ -75,6 +75,12 @@ def creator_get(slug: str):
             return creator_page(s, slug)
         except CreatorNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/{slug}/opened", dependencies=[requires(Area.LIBRARY, Level.VIEW)], status_code=status.HTTP_204_NO_CONTENT)
+def creator_opened(slug: str) -> None:
+    """Count that someone opened the creator's page, so the Library can list the most used creators first."""
+    _found(lambda: run_write_transaction(lambda s: record_creator_opened(s, slug), concurrent=True))
 
 
 @router.get("/{slug}/episodes", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=CreatorEpisodePageAPIRead)

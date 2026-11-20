@@ -99,7 +99,7 @@ function contractOf(type: string): Contract {
     return contract
 }
 
-/** What a Local Media Profile can keep to be offered for a collection of the type, such as both or podcast. */
+/** What a Local Media Profile can keep to be offered for a collection of the type, such as podcast-and-series or podcast. */
 export function profileScopesFor(type: string): string[] {
     return contractOf(type).profileScopes
 }

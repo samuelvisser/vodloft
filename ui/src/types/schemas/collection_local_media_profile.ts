@@ -43,7 +43,7 @@ export const DEFAULT_COLLECTION_OUTPUT_TEMPLATE = '/downloads/shows/{{ collectio
 // ---------- Strict request (create/update) ----------
 const CollectionLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
     type: z.literal('collection').default('collection'),
-    collectionScope: z.enum(CollectionLocalMediaProfileScopeReg.values).default('both'),
+    collectionScope: z.enum(CollectionLocalMediaProfileScopeReg.values).default('podcast-and-series'),
     outputTemplate: LocalMediaProfileOutputTemplateSchema.default(DEFAULT_COLLECTION_OUTPUT_TEMPLATE),
     preferredFormat: z.enum(PreferredFormatReg.values).default('format_audio_only'),
     downloadCollectionAssets: z.boolean().nullable().default(null),
@@ -76,7 +76,7 @@ export const CollectionLocalMediaProfileReadSchema = LocalMediaProfileSchemaResp
     collectionScope: z.enum(CollectionLocalMediaProfileScopeReg.values)
         .nullable()
         .optional()
-        .transform((value) => value ?? 'both'),
+        .transform((value) => value ?? 'podcast-and-series'),
     downloadCollectionAssets: z.boolean().nullable().default(null),
     showNfo: z.boolean().default(false),
     episodeNfo: z.enum(EpisodeNfoReg.values).default('episode'),

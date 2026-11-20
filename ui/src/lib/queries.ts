@@ -835,6 +835,8 @@ export function useCreators() {
         queryKey: ['creators'] as const,
         enabled: can('library'),
         queryFn: ({signal}) => fetchParsed(`${apiUrl()}/creators`, CreatorReadSchema.array(), signal),
+        // Opening a creator or one of its collections changes the Library's Recently used order.
+        refetchOnMount: 'always',
     })
 }
 

@@ -225,6 +225,24 @@ def test_the_creator_list_counts_its_collections(client):
     assert (creator["title"], creator["collectionCount"], creator["accounts"][0]["site"]["name"]) == ("Northwind Workshop", 1, "Tube")
 
 
+def test_a_creator_counts_as_opened_when_its_page_or_one_of_its_collections_is(client):
+    client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [{"ref": "shorts", "target": "own"}]})
+    [creator] = client.get("/api/creators").json()
+    assert (creator["openCount"], creator["lastOpenedAt"]) == (0, None)
+
+    assert client.post(f"/api/creators/{creator['slug']}/opened").status_code == 204
+    [after_page] = client.get("/api/creators").json()
+    assert after_page["openCount"] == 1 and after_page["lastOpenedAt"] is not None
+
+    [collection] = client.get(f"/api/creators/{creator['slug']}").json()["collections"]
+    assert client.post(f"/api/collections/{collection['slug']}/opened").status_code == 204
+    [after_collection] = client.get("/api/creators").json()
+    assert after_collection["openCount"] == 2
+    assert after_collection["lastOpenedAt"] >= after_page["lastOpenedAt"]
+
+    assert client.post("/api/creators/nobody/opened").status_code == 404
+
+
 def test_a_youtube_creator_is_read_from_its_tabs_and_playlists_under_the_link_people_paste(monkeypatch):
     from sources import ytdlp_runner as runner
     from sources.ytdlp.source import YtDlpSource

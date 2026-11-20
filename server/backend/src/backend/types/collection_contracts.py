@@ -52,7 +52,7 @@ class CollectionContract:
     """It takes the kinds of list that best describe albums, where its Site has them, and skips the others, such as an
     artist's SoundCloud playlists."""
 
-    profile_scope: ProfileScope = ProfileScope.BOTH
+    profile_scope: ProfileScope = ProfileScope.PODCAST_AND_SERIES
     """What a new Local Media Profile made for a collection of the type keeps, such as Podcasts."""
     audio_profile_scope: ProfileScope | None = None
     """What it keeps when it is made for sound, such as Music tracks; the same as ``profile_scope`` unless set."""
@@ -69,7 +69,7 @@ class CollectionContract:
 
     @property
     def profile_scopes(self) -> tuple[ProfileScope, ...]:
-        """What a Local Media Profile can keep to be offered for a collection of the type, such as Both or Podcasts."""
+        """What a Local Media Profile can keep to be offered for a collection of the type, such as Podcasts and Series or Podcasts."""
         return tuple(scope for scope in ProfileScope if self.type.value in scope.collection_types())
 
     def creator_names_on(self, site: Site) -> Names:

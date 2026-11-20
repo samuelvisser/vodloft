@@ -61,7 +61,7 @@ export function useLocalMediaProfileSummaries(form: UseFormReturn<any>, mode: Lo
     const siteNames = (siteKeys ?? []).map((key) => sites?.sites.find((site) => site.key === key)?.name ?? key)
     const profile = [
         name || 'No name yet',
-        mode === 'collection' ? CollectionLocalMediaProfileScopeReg.getLabelLoose(scope ?? 'both') : '',
+        mode === 'collection' ? CollectionLocalMediaProfileScopeReg.getLabelLoose(scope ?? 'podcast-and-series') : '',
         [...siteNames, ...(upcoming ? ['upcoming sites'] : [])].join(', '),
     ].filter(Boolean).join(' · ')
 

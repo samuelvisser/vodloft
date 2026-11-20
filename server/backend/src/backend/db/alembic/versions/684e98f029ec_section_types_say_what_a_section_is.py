@@ -8,7 +8,7 @@ Type keys are only unique within a Site, so ``creators.new_lists`` goes from ``{
 ``{site: {type: action}}``: each of a creator's Sites gets the setting of each of its types the creator had.
 
 Revision ID: 684e98f029ec
-Revises: 7d3b9e41a6c2
+Revises: f3df05c49000
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "684e98f029ec"
-down_revision = "7d3b9e41a6c2"
+down_revision = "f3df05c49000"
 branch_labels = None
 depends_on = None
 

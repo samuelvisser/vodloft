@@ -77,7 +77,7 @@ def test_a_music_collection_calls_its_creator_an_artist_on_every_site():
 
 def test_a_type_offers_the_profiles_that_keep_it_and_starts_a_new_one_for_it():
     scope = CollectionLocalMediaProfileScope
-    assert collection_contract("podcast").profile_scopes == (scope.BOTH, scope.PODCAST)
+    assert collection_contract("podcast").profile_scopes == (scope.PODCAST_AND_SERIES, scope.PODCAST)
     assert collection_contract("music").profile_scopes == (scope.MUSIC_TRACKS, scope.MUSIC_VIDEOS)
     assert (collection_contract("music").profile_scope, collection_contract("music").audio_profile_scope) == (
         scope.MUSIC_VIDEOS, scope.MUSIC_TRACKS)

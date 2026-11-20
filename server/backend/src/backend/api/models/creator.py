@@ -214,6 +214,10 @@ class CreatorAPIRead(ResponseBase):
     created_at: datetime
     collection_count: int = 0
     episode_count: int = 0
+    open_count: int = 0
+    """How often its page and its collections' pages were opened, for the Library's Often used order."""
+    last_opened_at: Optional[datetime] = None
+    """When its page or one of its collections' pages was last opened, for the Library's Recently used order."""
     new_lists: list[CreatorNewListAPIRead]
     """What the creator does with a new list, for each kind of list of their Sites."""
     new_list_names: NamesAPIRead

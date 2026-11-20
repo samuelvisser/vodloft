@@ -169,6 +169,10 @@ export const CreatorReadSchema = z.object({
     createdAt: z.string(),
     collectionCount: z.number(),
     episodeCount: z.number(),
+    /** How often its page and its collections' pages were opened, for the Library's Often used order. */
+    openCount: z.int(),
+    /** When its page or one of its collections' pages was last opened, for the Library's Recently used order. */
+    lastOpenedAt: ApiDateTimeSchema.nullable(),
     /** What the creator does with a new list, for each kind of list of their Sites. */
     newLists: z.array(CreatorNewListSchema),
     /** Those kinds of list named together, such as albums and playlists, or lists when there are none. */

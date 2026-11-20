@@ -20,7 +20,7 @@ function mismatches(
 ): string[] {
     const reasons: string[] = []
     if (!isCollectionLocalMediaProfileAvailableFor(profile, collection.type)) {
-        const scope = profile.type === 'collection' ? profile.collectionScope ?? 'both' : undefined
+        const scope = profile.type === 'collection' ? profile.collectionScope ?? 'podcast-and-series' : undefined
         reasons.push(`This Local Media Profile is available for ${scope ? CollectionLocalMediaProfileScopeReg.getLabelLoose(scope) : 'videos and movies'}, `
             + `not for ${CollectionTypeReg.getLabelLoose(collection.type)} collections like ${collection.title}.`)
     }
