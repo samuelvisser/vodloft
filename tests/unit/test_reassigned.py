@@ -100,13 +100,15 @@ def test_a_downloaded_video_a_playlist_of_another_collection_holds_is_reassigned
     ]
     # Tool Reviews leaves it alone until it is moved there, so it is not downloaded twice.
     assert awaiting_move(session, tools) == {_episode(session, tools, "t1").id}
-    # c1 is in a playlist season of the creator's own collection too, so it stays where it is.
+    # A collection made from a playlist keeps every video of its playlist.
     assert reassigned_episodes(session, tools) == []
 
-    # One that is not downloaded simply leaves for its playlist's collection.
-    assert run_write_transaction(lambda w: settle_creator(w, w.get(type(main), main.id))) == 1
+    # One that is not downloaded simply leaves for its playlist's collection, also c1, which a playlist season of the
+    # creator's own collection has too: a playlist that is not in a collection keeps all its videos out of it.
+    assert run_write_transaction(lambda w: settle_creator(w, w.get(type(main), main.id))) == 2
     session.expire_all()
     assert _episode(session, main, "t2") is None and _episode(session, tools, "t2") is not None
+    assert _episode(session, main, "c1") is None and _episode(session, tools, "c1") is not None
     assert _episode(session, main, "t1") is not None
 
 
@@ -322,7 +324,8 @@ def test_a_creators_collection_leaves_a_video_its_feed_lists_to_the_playlist_tha
     client, session, tube, monkeypatch,
 ):
     """The creator's collection lists its uploads before Tool Reviews has listed its own videos: t1 and t2 still go
-    to Tool Reviews alone, and c1, in Building the Cabin too, which is a season of the creator's collection, stays."""
+    to Tool Reviews alone, and so does c1, though Building the Cabin, a season of the creator's collection, has it
+    too."""
     from backend.db.models import Collection, Episode
     from sources import ItemRef
     from task_manager.tasks.helpers.listed_collections import index_listed_collection
@@ -348,14 +351,14 @@ def test_a_creators_collection_leaves_a_video_its_feed_lists_to_the_playlist_tha
         return sorted(session.scalars(select(Episode.source_slug).where(Episode.collection_id == collection_id)))
 
     index_listed_collection(session, collection_id=main_id, source=tube)
-    assert slugs(main_id) == ["c1", "v1"]
+    assert slugs(main_id) == ["v1"]
     index_listed_collection(session, collection_id=tools_id, source=tube)
     assert slugs(tools_id) == ["c1", "t1", "t2"]
     # A new upload the creator put in Tool Reviews right away goes there too.
     lists[tools_url].append("t3")
     lists.setdefault(f"{ROOT}/videos", ["t1", "t2", "c1", "v1", "t3"])
     index_listed_collection(session, collection_id=main_id, source=tube)
-    assert slugs(main_id) == ["c1", "v1"]
+    assert slugs(main_id) == ["v1"]
 
 
 def test_a_playlist_that_is_in_none_of_the_creators_collections_keeps_its_videos_out_of_them_too(
@@ -394,3 +397,16 @@ def test_a_playlist_that_is_in_none_of_the_creators_collections_keeps_its_videos
     session.expire_all()
 
     assert sorted(session.scalars(select(Episode.source_slug).where(Episode.collection_id == main_id))) == ["m1", "v1"]
+
+
+def test_a_downloaded_video_in_a_season_and_in_a_playlist_of_its_own_is_reassigned_to_that_playlist(creator, session):
+    from backend.services.reassigned import reassigned_episodes
+
+    main, tools = creator
+    local = _profile(session, "shows")
+    _download(session, _episode(session, main, "c1"), local, _download_profile(session, main, local))
+    session.commit()
+
+    assert [(item.episode.source_slug, item.target.collection.slug) for item in reassigned_episodes(session, main)] == [
+        ("c1", "PLtools"),
+    ]

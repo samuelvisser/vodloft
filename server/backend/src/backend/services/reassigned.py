@@ -3,9 +3,10 @@
 A creator keeps each of its videos in one of its collections. A list, such as a playlist, beats a feed:
 a video is in the collection whose lists hold it, which is the creator's own collection for the playlists that are its
 seasons and a collection of its own for a playlist that is one. A list of the creator that is not in a collection
-keeps its videos out of it, also when a feed of that collection lists them: whether the list is a collection of its
-own, was skipped or waits for the user's choice. Only a season of the collection itself lets such a video in. Each
-collection of the creator lists those lists when it syncs, so it knows their videos before their own collections do.
+keeps every one of its videos out of it, whether the list is a collection of its own, was skipped or waits for the
+user's choice: also when a feed of that collection lists them, and also when one of its own seasons has them too.
+Each collection of the creator lists those lists when it syncs, so it knows their videos before their own collections
+do.
 
 A video that is not downloaded simply moves: the collection it is in leaves it, and a collection that does not hold it
 by a list does not add it. One with downloads stays where it is, files and all. When another collection holds it by a
@@ -76,6 +77,9 @@ class CreatorPlaces:
     """The ids of each collection's whole videos, by slug, by collection id."""
     downloaded: set[int] = field(default_factory=set)
     """The ids of the episodes with a download, whether or not its file is there yet."""
+    blocked: dict[int, frozenset[str]] = field(default_factory=dict)
+    """The slugs of the videos each collection leaves out, because a list of the creator that is not in it has them,
+    by collection id."""
 
     def episode(self, episode_id: int) -> Episode:
         return self.s.get(Episode, episode_id)
@@ -88,11 +92,12 @@ class CreatorPlaces:
 
     def place(self, collection_id: int, slug: str) -> Collection | None:
         """The collection the video belongs in, when that is another one than ``collection_id``."""
-        if slug in self.held.get(collection_id, ()):
+        if slug in self.held.get(collection_id, ()) and slug not in self.blocked.get(collection_id, ()):
             return None
         return next((
             other for other in self.order
             if other.id != collection_id and slug in self.held[other.id] and slug in self.episodes[other.id]
+            and slug not in self.blocked.get(other.id, ())
         ), None)
 
     def elsewhere(self, collection_id: int) -> frozenset[str]:
@@ -129,6 +134,12 @@ def creator_places(s: Session, creator: Creator) -> CreatorPlaces:
             }
         else:
             places.held[collection.id] = set()
+    listed = set().union(*(places.held[collection_id] for collection_id in lists)) if lists else set()
+    for collection in order:
+        if collection.id not in lists:
+            # A list that is a collection of its own keeps out what it has, also before the creator's collections
+            # listed it themselves.
+            places.blocked[collection.id] = left_out(s, collection) | listed
     places.downloaded = set(s.scalars(
         select(MediaDownloadBase.media_item_id).join(Episode, Episode.id == MediaDownloadBase.media_item_id)
         .where(Episode.collection_id.in_(ids))
@@ -188,7 +199,8 @@ def placed_elsewhere(s: Session, collection: Collection) -> frozenset[str]:
     creator = collection.creator
     if creator is None or collection.id in _list_collection_ids(creator, _main_seasons(s, creator)):
         return frozenset()
-    return creator_places(s, creator).elsewhere(collection.id) | left_out(s, collection)
+    places = creator_places(s, creator)
+    return places.elsewhere(collection.id) | places.blocked.get(collection.id, frozenset())
 
 
 def lists_left_out(s: Session, collection: Collection) -> dict[int, str]:
@@ -227,13 +239,13 @@ def save_left_out(s: Session, listed: dict[int, tuple[ItemRef, ...]]) -> None:
 
 
 def left_out(s: Session, collection: Collection) -> frozenset[str]:
-    """The videos the collection leaves out because a list of its creator that is not in it has them, unless one of
-    its own seasons has them too."""
+    """The videos the collection leaves out because a list of its creator that is not in it has them, also when one
+    of its own seasons has them too: a list not in a collection keeps every one of its videos out of it."""
     lists = lists_left_out(s, collection)
     if not lists:
         return frozenset()
     slugs = set(s.scalars(select(CreatorSectionItem.source_slug).where(CreatorSectionItem.section_id.in_(lists))))
-    return frozenset(slugs - set(_holders(s, active_lists(s, collection))))
+    return frozenset(slugs)
 
 
 def settle_creator(s: Session, collection: Collection) -> int:
@@ -245,12 +257,12 @@ def settle_creator(s: Session, collection: Collection) -> int:
     if creator is None:
         return 0
     places = creator_places(s, creator)
-    outs = {other.id: left_out(s, other) for other in places.order}
     leaving = [
         episode_id
         for other in places.order
         for slug, episode_id in places.episodes[other.id].items()
-        if episode_id not in places.downloaded and (places.place(other.id, slug) is not None or slug in outs[other.id])
+        if episode_id not in places.downloaded
+        and (places.place(other.id, slug) is not None or slug in places.blocked.get(other.id, ()))
     ]
     places.load(leaving)
     for episode_id in leaving:
