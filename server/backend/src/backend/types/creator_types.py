@@ -5,11 +5,15 @@ class SectionTarget(StrEnum):
     """Where one section of a creator goes when the creator is added."""
 
     MAIN = "main"
-    """Into the creator's own collection, the show named after the creator."""
+    """Into the creator's own collection, the show named after the creator: a list as a season of its own."""
+    MAIN_LOOSE = "main_loose"
+    """A list into the creator's own collection, not as a season: its videos go where the collection's videos in no
+    list go. A feed goes into the creator's own collection the same as with ``MAIN``."""
     OWN = "own"
     """Into a collection of its own."""
-    SKIP = "skip"
-    """Nowhere: it stays on the creator page, one click from being added."""
+    EXCLUDE = "exclude"
+    """Nowhere: it is excluded from the Library, and a list keeps its videos out of the creator's collections. It stays
+    on the creator page, one click from being added."""
 
 
 class NewSectionAction(StrEnum):
@@ -19,6 +23,8 @@ class NewSectionAction(StrEnum):
     """Send a message, and show the section on the creator page with the choices."""
     SEASON = "season"
     """Add it to the creator's own collection, as a season of its own. A show still gets a collection of its own."""
+    LOOSE = "loose"
+    """Add it to the creator's own collection, not as a season: its videos go where the ones in no list go."""
     OWN = "own"
     """Add it as a collection of its own."""
     IGNORE = "ignore"

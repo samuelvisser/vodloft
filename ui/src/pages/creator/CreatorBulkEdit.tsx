@@ -113,7 +113,7 @@ function ActionNote({creator, action, onEdit}: {creator: CreatorPageRead, action
     )
 }
 
-const TARGETS: Record<'main' | 'movie' | 'skip', 'main' | 'own' | 'skip'> = {main: 'main', movie: 'own', skip: 'skip'}
+const TARGETS: Record<'main' | 'movie' | 'skip', 'main' | 'own' | 'exclude'> = {main: 'main', movie: 'own', skip: 'exclude'}
 
 /**
  * The bar of actions for the creator's chosen sections that are not in the Library, and what each opens: a question

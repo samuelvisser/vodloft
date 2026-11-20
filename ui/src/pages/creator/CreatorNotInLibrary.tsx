@@ -116,7 +116,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                 queryClient.invalidateQueries({queryKey: ['collectionsView']}),
                 ...(item.section.kind === 'item' ? [queryClient.invalidateQueries({queryKey: ['movies']})] : []),
             ])
-            if (plan.target !== 'skip') toast.success(`Added ${item.section.title}`)
+            if (plan.target !== 'exclude') toast.success(`Added ${item.section.title}`)
         } catch (exc) {
             toast.error(exc instanceof Error ? exc.message : String(exc))
         } finally {
@@ -142,7 +142,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                         label: 'Do not show here again',
                         description: `It leaves this list${isNew ? ' and stays out of your library' : ''}. You can still add it from the Edit page`,
                         separatorBefore: true, disabled: busy !== null,
-                        onSelect: () => void add(item, {ref: item.section.ref, target: 'skip'}),
+                        onSelect: () => void add(item, {ref: item.section.ref, target: 'exclude'}),
                     },
                 ]}
             />

@@ -18,7 +18,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Creator, CreatorAccount, CreatorSection, Collection, CollectionList, Movie
-from backend.services.link_seasons import is_season, lists_own_link
+from backend.services.link_seasons import is_in, lists_own_link
 from backend.services.collections import add_collection, index_new_collection, reindex_collection
 from backend.services.errors import ServiceError
 from backend.services.sites import collection_site, site_record
@@ -87,14 +87,14 @@ def preset_plan(
     by its ref in ``movies_in_library``, joins the creator with every preset."""
     plans = []
     for section in details.sections:
-        target = SectionTarget.SKIP
+        target = SectionTarget.EXCLUDE
         if movies and section.kind is SectionKind.ITEM:
             if section.ref in movies_in_library or (preset is not CreatorPreset.PICK and section.access is None):
                 target = SectionTarget.OWN
         elif preset is not CreatorPreset.PICK and _usable(section):
             # The creator's own collection lists its Shorts and Live too, tagged, so they need no collection of their own.
             if section.kind is SectionKind.FEED:
-                target = SectionTarget.MAIN if feeds else SectionTarget.SKIP
+                target = SectionTarget.MAIN if feeds else SectionTarget.EXCLUDE
             elif section.kind is SectionKind.SHOW or preset is CreatorPreset.PER_LIST:
                 target = SectionTarget.OWN
             else:
@@ -164,9 +164,9 @@ def sections_in_library(
     if main is not None:
         uploads = _takes_uploads(main)
         on = main.link_seasons != LinkSeasons.OFF.value
-        seasons = {link.ref for link in main.lists if on and is_season(main, link)}
+        lists = {link.ref for link in main.lists if on and is_in(main, link)}
         for section in sections:
-            if section.ref in seasons:
+            if section.ref in lists:
                 # The creator placed the list in its own collection; a collection of the list left from before keeps
                 # only what the list no longer has.
                 found[section.ref] = main.slug
@@ -207,7 +207,7 @@ def movies_to_add(
         return []
     items = {section.ref for section in sections if section.kind == SectionKind.ITEM}
     kept = movies_in_library(s, source_key, sections)
-    return [plan.ref for plan in plans if plan.target is not SectionTarget.SKIP and plan.ref in items and plan.ref not in kept]
+    return [plan.ref for plan in plans if plan.target is not SectionTarget.EXCLUDE and plan.ref in items and plan.ref not in kept]
 
 
 def join_movies(s: Session, account: CreatorAccount, plans: Sequence[SectionPlan]) -> list[Movie]:
@@ -215,7 +215,7 @@ def join_movies(s: Session, account: CreatorAccount, plans: Sequence[SectionPlan
     stays as it is. Returns the movies that joined.
 
     ``s`` is a write transaction's session."""
-    picked = {plan.ref for plan in plans if plan.target is not SectionTarget.SKIP}
+    picked = {plan.ref for plan in plans if plan.target is not SectionTarget.EXCLUDE}
     joined = []
     for ref, movie in movies_in_library(s, account.source_key, account.sections).items():
         if ref in picked and movie.creator_id != account.creator.id:
@@ -339,8 +339,9 @@ def new_link_seasons(creator: Creator, site_key: str) -> dict[str, str]:
     return {key: link_season_action(action).value for key, action in site_settings(creator_new_lists(creator), site_key).items()}
 
 
-def _make_seasons(account: CreatorAccount, main: Collection, refs: set[str]) -> None:
-    """Make the lists ``refs`` seasons of the account's own collection, which then knows all the account's lists."""
+def _make_seasons(account: CreatorAccount, main: Collection, refs: set[str], *, as_season: bool = True) -> None:
+    """Put the lists ``refs`` in the account's own collection, which then knows all the account's lists: as seasons,
+    or without ``as_season``, with their videos where its videos in no list go."""
     # The creator decides which of their lists are seasons, the ones to come too, so the collection only takes the
     # ones the creator gives it.
     main.link_seasons = LinkSeasons.SELECTED.value
@@ -354,10 +355,17 @@ def _make_seasons(account: CreatorAccount, main: Collection, refs: set[str]) -> 
             main.lists.append(CollectionList(
                 ref=section.ref, url=section.url, title=section.title, image_path=section.image_path,
                 item_count=section.item_count, site_position=section.site_position, enabled=section.ref in refs,
-                status=ListStatus.KNOWN.value,
+                status=ListStatus.KNOWN.value, as_season=as_season or section.ref not in refs,
             ))
         elif section.ref in refs:
-            playlist.enabled, playlist.status = True, ListStatus.KNOWN.value
+            playlist.enabled, playlist.status, playlist.as_season = True, ListStatus.KNOWN.value, as_season
+
+
+# Where a new section goes, for what the creator does with new ones; a new season otherwise.
+_NEW_SECTION_TARGETS = {NewSectionAction.OWN: SectionTarget.OWN, NewSectionAction.LOOSE: SectionTarget.MAIN_LOOSE}
+
+# What puts a section into the creator's own collection: a list as a season, or with its videos in its other seasons.
+_INTO_MAIN = (SectionTarget.MAIN, SectionTarget.MAIN_LOOSE)
 
 
 def _place(
@@ -372,21 +380,21 @@ def _place(
     site = get_source(account.source_key).site_of(account.site_key)
     wanted = []
     for plan in plans:
-        if plan.target is SectionTarget.SKIP or plan.ref in kept:
+        if plan.target is SectionTarget.EXCLUDE or plan.ref in kept:
             continue
         section = sections[plan.ref]
         section.status = SectionStatus.KNOWN.value
         if section.kind == SectionKind.ITEM:
             # A single item, such as a movie, is never a collection: join_movies takes the movies.
             continue
-        # A list goes into the creator's own collection only as one of its seasons, and a show, with seasons of its
-        # own, always has a collection of its own.
-        if plan.target is SectionTarget.MAIN and (
+        # A list goes into the creator's own collection only where lists can be seasons there, and a show, with
+        # seasons of its own, always has a collection of its own.
+        if plan.target in _INTO_MAIN and (
             section.kind == SectionKind.SHOW or (section.kind == SectionKind.LIST and not lists_are_seasons(site))
         ):
             plan = replace(plan, target=SectionTarget.OWN)
         wanted.append(plan)
-    main_plans = [plan for plan in wanted if plan.target is SectionTarget.MAIN]
+    main_plans = [plan for plan in wanted if plan.target in _INTO_MAIN]
     made, changed = [], []
     if main_plans:
         main = account.main_collection
@@ -421,9 +429,13 @@ def _place(
                 main.feeds = sorted({*main.feeds, *feeds})
             if main.outside_videos == OutsideVideos.ONLY.value:
                 main.outside_videos = (OutsideVideos.ADD if music else OutsideVideos.LEAVE_OUT).value
-        lists = {plan.ref for plan in main_plans if sections[plan.ref].kind == SectionKind.LIST}
-        if lists:
-            _make_seasons(account, main, lists)
+        for as_season in (True, False):
+            lists = {
+                plan.ref for plan in main_plans
+                if sections[plan.ref].kind == SectionKind.LIST and (plan.target is SectionTarget.MAIN) == as_season
+            }
+            if lists:
+                _make_seasons(account, main, lists, as_season=as_season)
     for plan in wanted:
         if plan.target is not SectionTarget.OWN:
             continue
@@ -508,15 +520,15 @@ def place_sections(
     if unknown:
         raise ServiceError(f"{creator.title} has no section {unknown[0]}", field="sections")
     for plan in plans:
-        if plan.target is SectionTarget.SKIP:
+        if plan.target is SectionTarget.EXCLUDE:
             sections[plan.ref].status = SectionStatus.IGNORED.value
-    if any(plan.target is SectionTarget.SKIP and sections[plan.ref].kind == SectionKind.LIST for plan in plans):
+    if any(plan.target is SectionTarget.EXCLUDE and sections[plan.ref].kind == SectionKind.LIST for plan in plans):
         # A skipped list keeps its videos out of the creator's collections, also the ones their feeds list.
         list_urls = {section.url for section in creator.sections if section.kind == SectionKind.LIST}
         for collection in creator.collections:
             if lists_own_link(collection) and collection.sharing_url not in list_urls:
                 reindex_collection(s, collection)
-    adding = [plan for plan in plans if plan.target is not SectionTarget.SKIP]
+    adding = [plan for plan in plans if plan.target is not SectionTarget.EXCLUDE]
     if not adding:
         return []
     settings = _settings_of(creator)
@@ -652,7 +664,7 @@ def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails,
             asked.append(record)
         else:
             # A show keeps its own seasons, so it becomes a collection of its own; _place sees to that.
-            plans.append(SectionPlan(record.ref, SectionTarget.OWN if action is NewSectionAction.OWN else SectionTarget.MAIN))
+            plans.append(SectionPlan(record.ref, _NEW_SECTION_TARGETS.get(action, SectionTarget.MAIN)))
             added.append(record)
     if plans:
         place_sections(s, account, plans)
@@ -687,7 +699,7 @@ def collection_section(
         if other.id == collection.id:
             continue
         if other.id == account.main_collection_id:
-            keeps = (section.kind == SectionKind.FEED and takes_feed(other, section.ref)) or _season_of_main(account, section.ref) is not None
+            keeps = (section.kind == SectionKind.FEED and takes_feed(other, section.ref)) or _list_of_main(account, section.ref) is not None
         else:
             keeps = other.sharing_url == section.url or other.slug == section_collection_slug(account.site_ref, section)
         if keeps:
@@ -706,11 +718,11 @@ class Overlap:
     """The other collection is the creator's own, which can let the list go; a collection of its own can't."""
 
 
-def _season_of_main(account: CreatorAccount, ref: str) -> CollectionList | None:
+def _list_of_main(account: CreatorAccount, ref: str) -> CollectionList | None:
     main = account.main_collection
     if main is None or main.link_seasons == LinkSeasons.OFF.value:
         return None
-    return next((link for link in main.lists if link.ref == ref and is_season(main, link)), None)
+    return next((link for link in main.lists if link.ref == ref and is_in(main, link)), None)
 
 
 def join_overlaps(
@@ -723,15 +735,15 @@ def join_overlaps(
         return []
     section, keeper = collection_section(s, collection, source_key, details, account)
     overlaps: list[Overlap] = []
-    if section is not None and keeper is not None and _season_of_main(account, section.ref) is not None:
+    if section is not None and keeper is not None and _list_of_main(account, section.ref) is not None:
         overlaps.append(Overlap(section.ref, section.title, keeper, True))
     if collection.link_seasons == LinkSeasons.OFF.value:
         return overlaps
     sections = {section.ref: section for section in account.sections if section.kind == SectionKind.LIST}
     for link in collection.lists:
-        if link.ref not in sections or not is_season(collection, link):
+        if link.ref not in sections or not is_in(collection, link):
             continue
-        if _season_of_main(account, link.ref) is not None and account.main_collection_id != collection.id:
+        if _list_of_main(account, link.ref) is not None and account.main_collection_id != collection.id:
             overlaps.append(Overlap(link.ref, link.title, account.main_collection, True))
             continue
         kept = sections_in_library(s, account.source_key, account.site_ref, [sections[link.ref]])
@@ -785,14 +797,15 @@ def join_creator(
 
 
 def _switch_off(collection: Collection, ref: str) -> None:
-    """Stop a list being a season of the collection. One that made every list a season keeps the others on."""
+    """Take a list out of the collection. One that made every list a season keeps the others on. Switched on again,
+    the list is a season."""
     if collection.link_seasons == LinkSeasons.ALL.value:
         for link in collection.lists:
             link.enabled = True
         collection.link_seasons = LinkSeasons.SELECTED.value
     for link in collection.lists:
         if link.ref == ref:
-            link.enabled = False
+            link.enabled, link.as_season = False, True
 
 
 def leave_creator(s: Session, collection: Collection) -> None:

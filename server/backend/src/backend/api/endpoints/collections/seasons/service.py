@@ -17,7 +17,7 @@ from backend.services.errors import ServiceError
 from backend.services.new_lists import checked_new_link_seasons
 from backend.services.link_seasons import (
     collection_list_kinds, collection_new_lists,
-    LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, section_list_names, lists_playlists, loose_season_name,
+    LinkListing, follows_creator, holds_only_link_seasons, is_in, leaving_outside, section_list_names, lists_playlists, loose_season_name,
     offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists, active_lists,
 )
 from backend.services.sites import collection_creator_names, collection_site, collection_words
@@ -159,12 +159,12 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
 
 
 def _left_by_only(s: Session, collection: Collection) -> list[int]:
-    """The videos that would leave the collection if it held only what its playlists that are seasons have now."""
+    """The videos that would leave the collection if it held only what its playlists have now."""
     if holds_only_link_seasons(collection):
         return []
     held = set(s.scalars(
         select(CollectionListItem.source_slug).where(CollectionListItem.list_id.in_(
-            [link.id for link in collection.lists if is_season(collection, link)]
+            [link.id for link in collection.lists if is_in(collection, link)]
         ))
     ))
     return [

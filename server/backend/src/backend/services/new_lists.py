@@ -119,8 +119,8 @@ def new_sections_settings(kinds: Iterable[ListKind], stored: SiteSettings | None
 
 
 def checked_new_sections(kinds: Iterable[ListKind], wanted: SiteSettings, music: bool) -> dict[str, dict[str, str]]:
-    """Every type's setting, ``wanted`` over the defaults, by Site. Refuses a type the Sites don't have, and "Add it as
-    a season" for a type whose lists can't be seasons, such as The Daily Wire's shows."""
+    """Every type's setting, ``wanted`` over the defaults, by Site. Refuses a type the Sites don't have, and adding to
+    the creator's own collection for a type whose lists can't be seasons there, such as The Daily Wire's shows."""
     kinds = list(kinds)
     known = {(kind.site_key, kind.key): kind for kind in kinds}
     settings = default_new_sections(kinds, music)
@@ -129,7 +129,7 @@ def checked_new_sections(kinds: Iterable[ListKind], wanted: SiteSettings, music:
             kind = known.get((site_key, key))
             if kind is None:
                 raise ServiceError(f"This creator's sites have no lists of the kind {key} on {site_key}", field="new_lists")
-            if NewSectionAction(action) is NewSectionAction.SEASON and not kind.seasons:
+            if NewSectionAction(action) in (NewSectionAction.SEASON, NewSectionAction.LOOSE) and not kind.seasons:
                 raise ServiceError(f"New {kind.names.plural} can't be added as seasons", field="new_lists")
             settings[site_key][key] = NewSectionAction(action).value
     return settings

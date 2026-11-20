@@ -4,8 +4,8 @@ a collection of their own and out of the Library, several at once, as the creato
 - A feed in the creator's own collection can become a collection of its own, or leave the Library; one in a collection
   of its own can join the creator's own collection again. The main feed, such as YouTube's Videos, has the creator's
   own collection's link, so it never becomes a collection of its own.
-- A list can move between a season of the creator's own collection and a collection of its own, or, from a season,
-  leave the Library.
+- A list can move between a season of the creator's own collection, the creator's own collection with its videos where
+  the ones in no list go, and a collection of its own, or, from the creator's own collection, leave the Library.
 
 What moves takes its videos along. A video that is not downloaded simply moves; a downloaded one moves the way a
 reassigned video does: its files are renamed into the new place, or, for a list, downloaded again there when the new
@@ -26,9 +26,11 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Creator, CreatorAccount, CreatorSection, Collection, CollectionListItem, Episode
+from backend.db.models import (
+    Creator, CreatorAccount, CreatorSection, Collection, CollectionListItem, Episode, EpisodeMediaDownload,
+)
 from backend.services.creators import (
-    _make_seasons, _new_collection, _season_of_main, _settings_of, _switch_off, lists_are_seasons,
+    _make_seasons, _new_collection, _list_of_main, _settings_of, _switch_off, lists_are_seasons,
     section_collection_slug, takes_feed,
 )
 from backend.services.collections import index_new_collection, reindex_collection
@@ -39,8 +41,9 @@ from backend.services.episode_identification import (
 from backend.operations.creators import CreatorMoveSectionsOperation
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import (
-    _holders, active_lists, adds_outside_videos, leaving_outside, place_in_link_seasons, remove_left_episode,
+    _holders, adds_outside_videos, lists_in, leaving_outside, place_in_link_seasons, remove_left_episode,
 )
+from backend.services.season_order import match_seasons_of_downloaded
 from backend.services.reassigned import MoveResult, Reassignment, move_reassigned, reassigned_episodes, settle_creator
 from backend.types.collection_types import EpisodeIdentifier
 from backend.types.creator_types import SectionStatus, SectionTarget
@@ -52,6 +55,8 @@ from task_manager.scheduler.types import OperationSource
 from sources import MAIN_TAG, Names, SectionKind, SectionRole, VideoDetails, get_source, section_type_names
 
 _FIELD = "places"
+# Where a list goes into the creator's own collection: as a season, or with its videos where the ones in no list go.
+_INTO_MAIN = (SectionTarget.MAIN, SectionTarget.MAIN_LOOSE)
 _ON_DISK = (MediaDownloadArtifactStatus.AVAILABLE.value, MediaDownloadArtifactStatus.CORRUPTED.value)
 # Episodes the dialog names of each part that moves.
 _EXAMPLES = 50
@@ -76,6 +81,8 @@ class _Moves:
     """The collections that gained or lost videos."""
     seasons: dict[int, list[str]] = field(default_factory=dict)
     """The new seasons, by collection id."""
+    seasoned: set[str] = field(default_factory=set)
+    """The refs of the lists in the creator's own collection that became seasons of their own."""
 
 
 @dataclass(frozen=True)
@@ -87,9 +94,11 @@ class Flow:
     """What moves, in the Site's words: Shorts for a feed, videos for a list."""
     source_id: int
     target_id: int | None
-    """None when they leave the Library."""
+    """None when they leave the Library; ``source_id`` when they change seasons within it."""
     episode_ids: list[int]
     """The videos as they were before they moved."""
+    files_moved: int = 0
+    """For videos that change seasons, how many downloads move along into their new season."""
 
 
 def place_of(account: CreatorAccount, section: CreatorSection) -> SectionTarget:
@@ -98,9 +107,9 @@ def place_of(account: CreatorAccount, section: CreatorSection) -> SectionTarget:
     if section.kind == SectionKind.FEED:
         if main is not None and takes_feed(main, section.ref):
             return SectionTarget.MAIN
-    elif _season_of_main(account, section.ref) is not None:
-        return SectionTarget.MAIN
-    return SectionTarget.OWN if _own_collection(account, section) is not None else SectionTarget.SKIP
+    elif (link := _list_of_main(account, section.ref)) is not None:
+        return SectionTarget.MAIN if link.as_season else SectionTarget.MAIN_LOOSE
+    return SectionTarget.OWN if _own_collection(account, section) is not None else SectionTarget.EXCLUDE
 
 
 def _own_collection(account: CreatorAccount, section: CreatorSection) -> Collection | None:
@@ -181,7 +190,7 @@ def _feed_to_own(s: Session, account: CreatorAccount, section: CreatorSection, m
         raise ServiceError(
             f"{section.title} lists everything {main.title} has, so it stays in it or leaves your library", field=_FIELD,
         )
-    held = set(_holders(s, active_lists(s, main)))
+    held = set(_holders(s, lists_in(main)))
     episodes = [episode for episode in _feed_episodes(s, account, main, section) if episode.source_slug not in held]
     main.feeds = sorted(set(_feeds_of(account, main)) - {section.ref})
     own = _new_collection(
@@ -209,7 +218,7 @@ def _feed_out(s: Session, account: CreatorAccount, section: CreatorSection, move
         main.outside_videos = OutsideVideos.ADD.value
     section.status = SectionStatus.IGNORED.value
     s.flush()
-    held = set(_holders(s, active_lists(s, main))) if adds_outside_videos(main) else set()
+    held = set(_holders(s, lists_in(main))) if adds_outside_videos(main) else set()
     episodes = _feed_episodes(s, account, main, section)
     before = [episode.id for episode in episodes]
     for episode in episodes:
@@ -247,7 +256,7 @@ def _feed_to_main(s: Session, account: CreatorAccount, section: CreatorSection, 
 
 def _list_to_own(s: Session, account: CreatorAccount, section: CreatorSection, moves: _Moves, added_by_id: int | None) -> None:
     main = account.main_collection
-    season = _season_of_main(account, section.ref)
+    season = _list_of_main(account, section.ref)
     slugs = list(s.scalars(
         select(CollectionListItem.source_slug).where(CollectionListItem.list_id == season.id).order_by(CollectionListItem.position)
     ))
@@ -269,10 +278,10 @@ def _list_to_own(s: Session, account: CreatorAccount, section: CreatorSection, m
     moves.touched |= {main.id, own.id}
 
 
-def _list_to_season(s: Session, account: CreatorAccount, section: CreatorSection, moves: _Moves) -> None:
+def _list_to_main(s: Session, account: CreatorAccount, section: CreatorSection, moves: _Moves, *, as_season: bool) -> None:
     main = account.main_collection
     own = _own_collection(account, section)
-    _make_seasons(account, main, {section.ref})
+    _make_seasons(account, main, {section.ref}, as_season=as_season)
     s.flush()
     season = next(link for link in main.lists if link.ref == section.ref)
     theirs = _whole(s, own)
@@ -296,8 +305,39 @@ def _list_to_season(s: Session, account: CreatorAccount, section: CreatorSection
     settle_creator(s, main)
     _drop_if_empty(s, own)
     reindex_collection(s, main)
-    moves.seasons.setdefault(main.id, []).append(section.title)
+    if as_season:
+        moves.seasons.setdefault(main.id, []).append(section.title)
     moves.touched |= {main.id, own.id}
+
+
+def _list_regrouped(s: Session, account: CreatorAccount, section: CreatorSection, moves: _Moves, *, as_season: bool) -> None:
+    """A list in the creator's own collection becomes a season of its own, or stops being one, so that its videos go
+    where the ones in no list go. They change seasons, files and all; the files are renamed into their new season."""
+    main = account.main_collection
+    link = _list_of_main(account, section.ref)
+    slugs = set(s.scalars(select(CollectionListItem.source_slug).where(CollectionListItem.list_id == link.id)))
+    theirs = {episode.id: episode for slug, episode in _whole(s, main).items() if slug in slugs}
+    before = {episode_id: episode.season_id for episode_id, episode in theirs.items()}
+    left = frozenset() if as_season or link.season_id is None else frozenset({link.season_id})
+    link.as_season = as_season
+    s.flush()
+    s.expire(main, ["lists"])
+    place_in_link_seasons(s, main, with_files=set(theirs), by_user=True, left=left)
+    moved = [episode_id for episode_id, episode in theirs.items() if episode.season_id != before[episode_id]]
+    downloaded = set(s.scalars(
+        select(EpisodeMediaDownload.media_item_id).where(
+            EpisodeMediaDownload.media_item_id.in_(moved), EpisodeMediaDownload.artifact_status.in_(_ON_DISK),
+        )
+    )) if moved else set()
+    if downloaded:
+        # Their numbers follow their new seasons, and their files move into those seasons' folders.
+        match_seasons_of_downloaded(s, main, downloaded)
+        moves.result.rename.setdefault(main.id, []).extend(sorted(downloaded))
+    moves.flows.append(Flow(section, _media_names(account), main.id, main.id, moved, files_moved=len(downloaded)))
+    if as_season:
+        moves.seasons.setdefault(main.id, []).append(section.title)
+        moves.seasoned.add(section.ref)
+    moves.touched.add(main.id)
 
 
 def _list_out(s: Session, account: CreatorAccount, section: CreatorSection, moves: _Moves) -> None:
@@ -348,19 +388,21 @@ def _checked(creator: Creator, moves: Sequence[SectionMove]) -> list[tuple[Creat
         main = account.main_collection
         if section.kind == SectionKind.LIST and not lists_are_seasons(site):
             raise ServiceError(f"{section.title} can't move: {site.section_list_names.plural} can't be seasons here", field=_FIELD)
-        if section.kind not in (SectionKind.FEED, SectionKind.LIST):
+        if section.kind not in (SectionKind.FEED, SectionKind.LIST) or (
+            section.kind == SectionKind.FEED and move.target is SectionTarget.MAIN_LOOSE
+        ):
             raise ServiceError(f"{section.title} can't move", field=_FIELD)
-        if origin is SectionTarget.SKIP:
+        if origin is SectionTarget.EXCLUDE:
             raise ServiceError(f"{section.title} is not in your library; add it from the creator's page", field=_FIELD)
-        if origin is SectionTarget.OWN and move.target is SectionTarget.SKIP:
+        if origin is SectionTarget.OWN and move.target is SectionTarget.EXCLUDE:
             own = _own_collection(account, section)
             raise ServiceError(
                 f"{section.title} is the collection {own.title}; delete that collection to take it out of your library",
                 field=_FIELD,
             )
-        if move.target is SectionTarget.MAIN and main is None:
+        if move.target in _INTO_MAIN and main is None:
             raise ServiceError(f"{creator.title} has no collection of its own to put {section.title} in", field=_FIELD)
-        if origin is SectionTarget.MAIN and move.target is SectionTarget.OWN and _own_collection(account, section) is not None:
+        if origin in _INTO_MAIN and move.target is SectionTarget.OWN and _own_collection(account, section) is not None:
             raise ServiceError(f"{_own_collection(account, section).title} is a collection of {section.title} already", field=_FIELD)
         checked.append((account, section, origin, move))
     return checked
@@ -380,20 +422,22 @@ def _apply(
             raise ServiceError(busy, field=_FIELD)
     done = _Moves()
     # What leaves the creator's own collection goes first, so what joins it finds it as it will be.
-    for account, section, origin, move in sorted(checked, key=lambda item: item[3].target is SectionTarget.MAIN):
+    for account, section, origin, move in sorted(checked, key=lambda item: item[3].target in _INTO_MAIN):
         if section.kind == SectionKind.FEED:
             if move.target is SectionTarget.OWN:
                 _feed_to_own(s, account, section, done, added_by_id)
-            elif move.target is SectionTarget.SKIP:
+            elif move.target is SectionTarget.EXCLUDE:
                 _feed_out(s, account, section, done)
             else:
                 _feed_to_main(s, account, section, done)
         elif move.target is SectionTarget.OWN:
             _list_to_own(s, account, section, done, added_by_id)
-        elif move.target is SectionTarget.SKIP:
+        elif move.target is SectionTarget.EXCLUDE:
             _list_out(s, account, section, done)
+        elif origin in _INTO_MAIN:
+            _list_regrouped(s, account, section, done, as_season=move.target is SectionTarget.MAIN)
         else:
-            _list_to_season(s, account, section, done)
+            _list_to_main(s, account, section, done, as_season=move.target is SectionTarget.MAIN)
         s.flush()
         s.expire(account, ["main_collection"])
         s.expire(creator, ["collections"])
@@ -462,7 +506,8 @@ class MovedPart:
     section_kind: SectionKind
     names: Names
     direction: str
-    """out, to another collection; in, from another one; or leave, out of the Library."""
+    """out, to another collection; in, from another one; leave, out of the Library; or within the collection,
+    season, into a season of their list's own, or loose, from it to where the videos in no list go."""
     count: int
     other_title: str | None
     """The collection they move to or come from."""
@@ -563,6 +608,13 @@ def preview_section_moves(s: Session, creator: Creator, moves: Sequence[SectionM
                 direction="leave", other_title=None, downloads_deleted=len(deleted),
                 kept_deleted=sum(1 for _name, kept in deleted if kept),
                 deleting_profiles=sorted({name for name, _kept in deleted}), **common,
+            ))
+            continue
+        if flow.target_id == flow.source_id:
+            # The list became a season of its own, or stopped being one.
+            parts.setdefault(flow.source_id, []).append(MovedPart(
+                direction="season" if flow.section.ref in done.seasoned else "loose", other_title=None,
+                files_moved=flow.files_moved, **common,
             ))
             continue
         moved = sum(len(item.downloads) for item in items)

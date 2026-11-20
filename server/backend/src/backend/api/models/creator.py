@@ -48,6 +48,9 @@ class CreatorSectionAPIRead(ResponseBase):
     collection_slug: Optional[str] = None
     """The collection that keeps the section, when one does."""
     collection_title: Optional[str] = None
+    as_season: Optional[bool] = None
+    """For a list in the creator's own collection: whether it is a season of its own, rather than having its videos
+    where the ones in no list go."""
     movie_slug: Optional[str] = None
     """The movie in the Library that this single item is, when it is one."""
     movie_title: Optional[str] = None
@@ -296,7 +299,7 @@ class CreatorMovedPartAPIRead(ResponseBase):
     section_kind: Literal["feed", "list", "show", "item"]
     names: NamesAPIRead
     """What moves, in the Site's words: shorts for a feed, videos for a list."""
-    direction: Literal["out", "in", "leave"]
+    direction: Literal["out", "in", "leave", "season", "loose"]
     """out to another collection, in from another one, or leave the Library."""
     count: int
     other_title: Optional[str] = None
