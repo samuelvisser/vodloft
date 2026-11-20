@@ -184,7 +184,7 @@ export const CreatorReadSchema = z.object({
     /** Those kinds of list named together, such as albums and playlists, or lists when there are none. */
     newListNames: NamesSchema,
     /** What the creator's page calls their seasons and episodes, such as albums and tracks for an artist. */
-    words: z.object({season: NamesSchema, episode: NamesSchema}),
+    words: CollectionWordsSchema,
     genre: z.string().nullable(),
     contentRating: z.string().nullable(),
 })

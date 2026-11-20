@@ -4,7 +4,9 @@ A creator keeps each of its videos in one of its collections. A list, such as a 
 a video is in the collection whose lists hold it, which is the creator's own collection for the playlists that are its
 seasons and a collection of its own for a playlist that is one. A list of the creator that is in another collection,
 or that the user keeps out, keeps every one of its videos out of a collection: also when a feed of that collection
-lists them, and also when one of its own seasons has them too. A skipped list changes nothing: its videos stay where
+lists them, and also when one of its own seasons has them too, unless the collection repeats a video in each season
+it belongs in, as an artist's albums do: it shows every season whole, so another collection only takes the videos it
+has from its feeds. A skipped list changes nothing: its videos stay where
 the creator's other feeds and lists put them. Neither does a list that waits for the user's choice: its videos stay
 where they are until the user answers, which moves them at once.
 Each collection of the creator lists those lists when it syncs, so it knows their videos before their own collections
@@ -39,7 +41,9 @@ from backend.db.models import (
     Creator, CreatorSection, CreatorSectionItem, Collection, DownloadProfile, Episode, MediaDownloadBase,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.services.link_seasons import _holders, link_seasons_on, list_each, lists_in, remove_left_episode
+from backend.services.link_seasons import (
+    _holders, active_lists, link_seasons_on, list_each, lists_in, remove_left_episode, repeats_videos,
+)
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.creator_types import SectionStatus
 from sources import ItemRef, SectionKind, Source
@@ -139,7 +143,12 @@ def creator_places(s: Session, creator: Creator) -> CreatorPlaces:
         if collection.id not in lists:
             # A list that is a collection of its own keeps out what it has, also before the creator's collections
             # listed it themselves.
-            places.blocked[collection.id] = left_out(s, collection) | listed
+            blocked = left_out(s, collection) | listed
+            if collection.id in mains and repeats_videos(collection) and link_seasons_on(collection):
+                # It shows each of its seasons whole, so another collection only takes what its feeds have, and a
+                # list the user keeps out what it has.
+                blocked = (blocked - set(_holders(s, active_lists(s, collection)))) | kept_out(s, collection)
+            places.blocked[collection.id] = frozenset(blocked)
     places.downloaded = set(s.scalars(
         select(MediaDownloadBase.media_item_id).join(Episode, Episode.id == MediaDownloadBase.media_item_id)
         .where(Episode.collection_id.in_(ids))

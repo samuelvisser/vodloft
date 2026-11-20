@@ -41,7 +41,8 @@ class Episode(
     __table_args__ = (
         UniqueConstraint("collection_id", "index", name="uq_episode_collection_index"),
         UniqueConstraint("collection_id", "episode_identifier", name="uq_unique_episode_identifier_per_collection"),
-        UniqueConstraint("collection_id", "source_slug", name="uq_episode_collection_source_slug"),
+        # A video can be in several seasons of a collection, as a track is on several albums, but once in each.
+        UniqueConstraint("season_id", "source_slug", name="uq_episode_season_source_slug"),
         Index(
             "ix_media_items_episode_collection_published_id",
             "collection_id",

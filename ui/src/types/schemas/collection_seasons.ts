@@ -1,5 +1,6 @@
 import {z} from 'zod'
 import {NamesSchema, SectionTypeSchema} from './source'
+import {CollectionWordsSchema} from './collection_contract'
 
 export const LinkSeasonModeValues = ['all', 'selected'] as const
 export const NewLinkSeasonValues = ['ask', 'add', 'ignore'] as const
@@ -7,6 +8,7 @@ export type NewLinkSeason = typeof NewLinkSeasonValues[number]
 export const ListLayoutValues = ['season_each', 'by_year'] as const
 export const LooseVideosValues = ['one_season', 'by_year'] as const
 export const OutsideVideosValues = ['leave_out', 'add', 'only'] as const
+export const RepeatVideosValues = ['one_season', 'each_season'] as const
 
 export const CollectionSeasonReadSchema = z.object({
     id: z.number(),
@@ -62,6 +64,10 @@ export const CollectionSeasonsReadSchema = z.object({
     })),
     listLayout: z.enum(ListLayoutValues).default('season_each'),
     looseVideos: z.enum(LooseVideosValues),
+    /** Whether a video that belongs in several seasons has an episode in the first of them, or in each. */
+    repeatVideos: z.enum(RepeatVideosValues),
+    /** The episodes of videos the collection has in another season already, which leave when it keeps one season. */
+    repeatedCount: z.number(),
     outsideVideos: z.enum(OutsideVideosValues),
     outsideCount: z.number(),
     outsideWithFiles: z.number(),
@@ -84,7 +90,7 @@ export const CollectionSeasonsReadSchema = z.object({
     /** The link seasons keep the order the Site gives the lists, as an artist's albums do, instead of by date. */
     siteOrder: z.boolean().default(false),
     /** What the collection calls its seasons and episodes. */
-    words: z.object({season: NamesSchema, episode: NamesSchema}),
+    words: CollectionWordsSchema,
     playlists: z.array(CollectionListReadSchema),
 })
 export type CollectionSeasonsRead = z.infer<typeof CollectionSeasonsReadSchema>
@@ -102,6 +108,7 @@ export const CollectionSeasonsFormSchema = z.object({
     newLists: z.record(z.string(), z.enum(NewLinkSeasonValues)).default({}),
     listLayout: z.enum(ListLayoutValues).default('season_each'),
     looseVideos: z.enum(LooseVideosValues).default('one_season'),
+    repeatVideos: z.enum(RepeatVideosValues).default('one_season'),
     outsideVideos: z.enum(OutsideVideosValues).default('leave_out'),
     /** Each list, whether it is a season, and the season it is in: its own, or another list's that it shares. */
     playlists: z.array(z.object({id: z.number(), enabled: z.boolean(), seasonId: z.number().nullable()})).default([]),
@@ -127,6 +134,7 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         newLists: Object.fromEntries(view.newLists.map((setting) => [setting.key, setting.action])),
         listLayout: view.listLayout,
         looseVideos: view.looseVideos,
+        repeatVideos: view.repeatVideos,
         outsideVideos: view.outsideVideos,
         playlists: view.playlists.map((playlist) => ({id: playlist.id, enabled: playlist.enabled, seasonId: playlist.seasonId})),
         removedLinks: [],

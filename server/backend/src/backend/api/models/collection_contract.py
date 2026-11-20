@@ -12,6 +12,8 @@ class CollectionWordsAPIRead(ResponseBase):
 
     season: NamesAPIRead
     episode: NamesAPIRead
+    in_season: str
+    """The word for being in one of its seasons, such as on for a track on an album."""
 
 
 class CollectionContractAPIRead(ResponseBase):

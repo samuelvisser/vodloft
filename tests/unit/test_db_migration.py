@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "4b9e1d7c2a60"
+HEAD_REVISION = "03646be1903c"
 
 
 @pytest.fixture
@@ -1984,3 +1984,34 @@ def test_a_database_that_renamed_podcasts_and_series_early_still_gets_the_lists_
     assert "new_lists" in {c["name"] for c in inspect(engine).get_columns("collections")}
     with engine.connect() as connection:
         assert connection.execute(text("SELECT alembic_version_num FROM settings")).scalars().all() == [HEAD_REVISION]
+
+
+def test_a_music_collection_repeats_a_video_in_each_album_and_others_keep_one(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "4b9e1d7c2a60")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        for collection_id, collection_type in ((1, "music"), (2, "series"), (3, "podcast")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order) VALUES (:id, :slug, :slug, 'Channel', "
+                "'https://example.test/' || :slug, 'free', :type, 'seasonal', 'Artist', 'artist', 'ytdlp', 'newest_first')"
+            ), {"id": collection_id, "slug": f"c{collection_id}", "type": collection_type})
+
+    command.upgrade(config, "03646be1903c")
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT repeat_videos FROM collections ORDER BY id")).scalars().all() == [
+            "each_season", "one_season", "one_season",
+        ]
+    unique = {tuple(c["column_names"]) for c in inspect(engine).get_unique_constraints("media_items_episode")}
+    assert ("season_id", "source_slug") in unique
+    assert ("collection_id", "source_slug") not in unique
+
+    command.downgrade(config, "4b9e1d7c2a60")
+    assert "repeat_videos" not in {c["name"] for c in inspect(engine).get_columns("collections")}
+    unique = {tuple(c["column_names"]) for c in inspect(engine).get_unique_constraints("media_items_episode")}
+    assert ("collection_id", "source_slug") in unique

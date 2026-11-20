@@ -465,3 +465,25 @@ def test_a_downloaded_video_in_a_season_and_in_a_playlist_of_its_own_is_reassign
 def _ok(response):
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def test_a_collection_that_repeats_videos_keeps_its_seasons_whole_and_lets_go_of_its_feeds_videos(creator, session):
+    from backend.db.core import run_write_transaction
+    from backend.services.reassigned import reassigned_episodes, settle_creator
+
+    main, tools = creator
+    main_id = main.id
+    main.repeat_videos = "each_season"
+    session.commit()
+    local = _profile(session, "shows")
+    _download(session, _episode(session, main, "c1"), local, _download_profile(session, main, local))
+    session.commit()
+
+    # c1 is in a season of the collection, which shows its list whole; Tool Reviews has it too.
+    assert reassigned_episodes(session, session.get(type(main), main_id)) == []
+    # t2 only came from its feeds, so it leaves for Tool Reviews; t1 too, which a download of its own does not hold.
+    assert run_write_transaction(lambda w: settle_creator(w, w.get(type(main), main_id))) == 2
+    session.expire_all()
+    main = session.get(type(main), main_id)
+    assert _episode(session, main, "c1") is not None and _episode(session, tools, "c1") is not None
+    assert _episode(session, main, "t1") is None and _episode(session, main, "t2") is None

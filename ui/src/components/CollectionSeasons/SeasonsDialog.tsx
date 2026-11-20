@@ -34,18 +34,19 @@ type Props = {
     words?: CollectionWords
 }
 
-/** What saving removes: ``asked`` when the ones with files stay until Home asks about them. */
-type Leaving = {episodes: number, withFiles: number, asked?: boolean}
+/** What saving removes: ``asked`` when the ones with files stay until Home asks about them. ``repeated`` counts the
+ * episodes of videos in another season already, which leave once a video has one season only. */
+type Leaving = {episodes: number, withFiles: number, asked?: boolean, repeated?: number}
 
 /** A creator's videos, or an artist's tracks or music videos, and what the collection calls its seasons. In a Music
  * collection an artist's albums are albums here too, so ``here`` tells them apart where both are meant. */
-type Words = {creator: string, video: string, videos: string, creators: string, season: Noun, here: string}
+type Words = {creator: string, video: string, videos: string, creators: string, season: Noun, episode: Noun, inSeason: string, here: string}
 const dialogWords = (collection: CollectionWords, view: CollectionSeasonsRead | undefined): Words => ({
     // What the collection calls its creator and what its lists hold, such as an artist's music videos.
     // Shown once the view is there, which brings the words.
     creator: view?.creatorNames.singular ?? '', creators: view?.creatorNames.plural ?? '',
     video: view?.mediaNames.singular ?? '', videos: view?.mediaNames.plural ?? '',
-    season: collection.season,
+    season: collection.season, episode: collection.episode, inSeason: collection.inSeason,
     here: view && namesOf(view).singular === collection.season.singular ? ' here' : '',
 })
 
@@ -89,6 +90,17 @@ function registries(names: ListNames, words: Words, view: CollectionSeasonsRead)
         loose: createSelectRegistry(`LooseVideos-${names.looseSeason}`, {
             one_season: {label: `One ${words.season.singular}, ${names.looseSeason}`, help: `They share one ${words.season.singular}, shown before the ${names.plural}.`},
             by_year: {label: `${capitalized(words.season.a)} per year`, help: `They get ${words.season.a} per upload year, with the ${names.plural} between them by date.`},
+        }),
+        // What the collection does with a video in several of its seasons, such as a track on several albums.
+        repeat: createSelectRegistry(`RepeatVideos-${words.season.singular}-${words.inSeason}-${words.episode.singular}`, {
+            one_season: {
+                label: `Only ${words.inSeason} the first ${words.season.singular}`,
+                help: `It gets one place, ${words.inSeason} the first of those ${words.season.plural} in the order below.`,
+            },
+            each_season: {
+                label: `${capitalized(words.inSeason)} each ${words.season.singular}`,
+                help: `It is ${words.inSeason} each of them, with files of its own, so every ${words.season.singular} is whole.`,
+            },
         }),
         outside: createSelectRegistry(
             `OutsideVideos-${names.plural}-${view.listsPlaylists}-${view.linksOnlyOffered}`,
@@ -152,10 +164,17 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const outsideVideos = watch('outsideVideos') ?? 'leave_out'
     const newLists = watch('newLists') ?? {}
     const customOrder = watch('customSeasonOrder') ?? false
+    const repeatVideos = watch('repeatVideos') ?? 'one_season'
     const removedLinks = watch('removedLinks') ?? []
     const only = outsideVideos === 'only'
 
     const leaving = (values: CollectionSeasonsFormOut): Leaving => {
+        if (!view) return {episodes: 0, withFiles: 0}
+        const repeated = view.repeatVideos === 'each_season' && values.repeatVideos === 'one_season' ? view.repeatedCount : 0
+        return {...leavingByLists(values), repeated}
+    }
+
+    const leavingByLists = (values: CollectionSeasonsFormOut): Leaving => {
         if (!view) return {episodes: 0, withFiles: 0}
         if (values.outsideVideos === 'only' && view.outsideVideos !== 'only') {
             // The playlists are listed again first; the downloaded ones then stay until Home asks about them.
@@ -185,6 +204,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             linkSeasons: data.linkSeasonsOn || data.outsideVideos === 'only' ? data.linkSeasonMode : 'off',
             newLists: data.newLists,
             looseVideos: data.looseVideos,
+            repeatVideos: data.repeatVideos,
             listLayout: data.listLayout,
             outsideVideos: data.outsideVideos,
             playlists: data.playlists,
@@ -212,7 +232,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
     const onSubmit = form.handleSubmit((values) => {
         const going = leaving(values)
-        if (going.episodes > 0 && !confirmed.current) {
+        if ((going.episodes > 0 || (going.repeated ?? 0) > 0) && !confirmed.current) {
             setConfirm(going)
             return
         }
@@ -549,6 +569,19 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 </button>
                                             )}
                                         </div>
+                                        {regs && (
+                                            <div className="form-row">
+                                                <label htmlFor="seasons-repeat">
+                                                    When {words.episode.a} belongs {words.inSeason} several {season.plural}
+                                                </label>
+                                                <SimpleSelect
+                                                    inputId="seasons-repeat" registry={regs.repeat} value={repeatVideos}
+                                                    onChange={(value) => setValue('repeatVideos', value as CollectionSeasonsFormIn['repeatVideos'], {shouldDirty: true})}
+                                                />
+                                                <div className="help">{regs.repeat.getHelp(repeatVideos)}</div>
+                                                {errors.repeatVideos && <div className="error" role="alert">{errors.repeatVideos.message}</div>}
+                                            </div>
+                                        )}
                                         <ol className="seasons-dialog-seasons">
                                             {fields.map((field, index) => {
                                                 const season = seasonsById.get(field.id)
@@ -638,7 +671,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                     },
                 }}
             >
-                {confirm && names && confirm.asked && (
+                {confirm && names && confirm.asked && confirm.episodes > 0 && (
                     <>
                         <p>
                             {counted(confirm.episodes, words.video, words.videos)} {confirm.episodes === 1 ? 'is' : 'are'} in
@@ -653,7 +686,15 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                         )}
                     </>
                 )}
-                {confirm && names && !confirm.asked && (
+                {confirm && (confirm.repeated ?? 0) > 0 && (
+                    <p>
+                        {counted(confirm.repeated ?? 0, words.episode.singular, words.episode.plural)} of{' '}
+                        {(confirm.repeated ?? 0) === 1 ? `${words.episode.a} that is` : `${words.episode.plural} that are`} {words.inSeason} another{' '}
+                        {season.singular} too {(confirm.repeated ?? 0) === 1 ? 'leaves' : 'leave'} the collection. Downloaded ones stay
+                        until Home asks whether to keep them.
+                    </p>
+                )}
+                {confirm && names && !confirm.asked && confirm.episodes > 0 && (
                     <>
                         <p>
                             {counted(confirm.episodes, words.video, words.videos)} came from {names.plural} and not from the collection's

@@ -29,7 +29,7 @@ from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
 from backend.types.collection_contracts import collection_contract
 from backend.types.season_types import SeasonType
-from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
+from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos
 from sources import Feature, Names, SectionKind, get_source
 
 
@@ -88,6 +88,7 @@ class _View:
     creator_slug: str | None
     creator_title: str | None
     new_lists: list
+    repeated_count: int
 
     def __getattr__(self, name):
         return getattr(self.collection, name)
@@ -155,6 +156,16 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         creator_slug=collection.creator.slug if follows_creator(collection) else None,
         creator_title=collection.creator.title if follows_creator(collection) else None,
         new_lists=collection_new_lists(collection),
+        repeated_count=_repeated(s, collection),
+    ))
+
+
+def _repeated(s: Session, collection: Collection) -> int:
+    """How many episodes the collection has of videos it has an episode of already, in another season: the ones that
+    leave when it gives each video one season only."""
+    return sum(s.scalars(
+        select(func.count() - 1).where(Episode.collection_id == collection.id, Episode.part_of.is_(None))
+        .group_by(Episode.source_slug)
     ))
 
 
@@ -256,6 +267,9 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         )
     collection.loose_videos = body.loose_videos
     collection.list_layout = body.list_layout
+    if body.repeat_videos is not None:
+        # An episode of a video in each season it belongs in, made or let go of below.
+        collection.repeat_videos = RepeatVideos(body.repeat_videos).value
     regrouped = _regroup(playlists, seasons, body)
     for change in body.playlists:
         if change.id not in playlists:
