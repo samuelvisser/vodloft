@@ -102,7 +102,7 @@ export default function CollectionDownloadAllDialog({
         context.addIssue({
           code: 'custom',
           path: ['seasonIds'],
-          message: `Select at least one ${season.one}.`,
+          message: `Select at least one ${season.singular}.`,
         })
       }
       if (data.episodeTypes.length === 0) {
@@ -123,7 +123,7 @@ export default function CollectionDownloadAllDialog({
         context.addIssue({
           code: 'custom',
           path: ['downloadEpisodeCount'],
-          message: `Enter a positive number of ${episode.many}.`,
+          message: `Enter a positive number of ${episode.plural}.`,
         })
       }
     }),
@@ -189,8 +189,8 @@ export default function CollectionDownloadAllDialog({
         }),
       })
       toast.success(result.queued
-        ? `Queued ${result.episodesQueued} ${episode.one} downloads for ${collectionTitle}`
-        : `No new ${episode.many} to download for ${collectionTitle}`)
+        ? `Queued ${result.episodesQueued} ${episode.singular} downloads for ${collectionTitle}`
+        : `No new ${episode.plural} to download for ${collectionTitle}`)
     } catch (error) {
       const detail = error instanceof OperationStartError ? error.message : undefined
       toast.error(detail || `Could not queue downloads for ${collectionTitle}`)
@@ -215,11 +215,11 @@ export default function CollectionDownloadAllDialog({
         disabled: starting || !compatibleProfiles.length,
       }}
     >
-      <p>Download the selected {episode.many} from "{collectionTitle}". Existing downloaded files will not be replaced.</p>
+      <p>Download the selected {episode.plural} from "{collectionTitle}". Existing downloaded files will not be replaced.</p>
       {bySeason ? (
         <div className="form-row">
           <div className="collection-download-all-label-row">
-            <label htmlFor={`${selectId}-season`}>{season.Many} to download</label>
+            <label htmlFor={`${selectId}-season`}>{season.Plural} to download</label>
             <button
               type="button"
               className="btn btn-link"
@@ -246,7 +246,7 @@ export default function CollectionDownloadAllDialog({
                 onBlur={field.onBlur}
                 closeMenuOnSelect={false}
                 isDisabled={starting || seasons.length === 0}
-                placeholder={seasons.length ? `Select ${season.many}` : `No ${season.many} available`}
+                placeholder={seasons.length ? `Select ${season.plural}` : `No ${season.plural} available`}
                 aria-invalid={!!errors.seasonIds}
               />
             )}
@@ -256,7 +256,7 @@ export default function CollectionDownloadAllDialog({
       ) : null}
       <div className="form-row">
         <div className="collection-download-all-label-row">
-            <label htmlFor={`${selectId}-type`}>{episode.One} types to download</label>
+            <label htmlFor={`${selectId}-type`}>{episode.Singular} types to download</label>
             <button
               type="button"
               className="btn btn-link"
@@ -378,7 +378,7 @@ export default function CollectionDownloadAllDialog({
                       />
                     )}
                   />
-                  <div className="help">Optional. Leave blank to include all eligible {episode.many}.</div>
+                  <div className="help">Optional. Leave blank to include all eligible {episode.plural}.</div>
                 </div>
               )}
         </>

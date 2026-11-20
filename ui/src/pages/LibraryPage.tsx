@@ -26,6 +26,7 @@ import {CollectionTypeReg} from '../types/collection'
 import DurationPill from '../components/common/DurationPill'
 import './LibraryPage.css'
 import {capitalized, creatorKindText} from '../types/creator'
+import type {Names} from '../types/schemas/source'
 import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
@@ -34,9 +35,9 @@ const LIBRARY_KIND_FILTER_STORAGE_KEY = 'libraryKindFilter'
 const KIND_VALUES = ['creator', 'collection']
 
 /** Creators and collections, with creators named as their Sites call them when they all call them the same. */
-function kindOptions(creatorLabels: string[]) {
-    const labels = new Set(creatorLabels)
-    const creators = labels.size === 1 ? `${capitalized([...labels][0])}s` : 'Creators'
+function kindOptions(creatorNames: Names[]) {
+    const kinds = new Set(creatorNames.map((names) => names.plural))
+    const creators = kinds.size === 1 ? capitalized([...kinds][0]) : 'Creators'
     return [{value: 'creator', label: creators}, {value: 'collection', label: 'Collections'}]
 }
 const LIBRARY_COLLECTION_SORT_STORAGE_KEY = 'libraryCollectionSort'
@@ -367,7 +368,7 @@ export default function LibraryPage() {
                     {showChips && (
                         <>
                             {showKindFilter && (
-                                <ChipFilter label="Kind" options={kindOptions((creators ?? []).map((creator) => creator.creatorLabel))} selected={activeKindFilter} onChange={setKindFilter}/>
+                                <ChipFilter label="Kind" options={kindOptions((creators ?? []).map((creator) => creator.creatorNames))} selected={activeKindFilter} onChange={setKindFilter}/>
                             )}
                             <ChipFilter label="Site" options={siteOptions} selected={activeSiteFilter} onChange={setSiteFilter}/>
                             {showTypeFilter && (

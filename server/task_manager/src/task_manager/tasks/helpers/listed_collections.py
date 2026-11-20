@@ -184,7 +184,7 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
     collection = s.get(Collection, collection_id)
     listing = None
     # The Site's own word for its lists, such as playlists on YouTube or albums on Bandcamp.
-    lists = list_names(collection).many if collection is not None else "playlists"
+    lists = list_names(collection).plural if collection is not None else "playlists"
     if collection is not None and link_seasons_on(collection):
         update_progress(progress, _PLAYLISTS_PROGRESS, f"Listing the {lists} of '{title}' at {source.name}")
         listing = list_lists(s, collection, source, also=frozenset(details.slug for details in found))

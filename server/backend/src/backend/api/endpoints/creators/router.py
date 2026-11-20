@@ -6,6 +6,7 @@ from backend.api.models.creator import (
 )
 from backend.api.pagination import InvalidCursorError
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
+from backend.api.models.source import NamesAPIRead
 from backend.api.steps import STEPS_RESPONSE, stream_steps
 from backend.app import db_session
 from backend.db.core import run_write_transaction
@@ -18,7 +19,7 @@ from backend.api.endpoints.movies.service import look_up_movies
 from . import lookups
 from .service import (
     CreatorNotFoundError, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
-    look_up_creator, lookup_creator_label, move_creator_reassigned, move_creator_section, update_creator,
+    look_up_creator, lookup_creator_names, move_creator_reassigned, move_creator_section, update_creator,
 )
 
 router = APIRouter(prefix="/creators", tags=["Creators"])
@@ -29,15 +30,15 @@ def lookup_creator(body: CreatorLookupAPIRequest, access: Access = signed_in()):
     """Look a creator up at its Site: who it is, its sections, and what each way of adding it does with them.
 
     Looking a creator up can take a minute, so the answer is a line of JSON per step: first ``{"step": "...",
-    "creatorLabel": "..."}`` with what the Site calls a creator, then ``{"step": "..."}`` while it
+    "creatorNames": {"one", "many", "a"}}`` with what the Site calls a creator, then ``{"step": "..."}`` while it
     works, then ``{"creator": CreatorLookupAPIRead}`` or ``{"error": "..."}``.
     """
     access.check_link_at(body.source_key, body.url)
 
     def look_up(send) -> dict:
-        label = lookup_creator_label(body.source_key, body.url)
-        send(step=f"Looking the {label} up", creatorLabel=label)
-        with asking_source(f"Could not look up this {label}"):
+        names = lookup_creator_names(body.source_key, body.url)
+        send(step=f"Looking the {names.singular} up", creatorNames=NamesAPIRead.model_validate(names).model_dump(mode="json"))
+        with asking_source(f"Could not look up this {names.singular}"):
             details = look_up_creator(body.source_key, body.url, body.ref, lambda step: send(step=step))
         send(step="Checking what is in your library already")
         with db_session() as s:

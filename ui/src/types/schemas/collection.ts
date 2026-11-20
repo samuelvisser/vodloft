@@ -2,7 +2,7 @@ import {z} from "zod";
 import {EpisodeIdentifierReg, EpisodeOrderReg, CollectionTypeReg} from "../collection";
 import {DwMembershipLevelReg} from "../dailywire_user_info";
 import {ApiDateTimeSchema} from "./datetime";
-import {SiteReadSchema, SourcedFields} from "./source";
+import {NamesSchema, SiteReadSchema, SourcedFields} from "./source";
 import {OutsideVideosValues} from "./collection_seasons";
 
 
@@ -102,6 +102,9 @@ export const CollectionReadSchema = z.looseObject({
     outsideVideos: z.enum(OutsideVideosValues).optional(),
     /** The website it is on; null for an older collection until VODLoft has found it. */
     site: SiteReadSchema.nullable().optional(),
+    /** What the collection calls the creator behind it, such as host, or artist in a Music collection. Optional only
+     *  for collections kept in the browser by an older VODLoft. */
+    creatorNames: NamesSchema.optional(),
     backgroundImagePath: z.string().nullable().optional(),
     logoImagePath: z.string().nullable().optional(),
 

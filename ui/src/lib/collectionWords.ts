@@ -7,12 +7,12 @@ import {type CollectionContracts, CollectionContractsSchema} from '../types/sche
 /** One word in the forms a sentence needs. */
 export interface Noun {
     /** Lower case, such as album. */
-    one: string
+    singular: string
     /** Lower case plural, such as albums. */
-    many: string
+    plural: string
     /** For the start of a sentence, a title or a label, such as Album. */
-    One: string
-    Many: string
+    Singular: string
+    Plural: string
     /** With its article, such as an album. */
     a: string
 }
@@ -28,30 +28,32 @@ export interface CollectionWords {
  *  or video, such as the videos of a YouTube channel. */
 export type MediaKind = 'audio' | 'video'
 
-type BackendNames = {one: string, many: string, a: string}
+type BackendNames = {singular: string, plural: string, a: string}
 
-function noun({one, many, a}: BackendNames): Noun {
+function noun({singular, plural, a}: BackendNames): Noun {
     const upper = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
-    return {one, many, One: upper(one), Many: upper(many), a}
+    return {singular, plural, Singular: upper(singular), Plural: upper(plural), a}
 }
 
 function words(names: {season: BackendNames, episode: BackendNames}): CollectionWords {
     const episode = noun(names.episode)
     return {
         season: noun(names.season), episode,
-        count: (count, counted = episode) => `${count.toLocaleString()} ${count === 1 ? counted.one : counted.many}`,
+        count: (count, counted = episode) => `${count.toLocaleString()} ${count === 1 ? counted.singular : counted.plural}`,
     }
 }
 
 const STORAGE_KEY = 'vodloft.collectionContracts'
-type Contract = Record<MediaKind, CollectionWords> & {downloadsBySeason: boolean}
+type Contract = Record<MediaKind, CollectionWords> & {downloadsBySeason: boolean, creatorNames: BackendNames | null}
 let contracts: {fallback: CollectionWords, types: Map<string, Contract>} | undefined
 
 /** Keep the collection contracts the backend gave, which every function here names things from. */
 export function setCollectionContracts(loaded: CollectionContracts) {
     contracts = {
         fallback: words(loaded.words),
-        types: new Map(loaded.types.map((type) => [type.type, {video: words(type.words), audio: words(type.audioWords), downloadsBySeason: type.downloadsBySeason}])),
+        types: new Map(loaded.types.map((type) => [type.type, {
+            video: words(type.words), audio: words(type.audioWords), downloadsBySeason: type.downloadsBySeason, creatorNames: type.creatorNames,
+        }])),
     }
 }
 
@@ -81,6 +83,12 @@ export function downloadsBySeason(type: string): boolean {
     const contract = contracts?.types.get(type)
     if (!contract) throw new Error(`No collection contract for ${type}`)
     return contract.downloadsBySeason
+}
+
+/** What a collection of the type calls the creator behind it: the type's word, such as artist for Music, or else what
+ *  their Site calls its creators. */
+export function creatorNamesFor(type: string | null | undefined, siteNames: BackendNames): BackendNames {
+    return (type ? contracts?.types.get(type)?.creatorNames : null) ?? siteNames
 }
 
 interface WordedCollection {

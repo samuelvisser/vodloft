@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sources import Names
+from sources import Names, Site
 
 from .collection_types import CollectionType
 
@@ -34,6 +34,10 @@ class CollectionContract:
     """What they are called when they are sound only, such as the tracks of a Music collection on a Site with sound
     only or the files of a profile for Music tracks; the same as ``words`` unless the contract sets it."""
 
+    creator_names: Names | None = None
+    """What a collection of the type calls the creator behind it, whatever their Site calls its creators, such as
+    artist for Music; when unset, the Site's word (``creator_names_on``)."""
+
     downloads_by_season: bool = True
     """Downloads pick the collection's seasons, as for a series or an artist's albums; otherwise its newest episodes,
     by a number of days or of episodes, as for a podcast."""
@@ -41,6 +45,10 @@ class CollectionContract:
     def __post_init__(self) -> None:
         if self.audio_words is None:
             object.__setattr__(self, "audio_words", self.words)
+
+    def creator_names_on(self, site: Site) -> Names:
+        """What a collection of the type on ``site`` calls the creator behind it: the type's word, or the Site's."""
+        return self.creator_names or site.creator_names
 
     def words_for(self, audio: bool = False) -> CollectionWords:
         """Its words for episodes of video, or with ``audio`` for those of sound only."""
@@ -57,8 +65,10 @@ MUSIC = CollectionContract(
     CollectionType.MUSIC,
     words=CollectionWords(Names("album", "albums"), Names("music video", "music videos")),
     audio_words=CollectionWords(Names("album", "albums"), Names("track", "tracks")),
+    creator_names=Names("artist", "artists"),
 )
-"""An artist's music: each season an album, each episode a music video, or a track where it is sound only."""
+"""An artist's music: each season an album, each episode a music video, or a track where it is sound only. Its
+creator is an artist on every Site."""
 
 CONTRACTS = {contract.type: contract for contract in (PODCAST, SERIES, MUSIC)}
 

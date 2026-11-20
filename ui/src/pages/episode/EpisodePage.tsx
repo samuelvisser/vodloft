@@ -142,7 +142,7 @@ export default function EpisodePage() {
         return (
             <section className="view episode-view">
                 <div className="view-header">
-                    <h1>{words.episode.One}</h1>
+                    <h1>{words.episode.Singular}</h1>
                 </div>
                 <p>Collection not found.</p>
                 <p><Link to="/">Go home</Link></p>
@@ -156,7 +156,7 @@ export default function EpisodePage() {
         return (
             <section className="view episode-view">
                 <div className="view-header">
-                    <h1>{words.episode.One}</h1>
+                    <h1>{words.episode.Singular}</h1>
                 </div>
                 <p>{(error as any)?.message ?? 'Collection not found.'}</p>
                 <p><Link to="/">Go home</Link></p>
@@ -170,9 +170,9 @@ export default function EpisodePage() {
         return (
             <section className="view episode-view">
                 <div className="view-header">
-                    <h1>{words.episode.One}</h1>
+                    <h1>{words.episode.Singular}</h1>
                 </div>
-                <p>{words.episode.One} not found.</p>
+                <p>{words.episode.Singular} not found.</p>
                 <p><Link to={`/collection/${collectionId}`}>Back to collection</Link></p>
             </section>
         )
@@ -202,7 +202,7 @@ export default function EpisodePage() {
     const coverUrl: string = episode.thumbnailLandscapePath
         || episode.backgroundImagePath
         || episode.thumbnailPortraitPath
-        || `https://placehold.co/960x540/png?text=${encodeURIComponent(words.episode.One)}+%23${episode.index}`
+        || `https://placehold.co/960x540/png?text=${encodeURIComponent(words.episode.Singular)}+%23${episode.index}`
 
     const downloadByProfileId = new Map<number, MediaDownloadViewRead>(
         (downloads ?? []).map((d) => [d.localMediaProfileId, d]),
@@ -239,7 +239,7 @@ export default function EpisodePage() {
 
     return (
         <section className="view episode-view" aria-labelledby="episode-title">
-            <article className="episode-details" aria-label={`${words.episode.One} details`}>
+            <article className="episode-details" aria-label={`${words.episode.Singular} details`}>
                 {/* The buttons share the breadcrumb's row, so the title below gets the full width. */}
                 <div className="episode-topbar">
                     <nav className="episode-breadcrumb" aria-label="Breadcrumb">
@@ -271,21 +271,21 @@ export default function EpisodePage() {
                                     disabledReason: metadataRefreshStarting
                                         ? OPERATION_STARTING_MESSAGE
                                         : metadataRefreshOperation
-                                            ? `A metadata refresh is running for this ${words.episode.one}.`
+                                            ? `A metadata refresh is running for this ${words.episode.singular}.`
                                             : undefined,
                                     operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),
                                 }] : []),
                                 ...(reassignedTo && can('library', 'manage') ? [{
                                     label: `Move to ${reassignedTo}`,
-                                    description: `Moves the ${words.episode.one} to the collection its creator places it in now, with its files`,
+                                    description: `Moves the ${words.episode.singular} to the collection its creator places it in now, with its files`,
                                     icon: faIcon('fass', 'arrow-right-from-bracket'),
                                     disabled: movingToCollection,
                                     onSelect: () => void moveToCollection(),
                                 }] : []),
                                 ...(moved && can('library', 'manage') ? [{
-                                    label: `Move to its new ${words.season.one}`,
-                                    description: `Moves the ${words.episode.one} and renames its files to match`,
+                                    label: `Move to its new ${words.season.singular}`,
+                                    description: `Moves the ${words.episode.singular} and renames its files to match`,
                                     icon: faIcon('fass', 'arrow-right-arrow-left'),
                                     disabled: movingToSeason,
                                     onSelect: () => void moveToSeason(),
@@ -297,20 +297,20 @@ export default function EpisodePage() {
                 </div>
 
                 <div className="episode-cover">
-                    <img src={coverUrl} alt={`${words.episode.One} cover`}/>
+                    <img src={coverUrl} alt={`${words.episode.Singular} cover`}/>
                     {(episode.duration > 0 || isUpcoming) && (
                         <span className="thumb-corner thumb-corner-large">
                             <DurationPill seconds={episode.duration} upcoming={isUpcoming} large/>
                         </span>
                     )}
                     {isLive && (
-                        <span className="episode-live-badge" aria-label={`${words.episode.One} is live`}>Live</span>
+                        <span className="episode-live-badge" aria-label={`${words.episode.Singular} is live`}>Live</span>
                     )}
                 </div>
 
                 <header className="episode-header">
                     <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
-                    <div className="episode-summary" aria-label={`${words.episode.One} metadata`}>
+                    <div className="episode-summary" aria-label={`${words.episode.Singular} metadata`}>
                         <EpisodeTypePill sourceKey={episode.sourceKey} type={episode.episodeType} asText/>
                         {episode.drmProtected && <DrmBadge asText/>}
                         <ItemAccessBadge item={episode} asText/>
@@ -379,7 +379,7 @@ export default function EpisodePage() {
                             <p>
                                 {profiles.length ? `No Local Media Profile fits ${collection.title} yet.` : 'No Local Media Profiles configured yet.'}{' '}
                                 <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, audio: collection.site?.audioOnly, from: collection.title})}>Add one</Link>
-                                {' '}to download this {words.episode.one}.
+                                {' '}to download this {words.episode.singular}.
                             </p>
                         )}
                         {!locked && !downloadStateError && !!collectionProfiles?.length && (

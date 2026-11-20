@@ -36,7 +36,7 @@ export type ReassignedMove = z.infer<typeof ReassignedMoveSchema>
 
 /** What the Moved badge explains, in the collection's words. */
 export const movedMessage = (words: CollectionWords = collectionWords(null)) =>
-    `Belongs in another ${words.season.one} now; it stays where it is until you move it, files and all`
+    `Belongs in another ${words.season.singular} now; it stays where it is until you move it, files and all`
 
 const placeKey = (episodeSlug: string) => ['episode', episodeSlug, 'seasonPlace']
 const movedKey = (collectionSlug: string) => ['collection', collectionSlug, 'movedEpisodes']
@@ -88,12 +88,12 @@ export function useReassignedEpisodes(collectionSlug: string | undefined) {
 
 /** What moving reassigned episodes did, in words. */
 export function reassignedMoveMessage(result: ReassignedMove, words: CollectionWords = collectionWords(null)): string {
-    if (!result.episodes) return `No ${words.episode.many} to move`
+    if (!result.episodes) return `No ${words.episode.plural} to move`
     const parts = [
         result.renamed ? `renaming ${result.renamed} ${result.renamed === 1 ? 'download' : 'downloads'} into ${result.episodes === 1 ? 'its' : 'their'} new collection` : null,
         result.downloading ? `downloading ${result.downloading} again with the new collection's Local Media Profile; the old files go once that succeeded` : null,
     ].filter(Boolean)
-    return `Moving ${result.episodes} ${result.episodes === 1 ? words.episode.one : words.episode.many}${parts.length ? `: ${parts.join(', and ')}` : ''}`
+    return `Moving ${result.episodes} ${result.episodes === 1 ? words.episode.singular : words.episode.plural}${parts.length ? `: ${parts.join(', and ')}` : ''}`
 }
 
 /** Move reassigned episodes to the collections their creator places them in now. */
@@ -129,7 +129,7 @@ export function useMoveToCollection(episodeSlug: string, collectionSlug?: string
                 ] : []),
             ])
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : `Could not move the ${words.episode.one}`)
+            toast.error(error instanceof Error ? error.message : `Could not move the ${words.episode.singular}`)
         } finally {
             setMoving(false)
         }
@@ -146,14 +146,14 @@ export function useMoveToSeason(episodeSlug: string, collectionSlug?: string, wo
         setMoving(true)
         try {
             await startOperation(`${apiUrl()}/episodes/${encodeURIComponent(episodeSlug)}/move-to-season`, {method: 'POST'})
-            toast.success(`Moving the ${words.episode.one} and its files`)
+            toast.success(`Moving the ${words.episode.singular} and its files`)
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: placeKey(episodeSlug)}),
                 queryClient.invalidateQueries({queryKey: ['episode', episodeSlug]}),
                 ...(collectionSlug ? [queryClient.invalidateQueries({queryKey: movedKey(collectionSlug)})] : []),
             ])
         } catch (error) {
-            toast.error(error instanceof OperationStartError ? error.message : `Could not move the ${words.episode.one}`)
+            toast.error(error instanceof OperationStartError ? error.message : `Could not move the ${words.episode.singular}`)
         } finally {
             setMoving(false)
         }
@@ -163,7 +163,7 @@ export function useMoveToSeason(episodeSlug: string, collectionSlug?: string, wo
 
 /** Where the episode belongs now, in words. */
 export function newPlace(place: SeasonPlace, words: CollectionWords = collectionWords(null)): string {
-    const season = words.season.one
+    const season = words.season.singular
     if (place.linkTitle) {
         if (place.linkKind === season) return `the ${season} ${place.linkTitle}`
         const name = place.seasonName && place.seasonName !== place.linkTitle ? ` (${place.seasonName})` : ''
@@ -211,7 +211,7 @@ export default function SeasonPlaceNote({episodeSlug, collectionSlug, canManage,
             <div className="season-place-note" role="note">
                 <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-from-bracket')} aria-hidden="true"/>
                 <p>
-                    <strong>Reassigned.</strong> Its creator places this {episode.one} in{' '}
+                    <strong>Reassigned.</strong> Its creator places this {episode.singular} in{' '}
                     <Link to={`/collection/${place.collectionSlug}`}>{place.collectionTitle}</Link> now. It is downloaded,
                     so it stays here, files and all, until you move it. Moving it renames its files into that collection,
                     or downloads it again there when that collection downloads it with another Local Media Profile; the
@@ -231,11 +231,11 @@ export default function SeasonPlaceNote({episodeSlug, collectionSlug, canManage,
         <div className="season-place-note" role="note">
             <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-arrow-left')} aria-hidden="true"/>
             <p>
-                <strong>Moved.</strong> The {place.linkKind}s of this collection changed, and this {episode.one} belongs in{' '}
-                {newPlace(place, words)} now. It is downloaded, so it stays in its old {season.one} until you move it: moving it
-                renames its files and puts them in the folder of its new {season.one}. Move it here, or move every such
-                {' '}{episode.one} of the collection at once with <em>Rename all {fileWords.episode.one} files</em> and{' '}
-                <em>Rename {season.one} folders too</em> in the collection's Actions menu.
+                <strong>Moved.</strong> The {place.linkKind}s of this collection changed, and this {episode.singular} belongs in{' '}
+                {newPlace(place, words)} now. It is downloaded, so it stays in its old {season.singular} until you move it: moving it
+                renames its files and puts them in the folder of its new {season.singular}. Move it here, or move every such
+                {' '}{episode.singular} of the collection at once with <em>Rename all {fileWords.episode.singular} files</em> and{' '}
+                <em>Rename {season.singular} folders too</em> in the collection's Actions menu.
             </p>
             {canManage && (
                 <button type="button" className="btn btn-small" onClick={() => void move()} disabled={moving}>

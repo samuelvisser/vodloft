@@ -1,5 +1,5 @@
 import {z} from 'zod'
-import {SectionTypeSchema} from './source'
+import {NamesSchema, SectionTypeSchema} from './source'
 
 export const LinkSeasonModeValues = ['all', 'selected'] as const
 export const NewLinkSeasonValues = ['ask', 'add', 'ignore'] as const
@@ -57,7 +57,7 @@ export const CollectionSeasonsReadSchema = z.object({
     linkSeasons: z.enum(['off', ...LinkSeasonModeValues]),
     /** What happens with a list the creator adds, for each kind of list of the collection's Site. */
     newLists: z.array(z.object({
-        key: z.string(), one: z.string(), many: z.string(), a: z.string(), seasons: z.boolean(), albums: z.boolean().default(false),
+        key: z.string(), names: NamesSchema, seasons: z.boolean(), albums: z.boolean().default(false),
         action: z.enum(NewLinkSeasonValues),
     })),
     listLayout: z.enum(ListLayoutValues).default('season_each'),
@@ -75,7 +75,9 @@ export const CollectionSeasonsReadSchema = z.object({
     /** The season of the videos in none of the lists, such as Videos, Singles or Tracks. */
     looseSeason: z.string(),
     /** What the collection's Site calls the creator behind it, such as artist in a Music collection. */
-    creatorLabel: z.string(),
+    creatorNames: NamesSchema,
+    /** What the collection's Site calls its media: videos, or tracks on a Site with sound only. */
+    mediaNames: NamesSchema,
     /** For a creator's own collection: the creator, which finds its new playlists and decides what happens with them. */
     creatorSlug: z.string().nullable().default(null),
     creatorTitle: z.string().nullable().default(null),

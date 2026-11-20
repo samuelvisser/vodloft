@@ -15,9 +15,9 @@ type LockedEpisodesFilterProps = {
  * Hidden while the collection has none. Episodes the signed-in account can watch are never hidden. */
 export default function LockedEpisodesFilter({lockedTotal, shown, onChange, noun = collectionWords(null).episode}: LockedEpisodesFilterProps) {
     if (lockedTotal === 0) return null
-    const what = `${lockedTotal} ${lockedTotal === 1 ? noun.one : noun.many} VODLoft has no access to, such as members-only ones`
+    const what = `${lockedTotal} ${lockedTotal === 1 ? noun.singular : noun.plural} VODLoft has no access to, such as members-only ones`
     return (
-        <div className="filter-chip-group" role="group" aria-label={`Filter locked ${noun.many}`}>
+        <div className="filter-chip-group" role="group" aria-label={`Filter locked ${noun.plural}`}>
             <button
                 type="button"
                 className="filter-chip filter-chip-locked"

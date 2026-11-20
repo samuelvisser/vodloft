@@ -6,8 +6,9 @@ export function capitalized(label: string): string {
     return label.slice(0, 1).toUpperCase() + label.slice(1)
 }
 
-/** A word as the backend names it: one, many, and one with its article, such as "an album". */
-type Names = {one: string, many: string, a: string}
+import type {Names} from './schemas/source'
+
+type Named = {kind: string, names: Names}
 
 function joined(words: string[], conjunction: string): string {
     const unique = [...new Set(words)]
@@ -17,21 +18,21 @@ function joined(words: string[], conjunction: string): string {
 /** One name for several section types, such as "album or playlist" and "albums and playlists" for SoundCloud's
  * lists, or "album, playlist or list" for three. */
 export function joinedNames(names: Names[]): Names {
-    const one = joined(names.map((name) => name.one), 'or')
+    const singular = joined(names.map((name) => name.singular), 'or')
     // "an album or playlist" takes the first one's article.
-    const article = names[0] ? names[0].a.slice(0, names[0].a.length - names[0].one.length) : ''
-    return {one, many: joined(names.map((name) => name.many), 'and'), a: `${article}${one}`}
+    const article = names[0] ? names[0].a.slice(0, names[0].a.length - names[0].singular.length) : ''
+    return {singular, plural: joined(names.map((name) => name.plural), 'and'), a: `${article}${singular}`}
 }
 
 /** What the Site calls its lists, all its types of list together, such as "albums and playlists" on SoundCloud. */
-export function listNames(types: (Names & {kind: string})[]): Names {
-    return joinedNames(types.filter((type) => type.kind === 'list'))
+export function listNames(types: Named[]): Names {
+    return joinedNames(types.filter((type) => type.kind === 'list').map((type) => type.names))
 }
 
 /** What the Site calls the lists and shows its creators add, which VODLoft looks for every day, such as "playlists"
  * on YouTube or "shows" on The Daily Wire. */
-export function growingNames(types: (Names & {kind: string})[]): Names {
-    return joinedNames(types.filter((type) => type.kind === 'list' || type.kind === 'show'))
+export function growingNames(types: Named[]): Names {
+    return joinedNames(types.filter((type) => type.kind === 'list' || type.kind === 'show').map((type) => type.names))
 }
 
 /** What a creator is, for a label: "YouTube creator" on one Site, "Creator on YouTube and The Daily Wire" on several. */
@@ -44,19 +45,19 @@ export function creatorKindText(creator: {kind: string, accounts: {site: {name: 
 /** One kind of list a creator's Sites have, such as a SoundCloud artist's albums or their playlists, which has a
  * setting of its own for what happens with a new one: what the Sites call it, and whether it can be a season of the
  * creator's own collection. */
-export type ListKind = {key: string, one: string, many: string, seasons: boolean}
+export type ListKind = {key: string, names: Names, seasons: boolean}
 
 const newListActionRegs = new Map<string, ReturnType<typeof makeNewListActionReg>>()
 
 function makeNewListActionReg(label: string, kind: ListKind, music: boolean) {
     // An artist's lists are albums of their own collection.
     const season = collectionWords(music ? 'music' : null).season
-    return createSelectRegistry(`NewListAction-${label}-${music}-${kind.key}-${kind.many}-${kind.seasons}`, {
+    return createSelectRegistry(`NewListAction-${label}-${music}-${kind.key}-${kind.names.plural}-${kind.seasons}`, {
         ask: {label: 'Ask me', help: `Sends a message, and shows the new one on the ${label}'s Edit page with the choices.`},
         // Only where the kind's lists can be seasons, unlike The Daily Wire's shows.
         ...(kind.seasons ? {season: {
             label: `Add it as ${season.a}`,
-            help: `New ${kind.many} become ${season.many} of the ${label}'s own collection.`,
+            help: `New ${kind.names.plural} become ${season.plural} of the ${label}'s own collection.`,
         }} : {}),
         own: {label: 'Add it as a collection', help: `Each new one becomes a collection of its own.`},
         ignore: {label: 'Always skip it', help: `It is only listed on the ${label}'s Edit page.`},
@@ -66,7 +67,7 @@ function makeNewListActionReg(label: string, kind: ListKind, music: boolean) {
 /** What to do when a creator adds a list of one kind, such as a playlist, show or album. "Add it as a season" is only
  * there when the kind's lists can be seasons; for a ``music`` artist it is "Add it as an album". */
 export function newListActionReg(label: string, kind: ListKind, music = false) {
-    const key = `${label}\n${music}\n${kind.key}\n${kind.many}\n${kind.seasons}`
+    const key = `${label}\n${music}\n${kind.key}\n${kind.names.plural}\n${kind.seasons}`
     let registry = newListActionRegs.get(key)
     if (!registry) {
         registry = makeNewListActionReg(label, kind, music)

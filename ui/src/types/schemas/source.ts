@@ -1,6 +1,10 @@
 import {z} from "zod";
 import {ApiDateTimeSchema} from "./datetime";
 
+/** A word as the backend names it: one, many, and one with its article, such as album, albums and an album. */
+export const NamesSchema = z.object({singular: z.string(), plural: z.string(), a: z.string()})
+export type Names = z.infer<typeof NamesSchema>
+
 /** Optional capabilities of a Source, as the backend names them. */
 export const SourceFeature = {
     COLLECTIONS: 'collections',
@@ -129,7 +133,7 @@ export const ResolvedLinkReadSchema = z.object({
     }),
     /** The creator this link is, on a Site with creators. */
     creatorUrl: z.string().nullable().optional().default(null),
-    creatorLabel: z.string().nullable().optional().default(null),
+    creatorNames: NamesSchema.nullable().optional().default(null),
     /** Every Source that claims the link's site, preferred first. */
     candidates: z.array(SourceReadSchema),
 })
@@ -150,7 +154,7 @@ export const SearchResultReadSchema = z.object({
     access: z.string().nullable().optional(),
     accessLabel: z.string().nullable().optional(),
     /** What the Site calls a creator, when the result is a creator's own page that can be added as one. */
-    creatorLabel: z.string().nullable().optional(),
+    creatorNames: NamesSchema.nullable().optional(),
 })
 export type SearchResultRead = z.infer<typeof SearchResultReadSchema>
 
@@ -186,18 +190,11 @@ export function pluralKindName(name: string): string {
 
 /** The website a collection or video is on, such as YouTube, whichever Source fetches it. */
 /** One type of section a Site's creators have, such as a feed, or an album or a playlist on SoundCloud, and what the
- * Site calls it, in lower case and without an article: one, such as "playlist", and many, such as "playlists". */
-/** A word as the backend names it: one, many, and one with its article, such as album, albums and an album. */
-export const NamesSchema = z.object({one: z.string(), many: z.string(), a: z.string()})
-export type Names = z.infer<typeof NamesSchema>
-
+ * Site calls it. */
 export const SectionTypeSchema = z.object({
     key: z.string(),
     kind: z.enum(['feed', 'list', 'show', 'item']),
-    one: z.string(),
-    many: z.string(),
-    /** One of them with its article, such as "an album". */
-    a: z.string(),
+    names: NamesSchema,
 })
 export type SectionType = z.infer<typeof SectionTypeSchema>
 
@@ -211,9 +208,7 @@ export const SiteReadSchema = z.object({
     /** What the Site calls one of its videos: a video, or a track on a Site with sound only. */
     mediaNames: NamesSchema,
     /** What the Site calls a creator, in lower case, such as host on The Daily Wire. */
-    creatorLabel: z.string(),
-    /** What the Site calls a creator with a Music collection, such as artist. */
-    musicCreatorLabel: z.string(),
+    creatorNames: NamesSchema,
     /** Every type of section the Site's creators have, such as YouTube's feeds and playlists. */
     sectionTypes: z.array(SectionTypeSchema),
 })
@@ -243,8 +238,7 @@ export const EpisodeTagReadSchema = z.object({
     label: z.string(),
     help: z.string(),
     /** Names a count of these episodes, such as "1 livestream" or "726 livestreams". */
-    singular: z.string(),
-    plural: z.string(),
+    names: NamesSchema,
     selectedByDefault: z.boolean(),
     rssEpisodeType: z.enum(['full', 'trailer', 'bonus']),
     /** Episodes with the main tag follow the collection's numbering. */

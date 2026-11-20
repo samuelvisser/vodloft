@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.api.models.source import ListKindAPIRead, SectionTypeAPIRead
+from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead
 from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
 
 
@@ -93,8 +93,10 @@ class CollectionSeasonsAPIRead(ResponseBase):
     creator_title: Optional[str] = None
     """What the collection's Site calls its link seasons, such as playlists or albums."""
     music: bool = False
-    creator_label: str
+    creator_names: NamesAPIRead
     """What the collection's Site calls the creator behind it, such as artist in a Music collection."""
+    media_names: NamesAPIRead
+    """What the collection's Site calls its media: videos, or tracks on a Site with sound only."""
     """A Music collection, of an artist's tracks rather than a creator's videos."""
     playlists: list[CollectionListAPIRead]
 

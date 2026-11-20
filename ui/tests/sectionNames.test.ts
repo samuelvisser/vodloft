@@ -3,19 +3,19 @@ import test from 'node:test'
 
 import {growingNames, joinedNames, listNames} from '../src/types/creator'
 
+const names = (singular: string, plural: string, a: string) => ({singular, plural, a})
+
 const soundcloud = [
-    {key: 'feed', kind: 'feed', one: 'feed', many: 'feeds', a: 'a feed'},
-    {key: 'album', kind: 'list', one: 'album', many: 'albums', a: 'an album'},
-    {key: 'playlist', kind: 'list', one: 'playlist', many: 'playlists', a: 'a playlist'},
-    {key: 'single', kind: 'item', one: 'single', many: 'singles', a: 'a single'},
+    {key: 'feed', kind: 'feed', names: names('feed', 'feeds', 'a feed')},
+    {key: 'album', kind: 'list', names: names('album', 'albums', 'an album')},
+    {key: 'playlist', kind: 'list', names: names('playlist', 'playlists', 'a playlist')},
+    {key: 'single', kind: 'item', names: names('single', 'singles', 'a single')},
 ]
 
 test('several section types are named together', () => {
-    assert.deepEqual(listNames(soundcloud), {one: 'album or playlist', many: 'albums and playlists', a: 'an album or playlist'})
-    assert.deepEqual(joinedNames([...soundcloud.slice(2, 3), soundcloud[1], {one: 'list', many: 'lists', a: 'a list'}]), {
-        one: 'playlist, album or list', many: 'playlists, albums and lists', a: 'a playlist, album or list',
-    })
-    assert.deepEqual(growingNames([{kind: 'show', one: 'show', many: 'shows', a: 'a show'}, {kind: 'item', one: 'movie', many: 'movies', a: 'a movie'}]), {
-        one: 'show', many: 'shows', a: 'a show',
-    })
+    assert.deepEqual(listNames(soundcloud), names('album or playlist', 'albums and playlists', 'an album or playlist'))
+    assert.deepEqual(joinedNames([soundcloud[2].names, soundcloud[1].names, names('list', 'lists', 'a list')]),
+        names('playlist, album or list', 'playlists, albums and lists', 'a playlist, album or list'))
+    assert.deepEqual(growingNames([{kind: 'show', names: names('show', 'shows', 'a show')}, {kind: 'item', names: names('movie', 'movies', 'a movie')}]),
+        names('show', 'shows', 'a show'))
 })

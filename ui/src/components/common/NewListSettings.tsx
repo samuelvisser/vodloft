@@ -21,7 +21,7 @@ type Props = {
 
 /** The kinds' names together, such as "albums and playlists". */
 export function listKindNames(kinds: readonly ListKind[]): string {
-    const names = kinds.map((kind) => kind.many)
+    const names = kinds.map((kind) => kind.names.plural)
     return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
@@ -38,7 +38,7 @@ export default function NewListSettings({kinds, values, onChange, registryFor, f
                     <div key={kind.key} className="new-list-setting" role="listitem">
                         <span className="new-list-setting-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'list')}/></span>
                         <div className="new-list-setting-copy">
-                            <label htmlFor={`${idPrefix}-${kind.key}`}><b>New {kind.many}</b></label>
+                            <label htmlFor={`${idPrefix}-${kind.key}`}><b>New {kind.names.plural}</b></label>
                             <span>{registry.getHelp(value)}</span>
                         </div>
                         <div className="new-list-setting-choice">

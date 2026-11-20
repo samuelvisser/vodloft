@@ -621,12 +621,12 @@ class YtDlpSource(Source):
         channel = channel_root(url) if youtube is not None and youtube.kind != "playlist" and youtube.tab == "videos" else None
         if artists.is_artist_page(url):
             channel = artists.artist_root(url)
-        creator_label = sites.site_for(channel).creator_label if channel else None
+        creator_names = sites.site_for(channel).creator_names if channel else None
         if collection := self._api_collection(url):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site="YouTube", creator_url=channel, creator_label=creator_label,
+                site="YouTube", creator_url=channel, creator_names=creator_names,
             )
         try:
             info = self._info(url)
@@ -640,7 +640,7 @@ class YtDlpSource(Source):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site=site, creator_url=channel, creator_label=creator_label,
+                site=site, creator_url=channel, creator_names=creator_names,
             )
         return ResolvedLink(
             kind=LinkKind.VIDEO,

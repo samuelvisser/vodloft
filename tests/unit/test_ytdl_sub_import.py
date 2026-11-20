@@ -459,7 +459,7 @@ def _artist_import(monkeypatch):
     """The music example uploaded, and a yt-dlp Source that knows Emily Hopkins on Bandcamp."""
     from backend.services import import_uploads
     from sources import registry
-    from sources.contract import CreatorDetails, Feature, SectionKind, SectionRef, Site
+    from sources.contract import CreatorDetails, Feature, Names, SectionKind, SectionRef, Site
 
     subscriptions = MUSIC.encode()
     import_uploads.begin_upload(ytdl_sub.IMPORTER, [("subscriptions.yaml", len(subscriptions))], include_secrets=False)
@@ -470,7 +470,7 @@ def _artist_import(monkeypatch):
     class Artists(type(ytdlp)):
         domains = ("bandcamp.com",)
         features = ytdlp.features | {Feature.CREATORS}
-        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_label="artist", link_seasons=True),)
+        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_names=Names("artist", "artists"), link_seasons=True),)
 
         def creator_details(self, ref, progress=lambda step: None):
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
@@ -831,7 +831,7 @@ Jellyfin Music Videos:
         domains = ("bandcamp.com", "youtube.com")
         features = ytdlp.features | {Feature.CREATORS}
         # A Site that tells an artist's albums from their playlists.
-        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_label="artist", link_seasons=True,
+        sites = (Site("bandcamp", "Bandcamp", ("bandcamp.com",), creators=True, creator_names=Names("artist", "artists"), link_seasons=True,
                       section_types=(SectionType("album", SectionKind.LIST, Names("album", "albums"), albums=True),
                                      SectionType("playlist", SectionKind.LIST, Names("playlist", "playlists")))),)
 

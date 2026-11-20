@@ -117,13 +117,13 @@ export default function LocalMediaProfilePage() {
             : redownloadOperation
                 ? 'A re-download operation is running for this profile.'
                 : moveOperation
-                    ? `${kept.Many} are being moved to another profile.`
+                    ? `${kept.Plural} are being moved to another profile.`
                     : undefined
     const deleteDisabledReason = runningActionReason
         ? `${runningActionReason} Wait for it to finish before deleting the profile.`
         : undefined
-    const managedLabel = profile.type === 'video' ? 'Managed items' : `Managed ${kept.many}`
-    const downloadedLabel = profile.type === 'video' ? 'Downloaded items' : `Downloaded ${kept.many}`
+    const managedLabel = profile.type === 'video' ? 'Managed items' : `Managed ${kept.plural}`
+    const downloadedLabel = profile.type === 'video' ? 'Downloaded items' : `Downloaded ${kept.plural}`
 
     const controlTaskOperation = async (
         operationId: string,
@@ -241,7 +241,7 @@ export default function LocalMediaProfilePage() {
                 onSelect: () => void matchExistingFiles(),
             },
             {
-                label: `Move ${kept.many} to another profile`,
+                label: `Move ${kept.plural} to another profile`,
                 icon: faIcon('fass', 'file-export'),
                 disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)
                     || statistics.managedMediaCount === 0,
@@ -252,7 +252,7 @@ export default function LocalMediaProfilePage() {
                         : redownloadOperation
                             ? 'A re-download operation is running for this profile.'
                             : statistics.managedMediaCount === 0
-                                ? `This Local Media Profile does not manage any ${kept.many} yet.`
+                                ? `This Local Media Profile does not manage any ${kept.plural} yet.`
                                 : undefined,
                 operation: moveOperation,
                 controls: operationControls(moveOperation?.id, 'move', false),

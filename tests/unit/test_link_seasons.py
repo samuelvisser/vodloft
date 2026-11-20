@@ -240,7 +240,7 @@ def test_the_user_renames_and_orders_the_seasons_and_a_new_one_goes_last(source,
 
     view = seasons_view(session, "creator")
     session.rollback()
-    assert ([t.one for t in view.list_types], view.loose_season, view.link_seasons_offered) == (["playlist"], "Videos", True)
+    assert ([t.names.singular for t in view.list_types], view.loose_season, view.link_seasons_offered) == (["playlist"], "Videos", True)
     videos, one = view.seasons
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": one.id, "name": "The One"}, {"id": videos.id, "name": "Uploads"}], custom_season_order=True,

@@ -57,10 +57,10 @@ def test_every_contract_has_a_key_of_its_own():
 def test_soundcloud_and_bandcamp_name_their_sections_and_seasons():
     soundcloud, bandcamp = site_of("soundcloud"), site_of("bandcamp")
 
-    assert [(t.key, t.names.many) for t in soundcloud.section_types] == [
+    assert [(t.key, t.names.plural) for t in soundcloud.section_types] == [
         ("feed", "feeds"), ("album", "albums"), ("playlist", "playlists"), ("single", "singles"),
     ]
-    assert [(t.key, t.names.many) for t in bandcamp.section_types] == [("album", "albums"), ("single", "singles")]
+    assert [(t.key, t.names.plural) for t in bandcamp.section_types] == [("album", "albums"), ("single", "singles")]
     assert soundcloud.season_names.loose == bandcamp.season_names.loose == "Tracks"
     # A Music collection still puts what is in no album in Singles.
     assert soundcloud.season_names.music_loose == bandcamp.season_names.music_loose == "Singles"

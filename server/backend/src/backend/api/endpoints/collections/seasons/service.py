@@ -20,7 +20,7 @@ from backend.services.link_seasons import (
     LinkListing, follows_creator, holds_only_link_seasons, is_season, leaving_outside, list_names, lists_playlists, loose_season_name,
     offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists, active_lists,
 )
-from backend.services.sites import collection_creator_label, collection_site
+from backend.services.sites import collection_creator_names, collection_site
 from backend.services.season_moves import queue_season_folder_moves
 from backend.services.season_order import (
     arrange_seasons, link_first_videos, lists_by_season, match_seasons_of_downloaded, renumber_seasons,
@@ -31,7 +31,7 @@ from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType
 from backend.types.season_types import SeasonType
 from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
-from sources import Feature, SectionKind, get_source
+from sources import Feature, Names, SectionKind, get_source
 
 
 class CollectionNotFoundError(LookupError):
@@ -74,7 +74,8 @@ class _View:
     list_types: object
     loose_season: str
     music: bool
-    creator_label: str
+    creator_names: Names
+    media_names: Names
     playlists: list
     outside_count: int
     outside_with_files: int
@@ -144,7 +145,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         link_seasons_offered=offers_link_seasons(collection),
         list_types=collection_site(collection).types_of(SectionKind.LIST), loose_season=loose_season_name(collection),
         music=music,
-        creator_label=collection_creator_label(collection),
+        creator_names=collection_creator_names(collection), media_names=collection_site(collection).media_names,
         playlists=[_Playlist(playlist, firsts.get(playlist.id), *leaving.get(playlist.id, (0, 0))) for playlist in playlists],
         outside_count=len(outside), outside_with_files=len(with_files),
         has_own_link=collection.sharing_url is not None, lists_playlists=lists_playlists(collection),
@@ -182,42 +183,42 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     seasons = {season.id: season for season in collection.seasons}
     if sorted(change.id for change in body.seasons) != sorted(seasons):
         season = collection_contract(collection.type).words.season
-        raise ServiceError(f"The {season.many} must name each {season.one} of the collection exactly once", field="seasons")
+        raise ServiceError(f"The {season.plural} must name each {season.singular} of the collection exactly once", field="seasons")
     playlists = {playlist.id: playlist for playlist in collection.lists}
     lists = list_names(collection)
     unknown = [change.id for change in [*body.playlists] if change.id not in playlists]
     unknown += [link_id for link_id in body.removed_links if link_id not in playlists]
     if unknown:
-        raise ServiceError(f"{collection.title} has no {lists.one} {unknown[0]}", field="playlists")
+        raise ServiceError(f"{collection.title} has no {lists.singular} {unknown[0]}", field="playlists")
     if any(not playlists[link_id].added_by_user for link_id in body.removed_links):
         raise ServiceError(f"Only a link you added can be removed; switch {lists.a} of the creator off instead", field="playlists")
     only = body.outside_videos == OutsideVideos.ONLY
     if only and body.link_seasons == LinkSeasons.OFF:
         raise ServiceError(
-            f"A collection that holds only what its {lists.many} have needs its {lists.many} as "
-            f"{collection_contract(collection.type).words.season.many}", field="link_seasons",
+            f"A collection that holds only what its {lists.plural} have needs its {lists.plural} as "
+            f"{collection_contract(collection.type).words.season.plural}", field="link_seasons",
         )
     if only and not get_source(collection.source_key).has(Feature.LINK_COLLECTIONS):
-        raise ServiceError(f"This collection can't hold only what its {lists.many} have", field="outside_videos")
+        raise ServiceError(f"This collection can't hold only what its {lists.plural} have", field="outside_videos")
     if not only and collection.sharing_url is None:
         raise ServiceError(
-            f"This collection has no link of its own, so it can only hold what its {lists.many} have", field="outside_videos",
+            f"This collection has no link of its own, so it can only hold what its {lists.plural} have", field="outside_videos",
         )
     if not only and any(link.added_by_user and link.id not in body.removed_links for link in playlists.values()):
         raise ServiceError(
-            f"Remove the links you added first: only a collection that holds what its {lists.many} have can keep them",
+            f"Remove the links you added first: only a collection that holds what its {lists.plural} have can keep them",
             field="outside_videos",
         )
     if follows_creator(collection) and body.link_seasons == LinkSeasons.ALL:
         raise ServiceError(
-            f"{collection.creator.title} decides which of its {lists.many} come in; switch them on or off here",
+            f"{collection.creator.title} decides which of its {lists.plural} come in; switch them on or off here",
             field="link_seasons",
         )
     if body.link_seasons != LinkSeasons.OFF and not only and not lists_playlists(collection):
         raise ServiceError(
-            f"Only a collection of a whole channel, on a site whose {lists.many} can be "
-            f"{collection_contract(collection.type).words.season.many}, can make them "
-            f"{collection_contract(collection.type).words.season.many}",
+            f"Only a collection of a whole channel, on a site whose {lists.plural} can be "
+            f"{collection_contract(collection.type).words.season.plural}, can make them "
+            f"{collection_contract(collection.type).words.season.plural}",
             field="link_seasons",
         )
     shared_seasons = {playlist.season_id for playlist in playlists.values() if playlist.season_id is not None}
@@ -334,10 +335,10 @@ def links_lookup(s: Session, collection_slug: str) -> _Lookup:
     """What listing the collection's playlists needs, read before the slow lookup."""
     collection = _collection(s, collection_slug)
     if not lists_playlists(collection):
-        raise ServiceError(f"This collection's link is not a creator with {list_names(collection).many}", field="link_seasons")
+        raise ServiceError(f"This collection's link is not a creator with {list_names(collection).plural}", field="link_seasons")
     if follows_creator(collection):
         raise ServiceError(
-            f"{collection.creator.title} looks for new {list_names(collection).many} itself: check the creator", field="link_seasons",
+            f"{collection.creator.title} looks for new {list_names(collection).plural} itself: check the creator", field="link_seasons",
         )
     return _Lookup(collection.source_key, collection.sharing_url)
 
@@ -389,7 +390,7 @@ def link_to_add(s: Session, collection_slug: str, url: str) -> _AddLookup:
     collection = _collection(s, collection_slug)
     if not holds_only_link_seasons(collection):
         raise ServiceError(
-            f"Only a collection that holds only what its {list_names(collection).many} have can take links you add", field="url",
+            f"Only a collection that holds only what its {list_names(collection).plural} have can take links you add", field="url",
         )
     source = get_source(collection.source_key)
     if not source.handles(url):

@@ -7,14 +7,16 @@ from pydantic import AliasChoices, AliasPath, computed_field, Field, ValidationI
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
-from backend.api.models.source import SiteAPIRead, SourcedResponse
+from backend.api.models.source import NamesAPIRead, SiteAPIRead, SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
+from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
 from backend.types.link_season_types import OutsideVideos
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
 from backend.api.models.source import checked_ytdlp_options
+from sources import Site, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH
 
 
@@ -245,6 +247,14 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
         validation_alias=AliasChoices(AliasPath("creator", "avatar_path"), AliasPath("collection", "creator", "avatar_path")),
     )
     """The picture of the creator, shown beside their name."""
+
+    @computed_field
+    @property
+    def creator_names(self) -> NamesAPIRead:
+        """What the collection calls the creator behind it: its Site's word, such as host, or artist in a Music
+        collection; VODLoft's own while the Site is not known yet."""
+        site = site_of(self.site.key) if self.site is not None else Site("", "")
+        return NamesAPIRead.model_validate(collection_contract(self.type).creator_names_on(site))
 
 
 class CollectionAPIRead(_CollectionAPIBaseOut):

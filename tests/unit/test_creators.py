@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from sources import (
-    CreatorDetails, CreatorPreset, Feature, SectionKind, SectionRef, SectionRole, Site, registry,
+    CreatorDetails, CreatorPreset, Feature, Names, SectionKind, SectionRef, SectionRole, Site, registry,
 )
 from test_ytdlp_collections import ListedSource, session  # noqa: F401
 
@@ -102,7 +102,7 @@ def test_one_show_folds_feeds_and_playlists_into_one_collection(client):
     steps, body = _lookup(client)
 
     assert steps == ["Looking the creator up", "Reading the creator", "Checking what is in your library already"]
-    assert (body["title"], body["creatorLabel"], body["facts"]) == ("Northwind Workshop", "creator", ["1.2M subscribers"])
+    assert (body["title"], body["creatorNames"]["singular"], body["facts"]) == ("Northwind Workshop", "creator", ["1.2M subscribers"])
     # The creator's own collection lists its Shorts and Live too, and its playlists are seasons of it.
     assert _plan(body, "one_show") == {
         "videos": "main", "shorts": "main", "streams": "main", "PLcabin": "main", "PLtools": "main",
@@ -570,7 +570,7 @@ def test_a_failed_lookup_ends_with_what_went_wrong(client, tube, monkeypatch):
     response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
 
     assert [json.loads(line) for line in response.text.splitlines()] == [
-        {"step": "Looking the creator up", "creatorLabel": "creator"},
+        {"step": "Looking the creator up", "creatorNames": {"singular": "creator", "plural": "creators", "a": "a creator"}},
         {"step": "Reading the creator"},
         {"error": "Could not look up this creator: This creator does not exist"},
     ]
@@ -661,12 +661,12 @@ def test_a_creator_the_site_knows_isnt_an_artist_isnt_added_as_one(client, tube,
 def test_a_site_names_its_creators_in_its_own_words(client, tube, monkeypatch):
     from dataclasses import replace
 
-    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], creator_label="host"),))
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], creator_names=Names("host", "hosts")),))
     response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
     lines = [json.loads(line) for line in response.text.splitlines()]
 
-    assert lines[0] == {"step": "Looking the host up", "creatorLabel": "host"}
-    assert lines[-1]["creator"]["creatorLabel"] == "host"
+    assert lines[0] == {"step": "Looking the host up", "creatorNames": {"singular": "host", "plural": "hosts", "a": "a host"}}
+    assert lines[-1]["creator"]["creatorNames"]["singular"] == "host"
 
 
 def test_a_creator_lookup_says_what_its_site_calls_the_creators_sections(client, tube, monkeypatch):
@@ -680,7 +680,7 @@ def test_a_creator_lookup_says_what_its_site_calls_the_creators_sections(client,
     response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
     found = json.loads(response.text.splitlines()[-1])["creator"]
 
-    assert [(t["key"], t["kind"], t["one"], t["many"]) for t in found["sectionTypes"]] == [
+    assert [(t["key"], t["kind"], t["names"]["singular"], t["names"]["plural"]) for t in found["sectionTypes"]] == [
         ("feed", "feed", "feed", "feeds"), ("show", "list", "show", "shows"),
     ]
     assert {section["type"] for section in found["sections"]} == {"feed", "show"}
@@ -692,7 +692,7 @@ def test_a_creators_sections_keep_their_type(client, session):
     _one_show(client)
     assert {section.type for section in session.scalars(select(CreatorSection))} == {"feed", "list"}
     page = client.get("/api/creators/workshop").json()
-    assert [(t["key"], t["many"]) for t in page["accounts"][0]["site"]["sectionTypes"]] == [("feed", "feeds"), ("list", "playlists")]
+    assert [(t["key"], t["names"]["plural"]) for t in page["accounts"][0]["site"]["sectionTypes"]] == [("feed", "feeds"), ("list", "playlists")]
 
 
 def test_a_playlist_that_is_a_season_of_the_creators_collection_moves_to_a_collection_that_joins(client, session):
@@ -750,8 +750,8 @@ def test_an_artists_creator_is_called_an_artist(client, tube, session, monkeypat
     # The user says the creator the Site wasn't sure of is an artist.
     client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "type": "music", "sections": [{"ref": "PLcabin", "target": "main"}]})
 
-    assert client.get("/api/creators/workshop").json()["creatorLabel"] == "artist"
-    assert [creator["creatorLabel"] for creator in client.get("/api/creators").json()] == ["artist"]
+    assert client.get("/api/creators/workshop").json()["creatorNames"]["singular"] == "artist"
+    assert [creator["creatorNames"]["singular"] for creator in client.get("/api/creators").json()] == ["artist"]
 
 
 def test_a_collection_from_another_link_can_join_a_creator_in_the_library(client, session):
@@ -786,7 +786,7 @@ class CastSource(ListedSource):
     name = "Cast"
     domains = ("cast.example",)
     features = ListedSource.features | {Feature.CREATORS}
-    sites = (Site("cast", "Cast", ("cast.example",), creators=True, creator_label="host"),)
+    sites = (Site("cast", "Cast", ("cast.example",), creators=True, creator_names=Names("host", "hosts")),)
 
     def creator_details(self, ref, progress=lambda step: None):
         return CreatorDetails(
@@ -810,7 +810,7 @@ def test_a_creator_is_called_what_their_one_site_calls_them_and_a_creator_on_sev
     _one_show(client)
     assert _add_host(client).status_code == 201
     creators = {creator["slug"]: creator for creator in client.get("/api/creators").json()}
-    assert {slug: (creator["creatorLabel"], creator["kind"]) for slug, creator in creators.items()} == {
+    assert {slug: (creator["creatorNames"]["singular"], creator["kind"]) for slug, creator in creators.items()} == {
         "workshop": ("creator", "Tube creator"), "nw-live": ("host", "Cast host"),
     }
 
@@ -824,7 +824,7 @@ def test_an_account_on_another_site_joins_a_creator_in_the_library(client, cast,
     assert response.status_code == 201, response.text
 
     page = response.json()
-    assert page["slug"] == "workshop" and (page["creatorLabel"], page["kind"]) == ("creator", "creator")
+    assert page["slug"] == "workshop" and (page["creatorNames"]["singular"], page["kind"]) == ("creator", "creator")
     assert [account["site"]["name"] for account in page["accounts"]] == ["Tube", "Cast"]
     assert [section["collectionSlug"] for section in page["accounts"][1]["sections"]] == ["workbench"]
     assert [creator["slug"] for creator in client.get("/api/creators").json()] == ["workshop"]
@@ -990,7 +990,7 @@ class FilmSource(ListedSource):
     domains = ("film.example",)
     features = ListedSource.features | {Feature.CREATORS, Feature.MOVIES}
     sites = (Site(
-        "film", "Film", ("film.example",), creators=True, creator_label="host",
+        "film", "Film", ("film.example",), creators=True, creator_names=Names("host", "hosts"),
         creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)
 
@@ -1140,7 +1140,7 @@ def test_each_kind_of_list_has_its_own_setting_for_new_ones(client, session, tub
     _one_show(client)
     client.post("/api/creators/workshop/accounts/1/sections", json={"sections": [{"ref": "PLcabin", "target": "main"}]})
     page = client.patch("/api/creators/workshop", json={"newLists": {"album": "season"}}).json()
-    assert [(setting["key"], setting["many"], setting["albums"], setting["action"]) for setting in page["newLists"]] == [
+    assert [(setting["key"], setting["names"]["plural"], setting["albums"], setting["action"]) for setting in page["newLists"]] == [
         ("album", "albums", True, "season"), ("playlist", "playlists", False, "ask"),
     ]
     refused = client.patch("/api/creators/workshop", json={"newLists": {"list": "season"}})

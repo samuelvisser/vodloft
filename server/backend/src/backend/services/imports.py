@@ -1353,7 +1353,7 @@ def _upsert_collection(
             from task_manager.scheduler.operation_factory import create_operation
 
             names = list_names(existing)
-            report.add("updated", plan.title, f"Updated: {added} {names.one if added == 1 else names.many} added as seasons")
+            report.add("updated", plan.title, f"Updated: {added} {names.singular if added == 1 else names.plural} added as seasons")
             create_operation(session, CollectionIndexOperation(existing))
     if "check_frequency" in write or "check_cron" in write:
         session.flush()

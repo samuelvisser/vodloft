@@ -539,7 +539,7 @@ def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPI
         return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False)
     collection = episode.collection
     # The Site's own word for the list, such as playlist on YouTube or album on Bandcamp.
-    kind = list_names(collection).one
+    kind = list_names(collection).singular
     if belonging.link is not None:
         season = belonging.link.season
         return EpisodeSeasonPlaceAPIRead(
@@ -582,7 +582,7 @@ def move_episode_to_its_season(s: Session, episode_slug: str) -> dict[str, bool 
 
     episode = _episode_or_404(s, episode_slug)
     if not move_to_where_it_belongs(s, episode):
-        raise HTTPException(status_code=409, detail=f"The episode is already in the {collection_contract(episode.collection.type).words.season.one} it belongs in")
+        raise HTTPException(status_code=409, detail=f"The episode is already in the {collection_contract(episode.collection.type).words.season.singular} it belongs in")
     operation_id, queued = queue_season_folder_moves(s, episode.collection, [episode.id])
     s.flush()
     return {"queued": queued, "operation_id": operation_id}

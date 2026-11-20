@@ -475,17 +475,17 @@ def request_collection_download_all(
     words = collection_words(collection)
     if collection_contract(collection.type).downloads_by_season:
         if not body.season_ids:
-            raise HTTPException(status_code=422, detail=f"Select at least one {words.season.one}")
+            raise HTTPException(status_code=422, detail=f"Select at least one {words.season.singular}")
         if body.download_days_in_past or body.download_episode_count or body.download_starting_from:
             raise HTTPException(
-                status_code=422, detail=f"Pick {words.season.many} instead of a date or a number of {words.episode.many}",
+                status_code=422, detail=f"Pick {words.season.plural} instead of a date or a number of {words.episode.plural}",
             )
         selected_ids = set(body.season_ids)
         valid_ids = set(s.scalars(
             select(Season.id).where(Season.collection_id == collection.id, Season.id.in_(selected_ids))
         ))
         if selected_ids != valid_ids:
-            raise HTTPException(status_code=422, detail=f"A selected {words.season.one} does not belong to this collection")
+            raise HTTPException(status_code=422, detail=f"A selected {words.season.singular} does not belong to this collection")
         statement = (
             statement.where(Episode.season_id.in_(selected_ids))
             .order_by(Episode.season_id.asc(), Episode.index.asc(), Episode.id.asc())

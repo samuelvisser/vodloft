@@ -167,7 +167,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
     const seasonOptions = createSelectRegistry(
         'WhichEpisodesSeasons',
         {
-            [UPCOMING_SEASONS]: {label: `Upcoming ${season.many}`},
+            [UPCOMING_SEASONS]: {label: `Upcoming ${season.plural}`},
             ...Object.fromEntries(seasons.map((season) => [season.slug, {label: season.name}])),
         },
         [UPCOMING_SEASONS, ...[...seasons].reverse().map((season) => season.slug)],
@@ -179,7 +179,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
             if (field === 'seasons') return seasonal || seasons.length > 0 || filters[index]?.field === 'seasons'
             if (isDateLine({field})) return !filters.some((filter, other) => other !== index && filter.field === field)
             return true
-        }).map((field) => [field, field === 'seasons' ? {label: season.one} : EpisodeFilterFieldReg.spec[field]]),
+        }).map((field) => [field, field === 'seasons' ? {label: season.singular} : EpisodeFilterFieldReg.spec[field]]),
     ))
 
     const openLine = (id: string, index: number) => {
@@ -343,7 +343,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                             setValue(`${name}.seasonSlugs`, picked.filter((value) => value !== UPCOMING_SEASONS), {shouldDirty: true})
                         }}
                     />
-                    <div className="help">With upcoming {season.many}, {season.a} the collection gets later is added to this filter.</div>
+                    <div className="help">With upcoming {season.plural}, {season.a} the collection gets later is added to this filter.</div>
                 </div>
             )
         }

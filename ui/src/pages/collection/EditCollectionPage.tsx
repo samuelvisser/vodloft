@@ -289,7 +289,7 @@ export default function EditCollectionPage() {
         title="Edit collection" titleId="edit-collection-title"
         actions={collection && (
           <>
-            <PageHeaderAction icon={faIcon('fass', 'layer-group')} label={words.season.Many} variant="secondary" keepLabel onClick={() => setSeasonsOpen(true)}/>
+            <PageHeaderAction icon={faIcon('fass', 'layer-group')} label={words.season.Plural} variant="secondary" keepLabel onClick={() => setSeasonsOpen(true)}/>
             <PageHeaderAction icon={faIcon('fass', 'list')} label="Metadata" variant="secondary" keepLabel onClick={() => setMetadataOpen(true)}/>
           </>
         )}
@@ -334,7 +334,7 @@ export default function EditCollectionPage() {
           {linkOptional && (
             <div className="help" id="collection-url-help">
               Optional. This collection holds only what its links have. A channel link here offers that channel's
-              playlists in the {words.season.Many} window and finds new ones.
+              playlists in the {words.season.Plural} window and finds new ones.
             </div>
           )}
         </div>
@@ -373,7 +373,7 @@ export default function EditCollectionPage() {
             aria-describedby="collection-content-rating-help"
           />
           <div className="help" id="collection-content-rating-help">
-            The rating media servers show for the show and its {words.episode.many}, such as TV-14 or TV-Y.
+            The rating media servers show for the show and its {words.episode.plural}, such as TV-14 or TV-Y.
           </div>
         </div>
 
@@ -398,7 +398,7 @@ export default function EditCollectionPage() {
         </div>
 
         <div className="form-row">
-          <label htmlFor="collection-episode-identification">{words.episode.One} identification</label>
+          <label htmlFor="collection-episode-identification">{words.episode.Singular} identification</label>
           <ProgressSelect
             inputId="collection-episode-identification"
             registry={episodeIdentifierRegFor(form.type)}
@@ -407,8 +407,8 @@ export default function EditCollectionPage() {
             definition={frontendOperationDefinitions['collection.change_identification']}
             resourceId={collection?.id}
             targetValueKey="episode_identifier"
-            activeLabel={`Renumbering ${words.episode.many}`}
-            busyReason={`VODLoft is still numbering the ${words.episode.many} of ${collection?.title ?? 'this collection'} again and renaming their files. You can change the identification again once that is done.`}
+            activeLabel={`Renumbering ${words.episode.plural}`}
+            busyReason={`VODLoft is still numbering the ${words.episode.plural} of ${collection?.title ?? 'this collection'} again and renaming their files. You can change the identification again once that is done.`}
             onChange={(value) => {
               if (collection && value !== collection.episodeIdentifier) {
                 setIdentificationTarget(value as EpisodeIdentifierValue)
@@ -417,7 +417,7 @@ export default function EditCollectionPage() {
             aria-describedby="collection-episode-identification-help"
           />
           <div className="help" id="collection-episode-identification-help">
-            How VODLoft numbers the {words.episode.many}. Changing it numbers every {words.episode.one} again, renames the files
+            How VODLoft numbers the {words.episode.plural}. Changing it numbers every {words.episode.singular} again, renames the files
             that are named by their numbers and rewrites their metadata.
           </div>
           {musicIdentificationAdvice(form.type, collection?.episodeIdentifier) && (
@@ -426,7 +426,7 @@ export default function EditCollectionPage() {
         </div>
 
         <div className="form-row">
-          <label htmlFor="collection-episode-order">{words.episode.One} order</label>
+          <label htmlFor="collection-episode-order">{words.episode.Singular} order</label>
           <SimpleSelect
             inputId="collection-episode-order"
             registry={EpisodeOrderReg}
@@ -435,10 +435,10 @@ export default function EditCollectionPage() {
           />
           <div className="help">
             {collection?.episodeIdentifier === 'seasonal'
-              ? `The order of the ${words.episode.many} within each ${words.season.one}`
-              : `The order of the ${words.episode.many}`}
+              ? `The order of the ${words.episode.plural} within each ${words.season.singular}`
+              : `The order of the ${words.episode.plural}`}
             {' '}on the Collection page and in podcast apps that follow its RSS feeds.
-            By default a seasonal Collection starts each {words.season.one} at its first {words.episode.one}, and any other Collection lists its newest {words.episode.one} first.
+            By default a seasonal Collection starts each {words.season.singular} at its first {words.episode.singular}, and any other Collection lists its newest {words.episode.singular} first.
           </div>
         </div>
 
@@ -468,7 +468,7 @@ export default function EditCollectionPage() {
         )}
 
         <div className="form-row">
-          <label htmlFor="collection-check-frequency">Look for new {words.episode.many}</label>
+          <label htmlFor="collection-check-frequency">Look for new {words.episode.plural}</label>
           <SimpleSelect
             inputId="collection-check-frequency"
             registry={CheckFrequencyReg}
@@ -518,7 +518,7 @@ export default function EditCollectionPage() {
                   ? form.type === 'music'
                     ? 'Each new video with chapters becomes an album of its own, named after the video, with a track per chapter.'
                     : 'Each new video with chapters becomes a season of its own, named after the video, with an episode per chapter.'
-                  : `Each video is one ${words.episode.one}, chapters and all.`
+                  : `Each video is one ${words.episode.singular}, chapters and all.`
               }>
                 <p>Splitting suits full albums uploaded as one video: in a Music Collection each video becomes an album and
                   each chapter a track. Each part downloads only its own stretch of the video and has its own file, so a

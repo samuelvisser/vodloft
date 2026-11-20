@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.utils.episode import EpisodeIdentifierInfo, episode_identifier_type_predicate
-from sources import MAIN_TAG, RssEpisodeType, VideoDetails, get_source, registry
+from sources import MAIN_TAG, Names, RssEpisodeType, VideoDetails, get_source, registry
 from sources import ytdlp_runner as runner
 from sources.ytdlp import YtDlpSource
 
@@ -87,7 +87,7 @@ def test_a_site_with_sound_only_has_tracks_and_downloads_sound_unless_its_contra
             site.upgrade_checks.improvements)
     assert site_of("youtube").downloads.video_heights
 
-    own = (EpisodeTag(MAIN_TAG, "Episode", "An episode", "episode", "episodes", main=True),)
+    own = (EpisodeTag(MAIN_TAG, "Episode", "An episode", Names("episode", "episodes"), main=True),)
     downloads = DownloadOptions(video_heights=(720,))
     site = Site(key="x", name="X", domains=("x.example",), audio_only=True, episode_tags=own, downloads=downloads)
     assert site.episode_tags == own and site.downloads == downloads

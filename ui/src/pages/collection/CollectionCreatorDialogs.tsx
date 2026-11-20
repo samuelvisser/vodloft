@@ -6,6 +6,7 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'
 import {addCollectionToCreator, setCollectionCreator, useCreators, useCollectionCreatorLeave, useCollectionCreatorMatch} from '../../lib/queries'
 import type {CollectionCreatorMatch} from '../../types/schemas/creator'
+import type {Names} from '../../types/schemas/source'
 import {capitalized, growingNames} from '../../types/creator'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -17,7 +18,8 @@ type DialogProps = {
     collectionSlug: string
     collectionTitle: string
     /** What the collection's Site calls a creator, such as host on The Daily Wire. */
-    creatorLabel: string
+    /** What the collection calls the creator behind it; there once the collection is loaded from the backend. */
+    creatorNames?: Names
     onDismiss: () => void
     /** The collection's Source can find the creator behind its link. Without it, it joins a creator in the Library. */
     findsCreator?: boolean
@@ -40,7 +42,7 @@ function useRefresh(collectionSlug: string) {
 function sectionNote(creator: CollectionCreatorMatch, label: string): string {
     if (creator.sectionTitle) {
         const type = creator.sectionTypes.find((type) => type.key === creator.sectionType)
-        const kind = type ? `${capitalized(type.one)} · ` : ''
+        const kind = type ? `${capitalized(type.names.singular)} · ` : ''
         return `${kind}becomes the ${label}'s ${creator.sectionTitle} section`
     }
     if (creator.keptBy) return `The ${label}'s ${creator.keptBy} has this already, so this collection can't join it`
@@ -48,7 +50,7 @@ function sectionNote(creator: CollectionCreatorMatch, label: string): string {
 }
 
 /** "Add to creator", in the words of the Site: find the creator behind the collection's link, show what the collection becomes, and add it. */
-export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, words, onDismiss, findsCreator = true}: DialogProps & {
+export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorNames, words, onDismiss, findsCreator = true}: DialogProps & {
     /** What the collection calls its seasons and numbers its episodes by, such as albums and tracks in a Music
      *  collection. */
     words: CollectionWords
@@ -58,11 +60,11 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
     const [picked, setTarget] = useState<string | null>(null)
     const target = picked ?? (findsCreator ? 'behind' : libraryCreators?.[0]?.slug ?? '')
     const targets = useMemo(() => createSelectRegistry<string>(`JoinCreatorTarget-${collectionSlug}-${findsCreator}`, {
-        ...(findsCreator ? {behind: {label: `The ${creatorLabel} behind its link`}} : {}),
+        ...(findsCreator ? {behind: {label: `The ${creatorNames?.singular} behind its link`}} : {}),
         ...Object.fromEntries((libraryCreators ?? []).map((other) => [
             other.slug, {label: `${other.title} (${other.kind})`},
         ])),
-    }), [collectionSlug, creatorLabel, libraryCreators, findsCreator])
+    }), [collectionSlug, creatorNames, libraryCreators, findsCreator])
     const chosen = libraryCreators?.find((other) => other.slug === target)
     const match = useCollectionCreatorMatch(collectionSlug, open && target === 'behind')
     const refresh = useRefresh(collectionSlug)
@@ -94,18 +96,18 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
             toast.success(`${collectionTitle} is now part of ${creator.title}`)
             onDismiss()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : `Could not add the collection to the ${creatorLabel}`)
+            toast.error(error instanceof Error ? error.message : `Could not add the collection to the ${creatorNames?.singular}`)
         }
     }
 
     return (
         <ConfirmDialog
             open={open}
-            title={`Add ${collectionTitle} to a ${creatorLabel}`}
+            title={`Add ${collectionTitle} to ${creatorNames?.a}`}
             icon={faIcon('fass', 'circle-user')}
             onDismiss={onDismiss}
             confirmButton={{
-                label: chosen ? `Add to ${chosen.title}` : creator ? `Add to ${creator.title}` : `Add to ${creatorLabel}`,
+                label: chosen ? `Add to ${chosen.title}` : creator ? `Add to ${creator.title}` : `Add to ${creatorNames?.singular}`,
                 onClick: add,
                 disabled: chosen ? false : !creator || !matched,
             }}
@@ -123,13 +125,13 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
             )}
             {chosen && (
                 <ul className="creator-order-note">
-                    <li>{collectionTitle} keeps its own link, so its videos can come from another {creatorLabel} or playlist, such as an artist's music videos on their label's channel.</li>
-                    <li>{words.season.Many}, {words.episode.one} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
+                    <li>{collectionTitle} keeps its own link, so its videos can come from another {creatorNames?.singular} or playlist, such as an artist's music videos on their label's channel.</li>
+                    <li>{words.season.Plural}, {words.episode.singular} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                 </ul>
             )}
             {!chosen && match.isLoading && (
                 <div className="creator-skeleton creator-join" aria-busy="true">
-                    <LookupSteps steps={match.steps} first={`Finding the ${creatorLabel} behind the link`}/>
+                    <LookupSteps steps={match.steps} first={`Finding the ${creatorNames?.singular} behind the link`}/>
                     <div className="creator-join-who" aria-hidden="true">
                         <span className="creator-avatar creator-avatar--small skeleton-block"/>
                         <div className="creator-skeleton-copy">
@@ -156,7 +158,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                             ? <img className="creator-avatar creator-avatar--small" src={creator.avatarUrl} alt="" loading="lazy"/>
                             : <span className="creator-avatar creator-avatar--small creator-avatar--empty" aria-hidden="true">{creator.title.slice(0, 1)}</span>}
                         <div className="creator-identity-copy">
-                            <span className="creator-kind">{creator.siteName} {creator.creatorLabel}</span>
+                            <span className="creator-kind">{creator.siteName} {creator.creatorNames.singular}</span>
                             <strong>{creator.title}</strong>
                             <span className="creator-section-note">
                                 {creator.creatorSlug ? 'In your library.' : 'Not in your library yet. It will be added.'}
@@ -167,7 +169,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                         <div className="creator-section-row">
                             <div className="creator-section-copy">
                                 <strong>{collectionTitle}</strong>
-                                <span>{sectionNote(creator, creatorLabel)}</span>
+                                <span>{sectionNote(creator, creator.creatorNames.singular)}</span>
                             </div>
                         </div>
                     </div>
@@ -175,7 +177,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                         <div className="creator-join-overlaps">
                             <p>
                                 These playlists of {collectionTitle} are also somewhere else in
-                                the {creatorLabel}. Once it joins, each is in one place only.
+                                the {creatorNames?.singular}. Once it joins, each is in one place only.
                             </p>
                             {creator.overlaps.map((overlap) => (
                                 <OverlapChoice
@@ -197,8 +199,8 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                         ? null
                         : (
                             <ul className="creator-order-note">
-                                <li>{words.season.Many}, {words.episode.one} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
-                                {!creator.creatorSlug && <li>The {creatorLabel}'s other {growingNames(creator.sectionTypes).many || 'lists'} start as not in your library, so you can add them from the {creatorLabel}'s Edit page.</li>}
+                                <li>{words.season.Plural}, {words.episode.singular} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
+                                {!creator.creatorSlug && <li>The {creatorNames?.singular}'s other {growingNames(creator.sectionTypes).plural || 'lists'} start as not in your library, so you can add them from the {creatorNames?.singular}'s Edit page.</li>}
                             </ul>
                         )}
                 </div>
@@ -244,7 +246,7 @@ function OverlapChoice({title, keptBy, collectionTitle, canMoveHere, movesHere, 
 }
 
 /** "Remove from creator", in the words of the Site: the collection becomes a plain one again. */
-export function RemoveFromCreatorDialog({open, collectionSlug, collectionTitle, creatorLabel, onDismiss}: DialogProps) {
+export function RemoveFromCreatorDialog({open, collectionSlug, collectionTitle, creatorNames, onDismiss}: DialogProps) {
     const leave = useCollectionCreatorLeave(collectionSlug, open)
     const refresh = useRefresh(collectionSlug)
     const info = leave.data
@@ -256,18 +258,18 @@ export function RemoveFromCreatorDialog({open, collectionSlug, collectionTitle, 
             toast.success(`${collectionTitle} is a plain collection now`)
             onDismiss()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : `Could not remove the collection from its ${creatorLabel}`)
+            toast.error(error instanceof Error ? error.message : `Could not remove the collection from its ${creatorNames?.singular}`)
         }
     }
 
     return (
         <ConfirmDialog
             open={open}
-            title={info ? `Remove from ${info.creatorTitle}?` : `Remove from ${creatorLabel}?`}
+            title={info ? `Remove from ${info.creatorTitle}?` : `Remove from ${creatorNames?.singular}?`}
             icon={faIcon('fass', 'link-slash')}
             iconTone="danger"
             onDismiss={onDismiss}
-            confirmButton={{label: `Remove from ${creatorLabel}`, onClick: remove, className: 'btn btn-danger', disabled: !info}}
+            confirmButton={{label: `Remove from ${creatorNames?.singular}`, onClick: remove, className: 'btn btn-danger', disabled: !info}}
         >
             {leave.error && <p className="text-danger">{leave.error.message}</p>}
             <p>

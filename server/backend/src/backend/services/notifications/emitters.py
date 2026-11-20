@@ -81,7 +81,7 @@ def quick_download_finished(session: Session, *, owner: str | None, title: str) 
 
 def creator_sections_found(session: Session, creator: Creator, sections: list[CreatorSection]) -> None:
     """The daily look found sections of a creator that wait for a choice: add them, or ignore them."""
-    from backend.services.creators import creator_label
+    from backend.services.creators import creator_names
 
     if not sections:
         return
@@ -91,11 +91,11 @@ def creator_sections_found(session: Session, creator: Creator, sections: list[Cr
     from backend.services.sites import joined_names
 
     names_of = joined_names(account_site(section.account).section_type_of(section).names for section in sections)
-    what = names_of.one if len(sections) == 1 else names_of.many
+    what = names_of.singular if len(sections) == 1 else names_of.plural
     emit(
         session, Event.CREATOR_SECTIONS_FOUND,
         title=f"New {what} on {creator.title}" if len(sections) == 1 else f"{len(sections)} new {what} on {creator.title}",
-        body=f"{names}. Choose on the {creator_label(creator)}'s page whether to add {'it' if len(sections) == 1 else 'them'}.",
+        body=f"{names}. Choose on the {creator_names(creator).singular}'s page whether to add {'it' if len(sections) == 1 else 'them'}.",
         url=f"/edit-creator/{creator.slug}", data={"creator": creator.title, "sections": [section.title for section in sections]},
         dedupe_key=f"creator-sections:{creator.id}:{','.join(sorted(section.ref for section in sections))}",
     )
@@ -113,8 +113,8 @@ def link_seasons_found(session: Session, collection: Collection, playlists: list
     lists = list_names(collection)
     emit(
         session, Event.CREATOR_SECTIONS_FOUND,
-        title=f"New {lists.one} for {collection.title}" if one else f"{len(playlists)} new {lists.many} for {collection.title}",
-        body=f"{names}. Choose in the collection's {season.many} whether {f'it becomes {season.a}' if one else f'they become {season.many}'}.",
+        title=f"New {lists.singular} for {collection.title}" if one else f"{len(playlists)} new {lists.plural} for {collection.title}",
+        body=f"{names}. Choose in the collection's {season.plural} whether {f'it becomes {season.a}' if one else f'they become {season.plural}'}.",
         url=f"/edit-collection/{collection.id}?seasons=1",
         data={"collection": collection.title, "playlists": [playlist.title for playlist in playlists]},
         dedupe_key=f"collection-playlists:{collection.id}:{','.join(sorted(playlist.ref for playlist in playlists))}",

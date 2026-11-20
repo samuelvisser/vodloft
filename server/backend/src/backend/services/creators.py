@@ -27,11 +27,13 @@ from backend.services.new_lists import (
 )
 from backend.types.creator_types import NewSectionAction, SectionStatus, SectionTarget
 from backend.types.dailywire_user_info import DwMembershipLevel
+from backend.types.collection_contracts import MUSIC
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
 from backend.utils.helpers import generate_uuid, slugify
 from sources import (
-    CreatorDetails, CreatorPreset, Feature, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source, site_of,
+    CreatorDetails, CreatorPreset, Feature, Names, SectionKind, SectionRef, SectionRole, Site, UnknownSourceError, get_source,
+    site_of,
 )
 
 
@@ -769,7 +771,7 @@ def leave_creator(s: Session, collection: Collection) -> None:
     ``s`` is a write transaction's session."""
     creator = collection.creator
     if creator is None:
-        raise ServiceError(f"{collection.title} is not in a {collection_site(collection).creator_label}")
+        raise ServiceError(f"{collection.title} is not in {collection_site(collection).creator_names.a}")
     for account in creator.accounts:
         if account.main_collection_id == collection.id:
             account.main_collection = None
@@ -822,19 +824,19 @@ def is_music_creator(creator: Creator) -> bool:
     return any(collection.type == CollectionType.MUSIC.value for collection in creator.collections)
 
 
-def creator_label(creator: Creator) -> str:
+def creator_names(creator: Creator) -> Names:
     """What the creator is called, as their Site calls them when all their accounts and collections are on one Site,
     such as host on The Daily Wire, or artist for one with a Music collection; and otherwise as any Site does."""
     sites = list(_sites(creator).values())
     site = sites[0] if len(sites) == 1 else _ANY_SITE
-    return site.music_creator_label if is_music_creator(creator) else site.creator_label
+    return MUSIC.creator_names_on(site) if is_music_creator(creator) else site.creator_names
 
 
 def creator_kind(creator: Creator) -> str:
     """What the creator is, with their Site when they are on one only: "YouTube creator", "The Daily Wire host" or
     "Bandcamp artist", and otherwise "creator" or "artist"."""
     sites = list(_sites(creator).values())
-    label = creator_label(creator)
+    label = creator_names(creator).singular
     return f"{sites[0].name} {label}" if len(sites) == 1 else label
 
 
@@ -848,7 +850,7 @@ def add_to_creator(s: Session, collection: Collection, creator: Creator) -> None
         raise ServiceError(f"{collection.title} is already in {collection.creator.title}")
     if collection.sharing_url is not None and any(section.url == collection.sharing_url for section in creator.sections):
         raise ServiceError(
-            f"{collection.title} is a part of {creator.title}'s own page: add it to the {creator_label(creator)} "
+            f"{collection.title} is a part of {creator.title}'s own page: add it to the {creator_names(creator).singular} "
             "behind its link instead", field="creator_slug",
         )
     belong_to(collection, creator)

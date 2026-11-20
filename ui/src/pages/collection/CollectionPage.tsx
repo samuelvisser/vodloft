@@ -177,7 +177,7 @@ export default function CollectionPage() {
     const values: string[] = []
     for (const season of seasons) {
       const value = String(season.id)
-      spec[value] = {label: season.name?.trim() || `${words.season.One} ${season.index}`}
+      spec[value] = {label: season.name?.trim() || `${words.season.Singular} ${season.index}`}
       values.push(value)
     }
     return createSelectRegistry('CollectionSeason', spec, values)
@@ -232,13 +232,13 @@ export default function CollectionPage() {
   const typeFiltered = episodeTypes.length > 0
   // With one type selected, the count names it, such as "726 livestreams".
   const singleTypeTag = episodeTypes.length === 1 ? episodeTags?.find((tag) => tag.key === episodeTypes[0]) : undefined
-  const countNouns = singleTypeTag ?? {singular: words.episode.one, plural: words.episode.many}
+  const countNouns = singleTypeTag?.names ?? words.episode
   // Locked episodes start shown, unless the collection's Site mixes them among open ones, such as a
   // YouTube channel's members-only videos. Episodes the account can watch are never hidden.
   const [storedShowLocked, setShowLocked] = useShowLocked(id)
   const showLocked = storedShowLocked ?? collection?.site?.showsLocked ?? true
   // A Music collection's creator is an artist, as VODLoft calls any creator with Music collections.
-  const creatorLabel = (collection?.type === 'music' ? collection?.site?.musicCreatorLabel : collection?.site?.creatorLabel) ?? 'creator'
+  const creatorNames = collection?.creatorNames
   const {data: libraryCreators} = useCreators()
   const {
     data: episodePagesData,
@@ -440,20 +440,20 @@ export default function CollectionPage() {
     ? metadataRefreshOperation.status === 'WAITING'
       ? metadataRefreshOperation.message || OPERATION_WAITING_MESSAGE
       : `A metadata refresh is running for ${collection.title}.${metadataRefreshOperation.progressTotal > 0
-        ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} ${words.episode.many} have finished.`
+        ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} ${words.episode.plural} have finished.`
         : ''}`
     : undefined
   const downloadStateUnknown = downloadsLoading && downloadedLocalMediaProfiles === undefined
   const downloadStateFailed = Boolean(downloadsError) && downloadedLocalMediaProfiles === undefined
   const downloadStateDisabledReason = downloadStateUnknown
-    ? `VODLoft is still checking for downloaded ${fileWords.episode.many} in ${collection.title}.`
+    ? `VODLoft is still checking for downloaded ${fileWords.episode.plural} in ${collection.title}.`
     : downloadStateFailed
-      ? `VODLoft could not determine whether ${collection.title} has downloaded ${fileWords.episode.many}.`
+      ? `VODLoft could not determine whether ${collection.title} has downloaded ${fileWords.episode.plural}.`
       : downloadLocalMediaProfiles.length === 0
-        ? `No downloaded ${fileWords.episode.many} exist for ${collection.title}.`
+        ? `No downloaded ${fileWords.episode.plural} exist for ${collection.title}.`
         : undefined
   const identificationDisabledReason = identificationOperation
-    ? `VODLoft is numbering the ${words.episode.many} of ${collection.title} again and renaming their files.`
+    ? `VODLoft is numbering the ${words.episode.plural} of ${collection.title} again and renaming their files.`
     : undefined
   const fileRenameDisabledReason = fileRenameOperation
     ? fileRenameOperation.status === 'WAITING'
@@ -575,11 +575,11 @@ export default function CollectionPage() {
       onSelect: () => void checkLockedAgain(),
     }] : []),
     ...(collection.creatorSlug ? [{
-      label: `Remove from ${creatorLabel}`,
+      label: `Remove from ${creatorNames?.singular}`,
       icon: faIcon('fass', 'link-slash') as [string, string],
       onSelect: () => setCreatorDialog('remove'),
     }] : hasSourceFeature(collection, SourceFeature.CREATORS) || (libraryCreators?.length ?? 0) > 0 ? [{
-      label: `Add to ${creatorLabel}`,
+      label: `Add to ${creatorNames?.singular}`,
       icon: faIcon('fass', 'circle-user') as [string, string],
       onSelect: () => setCreatorDialog('add'),
     }] : []),
@@ -594,7 +594,7 @@ export default function CollectionPage() {
       onSelect: () => setMetadataRefreshConfirm(true),
     }] : []),
     {
-      label: `Rename all ${fileWords.episode.one} files`,
+      label: `Rename all ${fileWords.episode.singular} files`,
       icon: faIcon('fass', 'file-pen'),
       disabled: fileRenameDisabledReason !== undefined,
       disabledReason: fileRenameDisabledReason,
@@ -706,10 +706,10 @@ export default function CollectionPage() {
                 status: indexingOperation ? presentIndexingStatus(indexingOperation) ?? undefined : undefined,
               },
               {
-                label: `Changing ${words.episode.one} identification`,
+                label: `Changing ${words.episode.singular} identification`,
                 icon: faIcon('fass', 'list-ol'),
                 operation: identificationOperation,
-                controls: operationControls(identificationOperation?.id, `${words.episode.one} identification change`, false),
+                controls: operationControls(identificationOperation?.id, `${words.episode.singular} identification change`, false),
               },
               {
                 label: 'Sync',
@@ -793,8 +793,8 @@ export default function CollectionPage() {
         </header>
 
         {isSeasonal && seasons.length > 0 && (
-          <div className="collection-season-filter" aria-label={`${words.season.One} selection`}>
-            <label htmlFor="collection-season">{words.season.One}</label>
+          <div className="collection-season-filter" aria-label={`${words.season.Singular} selection`}>
+            <label htmlFor="collection-season">{words.season.Singular}</label>
             <SimpleSelect
               inputId="collection-season"
               className="collection-season-select"
@@ -830,9 +830,9 @@ export default function CollectionPage() {
         )}
 
         {isSeasonal && !seasonViewLoading && seasons.length === 0 ? (
-          <div className="collection-season-empty" role="status">No {words.season.many} are available for {collection.title}.</div>
+          <div className="collection-season-empty" role="status">No {words.season.plural} are available for {collection.title}.</div>
         ) : episodesViewLoading ? (
-          <div className="episodes-grid" role="status" aria-label={`Loading ${words.episode.many}`} aria-busy="true">
+          <div className="episodes-grid" role="status" aria-label={`Loading ${words.episode.plural}`} aria-busy="true">
             {Array.from({length: EPISODE_SKELETON_COUNT}, (_, index) => (
               <div className="episode-card episode-card-skeleton" key={index} aria-hidden="true">
                 <div className="episode-skeleton-cover"/>
@@ -844,11 +844,11 @@ export default function CollectionPage() {
         ) : (typeFiltered || lockedHidden) && visibleItems.length === 0 && episodePagesData !== undefined ? (
           <div className="collection-season-empty" role="status">
             {typeFiltered
-              ? `No ${lockedHidden ? 'unlocked ' : ''}${words.episode.many} of the selected types${isSeasonal ? ` in this ${words.season.one}` : ''}.`
-              : `Every ${words.episode.one}${isSeasonal ? ` in this ${words.season.one}` : ''} is locked. Turn on Locked to show them.`}
+              ? `No ${lockedHidden ? 'unlocked ' : ''}${words.episode.plural} of the selected types${isSeasonal ? ` in this ${words.season.singular}` : ''}.`
+              : `Every ${words.episode.singular}${isSeasonal ? ` in this ${words.season.singular}` : ''} is locked. Turn on Locked to show them.`}
           </div>
         ) : (
-          <div className="episodes-grid" role="list" aria-label={`${collection.title} ${words.episode.many}`}>
+          <div className="episodes-grid" role="list" aria-label={`${collection.title} ${words.episode.plural}`}>
             {visibleItems.map((ep: any) => (
               <EpisodeCard
                 key={ep.id} ep={ep} collectionSlug={id} downloads={downloadsBySlug.get(ep.slug)}
@@ -864,8 +864,8 @@ export default function CollectionPage() {
           <div className="episodes-load-more episodes-load-failed" role="alert">
             <span>
               {isFetchNextPageError || visibleItems.length > 0
-                ? `Could not load the rest of the ${words.episode.many}, ${visibleItems.length} of ${total} are shown.`
-                : `Could not load the ${words.episode.many}.`}
+                ? `Could not load the rest of the ${words.episode.plural}, ${visibleItems.length} of ${total} are shown.`
+                : `Could not load the ${words.episode.plural}.`}
             </span>
             <button type="button" className="btn" onClick={retryEpisodes}>
               <FontAwesomeIcon icon={faIcon('fass', 'rotate-right')} aria-hidden="true"/> Try again
@@ -873,11 +873,11 @@ export default function CollectionPage() {
           </div>
         ) : episodesFromCache && visibleItems.length > 0 ? (
           <div className="episodes-load-more" role="status">
-            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Loading {words.episode.many}…
+            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Loading {words.episode.plural}…
           </div>
         ) : sentinelShown ? (
           <div ref={sentinelRef} className="episodes-load-more" role="status">
-            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Loading more {words.episode.many}…
+            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Loading more {words.episode.plural}…
           </div>
         ) : null)}
       </article>
@@ -928,7 +928,7 @@ export default function CollectionPage() {
         findsCreator={hasSourceFeature(collection, SourceFeature.CREATORS)}
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
-        creatorLabel={creatorLabel}
+        creatorNames={creatorNames}
         // A Music collection numbers its music videos as tracks too.
         words={collectionWords(collection.type, 'audio')}
         onDismiss={() => setCreatorDialog(null)}
@@ -937,7 +937,7 @@ export default function CollectionPage() {
         open={creatorDialog === 'remove'}
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
-        creatorLabel={creatorLabel}
+        creatorNames={creatorNames}
         onDismiss={() => setCreatorDialog(null)}
       />
 
@@ -953,7 +953,7 @@ export default function CollectionPage() {
         confirmLabel="Refresh metadata"
         disabled={metadataRefreshBusy}
       >
-        <p>Refresh metadata for every {words.episode.one} in "{collection.title}"? This can take a while and is usually not needed.</p>
+        <p>Refresh metadata for every {words.episode.singular} in "{collection.title}"? This can take a while and is usually not needed.</p>
       </ActionConfirmDialogue>
 
       <ActionConfirmDialogue
@@ -962,7 +962,7 @@ export default function CollectionPage() {
         onStartingChange={onStartingChange('collection.rename_files')}
         requestPath={`/collections/${encodeURIComponent(id)}/rename-files`}
         resourceLabel={collection.title}
-        title={`Rename existing ${fileWords.episode.one} files`}
+        title={`Rename existing ${fileWords.episode.singular} files`}
         onDismiss={() => { setFileRenameConfirm(false); setFileRenameProfileId(undefined) }}
         icon={faIcon('fass', 'file-pen')}
         confirmLabel="Rename files"
@@ -973,7 +973,7 @@ export default function CollectionPage() {
         extraBody={{seasonFolders: renameSeasonFolders, moveReassigned: moveReassigned && !!reassignedEpisodes?.size}}
       >
         <p>
-          Rename existing {fileWords.episode.one} files in "{collection.title}" so their paths match the current Local Media Profile output templates.
+          Rename existing {fileWords.episode.singular} files in "{collection.title}" so their paths match the current Local Media Profile output templates.
         </p>
         <label className="rename-season-folders">
           <Switch
@@ -983,13 +983,13 @@ export default function CollectionPage() {
             height={18} width={34} handleDiameter={14}
           />
           <span>
-            <b>Rename {words.season.one} folders too</b>
+            <b>Rename {words.season.singular} folders too</b>
             <span className="help">
-              {fileWords.episode.Many} move into the folders of the {words.season.many} they are in now, with their
-              {' '}{words.season.one}'s number, also after {words.season.many} were reordered.{' '}
+              {fileWords.episode.Plural} move into the folders of the {words.season.plural} they are in now, with their
+              {' '}{words.season.singular}'s number, also after {words.season.plural} were reordered.{' '}
               {collection.type === 'music'
-                ? `In a collection of the artist's albums, downloaded ${fileWords.episode.many} also move to the album they belong in now.`
-                : `In a collection whose ${words.season.many} come from the site's lists, downloaded ${fileWords.episode.many} also move to the ${words.season.one} of the list they belong in now.`}
+                ? `In a collection of the artist's albums, downloaded ${fileWords.episode.plural} also move to the album they belong in now.`
+                : `In a collection whose ${words.season.plural} come from the site's lists, downloaded ${fileWords.episode.plural} also move to the ${words.season.singular} of the list they belong in now.`}
             </span>
           </span>
         </label>
@@ -1002,12 +1002,12 @@ export default function CollectionPage() {
               height={18} width={34} handleDiameter={14}
             />
             <span>
-              <b>Also move reassigned {fileWords.episode.many} out</b>
+              <b>Also move reassigned {fileWords.episode.plural} out</b>
               <span className="help">
                 {reassignedEpisodes.size === 1
-                  ? `One downloaded ${fileWords.episode.one} belongs in another collection of this ${creatorLabel} now. It moves there with its files`
-                  : `${reassignedEpisodes.size} downloaded ${fileWords.episode.many} belong in other collections of this ${creatorLabel} now. They move there with their files`},
-                or are downloaded again there when that collection uses another Local Media Profile. {fileWords.episode.Many} reassigned
+                  ? `One downloaded ${fileWords.episode.singular} belongs in another collection of this ${creatorNames?.singular} now. It moves there with its files`
+                  : `${reassignedEpisodes.size} downloaded ${fileWords.episode.plural} belong in other collections of this ${creatorNames?.singular} now. They move there with their files`},
+                or are downloaded again there when that collection uses another Local Media Profile. {fileWords.episode.Plural} reassigned
                 to this collection from elsewhere stay where they are.
               </span>
             </span>
@@ -1053,11 +1053,11 @@ export default function CollectionPage() {
         localMediaProfiles={actionLocalMediaProfiles}
       >
         <p>
-          Delete downloaded {fileWords.episode.one} files in "{collection.title}".
+          Delete downloaded {fileWords.episode.singular} files in "{collection.title}".
         </p>
         <p>
-          When you delete everything, VODLoft first disables any Download Profiles attached to the selected Local Media Profile or Profiles. Re-enable a disabled Download Profile whenever you want VODLoft to download its eligible {fileWords.episode.many} again.
-          Deleting only older {fileWords.episode.many} leaves Download Profiles on, so they may download those {fileWords.episode.many} again.
+          When you delete everything, VODLoft first disables any Download Profiles attached to the selected Local Media Profile or Profiles. Re-enable a disabled Download Profile whenever you want VODLoft to download its eligible {fileWords.episode.plural} again.
+          Deleting only older {fileWords.episode.plural} leaves Download Profiles on, so they may download those {fileWords.episode.plural} again.
         </p>
       </ActionConfirmDialogue>
 
@@ -1078,7 +1078,7 @@ export default function CollectionPage() {
         localMediaProfiles={actionLocalMediaProfiles}
       >
         <p>
-          Delete existing {fileWords.episode.one} files in "{collection.title}" and re-download them.
+          Delete existing {fileWords.episode.singular} files in "{collection.title}" and re-download them.
           This can take a long time, use significant bandwidth, and is usually not needed.
         </p>
       </ActionConfirmDialogue>

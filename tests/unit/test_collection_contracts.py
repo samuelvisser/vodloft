@@ -26,16 +26,16 @@ def test_every_type_has_a_contract_that_sets_only_what_differs_from_the_fallback
     for collection_type in (CollectionType.PODCAST, CollectionType.SERIES):
         assert collection_contract(collection_type).words_for(audio=True) == DEFAULT_WORDS
     music = collection_contract("music")
-    assert (music.words.season.one, music.words.episode.one, music.words_for(audio=True).episode.one) == (
+    assert (music.words.season.singular, music.words.episode.singular, music.words_for(audio=True).episode.singular) == (
         "album", "music video", "track")
 
 
 def test_a_collection_takes_sound_words_on_a_site_with_sound_only():
     on_bandcamp = Collection(source_key="ytdlp", type="music", sharing_url="https://show.bandcamp.com/music")
     on_youtube = Collection(source_key="ytdlp", type="music", sharing_url="https://www.youtube.com/@show")
-    assert collection_words(on_bandcamp).episode.many == "tracks"
-    assert collection_words(on_youtube).episode.many == "music videos"
-    assert collection_words(on_youtube, audio=True).episode.many == "tracks"
+    assert collection_words(on_bandcamp).episode.plural == "tracks"
+    assert collection_words(on_youtube).episode.plural == "music videos"
+    assert collection_words(on_youtube, audio=True).episode.plural == "tracks"
 
 
 def test_a_word_has_its_article():
@@ -58,6 +58,14 @@ def test_a_site_names_its_media_and_every_section_kind():
     from sources import SectionKind
     from sources.ytdlp.sites import site_of
 
-    assert (site_of("youtube").media_names.many, site_of("bandcamp").media_names.many) == ("videos", "tracks")
+    assert (site_of("youtube").media_names.plural, site_of("bandcamp").media_names.plural) == ("videos", "tracks")
     # YouTube names no type for single items, so they get VODLoft's own word, with its article.
     assert site_of("youtube").section_type(None, SectionKind.ITEM).names.a == "a video"
+
+
+def test_a_music_collection_calls_its_creator_an_artist_on_every_site():
+    from sources import Site
+
+    host = Site("cast", "Cast", creator_names=Names("host", "hosts"))
+    assert collection_contract("music").creator_names_on(host) == Names("artist", "artists")
+    assert collection_contract("series").creator_names_on(host) == Names("host", "hosts")

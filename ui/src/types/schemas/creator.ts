@@ -46,9 +46,7 @@ export type NewSectionAction = typeof NewSectionActionValues[number]
 /** One kind of list a creator's Sites have, such as a SoundCloud artist's albums, with what happens with a new one. */
 export const CreatorNewListSchema = z.object({
     key: z.string(),
-    one: z.string(),
-    many: z.string(),
-    a: z.string(),
+    names: NamesSchema,
     /** The lists can be seasons of the creator's own collection. */
     seasons: z.boolean(),
     /** The kind best describes an artist's albums. */
@@ -71,9 +69,7 @@ export const CreatorLookupReadSchema = z.object({
     sourceKey: z.string(),
     siteKey: z.string(),
     siteName: z.string(),
-    creatorLabel: z.string(),
-    /** What the Site calls the creator when they are added as a music artist. */
-    musicCreatorLabel: z.string(),
+    creatorNames: NamesSchema,
     /** Every type of section the Site's creators have, such as shows and movies on The Daily Wire. */
     sectionTypes: z.array(SectionTypeSchema),
     /** The Site has sound only, such as Bandcamp, so what its lists hold are tracks. */
@@ -111,7 +107,7 @@ export const CreatorLookupReadSchema = z.object({
 export type CreatorLookupRead = z.infer<typeof CreatorLookupReadSchema>
 
 const SiteSchema = z.object({
-    key: z.string(), name: z.string(), creatorLabel: z.string(), linkSeasons: z.boolean().default(false),
+    key: z.string(), name: z.string(), creatorNames: NamesSchema, linkSeasons: z.boolean().default(false),
     /** The Site has sound only, such as Bandcamp. */
     audioOnly: z.boolean().default(false),
     /** What the Site calls one of its videos: a video, or a track on a Site with sound only. */
@@ -138,7 +134,7 @@ export const CreatorReadSchema = z.object({
     id: z.number(),
     slug: z.string(),
     /** The word of their one Site, such as host, or artist for a music artist. */
-    creatorLabel: z.string(),
+    creatorNames: NamesSchema,
     /** A music artist: they have a Music collection. */
     music: z.boolean(),
     /** The label with their Site, when they are on one only, such as "The Daily Wire host". */
@@ -250,7 +246,7 @@ export const CollectionCreatorMatchSchema = z.object({
     /** Adding the collection with it uses what this lookup found, instead of asking the Site again. */
     lookupId: z.string().nullable().optional(),
     siteName: z.string(),
-    creatorLabel: z.string(),
+    creatorNames: NamesSchema,
     /** Every type of section the creator's Site has, such as feeds and playlists on YouTube. */
     sectionTypes: z.array(SectionTypeSchema),
     ref: z.string(),
