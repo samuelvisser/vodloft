@@ -216,3 +216,53 @@ def test_cancellation_before_publication_leaves_no_target(tmp_path):
         files.publish_collection_asset(source, target, download_root=tmp_path, expected_hash=None, check_canceled=canceled)
     assert not target.exists()
     assert not list(target.parent.glob(".vodloft-artwork-*"))
+
+
+def _hold_asset_lock(download_root, target):
+    """Hold the artwork lock on another thread until the returned event is set."""
+    import threading
+
+    held, release = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        with files.asset_file_lock(download_root, target, _active):
+            held.set()
+            release.wait(5)
+
+    thread = threading.Thread(target=hold)
+    thread.start()
+    assert held.wait(5)
+    return release, thread
+
+
+def test_a_second_writer_waits_for_the_artwork_lock_instead_of_giving_up(tmp_path):
+    target = tmp_path / "collection" / "poster.jpg"
+    release, thread = _hold_asset_lock(tmp_path, target)
+    polls = []
+
+    def still_wanted() -> None:
+        polls.append(1)
+        if len(polls) == 5:
+            release.set()
+
+    with files.asset_file_lock(tmp_path, target, still_wanted):
+        assert len(polls) >= 5
+    thread.join(5)
+
+
+def test_a_canceled_writer_stops_waiting_for_the_artwork_lock(tmp_path):
+    from downloader import DownloadCanceled
+
+    target = tmp_path / "collection" / "poster.jpg"
+    release, thread = _hold_asset_lock(tmp_path, target)
+
+    def canceled() -> None:
+        raise DownloadCanceled("canceled")
+
+    try:
+        with pytest.raises(DownloadCanceled):
+            with files.asset_file_lock(tmp_path, target, canceled):
+                pass
+    finally:
+        release.set()
+        thread.join(5)
