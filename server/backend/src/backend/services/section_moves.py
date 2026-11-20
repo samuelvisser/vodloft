@@ -36,6 +36,7 @@ from backend.services.episode_identification import (
     IdentificationChange, ProfileFilesChange, collection_busy, plan_identification, profile_file_changes,
     queue_renumber, renumber_changes,
 )
+from backend.operations.creators import CreatorMoveSectionsOperation
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import (
     _holders, active_lists, adds_outside_videos, leaving_outside, place_in_link_seasons, remove_left_episode,
@@ -45,7 +46,10 @@ from backend.types.collection_types import EpisodeIdentifier
 from backend.types.creator_types import SectionStatus, SectionTarget
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.link_season_types import OutsideVideos
-from sources import MAIN_TAG, Names, SectionKind, SectionRole, VideoDetails, get_source
+from task_manager.scheduler.operation_factory import create_operation
+from task_manager.scheduler.operations import dispatch_operation_targets, spun_off_work
+from task_manager.scheduler.types import OperationSource
+from sources import MAIN_TAG, Names, SectionKind, SectionRole, VideoDetails, get_source, section_type_names
 
 _FIELD = "places"
 _ON_DISK = (MediaDownloadArtifactStatus.AVAILABLE.value, MediaDownloadArtifactStatus.CORRUPTED.value)
@@ -414,25 +418,40 @@ def move_sections(
     ``s`` is a write transaction's session."""
     from task_manager.scheduler.transactional import queue_task_after_commit
 
-    done = _apply(s, creator, moves, added_by_id=added_by_id)
-    for collection_id in sorted(done.result.sources):
-        queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=collection_id)
-    for collection_id in sorted(done.touched):
-        collection = s.get(Collection, collection_id)
-        if collection is None:
-            continue
-        again = _numbered_again(collection, renumber)
-        if collection_id in done.result.rename or (again and plan_identification(
-            s, collection, EpisodeIdentifier(collection.episode_identifier),
-        ).identifiers):
-            queue_renumber(s, collection, renumber=again, sections=sorted(
-                f"{flow.section.account_id}:{flow.section.ref}" for flow in done.flows
-                if collection_id in (flow.source_id, flow.target_id)
-            ))
-    for collection_id in done.new:
-        collection = s.get(Collection, collection_id)
-        if collection is not None:
-            index_new_collection(s, collection)
+    # Every operation and task the move starts is a part of one operation for the whole move, which tells the user
+    # when it is done and shows its progress on the creator's page.
+    with spun_off_work(s) as work:
+        done = _apply(s, creator, moves, added_by_id=added_by_id)
+        for collection_id in sorted(done.result.sources):
+            queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=collection_id)
+        for collection_id in sorted(done.touched):
+            collection = s.get(Collection, collection_id)
+            if collection is None:
+                continue
+            again = _numbered_again(collection, renumber)
+            if collection_id in done.result.rename or (again and plan_identification(
+                s, collection, EpisodeIdentifier(collection.episode_identifier),
+            ).identifiers):
+                queue_renumber(s, collection, renumber=again, sections=sorted(
+                    f"{flow.section.account_id}:{flow.section.ref}" for flow in done.flows
+                    if collection_id in (flow.source_id, flow.target_id)
+                ))
+        for collection_id in done.new:
+            collection = s.get(Collection, collection_id)
+            if collection is not None:
+                index_new_collection(s, collection)
+    if not work.operations and not work.tasks:
+        return
+    # The whole move tells the user it is done, not each part.
+    for operation in work.operations:
+        operation.source = OperationSource.SYSTEM.value
+    moved = [section for move in moves if (section := s.scalar(select(CreatorSection).where(
+        CreatorSection.account_id == move.account_id, CreatorSection.ref == move.ref,
+    ))) is not None]
+    dispatch_operation_targets(s, create_operation(s, CreatorMoveSectionsOperation(
+        creator, parts=work.operations, tasks=work.tasks, sections=[f"{move.account_id}:{move.ref}" for move in moves],
+        names=section_type_names(section.section_type for section in moved),
+    )))
 
 
 @dataclass(frozen=True)
