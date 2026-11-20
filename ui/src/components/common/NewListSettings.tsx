@@ -25,6 +25,8 @@ export default function NewListSettings({kinds, valueOf, onChange, registryFor, 
     const labels = kinds.flatMap((kind) => registryFor(kind).options.map((option) => option.label))
     // A creator on several Sites has a row for each kind on each Site, named with its Site.
     const severalSites = new Set(kinds.map((kind) => kind.siteKey)).size > 1
+    // A single row is named by the heading above it already, so it shows only what its choice does.
+    const single = kinds.length === 1
     return (
         <div className="new-list-settings" role="list">
             {kinds.map((kind) => {
@@ -35,7 +37,7 @@ export default function NewListSettings({kinds, valueOf, onChange, registryFor, 
                     <div key={id} className="new-list-setting" role="listitem">
                         <span className="new-list-setting-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'list')}/></span>
                         <div className="new-list-setting-copy">
-                            <label htmlFor={id}><b>New {severalSites ? `${kind.siteName} ` : ''}{kind.names.singular}</b></label>
+                            <label htmlFor={id} className={single ? 'sr-only' : undefined}><b>New {severalSites ? `${kind.siteName} ` : ''}{kind.names.singular}</b></label>
                             <span>{registry.getHelp(value)}</span>
                         </div>
                         <div className="new-list-setting-choice">

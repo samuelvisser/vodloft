@@ -12,7 +12,8 @@
 /* The selects take the width of the longest choice (SimpleSelect's fitLabels), so they line up. */
 .new-list-setting-choice { flex: 0 0 auto; min-width: 15rem; max-width: 50%; }
 
+/* On a phone the name (or, for a single row, what its choice does) sits beside the icon, with the select below. */
 @media (max-width: 640px) {
-    .new-list-setting { flex-wrap: wrap; }
-    .new-list-setting-choice { flex: 1 1 100%; max-width: none; }
+    .new-list-setting { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: .75rem; row-gap: .5rem; }
+    .new-list-setting-choice { grid-column: 1 / -1; min-width: 0; max-width: none; }
 }
