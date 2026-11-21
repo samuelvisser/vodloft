@@ -116,13 +116,23 @@ class DownloadProfileDefaultsAPIRead(ResponseBase):
     upgrade_length_minutes: int
 
 
+class SearchSiteAPIRead(ResponseBase):
+    """A Site a Source finds things on by name, such as YouTube or SoundCloud for yt-dlp."""
+
+    key: str
+    name: str
+    costly_search: bool
+    """Each search costs something, so the search page searches when asked instead of while the user types."""
+
+
 class SourceAPIRead(ResponseBase):
     id: str
     name: str
     domains: list[str]
     features: list[str]
     sites_label: Optional[str] = None
-    search_label: Optional[str] = None
+    search_sites: list[SearchSiteAPIRead] = Field(default_factory=list)
+    """The Sites the Source can search by name, each with a search button of its own."""
     kind_names: dict[str, NamesAPIRead] = Field(validation_alias="named_kinds")
     """What the Source calls each kind of media, such as show for a Daily Wire collection, or VODLoft's word."""
     release_date: ReleaseDate

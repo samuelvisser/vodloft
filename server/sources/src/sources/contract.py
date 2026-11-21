@@ -34,10 +34,7 @@ class Feature(StrEnum):
     """Collections whose episodes the Source lists with ``list_episodes``. VODLoft
     keeps the Source's own seasons, or makes one season per upload year."""
     SEARCH = "search"
-    """Finding collections and videos at the Source by name, with ``search``."""
-    COSTLY_SEARCH = "costly_search"
-    """Each search costs the Source something, such as API quota, so the search
-    page searches when asked instead of while the user types."""
+    """Finding collections and videos by name on each of the Source's ``search_sites``, with ``search``."""
     PROGRAM_UPDATES = "program_updates"
     COOKIES = "cookies"
     """The Source signs in on a Site with the Site's own cookies file (``sources.cookies``)."""
@@ -936,6 +933,14 @@ class Site:
     loose_season: str = "Videos"
     """What VODLoft calls the season it makes itself of the videos in none of a collection's link seasons, such as
     Tracks on Bandcamp. A collection type can name it itself (``CollectionContract.loose_season``)."""
+    share_hosts: tuple[str, ...] = ()
+    """The hosts of the short links the Site's apps share, such as SoundCloud's on.soundcloud.com, which redirect to
+    the Site's own pages. Their links are the Site's, and VODLoft follows them to the page they stand for."""
+    searchable: bool = False
+    """VODLoft can find the Site's collections and videos by name, through a Source with ``Feature.SEARCH``."""
+    costly_search: bool = False
+    """Each search of the Site costs something, such as API quota or a slow lookup, so the search page searches when
+    asked instead of while the user types."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
@@ -1068,8 +1073,6 @@ class Source(ABC):
     sites_label: ClassVar[str | None] = None
     """What the Source downloads from, in a few words, when its name does not say so, such as
     "YouTube, and many more" for yt-dlp."""
-    search_label: ClassVar[str | None] = None
-    """What the search button names, when that is not the Source's name, such as YouTube for yt-dlp."""
     publish_status_labels: ClassVar[tuple[PublishStatusLabel, ...]] = DEFAULT_PUBLISH_STATUS_LABELS
     """What the Source calls each publish status, every status included."""
     release_date: ClassVar[ReleaseDate] = ReleaseDate.START
@@ -1280,8 +1283,15 @@ class Source(ABC):
         get a quick check. ``Feature.QUICK_CHECK`` only."""
         raise NotImplementedError(f"{self.name} has no quick check")
 
-    def search(self, query: str) -> SearchResults:
-        """Collections and videos whose name matches the query. Only Sources with ``Feature.SEARCH`` implement it."""
+    @property
+    def search_sites(self) -> tuple[Site, ...]:
+        """The Sites the Source finds things on by name, each ``searchable``: those of its ``sites``. A Source of many
+        sites names its own."""
+        return tuple(site for site in self.sites if site.searchable)
+
+    def search(self, site: Site, query: str) -> SearchResults:
+        """Collections and videos on one of the ``search_sites`` whose name matches the query. Only Sources with
+        ``Feature.SEARCH`` implement it."""
         raise NotImplementedError(f"{self.name} cannot be searched")
 
     def program_status(self) -> ProgramStatus:

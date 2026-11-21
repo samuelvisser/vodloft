@@ -41,7 +41,7 @@ Starting fresh adds two Local Media Profiles for collections, **VODLoft Collecti
 
 ## 4. Add your first collection, movie or video
 
-Paste a link to a collection, an episode, a movie or a video, such as a Daily Wire show, a YouTube channel or playlist, or an NPO Start series. VODLoft finds the Source that recognises the link, shows a preview, and continues to the normal Add Collection wizard or movie page. A link to an episode opens its collection, and a single video is added under **Videos**. You can also search YouTube or NPO Start, or browse The Daily Wire's catalogue, instead.
+Paste a link to a collection, an episode, a movie or a video, such as a Daily Wire show, a YouTube channel or playlist, or an NPO Start series. VODLoft finds the Source that recognises the link, shows a preview, and continues to the normal Add Collection wizard or movie page. A link to an episode opens its collection, and a single video is added under **Videos**. You can also search YouTube, SoundCloud or NPO Start, or browse The Daily Wire's catalogue, instead.
 
 ### Collections
 

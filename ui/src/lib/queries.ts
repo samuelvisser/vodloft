@@ -742,13 +742,13 @@ export async function saveSourceSite(key: string, preferredSourceKey: string | n
     return SourceSiteReadSchema.parse(await response.json())
 }
 
-/** Shows and videos at a Source whose name matches the query. */
-export function useSourceSearch(sourceId: string | undefined, query: string) {
-    return useQuery<SearchResultsRead, Error, SearchResultsRead, readonly ['sourceSearch', string | undefined, string]>({
-        queryKey: ['sourceSearch', sourceId, query] as const,
-        enabled: !!sourceId && !!query,
+/** Collections and videos on a Site a Source searches, whose name matches the query. */
+export function useSourceSearch(sourceId: string | undefined, siteKey: string | undefined, query: string) {
+    return useQuery<SearchResultsRead, Error, SearchResultsRead, readonly ['sourceSearch', string | undefined, string | undefined, string]>({
+        queryKey: ['sourceSearch', sourceId, siteKey, query] as const,
+        enabled: !!sourceId && !!siteKey && !!query,
         queryFn: async ({signal}) => {
-            const params = new URLSearchParams({q: query})
+            const params = new URLSearchParams({site: siteKey!, q: query})
             const response = await fetch(
                 `${apiUrl()}/sources/${encodeURIComponent(sourceId!)}/search?${params}`,
                 {signal, credentials: 'include'},

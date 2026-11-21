@@ -11,6 +11,12 @@ class SoundCloud(OtherSites):
     name = "SoundCloud"
     audio_only = True
     creators = True
+    # Its apps share short links, which redirect to its pages.
+    share_hosts = ("on.soundcloud.com",)
+    # Its accounts, albums, playlists and tracks are found by name. Each search asks SoundCloud four times, or runs
+    # yt-dlp when that fails, so it searches when asked instead of while the user types.
+    searchable = True
+    costly_search = True
     # An account may be a music artist or anyone else, such as a podcast; a Music collection calls it an artist.
     creator_presets = CREATOR_PRESETS
     # An account has its Tracks, and its sets: albums and playlists, which SoundCloud tells apart. A track on its own
