@@ -388,7 +388,7 @@ export default function EpisodePage() {
                         {!locked && !downloadStateError && profiles !== undefined && !collectionProfiles?.length && (
                             <p>
                                 {profiles.length ? `No Local Media Profile fits ${collection.title} yet.` : 'No Local Media Profiles configured yet.'}{' '}
-                                <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, audio: collection.site?.audioOnly, from: collection.title})}>Add one</Link>
+                                <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, audio: collection.site?.audioOnly, from: collection.title, collectionId: collection.id})}>Add one</Link>
                                 {' '}to download this {words.episode.singular}.
                             </p>
                         )}

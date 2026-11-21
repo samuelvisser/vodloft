@@ -137,9 +137,12 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
     const fitsScope = searchParams.get('for')
     const fitsSite = searchParams.get('site')
     const fitsFormat = PreferredFormatReg.normalize(searchParams.get('format'))
+    // Opened from a collection's page: its examples come from that collection.
+    const rawCollectionId = Number(searchParams.get('collection') ?? NaN)
+    const fitsCollectionId = Number.isInteger(rawCollectionId) ? rawCollectionId : undefined
     const fit = useMemo(
-        () => ({type: explicitType, scope: fitsScope, site: fitsSite, format: fitsFormat}),
-        [explicitType, fitsScope, fitsSite, fitsFormat],
+        () => ({type: explicitType, scope: fitsScope, site: fitsSite, format: fitsFormat, collectionId: fitsCollectionId}),
+        [explicitType, fitsScope, fitsSite, fitsFormat, fitsCollectionId],
     )
 
     useEffect(() => {
