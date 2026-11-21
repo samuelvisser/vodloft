@@ -132,18 +132,21 @@ export function useRandomCollectionTemplateSource(
     /** A saved profile starts on an episode of a collection that downloads to it. */
     localMediaProfileId: number | null = null,
     siteKeys?: string[],
+    /** The collection the form was opened from, which the example always comes from. */
+    collectionId?: number,
 ) {
     const sites = sitesParam(siteKeys)
     // A per-mount key makes reopening the form request a fresh example instead
     // of reusing React Query's cache from the previous page visit.
     const [requestKey] = useState(() => Math.random())
     return useQuery<LocalMediaProfileTemplateSource | null>({
-        queryKey: ['randomCollectionTemplateSource', collectionScope, localMediaProfileId, sites ?? null, requestKey],
+        queryKey: ['randomCollectionTemplateSource', collectionScope, localMediaProfileId, sites ?? null, collectionId ?? null, requestKey],
         enabled,
         queryFn: ({signal}) => fetchTemplateJson(
             `sources/random-collection-episode?collection_scope=${encodeURIComponent(collectionScope)}`
             + (localMediaProfileId !== null ? `&local_media_profile_id=${localMediaProfileId}` : '')
-            + (sites !== undefined ? `&sites=${encodeURIComponent(sites)}` : ''),
+            + (sites !== undefined ? `&sites=${encodeURIComponent(sites)}` : '')
+            + (collectionId !== undefined ? `&collection_id=${collectionId}` : ''),
             signal,
             'no-store',
         ),

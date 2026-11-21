@@ -18,7 +18,7 @@ names and get their new metadata.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Container, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import PurePath
@@ -30,16 +30,22 @@ from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadP
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.operations.collections import CollectionIdentificationChangeOperation, CollectionRenumberOperation
 from backend.services.download_options import effective_metadata_mode
-from backend.services.episode_filters import EpisodeSelection, evaluate, filter_leaving_out, retention_removes
+from backend.services.episode_filters import (
+    EpisodeSelection, evaluate, filter_leaving_out, retention_downloads, retention_removes,
+)
 from backend.services.errors import ServiceError
 from backend.services.season_order import number_in_link_order
+from backend.services.sites import collection_words
+from backend.types import work_weights
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
 from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
+from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.season_types import SeasonType
 from backend.utils.episode import EpisodeIdentifierInfo
 from backend.utils.output_template import output_template_fields
 from config.settings.submodels import MetadataMode
 from downloader.plan import EMBEDS_METADATA
+from progress_plan import StageSpec
 from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
@@ -336,6 +342,58 @@ def _profiles_with_files(s: Session, collection: Collection) -> list[int]:
     ))
 
 
+def identification_steps(s: Session, collection: Collection, *, renumbering: bool) -> list[StageSpec]:
+    """The plan of numbering the collection's episodes again: numbering them, one write that cannot say how far it is,
+    then for each Local Media Profile with files, renaming them and rewriting their metadata. Each step weighs what it
+    does, so an action that numbers several collections counts each by its size."""
+    episodes = collection_words(collection).episode.plural
+    count = s.scalar(select(func.count(Episode.id)).where(Episode.collection_id == collection.id)) or 0
+    steps = [StageSpec(
+        id="number", code="number_episodes", weight=max(work_weights.DEFAULT, count * work_weights.NUMBER_EPISODE),
+        label=f"Numbering the {episodes}" if renumbering else "Saving the new order",
+    )]
+    return steps + profile_file_steps(s, collection)
+
+
+def profile_file_steps(s: Session, collection: Collection, profile_ids: Container[int] | None = None) -> list[StageSpec]:
+    """Renaming each Local Media Profile's files, then rewriting their metadata, after the numbering: of every profile
+    with files, or of those of ``profile_ids``. The rewriting counts what it rewrote as the profile's files are called,
+    such as the tracks of a profile for an artist's sound."""
+    steps = []
+    for profile_id, name, files, audio in files_by_profile(s, collection.id):
+        if profile_ids is None or profile_id in profile_ids:
+            unit = collection_words(collection, audio=True if audio else None).episode.plural
+            steps += _file_steps(profile_id, name, files, unit)
+    return steps
+
+
+def _file_steps(profile_id: int, name: str, files: int, unit: str) -> list[StageSpec]:
+    of = f" of {name}"
+    return [
+        StageSpec(id=f"rename:{profile_id}", code="rename_files", label=f"Renaming the files{of}",
+                  weight=max(1, files) * work_weights.MOVE_FILE, depends_on=("number",)),
+        StageSpec(id=f"rewrite:{profile_id}", code="rewrite_metadata", label=f"Rewriting the metadata{of}", unit=unit,
+                  weight=max(1, files) * work_weights.REWRITE_FILE, depends_on=(f"rename:{profile_id}",)),
+    ]
+
+
+def files_by_profile(s: Session, collection_id: int) -> list[tuple[int, str, int, bool]]:
+    """Each Local Media Profile with files of the collection's episodes: its id, its name, how many files and whether
+    they are sound only, for the plan of the work that renames them and rewrites their metadata."""
+    return [(row.id, row.name, row.files, row.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY) for row in s.execute(
+        select(
+            CollectionLocalMediaProfile.id, CollectionLocalMediaProfile.name, CollectionLocalMediaProfile.preferred_format,
+            func.count(EpisodeMediaDownload.id).label("files"),
+        )
+        .join(EpisodeMediaDownload, EpisodeMediaDownload.local_media_profile_id == CollectionLocalMediaProfile.id)
+        .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+        .where(Episode.collection_id == collection_id, EpisodeMediaDownload.artifact_status.in_(_PHYSICAL))
+        .group_by(CollectionLocalMediaProfile.id, CollectionLocalMediaProfile.name,
+                  CollectionLocalMediaProfile.preferred_format)
+        .order_by(CollectionLocalMediaProfile.id)
+    )]
+
+
 _KIND_NAMES = {EpIdType.TRAILER.value: "Trailer", EpIdType.AUX.value: "Auxiliary"}
 
 
@@ -433,7 +491,10 @@ def queue_renumber(s: Session, collection: Collection, *, renumber: bool, sectio
     ``sections``, the feeds and lists that moved.
 
     ``s`` is a write transaction's session."""
-    operation = create_operation(s, CollectionRenumberOperation(collection, renumber=renumber, sections=sections))
+    weight = sum(step.weight for step in identification_steps(s, collection, renumbering=renumber))
+    operation = create_operation(s, CollectionRenumberOperation(
+        collection, renumber=renumber, sections=sections, work_weight=weight,
+    ))
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
     s.flush()
     return operation
@@ -452,9 +513,7 @@ def _download_profile_changes(
     downloads: dict[int, list[EpisodeMediaDownload]] = {}
     with s.no_autoflush:
         for profile in profiles:
-            downloads[profile.id] = list(s.scalars(
-                select(EpisodeMediaDownload).where(EpisodeMediaDownload.download_profile_id == profile.id)
-            ))
+            downloads[profile.id] = retention_downloads(s, profile)
             before[profile.id] = _judge(s, profile, ordered, downloads[profile.id])
         old = {episode.id: episode.episode_identifier for episode in episodes}
         try:
@@ -486,11 +545,14 @@ def _download_profile_changes(
 def _judge(
         s: Session, profile: DownloadProfile, episodes: list[Episode], downloads: list[EpisodeMediaDownload],
 ) -> tuple[set[int], set[int], set[int]]:
-    """The episodes the profile wants, and its downloads on disk that its filters leave out and that its cleanup
-    deletes."""
+    """The episodes the profile wants, its downloads on disk that its filters leave out, and the downloads on disk
+    that its cleanup deletes, manual ones included when it includes them."""
     evaluation = evaluate(s, EpisodeSelection.of_profile(profile), episodes=episodes)
     on_disk = [download for download in downloads if download.artifact_status in _ON_DISK]
-    out = {download.id for download in on_disk if filter_leaving_out(evaluation, download) is not None}
+    out = {
+        download.id for download in on_disk
+        if download.download_profile_id == profile.id and filter_leaving_out(evaluation, download) is not None
+    }
     removed = {
         download.id for download in on_disk
         if retention_removes(evaluation, download, delete_older_episodes=profile.delete_older_episodes)

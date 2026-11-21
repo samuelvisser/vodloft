@@ -13,7 +13,7 @@ import {refreshFrontendPuller} from '../../lib/puller'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import PageHeader from '../../components/common/PageHeader'
-import {creatorKindText, joinedNames, newListActionReg} from '../../types/creator'
+import {capitalized, creatorKindText, joinedNames, newListActionReg} from '../../types/creator'
 import NewListSettings from '../../components/common/NewListSettings'
 import {
     CreatorPageReadSchema, CreatorUpdateSchema, newListsValues, withNewList, type CreatorUpdateIn, type CreatorUpdateOut,
@@ -22,6 +22,7 @@ import {
 import CreatorSectionsEditor, {placedSections, placeKey, placeLabel, placeMove, placeOf} from './CreatorSectionsEditor'
 import MoveSectionsDialog, {type PlaceChange} from './MoveSectionsDialog'
 import './CreatorPages.css'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
 export default function EditCreatorPage() {
     const {slug} = useParams()
@@ -142,10 +143,17 @@ export default function EditCreatorPage() {
 
     return (
         <section className="view creator-view" aria-labelledby="edit-creator-title">
-            <PageHeader
-                title="Edit creator" titleId="edit-creator-title"
-                subtitle={<p className="view-description"><Link className="quiet-link" to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
-            />
+            {/* One block, so the page's gap does not push the breadcrumb and the title apart. */}
+            <div className="creator-edit-head">
+                <Breadcrumb className="page-breadcrumb" items={[
+                    {label: 'Library', to: '/library'},
+                    {label: `${capitalized(creator.creatorNames.singular)} ${creator.title}`, to: `/creator/${creator.slug}`},
+                ]}/>
+                <PageHeader
+                    title="Edit creator" titleId="edit-creator-title"
+                    subtitle={<p className="view-description"><Link className="quiet-link" to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
+                />
+            </div>
             <CreatorSectionsEditor creator={creator} part="new"/>
             <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
                 <div className="form-row creator-membership">

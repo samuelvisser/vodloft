@@ -1,14 +1,46 @@
 import type {TaskOperationRead} from '../types/schemas/operation'
-import type {ProgressPresentation} from '../types/progress'
+import type {ProgressPresentation, ProgressStep} from '../types/progress'
+import {PlanSchema, type PlanStage} from '../types/schemas/progress_plan'
+import {frontendOperationDefinitions} from './operationDefinitions'
 import {ACTIVE_OPERATION_STATUSES, presentDownloadProgress} from './downloadProgress'
 import {waitingPresentation, workingPresentation} from './progressPresentation'
 import {faIcon} from '../icons/faIcon'
+import {planSteps} from './progressPlan'
+
+/** A step in words: what the task says it does, or for a part of a larger action, which action on what. */
+function stepLabel(stage: PlanStage): string {
+    const definition = (frontendOperationDefinitions as Record<string, {label: string} | undefined>)[stage.code]
+    if (definition) return stage.label ? `${definition.label}: ${stage.label}` : definition.label
+    return stage.label ?? 'Working'
+}
+
+/** The steps of the plan an operation reports, with the one it is on, when it reports one. */
+function planOf(operation: TaskOperationRead): {steps: ProgressStep[], main?: ProgressStep} | undefined {
+    const parsed = PlanSchema.safeParse(operation.progressMeta?.plan)
+    if (!parsed.success || parsed.data.stages.length === 0) return undefined
+    const steps = planSteps(parsed.data.stages, stepLabel)
+    return {steps, main: steps.find((step) => step.id === parsed.data.main_activity)}
+}
 
 export function presentOperationProgress(operation?: TaskOperationRead, starting = false): ProgressPresentation | undefined {
+    const presentation = presentWithoutPlan(operation, starting)
+    const plan = operation && presentation ? planOf(operation) : undefined
+    if (!presentation || !plan) return presentation
+    // Its details list the steps; while the step it is on cannot measure itself, it shows that step's name.
+    const detail = plan.main
+        ? `${plan.main.label}${plan.main.count ? `: ${plan.main.count} done` : ''}.`
+        : presentation.detail
+    if (presentation.mode === 'indeterminate' && plan.main) {
+        return {...presentation, label: `${plan.main.label}...`, compactLabel: `${plan.main.label}...`, detail, steps: plan.steps}
+    }
+    return {...presentation, detail, steps: plan.steps}
+}
+
+function presentWithoutPlan(operation?: TaskOperationRead, starting = false): ProgressPresentation | undefined {
     if (starting && !operation) return workingPresentation('Starting')
     if (!operation || !ACTIVE_OPERATION_STATUSES.has(operation.status)) return undefined
     if (operation.kind === 'media.download' || operation.kind === 'quick.download') return presentDownloadProgress(undefined, operation)
-    if (operation.status === 'QUEUED') return waitingPresentation('download_capacity')
+    if (operation.status === 'QUEUED') return waitingPresentation('task_queue')
     const wait = operation.progressMeta?.wait_state as {reason?: string; message?: string; until?: number | null} | undefined
     if (operation.status === 'WAITING') return waitingPresentation(wait?.reason || 'dependency', wait?.message || operation.message, operation.progress ?? null, wait?.until)
     const batch = operation.progressMeta?.batch as {completed?: number; requested?: number; finishing?: number; failed?: number; canceled?: number} | undefined

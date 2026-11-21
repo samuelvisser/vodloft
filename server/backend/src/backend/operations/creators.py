@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from backend.db.models import Creator
 from sources import Names
 from task_manager.scheduler.db import TaskOperation
-from task_manager.scheduler.operation_factory import OperationDefinition
+from task_manager.scheduler.operation_factory import OperationDefinition, work_weight
 from task_manager.scheduler.operations import OperationDependencySpec, OperationTargetSpec
 
 
@@ -33,7 +33,9 @@ class CreatorMoveSectionsOperation(OperationDefinition[Creator]):
 
     def dependencies(self) -> tuple[OperationDependencySpec, ...]:
         return tuple(
-            OperationDependencySpec(child_operation_id=part.id, slot_key=f"{part.kind}:{part.resource_id}")
+            OperationDependencySpec(
+                child_operation_id=part.id, slot_key=f"{part.kind}:{part.resource_id}", weight=work_weight(part),
+            )
             for part in self.parts
         )
 

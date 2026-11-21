@@ -10,6 +10,7 @@ members = [
     "downloader",
     "importer",
     "jinja-analysis",
+    "progress-plan",
     "sources",
     "task-manager",
     "vodloft",
@@ -105,6 +106,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "jinja-analysis" },
     { name = "jinja2" },
+    { name = "progress-plan" },
     { name = "psutil" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
@@ -128,6 +130,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.118.0" },
     { name = "jinja-analysis", editable = "server/jinja_analysis" },
     { name = "jinja2", specifier = ">=3.1,<4" },
+    { name = "progress-plan", editable = "server/progress_plan" },
     { name = "psutil", specifier = ">=6.1.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "pydantic", specifier = ">=2.11.9" },
@@ -414,6 +417,12 @@ wheels = [
 name = "downloader"
 version = "0.8.0"
 source = { editable = "server/downloader" }
+dependencies = [
+    { name = "progress-plan" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "progress-plan", editable = "server/progress_plan" }]
 
 [[package]]
 name = "fastapi"
@@ -722,6 +731,11 @@ wheels = [
 win32 = [
     { name = "pywin32", marker = "sys_platform == 'win32'" },
 ]
+
+[[package]]
+name = "progress-plan"
+version = "0.10.0"
+source = { editable = "server/progress_plan" }
 
 [[package]]
 name = "psutil"
@@ -1102,6 +1116,7 @@ dependencies = [
     { name = "controller" },
     { name = "downloader" },
     { name = "portalocker", extra = ["win32"] },
+    { name = "progress-plan" },
     { name = "pyventus" },
     { name = "sources" },
     { name = "sqlalchemy" },
@@ -1115,6 +1130,7 @@ requires-dist = [
     { name = "controller", editable = "server/controller" },
     { name = "downloader", editable = "server/downloader" },
     { name = "portalocker", extras = ["win32"], specifier = ">=4.0,<5" },
+    { name = "progress-plan", editable = "server/progress_plan" },
     { name = "pyventus", specifier = ">=0.7.2" },
     { name = "sources", editable = "server/sources" },
     { name = "sqlalchemy", specifier = ">=2.0.43,<3.0" },
@@ -1195,6 +1211,7 @@ dependencies = [
     { name = "downloader" },
     { name = "importer" },
     { name = "jinja-analysis" },
+    { name = "progress-plan" },
     { name = "sources" },
     { name = "task-manager" },
 ]
@@ -1214,6 +1231,7 @@ requires-dist = [
     { name = "downloader", editable = "server/downloader" },
     { name = "importer", editable = "server/importer" },
     { name = "jinja-analysis", editable = "server/jinja_analysis" },
+    { name = "progress-plan", editable = "server/progress_plan" },
     { name = "sources", editable = "server/sources" },
     { name = "task-manager", editable = "server/task_manager" },
 ]

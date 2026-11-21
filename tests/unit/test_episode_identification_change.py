@@ -1,6 +1,8 @@
 """Changing how a collection numbers its episodes: the new identifiers, what the change would do, and the files."""
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import json
 import shutil
 import subprocess
@@ -301,3 +303,105 @@ def test_asking_the_api_for_another_identification_starts_an_operation(session):
     operation = session.get(TaskOperation, accepted.operation_id)
     assert operation.kind == "collection.change_identification"
     assert operation.context["episode_identifier"] == "numbered"
+
+
+class _Progress:
+    """A task's progress, keeping each report."""
+
+    def __init__(self):
+        self.reports = []
+
+    def __call__(self):
+        return False
+
+    def set(self, percent, message=None, meta=None, **_):
+        self.reports.append((percent, message, meta))
+
+
+def test_the_change_follows_a_plan_whose_numbering_cannot_measure_itself(session):
+    import asyncio
+
+    from task_manager.tasks.workers.change_collection_identification.entrypoint import change_collection_identification
+
+    collection = _collection(session, source_key="ytdlp", identification="date_based")
+    _episode(session, collection, 1, _date(1))
+    _episode(session, collection, 2, _date(2))
+    session.commit()
+
+    progress = _Progress()
+    asyncio.run(change_collection_identification(
+        resource_id=collection.id, progress=progress, episode_identifier="numbered",
+    ))
+
+    plans = [meta["plan"] for _, _, meta in progress.reports if meta and "plan" in meta]
+    # While it numbers, the plan shows the step with no percentage, in the collection's words.
+    numbering = next(report for report in progress.reports if report[1] == "Numbering the episodes")
+    assert numbering[0] is None
+    assert [stage["state"] for stage in plans[-1]["stages"]] == ["completed"]
+    assert _identifiers(session, collection) == {"ep-1": "ep.1", "ep-2": "ep.2"}
+
+
+def test_numbering_again_keeps_the_numbers_when_asked_to(session):
+    import asyncio
+
+    from task_manager.tasks.workers.change_collection_identification.entrypoint import change_collection_identification
+
+    collection = _collection(session, source_key="ytdlp", identification="numbered")
+    _episode(session, collection, 1, "ep.7")
+    _episode(session, collection, 2, "ep.3")
+    session.commit()
+
+    asyncio.run(change_collection_identification(
+        resource_id=collection.id, progress=_Progress(), episode_identifier="numbered", renumber=False,
+    ))
+
+    session.expire_all()
+    assert _identifiers(session, collection) == {"ep-1": "ep.7", "ep-2": "ep.3"}
+
+
+def test_numbering_again_weighs_its_plan_for_an_action_made_of_several(session):
+    """A creator's move counts each collection it numbers again by the steps of that collection's plan."""
+    from backend.services.episode_identification import identification_steps, queue_renumber
+    from task_manager.scheduler.operation_factory import work_weight
+
+    collection = _collection(session, source_key="ytdlp", identification="numbered")
+    for index in range(1, 41):
+        _episode(session, collection, index, f"ep.{index}")
+
+    steps = identification_steps(session, collection, renumbering=True)
+    assert [(step.id, step.label, step.weight) for step in steps] == [("number", "Numbering the episodes", 40.0)]
+    operation = queue_renumber(session, collection, renumber=True)
+    assert work_weight(operation) == 40.0
+
+
+def test_rewriting_counts_what_each_profile_calls_its_files(session):
+    """An artist's music videos are music videos, and its sound only are tracks."""
+    from progress_plan import PlanTracker
+
+    from backend.db.models import LocalMediaProfile
+    from backend.services.episode_identification import identification_steps
+    from task_manager.tasks.helpers.progress import PlanStep, report_plan, update_progress
+
+    collection = _collection(session, source_key="ytdlp", identification="numbered")
+    collection.type = "music"
+    episode = _episode(session, collection, 1, "ep.1")
+    videos = _profile(session, collection)
+    _download(session, videos, episode)
+    sound = LocalMediaProfile(slug="sound", name="Sound", preferred_format="format_audio_only",
+                              output_template="/music/{{ episode_label }}.ext")
+    session.add(sound)
+    session.flush()
+    _download(session, SimpleNamespace(local_media_profile_id=sound.id, id=videos.id), episode,
+              file_path="/tmp/show-1.m4a")
+
+    steps = identification_steps(session, collection, renumbering=True)
+    assert [(step.id, step.unit) for step in steps if step.code == "rewrite_metadata"] == [
+        (f"rewrite:{videos.local_media_profile_id}", "music videos"), (f"rewrite:{sound.id}", "tracks"),
+    ]
+
+    progress = _Progress()
+    plan = PlanTracker(steps, sink=report_plan(progress))
+    plan.start(f"rewrite:{sound.id}")
+    update_progress(PlanStep(plan, progress, f"rewrite:{sound.id}"), 10, "Rewriting a.m4a", done=11, total=110)
+    rewrite = next(stage for stage in progress.reports[-1][2]["plan"]["stages"] if stage["id"] == f"rewrite:{sound.id}")
+    assert (rewrite["unit"], rewrite["done"], rewrite["total"]) == ("tracks", 11, 110)

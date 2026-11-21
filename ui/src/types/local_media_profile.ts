@@ -125,6 +125,8 @@ export type LocalMediaProfileFit = {
     returnTo?: string
     /** The name of what the link comes from, such as the collection's title, which the form's notes name. */
     from?: string | null
+    /** The collection the link is on, whose episodes the form shows as its examples. */
+    collectionId?: number
 }
 
 /** A page of VODLoft to return to, from a link: a path on this site, never another site. */
@@ -136,7 +138,7 @@ export function safeReturnPath(value: string | null | undefined): string | undef
  *  collection, for Music tracks when it is a Music collection on a Site with sound only and for Music videos when it is
  *  another Music collection, and a Video profile for a video or movie. The rest starts as broad as it can, for every
  *  Site, for both podcasts and series, and for both videos and movies. */
-export function addLocalMediaProfilePath({collectionType, video, siteKey, audio = false, format, returnTo, from}: LocalMediaProfileFit = {}): string {
+export function addLocalMediaProfilePath({collectionType, video, siteKey, audio = false, format, returnTo, from, collectionId}: LocalMediaProfileFit = {}): string {
     const params = new URLSearchParams()
     if (collectionType === undefined) {
         params.set('type', 'video')
@@ -150,6 +152,7 @@ export function addLocalMediaProfilePath({collectionType, video, siteKey, audio 
     if (format) params.set('format', format)
     if (returnTo) params.set('returnTo', returnTo)
     if (from) params.set('from', from)
+    if (collectionId !== undefined) params.set('collection', String(collectionId))
     return `/add-local-media-profile?${params}`
 }
 

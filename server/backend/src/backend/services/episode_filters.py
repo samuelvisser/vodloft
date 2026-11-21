@@ -14,7 +14,9 @@ behind a subscription VODLoft is not signed in with).
 Only a date line deletes. With delete older episodes on, a download is removed when an
 Only download date line leaves its episode out, unless a Keep filter or a person kept
 it, or the Source no longer has the episode and the Home page still asks whether to keep
-it. Changing the other filters never deletes anything.
+it. Changing the other filters never deletes anything. A profile that also includes manual
+downloads deletes the manual downloads of its Collection in its Local Media Profile the same
+way, once they are on disk.
 
 Everything that asks which episodes a profile wants uses this module: the Download
 Profile worker and its cleanup, the counts in the profile form, Skipped by filter,
@@ -33,6 +35,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, lazyload, selectinload
 
 from backend.db.models import Collection, DownloadProfile, DownloadProfileFilter, Episode
+from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.media_access import AccessLocks
 from backend.services.removed_downloads import awaits_keep_answer
 from backend.services.regex_check import PatternError, compile_pattern, search, split_inline_ignore_case
@@ -409,14 +412,42 @@ def left_out_by_date_line(evaluation: Evaluation, episode_id: int) -> bool:
     return index is not None and is_date_line(evaluation.filters[index])
 
 
-def retention_removes(evaluation: Evaluation, download, *, delete_older_episodes: bool) -> bool:
-    """Whether the profile's cleanup removes this download of its own.
+def retention_downloads(s: Session, profile: DownloadProfile) -> list[EpisodeMediaDownload]:
+    """The downloads the profile's retention judges: its own, and with manual downloads included, the manual
+    downloads of its Collection in its Local Media Profile.
 
-    A download that is not on disk yet goes as soon as a date line leaves its episode
-    out. One that is, only when the profile deletes older episodes.
+    A profile takes a manual download over once it downloads that episode itself, so the manual ones left are
+    the ones it does not download.
+    """
+    ours = EpisodeMediaDownload.download_profile_id == profile.id
+    if profile.delete_older_episodes and profile.retention_includes_manual:
+        manual = EpisodeMediaDownload.download_profile_id.is_(None) & (
+            EpisodeMediaDownload.local_media_profile_id == profile.local_media_profile_id
+        ) & EpisodeMediaDownload.media_item_id.in_(
+            select(Episode.id).where(Episode.collection_id == profile.collection_id)
+        )
+        ours = ours | manual
+    return list(s.scalars(
+        select(EpisodeMediaDownload).where(ours)
+        # Most stay: the few that go load their sidecar files and metadata rows when they are deleted.
+        .options(lazyload(EpisodeMediaDownload.assets), lazyload(EpisodeMediaDownload.meta_items))
+    ))
+
+
+def retention_removes(evaluation: Evaluation, download, *, delete_older_episodes: bool) -> bool:
+    """Whether the profile's cleanup removes this download of its own, or this manual download.
+
+    A download of its own that is not on disk yet goes as soon as a date line leaves its
+    episode out. One that is, only when the profile deletes older episodes. A manual
+    download goes only once it is on disk: one that is still waiting was just asked for.
     """
     if protected(evaluation, download):
         return False
+    if download.download_profile_id is None:
+        return (
+            delete_older_episodes and download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value
+            and date_line_leaves_out(evaluation, download)
+        )
     if download.artifact_status == MediaDownloadArtifactStatus.ABSENT.value and left_out_by_date_line(
         evaluation, download.media_item_id,
     ):

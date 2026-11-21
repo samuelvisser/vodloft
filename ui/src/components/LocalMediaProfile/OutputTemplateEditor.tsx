@@ -27,6 +27,7 @@ import OpaqueOutputTemplateCode from './OpaqueOutputTemplateCode'
 import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStartFields'
 import CollectionRootNote from './CollectionRootNote'
 import {useSetExampleEpisode} from './ExampleEpisodeContext'
+import {useProfileFit} from './ProfileFit'
 import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
 import {
     analyzeJinjaStatement,
@@ -794,8 +795,10 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
         anchorSourceId: isExampleSource(selectedSource) ? undefined : selectedSource?.id,
         siteKeys,
     })
+    // Opened from a collection's page, the first example is always one of that collection's episodes.
+    const {collectionId: fitCollectionId} = useProfileFit('collection')
     const randomCollectionSourceQuery = useRandomCollectionTemplateSource(
-        collectionScope, mode === 'collection', localMediaProfileId, siteKeys,
+        collectionScope, mode === 'collection', localMediaProfileId, siteKeys, fitCollectionId,
     )
     const variableQuery = useLocalMediaProfileTemplateVariables(mode)
     const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]

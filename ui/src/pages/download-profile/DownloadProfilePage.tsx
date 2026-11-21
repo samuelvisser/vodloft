@@ -207,7 +207,9 @@ export default function DownloadProfilePage() {
                     </div>
                     <div>
                         <dt>Delete older episodes</dt>
-                        <dd>{profile.deleteOlderEpisodes ? 'Yes, when a date line leaves them out' : 'No'}</dd>
+                        <dd>{!profile.deleteOlderEpisodes ? 'No' : profile.retentionIncludesManual
+                            ? 'Yes, when a date line leaves them out, manual downloads too'
+                            : 'Yes, when a date line leaves them out'}</dd>
                     </div>
                 </dl>
             </article>

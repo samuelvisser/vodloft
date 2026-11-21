@@ -16,34 +16,6 @@
     margin-bottom: 12px;
 }
 
-.episode-view .episode-breadcrumb {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    color: var(--muted, #777);
-    font-size: 0.9rem;
-}
-
-/* A long collection name is cut short rather than pushing the buttons onto a row of their own. */
-.episode-view .episode-breadcrumb a {
-    flex: 0 0 auto;
-}
-
-.episode-view .episode-breadcrumb a:last-child {
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.episode-view .episode-breadcrumb svg {
-    flex: 0 0 auto;
-    width: 9px;
-    opacity: 0.6;
-}
-
 .episode-view .episode-cover {
     position: relative;
     overflow: hidden;
@@ -474,11 +446,6 @@
     .episode-view .episode-topbar {
         gap: 10px;
         margin-bottom: 10px;
-    }
-
-    .episode-view .episode-breadcrumb {
-        gap: 8px;
-        font-size: 0.82rem;
     }
 
     .episode-view .episode-cover {

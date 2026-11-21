@@ -91,6 +91,7 @@ export default function LocalMediaProfileFitNote({profiles, selectedId, used, co
                             format,
                             returnTo,
                             from: collection.title,
+                            collectionId: collection.id,
                         })}
                     >
                         {formatLabel ? `Create one for ${formatLabel}` : 'Create one'}

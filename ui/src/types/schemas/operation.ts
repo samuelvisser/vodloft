@@ -22,6 +22,8 @@ export const TaskOperationReadSchema = z.looseObject({
   result: TaskOperationResultSchema.nullable().optional(),
   context: z.record(z.string(), z.unknown()).nullable().optional(),
   progressMeta: z.record(z.string(), z.unknown()).nullable().optional(),
+  // Whether a person may cancel it: every button that cancels an operation asks this.
+  cancelable: z.boolean(),
   error: z.string().nullable().optional(),
   notificationSeenAt: ApiDateTimeStringSchema.nullable().optional(),
   startedAt: ApiDateTimeStringSchema.nullable().optional(),

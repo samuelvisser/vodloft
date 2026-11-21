@@ -166,6 +166,8 @@ class CollectionIdentificationChangeOperation(_CollectionOperation):
     Profile's files move to their new names and get their new metadata, all in one task so its progress shows."""
 
     kind = "collection.change_identification"
+    # The episodes have their new numbers before the files move, so stopping halfway leaves them out of step.
+    cancelable = False
     task = _CHANGE_IDENTIFICATION_TASK_KEY
 
     def __init__(self, collection: Collection, *, episode_identifier: str, episode_order: str | None) -> None:
@@ -190,10 +192,14 @@ class CollectionRenumberOperation(_CollectionOperation):
     Profile's files move to their new names and get their new metadata. The same task as changing the identification."""
 
     kind = "collection.renumber"
+    # The episodes have their new numbers before the files move, so stopping halfway leaves them out of step.
+    cancelable = False
     task = _CHANGE_IDENTIFICATION_TASK_KEY
 
-    def __init__(self, collection: Collection, *, renumber: bool, sections: Sequence[str] = ()) -> None:
-        super().__init__(collection)
+    def __init__(
+            self, collection: Collection, *, renumber: bool, sections: Sequence[str] = (), work_weight: float | None = None,
+    ) -> None:
+        super().__init__(collection, work_weight=work_weight)
         self.renumber = renumber
         self.sections = list(sections)
 

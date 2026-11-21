@@ -897,8 +897,9 @@ def test_operation_dependencies_weight_child_completion_without_replacing_child_
         session.close()
 
 
-def test_a_parent_shows_no_percentage_until_one_of_its_parts_got_anywhere():
-    """Such as a creator's move while a collection numbers its episodes in one long write: not 0% the whole time."""
+def test_a_parent_counts_its_parts_by_weight_also_while_one_cannot_measure_itself():
+    """Such as a creator's move while a collection numbers its episodes in one long write: the part has no percentage
+    of its own, and the move still counts how far it is by the weights of its parts and their plans."""
     from task_manager.scheduler.operations import (
         OperationDependencySpec, _operation_snapshot, add_operation_dependencies, create_operation, refresh_operation,
     )
@@ -912,22 +913,34 @@ def test_a_parent_shows_no_percentage_until_one_of_its_parts_got_anywhere():
                 session, kind="collection.renumber", resource_type="collection", resource_id=number,
                 title=f"Collection {number}", targets=[],
             )
-            child.status, child.progress, child.completion_progress = OperationStatus.RUNNING.value, None, 0
+            # The first is halfway through its plan by weight, on a step that cannot measure itself.
+            child.status, child.progress = OperationStatus.RUNNING.value, None
+            child.completion_progress = 50 if number == 1 else 0
             children.append(child)
         session.flush()
         parent = create_operation(
             session, kind="creator.move_sections", resource_type="creator", resource_id=1, title="Creator", targets=[],
         )
         add_operation_dependencies(session, parent.id, [
-            OperationDependencySpec(child_operation_id=child.id, slot_key=str(child.id)) for child in children
+            OperationDependencySpec(child_operation_id=children[0].id, slot_key="1", weight=3.0),
+            OperationDependencySpec(child_operation_id=children[1].id, slot_key="2", weight=1.0),
         ])
         refresh_operation(session, parent.id)
-        assert _operation_snapshot(parent).progress is None
+        snapshot = _operation_snapshot(parent)
+        assert snapshot.progress == 37
+
+        # Its parts are the steps of its plan, in the shape a task reports its own plan in, with their weights.
+        plan = snapshot.progress_meta["plan"]
+        assert [(stage["code"], stage["label"], stage["weight"], stage["state"], stage["fraction"])
+                for stage in plan["stages"]] == [
+            ("collection.renumber", "Collection 1", 3.0, "running", None),
+            ("collection.renumber", "Collection 2", 1.0, "running", None),
+        ]
 
         children[0].status, children[0].progress, children[0].completion_progress = OperationStatus.SUCCEEDED.value, 100, 100
         session.flush()
         refresh_operation(session, parent.id)
-        assert _operation_snapshot(parent).progress == 50
+        assert _operation_snapshot(parent).progress == 75
     finally:
         session.close()
 

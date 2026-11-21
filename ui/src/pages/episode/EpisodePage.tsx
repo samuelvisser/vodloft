@@ -29,6 +29,7 @@ import DurationPill from '../../components/common/DurationPill'
 import EpisodeTypePill from '../../components/Episode/EpisodeTypePill'
 import {fileWordsFor, wordsFor} from '../../lib/collectionWords'
 import {addLocalMediaProfilePath} from '../../types/local_media_profile'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -243,11 +244,10 @@ export default function EpisodePage() {
             <article className="episode-details" aria-label={`${words.episode.Singular} details`}>
                 {/* The buttons share the breadcrumb's row, so the title below gets the full width. */}
                 <div className="episode-topbar">
-                    <nav className="episode-breadcrumb" aria-label="Breadcrumb">
-                        <Link className="quiet-link" to="/library">Library</Link>
-                        <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
-                        <Link className="quiet-link" to={`/collection/${collectionId}`}>{collection.title}</Link>
-                    </nav>
+                    <Breadcrumb items={[
+                        {label: 'Library', to: '/library'},
+                        {label: collection.title, to: `/collection/${collectionId}`},
+                    ]}/>
                     <div className="episode-title-actions">
                         {episode.sharingUrl && (
                             <a
@@ -388,7 +388,7 @@ export default function EpisodePage() {
                         {!locked && !downloadStateError && profiles !== undefined && !collectionProfiles?.length && (
                             <p>
                                 {profiles.length ? `No Local Media Profile fits ${collection.title} yet.` : 'No Local Media Profiles configured yet.'}{' '}
-                                <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, audio: collection.site?.audioOnly, from: collection.title})}>Add one</Link>
+                                <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, audio: collection.site?.audioOnly, from: collection.title, collectionId: collection.id})}>Add one</Link>
                                 {' '}to download this {words.episode.singular}.
                             </p>
                         )}

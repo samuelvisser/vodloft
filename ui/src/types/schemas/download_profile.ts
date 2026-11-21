@@ -140,6 +140,8 @@ export const DownloadProfileSchemaRequest = z.object({
     redownloadFinal: z.boolean().default(true),
     /** Whether an Only date line deletes the downloads it leaves out. */
     deleteOlderEpisodes: z.boolean().default(true),
+    /** Whether deleting older episodes also deletes the collection's manual downloads in this Local Media Profile. */
+    retentionIncludesManual: z.boolean().default(false),
     upgradeCheck: z.boolean().default(true),
     upgradeAfterDays: z.int('Enter a number of days').min(1, 'Check after at least 1 day').max(365, 'Check within a year').default(7),
     upgradeRepeat: z.enum(['once', 'twice', 'every']).default('once'),
@@ -171,6 +173,7 @@ export const DownloadProfileReadSchema = z.looseObject({
     downloadWithCountdown: z.boolean(),
     redownloadFinal: z.boolean(),
     deleteOlderEpisodes: z.boolean(),
+    retentionIncludesManual: z.boolean(),
     upgradeCheck: z.boolean(),
     upgradeAfterDays: z.int(),
     upgradeRepeat: z.enum(['once', 'twice', 'every']),

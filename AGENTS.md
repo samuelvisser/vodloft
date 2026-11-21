@@ -243,6 +243,18 @@ in `backend.types.collection_contracts`, the way a Site's lives in its Site cont
 - The UI gets every contract with the public config and names things only through `ui/src/lib/collectionWords.ts`.
   A creator's words come from the API (`words`, from `creator_words`), not from the types of its collections.
 
+## Progress plans
+Long work reports its progress by a plan of weighted steps from the `progress_plan` package (`server/progress_plan`),
+which never imports VODLoft code. Downloads report their attempt this way, and so does any task that has steps.
+- A task draws up its steps before it starts (`StageSpec`, each with a weight in the units of
+  `backend.types.work_weights`), follows them with a `PlanTracker`, and reports through `report_plan(progress)` from
+  `task_manager.tasks.helpers.progress`. Work that reports its own percentage, such as renaming files, gets a `PlanStep`.
+- A step that cannot measure itself, such as one long write, reports no fraction: the task then shows no percentage,
+  but its weight still counts toward how far the whole plan is, and toward any action the task is a part of.
+- An action made of several operations, such as a creator's move, counts its parts by their `work_weight`, which
+  each part's definition sets from its own plan. Its parts are the steps of its plan in the UI.
+- Do not invent a percentage for a step that cannot measure itself, and do not leave a step without a weight.
+
 ## Jinja analysis
 Output template analysis lives in the `jinja_analysis` package (`server/jinja_analysis`), which only depends on
 jinja2 and never imports VODLoft code; its tests use jinja2 and the package alone.

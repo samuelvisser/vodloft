@@ -187,6 +187,12 @@ def get_task(key: str) -> Tuple[TaskMeta, TaskCallable]:
     return _REGISTRY[key]
 
 
+def task_meta(key: str) -> TaskMeta | None:
+    """A registered task's definition, or None for a key nothing registered."""
+    registered = _REGISTRY.get(key)
+    return registered[0] if registered is not None else None
+
+
 def task_tracks_progress(key: str) -> bool:
     """Return whether a registered task exposes determinate execution progress."""
     registered = _REGISTRY.get(key)

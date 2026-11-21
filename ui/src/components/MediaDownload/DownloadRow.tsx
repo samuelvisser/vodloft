@@ -151,6 +151,7 @@ export function DownloadRow({
                         detail={download.presentation.detail + (download.presentation.secondary
                             ? ` ${download.presentation.secondary}.`
                             : '')}
+                        steps={download.presentation.steps}
                     />
                     {download.presentation.active && download.presentation.canCancel && (
                         <button

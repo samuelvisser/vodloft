@@ -23,6 +23,7 @@ import {isLocalMediaProfileAvailableForSite, videoProfileKeeps} from '../../type
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../../components/common/DurationPill'
 import {addLocalMediaProfilePath} from '../../types/local_media_profile'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
 /** The site a video is on, since one Source can serve many sites. */
 export default function VideoPage() {
@@ -120,11 +121,10 @@ export default function VideoPage() {
             <article className="episode-details" aria-label="Video details">
                 {/* The menu shares the breadcrumb's row, so the title below gets the full width. */}
                 <div className="episode-topbar">
-                    <nav className="episode-breadcrumb" aria-label="Breadcrumb">
-                        <Link to="/library">Library</Link>
-                        <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
-                        <Link to="/library?type=videos">Videos</Link>
-                    </nav>
+                    <Breadcrumb items={[
+                        {label: 'Library', to: '/library'},
+                        {label: 'Videos', to: '/library?type=videos'},
+                    ]}/>
                     <div className="episode-title-actions">
                         <ActionMenu
                             items={[
