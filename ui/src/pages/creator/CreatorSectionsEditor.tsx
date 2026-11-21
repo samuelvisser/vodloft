@@ -95,7 +95,7 @@ export function placeOf({account, section}: AccountSection): Place {
 export function placedSections(creator: CreatorPageRead): AccountSection[] {
     const all = creator.accounts.flatMap((account) => account.sections.map((section) => ({account, section})))
     return all.filter(({account, section}) => (
-        account.mainCollectionSlug && creator.collections.some((collection) => collection.slug === section.collectionSlug)
+        creator.collections.some((collection) => collection.slug === section.collectionSlug)
         && (section.kind === 'feed' || (section.kind === 'list' && account.site.linkSeasons))
     )).sort((a, b) => Number(a.section.kind !== 'feed') - Number(b.section.kind !== 'feed'))
 }

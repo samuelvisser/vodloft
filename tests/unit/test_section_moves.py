@@ -234,3 +234,40 @@ def test_renumbering_again_keeps_the_identification_and_gives_the_numbers_again(
     assert sorted(session.scalars(select(Episode.episode_identifier).where(
         Episode.collection_id == main_id, Episode.episode_identifier.like("ep.%"),
     ))) == ["ep.1", "ep.2"]
+
+
+def test_a_creator_without_a_collection_of_its_own_gets_one_when_a_playlist_joins_it(client, session):
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, CreatorAccount
+    from task_manager.tasks.helpers.listed_collections import add_listed_episodes
+
+    added = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "PLcabin", "target": "own"}, {"ref": "videos", "target": "exclude"},
+    ]})
+    assert added.status_code == 201, added.text
+    cabin_id = session.scalar(select(Collection.id).where(Collection.slug == "PLcabin"))
+    run_write_transaction(lambda w: add_listed_episodes(w, collection_id=cabin_id, found=[_video("c1"), _video("c2", 2)]))
+    [account] = added.json()["accounts"]
+    # The playlist is in a collection of its own, with no collection of the creator's own beside it.
+    assert account["mainCollectionSlug"] is None
+    assert {section["ref"]: section["collectionSlug"] for section in account["sections"]}["PLcabin"] == "PLcabin"
+
+    _settled()
+    preview = client.post("/api/creators/workshop/moves/preview", json={"moves": [
+        {"accountId": account["id"], "ref": "PLcabin", "target": "main"},
+    ]})
+    assert preview.status_code == 200, preview.text
+    assert {item["slug"]: item["state"] for item in preview.json()["collections"]} == {
+        "PLcabin": "deleted", "UCworkshop": "new",
+    }
+
+    moved = _save(client, "PLcabin", "main")
+
+    assert moved.status_code == 200, moved.text
+    session.expire_all()
+    main = session.scalar(select(CreatorAccount)).main_collection
+    assert (main.slug, main.title) == ("UCworkshop", "Northwind Workshop")
+    assert session.get(Collection, cabin_id) is None
+    assert sorted(episode.title for episode in main.episodes) == ["Video c1", "Video c2"]
+    assert [link.ref for link in main.lists if link.enabled] == ["PLcabin"]
+    assert main.feeds == []

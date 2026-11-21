@@ -10,6 +10,7 @@ Wire host, and collections from any other link can join them too.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Collection as Refs, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -117,10 +118,25 @@ def preset_plan(
     return plans
 
 
+# What a slug can't have, as it is a part of the link to the collection's page.
+_NOT_IN_LINKS = re.compile(r"[/\\?#%\s]")
+
+
+def _link_slug(ref: str) -> str:
+    """A Site's id as a collection's slug: the id itself, since a Source may know a collection by it, unless it has
+    what can't be a part of a link, such as the slashes of a SoundCloud or Bandcamp album's path."""
+    return slugify(ref) if _NOT_IN_LINKS.search(ref) else ref
+
+
+def main_collection_slug(creator_ref: str) -> str:
+    """The slug the creator's own collection on a Site gets: the account's id on the Site."""
+    return _link_slug(creator_ref)
+
+
 def section_collection_slug(creator_ref: str, section: SectionRef | CreatorSection) -> str:
     """The slug a section's own collection gets: its own id for a list or a show, such as a playlist or a Daily Wire
     show, whose collection is known by it, and the creator's id with the feed's for a feed."""
-    return f"{creator_ref}-{section.ref}" if section.kind == SectionKind.FEED else section.ref
+    return _link_slug(f"{creator_ref}-{section.ref}" if section.kind == SectionKind.FEED else section.ref)
 
 
 def _main_feed(sections: Sequence[SectionRef | CreatorSection]) -> SectionRef | CreatorSection | None:
@@ -158,7 +174,8 @@ def sections_in_library(
     urls = {section.url: section.ref for section in sections}
     slugs = {section_collection_slug(creator_ref, section): section.ref for section in sections}
     main_feed = _main_feed(sections)
-    slugs[creator_ref] = main_feed.ref if main_feed is not None else ""
+    main_slug = main_collection_slug(creator_ref)
+    slugs[main_slug] = main_feed.ref if main_feed is not None else ""
     found: dict[str, str] = {}
     for url, slug, outside, feeds in s.execute(
         select(Collection.sharing_url, Collection.slug, Collection.outside_videos, Collection.feeds)
@@ -172,7 +189,7 @@ def sections_in_library(
         select(Collection.slug, Collection.outside_videos, Collection.feeds)
         .where(Collection.source_key == source_key, Collection.slug.in_(slugs), Collection.creator_account_id.is_(None))
     ):
-        if slug == creator_ref and (outside == OutsideVideos.ONLY.value or (feeds is not None and slugs[slug] not in feeds)):
+        if slug == main_slug and (outside == OutsideVideos.ONLY.value or (feeds is not None and slugs[slug] not in feeds)):
             continue
         if slugs[slug]:
             found.setdefault(slugs[slug], slug)
@@ -481,30 +498,11 @@ def _place(
     if main_plans:
         main = account.main_collection
         if main is None:
-            main_feed = _main_feed(list(sections.values()))
-            url = main_feed.url if main_feed is not None else account.url
-            if not url:
-                raise ServiceError(f"{creator.title} has no page that lists all of its videos")
-            # A collection of this link left from before, such as when the creator was deleted, which kept their
-            # collections as plain ones, becomes the creator's own collection again.
-            left = s.scalar(select(Collection).where(Collection.sharing_url == url, Collection.creator_id.is_(None)))
-            if left is not None:
-                belong_to(left, creator)
-                left.creator_account = account
-                account.main_collection = left
-                main = left
-            else:
-                # The account's own picture on its Site, not that of the creator's other accounts. An artist without a
-                # picture of their own shows their newest album's cover.
-                image = account.avatar_path or next(
-                    (sections[plan.ref].image_path for plan in main_plans if sections[plan.ref].image_path), None,
-                )
-                main = _new_collection(
-                    s, account, settings, title=main_collection_title(account), slug=account.site_ref, url=url,
-                    description=creator.description, image=image, added_by_id=added_by_id,
-                )
-                main.background_image_path = account.banner_path
-                account.main_collection = main
+            main, new = make_main_collection(
+                s, account, settings, added_by_id=added_by_id,
+                images=[sections[plan.ref].image_path for plan in main_plans],
+            )
+            if new:
                 made.append(main)
         if main not in made:
             changed.append(main)
@@ -529,6 +527,38 @@ def _place(
     for collection in changed:
         reindex_collection(s, collection)
     return made
+
+
+def make_main_collection(
+    s: Session, account: CreatorAccount, settings: NewCollectionSettings, *, added_by_id: int | None,
+    images: Sequence[str | None] = (),
+) -> tuple[Collection, bool]:
+    """Make the account's own collection, for an account that has none, such as one added without its uploads that a
+    list joins now. ``images`` are the pictures of what goes into it, newest first. Returns the collection, and
+    whether it is new: a plain collection of the account's page left from before becomes it again instead."""
+    creator = account.creator
+    main_feed = _main_feed(account.sections)
+    url = main_feed.url if main_feed is not None else account.url
+    if not url:
+        raise ServiceError(f"{creator.title} has no page that lists all of its videos")
+    # A collection of this link left from before, such as when the creator was deleted, which kept their
+    # collections as plain ones, becomes the creator's own collection again.
+    left = s.scalar(select(Collection).where(Collection.sharing_url == url, Collection.creator_id.is_(None)))
+    if left is not None:
+        belong_to(left, creator)
+        left.creator_account = account
+        account.main_collection = left
+        return left, False
+    # The account's own picture on its Site, not that of the creator's other accounts. An artist without a picture of
+    # their own shows their newest album's cover.
+    image = account.avatar_path or next(filter(None, images), None)
+    main = _new_collection(
+        s, account, settings, title=main_collection_title(account), slug=main_collection_slug(account.site_ref), url=url,
+        description=creator.description, image=image, added_by_id=added_by_id,
+    )
+    main.background_image_path = account.banner_path
+    account.main_collection = main
+    return main, True
 
 
 def main_collection_title(account: CreatorAccount) -> str:
