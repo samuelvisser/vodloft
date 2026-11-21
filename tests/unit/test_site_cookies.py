@@ -164,7 +164,7 @@ def test_a_site_without_anything_in_vodloft_can_be_removed(session):
 
 
 @pytest.mark.parametrize(("key", "address"), [
-    ("youtube", "youtube.com"), ("dailywire", "dailywire.com"), ("instagram", "instagram.com"), ("npo", "npo.nl"),
+    ("youtube", "youtube.com"), ("dailywire", "dailywire.com"), ("soundcloud", "soundcloud.com"), ("npo", "npo.nl"),
 ])
 def test_a_site_vodloft_starts_with_comes_back_whole(session, key, address):
     from backend.api.endpoints.sources import router

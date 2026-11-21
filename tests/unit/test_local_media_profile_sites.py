@@ -46,14 +46,14 @@ def test_a_new_profile_starts_with_every_known_site_and_upcoming_sites() -> None
     session, engine = _new_session()
     _see_site(session, "vimeo", "Vimeo")
     created = create_collection_local_media_profile(session, _create())
-    assert created.site_keys == ["dailywire", "instagram", "tiktok", "twitch", "twitter", "vimeo", "youtube"]
+    assert created.site_keys == ["dailywire", "soundcloud", "tiktok", "twitch", "vimeo", "youtube"]
     assert created.include_upcoming_sites is True
 
     # A Video profile keeps single videos and movies, so it starts with every Site too.
     videos = create_video_local_media_profile(session, VideoLocalMediaProfileAPICreate(
         name="Videos", output_template="/downloads/videos/{{ title }}.ext", preferred_format="format_1080p",
     ))
-    assert videos.site_keys == ["dailywire", "instagram", "tiktok", "twitch", "twitter", "vimeo", "youtube"]
+    assert videos.site_keys == ["dailywire", "soundcloud", "tiktok", "twitch", "vimeo", "youtube"]
     assert videos.include_upcoming_sites is True
 
     session.close()
