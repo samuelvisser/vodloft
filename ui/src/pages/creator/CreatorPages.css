@@ -287,21 +287,25 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
     .creator-more-all.is-phone-only { display: flex; }
 }
 
-/* The moves the Edit page saves, one line each: what, where it is, where it goes */
+/* The moves the Edit page saves, one line each: what, where it is, where it goes. The names line up in one column and
+   the places beside them, in one grid for every row. A long name wraps instead of pushing the places past the dialog's
+   edge, and the places wrap too when even they are wider than what is left. */
 .move-sections-dialog .move-sections-changes {
     list-style: none;
     margin: 4px 0 0;
     padding: 0;
     display: grid;
-    gap: 6px;
+    grid-template-columns: minmax(40%, 1fr) minmax(0, max-content);
+    gap: 10px 12px;
 }
 
-/* The names line up in one column, the places beside them. */
 .move-sections-dialog .move-sections-changes li {
+    grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: minmax(96px, max-content) minmax(0, 1fr);
+    grid-template-columns: subgrid;
     align-items: center;
     gap: 4px 12px;
+    overflow-wrap: anywhere;
 }
 
 .move-sections-dialog .move-sections-changes .change-identification-change {
@@ -309,7 +313,7 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
 }
 
 @media (max-width: 520px) {
-    .move-sections-dialog .move-sections-changes li {
+    .move-sections-dialog .move-sections-changes {
         grid-template-columns: minmax(0, 1fr);
     }
 }

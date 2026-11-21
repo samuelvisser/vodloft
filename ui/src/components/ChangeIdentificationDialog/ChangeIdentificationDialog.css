@@ -54,7 +54,8 @@
     color: var(--text);
     font-size: 13px;
     font-weight: 600;
-    white-space: nowrap;
+    /* A name too long for the dialog wraps inside its chip, instead of pushing the dialog sideways. */
+    overflow-wrap: anywhere;
 }
 
 .change-identification-dialog .change-identification-chip.is-target {
