@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "148e116c354b"
+HEAD_REVISION = "250f37a05db0"
 
 
 @pytest.fixture
@@ -2060,8 +2060,10 @@ def test_accounts_get_their_picture_and_own_collections_their_sites_name(migrati
                 ), {"key": key, "name": name})
         for creator_id, title, avatar in ((1, "Northwind", "nw.jpg"), (2, "Solo", "solo.jpg")):
             connection.execute(text(
-                "INSERT INTO creators (id, uuid, slug, title, avatar_path) VALUES (:id, :uuid, :slug, :title, :avatar)"
-            ), {"id": creator_id, "uuid": f"creator-{creator_id}", "slug": title.lower(), "title": title, "avatar": avatar})
+                "INSERT INTO creators (id, uuid, slug, title, avatar_path, banner_path) "
+                "VALUES (:id, :uuid, :slug, :title, :avatar, :banner)"
+            ), {"id": creator_id, "uuid": f"creator-{creator_id}", "slug": title.lower(), "title": title, "avatar": avatar,
+                "banner": f"banner-{avatar}"})
         accounts = (
             # (id, creator, site, main collection)
             (1, 1, "youtube", 1), (2, 1, "soundcloud", 2), (3, 1, "twitch", 3), (4, 2, "youtube", 4),
@@ -2081,3 +2083,9 @@ def test_accounts_get_their_picture_and_own_collections_their_sites_name(migrati
     assert titles == {1: "Northwind YouTube", 2: "Northwind SoundCloud", 3: "My own name", 4: "Solo"}
     # A creator's first account has their picture; the others get theirs on the next daily look.
     assert avatars == {1: "nw.jpg", 2: None, 3: None, 4: "solo.jpg"}
+
+    # So does their banner; a background migration looks up the others' pictures.
+    command.upgrade(config, "250f37a05db0")
+    with engine.connect() as connection:
+        banners = dict(connection.execute(text("SELECT id, banner_path FROM creator_accounts")).all())
+    assert banners == {1: "banner-nw.jpg", 2: None, 3: None, 4: "banner-solo.jpg"}
