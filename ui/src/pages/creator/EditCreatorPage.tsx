@@ -143,14 +143,17 @@ export default function EditCreatorPage() {
 
     return (
         <section className="view creator-view" aria-labelledby="edit-creator-title">
-            <Breadcrumb className="page-breadcrumb" items={[
-                {label: 'Library', to: '/library'},
-                {label: creator.title, to: `/creator/${creator.slug}`},
-            ]}/>
-            <PageHeader
-                title="Edit creator" titleId="edit-creator-title"
-                subtitle={<p className="view-description"><Link className="quiet-link" to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
-            />
+            {/* One block, so the page's gap does not push the breadcrumb and the title apart. */}
+            <div className="creator-edit-head">
+                <Breadcrumb className="page-breadcrumb" items={[
+                    {label: 'Library', to: '/library'},
+                    {label: creator.title, to: `/creator/${creator.slug}`},
+                ]}/>
+                <PageHeader
+                    title="Edit creator" titleId="edit-creator-title"
+                    subtitle={<p className="view-description"><Link className="quiet-link" to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
+                />
+            </div>
             <CreatorSectionsEditor creator={creator} part="new"/>
             <form className="form form-fluid creator-setup" onSubmit={onSubmit} noValidate>
                 <div className="form-row creator-membership">

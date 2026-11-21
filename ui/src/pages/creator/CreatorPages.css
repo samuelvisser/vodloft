@@ -1,4 +1,6 @@
 .creator-view { display: flex; flex-direction: column; gap: 1.25rem; }
+/* The page's gap already parts the header from what follows, so the header adds no margin of its own. */
+.creator-edit-head .page-header { margin-bottom: 0; }
 
 /* The banner hero: the banner, the creator's picture over its lower edge, their name beside it and their buttons on
    the right. A phone stacks them, with the buttons last. */
