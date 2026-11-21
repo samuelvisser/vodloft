@@ -20,6 +20,7 @@ from fastapi import HTTPException
 from fastapi.responses import Response, StreamingResponse
 
 from backend.services.collection_cookies import uses_cookies
+from backend.services.source_options import ytdlp_call_options
 from config import get_settings
 from sources import MediaStream, Source
 
@@ -72,11 +73,17 @@ def episode_stream(source: Source, episode, *, audio: bool, fresh: bool = False)
     ``fresh`` looks it up again, for a URL the site stopped accepting.
     """
     url, use_cookies = episode.sharing_url, uses_cookies(episode.collection)
+    options = episode.collection.ytdlp_options
     return _streams.get(
         (episode.uuid, audio),
-        lambda: look_up_at_site(source, "stream", url, lambda: source.media_stream(url, audio=audio, use_cookies=use_cookies)),
+        lambda: look_up_at_site(source, "stream", url, lambda: _stream(source, url, audio, use_cookies, options)),
         fresh=fresh,
     )
+
+
+def _stream(source: Source, url: str, audio: bool, use_cookies: bool, options: str | None) -> MediaStream | None:
+    with ytdlp_call_options(source, options):
+        return source.media_stream(url, audio=audio, use_cookies=use_cookies)
 
 
 def _requested_range(header: str | None, size: int | None) -> tuple[int, int | None] | None:

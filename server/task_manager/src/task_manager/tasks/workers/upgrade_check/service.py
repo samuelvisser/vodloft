@@ -11,6 +11,7 @@ from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.media_download_history import record_media_download_history
 from backend.services.sites import episode_site
+from backend.services.source_options import ytdlp_call_options
 from backend.services.upgrade_check import (
     checks_profile, kept_length, next_upgrade_check_at, sponsorblock_categories, upgrade_findings,
 )
@@ -103,9 +104,12 @@ def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
     episode = download.media
     source = get_source(episode.source_key)
     url, categories = episode.sharing_url, sponsorblock_categories(download, episode_site(episode))
+    collection_options = episode.collection.ytdlp_options if isinstance(episode, Episode) else None
+    options = ytdlp_call_options(source, collection_options, session=s)
     s.rollback()
     try:
-        offer = source.upgrade_offer(url, sponsorblock_categories=categories)
+        with options:
+            offer = source.upgrade_offer(url, sponsorblock_categories=categories)
     except Exception as exc:
         if is_no_internet_error(exc):
             raise

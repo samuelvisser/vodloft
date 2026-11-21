@@ -19,6 +19,7 @@ from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
 from backend.services.users import settings_row
 from backend.utils.helpers import slugify
+from backend.services.source_options import ytdlp_call_options
 from sources import (
     Feature, LinkKind, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, sources_for,
 )
@@ -68,7 +69,7 @@ def source_with(source_id: str, feature: Feature) -> Source:
 def lookup_show_details(access: Access, source: Source, url: str) -> CollectionDetailsAPIRead:
     """Look up a collection to add, shaped like the fields of a new collection."""
     access.check_link(source, url)
-    with asking_source(f"{source.name} could not look up this collection"):
+    with asking_source(f"{source.name} could not look up this collection"), ytdlp_call_options(source):
         details = source.collection_details(url)
     try:
         music = source.music_reason(url, details)
@@ -262,7 +263,7 @@ def resolve_link(s: Session, access: Access, url: str, source_key: str | None = 
             access.check_link((usable or candidates)[0], url)
         asked = allowed
     for source in asked:
-        with asking_source(f"{source.name} could not look up this link"):
+        with asking_source(f"{source.name} could not look up this link"), ytdlp_call_options(source):
             link = source.resolve(url)
         if link is not None:
             access.check_link(source, link.url)

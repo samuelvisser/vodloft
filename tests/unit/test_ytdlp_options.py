@@ -87,3 +87,70 @@ def test_the_check_endpoint_reports_each_line():
     response = client.post("/api/sources/ytdlp-options/check", json={"text": "-N 4\n-P /tmp"})
     assert response.status_code == 200
     assert [(line["line"], line["status"]) for line in response.json()] == [(1, "valid"), (2, "blocked")]
+
+
+def test_options_that_break_a_download_are_blocked():
+    for option in ("--test", "--no-warnings", "--hls-split-discontinuity", "--ignore-no-formats-error",
+                   "--download-sections '*0-60'", "-J"):
+        [line] = check_ytdlp_options(option)
+        assert line.status == "blocked", option
+
+
+def test_more_options_point_to_their_setting():
+    assert _status("--reject-title trailer\n--max-downloads 3\n--remove-chapters Intro\n--no-mtime\n-r 4M") == [
+        (1, "has_setting", "which_episodes"),
+        (2, "has_setting", "which_episodes"),
+        (3, "has_setting", "chapters"),
+        (4, "has_setting", "file_date"),
+        (5, "has_setting", "download_speed"),
+    ]
+
+
+def test_network_and_site_options_reach_every_call():
+    from sources.ytdlp_options import every_call_arguments
+
+    text = "--proxy http://proxy:3128\n--concurrent-fragments 4\n--impersonate chrome\n" \
+           "--extractor-args 'youtube:player_client=web'\n--embed-chapters"
+    assert every_call_arguments(text) == (
+        "--proxy", "http://proxy:3128", "--impersonate", "chrome", "--extractor-args", "youtube:player_client=web",
+    )
+    # Options that can't be used reach no call at all; saving them is refused.
+    assert every_call_arguments("--proxy http://proxy:3128\n--exec 'echo hi'") == ()
+
+
+def test_every_yt_dlp_started_in_the_block_gets_the_options_also_in_its_threads():
+    from concurrent.futures import ThreadPoolExecutor
+
+    from sources import ytdlp_runner
+    from sources.ytdlp_options import call_options, keep_call_options
+
+    assert "--proxy" not in ytdlp_runner.command()
+    with call_options(("--proxy", "http://proxy:3128")):
+        assert ytdlp_runner.command()[-2:] == ("--proxy", "http://proxy:3128")
+        with ThreadPoolExecutor(max_workers=1, **keep_call_options()) as pool:
+            assert pool.submit(ytdlp_runner.command).result()[-2:] == ("--proxy", "http://proxy:3128")
+    assert "--proxy" not in ytdlp_runner.command()
+
+
+def test_a_download_keeps_yt_dlps_warnings_and_lookups_leave_them_out():
+    from sources import ytdlp_runner
+
+    assert "--no-warnings" in ytdlp_runner.command()
+    assert "--no-warnings" not in ytdlp_runner.command(warnings=True)
+
+
+def test_a_lookup_uses_the_sources_and_the_collections_network_options(task_database):
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Settings
+    from backend.services.source_options import ytdlp_call_options
+    from sources import ytdlp_runner
+
+    def save(w):
+        w.query(Settings).one().ytdlp_options = "--proxy http://proxy:3128\n--concurrent-fragments 4"
+
+    run_write_transaction(save)
+    with ytdlp_call_options("ytdlp", "--impersonate chrome"):
+        assert ytdlp_runner.command()[-4:] == ("--proxy", "http://proxy:3128", "--impersonate", "chrome")
+    # A Source without your own yt-dlp options gets none of them.
+    with ytdlp_call_options("dailywire", "--impersonate chrome"):
+        assert "--proxy" not in ytdlp_runner.command()

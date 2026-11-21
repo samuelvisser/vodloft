@@ -39,6 +39,7 @@ from backend.types.link_season_types import (
 )
 from backend.utils.helpers import generate_uuid, slugify
 from sources import Feature, ItemRef, Names, SectionKind, SectionRef, SectionRole, Source, VideoDetails, get_source
+from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +283,7 @@ def list_each(source: Source, urls: dict[str, str]) -> dict[str, tuple[ItemRef, 
     # A creator can have hundreds of playlists, each a lookup of a second or more, so a few are listed at once. Each
     # runs in a copy of this context, which tells the Source's pacing whose requests they are.
     items: dict[str, tuple[ItemRef, ...]] = {}
-    with ThreadPoolExecutor(max_workers=_LISTS_AT_ONCE, thread_name_prefix="list-items") as pool:
+    with ThreadPoolExecutor(max_workers=_LISTS_AT_ONCE, thread_name_prefix="list-items", **keep_call_options()) as pool:
         listed = {key: pool.submit(contextvars.copy_context().run, list_one, url) for key, url in urls.items()}
         for key, future in listed.items():
             if (found := future.result()) is not None:

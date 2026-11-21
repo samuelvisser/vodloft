@@ -30,6 +30,7 @@ from config.network import is_no_internet_error
 from backend.types.collection_contracts import collection_contract
 from backend.types.season_types import SeasonType
 from backend.types.link_season_types import NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos
+from backend.services.source_options import ytdlp_call_options
 from sources import Feature, Names, SectionKind, get_source
 
 
@@ -344,6 +345,7 @@ def _regroup(playlists: dict[int, CollectionList], seasons: dict[int, Season], b
 class _Lookup:
     source_key: str
     url: str
+    ytdlp_options: str | None = None
 
 
 def links_lookup(s: Session, collection_slug: str) -> _Lookup:
@@ -355,12 +357,12 @@ def links_lookup(s: Session, collection_slug: str) -> _Lookup:
         raise ServiceError(
             f"{collection.creator.title} looks for new {section_list_names(collection).plural} itself: check the creator", field="link_seasons",
         )
-    return _Lookup(collection.source_key, collection.sharing_url)
+    return _Lookup(collection.source_key, collection.sharing_url, collection.ytdlp_options)
 
 
 def look_up_links(lookup: _Lookup) -> LinkListing:
     """The creator's playlists, asked of its Source. Slow: call it outside a transaction."""
-    with asking_source("Could not list the playlists"):
+    with asking_source("Could not list the playlists"), ytdlp_call_options(lookup.source_key, lookup.ytdlp_options):
         return LinkListing(get_source(lookup.source_key).season_lists(lookup.url))
 
 
@@ -388,6 +390,7 @@ def save_listed_links(s: Session, collection_slug: str, listing: LinkListing) ->
 class _AddLookup:
     source_key: str
     url: str
+    ytdlp_options: str | None = None
 
 
 @dataclass(frozen=True)
@@ -410,11 +413,16 @@ def link_to_add(s: Session, collection_slug: str, url: str) -> _AddLookup:
     source = get_source(collection.source_key)
     if not source.handles(url):
         raise ServiceError(f"{source.name} can't read this link", field="url")
-    return _AddLookup(collection.source_key, url.strip())
+    return _AddLookup(collection.source_key, url.strip(), collection.ytdlp_options)
 
 
 def look_up_added_link(lookup: _AddLookup) -> AddedLink:
     """A playlist, channel or video at the link, as its Source describes it. Slow: call it outside a transaction."""
+    with ytdlp_call_options(lookup.source_key, lookup.ytdlp_options):
+        return _look_up_added_link(lookup)
+
+
+def _look_up_added_link(lookup: _AddLookup) -> AddedLink:
     source = get_source(lookup.source_key)
     try:
         found = source.collection_details(lookup.url)

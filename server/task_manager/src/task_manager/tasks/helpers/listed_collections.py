@@ -55,6 +55,7 @@ from backend.services.media_access import lock_refused
 from backend.services.notifications.emitters import link_seasons_found
 from backend.services.reassigned import list_left_out, lists_left_out, placed_elsewhere, save_left_out, settle_creator
 from backend.services.season_order import arrange_seasons
+from backend.services.source_options import ytdlp_call_options
 from backend.services.link_seasons import (
     SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, own_feeds, own_link, section_list_names, place_in_link_seasons, link_seasons_on,
     save_lists,
@@ -171,6 +172,14 @@ def _list_new_episodes(s: Session, collection: Collection, source: Source, progr
 def index_listed_collection(s: Session, *, collection_id: int, source: Source, progress=None, dry_run: bool = False) -> int:
     """Add the collection's new episodes, and put its videos in the seasons of the playlists that are seasons.
     Returns how many episodes were added, or would be added in a dry run."""
+    collection = s.get(Collection, collection_id)
+    if collection is None:
+        return 0
+    with ytdlp_call_options(source, collection.ytdlp_options, session=s):
+        return _index_listed_collection(s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run)
+
+
+def _index_listed_collection(s: Session, *, collection_id: int, source: Source, progress, dry_run: bool) -> int:
     collection = s.get(Collection, collection_id)
     if collection is None:
         return 0
@@ -378,7 +387,12 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
     collection = s.get(Collection, collection_id)
     if collection is None:
         return RefreshCounts()
-    title, url = collection.title, own_link(collection)
+    with ytdlp_call_options(source, collection.ytdlp_options, session=s):
+        return _refresh_listed_collection(s, collection, source)
+
+
+def _refresh_listed_collection(s: Session, collection: Collection, source: Source) -> RefreshCounts:
+    collection_id, title, url = collection.id, collection.title, own_link(collection)
     # A collection that only holds its link seasons has no listing of its own to read its videos from.
     one_by_one = url is None or not lists_own_link(collection)
     # The parts of a split video are asked about once, as their video.

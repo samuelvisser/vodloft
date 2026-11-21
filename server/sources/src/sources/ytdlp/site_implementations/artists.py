@@ -19,6 +19,7 @@ from ... import ytdlp_runner as runner
 from .. import sites, soundcloud_search, thumbnails
 from ..site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST
 from .other_sites import OtherSitesImplementation
+from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ class ArtistImplementation(OtherSitesImplementation):
         progress("Listing the albums")
         links = self.release_links(root)
         found: dict[str, dict] = {}
-        with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE) as pool:
+        with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE, **keep_call_options()) as pool:
             pictures = pool.submit(self.pictures, root)
             lookups = {pool.submit(self.look_up, url, cookies): url for url in links}
             for done, lookup in enumerate(as_completed(lookups), start=1):
@@ -193,7 +194,7 @@ class BandcampImplementation(ArtistImplementation):
         if newest_albums is not None:
             album_links = album_links[:newest_albums]
         tracks: list[dict] = []
-        with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE) as pool:
+        with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE, **keep_call_options()) as pool:
             for found in pool.map(lambda link: _album_tracks(link, cookies), album_links):
                 tracks += found
         # A track on no album is listed by its link alone, so it is looked up for its id.

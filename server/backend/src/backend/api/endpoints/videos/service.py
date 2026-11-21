@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.api.models.video import VideoAPIRead
 from backend.db.models import Video
 from backend.services.source_requests import asking_source
+from backend.services.source_options import ytdlp_call_options
 from sources import Feature, Source, UnknownSourceError, VideoDetails, get_source
 
 
@@ -23,7 +24,7 @@ def video_source(source_key: str) -> Source:
 
 def fetch_video_details(source: Source, url: str) -> VideoDetails:
     """Ask the Source about a video. Call it outside a database transaction."""
-    with asking_source(f"{source.name} could not look up this video"):
+    with asking_source(f"{source.name} could not look up this video"), ytdlp_call_options(source):
         return source.video_details(url)
 
 

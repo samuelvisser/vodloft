@@ -150,12 +150,15 @@ class _Upstream:
 def _episode(duration=10.0):
     return SimpleNamespace(
         uuid=f"episode-{id(object())}", sharing_url="https://www.youtube.com/watch?v=abc", duration=duration,
-        collection=SimpleNamespace(cookies_mode="automatic", cookies_needed_until=None),
+        collection=SimpleNamespace(cookies_mode="automatic", cookies_needed_until=None, ytdlp_options=""),
     )
 
 
 class _Source:
     name = "YouTube"
+
+    def has(self, feature):
+        return False
 
     def __init__(self, *streams):
         self.streams = list(streams)

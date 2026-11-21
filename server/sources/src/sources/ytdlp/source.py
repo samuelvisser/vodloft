@@ -1181,7 +1181,7 @@ class YtDlpSource(Source):
         return interval or settings.min_check_interval_minutes
 
     def video_playback(self, *, slug: str, url: str, use_cookies: bool = True) -> Playback:
-        return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command(cookies=sites.cookies_for(url, use_cookies)))
+        return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command(cookies=sites.cookies_for(url, use_cookies), warnings=True))
 
     def media_stream(self, url: str, *, audio: bool, use_cookies: bool = True) -> MediaStream | None:
         if not self.site_for(url).streams:

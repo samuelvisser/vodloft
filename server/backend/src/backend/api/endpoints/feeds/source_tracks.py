@@ -38,6 +38,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response, Streamin
 from config import get_settings
 from sources import MediaStream, MediaTracks, Site, Source
 
+from backend.services.source_options import ytdlp_call_options
 from backend.services.video_cache import get_cached_mp4_path, joined_key, joins_mp4, mark_used, mp4_cache_path, stream_height
 from .upstream import NO_CACHE_HEADERS, LinkCache, first_range, look_up_at_site, seconds_until_expiry, stream_bytes
 
@@ -64,6 +65,8 @@ class EpisodeRef:
     uuid: str
     url: str
     use_cookies: bool
+    # The collection's own yt-dlp options, whose network and site options the lookup uses too.
+    ytdlp_options: str | None = None
 
 
 # --- Looking tracks up -----------------------------------------------------------------------------
@@ -83,13 +86,18 @@ def episode_tracks(source: Source, episode: EpisodeRef, *, fresh: bool = False) 
     tracks = _tracks.get(
         episode.uuid,
         lambda: look_up_at_site(
-            source, "stream", episode.url, lambda: source.media_tracks(episode.url, use_cookies=episode.use_cookies),
+            source, "stream", episode.url, lambda: _look_up_tracks(source, episode),
         ),
         fresh=fresh,
     )
     if tracks is None:
         raise HTTPException(status_code=404, detail=f"No {source.name} video tracks for this episode")
     return tracks
+
+
+def _look_up_tracks(source: Source, episode: EpisodeRef) -> MediaTracks | None:
+    with ytdlp_call_options(source, episode.ytdlp_options):
+        return source.media_tracks(episode.url, use_cookies=episode.use_cookies)
 
 
 def _video_track(tracks: MediaTracks, height: int) -> MediaStream:

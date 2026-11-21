@@ -24,6 +24,7 @@ from fastapi.responses import Response, StreamingResponse
 from config import get_settings
 from sources import LiveStream, MediaStream, Source
 
+from backend.services.source_options import ytdlp_call_options
 from .source_tracks import HLS_MIME_TYPE, EpisodeRef
 from .upstream import NO_CACHE_HEADERS, LinkCache, look_up_at_site
 
@@ -49,13 +50,18 @@ def episode_live(source: Source, episode: EpisodeRef, *, fresh: bool = False) ->
     live = _kept.get(
         episode.uuid,
         lambda: look_up_at_site(
-            source, "live stream", episode.url, lambda: source.live_stream(episode.url, use_cookies=episode.use_cookies),
+            source, "live stream", episode.url, lambda: _live(source, episode),
         ),
         fresh=fresh,
     )
     if live is None:
         raise HTTPException(status_code=404, detail=f"This episode is not live on {source.name}")
     return live
+
+
+def _live(source: Source, episode: EpisodeRef) -> LiveStream | None:
+    with ytdlp_call_options(source, episode.ytdlp_options):
+        return source.live_stream(episode.url, use_cookies=episode.use_cookies)
 
 
 def live_master_playlist(live: LiveStream, height: int) -> str:

@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from ..choices import sponsorblock, sponsorblock_all, video_quality
+from ..choices import SPONSORBLOCK_CATEGORIES, sponsorblock, sponsorblock_all, video_quality
 from ..contract import (
     CollectionPlan,
     CustomIndexPlan,
@@ -210,9 +210,86 @@ def _quality_settings(profile: PinchflatProfile) -> dict[str, object]:
 # Options the converter explains better than a yt-dlp option could: the template and links.
 _NOT_FORWARDED = frozenset({"outtmpl", "url"})
 
+# Option file options that VODLoft has a setting for, which the import sets instead of keeping the option.
+_TO_SETTINGS = frozenset({
+    "subtitleslangs", "writeautomaticsub", "remuxvideo", "merge_output_format", "sponsorblock_remove",
+    "sponsorblock_mark", "no_sponsorblock", "remove_chapters", "updatetime", "ratelimit", "matchtitle", "rejecttitle",
+    "dateafter",
+})
+_DATE = re.compile(r"^(\d{4})(\d{2})(\d{2})$")
 
-def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> tuple[ProfilePlan, str]:
-    """The Local Media Profile, and the option file lines VODLoft has no setting for, for its Collections."""
+
+@dataclass
+class _OwnOptions:
+    """What the option files of a profile become: Collection options VODLoft has no setting for, and settings."""
+
+    text: str = ""
+    download_profile: dict[str, object] = field(default_factory=dict)
+    rules: list[dict[str, object]] = field(default_factory=list)
+    starting_from: str | None = None
+    speed_limit: float | None = None
+    """yt-dlp's --limit-rate in MB/s, which VODLoft has for all downloads together."""
+
+
+def _to_settings(option_set: OptionSet, written: frozenset[str], settings: dict[str, object],
+                 own: _OwnOptions, warnings: list[ImportWarning]) -> None:
+    """Set what the option files' options with a VODLoft setting ask for, on the profile and the Download Profile.
+
+    ``written`` holds the options an option file sets and Pinchflat does not set over.
+    """
+    opts = option_set.options
+    if "subtitleslangs" in written:
+        languages, left_out = _subtitle_languages(",".join(opts.get("subtitleslangs") or ()))
+        settings.update(subtitle_languages=languages or ["en"], subtitle_language_mode="listed" if languages else "site")
+        if left_out:
+            warnings.append(ImportWarning(
+                "--sub-langs", f"VODLoft lists languages by code, so it leaves out {', '.join(left_out)}", "close",
+            ))
+    if "writeautomaticsub" in written:
+        own.download_profile["auto_subtitles"] = "fallback" if opts.get("writeautomaticsub") else "never"
+    container = opts.get("remuxvideo") if "remuxvideo" in written else None
+    container = container or (opts.get("merge_output_format") if "merge_output_format" in written else None)
+    if container in ("mp4", "mkv"):
+        above_1080p = settings.get("preferred_format") in ("format_1440p", "format_4k", "format_8k")
+        for key in ("quality_goal", "video_codecs", "container", "audio_codec"):
+            settings.pop(key, None)
+        settings.update(video_quality(container, above_1080p))
+    elif container:
+        warnings.append(ImportWarning(
+            "--remux-video", f"VODLoft downloads MP4 or MKV, not {container}; the profile's quality decides", "close",
+        ))
+    if written & {"sponsorblock_remove", "sponsorblock_mark", "no_sponsorblock"}:
+        actions = {category: "chapter" for category in opts.get("sponsorblock_mark") or () if category in SPONSORBLOCK_CATEGORIES}
+        actions.update({category: "cut" for category in opts.get("sponsorblock_remove") or () if category in SPONSORBLOCK_CATEGORIES})
+        own.download_profile.update(sponsorblock(actions))
+    if "remove_chapters" in written:
+        own.download_profile["cut_chapters"] = [pattern.pattern for pattern in opts.get("remove_chapters") or ()]
+    if "updatetime" in written:
+        settings["file_date_from_publish_date"] = bool(opts.get("updatetime"))
+    if "ratelimit" in written and opts.get("ratelimit"):
+        own.speed_limit = max(round(opts["ratelimit"] / 1_000_000, 2), 0.01)
+    # yt-dlp matches the title anywhere in it, ignoring case.
+    for dest, action in (("matchtitle", "only"), ("rejecttitle", "skip")):
+        if dest in written and opts.get(dest):
+            try:
+                re.compile(opts[dest])
+            except re.error as exc:
+                warnings.append(ImportWarning(dest, f"The title filter is not a pattern VODLoft can read ({exc})"))
+            else:
+                own.rules.append({"action": action, "field": "title", "pattern": opts[dest], "ignore_case": True})
+    if "dateafter" in written and opts.get("dateafter"):
+        match = _DATE.match(str(opts["dateafter"]))
+        if match:
+            own.starting_from = "-".join(match.groups())
+        else:
+            warnings.append(ImportWarning(
+                "--dateafter", f"VODLoft starts from a fixed date, not {opts['dateafter']}; set one on the Download "
+                "Profile", "unsupported",
+            ))
+
+
+def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> tuple[ProfilePlan, _OwnOptions]:
+    """The Local Media Profile, and what its option files become for its Collections."""
     profile = variant.profile
     warnings = _profile_warnings(profile)
     try:
@@ -231,6 +308,7 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
     report = convert_pinchflat(template, options)
 
     custom: list[str] = []
+    own = _OwnOptions()
     settings: dict[str, object] = {
         "preferred_format": _preferred_format(profile),
         "collection_scope": "podcast-and-series",
@@ -246,10 +324,13 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
             "embed_and_nfo" if embed and profile.download_nfo else "nfo" if profile.download_nfo
             else "embed" if embed else "no_metadata"
         )
+        written: set[str] = set()
         for option in option_set.reports:
             if option.option.origin == "Pinchflat":
                 continue
-            if option.handling == "unsupported" and option.option.dest not in _NOT_FORWARDED:
+            if option.handling != "overridden" and option.option.dest in _TO_SETTINGS:
+                written.add(option.option.dest)
+            elif option.handling == "unsupported" and option.option.dest not in _NOT_FORWARDED:
                 # VODLoft checks these as your own yt-dlp options, and reports the lines it can't use.
                 custom.append(f"{option.option.source}  # {option.option.origin}")
             elif option.handling in ("unsupported", "close"):
@@ -257,6 +338,7 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
                     option.option.origin, f"{option.option.source}: {option.reason}",
                     "close" if option.handling == "close" else "unsupported",
                 ))
+        _to_settings(option_set, frozenset(written), settings, own, warnings)
     if profile.preferred_resolution == "audio":
         settings["subtitle_mode"] = "no_subtitles"
     settings["download_collection_assets"] = bool(profile.download_source_images)
@@ -273,7 +355,7 @@ def _profile_plan(variant: _Variant, data: PinchflatData, path_map: PathMap) -> 
         report=tuple(report.lines()[1:]),
         support=report.support,
         base_name=variant.base_name,
-    ), "\n".join(custom)
+    ), replace(own, text="\n".join(custom))
 
 
 def _episode_types(profile: PinchflatProfile) -> list[str]:
@@ -331,7 +413,9 @@ def _checking(source: PinchflatSource, warnings: list[ImportWarning]) -> dict[st
 
 
 def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile_external_id: str, path_map: PathMap,
-                     ytdlp_options: str = "") -> CollectionPlan:
+                     own: _OwnOptions | None = None) -> CollectionPlan:
+    own = own or _OwnOptions()
+    ytdlp_options = own.text
     warnings: list[ImportWarning] = []
     limits: dict[str, object] = {"download_days_in_past": 0, "download_episode_count": 0,
                                  "download_starting_from": None, "delete_older_episodes": False,
@@ -352,7 +436,13 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
             ))
     elif source.download_cutoff_date:
         limits["download_starting_from"] = source.download_cutoff_date[:10]
-    rules: list[dict[str, object]] = []
+    if own.starting_from and (source.retention_period_days or source.download_cutoff_date):
+        warnings.append(ImportWarning(
+            "--dateafter", f"The source's own limit wins over --dateafter {own.starting_from}", "close",
+        ))
+    elif own.starting_from:
+        limits["download_starting_from"] = own.starting_from
+    rules: list[dict[str, object]] = list(own.rules)
     if source.title_filter_regex:
         # Pinchflat downloads only the videos whose title matches, ignoring case, anywhere in the title.
         try:
@@ -407,6 +497,8 @@ def _collection_plan(source: PinchflatSource, profile: PinchflatProfile, profile
             # yt-dlp takes an uploaded subtitle over an auto-generated one, as VODLoft's fallback does.
             "auto_subtitles": "fallback" if profile.download_auto_subs else "never",
             **_sponsorblock(profile),
+            # What the option files ask for, which yt-dlp did over Pinchflat's own settings.
+            **own.download_profile,
             **upgrade,
             **limits,
         },
@@ -439,7 +531,7 @@ def _file_plan(item: PinchflatItem, source: PinchflatSource, indexes: Sequence[C
     return None
 
 
-def _settings(data: PinchflatData, extras: Path | None) -> list[SettingPlan]:
+def _settings(data: PinchflatData, extras: Path | None, option_limits: Sequence[float] = ()) -> list[SettingPlan]:
     settings = [SettingPlan(
         "downloads.filename_restriction_mode", "restricted" if data.settings.restrict_filenames else "windows",
         note="Pinchflat's Restrict filenames setting becomes VODLoft's filename mode for every download",
@@ -467,6 +559,16 @@ def _settings(data: PinchflatData, extras: Path | None) -> list[SettingPlan]:
     elif data.settings.download_throughput_limit:
         settings.append(SettingPlan("download_throughput_limit", data.settings.download_throughput_limit, "unsupported",
                                     "Not a speed VODLoft can read; set one in Settings › Downloads"))
+    elif option_limits:
+        # VODLoft has one limit for every download, so the lowest --limit-rate of the option files is kept.
+        settings.append(SettingPlan(
+            "settings.download_settings.speed_limit_mode", "custom", "close",
+            note="An option file limited the download speed with --limit-rate, so VODLoft does too",
+        ))
+        settings.append(SettingPlan(
+            "settings.download_settings.speed_limit_mbps", min(option_limits), "close",
+            note="VODLoft's limit is for all downloads together, not for each one",
+        ))
     if data.settings.apprise_server:
         settings.append(SettingPlan(
             "notifications.apprise", data.settings.apprise_server, secret=True,
@@ -497,10 +599,10 @@ def plan_import(data: PinchflatData, *, option_directory: Path | None, extras: P
                 path_map: PathMap = DEFAULT_PATH_MAP, saved: Mapping[int, Mapping[str, str]] | None = None) -> ImportPlan:
     variants = _variants(data, option_directory)
     planned = [_profile_plan(variant, data, path_map) for variant in variants]
-    profiles = [plan for plan, _custom in planned]
-    by_source: dict[int, tuple[ProfilePlan, PinchflatProfile, str]] = {
-        source.id: (plan, variant.profile, custom)
-        for variant, (plan, custom) in zip(variants, planned, strict=True) for source in variant.sources
+    profiles = [plan for plan, _own in planned]
+    by_source: dict[int, tuple[ProfilePlan, PinchflatProfile, _OwnOptions]] = {
+        source.id: (plan, variant.profile, own)
+        for variant, (plan, own) in zip(variants, planned, strict=True) for source in variant.sources
     }
     collections: list[CollectionPlan] = []
     files: list[FilePlan] = []
@@ -510,8 +612,8 @@ def plan_import(data: PinchflatData, *, option_directory: Path | None, extras: P
     for source in data.sources:
         if source.id not in by_source:
             continue
-        plan, profile, custom = by_source[source.id]
-        collections.append(_collection_plan(source, profile, plan.external_id, path_map, custom))
+        plan, profile, own = by_source[source.id]
+        collections.append(_collection_plan(source, profile, plan.external_id, path_map, own))
         for item in items_by_source.get(source.id, ()):
             file_plan = _file_plan(item, source, plan.custom_indexes, path_map, (saved or {}).get(item.id))
             if file_plan is not None:
@@ -531,7 +633,7 @@ def plan_import(data: PinchflatData, *, option_directory: Path | None, extras: P
         profiles=tuple(profiles),
         collections=tuple(collections),
         files=tuple(files),
-        settings=tuple(_settings(data, extras)),
+        settings=tuple(_settings(data, extras, [own.speed_limit for _plan, own in planned if own.speed_limit])),
         warnings=tuple(warnings),
         version=str(data.version),
     )

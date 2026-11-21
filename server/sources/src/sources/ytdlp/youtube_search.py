@@ -17,6 +17,7 @@ from .search_facts import date as _date, facts as _facts, length as _length, plu
 from .youtube_api import mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.quota import Share
+from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +192,7 @@ def _filtered(query: str, search_filter: str, count: int, to_link) -> list[Resol
 
 def search_ytdlp(query: str) -> list[ResolvedLink]:
     """yt-dlp's YouTube search: the top channels, playlists and videos, read at the same time."""
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=3, **keep_call_options()) as pool:
         channels = pool.submit(_filtered, query, _CHANNELS_FILTER, _YTDLP_CHANNELS, _ytdlp_channel)
         playlists = pool.submit(_filtered, query, _PLAYLISTS_FILTER, _YTDLP_PLAYLISTS, _ytdlp_playlist)
         videos = pool.submit(_entries, f"ytsearch{_YTDLP_VIDEOS}:{query}")

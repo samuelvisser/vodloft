@@ -11,6 +11,7 @@ from backend.db.core import run_write_transaction
 from backend.db.models import CreatorAccount
 from backend.services.creators import follow_account
 from backend.services.notifications.emitters import creator_sections_found
+from backend.services.source_options import ytdlp_call_options
 from sources import CreatorDetails, get_source
 from task_manager.scheduler.results import TaskResult
 
@@ -24,7 +25,8 @@ def _look_up(s: Session, account_id: int) -> tuple[str, CreatorDetails] | None:
     title, source_key, ref = account.creator.title, account.source_key, account.url or account.site_ref
     # No transaction stays open while the Source looks the account up.
     s.rollback()
-    return title, get_source(source_key).creator_details(ref)
+    with ytdlp_call_options(source_key):
+        return title, get_source(source_key).creator_details(ref)
 
 
 def run_follow_creators(s: Session, *, creator_id: int | None = None) -> TaskResult:

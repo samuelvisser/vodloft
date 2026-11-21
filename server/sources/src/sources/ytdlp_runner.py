@@ -22,6 +22,7 @@ import requests
 
 from config.settings.base import get_config_path
 from downloader.ytdlp import error_message
+from sources.ytdlp_options import current_call_options
 
 RELEASE_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
 CHECKSUMS_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS"
@@ -55,14 +56,20 @@ def program() -> tuple[str, ...]:
     return (sys.executable, "-m", "yt_dlp")
 
 
-def command(*, cookies: Path | None = None) -> tuple[str, ...]:
-    """yt-dlp with the options every run uses, signed in with the ``cookies`` file when one is given."""
-    options = ["--ignore-config", "--no-warnings", "--color", "never"]
+def command(*, cookies: Path | None = None, warnings: bool = False) -> tuple[str, ...]:
+    """yt-dlp with the options every run uses, signed in with the ``cookies`` file when one is given.
+
+    A lookup has no use for yt-dlp's warnings. A download keeps them (``warnings``): the downloader reads them to
+    notice a site holding better versions back.
+    """
+    options = ["--ignore-config", *(() if warnings else ("--no-warnings",)), "--color", "never"]
     # YouTube needs a JavaScript runtime. VODLoft installs Deno next to Python,
     # which is not always on the PATH of the process that runs yt-dlp.
     deno = Path(sys.executable).with_name("deno")
     if deno.is_file():
         options += ["--js-runtimes", f"deno:{deno}"]
+    # The user's own options that change how yt-dlp reaches a site, for the Collection the work is for.
+    options += current_call_options()
     if cookies is not None:
         options += ["--cookies", str(cookies)]
     return (*program(), *options)
