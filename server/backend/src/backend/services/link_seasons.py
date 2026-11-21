@@ -88,6 +88,15 @@ def own_link(collection: Collection) -> str | None:
     return main_feed.url if main_feed is not None else account.url
 
 
+def made_from_list(collection: Collection) -> bool:
+    """Whether the collection is made from one of its creator's lists, such as a playlist or an album, rather than
+    gathering the creator's feeds and lists: the list is its one season, with its videos in the list's order."""
+    creator = collection.creator
+    if creator is None or collection.sharing_url is None or collection.id in creator.gathering_ids:
+        return False
+    return any(section.kind == SectionKind.LIST and section.url == collection.sharing_url for section in creator.sections)
+
+
 def lists_own_link(collection: Collection) -> bool:
     """Whether the collection's own link lists its videos: it has one, it holds more than its link seasons, and when it
     gathers a creator's feeds, at least one of them is placed in it."""
@@ -396,6 +405,7 @@ class SeasonFinder:
         self._by_year = {season_year(season): season for season in collection.seasons if season_year(season) is not None}
         self.numbers = SeasonNumbers(s)
         self._loose_one = link_seasons_on(collection) and loose_in_one_season(collection)
+        self._one_list = made_from_list(collection)
 
     def create(self, *, slug: str, name: str, number: int) -> Season:
         collection = self._collection
@@ -434,8 +444,22 @@ class SeasonFinder:
             self._s.flush()
         return season
 
+    def list_own_season(self) -> Season:
+        """The one season of a collection made from one list, named after it, as the collection is."""
+        season = next((
+            season for season in sorted(self._collection.seasons, key=lambda season: season.index)
+            if season.season_type == SeasonType.NORMAL.value and season_year(season) is None
+        ), None)
+        if season is None:
+            title = self._collection.title
+            season = self.create(slug=slugify(title) or "1", name=title, number=1)
+        return season
+
     def home_season(self, published_at: datetime | None) -> Season:
-        """Where a new video in no playlist goes: the one season of such videos, or its season per year."""
+        """Where a new video in no playlist goes: the one season of a collection made from one list, the one season of
+        such videos, or its season per year."""
+        if self._one_list:
+            return self.list_own_season()
         if self._loose_one:
             return self.loose_season()
         return self.year_season(published_at)

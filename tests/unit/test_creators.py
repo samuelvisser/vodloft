@@ -182,11 +182,13 @@ def test_adding_a_creator_puts_sections_into_the_new_collection_of_another(clien
         ("Building the Cabin", ["Shorts", "Building the Cabin", "Tool Reviews"]),
     ]
     cabin = session.scalar(select(Collection).where(Collection.slug == "PLcabin"))
-    # The playlist's own collection gathers now: the Tool Reviews are a season of it, and it lists the Shorts.
+    # The playlist's own collection gathers now: its own playlist and the Tool Reviews are seasons of it, it lists the
+    # Shorts, and it knows no other playlist of the creator.
     assert cabin.feeds == ["shorts"]
-    assert {(link.ref, link.enabled, link.as_season) for link in cabin.lists if link.enabled} == {
-        ("PLcabin", True, False), ("PLtools", True, True),
+    assert {(link.ref, link.enabled, link.as_season) for link in cabin.lists} == {
+        ("PLcabin", True, True), ("PLtools", True, True),
     }
+    assert cabin.episode_identifier == "seasonal"
 
 
 def test_adding_a_deleted_creator_again_takes_back_their_collection(client, session):
@@ -1416,7 +1418,8 @@ def test_each_new_collection_takes_the_type_and_identification_chosen_for_it(cli
     assert {
         collection.slug: (collection.type, collection.episode_identifier) for collection in session.scalars(select(Collection))
     } == {
-        "UCworkshop": ("podcast", "date_based"), "PLcabin": ("series", "seasonal"), "PLtools": ("podcast", "date_based"),
+        # A list is its collection's one season, so without a choice of its own it is numbered in the list's order.
+        "UCworkshop": ("podcast", "date_based"), "PLcabin": ("series", "seasonal"), "PLtools": ("podcast", "numbered"),
     }
 
 

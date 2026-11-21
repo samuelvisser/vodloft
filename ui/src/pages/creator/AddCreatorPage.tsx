@@ -205,7 +205,8 @@ const NewCollectionTypeReg = createSelectRegistry('CreatorNewCollectionType', {
     series: CollectionTypeReg.meta('series')!,
 })
 
-type NewCollection = {key: string, title: string, url: string | null}
+/** ``list`` says it is made from one of the creator's lists, such as a playlist. */
+type NewCollection = {key: string, title: string, url: string | null, list: boolean}
 type CollectionSettings = {type: CollectionTypeValue | '', episodeIdentifier: EpisodeIdentifierValue | ''}
 
 /**
@@ -217,7 +218,7 @@ function NewCollectionCard({item, value, onChange}: {
     value: CollectionSettings | undefined
     onChange: (key: string, value: CollectionSettings) => void
 }) {
-    const suggestion = useCollectionDefaults(item.url ?? undefined)
+    const suggestion = useCollectionDefaults(item.url ?? undefined, item.list)
     const chosen = useRef(false)
     useEffect(() => {
         if (chosen.current) return
@@ -444,13 +445,14 @@ export default function AddCreatorPage() {
     const mainFeed = creator.sections.find((section) => section.kind === 'feed' && section.role === 'main')
     const newCollections: NewCollection[] = [
         // A collection of the main feed left in the library, such as after the creator was deleted, becomes theirs again.
-        ...(kept.some((plan) => plan.target === 'main' && !plan.intoRef) && !mainFeed?.collectionSlug ? [{key: MAIN_KEY, title: intoTitle ?? creator.title, url: mainFeed?.url ?? creator.url}] : []),
+        ...(kept.some((plan) => plan.target === 'main' && !plan.intoRef) && !mainFeed?.collectionSlug ? [{key: MAIN_KEY, title: intoTitle ?? creator.title, url: mainFeed?.url ?? creator.url, list: false}] : []),
         ...kept.filter((plan) => plan.target === 'own' && sectionOf.get(plan.ref)?.kind !== 'item').map((plan) => {
             const section = sectionOf.get(plan.ref)
             return {
                 key: plan.ref,
                 title: section?.kind === 'feed' ? `${creator.title} ${section.title}` : section?.title ?? plan.ref,
                 url: section?.url ?? null,
+                list: section?.kind === 'list',
             }
         }),
     ]

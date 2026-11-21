@@ -10,6 +10,7 @@ Wire host, and collections from any other link can join them too.
 """
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Collection as Refs, Sequence
 from dataclasses import dataclass, replace
@@ -18,10 +19,14 @@ from datetime import datetime
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Creator, CreatorAccount, CreatorSection, Collection, CollectionList, CollectionListItem, Episode, Movie
-from backend.services.link_seasons import is_in, lists_own_link, own_link
+from backend.db.models import (
+    Creator, CreatorAccount, CreatorSection, Collection, CollectionList, CollectionListItem, Episode, MediaDownloadBase, Movie,
+)
+from backend.services.link_seasons import is_in, lists_own_link, made_from_list, own_link
 from backend.services.collections import add_collection, index_new_collection, reindex_collection
+from backend.services.episode_identification import apply_identification, plan_identification
 from backend.services.errors import ServiceError
+from backend.services.season_order import season_year
 from backend.services.sites import collection_site, site_record
 from backend.services.new_lists import (
     ListKind, NewListSetting, SiteSettings, checked_new_sections, link_season_action, list_kinds, merged_settings,
@@ -30,13 +35,16 @@ from backend.services.new_lists import (
 from backend.types.creator_types import NewSectionAction, SectionStatus, SectionTarget
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_contracts import DEFAULT_WORDS, MUSIC, CollectionWords, collection_contract
-from backend.types.collection_types import CollectionType, EpisodeIdentifier
+from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
 from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
+from backend.types.season_types import SeasonType
 from backend.utils.helpers import generate_uuid, slugify
 from sources import (
     CreatorDetails, CreatorPreset, Feature, Names, SectionKind, SectionRef, SectionRole, SectionType, Site, UnknownSourceError, get_source,
     site_of,
 )
+
+logger = logging.getLogger(__name__)
 
 # Where a section goes that is not added, and its status then: skipped, or a list that keeps its videos out.
 _NOT_ADDED = {SectionTarget.EXCLUDE: SectionStatus.IGNORED.value, SectionTarget.KEEP_OUT: SectionStatus.KEPT_OUT.value}
@@ -380,8 +388,10 @@ def new_link_seasons(creator: Creator, site_key: str) -> dict[str, str]:
 
 
 def _make_seasons(account: CreatorAccount, main: Collection, refs: set[str], *, as_season: bool = True) -> None:
-    """Put the lists ``refs`` in the account's own collection, which then knows all the account's lists: as seasons,
-    or without ``as_season``, with their videos where its videos in no list go."""
+    """Put the lists ``refs`` in a collection that gathers the account's lists: as seasons, or without ``as_season``,
+    with their videos where its videos in no list go. The account's own collection then knows all the account's
+    lists, to switch on later; another collection only knows the lists the creator gives it, so it can switch those
+    off, but never take a list it was not given."""
     # The creator decides which of their lists are seasons, the ones to come too, so the collection only takes the
     # ones the creator gives it.
     main.link_seasons = LinkSeasons.SELECTED.value
@@ -391,6 +401,8 @@ def _make_seasons(account: CreatorAccount, main: Collection, refs: set[str], *, 
         if section.kind != SectionKind.LIST:
             continue
         playlist = known.get(section.ref)
+        if playlist is None and section.ref not in refs and account.main_collection is not main:
+            continue
         if playlist is None:
             main.lists.append(CollectionList(
                 ref=section.ref, url=section.url, title=section.title, image_path=section.image_path,
@@ -598,14 +610,16 @@ def rename_creator(creator: Creator, title: str) -> None:
 
 def _own_settings(settings: NewCollectionSettings, plan: SectionPlan, section: CreatorSection) -> NewCollectionSettings:
     """What a section's collection of its own starts with: the plan's type and identification, where it gives them.
-    An artist's collections always hold music, and only an artist's do."""
+    An artist's collections always hold music, and only an artist's do. A list, such as a playlist or an album, is the
+    one season of its collection, so unless the plan says otherwise its videos are numbered in the list's order."""
+    identification = plan.episode_identifier or (
+        EpisodeIdentifier.NUMBERED if section.kind == SectionKind.LIST else settings.episode_identifier
+    )
     if settings.type is CollectionType.MUSIC:
-        return settings
+        return replace(settings, episode_identifier=identification)
     if plan.type is CollectionType.MUSIC:
         raise ServiceError(f"{section.title} can only be a Music collection when the creator is a music artist", field="sections")
-    return replace(
-        settings, type=plan.type or settings.type, episode_identifier=plan.episode_identifier or settings.episode_identifier,
-    )
+    return replace(settings, type=plan.type or settings.type, episode_identifier=identification)
 
 
 def _new_collection(
@@ -622,6 +636,9 @@ def _new_collection(
     )
     add_collection(s, collection, added_by_id=added_by_id)
     belong_to(collection, creator)
+    if made_from_list(collection):
+        # Its one season lists the videos as the list has them, from the first.
+        collection.episode_order = EpisodeOrder.OLDEST_FIRST.value
     return collection
 
 
@@ -669,6 +686,8 @@ def place_sections(
     settings = replace(
         settings, type=type or settings.type, episode_identifier=episode_identifier or settings.episode_identifier,
     )
+    # The identification the user chose is the one a section's collection of its own takes, also for a list.
+    adding = [replace(plan, episode_identifier=plan.episode_identifier or episode_identifier) for plan in adding]
     made = _place(s, account, adding, settings, added_by_id=added_by_id)
     join_movies(s, account, adding)
     return made
@@ -899,8 +918,9 @@ def gatherable(account: CreatorAccount) -> list[Collection]:
 
 
 def gather(s: Session, account: CreatorAccount, collection: Collection) -> Collection:
-    """Make the collection one that gathers the account's feeds and lists. A collection made from one feed or list
-    keeps it as it is: it lists only that feed, or holds that list with its videos where they are, not as a season."""
+    """Make the collection one that gathers the account's feeds and lists. A collection made from one feed keeps
+    listing only that feed. One made from a list holds that list as a season, its one season so far, and numbers its
+    episodes by season from now on, as a collection of several albums or playlists does."""
     if collection in account.gatherers:
         return collection
     made_of = next((
@@ -915,16 +935,57 @@ def gather(s: Session, account: CreatorAccount, collection: Collection) -> Colle
         collection.feeds = []
         # It holds nothing but what its lists give it, as the creator's collection without feeds does.
         collection.outside_videos = OutsideVideos.ONLY.value
-        _make_seasons(account, collection, {made_of.ref}, as_season=False)
+        album = next((
+            season for season in sorted(collection.seasons, key=lambda season: season.index)
+            if season.season_type == SeasonType.NORMAL.value and season_year(season) is None and not season.loose
+        ), None)
+        _make_seasons(account, collection, {made_of.ref}, as_season=True)
         s.flush()
         link = next(link for link in collection.lists if link.ref == made_of.ref)
+        # The season it has is the list's. Placing the videos puts those of its seasons per year, from before, there.
+        link.season = album
         for position, episode in enumerate(episode for episode in theirs if not episode.removed_from_source):
             s.add(CollectionListItem(list_id=link.id, source_slug=episode.source_slug, position=position))
         for episode in theirs:
             episode.from_link_season = True
+        number_by_season(s, collection)
     s.flush()
     s.expire(account, ["gathering"])
     return collection
+
+
+def offered_lists(collection: Collection) -> list[CollectionList]:
+    """The lists the collection's Seasons dialog offers to switch on or off. A collection that gathers some of an
+    account's lists, other than the account's own collection, only offers the ones the creator gave it, and not one
+    that another collection of the creator holds now: it can switch its lists off, but never take another's."""
+    account = collection.creator_account
+    if account is None or account.main_collection is collection:
+        return list(collection.lists)
+    elsewhere = {
+        link.ref for other in account.gatherers if other is not collection for link in other.lists if is_in(other, link)
+    } | {
+        section.ref for section in account.sections
+        if section.kind == SectionKind.LIST and own_collection(account, section) not in (None, collection)
+    }
+    return [link for link in collection.lists if link.added_by_user or link.ref not in elsewhere]
+
+
+def number_by_season(s: Session, collection: Collection) -> None:
+    """Number a collection whose lists are its seasons by season, in each list's order, once its videos are placed
+    in them. A collection with downloaded files keeps its numbering, which its files are named by; the user can
+    change it on its Edit page."""
+    if collection.episode_identifier == EpisodeIdentifier.SEASONAL.value:
+        return
+    with_files = s.scalar(
+        select(MediaDownloadBase.id).join(Episode, Episode.id == MediaDownloadBase.media_item_id)
+        .where(Episode.collection_id == collection.id).limit(1)
+    )
+    if with_files is not None:
+        logger.info("'%s' keeps numbering its episodes as it did, because it has downloaded files", collection.title)
+        return
+    s.flush()
+    apply_identification(s, collection, plan_identification(s, collection, EpisodeIdentifier.SEASONAL))
+    collection.episode_order = EpisodeOrder.default_for(EpisodeIdentifier.SEASONAL).value
 
 
 def list_holder(account: CreatorAccount, ref: str) -> tuple[Collection, CollectionList] | None:

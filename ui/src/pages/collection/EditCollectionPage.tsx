@@ -4,7 +4,7 @@ import CollectionForm, { CollectionFormValue, defaultCollectionFormValue } from 
 import CustomMetadataEditor from '../../components/CustomMetadataEditor/CustomMetadataEditor'
 import { useQueryClient } from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useCollection} from '../../lib/queries'
+import {useCollection, useCollectionSeasons} from '../../lib/queries'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {faIcon} from '../../icons/faIcon'
@@ -81,6 +81,9 @@ export default function EditCollectionPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [optionsError, setOptionsError] = useState<string | null>(null)
   const {data: collection} = useCollection(id)
+  // A Music collection that is one album, such as one made from an album, has no albums to group its tracks by.
+  const {data: seasons} = useCollectionSeasons(id)
+  const oneAlbum = seasons?.length === 1
   const initializedCollectionId = useRef<string | undefined>(undefined)
 
   const [form, setForm] = useState<FormState>(() => ({
@@ -421,8 +424,8 @@ export default function EditCollectionPage() {
             How VODLoft numbers the {words.episode.plural}. Changing it numbers every {words.episode.singular} again, renames the files
             that are named by their numbers and rewrites their metadata.
           </div>
-          {musicIdentificationAdvice(form.type, collection?.episodeIdentifier) && (
-            <div className="help form-advice" role="status">{musicIdentificationAdvice(form.type, collection?.episodeIdentifier)}</div>
+          {musicIdentificationAdvice(form.type, collection?.episodeIdentifier, oneAlbum) && (
+            <div className="help form-advice" role="status">{musicIdentificationAdvice(form.type, collection?.episodeIdentifier, oneAlbum)}</div>
           )}
         </div>
 

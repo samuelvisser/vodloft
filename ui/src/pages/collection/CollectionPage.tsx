@@ -785,7 +785,8 @@ export default function CollectionPage() {
           )}
         </header>
 
-        {isSeasonal && seasons.length > 0 && (
+        {/* A collection with one season, such as one made from an album, is that season: there is nothing to choose. */}
+        {isSeasonal && seasons.length > 1 && (
           <div className="collection-season-filter" aria-label={`${words.season.Singular} selection`}>
             <label htmlFor="collection-season">{words.season.Singular}</label>
             <SimpleSelect
@@ -814,7 +815,7 @@ export default function CollectionPage() {
               />
             )}
             <LockedEpisodesFilter lockedTotal={lockedTotal} shown={showLocked} onChange={setShowLocked} noun={words.episode}/>
-            {(typeFiltered || lockedHidden) && !isSeasonal && displayedTotal !== undefined && (
+            {(typeFiltered || lockedHidden) && (!isSeasonal || seasons.length === 1) && displayedTotal !== undefined && (
               <span className="collection-type-count">
                 {displayedTotal} {displayedTotal === 1 ? countNouns.singular : countNouns.plural}
               </span>

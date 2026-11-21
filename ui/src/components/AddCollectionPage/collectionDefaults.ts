@@ -10,15 +10,17 @@ export type CollectionDefaults = {
 }
 
 /**
- * At a Source that lists its episodes: the type the backend guessed, from the name or because it is music. Music is
- * always seasonal, its albums being the seasons. A series is numbered by the Source's own seasons when it has them, and
- * a podcast or a series without seasons by date.
+ * At a Source that lists its episodes: the type the backend guessed, from the name or because it is music. One list of
+ * a creator's, such as a playlist or an album, is the collection's one season, so it is numbered in the list's order.
+ * Otherwise music is seasonal, its albums being the seasons. A series is numbered by the Source's own seasons when it
+ * has them, and a podcast or a series without seasons by date.
  */
-export function listedCollectionDefaults(details: CollectionDetailsRead): CollectionDefaults {
+export function listedCollectionDefaults(details: CollectionDetailsRead, list = false): CollectionDefaults {
     const type = CollectionTypeReg.normalize(details.probableCollectionType) ?? CollectionTypeReg.Enum.series
     return {
         type,
-        episodeIdentifier: type === CollectionTypeReg.Enum.music || (type === CollectionTypeReg.Enum.series && details.seasons.length)
+        episodeIdentifier: list ? EpisodeIdentifierReg.Enum.numbered
+            : type === CollectionTypeReg.Enum.music || (type === CollectionTypeReg.Enum.series && details.seasons.length)
             ? EpisodeIdentifierReg.Enum.seasonal
             : EpisodeIdentifierReg.Enum.date_based,
     }
@@ -35,8 +37,11 @@ export function dailywireShowDefaults(show: DailywireShowRead): CollectionDefaul
     }
 }
 
-/** Looks the collection behind a link up the way Add collection does, and suggests its type and identification. */
-export function useCollectionDefaults(url: string | undefined) {
+/**
+ * Looks the collection behind a link up the way Add collection does, and suggests its type and identification.
+ * ``list`` says the link is one of a creator's lists, such as a playlist or an album.
+ */
+export function useCollectionDefaults(url: string | undefined, list = false) {
     const resolved = useResolvedLink(url)
     const collection = resolved.data?.kind === 'collection' ? resolved.data : undefined
     const showSlug = collection && sourceHas(collection.source, SourceFeature.EPISODE_LOOKUPS) ? collection.slug : undefined
@@ -46,7 +51,7 @@ export function useCollectionDefaults(url: string | undefined) {
 
     const defaults: CollectionDefaults | undefined = show.data
         ? dailywireShowDefaults(show.data)
-        : listed.data ? listedCollectionDefaults(listed.data) : undefined
+        : listed.data ? listedCollectionDefaults(listed.data, list) : undefined
     const error = resolved.error ?? show.error ?? listed.error
         ?? (resolved.data && !showSlug && !listedSource ? new Error('VODLoft could not tell what this link points to') : null)
     return {defaults, error, isLoading: !defaults && !error && !!url}

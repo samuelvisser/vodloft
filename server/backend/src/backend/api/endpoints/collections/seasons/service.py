@@ -13,6 +13,7 @@ from backend.api.models.collection_seasons import (
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, Season
 from backend.db.models import MediaDownloadBase
 from backend.services.collections import reindex_collection
+from backend.services.creators import offered_lists
 from backend.services.errors import ServiceError
 from backend.services.new_lists import checked_new_link_seasons
 from backend.services.link_seasons import (
@@ -126,7 +127,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
     # An artist's albums in the artist's order; playlists in the order they were started, as far as the videos tell:
     # YouTube does not say when a playlist was made.
     # Links the user added stay in the order they were added.
-    playlists = sorted(collection.lists, key=lambda playlist: (
+    playlists = sorted(offered_lists(collection), key=lambda playlist: (
         (playlist.site_position,) if contract.site_order else (
             firsts.get(playlist.id, never), playlist.site_position if playlist.added_by_user else -playlist.site_position,
         )
@@ -196,7 +197,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     if sorted(change.id for change in body.seasons) != sorted(seasons):
         season = collection_contract(collection.type).words.season
         raise ServiceError(f"The {season.plural} must name each {season.singular} of the collection exactly once", field="seasons")
-    playlists = {playlist.id: playlist for playlist in collection.lists}
+    playlists = {playlist.id: playlist for playlist in offered_lists(collection)}
     lists = section_list_names(collection)
     unknown = [change.id for change in [*body.playlists] if change.id not in playlists]
     unknown += [link_id for link_id in body.removed_links if link_id not in playlists]
