@@ -104,7 +104,6 @@ export default function MoveSectionsDialog({open, creatorSlug, changes, onDismis
                 />
             ))}
             {error && <p className="error" role="alert">{error}</p>}
-            {preview && <p className="help">The progress shows on the dropdowns of what moves.</p>}
         </ConfirmDialog>
     )
 }
