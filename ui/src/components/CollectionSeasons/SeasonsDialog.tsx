@@ -14,6 +14,7 @@ import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {createSelectRegistry, type SelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
+import DisabledReason from '../common/DisabledReason'
 import NewListSettings from '../common/NewListSettings'
 import {capitalized, type ListKind} from '../../types/creator'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
@@ -165,6 +166,11 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const newLists = watch('newLists') ?? {}
     const customOrder = watch('customSeasonOrder') ?? false
     const repeatVideos = watch('repeatVideos') ?? 'one_season'
+    // Laid out by year, a video has one upload year, so it never belongs in several seasons.
+    const byYear = linkSeasonsOn && listLayout === 'by_year'
+    const repeatByYearReason = names
+        ? `The ${names.plural} are laid out by year, so this setting does nothing: ${words.episode.a} has one upload year, and is ${words.inSeason} the ${words.season.singular} of that year.`
+        : undefined
     const removedLinks = watch('removedLinks') ?? []
     const only = outsideVideos === 'only'
 
@@ -582,12 +588,20 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 <label htmlFor="seasons-repeat">
                                                     When {words.episode.a} belongs {words.inSeason} several {season.plural}
                                                 </label>
-                                                <SimpleSelect
-                                                    menuPortalTarget={document.body} menuPlacement="auto"
-                                                    styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
-                                                    inputId="seasons-repeat" registry={regs.repeat} value={repeatVideos}
-                                                    onChange={(value) => setValue('repeatVideos', value as CollectionSeasonsFormIn['repeatVideos'], {shouldDirty: true})}
-                                                />
+                                                {/* Laid out by year, a video has one upload year, so it is in one season. */}
+                                                <DisabledReason reason={byYear ? repeatByYearReason : undefined} placement="below-start" as="div">
+                                                    {({describedBy, explain}) => (
+                                                        <div onClick={byYear ? explain : undefined}>
+                                                            <SimpleSelect
+                                                                menuPortalTarget={document.body} menuPlacement="auto"
+                                                                styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                                                                inputId="seasons-repeat" registry={regs.repeat} value={repeatVideos}
+                                                                isDisabled={byYear} aria-describedby={describedBy}
+                                                                onChange={(value) => setValue('repeatVideos', value as CollectionSeasonsFormIn['repeatVideos'], {shouldDirty: true})}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </DisabledReason>
                                                 <div className="help">{regs.repeat.getHelp(repeatVideos)}</div>
                                                 {errors.repeatVideos && <div className="error" role="alert">{errors.repeatVideos.message}</div>}
                                             </div>
