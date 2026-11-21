@@ -154,6 +154,8 @@ export const CreatorAccountReadSchema = z.object({
     siteRef: z.string(),
     url: z.string().nullable(),
     handle: z.string().nullable(),
+    /** The account's own picture on its Site. */
+    avatarUrl: z.string().nullable().default(null),
     checkedAt: z.string().nullable(),
     /** The collection named after the creator that takes this account's uploads. */
     mainCollectionSlug: z.string().nullable(),

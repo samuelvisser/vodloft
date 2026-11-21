@@ -195,6 +195,8 @@ class CreatorAccountAPIRead(ResponseBase):
     site_ref: str
     url: Optional[str] = None
     handle: Optional[str] = None
+    avatar_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("avatar_path", "avatar_url"))
+    """The account's own picture on its Site."""
     checked_at: Optional[datetime] = None
     """When VODLoft last looked for new sections."""
     main_collection_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("main_collection", "slug"))

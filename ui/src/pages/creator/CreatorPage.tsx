@@ -190,8 +190,11 @@ export default function CreatorPage() {
     }
 
     const several = creator.accounts.length > 1
-    // The collections that take an account's uploads, and decide where its new lists land.
-    const mainSlugs = new Set(creator.accounts.map((account) => account.mainCollectionSlug))
+    // The collections that take an account's uploads, and decide where its new lists land. On a creator with several
+    // accounts, each one's badge names its Site, such as "YouTube main collection".
+    const mainBadges = new Map(creator.accounts.filter((account) => account.mainCollectionSlug).map((account) => [
+        account.mainCollectionSlug!, several ? `${account.site.name} main collection` : 'Main collection',
+    ]))
     // The feeds and playlists whose place the Edit page changes, named together, such as "feeds and playlists".
     const placed = placedSections(creator).map(({section}) => section)
     const placedNames = placed.length ? joinedNames(placed.map((section) => groupNames(section, placed))) : null
@@ -287,7 +290,7 @@ export default function CreatorPage() {
                         {creator.collections.map((collection) => (
                             <CollectionTile
                                 key={collection.slug} collection={collection} showSource={several}
-                                badge={mainSlugs.has(collection.slug) ? 'Main collection' : null}
+                                badge={mainBadges.get(collection.slug) ?? null}
                                 // Where it comes from, unless that is just its own title.
                                 subtitle={collection.links.length > 1 || (collection.links.length === 1 && collection.links[0] !== collection.title)
                                     ? listedSources(collection.links) : null}

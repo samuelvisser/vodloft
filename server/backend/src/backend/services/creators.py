@@ -278,6 +278,7 @@ def _section_record(section: SectionRef, position: int, status: SectionStatus = 
 def _new_account(s: Session, creator: Creator, source_key: str, site_key: str, details: CreatorDetails) -> CreatorAccount:
     account = CreatorAccount(
         source_key=source_key, site_key=site_key, site_ref=details.ref, url=details.url, handle=details.handle,
+        avatar_path=details.avatar_url,
     )
     account.sections = [
         _section_record(section, position) for position, section in enumerate(details.sections)
@@ -331,6 +332,9 @@ def add_creator(
         account = _new_creator(s, source_key, record.key, details, added_by_id=added_by_id, new_lists=lists)
     collections = _place(s, account, plans, settings, added_by_id=added_by_id)
     join_movies(s, account, plans)
+    if into is not None:
+        # The creator's other own collections now take their Site's name too.
+        _name_main_collections(into, into.title)
     return account.creator, collections
 
 
@@ -462,7 +466,7 @@ def _place(
             # An artist without a picture of their own shows their newest album's cover.
             image = creator.avatar_path or next((sections[plan.ref].image_path for plan in main_plans if sections[plan.ref].image_path), None)
             main = _new_collection(
-                s, account, settings, title=creator.title, slug=account.site_ref, url=url,
+                s, account, settings, title=main_collection_title(account), slug=account.site_ref, url=url,
                 description=creator.description, image=image, added_by_id=added_by_id,
             )
             account.main_collection = main
@@ -485,6 +489,26 @@ def _place(
     for collection in changed:
         reindex_collection(s, collection)
     return made
+
+
+def main_collection_title(account: CreatorAccount) -> str:
+    """What the account's own collection is called: the creator's name, with the Site's after it on a creator with
+    several accounts, such as "for KING + COUNTRY YouTube"."""
+    creator = account.creator
+    if len(creator.accounts) < 2:
+        return creator.title
+    return f"{creator.title} {get_source(account.source_key).site_of(account.site_key).name}"
+
+
+def _name_main_collections(creator: Creator, *names: str) -> None:
+    """Add its Site's name to the own collection of each of the creator's accounts, now that the creator has several:
+    only to one still named exactly after the creator, by one of ``names`` (the creators' names before they joined).
+    Any other name stays, such as one the user gave or one that already names its Site, so an account that leaves and
+    joins again never gets its Site's name twice."""
+    for account in creator.accounts:
+        main = account.main_collection
+        if main is not None and main.title in names:
+            main.title = main_collection_title(account)
 
 
 def belong_to(collection: Collection, creator: Creator | None) -> None:
@@ -658,7 +682,7 @@ def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails,
         ):
             if value and getattr(creator, field) != value:
                 setattr(creator, field, value)
-    for field, value in (("handle", details.handle), ("url", details.url)):
+    for field, value in (("handle", details.handle), ("url", details.url), ("avatar_path", details.avatar_url)):
         if value and getattr(account, field) != value:
             setattr(account, field, value)
     account.checked_at = now
@@ -991,6 +1015,7 @@ def combine_creators(s: Session, creator: Creator, other: Creator) -> None:
     ``s`` is a write transaction's session."""
     if other.id == creator.id:
         raise ServiceError(f"{creator.title} can't be combined with themselves", field="other_slug")
+    other_title = other.title
     for account in list(other.accounts):
         other.accounts.remove(account)
         creator.accounts.append(account)
@@ -1008,6 +1033,9 @@ def combine_creators(s: Session, creator: Creator, other: Creator) -> None:
     for account in creator.accounts:
         if account.main_collection is not None:
             account.main_collection.new_lists = new_link_seasons(creator, account.site_key)
+    # Both creators' own collections now take their Site's name, after the creator's.
+    _name_main_collections(creator, creator.title, other_title)
+    s.flush()
 
 
 def split_account(s: Session, account: CreatorAccount, details: CreatorDetails | None) -> Creator:
@@ -1026,7 +1054,7 @@ def split_account(s: Session, account: CreatorAccount, details: CreatorDetails |
         slug=_unique_slug(s, Creator, slugify((details.handle or details.title) if details else account.handle or creator.title) or account.site_ref),
         title=details.title if details else creator.title,
         description=details.description if details else creator.description,
-        avatar_path=details.avatar_url if details else creator.avatar_path,
+        avatar_path=details.avatar_url if details else account.avatar_path or creator.avatar_path,
         banner_path=details.banner_url if details else creator.banner_path,
         links=list(details.links) if details else [], facts=list(details.facts) if details else [],
         added_by_id=creator.added_by_id, new_lists={site: dict(actions) for site, actions in creator.new_lists.items()}, genre=creator.genre,

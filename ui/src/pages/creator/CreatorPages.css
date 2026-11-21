@@ -94,6 +94,10 @@
     flex: 0 0 auto; width: 64px; height: 36px; border-radius: 4px; object-fit: cover;
     display: grid; place-items: center; background: rgba(100, 116, 139, 0.15);
 }
+.creator-account-avatar {
+    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; object-fit: cover;
+    display: grid; place-items: center; background: rgba(100, 116, 139, 0.15);
+}
 .creator-section-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .creator-section-copy span { opacity: .75; font-size: .875rem; }
 /* A row's select takes the width of the longest choice in its list (SimpleSelect's fitLabels), so the selects of a
