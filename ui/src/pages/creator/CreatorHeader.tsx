@@ -34,11 +34,13 @@ function CreatorDescription({text}: {text: string}) {
         return () => observer.disconnect()
     }, [text, open])
     return (
-        <div className="creator-description-wrap">
+        <div className={`creator-description-wrap${cut && !open ? ' is-cut' : ''}`}>
             <p ref={ref} className={`creator-description${open ? ' is-open' : ''}`}><LinkedText text={text}/></p>
+            {/* Cut, Read more sits at the end of the second line, as on YouTube; open, Show less follows the text. */}
             {(cut || open) && (
-                <button type="button" className="read-more-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
-                    {open ? 'Show less' : 'Read more'}
+                <button type="button" className="creator-description-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
+                    {!open && <span aria-hidden="true">… </span>}
+                    <span className="read-more-toggle">{open ? 'Show less' : 'Read more'}</span>
                 </button>
             )}
         </div>
@@ -59,7 +61,10 @@ export default function CreatorHeader({title, label, handle, avatarUrl, bannerUr
             <Heading id={titleId} className="creator-name">{title}</Heading>
             {actions && <div className="creator-actions">{actions}</div>}
             <div className="creator-about">
-                <p className="creator-facts">{[capitalized(label), handle, ...facts].filter(Boolean).join(' · ')}</p>
+                {/* Each fact stays whole, such as "1.7M subscribers": a line breaks only between them. */}
+                <p className="creator-facts">
+                    {[capitalized(label), handle, ...facts].filter(Boolean).map((fact) => fact!.replace(/ /g, '\u00a0')).join('\u00a0· ')}
+                </p>
                 {description && <CreatorDescription text={description}/>}
                 {stats}
             </div>

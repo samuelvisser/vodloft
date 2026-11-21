@@ -113,9 +113,15 @@ export default function EditCreatorPage() {
             const body = await response.clone().json().catch(() => null)
             const detail = body?.detail
             renumber.current = null
-            // A refusal of the moves stays in the dialog; one of another field shows under it on the page.
+            // A refusal of the moves stays in the dialog; one of a field on the page shows under it there.
             if (typeof detail === 'string') {
                 setMoveError(detail)
+                return
+            }
+            const pageFields = Object.keys(CreatorUpdateSchema.shape).filter((field) => field !== 'places')
+            const errors: {loc?: unknown[], msg?: string}[] = Array.isArray(detail) ? detail : []
+            if (!errors.some((error) => pageFields.includes(String(error.loc?.[1])))) {
+                setMoveError(errors.map((error) => error.msg).filter(Boolean).join(' ') || `The ${creator.creatorNames.singular} could not be saved (HTTP ${response.status})`)
                 return
             }
             setMoving(null)

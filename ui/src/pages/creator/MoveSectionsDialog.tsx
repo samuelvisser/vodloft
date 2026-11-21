@@ -52,7 +52,9 @@ export default function MoveSectionsDialog({open, creatorSlug, changes, onDismis
         queryFn: ({signal}) => previewCreatorMoves(creatorSlug, moves, signal),
     })
 
-    const deletes = preview?.collections.some((collection) => collection.parts.some((part) => part.downloadsDeleted > 0)) ?? false
+    const deletes = preview?.collections.some((collection) => (
+        collection.state === 'deleted' || collection.parts.some((part) => part.downloadsDeleted > 0)
+    )) ?? false
     const what = joinedNames(changes.map((change) => change.names)).plural
 
     return (
@@ -104,7 +106,6 @@ export default function MoveSectionsDialog({open, creatorSlug, changes, onDismis
                 />
             ))}
             {error && <p className="error" role="alert">{error}</p>}
-            {preview && <p className="help">The progress shows on the dropdowns of what moves.</p>}
         </ConfirmDialog>
     )
 }
@@ -119,6 +120,9 @@ export function CollectionMoves({collection, renumber, onRenumber}: {
     const renumbered = renumber ? collection.changes : []
     // Kept numbers rename and rewrite nothing, unless files moved in, which go where the collection keeps them.
     const touched = renumber || collection.filesFollow
+    // A collection that goes says first what goes with it: the collection, then the downloads of what leaves.
+    const deleted = collection.state === 'deleted'
+    const leaving = collection.parts.filter((part) => part.direction === 'leave')
     const files = touched ? collection.profiles.reduce((sum, profile) => sum + (renumber ? profile.filesRenamed : 0), 0) : 0
     const metadata = touched ? collection.profiles.reduce((sum, profile) => sum + profile.metadataRewritten, 0) : 0
     return (
@@ -128,7 +132,20 @@ export function CollectionMoves({collection, renumber, onRenumber}: {
                 {tag && <span className={`move-sections-state is-${collection.state}`}>{tag}</span>}
             </h3>
             <ul className="change-identification-steps">
-                {collection.parts.map((part, index) => <PartSteps key={index} part={part} season={season}/>)}
+                {deleted && (
+                    // The collection itself goes: what leaves the library with it says which files go too.
+                    <Step
+                        danger
+                        icon={faIcon('fass', 'trash')}
+                        headline="Collection deleted"
+                        detail={collection.parts.some((part) => part.direction === 'out')
+                            ? `${collection.title} goes once everything in it moved to another collection.`
+                            : `${collection.title} leaves your library, with all its ${episode.plural} and their files.`}
+                        value={leaving.reduce((sum, part) => sum + part.count, 0) || 'All'}
+                    />
+                )}
+                {deleted && <DownloadsDeleted parts={leaving}/>}
+                {collection.parts.map((part, index) => <PartSteps key={index} part={part} season={season} downloads={!deleted}/>)}
                 {collection.newSeasons.length > 0 && (
                     <Step
                         icon={faIcon('fass', 'folder-plus')}
@@ -194,7 +211,26 @@ export function CollectionMoves({collection, renumber, onRenumber}: {
     )
 }
 
-function PartSteps({part, season}: {part: MovedPart, season: Noun}) {
+/** The downloads deleted with what leaves the library, in red, unless there are none. */
+function DownloadsDeleted({parts}: {parts: MovedPart[]}) {
+    const count = parts.reduce((sum, part) => sum + part.downloadsDeleted, 0)
+    const kept = parts.reduce((sum, part) => sum + part.keptDeleted, 0)
+    if (count === 0) return null
+    return (
+        <Step
+            danger
+            icon={faIcon('fass', 'triangle-exclamation')}
+            headline="Downloads deleted"
+            detail={`In ${names([...new Set(parts.flatMap((part) => part.deletingProfiles))].sort())}${kept > 0
+                ? `, ${kept.toLocaleString()} of them kept by hand` : ''}.`}
+            value={count}
+        />
+    )
+}
+
+/** What one feed or list does to a collection; ``downloads`` says whether what leaves the library says which of its
+ *  downloads are deleted, which a collection that goes says above everything instead. */
+function PartSteps({part, season, downloads}: {part: MovedPart, season: Noun, downloads: boolean}) {
     const what = part.count === 1 ? part.names.singular : part.names.plural
     // The verb that goes with them: one video moves, two videos move.
     const verb = (one: string, several: string) => part.count === 1 ? one : several
@@ -266,16 +302,7 @@ function PartSteps({part, season}: {part: MovedPart, season: Noun}) {
             >
                 {examples}
             </Step>
-            {part.downloadsDeleted > 0 && (
-                <Step
-                    danger
-                    icon={faIcon('fass', 'triangle-exclamation')}
-                    headline="Downloads deleted"
-                    detail={`In ${names(part.deletingProfiles)}${part.keptDeleted > 0
-                        ? `, ${part.keptDeleted.toLocaleString()} of them kept by hand` : ''}.`}
-                    value={part.downloadsDeleted}
-                />
-            )}
+            {downloads && <DownloadsDeleted parts={[part]}/>}
         </>
     )
 }

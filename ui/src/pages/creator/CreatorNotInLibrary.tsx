@@ -10,10 +10,11 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import CollectionTileArt from '../../components/CollectionTileArt/CollectionTileArt'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import type {CreatorPageRead, SectionPlan} from '../../types/schemas/creator'
-import {choices, isMovie, placeLabel, placeMove, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
-import AnotherCollectionDialog, {otherCollections} from './AnotherCollectionDialog'
+import {choices, isMovie, mainTitleOf, placeLabel, placeMove, sectionFacts, type AccountSection} from './CreatorSectionsEditor'
+import AddToCollectionDialog, {collectionChoices} from './AddToCollectionDialog'
+import {SECTION_ACTIONS} from './sectionActions'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
-import {isWaitingList, useAnswerList} from './useAnswerList'
+import {isListOutside, useAnswerList} from './useAnswerList'
 import CreatorBulkBar from './CreatorBulkEdit'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import '../../components/ProfileBulkEdit/ProfileBulkEdit.css'
@@ -113,7 +114,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
             setAdding(item)
             return
         }
-        if (isWaitingList(item) && plan.target !== 'exclude') {
+        if (isListOutside(item) && plan.target !== 'exclude') {
             // Its answer moves its videos, so the move dialog asks first.
             answer(item, {target: plan.target, collectionSlug: plan.collectionSlug}, to ?? '')
             return
@@ -144,25 +145,25 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
             <ActionMenu
                 label={`Add ${item.section.title}`} triggerIcon={faIcon('fass', 'plus')}
                 items={[
+                    ...(collectionChoices(creator, item).length > 0 ? [{
+                        label: SECTION_ACTIONS.collection, description: `Into ${mainTitleOf(creator, item.account)}, or another collection you pick`,
+                        disabled: busy !== null, onSelect: () => setPicking(item),
+                    }] : []),
                     ...options.map((option) => ({
                         label: option.label, description: option.description, disabled: busy !== null,
                         onSelect: () => void add(item, option.plan, option.label),
                     })),
-                    ...(item.section.kind !== 'item' && otherCollections(creator, item).length > 0 ? [{
-                        label: 'Another collection…', description: `Into one of ${creator.title}'s other collections`,
-                        disabled: busy !== null, onSelect: () => setPicking(item),
-                    }] : []),
                     {
-                        label: 'Do not show here again',
+                        label: SECTION_ACTIONS.skip,
                         description: `It leaves this list${isNew ? ' and stays out of your library' : ''}. You can still add it from the Edit page`,
                         separatorBefore: true, disabled: busy !== null,
                         onSelect: () => void add(item, {ref: item.section.ref, target: 'exclude'}),
                     },
                     ...(item.section.kind === 'list' ? [{
-                        label: 'Keep its videos out',
+                        label: SECTION_ACTIONS.keepOut,
                         description: `Its ${item.account.site.mediaNames.plural} leave every collection of ${creator.title} too, also when another feed or list has them`,
                         disabled: busy !== null,
-                        onSelect: () => answer(item, {target: 'keep_out'}, 'Skip, and keep its videos out'),
+                        onSelect: () => answer(item, {target: 'keep_out'}, SECTION_ACTIONS.keepOut),
                     }] : []),
                 ]}
             />
@@ -276,7 +277,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                 />
             )}
             {picking && (
-                <AnotherCollectionDialog
+                <AddToCollectionDialog
                     creator={creator} item={picking} confirmLabel="Add" onDismiss={() => setPicking(null)}
                     onPick={async (place) => { setPicking(null); await add(picking, {ref: picking.section.ref, ...placeMove(place)}, placeLabel(creator, picking, place)) }}
                 />
@@ -284,8 +285,8 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
             {adding && (
                 <NewCreatorCollectionDialog
                     creator={creator} items={[adding]} onDismiss={() => setAdding(null)}
-                    onChoose={isWaitingList(adding) ? (values) => {
-                        answer(adding, {target: 'own', type: values.type, episodeIdentifier: values.episodeIdentifier}, 'Collection of its own')
+                    onChoose={isListOutside(adding) ? (values) => {
+                        answer(adding, {target: 'own', type: values.type, episodeIdentifier: values.episodeIdentifier}, SECTION_ACTIONS.own)
                         setAdding(null)
                     } : undefined}
                 />
