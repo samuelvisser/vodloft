@@ -94,6 +94,8 @@ export const SearchSiteReadSchema = z.object({
     key: z.string(),
     name: z.string(),
     costlySearch: z.boolean(),
+    /** The Site is added to VODLoft, so Add Media offers its search. */
+    added: z.boolean(),
 })
 export type SearchSiteRead = z.infer<typeof SearchSiteReadSchema>
 
@@ -106,6 +108,9 @@ export const SourceReadSchema = z.object({
     sitesLabel: z.string().nullable().optional(),
     /** The Sites the Source can search by name, such as YouTube and SoundCloud for yt-dlp, each searched on its own. */
     searchSites: z.array(SearchSiteReadSchema).default([]),
+    /** The Sites the Source is made for, such as The Daily Wire, and whether each is added to VODLoft, so Add Media
+     *  offers to browse its catalogue. */
+    sites: z.array(z.object({key: z.string(), name: z.string(), added: z.boolean()})).default([]),
     /** What the Source calls each kind of media, such as show for a Daily Wire collection, or VODLoft's word. */
     kindNames: z.record(z.string(), NamesSchema),
     /** The Sites the Source is made for, such as The Daily Wire; none for a Source of many sites. */

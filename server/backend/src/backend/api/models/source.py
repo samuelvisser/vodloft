@@ -4,7 +4,7 @@ from datetime import datetime
 from collections.abc import Iterable, Mapping
 from typing import Literal, Optional
 
-from pydantic import AliasChoices, AliasPath, Field, computed_field, field_validator
+from pydantic import AliasChoices, AliasPath, Field, ValidationInfo, computed_field, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.media_access import access_granted, access_locked, site_access
@@ -116,11 +116,23 @@ class DownloadProfileDefaultsAPIRead(ResponseBase):
     upgrade_length_minutes: int
 
 
-class SearchSiteAPIRead(ResponseBase):
-    """A Site a Source finds things on by name, such as YouTube or SoundCloud for yt-dlp."""
+class SourceSiteAddedAPIRead(ResponseBase):
+    """A Site of a Source, and whether it is added to VODLoft, so Add Media offers to browse or search it."""
 
     key: str
     name: str
+    added: bool = False
+    """Told by the ``added_sites`` the Sources are read with."""
+
+    @model_validator(mode="after")
+    def _added(self, info: ValidationInfo) -> "SourceSiteAddedAPIRead":
+        self.added = self.key in (info.context or {}).get("added_sites", ())
+        return self
+
+
+class SearchSiteAPIRead(SourceSiteAddedAPIRead):
+    """A Site a Source finds things on by name, such as YouTube or SoundCloud for yt-dlp."""
+
     costly_search: bool
     """Each search costs something, so the search page searches when asked instead of while the user types."""
 
@@ -131,6 +143,8 @@ class SourceAPIRead(ResponseBase):
     domains: list[str]
     features: list[str]
     sites_label: Optional[str] = None
+    sites: list[SourceSiteAddedAPIRead] = Field(default_factory=list)
+    """The Sites the Source is made for, such as The Daily Wire, whose catalogue it browses."""
     search_sites: list[SearchSiteAPIRead] = Field(default_factory=list)
     """The Sites the Source can search by name, each with a search button of its own."""
     kind_names: dict[str, NamesAPIRead] = Field(validation_alias="named_kinds")
