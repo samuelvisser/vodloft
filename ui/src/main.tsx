@@ -49,7 +49,9 @@ async function bootstrap() {
   // Restore cached data synchronously before initial render to prevent flashes.
   const cachedCollections = library ? loadCollectionsFromStorage() : null
   if (cachedCollections) {
-    queryClient.setQueryData(['collections'], cachedCollections)
+    // As old as can be: the stored list paints the first render, but the server's list replaces it, and a collection
+    // page that starts from it asks the server too, so one deleted since shows as gone instead of staying.
+    queryClient.setQueryData(['collections'], cachedCollections, {updatedAt: 0})
     // Season lists are small and seasonal collection pages need them before rendering episode cards.
     // Hydrating them now avoids a skeleton gate without parsing every potentially-large episode list.
     hydrateCachedSeasonQueries(queryClient, cachedCollections)

@@ -47,6 +47,7 @@ export function useAnswerList(creator: CreatorPageRead, onAnswered?: (items: Acc
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['creators']}),
                 queryClient.invalidateQueries({queryKey: ['collection']}),
+                queryClient.invalidateQueries({queryKey: ['collections']}),
                 queryClient.invalidateQueries({queryKey: ['collectionsView']}),
                 queryClient.invalidateQueries({queryKey: ['movesWaiting']}),
             ])

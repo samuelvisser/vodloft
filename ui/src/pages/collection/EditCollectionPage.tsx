@@ -15,7 +15,8 @@ import CronEditor from '../../components/Settings/CronEditor'
 import {useQuery} from '@tanstack/react-query'
 import {toast} from '../../lib/toast'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
-import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
+import {removeEpisodePreviewFromStorage} from '../../lib/cache'
+import {forgetDeletedCollection} from '../../lib/deletedCollection'
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
 import {CollectionTypeReg, CollectionTypeValue, episodeIdentifierRegFor, musicIdentificationAdvice, EpisodeIdentifierValue, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
 import ChangeIdentificationDialog from '../../components/ChangeIdentificationDialog/ChangeIdentificationDialog'
@@ -241,23 +242,8 @@ export default function EditCollectionPage() {
       toast.error(friendly)
       return
     }
-    removeEpisodePreviewFromStorage(id)
-    removeSeasonsFromStorage(id)
     setDeleteConfirm(false)
-
-    await Promise.all([
-      qc.cancelQueries({queryKey: ['collection', id]}),
-      qc.cancelQueries({queryKey: ['seasons', id]}),
-      qc.cancelQueries({queryKey: episodeQueryKeys.forCollection(id)}),
-    ])
-    qc.removeQueries({queryKey: ['collection', id]})
-    qc.removeQueries({queryKey: ['seasons', id]})
-    qc.removeQueries({queryKey: episodeQueryKeys.forCollection(id)})
-
-    await Promise.all([
-      qc.invalidateQueries({queryKey: ['collections']}),
-      qc.invalidateQueries({queryKey: ['collectionsView']}),
-    ])
+    await forgetDeletedCollection(qc, id)
     navigate('/library?type=collections')
   }
 

@@ -1396,3 +1396,18 @@ def test_each_kind_of_list_has_its_own_setting_for_new_ones(client, session, tub
 
     # The album is added by itself; the playlist waits for the user's choice.
     assert ([section.ref for section in result.added], [section.ref for section in result.asked]) == (["PLalbum"], ["PLbarn"])
+
+
+def test_deleting_an_accounts_own_collection_keeps_the_account(client, tube, session):
+    registry.register(ClipsSource())
+    _one_show(client)
+    assert _add_clips(client, into="workshop").status_code == 201
+    page = client.get("/api/creators/workshop").json()
+    clips = next(account for account in page["accounts"] if account["site"]["key"] == "clips")
+
+    assert client.delete(f"/api/collections/{clips['mainCollectionSlug']}").status_code == 200
+
+    page = client.get("/api/creators/workshop").json()
+    assert [account["site"]["key"] for account in page["accounts"]] == ["tube", "clips"]
+    assert page["accounts"][1]["mainCollectionSlug"] is None
+    assert clips["mainCollectionSlug"] not in {collection["slug"] for collection in page["collections"]}
