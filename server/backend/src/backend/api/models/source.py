@@ -87,6 +87,30 @@ class LockableResponse(ResponseBase):
         return found.description if found is not None else None
 
 
+class RetentionAPIRead(ResponseBase):
+    """A Site that removes its media itself after a while, such as Twitch its past broadcasts."""
+
+    site_name: str
+    retention: str
+    """How the Site removes its media, as a sentence."""
+
+
+class RetentionResponse(LockableResponse):
+    """Media on a Site that may have removed it itself, as it removes all its media after a while."""
+
+    removed_by_retention: bool = False
+
+    @computed_field
+    @property
+    def removed_by(self) -> Optional[RetentionAPIRead]:
+        """The Site whose retention removed the media, and how that Site removes its media; None for media its Site
+        did not remove so."""
+        if not self.removed_by_retention or self.site_key is None:
+            return None
+        site = site_of(self.site_key)
+        return RetentionAPIRead(site_name=site.name, retention=site.retention or "")
+
+
 class DownloadOptionsAPIRead(ResponseBase):
     """What a Local Media Profile can download for a Site, or for any Site of a Source."""
 
@@ -135,6 +159,14 @@ class SearchSiteAPIRead(SourceSiteAddedAPIRead):
 
     costly_search: bool
     """Each search costs something, so the search page searches when asked instead of while the user types."""
+    ready: bool = False
+    """The Source can search the Site now: one whose search goes through its own API once that is set up. Told by
+    the ``ready_sites`` the Sources are read with."""
+
+    @model_validator(mode="after")
+    def _ready(self, info: ValidationInfo) -> "SearchSiteAPIRead":
+        self.ready = self.key in (info.context or {}).get("ready_sites", ())
+        return self
 
 
 class SourceAPIRead(ResponseBase):
@@ -219,6 +251,41 @@ class CookiesStatusAPIRead(ResponseBase):
     detail: Optional[str] = None
 
 
+class ApiFieldAPIRead(ResponseBase):
+    key: str
+    label: str
+    secret: bool
+
+
+class GuideStepAPIRead(ResponseBase):
+    text: str
+    button: Optional[str] = None
+    url: Optional[str] = None
+
+
+class SiteApiAPIRead(ResponseBase):
+    """A Site's own free API that the user can register VODLoft with, such as Twitch's."""
+
+    name: str
+    fields: list[ApiFieldAPIRead]
+    benefits: str
+    steps: list[GuideStepAPIRead]
+    searches: bool
+    """The Site's search goes through the API, so Add Media only searches the Site once it is set up."""
+
+
+class SiteApiStatusAPIRead(ResponseBase):
+    hints: dict[str, str]
+    """The values that are set, by their field's key: a secret by its last few characters."""
+    problem: Optional[str] = None
+    set_up: bool
+
+
+class SiteApiValuesAPIUpdate(RequestBase):
+    values: dict[str, str] = Field(max_length=8)
+    """The values by their field's key. A secret left empty keeps the one stored."""
+
+
 class SiteAuthenticationAPIRead(ResponseBase):
     """A Site, and how VODLoft signs in on it or gets at its API: a Source's own sign-in, the Site's cookies
     file, or a Source's API key."""
@@ -236,6 +303,9 @@ class SiteAuthenticationAPIRead(ResponseBase):
     cookies_status: Optional[CookiesStatusAPIRead] = None
     api_key_source_key: Optional[str] = None
     """The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key."""
+    site_api: Optional[SiteApiAPIRead] = None
+    """The Site's own API, on a Site that has one a Source uses."""
+    site_api_status: Optional[SiteApiStatusAPIRead] = None
     removable: bool
     """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
 

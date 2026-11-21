@@ -131,7 +131,7 @@ def test_the_api_and_ytdlp_make_the_same_episode(path):
         assert mapping.is_pending(api_item)
         return
     url = ytdlp_info["webpage_url"]
-    from_ytdlp = YtDlpSource._video(ytdlp_info, url)
+    from_ytdlp = YtDlpSource()._video(ytdlp_info, url)
     from_api = mapping.video(api_item, short=fixture["playlist"] == "UUSH")
 
     assert from_api.published_at == from_ytdlp.published_at

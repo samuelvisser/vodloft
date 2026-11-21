@@ -50,6 +50,7 @@ export function EpisodeDownloadRow({
     skippedBy,
     waitsForCountdown = false,
     season,
+    goneReason,
 }: {
     profile: LocalMediaProfileRead
     download?: MediaDownloadViewRead
@@ -64,6 +65,8 @@ export function EpisodeDownloadRow({
     waitsForCountdown?: boolean
     /** What the collection calls its seasons: albums in a Music collection. */
     season?: Noun
+    /** Why the episode can't be downloaded (again), such as its Site's retention having removed it. */
+    goneReason?: string
 }) {
     const {busy, request, cancel, retry, present, isStarting} = useDownloadRowRequest(['episodeDownloads', episodeSlug])
     const starting = isStarting(download)
@@ -257,9 +260,11 @@ export function EpisodeDownloadRow({
                             ? `Re-download ${profile.name}`
                             : `Retry download for ${profile.name}`,
                     onClick: requestRetry,
+                    disabledReason: goneReason,
                 }
                 : null}
             onDownload={requestDownload}
+            downloadDisabledReason={goneReason}
             onCancel={() => download && void cancel(download)}
             note={note}
             downloadLabel={(skippedBy || waitsForCountdown) && !download ? 'Download anyway' : 'Download'}

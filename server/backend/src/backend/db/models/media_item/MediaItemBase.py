@@ -43,6 +43,10 @@ class MediaItemBase(Base):
     removed_from_source: Mapped[bool] = mapped_column(
         default=False, server_default=false(), comment="The Source no longer has the media; downloaded files are kept",
     )
+    removed_by_retention: Mapped[bool] = mapped_column(
+        default=False, server_default=false(),
+        comment="The Site removed the media itself, as it removes all its media after a while (its retention)",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()

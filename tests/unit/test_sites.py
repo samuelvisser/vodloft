@@ -195,6 +195,25 @@ def test_add_media_offers_only_the_search_and_catalogue_of_added_sites():
             return ["youtube"]
 
     sources = {source.id: source for source in list_sources(OnlyYouTubeAdded())}
-    assert {site.key: site.added for site in sources["ytdlp"].search_sites} == {"youtube": True, "soundcloud": False}
+    assert {site.key: site.added for site in sources["ytdlp"].search_sites} == {"youtube": True, "twitch": False, "soundcloud": False}
     assert [(site.key, site.added) for site in sources["dailywire"].sites] == [("dailywire", False)]
     assert [(site.key, site.added) for site in sources["npo"].search_sites] == [("npo", False)]
+
+
+def test_add_media_only_searches_twitch_once_its_api_is_set_up(monkeypatch, tmp_path):
+    from backend.api.endpoints.sources.service import list_sources
+    from sources import cookies, site_api_keys
+
+    monkeypatch.setattr(cookies, "cookies_directory", lambda: tmp_path / "cookies")
+
+    class TwitchAdded:
+        def scalars(self, _query):
+            return ["twitch"]
+
+    def twitch():
+        sources = {source.id: source for source in list_sources(TwitchAdded())}
+        return next(site for site in sources["ytdlp"].search_sites if site.key == "twitch")
+
+    assert twitch().added and not twitch().ready
+    site_api_keys.save("twitch", {"client_id": "an-id", "client_secret": "a-secret"})
+    assert twitch().ready

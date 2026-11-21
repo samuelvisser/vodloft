@@ -7,7 +7,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
-from ...contract import LIST_TYPE, CollectionDetails, CreatorDetails, SearchResults, SectionRef, link_host, on_domain
+from ...contract import LIST_TYPE, MAIN_TAG, CollectionDetails, CreatorDetails, SearchResults, SectionRef, link_host, on_domain
 from ... import ytdlp_runner as runner
 from .. import sites, thumbnails, youtube_search
 from ..youtube_api import QuotaExceededError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
@@ -21,6 +21,7 @@ _CHANNEL_PAGE = re.compile(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)(?:/(?:v
 # A playlist's own picture on YouTube. YouTube serves it only under the signed link it lists it with; yt-dlp adds a
 # widest form without the signature, which YouTube answers with a grey placeholder.
 _UNSIGNED_PLAYLIST_PICTURE = re.compile(r"^https?://i\d?\.ytimg\.com/s_p/[^?]+$")
+_LIVE_STATUSES = {"is_live", "is_upcoming", "was_live", "post_live"}
 
 
 def collection_url(url: str) -> str:
@@ -83,6 +84,28 @@ class YouTubeImplementation(OtherSitesImplementation):
                 logger.info("Searching YouTube with yt-dlp, because the API could not: %s", exc)
                 reason = "error"
         return SearchResults(youtube_search.search_ytdlp(query), youtube_search.ytdlp_notice(reason))
+
+    def collection_link(self, url: str) -> str:
+        return collection_url(url)
+
+    def episode_tag(self, info: dict, url: str) -> str:
+        """Short and Livestream, as yt-dlp's full extraction of a YouTube video says.
+
+        yt-dlp calls a premiere a video, also while it is upcoming or playing for
+        the first time, so then a live status alone does not make it a livestream.
+        A finished broadcast does.
+        """
+        if not str(info.get("extractor_key") or "").startswith("Youtube"):
+            return MAIN_TAG
+        media_type = info.get("media_type")
+        if media_type in {"short", "livestream"}:
+            return media_type
+        live_status = info.get("live_status")
+        if live_status == "was_live" or (media_type is None and live_status in _LIVE_STATUSES):
+            return "livestream"
+        if "/shorts/" in (info.get("webpage_url") or url):
+            return "short"
+        return MAIN_TAG
 
     def creator_root(self, url: str) -> str | None:
         return channel_root(collection_url(url))

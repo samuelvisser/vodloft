@@ -32,9 +32,15 @@ class LinkNotRecognisedError(LookupError):
 
 
 def list_sources(s: Session) -> list[SourceAPIRead]:
-    """Every Source, with which of the Sites it searches are added to VODLoft."""
+    """Every Source, with which of the Sites it searches are added to VODLoft, and which it can search now."""
     added = set(s.scalars(select(SiteRecord.key)))
-    return [SourceAPIRead.model_validate(source, context={"added_sites": added}) for source in all_sources()]
+    return [
+        SourceAPIRead.model_validate(source, context={
+            "added_sites": added,
+            "ready_sites": {site.key for site in source.search_sites if source.search_ready(site)},
+        })
+        for source in all_sources()
+    ]
 
 
 def sources_in_use(s: Session) -> list[str]:

@@ -5,10 +5,12 @@ from __future__ import annotations
 
 from .artists import BandcampImplementation, SoundCloudImplementation
 from .other_sites import OtherSitesImplementation, Read
+from .tiktok import TikTokImplementation
+from .twitch import TwitchImplementation
 from .youtube import YouTubeImplementation
 
 IMPLEMENTATIONS: dict[str, type[OtherSitesImplementation]] = {implementation.key: implementation for implementation in (
-    YouTubeImplementation, SoundCloudImplementation, BandcampImplementation,
+    YouTubeImplementation, TwitchImplementation, TikTokImplementation, SoundCloudImplementation, BandcampImplementation,
 )}
 
 __all__ = ["IMPLEMENTATIONS", "OtherSitesImplementation", "Read"]

@@ -27,11 +27,6 @@ class Facebook(OtherSites):
     domains = ("facebook.com", "fb.watch")
 
 
-class Instagram(OtherSites):
-    key, name = "instagram", "Instagram"
-    domains = ("instagram.com",)
-
-
 class Kick(OtherSites):
     key, name = "kick", "Kick"
     domains = ("kick.com",)
@@ -67,24 +62,9 @@ class Rumble(OtherSites):
     domains = ("rumble.com",)
 
 
-class TikTok(OtherSites):
-    key, name = "tiktok", "TikTok"
-    domains = ("tiktok.com",)
-
-
-class Twitch(OtherSites):
-    key, name = "twitch", "Twitch"
-    domains = ("twitch.tv",)
-
-
-class X(OtherSites):
-    key, name = "twitter", "X"
-    domains = ("x.com", "twitter.com")
-
-
 class Vimeo(OtherSites):
     key, name = "vimeo", "Vimeo"
     domains = ("vimeo.com",)
 
 
-NAMED = (BBC, Bilibili, BitChute, Dailymotion, Facebook, Instagram, Kick, Nebula, Odysee, Patreon, PeerTube, Reddit, Rumble, TikTok, Twitch, X, Vimeo)
+NAMED = (BBC, Bilibili, BitChute, Dailymotion, Facebook, Kick, Nebula, Odysee, Patreon, PeerTube, Reddit, Rumble, Vimeo)

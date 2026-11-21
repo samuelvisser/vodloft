@@ -6,6 +6,7 @@ import type {SiteAuthenticationRead} from '../../types/schemas/source'
 import SourceSection from './SourceSection'
 import {sourceComponents} from './sourceComponents'
 import AddSiteByLink from '../Settings/AddSiteByLink'
+import SiteApiSettings from './SiteApiSettings'
 import SiteRow, {SiteBadge, SiteRows} from '../Settings/SiteRow'
 import './SiteAuthenticationCard.css'
 
@@ -128,6 +129,11 @@ function badges(site: SiteAuthenticationRead, apiKey: ReturnType<typeof useApiKe
         shown.push(<SiteBadge key="cookies" tone="on">Cookies file</SiteBadge>)
     }
     if (apiKey) shown.push(apiKey)
+    if (site.siteApiStatus?.setUp) {
+        shown.push(site.siteApiStatus.problem
+            ? <SiteBadge key="site-api" tone="problem">{`${site.siteApi?.name ?? 'API'} not working`}</SiteBadge>
+            : <SiteBadge key="site-api" tone="on">{site.siteApi?.name ?? 'API'}</SiteBadge>)
+    }
     if (!shown.length) shown.push(<SiteBadge key="none" tone="off">Not signed in</SiteBadge>)
     return shown
 }
@@ -145,8 +151,9 @@ function SiteAuthenticationRow({site, onSaved}: {site: SiteAuthenticationRead; o
         >
             {SignIn ? <SignIn/> : null}
             {ApiKey ? <ApiKey/> : null}
+            {site.siteApi ? <SiteApiSettings site={site} onSaved={onSaved}/> : null}
             {takesCookies ? <SiteCookies site={site} onSaved={onSaved}/> : null}
-            {!SignIn && !ApiKey && !takesCookies ? <p className="settings-field__help">VODLoft can't sign in on {site.name}.</p> : null}
+            {!SignIn && !ApiKey && !site.siteApi && !takesCookies ? <p className="settings-field__help">VODLoft can't sign in on {site.name}.</p> : null}
         </SiteRow>
     )
 }

@@ -4,14 +4,15 @@ from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
     ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
-    SiteAddAPIRequest, SiteAddedAPIRead, SiteAuthenticationAPIRead,
+    SiteAddAPIRequest, SiteAddedAPIRead, SiteApiValuesAPIUpdate, SiteAuthenticationAPIRead,
 )
 from backend.app import db_session
 from backend.api.endpoints.creators.service import look_up_creator_ahead
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.site_cookies import (
-    SiteAuthentication, SiteNotKnownError, list_site_authentication, remove_known_site, remove_site_cookies, save_site_cookies,
+    SiteAuthentication, SiteNotKnownError, list_site_authentication, remove_known_site, remove_site_api, remove_site_cookies,
+    save_site_api, save_site_cookies, test_site_api,
 )
 from backend.services.errors import ServiceError
 from backend.services.sites import SiteLinkError, add_site, episode_tags_named, site_of_link
@@ -264,6 +265,42 @@ def remove_site_cookie_file(site_key: str):
             raise HTTPException(status_code=404, detail=str(exc)) from exc
     _sign_in_changed(listing)
     return SiteAuthenticationAPIRead.model_validate(listing)
+
+
+def _site_api_rejected(exc: ApiKeyRejected) -> HTTPException:
+    """Under the value it is about, or under the form as a whole."""
+    loc = ["body", "values", exc.field] if exc.field else ["body"]
+    return HTTPException(status_code=422, detail=[{"loc": loc, "msg": str(exc), "type": "value_error"}])
+
+
+@router.put("/sources/authentication/{site_key}/api", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def save_site_api_values(site_key: str, body: SiteApiValuesAPIUpdate):
+    """Test the values of the Site's own API, such as Twitch's client ID and secret, and store them when the Site
+    accepts them."""
+    try:
+        return SiteAuthenticationAPIRead.model_validate(save_site_api(site_key, body.values))
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ApiKeyRejected as exc:
+        raise _site_api_rejected(exc) from exc
+
+
+@router.post("/sources/authentication/{site_key}/api/test", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def test_site_api_values(site_key: str):
+    try:
+        return SiteAuthenticationAPIRead.model_validate(test_site_api(site_key))
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ApiKeyRejected as exc:
+        raise _api_key_rejected(exc) from exc
+
+
+@router.delete("/sources/authentication/{site_key}/api", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SiteAuthenticationAPIRead)
+def remove_site_api_values(site_key: str):
+    try:
+        return SiteAuthenticationAPIRead.model_validate(remove_site_api(site_key))
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 def _sign_in_changed(listing: SiteAuthentication) -> None:

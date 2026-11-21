@@ -150,7 +150,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     // Sites added to VODLoft are offered.
     const browseChoices = (sources ?? []).filter((source) => canUseSource(source.id)).flatMap((source): {source: SourceRead, site?: SearchSiteRead}[] => (
         sourceHas(source, SourceFeature.BROWSE) ? (source.sites.some((site) => site.added) ? [{source}] : [])
-            : sourceHas(source, SourceFeature.SEARCH) ? source.searchSites.filter((site) => site.added).map((site) => ({source, site}))
+            : sourceHas(source, SourceFeature.SEARCH) ? source.searchSites.filter((site) => site.added && site.ready).map((site) => ({source, site}))
             : []
     ))
     const browse = (source: SourceRead, site?: SearchSiteRead) => {

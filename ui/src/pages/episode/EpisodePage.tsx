@@ -18,7 +18,7 @@ import {formatDate} from "../../utils/formatting";
 import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
-import {RemovedBadge} from '../../components/common/RemovedFromSource'
+import {RemovedBadge, RemovedByRetentionBadge} from '../../components/common/RemovedFromSource'
 import SeasonPlaceNote, {MovedBadge, ReassignedBadge, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
 import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
 import {can} from '../../lib/access'
@@ -314,7 +314,9 @@ export default function EpisodePage() {
                         <EpisodeTypePill sourceKey={episode.sourceKey} type={episode.episodeType} asText/>
                         {episode.drmProtected && <DrmBadge asText/>}
                         <ItemAccessBadge item={episode} asText/>
-                        {episode.removedFromSource && <RemovedBadge asText/>}
+                        {episode.removedBy
+                            ? <RemovedByRetentionBadge removedBy={episode.removedBy}/>
+                            : episode.removedFromSource && <RemovedBadge asText/>}
                         {reassignedTo && <ReassignedBadge collectionTitle={reassignedTo} asText/>}
                         {moved && <MovedBadge asText words={words}/>}
                         <span className={`episode-status${isLive ? ' is-live' : ''}`} title={sourceStatus?.help}>
@@ -417,6 +419,9 @@ export default function EpisodePage() {
                                             skippedBy={skippedBy}
                                             season={words.season}
                                             waitsForCountdown={containsCountdown && waitsForCountdown}
+                                            goneReason={episode.removedBy
+                                                ? `${episode.removedBy.siteName} removed this ${words.episode.singular}, so it can't be downloaded again`
+                                                : undefined}
                                         />
                                     )
                                 })}

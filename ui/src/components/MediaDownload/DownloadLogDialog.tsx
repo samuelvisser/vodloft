@@ -260,7 +260,17 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                     This will stop any active download and remove its record, download history,
                     media file and associated downloaded files from the filesystem.
                 </p>
-                <p>This action cannot be undone. A Download Profile that covers this episode may download it again.</p>
+                {row.removedBy ? (
+                    <p className="confirm-dialog-warning" role="alert">
+                        <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')} aria-hidden="true"/>
+                        <span>{row.removedBy.siteName} no longer offers this, as it removes its media after a while.
+                        Once you delete this download, VODLoft can&apos;t download it again, so it is gone for good.</span>
+                    </p>
+                ) : null}
+                <p>
+                    This action cannot be undone.
+                    {row.removedBy ? '' : ' A Download Profile that covers this episode may download it again.'}
+                </p>
             </ConfirmDialog>
         </>
     )

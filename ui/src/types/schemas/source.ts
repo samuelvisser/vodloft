@@ -62,6 +62,15 @@ export const LockableFields = {
     accessDescription: z.string().nullable().optional().default(null),
 }
 
+/** Media on a Site that removes its media itself after a while, such as Twitch its past broadcasts. */
+export const RetentionFields = {
+    ...LockableFields,
+    /** The Site removed the media itself, so it is gone for good there and VODLoft did not ask about it on Home. */
+    removedByRetention: z.boolean().optional().default(false),
+    /** The Site that removed it, and how that Site removes its media. */
+    removedBy: z.object({siteName: z.string(), retention: z.string()}).nullable().optional().default(null),
+}
+
 
 export function hasSourceFeature(
     item: {sourceFeatures?: readonly string[] | null} | null | undefined,
@@ -96,6 +105,8 @@ export const SearchSiteReadSchema = z.object({
     costlySearch: z.boolean(),
     /** The Site is added to VODLoft, so Add Media offers its search. */
     added: z.boolean(),
+    /** The Source can search the Site now: one whose search goes through its own API once that is set up. */
+    ready: z.boolean().default(true),
 })
 export type SearchSiteRead = z.infer<typeof SearchSiteReadSchema>
 
@@ -302,6 +313,17 @@ export const SourceProblemReadSchema = z.object({
 })
 export type SourceProblemRead = z.infer<typeof SourceProblemReadSchema>
 
+/** A Site's own free API that the user can register VODLoft with, such as Twitch's. */
+export const SiteApiReadSchema = z.object({
+    name: z.string(),
+    fields: z.array(z.object({key: z.string(), label: z.string(), secret: z.boolean()})),
+    benefits: z.string(),
+    steps: z.array(z.object({text: z.string(), button: z.string().nullable(), url: z.string().nullable()})),
+    /** The Site's search goes through the API, so Add Media only searches it once it is set up. */
+    searches: z.boolean(),
+})
+export type SiteApiRead = z.infer<typeof SiteApiReadSchema>
+
 export const SiteAuthenticationReadSchema = z.object({
     key: z.string(),
     name: z.string(),
@@ -318,6 +340,14 @@ export const SiteAuthenticationReadSchema = z.object({
     cookiesStatus: z.object({label: z.string(), ok: z.boolean(), detail: z.string().nullable()}).nullable(),
     /** The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key. */
     apiKeySourceKey: z.string().nullable(),
+    /** The Site's own API, on a Site that has one a Source uses. */
+    siteApi: SiteApiReadSchema.nullable().default(null),
+    /** Which values of the Site's API are set, a secret by its last few characters, and the last problem with them. */
+    siteApiStatus: z.object({
+        hints: z.record(z.string(), z.string()),
+        problem: z.string().nullable(),
+        setUp: z.boolean(),
+    }).nullable().default(null),
     /** The user can remove the Site: VODLoft has nothing from it and no Source is made for it. */
     removable: z.boolean(),
 })

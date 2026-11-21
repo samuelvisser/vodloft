@@ -1,5 +1,6 @@
 """Authentication per Site: a Site's own sign-in, such as The Daily Wire's, a cookies file per Site,
-and the API key a Source uses on a Site, such as YouTube's.
+the API key a Source uses on a Site, such as YouTube's, and a Site's own API the user registered VODLoft with, such
+as Twitch's.
 
 Every Source that signs in with cookies uses the cookies file of the Site it fetches, so YouTube and Twitch
 each have their own file, and yt-dlp uses NPO Start's file when it fetches npo.nl. A cookies file that another
@@ -21,8 +22,9 @@ from sqlalchemy.orm import Session
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Site as SiteRecord
 from backend.services.sites import SiteLinkError, remove_site, site_of_link, site_record, site_removable, sites_in_use
-from sources import ANY_DOMAIN, CookiesStatus, Feature, Site, Source, all_sources, site_of, sources_for
+from sources import ANY_DOMAIN, CookiesStatus, Feature, Site, SiteApi, SiteApiStatus, Source, all_sources, site_of, sources_for
 from sources import cookies as cookie_files
+from sources import site_api_keys
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,9 @@ class SiteAuthentication:
     cookies_status: Optional[CookiesStatus]
     api_key_source_key: Optional[str]
     """The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key."""
+    site_api: Optional[SiteApi]
+    """The Site's own API that a Source uses with the user's credentials, such as Twitch's."""
+    site_api_status: Optional[SiteApiStatus]
     removable: bool
     """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
 
@@ -129,14 +134,63 @@ def _authentication(site: Site, domains: tuple[str, ...], in_use: set[str]) -> S
          if source.has(Feature.API_KEY)),
         None,
     )
+    api_source = _site_api_source(site, domains)
     return SiteAuthentication(
         key=site.key, name=site.name, domains=domains, sign_in_source_key=owner.id if owner is not None else None,
         cookie_source_keys=tuple(source.id for source in sources),
         cookie_source_names=tuple(source.name for source in sources), cookies_help=site.cookies_help,
         cookie_count=count, cookies_status=_status(site.key, sources) if count else None,
         api_key_source_key=api_key.id if api_key is not None else None,
+        site_api=site.site_api if api_source is not None else None,
+        site_api_status=api_source.site_api_status(site) if api_source is not None else None,
         removable=site_removable(site.key, in_use),
     )
+
+
+def _site_api_source(site: Site, domains: tuple[str, ...]) -> Optional[Source]:
+    """The Source that uses the Site's own API, on a Site that has one."""
+    if site.site_api is None or not domains:
+        return None
+    return next((source for source in sources_for(f"https://{domains[0]}/") if source.has(Feature.SITE_API)), None)
+
+
+def _with_site_api(site_key: str) -> tuple[Site, Source, tuple[str, ...]]:
+    with _reading() as s:
+        known = _known_sites(s).get(site_key)
+    if known is None:
+        raise SiteNotKnownError(f"VODLoft does not know the Site '{site_key}'")
+    site, domains = known
+    source = _site_api_source(site, domains)
+    if source is None:
+        raise SiteNotKnownError(f"VODLoft uses no API of {site.name}")
+    return site, source, domains
+
+
+def _listing(site_key: str) -> SiteAuthentication:
+    with _reading() as s:
+        site, domains = _known_sites(s)[site_key]
+        return _authentication(site, domains, sites_in_use(s))
+
+
+def save_site_api(site_key: str, values: dict[str, str]) -> SiteAuthentication:
+    """Test the values of the Site's own API with one call and store them. Raises ApiKeyRejected when the Site does
+    not accept them."""
+    site, source, _domains = _with_site_api(site_key)
+    source.save_site_api(site, values)
+    logger.info("Set up the %s", site.site_api.name)
+    return _listing(site_key)
+
+
+def test_site_api(site_key: str) -> SiteAuthentication:
+    site, source, _domains = _with_site_api(site_key)
+    source.test_site_api(site)
+    return _listing(site_key)
+
+
+def remove_site_api(site_key: str) -> SiteAuthentication:
+    site, source, _domains = _with_site_api(site_key)
+    source.remove_site_api(site)
+    return _listing(site_key)
 
 
 def list_site_authentication(s: Session) -> list[SiteAuthentication]:
@@ -199,6 +253,7 @@ def remove_known_site(site_key: str) -> None:
     if known is None:
         raise SiteNotKnownError(f"VODLoft does not know the Site '{site_key}'")
     run_write_transaction(lambda s: remove_site(s, site_key))
+    site_api_keys.remove(site_key)
     if cookie_files.site_cookies(site_key) is not None:
         cookie_files.remove_site_cookies(site_key)
         _changed(*known)

@@ -27,12 +27,12 @@ def session():
     engine.dispose()
 
 
-def _episode(session, status="published_final", *, files=False):
+def _episode(session, status="published_final", *, files=False, url="https://example.test/show"):
     from backend.db.models import Collection, Episode, EpisodeMediaDownload, LocalMediaProfile, Season
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
 
     collection = Collection(
-        source_key="ytdlp", uuid="c-uuid", slug="show", title="Show", sharing_url="https://example.test/show",
+        source_key="ytdlp", uuid="c-uuid", slug="show", title="Show", sharing_url=url,
         membership_level="FREE", type=CollectionType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host", author_slug="host",
     )
@@ -94,6 +94,21 @@ def test_a_downloaded_episode_stays_marked_removed_and_home_asks_about_it(sessio
     assert episode.removed_from_source is True
     assert episode.publish_status == "published_final"
     assert [download.media_item_id for download in downloads_awaiting_keep_answer(session)] == [episode_id]
+
+
+def test_a_downloaded_video_its_sites_retention_removed_is_not_asked_about(session):
+    from backend.api.models.episode import EpisodeAPIRead
+    from backend.db.models import Episode
+    from backend.services.removed_downloads import back_at_source, downloads_awaiting_keep_answer
+
+    episode_id = _episode(session, files=True, url="https://www.twitch.tv/spamfish/videos?filter=all")
+
+    assert _left(session, episode_id) is False
+    episode = session.get(Episode, episode_id)
+    assert episode.removed_from_source and episode.removed_by_retention
+    # Twitch deletes its past broadcasts itself, so Home does not ask whether to keep the download.
+    assert downloads_awaiting_keep_answer(session) == []
+    assert back_at_source(episode) and not episode.removed_by_retention
 
 
 @pytest.mark.parametrize("status", ["live", "source_processing", "published_preliminary"])
