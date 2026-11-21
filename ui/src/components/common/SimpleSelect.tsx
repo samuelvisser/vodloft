@@ -2,6 +2,7 @@ import {forwardRef, useMemo} from 'react'
 import Select, {components, type Props as ReactSelectProps, type SelectInstance, type ValueContainerProps} from 'react-select'
 
 import type {SelectRegistry} from '../../utils/selectRegistry'
+import {useDialogMenuProps} from '../Modal/dialogMenus'
 
 type SimpleSelectOption = {
     value: string
@@ -41,6 +42,7 @@ const SimpleSelect = forwardRef<SelectInstance<SimpleSelectOption, false>, Simpl
         components: customComponents,
         ...props
     }, ref) {
+        const dialogMenuProps = useDialogMenuProps()
         const selectedOption = registry.options.find((option) => option.value === value) ?? null
         const fitKey = [...new Set(fitLabels ?? [])].join('\n')
         const selectComponents = useMemo(() => {
@@ -62,7 +64,9 @@ const SimpleSelect = forwardRef<SelectInstance<SimpleSelectOption, false>, Simpl
 
         return (
             <Select<SimpleSelectOption, false>
+                {...dialogMenuProps}
                 {...props}
+                styles={{...dialogMenuProps.styles, ...props.styles}}
                 ref={ref}
                 classNamePrefix={classNamePrefix}
                 components={selectComponents}
