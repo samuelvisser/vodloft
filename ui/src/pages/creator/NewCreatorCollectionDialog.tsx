@@ -39,7 +39,7 @@ export default function NewCreatorCollectionDialog({creator, items, onDismiss, o
     const {account, section} = items[0]
     const one = items.length === 1
     const named = namedSections(items)
-    const suggestion = useCollectionDefaults(section.url)
+    const suggestion = useCollectionDefaults(section.url, section.kind === 'list')
     const form = useForm<CreatorCollectionFormIn, unknown, CreatorCollectionFormOut>({
         resolver: zodResolver(CreatorCollectionFormSchema),
         defaultValues: getZodDefaults(CreatorCollectionFormSchema),
@@ -148,8 +148,8 @@ export default function NewCreatorCollectionDialog({creator, items, onDismiss, o
             )}
             {field('type', 'Collection type', CollectionTypeReg)}
             {field('episodeIdentifier', 'Episode identification', episodeIdentifierRegFor(form.watch('type')))}
-            {musicIdentificationAdvice(form.watch('type'), form.watch('episodeIdentifier')) && (
-                <p className="help form-advice" role="status">{musicIdentificationAdvice(form.watch('type'), form.watch('episodeIdentifier'))}</p>
+            {musicIdentificationAdvice(form.watch('type'), form.watch('episodeIdentifier'), section.kind === 'list') && (
+                <p className="help form-advice" role="status">{musicIdentificationAdvice(form.watch('type'), form.watch('episodeIdentifier'), section.kind === 'list')}</p>
             )}
             {errors.root && <div className="form-error-card" role="alert">{String(errors.root.message)}</div>}
         </ConfirmDialog>

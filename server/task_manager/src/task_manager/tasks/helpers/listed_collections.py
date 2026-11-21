@@ -21,6 +21,9 @@ first. A video in none goes to the season of videos in no playlist, or to its se
 per year, as the collection is set. Once a video has a file it stays where it is,
 until the user moves it.
 
+A collection made from one of its creator's lists, such as a playlist or an album,
+has that list as its one season, and numbers its videos in the list's order.
+
 A collection that splits videos by chapter, at a Source with ``Feature.CHAPTERS``,
 adds each new video with chapters as a season of its own, named after the video,
 with an episode per chapter. Each part is downloaded on its own, as just its stretch
@@ -56,7 +59,7 @@ from backend.services.notifications.emitters import link_seasons_found
 from backend.services.reassigned import list_left_out, lists_left_out, placed_elsewhere, save_left_out, settle_creator
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
-    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, own_feeds, own_link, section_list_names, place_in_link_seasons, link_seasons_on,
+    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, made_from_list, own_feeds, own_link, section_list_names, place_in_link_seasons, link_seasons_on,
     save_lists,
 )
 from backend.services.metadata_refresh import new_item_metadata_is_final
@@ -327,7 +330,9 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
     known = set(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id, Episode.video_slug.in_(listed))))
     # A list of another collection of the creator holds it, so it belongs there.
     known |= placed_elsewhere(s, collection) & set(listed)
-    ordered = sorted((details for slug, details in listed.items() if slug not in known), key=lambda details: _order_key(details, now))
+    new = [details for slug, details in listed.items() if slug not in known]
+    # A collection made from one list numbers its videos in the list's order, as an album numbers its tracks.
+    ordered = new if made_from_list(collection) else sorted(new, key=lambda details: _order_key(details, now))
 
     placer = _Placer(s, collection, now)
     split = splits_chapters(collection)

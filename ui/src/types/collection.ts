@@ -31,9 +31,14 @@ export function episodeIdentifierRegFor(type: string | null | undefined): typeof
     return type === CollectionTypeReg.Enum.music ? MusicEpisodeIdentifierReg as typeof EpisodeIdentifierReg : EpisodeIdentifierReg;
 }
 
-/** Advice for a Music collection that isn't identified by album, which always suits music better. */
-export function musicIdentificationAdvice(type: string | null | undefined, identifier: string | null | undefined): string | null {
-    return type === CollectionTypeReg.Enum.music && identifier && identifier !== EpisodeIdentifierReg.Enum.seasonal
+/**
+ * Advice for a Music collection that isn't identified by album, which suits music of several albums better. A
+ * collection that is one album, such as one made from an album or a playlist, has nothing to group: ``oneAlbum``.
+ */
+export function musicIdentificationAdvice(
+    type: string | null | undefined, identifier: string | null | undefined, oneAlbum = false,
+): string | null {
+    return type === CollectionTypeReg.Enum.music && !oneAlbum && identifier && identifier !== EpisodeIdentifierReg.Enum.seasonal
         ? "For a Music collection, By album is always the better choice: the tracks are grouped by album, in the album's order."
         : null;
 }

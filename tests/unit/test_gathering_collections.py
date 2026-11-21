@@ -83,17 +83,19 @@ def test_a_playlist_season_joins_the_collection_of_another_playlist_which_keeps_
     tools = _collection(session, "PLtools")
     assert tools.id == tools_id and tools.creator_account_id is not None
     links = {link.ref: link for link in tools.lists if link.enabled}
-    # Its own playlist stays as it was, not a season; the one that joined is a season.
-    assert (links["PLtools"].as_season, links["PLcabin"].as_season) == (False, True)
-    # c1 is in both playlists, and goes to the season; the others stay where they were.
+    # Its own playlist was its one season all along, and stays that; the one that joined is a season too.
+    assert (links["PLtools"].as_season, links["PLcabin"].as_season) == (True, True)
+    assert links["PLtools"].season.name == "Tool Reviews"
+    assert tools.episode_identifier == "seasonal"
+    # c1 is in both playlists, and stays in the collection's own, which comes first; the others stay too.
     assert {episode.source_slug: episode.season.name for episode in tools.episodes if episode.source_slug in tools_seasons} == {
-        **tools_seasons, "c1": "Building the Cabin",
+        **tools_seasons, "c1": "Tool Reviews",
     }
     assert _episode(session, tools, "k1").season.name == "Building the Cabin"
     assert _episode(session, _collection(session, "UCworkshop"), "k1") is None
     sections = _sections(moved.json())
     assert (sections["PLcabin"]["collectionSlug"], sections["PLcabin"]["asSeason"]) == ("PLtools", True)
-    assert (sections["PLtools"]["collectionSlug"], sections["PLtools"]["asSeason"]) == ("PLtools", False)
+    assert (sections["PLtools"]["collectionSlug"], sections["PLtools"]["asSeason"]) == ("PLtools", True)
 
 
 def test_a_playlist_the_creator_has_not_placed_goes_into_the_collection_picked_for_it(feeds, client, session):

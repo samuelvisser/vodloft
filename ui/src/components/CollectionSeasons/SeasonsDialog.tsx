@@ -83,8 +83,8 @@ function registries(names: ListNames, words: Words, view: CollectionSeasonsRead)
             add: {label: `Make it ${words.season.a}${words.here}`, help: `A new ${kind.names.singular} becomes ${words.season.a}${words.here} right away.`},
             ignore: {label: 'Always skip it', help: `A new ${kind.names.singular} stays off. You can switch it on here.`},
         }),
-        layout: createSelectRegistry(`ListLayout-${names.plural}`, {
-            season_each: {label: words.here ? `Each ${names.singular} on its own` : `A ${words.season.singular} per ${names.singular}`, help: `Each ${names.singular} is ${words.season.a}${words.here}, or shares one with the ${names.plural} you put together below.`},
+        layout: createSelectRegistry(`ListLayout-${names.plural}-${words.creator}-${words.season.a}`, {
+            season_each: {label: words.here ? `Each ${names.singular} on its own` : `${capitalized(words.season.a)} per ${words.creator ? `${words.creator} ` : ''}${names.singular}`, help: `Each ${names.singular} is ${words.season.a}${words.here}, or shares one with the ${names.plural} you put together below.`},
             by_year: {label: `Together in ${words.season.plural} by year`, help: `The ${names.plural} still decide which ${words.videos} are in, but every ${words.video} goes to the ${words.season.singular} of its year, as do the ${words.videos} in no ${names.singular}. Downloaded ${words.videos} stay where they are, marked Moved, until you move them.`},
         }),
         loose: createSelectRegistry(`LooseVideos-${names.looseSeason}`, {

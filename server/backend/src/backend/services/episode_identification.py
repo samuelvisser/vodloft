@@ -34,6 +34,7 @@ from backend.services.episode_filters import (
     EpisodeSelection, evaluate, filter_leaving_out, retention_downloads, retention_removes,
 )
 from backend.services.errors import ServiceError
+from backend.services.link_seasons import made_from_list
 from backend.services.season_order import number_in_link_order
 from backend.services.sites import collection_words
 from backend.types import work_weights
@@ -161,7 +162,7 @@ def plan_identification(s: Session, collection: Collection, identification: Epis
     """The identifiers the collection's episodes get under ``identification``. Only reads."""
     episodes = _episodes(s, collection)
     if counts_own_numbers(collection):
-        identifiers, counters = _plan_counted(episodes, identification), {}
+        identifiers, counters = _plan_counted(episodes, identification, in_list_order=made_from_list(collection)), {}
     else:
         identifiers, counters = _plan_source_numbered(episodes, identification)
     return IdentificationPlan(
@@ -174,9 +175,10 @@ def plan_identification(s: Session, collection: Collection, identification: Epis
     )
 
 
-def _plan_counted(episodes: list[Episode], identification: EpisodeIdentifier) -> dict[int, str]:
+def _plan_counted(episodes: list[Episode], identification: EpisodeIdentifier, *, in_list_order: bool) -> dict[int, str]:
     """Count the main episodes again, as indexing counts the videos of a Source without episode numbers. Other tags,
-    and the parts of a split video, keep theirs."""
+    and the parts of a split video, keep theirs. ``in_list_order`` numbers them in the order they were added, which is
+    their list's order for a collection made from one list, rather than by date."""
     main = [
         episode for episode in episodes
         if episode.part_of is None and _tag(episode.episode_identifier) in {EpIdType.EP.value, EpIdType.AUX.value}
@@ -193,7 +195,9 @@ def _plan_counted(episodes: list[Episode], identification: EpisodeIdentifier) ->
                 taken.add(identifier)
                 identifiers[episode.id] = identifier
         case EpisodeIdentifier.NUMBERED:
-            for episode in sorted(main, key=lambda episode: (_published(episode), episode.index, episode.id)):
+            for episode in sorted(main, key=lambda episode: (
+                (episode.index, episode.id) if in_list_order else (_published(episode), episode.index, episode.id)
+            )):
                 identifier = next_identifier(taken, EpIdType.EP)
                 taken.add(identifier)
                 identifiers[episode.id] = identifier
