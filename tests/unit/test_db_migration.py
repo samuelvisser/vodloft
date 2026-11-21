@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "a4318a92a5ca"
+HEAD_REVISION = "6f2d9b4e1a83"
 
 
 @pytest.fixture
@@ -1734,6 +1734,33 @@ def test_profiles_for_music_tracks_and_music_videos_become_profiles_for_music(mi
 
     command.downgrade(config, "7c41e2a9d5b3")
     assert [scope for scope, _nfo in profiles()] == ["music_tracks", "music_videos", "podcast"]
+
+
+def test_profiles_for_music_with_an_hls_bundle_download_1080p_video(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "a4318a92a5ca")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        for profile_id, scope, preferred_format in (
+            (1, "music", "format_hls"), (2, "music", "format_720p"), (3, "podcast-and-series", "format_hls"),
+        ):
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
+                "VALUES (:id, :id, :id, '/downloads/' || :id || '.ext', :format, '[]', 'collection')"
+            ), {"id": profile_id, "format": preferred_format})
+            connection.execute(text(
+                "INSERT INTO local_media_profiles_collection (id, collection_scope) VALUES (:id, :scope)"
+            ), {"id": profile_id, "scope": scope})
+
+    command.upgrade(config, "6f2d9b4e1a83")
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT preferred_format FROM local_media_profiles ORDER BY id")).scalars().all() == [
+            "format_1080p", "format_720p", "format_hls",
+        ]
 
 
 def test_a_creator_on_sites_without_link_seasons_adds_new_sections_as_collections(migration_database):
