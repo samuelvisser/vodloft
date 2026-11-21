@@ -8,7 +8,7 @@ import {can} from '../../lib/access'
 import {addCreatorSections, showCreatorSections, splitCreatorAccount} from '../../lib/queries'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
-import {isWaitingList, useAnswerList} from './useAnswerList'
+import {isListOutside, useAnswerList} from './useAnswerList'
 import AddToCollectionDialog, {collectionChoices, hasCollectionChoice} from './AddToCollectionDialog'
 import CreatorBulkBar from './CreatorBulkEdit'
 import {sectionNouns} from './sectionNames'
@@ -122,7 +122,7 @@ export function placeLabel(creator: CreatorPageRead, {account, section}: Account
 
 /** The places a feed or list can go from where it is: where it is and where the user moved it, the dialog that asks
  * for another collection or, for a list, whether it is a season there, a collection of its own, and out of the
- * Library. One in a collection of its own goes elsewhere by deleting that collection. The main feed, such as YouTube's
+ * Library. When one in a collection of its own goes elsewhere, that collection goes. The main feed, such as YouTube's
  * Videos, has the own collection's link, so it never goes anywhere else. */
 function placeChoices(creator: CreatorPageRead, item: AccountSection, current: Place, value: Place): Place[] {
     const {section} = item
@@ -133,9 +133,10 @@ function placeChoices(creator: CreatorPageRead, item: AccountSection, current: P
         ...[current, value].filter((place) => !out.includes(place)),
         ...(hasCollectionChoice(creator, item, value) ? [PICK] : []),
         ...(own || current === 'own' ? ['own'] : []),
-        ...(current !== 'own' ? ['exclude'] : []),
+        // A collection of its own goes with it, files and all: the move dialog says so first.
+        'exclude',
         // Its videos also leave the creator's other collections, such as a list of reuploads.
-        ...(current !== 'own' && list ? ['keep_out'] : []),
+        ...(list ? ['keep_out'] : []),
     ])]
 }
 
@@ -329,7 +330,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
         if (collectionChoices(creator, item).length > 0) {
             actions.push({
                 key: 'collection', label: SECTION_ACTIONS.collection,
-                run: () => setPicking({item, confirm: isWaitingList(item) ? 'Next' : 'Add', pick: (to) => isWaitingList(item)
+                run: () => setPicking({item, confirm: isListOutside(item) ? 'Next' : 'Add', pick: (to) => isListOutside(item)
                     ? answer(item, placeMove(to), placeLabel(creator, item, to))
                     : place(account, {ref: section.ref, ...placeMove(to)})}),
             })
@@ -338,7 +339,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
             key: `choice-${index}`, label: choice.label,
             run: () => choice.plan.target === 'own' && section.kind !== 'item'
                 ? setAdding(item)
-                : isWaitingList(item)
+                : isListOutside(item)
                     ? answer(item, {target: choice.plan.target}, choice.label)
                     : void place(account, choice.plan),
         })))
@@ -539,7 +540,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
             {adding && (
                 <NewCreatorCollectionDialog
                     creator={creator} items={[adding]} onDismiss={() => setAdding(null)}
-                    onChoose={isWaitingList(adding) ? (values) => {
+                    onChoose={isListOutside(adding) ? (values) => {
                         answer(adding, {target: 'own', type: values.type, episodeIdentifier: values.episodeIdentifier}, SECTION_ACTIONS.own)
                         setAdding(null)
                     } : undefined}

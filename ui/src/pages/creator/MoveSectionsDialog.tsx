@@ -52,7 +52,9 @@ export default function MoveSectionsDialog({open, creatorSlug, changes, onDismis
         queryFn: ({signal}) => previewCreatorMoves(creatorSlug, moves, signal),
     })
 
-    const deletes = preview?.collections.some((collection) => collection.parts.some((part) => part.downloadsDeleted > 0)) ?? false
+    const deletes = preview?.collections.some((collection) => (
+        collection.state === 'deleted' || collection.parts.some((part) => part.downloadsDeleted > 0)
+    )) ?? false
     const what = joinedNames(changes.map((change) => change.names)).plural
 
     return (
@@ -127,6 +129,18 @@ export function CollectionMoves({collection, renumber, onRenumber}: {
                 {tag && <span className={`move-sections-state is-${collection.state}`}>{tag}</span>}
             </h3>
             <ul className="change-identification-steps">
+                {collection.state === 'deleted' && (
+                    // The collection itself goes: what leaves the library with it says which files go too.
+                    <Step
+                        danger
+                        icon={faIcon('fass', 'trash')}
+                        headline="Collection deleted"
+                        detail={collection.parts.some((part) => part.direction === 'out')
+                            ? `${collection.title} goes once everything in it moved to another collection.`
+                            : `${collection.title} leaves your library, with all its ${episode.plural} and their files.`}
+                        value={collection.parts.filter((part) => part.direction === 'leave').reduce((sum, part) => sum + part.count, 0) || 'All'}
+                    />
+                )}
                 {collection.parts.map((part, index) => <PartSteps key={index} part={part} season={season}/>)}
                 {collection.newSeasons.length > 0 && (
                     <Step

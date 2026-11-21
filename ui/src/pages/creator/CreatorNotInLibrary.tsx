@@ -14,7 +14,7 @@ import {choices, isMovie, mainTitleOf, placeLabel, placeMove, sectionFacts, type
 import AddToCollectionDialog, {collectionChoices} from './AddToCollectionDialog'
 import {SECTION_ACTIONS} from './sectionActions'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
-import {isWaitingList, useAnswerList} from './useAnswerList'
+import {isListOutside, useAnswerList} from './useAnswerList'
 import CreatorBulkBar from './CreatorBulkEdit'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import '../../components/ProfileBulkEdit/ProfileBulkEdit.css'
@@ -114,7 +114,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
             setAdding(item)
             return
         }
-        if (isWaitingList(item) && plan.target !== 'exclude') {
+        if (isListOutside(item) && plan.target !== 'exclude') {
             // Its answer moves its videos, so the move dialog asks first.
             answer(item, {target: plan.target, collectionSlug: plan.collectionSlug}, to ?? '')
             return
@@ -285,7 +285,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
             {adding && (
                 <NewCreatorCollectionDialog
                     creator={creator} items={[adding]} onDismiss={() => setAdding(null)}
-                    onChoose={isWaitingList(adding) ? (values) => {
+                    onChoose={isListOutside(adding) ? (values) => {
                         answer(adding, {target: 'own', type: values.type, episodeIdentifier: values.episodeIdentifier}, SECTION_ACTIONS.own)
                         setAdding(null)
                     } : undefined}

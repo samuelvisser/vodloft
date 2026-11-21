@@ -14,7 +14,7 @@ import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import AddToCollectionDialog, {collectionChoices} from './AddToCollectionDialog'
 import {SECTION_ACTIONS, SECTIONS_ACTIONS} from './sectionActions'
 import {TitleList, namedSections, sectionNouns} from './sectionNames'
-import {isWaitingList, useAnswerList} from './useAnswerList'
+import {isListOutside, useAnswerList} from './useAnswerList'
 
 type BulkAction = {
     id: 'collection' | 'own' | 'movie' | 'skip' | 'keep_out' | 'show'
@@ -129,7 +129,7 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
 
     /** Add ``items`` at ``place``: the ones that wait for a choice through the move dialog, the others at once. */
     const apply = async (action: BulkAction, place?: Place) => {
-        const waiting = MOVING.has(action.id) || place ? action.items.filter(isWaitingList) : []
+        const waiting = MOVING.has(action.id) || place ? action.items.filter(isListOutside) : []
         const now = action.items.filter((item) => !waiting.includes(item))
         if (now.length) await add(action, now, place)
         else setConfirming(null)
@@ -209,7 +209,7 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
                     }}
                 >
                     <ActionNote creator={creator} action={confirming} onEdit={onEdit}/>
-                    {MOVING.has(confirming.id) && confirming.items.some(isWaitingList) && (
+                    {MOVING.has(confirming.id) && confirming.items.some(isListOutside) && (
                         <p className="help">The ones that wait for your choice move their {confirming.items[0].account.site.mediaNames.plural} along: VODLoft shows what moves next.</p>
                     )}
                     {confirming.items.length > 1 && <TitleList titles={confirming.items.map(({section}) => section.title)}/>}
@@ -232,6 +232,12 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
             {owning && (
                 <NewCreatorCollectionDialog
                     creator={creator} items={owning} onDismiss={() => setOwning(null)} onAdded={() => onDone(owning)}
+                    // Lists not in the library take their videos out of the other collections, so the move dialog
+                    // says what leaves each one first.
+                    onChoose={owning.every(isListOutside) ? (values) => {
+                        answerAll(owning, {target: 'own', type: values.type, episodeIdentifier: values.episodeIdentifier}, SECTION_ACTIONS.own)
+                        setOwning(null)
+                    } : undefined}
                 />
             )}
         </>

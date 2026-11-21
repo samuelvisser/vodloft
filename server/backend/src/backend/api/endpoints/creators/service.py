@@ -35,7 +35,7 @@ from backend.services.sites import collection_site
 from backend.types.creator_types import SectionTarget
 from task_manager.scheduler.transactional import queue_task_after_commit
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
-from sources import CreatorDetails, Feature, Names, SectionRef, SectionType, Site, get_source
+from sources import CreatorDetails, Feature, ItemRef, Names, SectionRef, SectionType, Site, get_source
 from backend.services.source_requests import asking_source
 
 
@@ -520,13 +520,27 @@ def _moves(body: CreatorSectionMovesAPIIn | CreatorAPIUpdate) -> list["SectionMo
     ]
 
 
-def preview_creator_moves(s: Session, slug: str, body: CreatorSectionMovesAPIIn) -> CreatorSectionMovesPreviewAPIRead:
+def list_skipped_moved(slug: str, body: CreatorSectionMovesAPIIn | CreatorAPIUpdate) -> dict[int, tuple[ItemRef, ...]]:
+    """What the skipped lists among the moves have now, which their Site says: a move takes their videos along. Slow,
+    so it runs before the write transaction."""
+    from backend.services.section_moves import list_skipped, lists_to_list
+
+    if not body.moves:
+        return {}
+    with db_session() as s:
+        wanted = lists_to_list(s, _creator(s, slug), _moves(body))
+    return list_skipped(wanted) if wanted else {}
+
+
+def preview_creator_moves(
+    s: Session, slug: str, body: CreatorSectionMovesAPIIn, listed: dict[int, tuple[ItemRef, ...]],
+) -> CreatorSectionMovesPreviewAPIRead:
     """What moving the creator's feeds and lists does to each of its collections. The moves are made and rolled back.
 
     ``s`` is a write transaction's session."""
     from backend.services.section_moves import preview_section_moves
 
-    return CreatorSectionMovesPreviewAPIRead.model_validate(preview_section_moves(s, _creator(s, slug), _moves(body)))
+    return CreatorSectionMovesPreviewAPIRead.model_validate(preview_section_moves(s, _creator(s, slug), _moves(body), listed))
 
 
 def _creator(s: Session, slug: str) -> Creator:
@@ -543,7 +557,10 @@ def _account(s: Session, slug: str, account_id: int) -> CreatorAccount:
     return account
 
 
-def update_creator(s: Session, slug: str, body: CreatorAPIUpdate, *, added_by_id: int | None = None) -> CreatorPageAPIRead:
+def update_creator(
+    s: Session, slug: str, body: CreatorAPIUpdate, *, added_by_id: int | None = None,
+    listed: dict[int, tuple[ItemRef, ...]] | None = None,
+) -> CreatorPageAPIRead:
     creator = _creator(s, slug)
     title = (body.title or "").strip()
     if title and title != creator.title:
@@ -556,7 +573,7 @@ def update_creator(s: Session, slug: str, body: CreatorAPIUpdate, *, added_by_id
     if body.moves:
         from backend.services.section_moves import move_sections
 
-        move_sections(s, creator, _moves(body), renumber=body.renumber, added_by_id=added_by_id)
+        move_sections(s, creator, _moves(body), renumber=body.renumber, added_by_id=added_by_id, listed=listed)
         s.flush()
         s.expire_all()
     return creator_page(s, slug)
