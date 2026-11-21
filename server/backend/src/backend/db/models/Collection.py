@@ -10,6 +10,7 @@ from backend.db.mixins.MediaContentMetadataMixin import PICTURE_PATH_COMMENT
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.collection_types import EpisodeOrder
+from backend.types.collection_contracts import collection_contract
 from backend.types.link_season_types import ListLayout, LooseVideos, LinkSeasons, OutsideVideos
 
 if TYPE_CHECKING:
@@ -21,6 +22,10 @@ if TYPE_CHECKING:
 
 def _default_episode_order(context) -> str:
     return EpisodeOrder.default_for(context.get_current_parameters()["episode_identifier"]).value
+
+
+def _default_repeat_videos(context) -> str:
+    return collection_contract(context.get_current_parameters()["type"]).repeat_videos.value
 
 
 class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
@@ -71,6 +76,11 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     loose_videos: Mapped[str] = mapped_column(
         default=LooseVideos.ONE_SEASON.value, server_default=LooseVideos.ONE_SEASON.value,
         comment="Where the videos in none of the playlists that are seasons go: one_season or by_year",
+    )
+    repeat_videos: Mapped[str] = mapped_column(
+        default=_default_repeat_videos, server_default="one_season",
+        comment="What happens with a video that belongs in several of its seasons: one_season, an episode in the first, "
+                "or each_season, an episode in each",
     )
     outside_videos: Mapped[str] = mapped_column(
         default=OutsideVideos.LEAVE_OUT.value, server_default=OutsideVideos.LEAVE_OUT.value,

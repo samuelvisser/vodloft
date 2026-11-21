@@ -82,6 +82,9 @@ def client(tube, session):
 
     app.include_router(creator_router_module.router, prefix="/api")
     app.include_router(collection_router_module.router, prefix="/api")
+    from backend.api.endpoints.episodes import episode_router
+
+    app.include_router(episode_router, prefix="/api")
     with TestClient(app) as test_client:
         yield test_client
 

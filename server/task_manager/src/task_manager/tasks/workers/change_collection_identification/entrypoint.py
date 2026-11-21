@@ -20,7 +20,7 @@ from task_manager.tasks.workers.rewrite_collection_profile_metadata.service impo
 
 logger = logging.getLogger(__name__)
 
-# Renumbering is one quick write; the files take the rest.
+# Renumbering is one write; the files take the rest.
 _RENUMBERED_PROGRESS = 5
 _DATA_KEYS = ("files_renamed", "files_unchanged", "files_skipped_existing", "files_retagged", "nfos_written",
               "files_skipped", "files_failed", "rename_failed")
@@ -61,7 +61,8 @@ async def change_collection_identification(
         raise ValueError("Changing episode identification requires a Collection and an identification")
     identification = EpisodeIdentifier(episode_identifier)
     order = EpisodeOrder(episode_order) if episode_order else None
-    update_progress(progress, 0, "Numbering the episodes")
+    # Numbering is one write that cannot report how far it is, so the bar moves without a percentage.
+    update_progress(progress, None, "Numbering the episodes")
 
     def renumber(w):
         result = change_identification(w, resource_id, identification, episode_order=order, renumber=renumber)

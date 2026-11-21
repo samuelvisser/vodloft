@@ -35,7 +35,7 @@ from backend.services.episode_identification import collection_busy
 from backend.services.errors import ServiceError
 from backend.services.link_seasons import _holders, lists_in, place_in_link_seasons
 from backend.services.reassigned import (
-    _list_collection_ids, _main_lists, creator_places, lists_left_out, move_reassigned, reassigned_episodes,
+    _list_collection_ids, _main_lists, blocking_lists, creator_places, move_reassigned, reassigned_episodes,
     settle_creator,
 )
 from backend.services.section_moves import (
@@ -199,7 +199,7 @@ def _settle(s: Session, account: CreatorAccount, collections: list[Collection], 
         if collection.id in lists:
             continue
         holders = _holders(s, lists_in(collection))
-        left = lists_left_out(s, collection)
+        left = blocking_lists(s, collection)
         blocking = {
             slug: section_id for section_id, slug in s.execute(
                 select(CreatorSectionItem.section_id, CreatorSectionItem.source_slug).where(CreatorSectionItem.section_id.in_(left))
@@ -245,7 +245,7 @@ def preview_join(s: Session, collection: Collection, *, source_key: str, details
     titles = {other.id: (other.slug, other.title, other.type) for other in others}
     before = snapshot(s, others)
     done = _join(s, collection, joining, source_key, details)
-    return preview(s, creator.id, titles, before, done)
+    return preview(s, titles, before, done)
 
 
 def join_creator(
@@ -269,7 +269,7 @@ def join_creator(
     with spun_off_work(s) as work:
         done = _join(s, collection, joining, source_key, details)
         follow_up(s, done, renumber or {})
-    moved = list({flow.section.id: flow.section for flow in done.flows}.values())
+    moved = list({flow.section.id: flow.section for flow in done.flows if flow.section is not None}.values())
     as_one_operation(s, creator, work, moved or [section])
     return creator
 

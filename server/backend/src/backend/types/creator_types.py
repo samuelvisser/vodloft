@@ -12,8 +12,11 @@ class SectionTarget(StrEnum):
     OWN = "own"
     """Into a collection of its own."""
     EXCLUDE = "exclude"
-    """Nowhere: it is excluded from the Library, and a list keeps its videos out of the creator's collections. It stays
-    on the creator page, one click from being added."""
+    """Nowhere, skipped: it is not in the Library, and nothing else changes; its videos stay where the creator's other
+    feeds and lists put them. It stays on the creator page, one click from being added."""
+    KEEP_OUT = "keep_out"
+    """A list nowhere, and its videos out of every collection of the creator too, also of the seasons of its other
+    lists, such as a list of reuploads."""
 
 
 class NewSectionAction(StrEnum):
@@ -36,3 +39,6 @@ class SectionStatus(StrEnum):
     NEW = "new"
     """Found by the daily look, waiting for the user's choice."""
     IGNORED = "ignored"
+    """Skipped: not in the Library, and hidden on the creator page."""
+    KEPT_OUT = "kept_out"
+    """A list that keeps its videos out of every collection of the creator."""

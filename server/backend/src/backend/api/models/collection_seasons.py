@@ -9,7 +9,9 @@ from pydantic import AliasChoices, AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.collection_contract import CollectionWordsAPIRead
 from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead
-from backend.types.link_season_types import ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos
+from backend.types.link_season_types import (
+    ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
+)
 
 
 class CollectionSeasonAPIRead(ResponseBase):
@@ -78,6 +80,10 @@ class CollectionSeasonsAPIRead(ResponseBase):
     """What happens with a list the creator adds, for each kind of list of the collection's Site."""
     list_layout: ListLayout
     loose_videos: LooseVideos
+    repeat_videos: RepeatVideos
+    """Whether a video that belongs in several seasons has an episode in the first of them, or in each."""
+    repeated_count: int = 0
+    """The episodes of videos the collection has in another season already, which leave when it keeps one season."""
     outside_videos: OutsideVideos
     outside_count: int = 0
     """The videos the collection added from its playlists that its own link does not list, which all leave, files and
@@ -166,6 +172,8 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     """What happens with a list the creator adds, by the key of its kind; a kind left out keeps its setting."""
     list_layout: ListLayout = ListLayout.SEASON_EACH
     loose_videos: LooseVideos = LooseVideos.ONE_SEASON
+    repeat_videos: Optional[RepeatVideos] = None
+    """None keeps the collection's setting."""
     outside_videos: OutsideVideos = OutsideVideos.LEAVE_OUT
     playlists: list[CollectionListChangeAPIIn] = Field(default_factory=list, max_length=5000)
     removed_links: list[int] = Field(default_factory=list, max_length=5000)

@@ -2,7 +2,8 @@ from fastapi import APIRouter, Query, status
 
 from .service import *
 from ...models.episode import *
-from ...models.collection_seasons import ReassignedMoveAPIRead
+from ...models.creator import CreatorSectionMovesPreviewAPIRead, ReconcileAPIIn, ReconcileAPIRead
+from ..reconcile import episode_scope, move, preview_move
 from ...models.media_download import EpisodeDownloadAPICreate
 from ...models.operations import EpisodeMetadataOperationAccepted, MediaDownloadOperationAccepted, TaskOperationAccepted
 from ..media_downloads.service import create_episode_download
@@ -150,24 +151,21 @@ def episode_season_place_get(episode_slug: str):
 
 
 @router.post(
-    "/{episode_slug}/move-to-season",
-    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
-    response_model=TaskOperationAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
+    "/{episode_slug}/reconcile/preview", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CreatorSectionMovesPreviewAPIRead,
 )
-def episode_move_to_season(episode_slug: str):
-    """Move the episode, and its files, to the season its collection's playlists put it in now."""
-    return run_write_transaction(lambda s: move_episode_to_its_season(s, episode_slug))
+def episode_reconcile_preview(episode_slug: str):
+    """What moving the episode to where it belongs now does: to the collection its creator places it in, or the
+    season its collection's lists put it in. Changes nothing."""
+    return run_write_transaction(lambda s: preview_move(s, episode_scope(episode_slug)))
 
 
 @router.post(
-    "/{episode_slug}/move-to-collection",
-    dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
-    response_model=ReassignedMoveAPIRead,
+    "/{episode_slug}/reconcile", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ReconcileAPIRead,
 )
-def episode_move_to_collection(episode_slug: str):
-    """Move a reassigned episode, and its files, to the collection its creator places it in now."""
-    return run_write_transaction(lambda s: move_episode_to_its_collection(s, episode_slug))
+def episode_reconcile(episode_slug: str, body: ReconcileAPIIn):
+    """Move the episode, with its files, to where it belongs now."""
+    return run_write_transaction(lambda s: move(s, episode_scope(episode_slug), body))
 
 
 @router.get("/{episode_slug}", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=EpisodeAPIRead)

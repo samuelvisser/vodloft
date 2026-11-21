@@ -14,7 +14,7 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from backend.api.models.collection_seasons import ReassignedMoveAPIRead
-from backend.services.reassigned import move_and_rename, reassigned_in_creator
+from backend.services.reconcile import ReconcileScope, Waiting, waiting
 from backend.api.models.creator import (
     CreatorAPICreate, CreatorAPIRead, CreatorAPIUpdate, CreatorCombineAPIIn, CreatorLookupAPIRead, CreatorPageAPIRead,
     CreatorSectionMovesAPIIn, CreatorSectionMovesPreviewAPIRead, CreatorSectionsAPIAdd, CreatorSectionsAPIShow, CollectionCreatorLeaveAPIRead, CollectionCreatorMatchAPIRead,
@@ -297,8 +297,16 @@ class _CreatorRead:
     collections: list = field(default_factory=list)
     movies: list = field(default_factory=list)
     accounts: list | None = None
-    reassigned_count: int = 0
+    waiting: Waiting | None = None
     last_published_date: datetime | None = None
+
+    @property
+    def reassigned_count(self) -> int:
+        return self.waiting.reassigned if self.waiting else 0
+
+    @property
+    def moved_count(self) -> int:
+        return self.waiting.moved if self.waiting else 0
 
     @property
     def creator_names(self) -> Names:
@@ -451,7 +459,7 @@ def creator_page(s: Session, slug: str) -> CreatorPageAPIRead:
         creator, collections_count.get(creator.id, 0), episodes.get(creator.id, 0),
         collections=collections, accounts=accounts,
         movies=sorted(creator.movies, key=lambda movie: (movie.release_date or movie.published_at or datetime.min).isoformat(), reverse=True),
-        reassigned_count=len(reassigned_in_creator(s, creator)),
+        waiting=waiting(s, ReconcileScope.of_creator(creator)),
         last_published_date=max((row.last for row in stats.values() if row.last is not None), default=None),
     ))
 
@@ -502,7 +510,14 @@ def creator_episodes(s: Session, slug: str, *, cursor: str | None, limit: int) -
 def _moves(body: CreatorSectionMovesAPIIn | CreatorAPIUpdate) -> list["SectionMove"]:
     from backend.services.section_moves import SectionMove
 
-    return [SectionMove(move.account_id, move.ref, SectionTarget(move.target), move.collection_slug) for move in body.moves]
+    return [
+        SectionMove(
+            move.account_id, move.ref, SectionTarget(move.target), move.collection_slug,
+            type=CollectionType(move.type) if move.type else None,
+            episode_identifier=EpisodeIdentifier(move.episode_identifier) if move.episode_identifier else None,
+        )
+        for move in body.moves
+    ]
 
 
 def preview_creator_moves(s: Session, slug: str, body: CreatorSectionMovesAPIIn) -> CreatorSectionMovesPreviewAPIRead:
@@ -512,17 +527,6 @@ def preview_creator_moves(s: Session, slug: str, body: CreatorSectionMovesAPIIn)
     from backend.services.section_moves import preview_section_moves
 
     return CreatorSectionMovesPreviewAPIRead.model_validate(preview_section_moves(s, _creator(s, slug), _moves(body)))
-
-
-def move_creator_reassigned(s: Session, slug: str) -> ReassignedMoveAPIRead:
-    """Move every reassigned video of the creator to the collection it belongs in now, with its files.
-
-    ``s`` is a write transaction's session."""
-    result, operations = move_and_rename(s, reassigned_in_creator(s, _creator(s, slug)))
-    s.flush()
-    return ReassignedMoveAPIRead(
-        episodes=result.episodes, renamed=result.renamed, downloading=result.downloading, operation_ids=operations,
-    )
 
 
 def _creator(s: Session, slug: str) -> Creator:

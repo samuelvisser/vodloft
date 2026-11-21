@@ -8,12 +8,14 @@ import {can} from '../../lib/access'
 import {addCreatorSections, showCreatorSections, splitCreatorAccount} from '../../lib/queries'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
+import {isWaitingList, useAnswerList} from './useAnswerList'
 import AnotherCollectionDialog, {otherCollections} from './AnotherCollectionDialog'
 import CreatorBulkBar from './CreatorBulkEdit'
 import {sectionNouns} from './sectionNames'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import '../../components/ProfileBulkEdit/ProfileBulkEdit.css'
 import ProgressSelect from '../../components/common/ProgressSelect'
+import SimpleSelect from '../../components/common/SimpleSelect'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {capitalized, groupNames, joinedNames} from '../../types/creator'
@@ -122,7 +124,8 @@ export function placeLabel(creator: CreatorPageRead, {account, section}: Account
         main: section.kind === 'feed' ? `In ${title}` : `${season.Singular} of ${title}`,
         main_loose: `Add its contents to ${title}`,
         own: 'Collection of its own',
-        exclude: 'Exclude from library',
+        exclude: 'Skip',
+        keep_out: 'Skip, and keep its videos out',
     }[target]
 }
 
@@ -142,6 +145,8 @@ function placeChoices(creator: CreatorPageRead, item: AccountSection, current: P
         ...(otherCollections(creator, item).length > 0 ? [PICK] : []),
         ...(own || current === 'own' ? ['own'] : []),
         ...(current !== 'own' ? ['exclude'] : []),
+        // Its videos also leave the creator's other collections, such as a list of reuploads.
+        ...(current !== 'own' && list ? ['keep_out'] : []),
     ])]
 }
 
@@ -209,6 +214,8 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
     const [selecting, setSelecting] = useState(false)
     const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
 
+    // A waiting list's answer moves its videos, so it asks through the move dialog first.
+    const {answer, dialog: answerDialog} = useAnswerList(creator)
     const mayAdd = can('add_media')
     const mayManage = can('library', 'manage')
     const slug = creator.slug
@@ -323,33 +330,61 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
             })}
         </div>
     )
-    const addButtons = (item: AccountSection, ignore: boolean) => mayAdd && (
-        <div className="creator-row-actions">
-            {choices(creator, item).map((choice) => (
-                <button key={choice.label} type="button" className="btn" disabled={busy !== null}
-                        onClick={() => choice.plan.target === 'own' && item.section.kind !== 'item' ? setAdding(item) : void place(item.account, choice.plan)}>
-                    {busy === sectionKey(item.account, item.section.ref) ? 'Adding…' : choice.label}
-                </button>
-            ))}
-            {item.section.kind !== 'item' && otherCollections(creator, item).length > 0 && (
-                <button type="button" className="btn" disabled={busy !== null}
-                        onClick={() => setPicking({item, confirm: 'Add', pick: (to) => place(item.account, {ref: item.section.ref, ...placeMove(to)})})}>
-                    Another collection…
-                </button>
-            )}
-            {ignore && (
-                <button type="button" className="btn btn-link" disabled={busy !== null}
-                        onClick={() => void place(item.account, {ref: item.section.ref, target: 'exclude'})}>
-                    Ignore
-                </button>
-            )}
-            {item.section.status === 'ignored' && (
-                <button type="button" className="btn" disabled={busy !== null || unhiding !== null} onClick={() => void unhide(item)}>
-                    <FontAwesomeIcon icon={faIcon('fass', unhiding === sectionKey(item.account, item.section.ref) ? 'spinner' : 'eye')} spin={unhiding === sectionKey(item.account, item.section.ref)} aria-hidden="true"/> Show on creator page
-                </button>
-            )}
-        </div>
-    )
+    // What the user can do with a section not in the library, in one select: each place it can go, then skipping it,
+    // letting its videos in or keeping them out, and showing it on the creator page again.
+    const actionsOf = (item: AccountSection, ignore: boolean) => {
+        const {account, section} = item
+        const actions: {key: string, label: string, run: () => void}[] = choices(creator, item).map((choice, index) => ({
+            key: `choice-${index}`, label: choice.label,
+            run: () => choice.plan.target === 'own' && section.kind !== 'item'
+                ? setAdding(item)
+                : isWaitingList(item)
+                    ? answer(item, {target: choice.plan.target}, choice.label)
+                    : void place(account, choice.plan),
+        }))
+        if (section.kind !== 'item' && otherCollections(creator, item).length > 0) {
+            actions.push({
+                key: 'another', label: 'Another collection…',
+                run: () => setPicking({item, confirm: isWaitingList(item) ? 'Next' : 'Add', pick: (to) => isWaitingList(item)
+                    ? answer(item, placeMove(to), placeLabel(creator, item, to))
+                    : place(account, {ref: section.ref, ...placeMove(to)})}),
+            })
+        }
+        if (ignore) actions.push({key: 'skip', label: 'Skip', run: () => void place(account, {ref: section.ref, target: 'exclude'})})
+        if (section.kind === 'list' && section.status !== 'kept_out') {
+            actions.push({
+                key: 'keep_out', label: ignore ? placeLabel(creator, item, 'keep_out') : 'Keep its videos out',
+                run: () => answer(item, {target: 'keep_out'}, placeLabel(creator, item, 'keep_out')),
+            })
+        }
+        if (section.status === 'kept_out') {
+            actions.push({key: 'let_in', label: 'Let its videos in', run: () => void place(account, {ref: section.ref, target: 'exclude'})})
+        }
+        if (section.status === 'ignored') actions.push({key: 'show', label: 'Show on creator page', run: () => void unhide(item)})
+        return actions
+    }
+    const actionSelect = (item: AccountSection, ignore: boolean) => {
+        if (!mayAdd) return null
+        const key = sectionKey(item.account, item.section.ref)
+        const actions = actionsOf(item, ignore)
+        const registry = createSelectRegistry(
+            `SectionAction-${key}-${actions.map((action) => action.label).join('-')}`,
+            Object.fromEntries(actions.map((action) => [action.key, {label: action.label}])),
+        )
+        const working = busy === key || unhiding === key
+        return (
+            <div className="creator-section-choice">
+                <SimpleSelect
+                    aria-label={`What to do with ${item.section.title}`} registry={registry} value={null}
+                    placeholder={working ? 'Working…' : 'Choose…'} isLoading={working}
+                    isDisabled={busy !== null || unhiding !== null}
+                    menuPortalTarget={document.body} menuPlacement="auto"
+                    styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                    onChange={(value) => actions.find((action) => action.key === value)?.run()}
+                />
+            </div>
+        )
+    }
 
     return (
         <>
@@ -366,7 +401,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                                     <b>{item.section.title}</b>
                                     <span>{facts(item) || `Found on ${creator.title}`}</span>
                                 </div>
-                                {addButtons(item, true)}
+                                {actionSelect(item, true)}
                             </div>
                         ))}
                     </div>
@@ -439,10 +474,10 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                                     <span>
                                         {item.section.access
                                             ? 'Only some members can watch this.'
-                                            : facts(item, item.section.movieSlug ? 'In your library' : null, item.section.status === 'ignored' ? 'Hidden on the creator page' : null)}
+                                            : facts(item, item.section.movieSlug ? 'In your library' : null, item.section.status === 'ignored' ? 'Hidden on the creator page' : null, item.section.status === 'kept_out' ? 'Keeps its videos out' : null)}
                                     </span>
                                 </div>
-                                {!selecting && addButtons(item, false)}
+                                {!selecting && actionSelect(item, false)}
                             </div>
                         ))}
                     </div>
@@ -510,7 +545,16 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                     onPick={async (to) => { await picking.pick(to); setPicking(null) }}
                 />
             )}
-            {adding && <NewCreatorCollectionDialog creator={creator} items={[adding]} onDismiss={() => setAdding(null)}/>}
+            {adding && (
+                <NewCreatorCollectionDialog
+                    creator={creator} items={[adding]} onDismiss={() => setAdding(null)}
+                    onChoose={isWaitingList(adding) ? (values) => {
+                        answer(adding, {target: 'own', type: values.type, episodeIdentifier: values.episodeIdentifier}, 'Collection of its own')
+                        setAdding(null)
+                    } : undefined}
+                />
+            )}
+            {answerDialog}
         </>
     )
 }

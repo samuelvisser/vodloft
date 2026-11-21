@@ -17,10 +17,15 @@ export function otherCollections(creator: CreatorPageRead, {account, section}: A
 
 /** Asks which of the creator's other collections a feed or list goes into, and for a list whether it becomes a
  * season of it. */
-export default function AnotherCollectionDialog({creator, item, confirmLabel, onPick, onDismiss}: {
+export default function AnotherCollectionDialog({creator, item, confirmLabel, title, several = false, onPick, onDismiss}: {
     creator: CreatorPageRead
+    /** The feed or list, or the first of several that go to the same place. */
     item: AccountSection
     confirmLabel: string
+    /** The dialog's title, when it is about several. */
+    title?: string
+    /** Whether several feeds or lists go there together. */
+    several?: boolean
     onPick: (place: Place) => void | Promise<void>
     onDismiss: () => void
 }) {
@@ -35,7 +40,7 @@ export default function AnotherCollectionDialog({creator, item, confirmLabel, on
     return (
         <ConfirmDialog
             open
-            title={`Another collection for ${section.title}`}
+            title={title ?? `Another collection for ${section.title}`}
             icon={faIcon('fass', 'folder-plus')}
             onDismiss={onDismiss}
             confirmButton={{
@@ -43,7 +48,7 @@ export default function AnotherCollectionDialog({creator, item, confirmLabel, on
                 onClick: () => onPick(`${list && !asSeason ? 'main_loose' : 'main'}@${slug}`),
             }}
         >
-            <p>Its {media} go into the collection you pick. That collection keeps what it has.</p>
+            <p>{several ? 'Their' : 'Its'} {media} go into the collection you pick. That collection keeps what it has.</p>
             <fieldset className="creator-presets">
                 <legend>Collection</legend>
                 {collections.map((collection) => (

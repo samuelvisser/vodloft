@@ -34,7 +34,7 @@ function presetText(key: CreatorCreateIn['preset'], hasFeeds: boolean, creator: 
     const {singular, plural} = creator.sectionGrowingNames
     const skipped = {
         label: 'Only what I pick',
-        help: `All ${hasFeeds ? `feeds and ${plural}` : plural} start excluded from your library.`,
+        help: `All ${hasFeeds ? `feeds and ${plural}` : plural} start skipped.`,
     }
     if (music) {
         if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with ${singular === 'album' ? 'every album' : `each ${singular} as an album`}${hasFeeds ? ' and the other tracks by year' : ''}.`}
@@ -54,7 +54,7 @@ function presetText(key: CreatorCreateIn['preset'], hasFeeds: boolean, creator: 
     return skipped
 }
 
-type Choice = 'main' | 'main_loose' | 'own' | 'exclude'
+type Choice = 'main' | 'main_loose' | 'own' | 'exclude' | 'keep_out'
 
 function choiceOf(plan: SectionPlan | undefined): Choice {
     return plan?.target ?? 'exclude'
@@ -74,7 +74,7 @@ function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, mus
         return createSelectRegistry(`CreatorMovie-${creator.ref}-${section.ref}-${creator.title}-${!!section.movieSlug}`, (
             section.movieSlug
                 ? {own: {label: `Joins ${creator.title}`}, exclude: {label: 'Stays apart'}}
-                : {own: {label: 'Add to your library'}, exclude: {label: 'Exclude from library'}}
+                : {own: {label: 'Add to your library'}, exclude: {label: 'Skip'}}
         ) as Record<Choice, {label: string}>)
     }
     const spec: Partial<Record<Choice, {label: string}>> = {}
@@ -85,7 +85,9 @@ function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, mus
         spec.main_loose = {label: 'Add its contents to the main collection'}
     }
     spec.own = {label: 'A collection of its own'}
-    spec.exclude = {label: 'Exclude from library'}
+    spec.exclude = {label: 'Skip'}
+    // Its videos stay out of every collection of the creator, also when another feed or list has them.
+    if (section.kind === 'list') spec.keep_out = {label: 'Skip, and keep its videos out'}
     return createSelectRegistry(`CreatorSection-${creator.ref}-${section.ref}-${music}`, spec as Record<Choice, {label: string}>)
 }
 
@@ -354,7 +356,7 @@ export default function AddCreatorPage() {
     const media = (type: string) => collectionWords(type, creator.audioOnly ? 'audio' : 'video')
     const hasFeeds = creator.sections.some((section) => section.kind === 'feed')
     const feeds = new Set(creator.sections.filter((section) => section.kind === 'feed').map((section) => section.ref))
-    const keepsFeeds = (plan: SectionPlan[]) => plan.some((item) => feeds.has(item.ref) && item.target !== 'exclude')
+    const keepsFeeds = (plan: SectionPlan[]) => plan.some((item) => feeds.has(item.ref) && item.target !== 'exclude' && item.target !== 'keep_out')
     // A Daily Wire host has no collection of their own: each show is one.
     const hasMain = [...registries.values()].some((registry) => registry.options.some((option) => option.value === 'main'))
     // A group for each type of section the Site has, in its words and order: Feeds and Playlists on YouTube, or
@@ -372,7 +374,7 @@ export default function AddCreatorPage() {
     // What is in the library already stays where it is, so it makes no collection.
     const inLibrary = new Set(creator.sections.filter((section) => section.collectionSlug).map((section) => section.ref))
     const sectionOf = new Map(creator.sections.map((section) => [section.ref, section]))
-    const kept = plans.filter((plan) => plan.target !== 'exclude' && !inLibrary.has(plan.ref))
+    const kept = plans.filter((plan) => plan.target !== 'exclude' && plan.target !== 'keep_out' && !inLibrary.has(plan.ref))
     const keptMovies = kept.filter((plan) => sectionOf.get(plan.ref)?.kind === 'item')
     const newMovies = keptMovies.filter((plan) => !sectionOf.get(plan.ref)?.movieSlug).map((plan) => sectionOf.get(plan.ref)!.title)
     const joiningMovies = keptMovies.filter((plan) => sectionOf.get(plan.ref)?.movieSlug).map((plan) => sectionOf.get(plan.ref)!.movieTitle ?? sectionOf.get(plan.ref)!.title)

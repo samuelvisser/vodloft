@@ -1,7 +1,7 @@
 import {z} from 'zod'
 import {NamesSchema} from './source'
 
-export const CollectionWordsSchema = z.object({season: NamesSchema, episode: NamesSchema})
+export const CollectionWordsSchema = z.object({season: NamesSchema, episode: NamesSchema, inSeason: z.string()})
 
 /** One collection type's words, for episodes of video and for episodes of sound only. */
 export const CollectionContractSchema = z.object({

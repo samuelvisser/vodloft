@@ -132,7 +132,7 @@ def test_a_collection_does_not_add_a_video_a_playlist_of_another_collection_hold
 
 def _move(session, episode):
     from backend.db.core import run_write_transaction
-    from backend.services.reassigned import move_and_rename, reassignment_of
+    from backend.services.reassigned import move_reassigned, reassignment_of
 
     episode_id = episode.id
     session.commit()
@@ -140,11 +140,12 @@ def _move(session, episode):
     def work(w):
         from backend.db.models import Episode
 
-        return move_and_rename(w, [reassignment_of(w, w.get(Episode, episode_id))])
+        return move_reassigned(w, [reassignment_of(w, w.get(Episode, episode_id))])
 
-    result, operations = run_write_transaction(work)
+    result = run_write_transaction(work)
     session.expire_all()
-    return result, operations
+    # The collections whose files are renamed into them.
+    return result, sorted(result.rename)
 
 
 def test_moving_renames_a_download_the_new_collection_takes_with_the_same_local_media_profile(creator, session):
@@ -221,11 +222,42 @@ def test_the_api_shows_and_moves_reassigned_episodes(creator, client, session):
     assert t1_slug not in client.get("/api/collections/UCworkshop/season-settings/moved-episodes").json()["episodeSlugs"]
     assert client.get("/api/creators/workshop").json()["reassignedCount"] == 1
 
-    moved = client.post("/api/creators/workshop/move-reassigned")
+    page = client.get("/api/creators/workshop").json()
+    assert (page["reassignedCount"], page["movedCount"]) == (1, 1)
+    # Home says so, and links to the creator's Move action.
+    [waiting] = client.get("/api/collections/moves-waiting").json()
+    assert {key: waiting[key] for key in ("kind", "slug", "title", "reassigned", "moved")} == {
+        "kind": "creator", "slug": "workshop", "title": page["title"], "reassigned": 1, "moved": 1,
+    }
+    assert waiting["words"]["episode"]["plural"] == page["words"]["episode"]["plural"]
+    _settled()
+    preview = client.post("/api/creators/workshop/reconcile/preview")
+    assert preview.status_code == 200, preview.text
+    parts = {(item["slug"], part["direction"], part["count"]) for item in preview.json()["collections"] for part in item["parts"]}
+    # c1, which Building the Cabin holds, is Moved: it goes to that season in the same move.
+    assert parts == {("UCworkshop", "out", 1), ("PLtools", "in", 1), ("UCworkshop", "moved", 1)}
+    [moved_part] = [part for item in preview.json()["collections"] for part in item["parts"] if part["direction"] == "moved"]
+    assert (moved_part["otherTitle"], moved_part["examples"]) == ("Building the Cabin", ["Video c1"])
+    # The same move from the collection's and the episode's Move action.
+    assert client.post("/api/collections/UCworkshop/reconcile/preview").json() == preview.json()
+    [out, joins] = [
+        (item["slug"], [part["direction"] for part in item["parts"]])
+        for item in _ok(client.post(f"/api/episodes/{t1_slug}/reconcile/preview"))["collections"]
+    ]
+    assert (out, joins) == (("UCworkshop", ["out"]), ("PLtools", ["in"]))
+    assert client.get("/api/creators/workshop").json()["reassignedCount"] == 1
+
+    moved = client.post(f"/api/episodes/{t1_slug}/reconcile", json={})
 
     assert moved.status_code == 200, moved.text
-    assert (moved.json()["episodes"], moved.json()["renamed"]) == (1, 1)
+    assert moved.json()["collectionSlug"] == "PLtools"
     assert client.get("/api/creators/workshop").json()["reassignedCount"] == 0
+    _settled()
+    assert _ok(client.post("/api/collections/UCworkshop/reconcile", json={})) == {"episodeSlug": None, "collectionSlug": None}
+    # Nothing is left to move.
+    assert client.get("/api/collections/moves-waiting").json() == []
+    nothing = client.post("/api/creators/workshop/reconcile/preview")
+    assert nothing.status_code != 200 and "where it belongs" in nothing.json()["detail"]
 
 
 def _settled():
@@ -377,10 +409,11 @@ def test_a_creators_collection_leaves_a_video_its_feed_lists_to_the_playlist_tha
     assert slugs(main_id) == ["v1"]
 
 
-def test_a_playlist_that_is_in_none_of_the_creators_collections_keeps_its_videos_out_of_them_too(
-    client, session, tube, monkeypatch,
+@pytest.mark.parametrize(("target", "kept"), [("keep_out", ["m1", "v1"]), ("exclude", ["m1", "m2", "m3", "v1"])])
+def test_a_playlist_kept_out_keeps_its_videos_out_of_the_creators_collections_and_a_skipped_one_does_not(
+    client, session, tube, monkeypatch, target, kept,
 ):
-    """Members' Cuts was skipped: the creator's collection leaves out its videos, also those its Videos feed lists. One
+    """Members' Cuts is kept out: the creator's collection leaves out its videos, also those its Videos feed lists. One
     it had already goes when the collection syncs, unless it is downloaded."""
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection, Episode
@@ -396,7 +429,7 @@ def test_a_playlist_that_is_in_none_of_the_creators_collections_keeps_its_videos
         ItemRef(slug, f"https://tube.example/watch?v={slug}") for slug in lists[url]
     ), raising=False)
     response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
-        {"ref": "videos", "target": "main"}, {"ref": "PLmembers", "target": "exclude"},
+        {"ref": "videos", "target": "main"}, {"ref": "PLmembers", "target": target},
     ]})
     assert response.status_code == 201, response.text
     main_id = session.scalar(select(Collection.id).where(Collection.slug == "UCworkshop"))
@@ -412,7 +445,8 @@ def test_a_playlist_that_is_in_none_of_the_creators_collections_keeps_its_videos
     index_listed_collection(session, collection_id=main_id, source=tube)
     session.expire_all()
 
-    assert sorted(session.scalars(select(Episode.source_slug).where(Episode.collection_id == main_id))) == ["m1", "v1"]
+    # Skipped, it changes nothing: its videos are uploads like any other.
+    assert sorted(session.scalars(select(Episode.source_slug).where(Episode.collection_id == main_id))) == kept
 
 
 def test_a_downloaded_video_in_a_season_and_in_a_playlist_of_its_own_is_reassigned_to_that_playlist(creator, session):
@@ -426,3 +460,30 @@ def test_a_downloaded_video_in_a_season_and_in_a_playlist_of_its_own_is_reassign
     assert [(item.episode.source_slug, item.target.collection.slug) for item in reassigned_episodes(session, main)] == [
         ("c1", "PLtools"),
     ]
+
+
+def _ok(response):
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_a_collection_that_repeats_videos_keeps_its_seasons_whole_and_lets_go_of_its_feeds_videos(creator, session):
+    from backend.db.core import run_write_transaction
+    from backend.services.reassigned import reassigned_episodes, settle_creator
+
+    main, tools = creator
+    main_id = main.id
+    main.repeat_videos = "each_season"
+    session.commit()
+    local = _profile(session, "shows")
+    _download(session, _episode(session, main, "c1"), local, _download_profile(session, main, local))
+    session.commit()
+
+    # c1 is in a season of the collection, which shows its list whole; Tool Reviews has it too.
+    assert reassigned_episodes(session, session.get(type(main), main_id)) == []
+    # t2 only came from its feeds, so it leaves for Tool Reviews; t1 too, which a download of its own does not hold.
+    assert run_write_transaction(lambda w: settle_creator(w, w.get(type(main), main_id))) == 2
+    session.expire_all()
+    main = session.get(type(main), main_id)
+    assert _episode(session, main, "c1") is not None and _episode(session, tools, "c1") is not None
+    assert _episode(session, main, "t1") is None and _episode(session, main, "t2") is None

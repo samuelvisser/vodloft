@@ -18,7 +18,7 @@ async def remove_left_episodes(*, resource_id: int | None = None, progress=None)
     if resource_id is None:
         raise ValueError("Removing episodes that left a collection requires a collection resource")
     with db_session() as s:
-        removed = run_remove_left_episodes(s, collection_id=resource_id)
+        removed = run_remove_left_episodes(s, collection_id=resource_id, progress=progress)
     return TaskResult(
         summary=f"Removed {removed} {'episode' if removed == 1 else 'episodes'} and {'its' if removed == 1 else 'their'} files",
         data={"episodes": removed},

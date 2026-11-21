@@ -62,6 +62,8 @@ from ...models.collection import (
 )
 from ...models.source import EpisodeTagAPIRead
 from backend.api.endpoints.creators import lookups as creator_lookups
+from backend.api.endpoints.reconcile import collection_scope, move, preview_move
+from backend.api.models.creator import CreatorSectionMovesPreviewAPIRead, MovesWaitingAPIRead, ReconcileAPIIn, ReconcileAPIRead
 from backend.api.steps import STEPS_RESPONSE, stream_steps
 from backend.app import db_session
 from backend.types.collection_types import EpisodeIdentifier
@@ -75,6 +77,18 @@ router.include_router(collection_view_router)
 router.include_router(collection_as_bundle_router)
 router.include_router(existing_files_router)
 router.include_router(collection_seasons_router)
+
+@router.get("/moves-waiting", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[MovesWaitingAPIRead])
+def collections_moves_waiting():
+    """Every creator, and every collection without one, whose Reassigned or Moved episodes wait to be moved."""
+    from backend.services.reconcile import waiting_in_library
+
+    with db_session() as s:
+        try:
+            return [MovesWaitingAPIRead.model_validate(item) for item in waiting_in_library(s)]
+        finally:
+            s.rollback()
+
 
 @router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[CollectionAPIRead])
 def collection_list():
@@ -171,11 +185,27 @@ def collection_rename_files(collection_slug: str, body: CollectionFileRenameAPIR
             collection_slug,
             body.local_media_profile_id,
             season_folders=body.season_folders,
-            move_reassigned=body.move_reassigned,
         )
         return result
 
     return run_write_transaction(work)
+
+
+@router.post(
+    "/{collection_slug}/reconcile/preview", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=CreatorSectionMovesPreviewAPIRead,
+)
+def collection_reconcile_preview(collection_slug: str):
+    """What moving the collection's Reassigned and Moved episodes to where they belong now does. Changes nothing."""
+    return run_write_transaction(lambda s: preview_move(s, collection_scope(collection_slug)))
+
+
+@router.post(
+    "/{collection_slug}/reconcile", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ReconcileAPIRead,
+)
+def collection_reconcile(collection_slug: str, body: ReconcileAPIIn):
+    """Move the collection's Reassigned and Moved episodes, with their files, to where they belong now."""
+    return run_write_transaction(lambda s: move(s, collection_scope(collection_slug), body))
 
 
 @router.post(

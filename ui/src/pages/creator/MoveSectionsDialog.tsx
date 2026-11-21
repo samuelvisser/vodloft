@@ -196,6 +196,8 @@ export function CollectionMoves({collection, renumber, onRenumber}: {
 
 function PartSteps({part, season}: {part: MovedPart, season: Noun}) {
     const what = part.count === 1 ? part.names.singular : part.names.plural
+    // The verb that goes with them: one video moves, two videos move.
+    const verb = (one: string, several: string) => part.count === 1 ? one : several
     // The feed or list they are of, unless that is what they are called already, such as Shorts.
     const section = part.sectionTitle.toLocaleLowerCase() === part.names.plural.toLocaleLowerCase() ? '' : `${part.sectionTitle}. `
     const examples = part.examples.length > 0 && <TitleList titles={part.examples} total={part.count}/>
@@ -203,9 +205,9 @@ function PartSteps({part, season}: {part: MovedPart, season: Noun}) {
         return (
             <Step
                 icon={faIcon('fass', 'arrow-right-to-bracket')}
-                headline={`${capitalized(what)} join`}
+                headline={`${capitalized(what)} ${verb('joins', 'join')}`}
                 detail={`From ${part.otherTitle && part.otherTitle !== part.sectionTitle ? `${part.sectionTitle} in ${part.otherTitle}` : part.sectionTitle}${part.filesMoved > 0
-                    ? `, with ${part.filesMoved.toLocaleString()} ${part.filesMoved === 1 ? 'file' : 'files'}, which are moved, not downloaded again` : ''}.`}
+                    ? `, with ${part.filesMoved.toLocaleString()} ${part.filesMoved === 1 ? 'file, which is' : 'files, which are'} moved, not downloaded again` : ''}.`}
                 value={part.count}
             >
                 {examples}
@@ -219,9 +221,23 @@ function PartSteps({part, season}: {part: MovedPart, season: Noun}) {
             <Step
                 icon={faIcon('fass', part.direction === 'season' ? 'folder-plus' : 'folder-minus')}
                 headline={part.direction === 'season'
-                    ? `${capitalized(what)} get ${season.a} of their own`
-                    : `${capitalized(what)} join the other ${season.plural}`}
+                    ? `${capitalized(what)} ${verb('gets', 'get')} ${season.a} of ${verb('its', 'their')} own`
+                    : `${capitalized(what)} ${verb('joins', 'join')} the other ${season.plural}`}
                 detail={`${section}${part.direction === 'season' ? `${part.sectionTitle} becomes ${season.a}.` : `${part.sectionTitle} is no longer ${season.a}.`}${files}`}
+                value={part.count}
+            >
+                {examples}
+            </Step>
+        )
+    }
+    if (part.direction === 'moved') {
+        const files = part.filesMoved > 0
+            ? `Their ${part.filesMoved.toLocaleString()} ${part.filesMoved === 1 ? 'file moves' : 'files move'} into its folder, without downloading them again.` : ''
+        return (
+            <Step
+                icon={faIcon('fass', 'arrow-right-arrow-left')}
+                headline={`${capitalized(what)} ${verb('moves', 'move')} to ${part.otherTitle ?? `another ${season.singular}`}`}
+                detail={`${part.sectionTitle === part.otherTitle ? '' : section}${files}`}
                 value={part.count}
             >
                 {examples}
@@ -232,8 +248,8 @@ function PartSteps({part, season}: {part: MovedPart, season: Noun}) {
         return (
             <Step
                 icon={faIcon('fass', 'arrow-right-from-bracket')}
-                headline={`${capitalized(what)} move to ${part.otherTitle ?? 'another collection'}`}
-                detail={`${section}Their files move along, without downloading them again.`}
+                headline={`${capitalized(what)} ${verb('moves', 'move')} to ${part.otherTitle ?? 'another collection'}`}
+                detail={`${section}${verb('Its', 'Their')} files move along, without downloading them again.`}
                 value={part.count}
             >
                 {examples}
@@ -244,7 +260,7 @@ function PartSteps({part, season}: {part: MovedPart, season: Noun}) {
         <>
             <Step
                 icon={faIcon('fass', 'right-from-bracket')}
-                headline={`${capitalized(what)} leave your library`}
+                headline={`${capitalized(what)} ${verb('leaves', 'leave')} your library`}
                 detail={`${section}VODLoft stops looking for new ones.`}
                 value={part.count}
             >

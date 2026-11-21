@@ -2,9 +2,13 @@
 
 A creator keeps each of its videos in one of its collections. A list, such as a playlist, beats a feed:
 a video is in the collection whose lists hold it, which is the creator's own collection for the playlists that are its
-seasons and a collection of its own for a playlist that is one. A list of the creator that is not in a collection
-keeps every one of its videos out of it, whether the list is a collection of its own, was skipped or waits for the
-user's choice: also when a feed of that collection lists them, and also when one of its own seasons has them too.
+seasons and a collection of its own for a playlist that is one. A list of the creator that is in another collection,
+or that the user keeps out, keeps every one of its videos out of a collection: also when a feed of that collection
+lists them, and also when one of its own seasons has them too, unless the collection repeats a video in each season
+it belongs in, as an artist's albums do: it shows every season whole, so another collection only takes the videos it
+has from its feeds. A skipped list changes nothing: its videos stay where
+the creator's other feeds and lists put them. Neither does a list that waits for the user's choice: its videos stay
+where they are until the user answers, which moves them at once.
 Each collection of the creator lists those lists when it syncs, so it knows their videos before their own collections
 do.
 
@@ -37,8 +41,11 @@ from backend.db.models import (
     Creator, CreatorSection, CreatorSectionItem, Collection, DownloadProfile, Episode, MediaDownloadBase,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.services.link_seasons import _holders, link_seasons_on, list_each, lists_in, remove_left_episode
+from backend.services.link_seasons import (
+    _holders, active_lists, link_seasons_on, list_each, lists_in, remove_left_episode, repeats_videos,
+)
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.creator_types import SectionStatus
 from sources import ItemRef, SectionKind, Source
 
 
@@ -136,7 +143,12 @@ def creator_places(s: Session, creator: Creator) -> CreatorPlaces:
         if collection.id not in lists:
             # A list that is a collection of its own keeps out what it has, also before the creator's collections
             # listed it themselves.
-            places.blocked[collection.id] = left_out(s, collection) | listed
+            blocked = left_out(s, collection) | listed
+            if collection.id in mains and repeats_videos(collection) and link_seasons_on(collection):
+                # It shows each of its seasons whole, so another collection only takes what its feeds have, and a
+                # list the user keeps out what it has.
+                blocked = (blocked - set(_holders(s, active_lists(s, collection)))) | kept_out(s, collection)
+            places.blocked[collection.id] = frozenset(blocked)
     places.downloaded = set(s.scalars(
         select(MediaDownloadBase.media_item_id).join(Episode, Episode.id == MediaDownloadBase.media_item_id)
         .where(Episode.collection_id.in_(ids))
@@ -202,10 +214,10 @@ def placed_elsewhere(s: Session, collection: Collection) -> frozenset[str]:
 
 def lists_left_out(s: Session, collection: Collection) -> dict[int, str]:
     """The creator's lists on the collection's Source that are not in the collection, by the id of their section,
-    with their links: the collection leaves out every video they have, also one its feeds list. Each list counts that
-    is not in the collection, as a season or with its videos in the other seasons, whether it is a collection of its
-    own, was excluded from the Library or waits for the user's choice. Empty for a collection made from a list, which adds every video of its list, and for one without a
-    creator."""
+    with their links, whose videos the collection keeps listed: whether a list is a collection of its own, was
+    skipped or kept out, or waits for the user's choice. Only some keep their videos out of the collection
+    (``blocking_lists``); the others are listed too, so that answering or keeping one out can move its videos at once.
+    Empty for a collection made from a list, which adds every video of its list, and for one without a creator."""
     creator = collection.creator
     if creator is None or collection.id in _list_collection_ids(creator, _main_lists(creator)):
         return {}
@@ -235,10 +247,39 @@ def save_left_out(s: Session, listed: dict[int, tuple[ItemRef, ...]]) -> None:
     s.flush()
 
 
+def blocking_lists(s: Session, collection: Collection) -> list[int]:
+    """The ids of the sections of ``lists_left_out`` that keep their videos out of the collection: a list in another
+    of the creator's collections, and a list the user keeps out. A skipped list, and one that waits for the user's
+    choice, change nothing."""
+    lists = lists_left_out(s, collection)
+    if not lists:
+        return []
+    creator = collection.creator
+    held = _main_lists(creator)
+    own = {key for c in creator.collections if c.id in _list_collection_ids(creator, held) for key in (c.sharing_url, c.slug)}
+    return [
+        section.id for section in s.scalars(select(CreatorSection).where(CreatorSection.id.in_(lists)))
+        if section.status == SectionStatus.KEPT_OUT.value
+        or (section.status == SectionStatus.KNOWN.value and (section.ref in held or section.url in own or section.ref in own))
+    ]
+
+
+def kept_out(s: Session, collection: Collection) -> frozenset[str]:
+    """The videos of the creator's lists that the user keeps out: they leave the collection, files and all."""
+    lists = lists_left_out(s, collection)
+    if not lists:
+        return frozenset()
+    return frozenset(s.scalars(
+        select(CreatorSectionItem.source_slug).join(CreatorSection, CreatorSection.id == CreatorSectionItem.section_id)
+        .where(CreatorSection.id.in_(lists), CreatorSection.status == SectionStatus.KEPT_OUT.value)
+    ))
+
+
 def left_out(s: Session, collection: Collection) -> frozenset[str]:
     """The videos the collection leaves out because a list of its creator that is not in it has them, also when one
-    of its own seasons has them too: a list not in a collection keeps every one of its videos out of it."""
-    lists = lists_left_out(s, collection)
+    of its own seasons has them too: a list not in a collection keeps every one of its videos out of it, unless it
+    waits for the user's choice."""
+    lists = blocking_lists(s, collection)
     if not lists:
         return frozenset()
     slugs = set(s.scalars(select(CreatorSectionItem.source_slug).where(CreatorSectionItem.section_id.in_(lists))))
@@ -422,21 +463,3 @@ def after_download(s: Session, episode: Episode) -> None:
         item.episode.collection_id for item in _reassigned(places, places.order) if item.target.id == episode.id
     }):
         queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=collection_id)
-
-
-def move_and_rename(s: Session, items: Sequence[Reassignment]) -> tuple[MoveResult, list[str]]:
-    """Move the reassigned videos, rename their files into their new collections, and let the old files go once
-    their new downloads succeed. Returns what moved, and the ids of the rename operations.
-
-    ``s`` is a write transaction's session."""
-    from backend.services.season_moves import queue_season_folder_moves
-    from task_manager.scheduler.transactional import queue_task_after_commit
-
-    result = move_reassigned(s, items)
-    operations = []
-    for collection_id, episode_ids in sorted(result.rename.items()):
-        operation_id, _queued = queue_season_folder_moves(s, s.get(Collection, collection_id), sorted(set(episode_ids)))
-        operations.append(operation_id)
-    for collection_id in sorted(result.sources):
-        queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=collection_id)
-    return result, operations

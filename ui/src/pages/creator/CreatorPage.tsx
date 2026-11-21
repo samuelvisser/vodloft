@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
-import {Link, useNavigate, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams, useSearchParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
@@ -16,7 +16,7 @@ import CollectionTile from '../../components/CollectionTile/CollectionTile'
 import OpenOnSiteLink from '../../components/common/OpenOnSiteLink'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
-import {postReassignedMove, reassignedMoveMessage} from '../../components/Episode/SeasonPlaceNote'
+import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
 import {toast} from 'react-hot-toast'
 import {creatorKindText, groupNames, joinedNames} from '../../types/creator'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
@@ -93,7 +93,15 @@ export default function CreatorPage() {
     }, [slug])
     const [actionError, setActionError] = useState<string | null>(null)
     const [checking, setChecking] = useState(false)
-    const [movingReassigned, setMovingReassigned] = useState(false)
+    // The Move action's dialog, which Home links to as well.
+    const [searchParams, setSearchParams] = useSearchParams()
+    const reconciling = searchParams.get('move') === '1'
+    const setReconciling = (open: boolean) => setSearchParams((current) => {
+        const next = new URLSearchParams(current)
+        if (open) next.set('move', '1')
+        else next.delete('move')
+        return next
+    }, {replace: true})
     const [combining, setCombining] = useState(false)
     const [combineWith, setCombineWith] = useState('')
     const {data: libraryCreators} = useCreators()
@@ -127,19 +135,6 @@ export default function CreatorPage() {
             setChecking(false)
         }
     }
-    const moveReassigned = async () => {
-        setMovingReassigned(true)
-        try {
-            const result = await postReassignedMove(`/creators/${encodeURIComponent(creator.slug)}/move-reassigned`)
-            toast.success(reassignedMoveMessage(result, fileWords))
-            await queryClient.invalidateQueries({queryKey: ['creator', slug]})
-            await queryClient.invalidateQueries({queryKey: ['collection']})
-        } catch (exc) {
-            toast.error(exc instanceof Error ? exc.message : String(exc))
-        } finally {
-            setMovingReassigned(false)
-        }
-    }
     const combine = async () => {
         if (!combineWith) return
         try {
@@ -168,6 +163,8 @@ export default function CreatorPage() {
     const episodes = creator.collections.reduce((total, collection) => total + collection.episodeCount, 0)
     const words = wordsOf(creator.words)
     const fileWords = words
+    // The downloaded episodes that wait to go to another collection, or another season of theirs.
+    const waitingCount = creator.reassignedCount + creator.movedCount
     const firstDates = creator.collections.map((collection) => collection.firstPublishedDate).filter((date): date is Date => !!date)
     const since = firstDates.length ? Math.min(...firstDates.map((date) => date.getFullYear())) : null
     const newest = creator.lastPublishedDate
@@ -205,17 +202,16 @@ export default function CreatorPage() {
                                     icon: faIcon('fass', 'arrow-up-right-from-square'),
                                     onSelect: () => window.open(link.url, '_blank', 'noreferrer'),
                                 }))),
-                                // Episodes can only move between collections, so a creator with one has nothing to move.
-                                ...(creator.collections.length > 1 ? [{
-                                    label: `Move reassigned ${fileWords.episode.plural}`,
-                                    description: creator.reassignedCount
-                                        ? `${creator.reassignedCount} downloaded ${creator.reassignedCount === 1 ? `${fileWords.episode.singular} belongs` : `${fileWords.episode.plural} belong`} in another collection of this ${creator.creatorNames.singular} now`
-                                        : `Moves ${fileWords.episode.plural} this ${creator.creatorNames.singular} puts elsewhere`,
+                                {
+                                    label: `Move ${fileWords.episode.plural}`,
+                                    description: waitingCount
+                                        ? `${waitingCount} downloaded ${waitingCount === 1 ? `${fileWords.episode.singular} belongs` : `${fileWords.episode.plural} belong`} in another ${creator.movedCount ? `collection or ${words.season.singular}` : 'collection'} now`
+                                        : `Moves Reassigned and Moved ${fileWords.episode.plural} to where they belong`,
                                     icon: faIcon('fass', 'arrow-right-from-bracket'),
-                                    disabled: movingReassigned || !creator.reassignedCount,
-                                    disabledReason: creator.reassignedCount ? undefined : `No ${fileWords.episode.singular} of this ${creator.creatorNames.singular} belongs in another of its collections.`,
-                                    onSelect: () => void moveReassigned(),
-                                }] : []), {
+                                    disabled: !waitingCount,
+                                    disabledReason: waitingCount ? undefined : `Every ${fileWords.episode.singular} of this ${creator.creatorNames.singular} is where it belongs.`,
+                                    onSelect: () => setReconciling(true),
+                                }, {
                                     label: 'Combine with another creator',
                                     description: 'The same person or group, added from another site or twice',
                                     icon: faIcon('fass', 'object-group'),
@@ -294,6 +290,13 @@ export default function CreatorPage() {
             )}
 
             <CreatorNotInLibrary creator={creator}/>
+
+            <ReconcileDialog
+                open={reconciling}
+                path={`/creators/${encodeURIComponent(creator.slug)}`}
+                what={`the ${fileWords.episode.plural} of ${creator.title}`}
+                onDismiss={() => setReconciling(false)}
+            />
 
             <ConfirmDialog
                 open={combining}
