@@ -13,7 +13,7 @@ import {refreshFrontendPuller} from '../../lib/puller'
 import {getZodDefaults} from '../../utils/defaultZod'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import PageHeader from '../../components/common/PageHeader'
-import {creatorKindText, joinedNames, newListActionReg} from '../../types/creator'
+import {capitalized, creatorKindText, joinedNames, newListActionReg} from '../../types/creator'
 import NewListSettings from '../../components/common/NewListSettings'
 import {
     CreatorPageReadSchema, CreatorUpdateSchema, newListsValues, withNewList, type CreatorUpdateIn, type CreatorUpdateOut,
@@ -147,7 +147,7 @@ export default function EditCreatorPage() {
             <div className="creator-edit-head">
                 <Breadcrumb className="page-breadcrumb" items={[
                     {label: 'Library', to: '/library'},
-                    {label: creator.title, to: `/creator/${creator.slug}`},
+                    {label: `${capitalized(creator.creatorNames.singular)} ${creator.title}`, to: `/creator/${creator.slug}`},
                 ]}/>
                 <PageHeader
                     title="Edit creator" titleId="edit-creator-title"

@@ -292,7 +292,7 @@ export default function EditCollectionPage() {
       {collection && (
         <Breadcrumb className="page-breadcrumb" items={[
           {label: 'Library', to: '/library'},
-          {label: collection.title, to: `/collection/${collection.slug}`},
+          {label: `Collection ${collection.title}`, to: `/collection/${collection.slug}`},
         ]}/>
       )}
       <PageHeader
