@@ -185,3 +185,16 @@ def test_a_site_remembers_every_domain_it_was_seen_on(session):
         session.flush()
         assert video.site_key == "youtube"
     assert video.site.domains == ["youtube.com", "youtu.be"]
+
+
+def test_add_media_offers_only_the_search_and_catalogue_of_added_sites():
+    from backend.api.endpoints.sources.service import list_sources
+
+    class OnlyYouTubeAdded:
+        def scalars(self, _query):
+            return ["youtube"]
+
+    sources = {source.id: source for source in list_sources(OnlyYouTubeAdded())}
+    assert {site.key: site.added for site in sources["ytdlp"].search_sites} == {"youtube": True, "soundcloud": False}
+    assert [(site.key, site.added) for site in sources["dailywire"].sites] == [("dailywire", False)]
+    assert [(site.key, site.added) for site in sources["npo"].search_sites] == [("npo", False)]

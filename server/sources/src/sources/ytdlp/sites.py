@@ -59,7 +59,6 @@ def site_for(url: str) -> Site:
     if extractor is None or extractor.ie_key() == "Generic":
         # A page only the generic extractor handles, such as a site's home page, is on the site whose domain it is,
         # or else a Site of its own per domain, with what OtherSites offers.
-        host = link_host(url)
         contract = next((
             contract for contract in CONTRACTS.values() if any(on_domain(host, own) for own in contract.domains)
         ), None)

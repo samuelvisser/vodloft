@@ -52,6 +52,10 @@ export default function AddSiteByLink() {
                 await Promise.all([
                     queryClient.invalidateQueries({queryKey: ['siteAuthentication']}),
                     queryClient.invalidateQueries({queryKey: ['sitesSettings']}),
+                    queryClient.invalidateQueries({queryKey: ['sourceSites']}),
+                    queryClient.invalidateQueries({queryKey: ['localMediaProfileSites']}),
+                    // Add Media only offers the search of a Site that is added.
+                    queryClient.invalidateQueries({queryKey: ['sources']}),
                 ])
             },
             fallbackField: 'url',

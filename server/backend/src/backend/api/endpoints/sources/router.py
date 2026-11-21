@@ -46,7 +46,8 @@ def _source(source_id: str, feature: Feature) -> Source:
 @router.get("/sources", dependencies=[signed_in()], response_model=list[SourceAPIRead])
 def source_list():
     """List every Source with the Features it supports."""
-    return list_sources()
+    with db_session() as s:
+        return list_sources(s)
 
 
 @router.get("/sources/in-use", dependencies=[signed_in()], response_model=list[str])
