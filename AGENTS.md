@@ -184,6 +184,9 @@ does differently on a Site lives in that Site's contract, a `Site` from `sources
   such as its quality choices and subtitles. Keep it small: a value that is only true of some yt-dlp sites belongs
   in their own contracts, and a value true of every site belongs in `Site`.
 - A site without a contract of its own, including a page only yt-dlp's generic extractor handles, gets `OtherSites`.
+- A Site names its Font Awesome brand `icon` (`fab:youtube`) where Font Awesome has one, and its two-letter `initials`
+  (YT). Where there is no icon, VODLoft shows a globe with the initials; a Site without a contract makes them from
+  its name. Every icon a Site names also needs its entry in `ui/src/icons/siteIcons.ts`.
 - `sites.site_of()` builds each Site once from its contract and keeps it, so contracts are static: no lookups, no
   settings, nothing that changes while VODLoft runs.
 - Code reads what is special about a Site from its contract (`site.audio_only`, `site.creator_names`,

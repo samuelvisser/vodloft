@@ -5,7 +5,9 @@ from .other_sites import CREATOR_PRESETS, OtherSites
 class Bandcamp(OtherSites):
     key = "bandcamp"
     name = "Bandcamp"
+    initials = "BC"
     domains = ("bandcamp.com",)
+    icon = "fab:bandcamp"
     audio_only = True
     creators = True
     creator_names = Names("artist", "artists")

@@ -6,6 +6,7 @@ caller today; methods are added together with the feature that needs them.
 """
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -927,6 +928,19 @@ class CreatorPreset(StrEnum):
     """Nothing until it is picked."""
 
 
+def initials_of(name: str) -> str:
+    """A Site's name in at most two capitals, for a Site whose contract names none: the first letters of its first two
+    words, such as SC for SoundCloud or DW for The Daily Wire, or the first two letters of a one-word name. A name that
+    is a domain, such as example.com, goes by the part before its ending: EX."""
+    if "." in name and " " not in name.strip():
+        name = name.strip().lower().removeprefix("www.").split(".")[0]
+    words = [word for part in re.findall(r"[A-Za-z0-9]+", name) for word in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[0-9]+", part)]
+    if len(words) > 2 and words[0].lower() == "the":
+        words = words[1:]
+    letters = "".join(word[0] for word in words[:2]) if len(words) > 1 else "".join(words)[:2]
+    return letters.upper()
+
+
 @dataclass(frozen=True)
 class Site:
     """One website as the user knows it, such as YouTube or The Daily Wire, whichever Source fetches it.
@@ -938,6 +952,13 @@ class Site:
     key: str
     name: str
     domains: tuple[str, ...] = ()
+    icon: str | None = None
+    """The Font Awesome icon of the Site, as ``prefix:name``, such as ``fab:youtube``: Font Awesome's brand icon of the
+    Site where it has one. VODLoft shows it where the Site's name does not fit, such as a creator's links on a phone.
+    A Site without one shows a globe with its ``initials``."""
+    initials: str = ""
+    """The Site's name in at most two letters, such as YT for YouTube, shown beside a globe where the Site has no
+    ``icon``. Left out, they are made from its name (``initials_of``)."""
     stream_methods: frozenset[StreamMethod] = frozenset()
     """How RSS feeds can stream the Site's episodes straight from it, without downloading them
     first. A Site with none only serves downloads."""
@@ -1018,6 +1039,13 @@ class Site:
     would empty the collection."""
 
     def __post_init__(self) -> None:
+        if self.icon is not None and not re.fullmatch(r"[a-z]+:[a-z0-9-]+", self.icon):
+            raise ValueError(f"The icon of {self.name}, {self.icon!r}, is not a Font Awesome icon as prefix:name")
+        if not self.initials:
+            object.__setattr__(self, "initials", initials_of(self.name) or initials_of(self.key))
+        # Only a stand-in without a name, such as for "any Site", has none.
+        if self.initials and not re.fullmatch(r"[A-Z0-9]{1,2}", self.initials):
+            raise ValueError(f"The initials of {self.name}, {self.initials!r}, are not one or two capitals or digits")
         # What a Site with sound only leaves out is for sound; whatever it sets itself stays as it is.
         if self.audio_only and self.downloads is _VIDEO_DOWNLOADS:
             object.__setattr__(self, "downloads", self.downloads.for_audio_only())
