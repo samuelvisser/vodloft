@@ -551,9 +551,7 @@ export const frontendOperationDefinitions = {
     resourceType: 'creator',
     label: 'Move',
     invalidate: (operation, invalidations) => {
-      invalidations.push(
-        ['creator', contextString(operation, 'creator_slug')], ['creators'], ['collections'], ['collection'], ['collectionsView'], ['libraryCounts'],
-      )
+      invalidations.push(['creator', contextString(operation, 'creator_slug')], ['creators'], ['collectionsView'])
     },
     success: (operation) => {
       // What moved, in the Site's words the backend joined, such as "shorts and playlists".

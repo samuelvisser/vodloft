@@ -9,7 +9,7 @@ import {collectionsQueryOptions, episodeQueryKeys} from './collectionQueryOption
  *
  * A collection page starts from the cached collection list, and that list is also kept in the browser's storage, so
  * a deleted collection that stays in it keeps showing until the list happens to be fetched again. Its creator's page
- * and the Library also list it until they are fetched again.
+ * and the Library also list it until they are fetched again. Only caches change: no page is refetched or reloaded.
  *
  * ``keepCollectionQuery`` leaves the collection's own query in place, for a page that is showing it: removing a query
  * that a page observes makes the page create it again at once.
@@ -38,13 +38,10 @@ export async function forgetDeletedCollection(
     saveCollectionsToStorage(left)
   }
 
-  // Everything that lists collections: the Library, and every creator's page and the episodes it shows.
-  await Promise.all([
-    queryClient.invalidateQueries({queryKey: listKey}),
-    queryClient.invalidateQueries({queryKey: ['collectionsView']}),
-    queryClient.invalidateQueries({queryKey: ['libraryCounts']}),
-    queryClient.invalidateQueries({queryKey: ['recentlyIndexedEpisodes']}),
-    queryClient.invalidateQueries({queryKey: ['creators']}),
-    queryClient.invalidateQueries({queryKey: ['creator']}),
-  ])
+  // Everything that lists collections: the Library, and every creator's page and the episodes it shows. These are
+  // only marked stale, never refetched here: a page that shows them keeps what it shows, and fetches them again the
+  // next time it opens.
+  for (const queryKey of [listKey, ['collectionsView'], ['libraryCounts'], ['recentlyIndexedEpisodes'], ['creators'], ['creator']]) {
+    await queryClient.invalidateQueries({queryKey, refetchType: 'none'})
+  }
 }

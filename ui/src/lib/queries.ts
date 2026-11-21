@@ -1223,13 +1223,13 @@ export function useCollection(id?: string) {
         enabled: !!id,
     })
     // A collection deleted elsewhere, such as by a creator's Edit page, another tab or another device, can still be
-    // in the cached collection list it starts from. The server's answer wins: the page shows it is gone, and the
-    // caches that list it forget it.
+    // in the cached collection list it starts from. When the server says it is gone, the caches that list it forget
+    // it; the page itself is left as it is.
     const gone = result.error instanceof ApiError && result.error.status === 404
     useEffect(() => {
         if (gone && id) void forgetDeletedCollection(qc, id, {keepCollectionQuery: true})
     }, [gone, id, qc])
-    return gone ? {...result, data: undefined} : result
+    return result
 }
 
 export function useEpisodePages(
