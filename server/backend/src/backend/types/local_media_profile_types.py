@@ -70,27 +70,24 @@ class CollectionLocalMediaProfileScope(StrEnum):
     """Podcasts and series."""
     PODCAST = "podcast"
     SERIES = "series"
-    MUSIC_TRACKS = "music_tracks"
-    """Music collections, kept as audio tracks with the tags music players read."""
-    MUSIC_VIDEOS = "music_videos"
-    """Music collections, kept as music videos."""
+    MUSIC = "music"
+    """Music collections: as audio tracks with the tags music players read when the profile downloads audio only, and
+    as music videos otherwise."""
 
     def collection_types(self) -> tuple[str, ...]:
         """The collection types a profile with this scope keeps."""
         if self is CollectionLocalMediaProfileScope.PODCAST_AND_SERIES:
             return (CollectionLocalMediaProfileScope.PODCAST.value, CollectionLocalMediaProfileScope.SERIES.value)
-        if self.music:
-            return ("music",)
         return (self.value,)
-
-    @property
-    def music(self) -> bool:
-        return self in (CollectionLocalMediaProfileScope.MUSIC_TRACKS, CollectionLocalMediaProfileScope.MUSIC_VIDEOS)
 
 
 def keeps_tracks(profile) -> bool:
-    """Whether a Local Media Profile keeps music collections as tracks: audio only, tagged for music players."""
-    return getattr(profile, "collection_scope", None) == CollectionLocalMediaProfileScope.MUSIC_TRACKS.value
+    """Whether a Local Media Profile keeps music collections as tracks, tagged for music players: a profile for Music
+    that downloads audio only. One for Music that downloads video keeps music videos."""
+    return (
+        getattr(profile, "collection_scope", None) == CollectionLocalMediaProfileScope.MUSIC
+        and getattr(profile, "preferred_format", None) == PreferredFormat.FORMAT_AUDIO_ONLY
+    )
 
 
 class VideoLocalMediaProfileScope(StrEnum):

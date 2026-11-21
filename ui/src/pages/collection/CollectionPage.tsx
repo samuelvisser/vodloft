@@ -323,10 +323,9 @@ export default function CollectionPage() {
   } = useCollectionDownloadedLocalMediaProfiles(id)
   const { data: downloadProfiles } = useCollectionDownloadProfilesView(id)
   const { data: localMediaProfiles } = useLocalMediaProfiles()
-  // A Music collection's files are tracks while only profiles for Music tracks, which keep sound, are offered for it.
+  // A Music collection's files are tracks while only profiles for Music that download audio only are offered for it.
   const fileWords = fileWordsFor(collection, localMediaProfiles
-    ?.filter((profile) => isCollectionLocalMediaProfileAvailableFor(profile, collection?.type))
-    .map((profile) => profile.type === 'collection' ? profile.collectionScope : 'video'))
+    ?.filter((profile) => isCollectionLocalMediaProfileAvailableFor(profile, collection?.type)))
   const { data: streamProfiles } = useCollectionStreamProfilesView(id)
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
 

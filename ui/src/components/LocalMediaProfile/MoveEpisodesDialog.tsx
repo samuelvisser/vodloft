@@ -217,7 +217,7 @@ function CollectionCard({collection, choice, setChoice, source, target, disabled
 
 /** Move a Collection Local Media Profile's downloaded episodes, and their files, to another profile. */
 export default function MoveEpisodesDialog({profile, sourceEmpty, onDeleteProfile, onClose}: Props) {
-    // A profile for Music tracks keeps tracks.
+    // A profile for Music that downloads audio only keeps tracks.
     const noun = collectionWords(keepsTracks(profile) ? 'music' : null, 'audio').episode
     const queryClient = useQueryClient()
     const startOperation = useStartOperation()

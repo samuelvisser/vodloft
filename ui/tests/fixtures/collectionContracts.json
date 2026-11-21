@@ -44,7 +44,6 @@
       "creatorNames": null,
       "looseSeason": null,
       "profileScope": "podcast",
-      "audioProfileScope": "podcast",
       "profileScopes": [
         "podcast-and-series",
         "podcast"
@@ -82,7 +81,6 @@
       "creatorNames": null,
       "looseSeason": null,
       "profileScope": "series",
-      "audioProfileScope": "series",
       "profileScopes": [
         "podcast-and-series",
         "series"
@@ -123,11 +121,9 @@
         "a": "an artist"
       },
       "looseSeason": "Singles",
-      "profileScope": "music_videos",
-      "audioProfileScope": "music_tracks",
+      "profileScope": "music",
       "profileScopes": [
-        "music_tracks",
-        "music_videos"
+        "music"
       ],
       "downloadsBySeason": true
     }

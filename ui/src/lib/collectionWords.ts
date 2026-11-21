@@ -26,7 +26,7 @@ export interface CollectionWords {
     count: (count: number, noun?: Noun) => string
 }
 
-/** Whether what is meant is sound only, such as the files of a profile for Music tracks or the tracks on Bandcamp,
+/** Whether what is meant is sound only, such as the files of a profile for Music that downloads audio only or the tracks on Bandcamp,
  *  or video, such as the videos of a YouTube channel. */
 export type MediaKind = 'audio' | 'video'
 
@@ -48,7 +48,7 @@ export function wordsOf(names: {season: BackendNames, episode: BackendNames, inS
 
 const STORAGE_KEY = 'vodloft.collectionContracts'
 type Contract = Record<MediaKind, CollectionWords> & {
-    downloadsBySeason: boolean, creatorNames: BackendNames | null, profileScope: string, audioProfileScope: string, profileScopes: string[],
+    downloadsBySeason: boolean, creatorNames: BackendNames | null, profileScope: string, profileScopes: string[],
 }
 let contracts: {fallback: CollectionWords, types: Map<string, Contract>} | undefined
 
@@ -58,7 +58,7 @@ export function setCollectionContracts(loaded: CollectionContracts) {
         fallback: wordsOf(loaded.words),
         types: new Map(loaded.types.map((type) => [type.type, {
             video: wordsOf(type.words), audio: wordsOf(type.audioWords), downloadsBySeason: type.downloadsBySeason, creatorNames: type.creatorNames,
-            profileScope: type.profileScope, audioProfileScope: type.audioProfileScope, profileScopes: type.profileScopes,
+            profileScope: type.profileScope, profileScopes: type.profileScopes,
         }])),
     }
 }
@@ -108,10 +108,9 @@ export function profileScopesFor(type: string): string[] {
     return contractOf(type).profileScopes
 }
 
-/** What a new Local Media Profile for a collection of the type keeps: music_tracks for sound in Music, for example. */
-export function newProfileScope(type: string, audio = false): string {
-    const contract = contractOf(type)
-    return audio ? contract.audioProfileScope : contract.profileScope
+/** What a new Local Media Profile for a collection of the type keeps, such as podcast. */
+export function newProfileScope(type: string): string {
+    return contractOf(type).profileScope
 }
 
 interface WordedCollection {
@@ -119,17 +118,19 @@ interface WordedCollection {
     site?: { audioOnly?: boolean } | null
 }
 
-/** The words for the files of a collection, kept by the Local Media Profiles it is offered, each by what it is
- *  available for: tracks when only profiles for Music tracks, which keep sound, are, and otherwise what the
- *  collection holds. */
-export function fileWordsFor(collection: WordedCollection | null | undefined, profileScopes: readonly string[] | undefined): CollectionWords {
-    const audio = !!profileScopes?.length && profileScopes.every((scope) => scope === 'music_tracks')
+/** The words for the files of a collection, kept by the Local Media Profiles it is offered: tracks when every one of
+ *  them is for Music and downloads audio only, and otherwise what the collection holds. */
+export function fileWordsFor(
+    collection: WordedCollection | null | undefined,
+    profiles: readonly {collectionScope?: string | null, preferredFormat?: string | null}[] | undefined,
+): CollectionWords {
+    const audio = !!profiles?.length && profiles.every((profile) => profile.collectionScope === 'music' && profile.preferredFormat === 'format_audio_only')
     return wordsFor(collection, audio ? 'audio' : undefined)
 }
 
 /** The words for a collection, as its Site has it: the episodes of a Music collection on a Site with sound only,
- *  such as Bandcamp, are tracks. Pass ``audio`` where the files are meant, which a profile for Music tracks
- *  keeps as sound. */
+ *  such as Bandcamp, are tracks. Pass ``audio`` where the files are meant, which a profile for Music that
+ *  downloads audio only keeps as sound. */
 export function wordsFor(collection: WordedCollection | null | undefined, kind?: MediaKind): CollectionWords {
     return collectionWords(collection?.type, kind ?? (collection?.site?.audioOnly ? 'audio' : 'video'))
 }

@@ -182,7 +182,7 @@ What comes along:
 - A **YouTube Full Albums** subscription becomes a Music collection that splits videos by chapter: each video is an
   album and each chapter a track, as in ytdl-sub. The tracks ytdl-sub already saved are adopted one by one.
 - A **Music Videos** subscription (for Plex, Jellyfin, Emby or Kodi) becomes a Music collection with a Collection
-  profile for Music videos, which keeps ytdl-sub's folder per artist and writes `musicvideo` NFO files. Its link can be
+  profile for Music that downloads video, which keeps ytdl-sub's folder per artist and writes `musicvideo` NFO files. Its link can be
   a channel, a playlist or a single video. An artist written as a `+` map, with links under categories such as
   Concerts, becomes one collection with each link a season named after its category.
 - Every artist keeps the name ytdl-sub gave them, also when their site calls them something else, so new files go

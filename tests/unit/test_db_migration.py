@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "7c41e2a9d5b3"
+HEAD_REVISION = "a4318a92a5ca"
 
 
 @pytest.fixture
@@ -1696,10 +1696,43 @@ def test_music_profiles_become_collection_profiles_and_video_profiles_say_what_t
         assert connection.execute(text(
             "SELECT p.slug, p.type, c.collection_scope FROM local_media_profiles p "
             "JOIN local_media_profiles_collection c ON c.id = p.id ORDER BY p.id"
-        )).all() == [("tracks", "collection", "music_tracks"), ("music-videos", "collection", "music_videos"), ("shows", "collection", "podcast-and-series")]
+        )).all() == [("tracks", "collection", "music"), ("music-videos", "collection", "music"), ("shows", "collection", "podcast-and-series")]
         assert connection.execute(text(
             "SELECT p.slug, v.video_scope FROM local_media_profiles p JOIN local_media_profiles_video v ON v.id = p.id ORDER BY p.id"
         )).all() == [("vodloft-movies", "movies"), ("vodloft-videos", "both"), ("own", "both")]
+
+
+def test_profiles_for_music_tracks_and_music_videos_become_profiles_for_music(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "7c41e2a9d5b3")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        for profile_id, scope, preferred_format, episode_nfo in (
+            (1, "music_tracks", "format_audio_only", "episode"), (2, "music_videos", "format_1080p", "music_video"),
+            (3, "podcast", "format_audio_only", "episode"),
+        ):
+            connection.execute(text(
+                "INSERT INTO local_media_profiles (id, slug, name, output_template, preferred_format, video_codecs, type) "
+                "VALUES (:id, :id, :id, '/downloads/' || :id || '.ext', :format, '[]', 'collection')"
+            ), {"id": profile_id, "format": preferred_format})
+            connection.execute(text(
+                "INSERT INTO local_media_profiles_collection (id, collection_scope, episode_nfo) VALUES (:id, :scope, :nfo)"
+            ), {"id": profile_id, "scope": scope, "nfo": episode_nfo})
+
+    def profiles():
+        with engine.connect() as connection:
+            return connection.execute(text(
+                "SELECT c.collection_scope, c.episode_nfo FROM local_media_profiles_collection c ORDER BY c.id"
+            )).all()
+
+    command.upgrade(config, "a4318a92a5ca")
+    assert profiles() == [("music", "episode"), ("music", "music_video"), ("podcast", "episode")]
+
+    command.downgrade(config, "7c41e2a9d5b3")
+    assert [scope for scope, _nfo in profiles()] == ["music_tracks", "music_videos", "podcast"]
 
 
 def test_a_creator_on_sites_without_link_seasons_adds_new_sections_as_collections(migration_database):

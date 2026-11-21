@@ -64,21 +64,30 @@ Collection profiles can use:
 - audio only.
 
 A Collection profile's **Available for** controls where VODLoft offers it: **Podcasts and Series**, **Podcasts**,
-**Series**, **Music tracks** or **Music videos**. The last two are for Music collections, see below.
-
-Music tracks keep sound only, so a profile can only switch to or from **Music tracks** before it has downloads. A
-profile with downloads shows **Music tracks** greyed out, and one for Music tracks with downloads keeps its choice. To
-keep a Music collection another way, duplicate the profile and change the copy.
+**Series** or **Music**. Music is for Music collections, see below.
 
 ### Music tracks and music videos
 
-A Collection profile available for **Music tracks** stores the tracks of **Music** collections. One available for **Music videos** keeps a Music collection's videos as video, each with a `musicvideo` NFO. Attach either, or both. A profile for Music tracks downloads audio only, as M4A, Opus, MP3 or FLAC, and tags every file the way music players expect:
+A Collection profile available for **Music** stores **Music** collections. What it keeps follows its **Download**
+choice under Quality:
+
+- with **Audio only** it keeps **tracks**, for a music library;
+- with a video download, such as 1080p, it keeps **music videos**, each with a `musicvideo` NFO, for a Music Videos
+  library.
+
+Attach either, or both. Once a profile has downloads, it stays on its side: a profile that keeps tracks keeps
+downloading audio only, and one that keeps music videos can't switch to audio only, though it can change between video
+qualities. The other choice shows greyed out and says why. To keep a Music collection the other way, duplicate the
+profile and change the copy.
+
+A profile that keeps tracks downloads them as M4A, Opus, MP3 or FLAC, and tags every file the way music players
+expect:
 
 - the **album** is the episode's season, such as a playlist or album the collection holds, or else the collection's title;
 - the **artist** and **album artist** are the creator the collection belongs to, or else its author;
 - the **track number** is the episode's number in its season.
 
-The thumbnail goes inside the file as its cover art, cut to a square from the middle. Opus files take tags but no cover art. A new profile for Music tracks starts with the **Music library** layout, `Artist/Album/01 - Title`, which Plex, Jellyfin, Navidrome and most music players read; the `artist`, `album`, `track_number` and `track_number_padded` variables let you build your own.
+The thumbnail goes inside the file as its cover art, cut to a square from the middle. Opus files take tags but no cover art. A new profile for Music that downloads audio only starts with the **Music library** layout, `Artist/Album/01 - Title`, which Plex, Jellyfin, Navidrome and most music players read; the `artist`, `album`, `track_number` and `track_number_padded` variables let you build your own.
 
 FLAC keeps exactly what the site sends. Sites such as YouTube send compressed audio, so a FLAC file is larger but sounds no better than M4A or Opus.
 
@@ -191,7 +200,7 @@ Each site offers its own choices, and a profile shows what its sites offer toget
 
 Changing a codec, the container or the audio codec while a goal is chosen turns it into **Your own**. Choosing a goal again replaces your order with that goal's.
 
-**Audio format**, for Audio only: **M4A** (plays everywhere, including podcast apps), **Opus** (smallest, not every podcast app plays it) or **MP3** (for very old players). Profiles for Music tracks can also choose **FLAC**. Opus files get their metadata inside, and their thumbnail beside them.
+**Audio format**, for Audio only: **M4A** (plays everywhere, including podcast apps), **Opus** (smallest, not every podcast app plays it) or **MP3** (for very old players). Profiles for Music can also choose **FLAC**. Opus files get their metadata inside, and their thumbnail beside them.
 
 **Audio language** picks a dubbed audio track when a video has one. **Original** keeps the language the video was made in.
 
@@ -496,7 +505,7 @@ Files you already have keep their names until you rename a profile's files.
 
 **Start from a preset** above a Collection profile's output template fills in a layout that a media server reads well,
 together with the matching metadata and NFO choices: **Plex**, **Jellyfin and Emby**, **Kodi**, **Audiobookshelf** for
-audio, **Music library** for Music tracks, and **Music videos**, which files each video as `Artist/Title` with a
+audio, **Music library** for music tracks, and **Music videos**, which files each video as `Artist/Title` with a
 `musicvideo` NFO. You can change everything afterwards.
 
 ## Suggested layouts

@@ -45,6 +45,7 @@ import {
     type OutputTemplateVariable,
 } from './outputTemplateVariables'
 import type {IndexingValueEntry} from '../../types/schemas/custom_metadata'
+import {musicKind} from '../../types/local_media_profile'
 import {isExampleSource, useCollectionExamples} from '../../lib/collectionExamples'
 import './OutputTemplateEditor.css'
 import './OutputTemplateEditorIde.css'
@@ -746,7 +747,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     const videoScope = useWatch({control, name: 'videoScope' as any}) ?? 'both'
     const sourceLabel = mode !== 'collection'
         ? ({videos: 'Example video', movies: 'Example movie'} as Record<string, string>)[videoScope] ?? 'Example video or movie'
-        : collectionScope === 'music_tracks' ? 'Example track' : collectionScope === 'music_videos' ? 'Example music video' : 'Example episode'
+        : ({tracks: 'Example track', music_videos: 'Example music video'} as Record<string, string>)[musicKind(collectionScope, preferredFormat) ?? ''] ?? 'Example episode'
     const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
     const watchedSiteKeys = useWatch({control, name: 'siteKeys'}) as string[] | null | undefined
     const siteKeys = Array.isArray(watchedSiteKeys) ? watchedSiteKeys : undefined
