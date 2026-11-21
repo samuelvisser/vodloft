@@ -239,8 +239,6 @@ export default function CreatorPage() {
             )}
             {actionError && <div className="form-error-card" role="alert">{actionError}</div>}
 
-            <EpisodeShelf slug={creator.slug} words={words}/>
-
             {(creator.collections.length > 0 || !creator.movies.length) && <div className="creator-section-group">
                 <h2 className="creator-collections-title">Collections</h2>
                 {creator.collections.length ? (
@@ -262,6 +260,9 @@ export default function CreatorPage() {
                     </p>
                 )}
             </div>}
+
+            {/* After the collections, which are what people open most. */}
+            <EpisodeShelf slug={creator.slug} words={words}/>
 
             {creator.movies.length > 0 && (
                 <div className="creator-section-group">
