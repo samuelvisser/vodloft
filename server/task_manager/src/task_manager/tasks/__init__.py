@@ -28,6 +28,7 @@ _WORKER_EXPORTS = {
     "move_collection_profile_episodes": ".workers.move_collection_profile_episodes",
     "delete_collection_downloads_worker": ".workers.delete_collection_downloads_worker",
     "remove_left_episodes": ".workers.remove_left_episodes",
+    "remove_skipped_collection": ".workers.remove_skipped_collection",
     "media_download_bulk_action_worker": ".workers.media_download_bulk_action_worker",
     "media_download_attach_retries": ".workers.media_download_attach_retries",
     "fetch_new_episodes": ".workers.fetch_new_episodes",

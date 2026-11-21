@@ -94,11 +94,11 @@ function registries(names: ListNames, words: Words, view: CollectionSeasonsRead)
         // What the collection does with a video in several of its seasons, such as a track on several albums.
         repeat: createSelectRegistry(`RepeatVideos-${words.season.singular}-${words.inSeason}-${words.episode.singular}`, {
             one_season: {
-                label: `Only ${words.inSeason} the first ${words.season.singular}`,
+                label: `Include it only ${words.inSeason} the first ${words.season.singular}`,
                 help: `It gets one place, ${words.inSeason} the first of those ${words.season.plural} in the order below.`,
             },
             each_season: {
-                label: `${capitalized(words.inSeason)} each ${words.season.singular}`,
+                label: `Include it ${words.inSeason} each ${words.season.singular}`,
                 help: `It is ${words.inSeason} each of them, with files of its own, so every ${words.season.singular} is whole.`,
             },
         }),
@@ -374,6 +374,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     {view.listsPlaylists && !view.creatorSlug && <div className="form-row">
                                                         <label htmlFor="seasons-link-mode">Which {names.plural}</label>
                                                         <SimpleSelect
+                                                            menuPortalTarget={document.body} menuPlacement="auto"
+                                                            styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                                                             inputId="seasons-link-mode" registry={regs.mode} value={mode}
                                                             onChange={(value) => setValue('linkSeasonMode', value as CollectionSeasonsFormIn['linkSeasonMode'], {shouldDirty: true})}
                                                         />
@@ -459,6 +461,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     <div className="form-row">
                                                         <label htmlFor="seasons-layout">{capitalized(names.plural)}</label>
                                                         <SimpleSelect
+                                                            menuPortalTarget={document.body} menuPlacement="auto"
+                                                            styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                                                             inputId="seasons-layout" registry={regs.layout} value={listLayout}
                                                             onChange={(value) => setValue('listLayout', value as CollectionSeasonsFormIn['listLayout'], {shouldDirty: true})}
                                                         />
@@ -468,6 +472,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     {!only && listLayout !== 'by_year' && <div className="form-row">
                                                         <label htmlFor="seasons-loose">{capitalized(words.videos)} in no {names.singular}</label>
                                                         <SimpleSelect
+                                                            menuPortalTarget={document.body} menuPlacement="auto"
+                                                            styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                                                             inputId="seasons-loose" registry={regs.loose} value={looseVideos}
                                                             onChange={(value) => setValue('looseVideos', value as CollectionSeasonsFormIn['looseVideos'], {shouldDirty: true})}
                                                         />
@@ -478,6 +484,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         <div className="form-row">
                                                             <label htmlFor="seasons-outside">How {names.singular} content fits in the collection</label>
                                                             <SimpleSelect
+                                                                menuPortalTarget={document.body} menuPlacement="auto"
+                                                                styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                                                                 inputId="seasons-outside" registry={regs.outside} value={outsideVideos}
                                                                 onChange={(value) => setValue('outsideVideos', value as CollectionSeasonsFormIn['outsideVideos'], {shouldDirty: true})}
                                                             />
@@ -575,6 +583,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     When {words.episode.a} belongs {words.inSeason} several {season.plural}
                                                 </label>
                                                 <SimpleSelect
+                                                    menuPortalTarget={document.body} menuPlacement="auto"
+                                                    styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                                                     inputId="seasons-repeat" registry={regs.repeat} value={repeatVideos}
                                                     onChange={(value) => setValue('repeatVideos', value as CollectionSeasonsFormIn['repeatVideos'], {shouldDirty: true})}
                                                 />

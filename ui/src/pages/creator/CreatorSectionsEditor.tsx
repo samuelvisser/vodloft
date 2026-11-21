@@ -8,10 +8,11 @@ import {can} from '../../lib/access'
 import {addCreatorSections, showCreatorSections, splitCreatorAccount} from '../../lib/queries'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
-import {isWaitingList, useAnswerList} from './useAnswerList'
-import AnotherCollectionDialog, {otherCollections} from './AnotherCollectionDialog'
+import {isListOutside, useAnswerList} from './useAnswerList'
+import AddToCollectionDialog, {collectionChoices, hasCollectionChoice} from './AddToCollectionDialog'
 import CreatorBulkBar from './CreatorBulkEdit'
 import {sectionNouns} from './sectionNames'
+import {SECTION_ACTIONS} from './sectionActions'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import '../../components/ProfileBulkEdit/ProfileBulkEdit.css'
 import ProgressSelect from '../../components/common/ProgressSelect'
@@ -51,11 +52,9 @@ export function mainSeasonOf(creator: CreatorPageRead, account: CreatorPageAccou
     return collectionWords(creator.collections.find((collection) => collection.slug === account.mainCollectionSlug)?.type).season
 }
 
-/** The ways a section of a creator in the Library can be added, in the words of this creator. */
+/** The ways a section of a creator in the Library can be added besides into one of the creator's collections, which
+ * the Add to collection dialog asks for, in the words of this creator. */
 export function choices(creator: CreatorPageRead, {account, section}: AccountSection): {label: string, description: string, plan: SectionPlan}[] {
-    const mainTitle = mainTitleOf(creator, account)
-    const season = mainSeasonOf(creator, account)
-    const main = `the ${creator.creatorNames.singular}'s main collection`
     const options: {label: string, description: string, plan: SectionPlan}[] = []
     if (isMovie(account, section)) {
         // A movie in the library joins the creator; another one goes into the library as one of theirs.
@@ -63,16 +62,7 @@ export function choices(creator: CreatorPageRead, {account, section}: AccountSec
             ? {label: `Join ${creator.title}`, description: `${section.movieTitle ?? section.title} in your library becomes one of ${creator.title}'s movies`, plan: {ref: section.ref, target: 'own'}}
             : {label: 'Add to your library', description: `The movie goes into your library, as one of ${creator.title}'s`, plan: {ref: section.ref, target: 'own'}}]
     }
-    if (section.kind === 'feed') {
-        options.push({label: `Add to ${mainTitle}`, description: `Its ${account.site.mediaNames.plural} go into ${main}`, plan: {ref: section.ref, target: 'main'}})
-    } else if (section.kind === 'list' && account.site.linkSeasons) {
-        options.push({label: `${season.Singular} of ${mainTitle}`, description: `${capitalized(season.a)} of ${main}`, plan: {ref: section.ref, target: 'main'}})
-        options.push({
-            label: `Add its contents to ${mainTitle}`, description: `Its ${account.site.mediaNames.plural} join the others in ${main}, without ${season.a} of their own`,
-            plan: {ref: section.ref, target: 'main_loose'},
-        })
-    }
-    options.push({label: 'Own collection', description: 'A collection of its own in your library', plan: {ref: section.ref, target: 'own'}})
+    options.push({label: SECTION_ACTIONS.own, description: 'A collection of its own in your library', plan: {ref: section.ref, target: 'own'}})
     return options
 }
 
@@ -110,12 +100,13 @@ export function placedSections(creator: CreatorPageRead): AccountSection[] {
     )).sort((a, b) => Number(a.section.kind !== 'feed') - Number(b.section.kind !== 'feed'))
 }
 
-/** The choice that asks which other collection a feed or list goes into. */
+/** The choice that asks which of the creator's collections a feed or list goes into, and as what. */
 const PICK = 'pick'
+
 
 /** A place of a feed or a playlist, in words. */
 export function placeLabel(creator: CreatorPageRead, {account, section}: AccountSection, place: Place): string {
-    if (place === PICK) return 'Another collection…'
+    if (place === PICK) return SECTION_ACTIONS.collection
     const {target, collectionSlug} = placeMove(place)
     const collection = creator.collections.find((collection) => collection.slug === (collectionSlug ?? account.mainCollectionSlug))
     const title = collection?.title ?? creator.title
@@ -123,30 +114,29 @@ export function placeLabel(creator: CreatorPageRead, {account, section}: Account
     return {
         main: section.kind === 'feed' ? `In ${title}` : `${season.Singular} of ${title}`,
         main_loose: `Add its contents to ${title}`,
-        own: 'Collection of its own',
-        exclude: 'Skip',
-        keep_out: 'Skip, and keep its videos out',
+        own: SECTION_ACTIONS.own,
+        exclude: SECTION_ACTIONS.skip,
+        keep_out: SECTION_ACTIONS.keepOut,
     }[target]
 }
 
-/** The places a feed or list can go from where it is: one in a collection that holds several can leave the Library,
- * one in a collection of its own goes elsewhere by deleting that collection. A list is a season of the collection it
- * is in, or has its videos with the ones in no list. The main feed, such as YouTube's Videos, has the own collection's
- * link, so it never goes anywhere else. When the creator has other collections, the last choice asks for one. */
+/** The places a feed or list can go from where it is: where it is and where the user moved it, the dialog that asks
+ * for another collection or, for a list, whether it is a season there, a collection of its own, and out of the
+ * Library. When one in a collection of its own goes elsewhere, that collection goes. The main feed, such as YouTube's
+ * Videos, has the own collection's link, so it never goes anywhere else. */
 function placeChoices(creator: CreatorPageRead, item: AccountSection, current: Place, value: Place): Place[] {
     const {section} = item
     const list = section.kind === 'list'
     const own = !(section.kind === 'feed' && section.role === 'main')
-    const elsewhere = [current, value].map((place) => placeMove(place).collectionSlug).filter((slug): slug is string => !!slug)
+    const out = ['own', 'exclude', 'keep_out']
     return [...new Set([
-        'main',
-        ...(list ? ['main_loose'] : []),
-        ...elsewhere.flatMap((slug) => list ? [`main@${slug}`, `main_loose@${slug}`] : [`main@${slug}`]),
-        ...(otherCollections(creator, item).length > 0 ? [PICK] : []),
+        ...[current, value].filter((place) => !out.includes(place)),
+        ...(hasCollectionChoice(creator, item, value) ? [PICK] : []),
         ...(own || current === 'own' ? ['own'] : []),
-        ...(current !== 'own' ? ['exclude'] : []),
+        // A collection of its own goes with it, files and all: the move dialog says so first.
+        'exclude',
         // Its videos also leave the creator's other collections, such as a list of reuploads.
-        ...(current !== 'own' && list ? ['keep_out'] : []),
+        ...(list ? ['keep_out'] : []),
     ])]
 }
 
@@ -209,7 +199,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
     // The section that becomes a collection of its own, while the user chooses its type and identification.
     const [adding, setAdding] = useState<AccountSection | null>(null)
     // The feed or list that goes into another of the creator's collections, while the user picks which.
-    const [picking, setPicking] = useState<{item: AccountSection, confirm: string, pick: (place: Place) => void | Promise<void>} | null>(null)
+    const [picking, setPicking] = useState<{item: AccountSection, place?: Place, confirm: string, pick: (place: Place) => void | Promise<void>} | null>(null)
     // Bulk edit of what is not in the library: whether it is on, and the keys of the chosen sections.
     const [selecting, setSelecting] = useState(false)
     const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
@@ -320,7 +310,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                                 creator={creator} item={item} current={current} value={value}
                                 fitLabels={placeChoiceLabels} collectionId={collectionIdOf(item.section.collectionSlug)}
                                 onChange={(to) => onPlace(key, to === current ? null : to)}
-                                onPick={() => setPicking({item, confirm: 'Choose', pick: (to) => onPlace(key, to === current ? null : to)})}
+                                onPick={() => setPicking({item, place: value, confirm: 'Choose', pick: (to) => onPlace(key, to === current ? null : to)})}
                             />
                         ) : (
                             <span className="creator-section-note">{placeLabel(creator, item, current)}</span>
@@ -330,43 +320,45 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
             })}
         </div>
     )
-    // What the user can do with a section not in the library, in one select: each place it can go, then skipping it,
-    // letting its videos in or keeping them out, and showing it on the creator page again.
+    // What the user can do with a section not in the library, in one select: the same actions as its + menu on the
+    // creator page. Not in the library, a section is skipped or keeps its videos out already, so that one shows as its
+    // choice, and choosing it again does nothing; a new one waits for a choice.
     const actionsOf = (item: AccountSection, ignore: boolean) => {
         const {account, section} = item
-        const actions: {key: string, label: string, run: () => void}[] = choices(creator, item).map((choice, index) => ({
-            key: `choice-${index}`, label: choice.label,
-            run: () => choice.plan.target === 'own' && section.kind !== 'item'
-                ? setAdding(item)
-                : isWaitingList(item)
-                    ? answer(item, {target: choice.plan.target}, choice.label)
-                    : void place(account, choice.plan),
-        }))
-        if (section.kind !== 'item' && otherCollections(creator, item).length > 0) {
+        const now = ignore || section.movieSlug ? null : section.status === 'kept_out' ? 'keep_out' : 'skip'
+        const actions: {key: string, label: string, run: () => void}[] = []
+        if (collectionChoices(creator, item).length > 0) {
             actions.push({
-                key: 'another', label: 'Another collection…',
-                run: () => setPicking({item, confirm: isWaitingList(item) ? 'Next' : 'Add', pick: (to) => isWaitingList(item)
+                key: 'collection', label: SECTION_ACTIONS.collection,
+                run: () => setPicking({item, confirm: isListOutside(item) ? 'Next' : 'Add', pick: (to) => isListOutside(item)
                     ? answer(item, placeMove(to), placeLabel(creator, item, to))
                     : place(account, {ref: section.ref, ...placeMove(to)})}),
             })
         }
-        if (ignore) actions.push({key: 'skip', label: 'Skip', run: () => void place(account, {ref: section.ref, target: 'exclude'})})
-        if (section.kind === 'list' && section.status !== 'kept_out') {
+        actions.push(...choices(creator, item).map((choice, index) => ({
+            key: `choice-${index}`, label: choice.label,
+            run: () => choice.plan.target === 'own' && section.kind !== 'item'
+                ? setAdding(item)
+                : isListOutside(item)
+                    ? answer(item, {target: choice.plan.target}, choice.label)
+                    : void place(account, choice.plan),
+        })))
+        if (!section.movieSlug) {
+            actions.push({key: 'skip', label: SECTION_ACTIONS.skip, run: () => now !== 'skip' && void place(account, {ref: section.ref, target: 'exclude'})})
+        }
+        if (section.kind === 'list') {
             actions.push({
-                key: 'keep_out', label: ignore ? placeLabel(creator, item, 'keep_out') : 'Keep its videos out',
-                run: () => answer(item, {target: 'keep_out'}, placeLabel(creator, item, 'keep_out')),
+                key: 'keep_out', label: SECTION_ACTIONS.keepOut,
+                run: () => now !== 'keep_out' && answer(item, {target: 'keep_out'}, SECTION_ACTIONS.keepOut),
             })
         }
-        if (section.status === 'kept_out') {
-            actions.push({key: 'let_in', label: 'Let its videos in', run: () => void place(account, {ref: section.ref, target: 'exclude'})})
-        }
-        if (section.status === 'ignored') actions.push({key: 'show', label: 'Show on creator page', run: () => void unhide(item)})
-        return actions
+        if (section.status === 'ignored') actions.push({key: 'show', label: SECTION_ACTIONS.show, run: () => void unhide(item)})
+        return {actions, now}
     }
     const actionSelect = (item: AccountSection, ignore: boolean) => {
         if (!mayAdd) return null
         const key = sectionKey(item.account, item.section.ref)
-        const actions = actionsOf(item, ignore)
+        const {actions, now: current} = actionsOf(item, ignore)
         const registry = createSelectRegistry(
             `SectionAction-${key}-${actions.map((action) => action.label).join('-')}`,
             Object.fromEntries(actions.map((action) => [action.key, {label: action.label}])),
@@ -375,7 +367,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
         return (
             <div className="creator-section-choice">
                 <SimpleSelect
-                    aria-label={`What to do with ${item.section.title}`} registry={registry} value={null}
+                    aria-label={`What to do with ${item.section.title}`} registry={registry} value={working ? null : current}
                     placeholder={working ? 'Working…' : 'Choose…'} isLoading={working}
                     isDisabled={busy !== null || unhiding !== null}
                     menuPortalTarget={document.body} menuPlacement="auto"
@@ -540,16 +532,16 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
             </ConfirmDialog>
 
             {picking && (
-                <AnotherCollectionDialog
-                    creator={creator} item={picking.item} confirmLabel={picking.confirm} onDismiss={() => setPicking(null)}
+                <AddToCollectionDialog
+                    creator={creator} item={picking.item} place={picking.place} confirmLabel={picking.confirm} onDismiss={() => setPicking(null)}
                     onPick={async (to) => { await picking.pick(to); setPicking(null) }}
                 />
             )}
             {adding && (
                 <NewCreatorCollectionDialog
                     creator={creator} items={[adding]} onDismiss={() => setAdding(null)}
-                    onChoose={isWaitingList(adding) ? (values) => {
-                        answer(adding, {target: 'own', type: values.type, episodeIdentifier: values.episodeIdentifier}, 'Collection of its own')
+                    onChoose={isListOutside(adding) ? (values) => {
+                        answer(adding, {target: 'own', type: values.type, episodeIdentifier: values.episodeIdentifier}, SECTION_ACTIONS.own)
                         setAdding(null)
                     } : undefined}
                 />
