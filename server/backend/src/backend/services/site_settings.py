@@ -22,7 +22,7 @@ from config.settings.site_settings import (
     resolve_site_setting,
     sponsorblock_changes_anything,
 )
-from sources import Site, site_of
+from sources import Feature, Site, all_sources, named_sites, site_of
 
 from backend.services.sites import site_removable, sites_in_use
 
@@ -106,13 +106,22 @@ def download_profile_defaults(site: Site) -> dict[str, Any]:
     return values
 
 
+def _named_sites() -> list[Site]:
+    """The Sites a Source names: the ones it is made for, and the ones it takes an API key for, such as YouTube.
+    Their presets are what a new Local Media Profile starts with."""
+    found = {site.key: site for site in named_sites()}
+    for source in all_sources():
+        if source.has(Feature.API_KEY):
+            for site in source.api_key_sites:
+                found.setdefault(site.key, site)
+    return list(found.values())
+
+
 def local_media_profile_defaults() -> dict[str, Any]:
     """What a new Local Media Profile starts with, by field: for each setting, what the first Site VODLoft knows
     that shows it follows, such as YouTube for SponsorBlock, or else the system default."""
-    from backend.services.local_media_profile_sites import builtin_sites
-
     def start(key: SiteSetting) -> Any:
-        return site_setting_of(next((site for site in builtin_sites() if offers(site, key)), None), key)[0]
+        return site_setting_of(next((site for site in _named_sites() if offers(site, key)), None), key)[0]
 
     values = {field: start(key) for key, field in _LOCAL_MEDIA_PROFILE_FIELDS.items()}
     values["auto_subtitles"] = str(values["auto_subtitles"])

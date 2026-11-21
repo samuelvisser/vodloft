@@ -20,7 +20,7 @@ from backend.db.models import Collection, CreatorAccount, Episode, LocalMediaPro
 from backend.types.collection_contracts import CollectionWords, collection_contract
 from backend.types.link_season_types import OutsideVideos
 from backend.services.errors import ServiceError
-from backend.services.local_media_profile_sites import add_upcoming_site, builtin_sites
+from backend.services.local_media_profile_sites import add_upcoming_site
 from sources import EpisodeTag, Names, Site as SourceSite, collection_on_site, get_source, site_for, source_site, sources_for
 
 
@@ -208,9 +208,9 @@ def sites_in_use(s: Session) -> set[str]:
 
 
 def site_removable(site_key: str, in_use: set[str]) -> bool:
-    """Whether the user can remove a Site: one they added, or VODLoft saw, that has nothing in VODLoft. A Site a
-    Source is made for, such as The Daily Wire, always stays."""
-    return site_key not in in_use and site_key not in {site.key for site in builtin_sites()}
+    """Whether the user can remove a Site: any Site that has nothing in VODLoft, also one VODLoft starts with, such
+    as The Daily Wire. Adding it again brings back everything its Sources offer there."""
+    return site_key not in in_use
 
 
 def remove_site(s: Session, site_key: str) -> None:

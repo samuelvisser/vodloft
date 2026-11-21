@@ -13,9 +13,14 @@ def _new_session() -> tuple[Session, object]:
     import backend.db.models  # noqa: F401
     from backend.db import Base
 
+    from backend.db.initial_seed import _seed_sites
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    return Session(engine), engine
+    session = Session(engine)
+    # A new VODLoft starts with the Sites a Source is made for or takes an API key for.
+    _seed_sites(session)
+    return session, engine
 
 
 def _create(**values):

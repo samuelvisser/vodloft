@@ -306,16 +306,23 @@
     }
 }
 
-/* The trash button sits at the header's top right, so it stays on the name's line on a phone too. */
-.site-settings-site--removable > summary {
-    position: relative;
-    padding-right: 60px;
+/* The trash button ends the header's line, centred on the badges beside it. */
+.site-settings-site__remove {
+    padding: 4px 10px;
+    font-size: 12px;
+    line-height: 1.3;
 }
 
-.site-settings-site__remove {
-    position: absolute;
-    top: 8px;
-    right: 10px;
-    padding: 5px 10px;
-    font-size: 13px;
+/* On a phone the badges wrap under the name, so the trash button sits at the top right, on the name's line. */
+@media (max-width: 640px) {
+    .site-settings-site--removable > summary {
+        position: relative;
+        padding-right: 56px;
+    }
+
+    .site-settings-site__remove {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
 }

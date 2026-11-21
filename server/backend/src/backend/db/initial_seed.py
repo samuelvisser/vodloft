@@ -52,6 +52,19 @@ def _add_missing_profiles(session: Session, profiles) -> None:
     )
 
 
+DEFAULT_SITES = ("https://www.dailywire.com", "https://www.youtube.com", "https://npo.nl")
+"""The Sites a new VODLoft starts with, by their address. Each is stored like any Site the user adds, and can be
+removed like one; what VODLoft offers on it comes from the address alone."""
+
+
+def _seed_sites(session: Session) -> None:
+    """Add the default Sites. They come before the profiles, which start with every Site VODLoft knows."""
+    from backend.services.sites import add_site, site_of_link
+
+    for address in DEFAULT_SITES:
+        add_site(session, site_of_link(session, address))
+
+
 def _seed_local_media_profiles(session: Session) -> None:
     from backend.db.models import VideoLocalMediaProfile
     from backend.services.local_media_profile_sites import movie_site_keys
@@ -134,6 +147,7 @@ def _mark_background_migrations_done(session: Session) -> None:
 
 
 _INITIAL_SEED_STEPS: tuple[Callable[[Session], None], ...] = (
+    _seed_sites,
     _seed_local_media_profiles,
     _seed_notification_rules,
     _mark_background_migrations_done,
