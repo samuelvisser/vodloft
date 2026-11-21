@@ -8,7 +8,9 @@ from .other_sites import OtherSites
 class TikTok(OtherSites):
     key = "tiktok"
     name = "TikTok"
+    initials = "TT"
     domains = ("tiktok.com",)
+    icon = "fab:tiktok"
     # Its apps share short links, which redirect to its pages.
     share_hosts = ("vm.tiktok.com", "vt.tiktok.com")
     creators = True

@@ -34,6 +34,8 @@ class OtherSites:
     """The yt-dlp extractor module the site's contract is for, such as ``youtube``."""
     name: ClassVar[str | None] = None
     """What VODLoft calls the site; None names it after the link's domain."""
+    # A site without a contract of its own has no ``icon``, and its ``initials`` come from its name, such as EX for
+    # example.com, where ``Site`` makes them.
     domains: ClassVar[tuple[str, ...]] = ()
     """The site's own domains, such as ``instagram.com``. They tell the site of a link to a page none of its
     extractors handles, such as its home page, which yt-dlp leaves to the generic extractor."""

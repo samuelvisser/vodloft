@@ -3,6 +3,7 @@ albums, or a SoundCloud account, which may be a musician or a podcast, whose sec
 from __future__ import annotations
 
 import html
+import json
 import logging
 import re
 from collections import Counter
@@ -28,6 +29,8 @@ _BROWSER = "Mozilla/5.0"
 # SoundCloud's own pages.
 _HOSTS = frozenset({"soundcloud.com", "www.soundcloud.com", "m.soundcloud.com"})
 _OG_IMAGE = re.compile(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"')
+# What SoundCloud's page knows about the account, for its own script.
+_HYDRATION = re.compile(r"window\.__sc_hydration\s*=\s*(\[.*?\]);\s*</script>", re.S)
 
 
 class ArtistImplementation(OtherSitesImplementation):
@@ -86,7 +89,7 @@ class ArtistImplementation(OtherSitesImplementation):
         links = self.release_links(root)
         found: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE) as pool:
-            avatar = pool.submit(self.avatar, root)
+            pictures = pool.submit(self.pictures, root)
             lookups = {pool.submit(self.look_up, url, cookies): url for url in links}
             for done, lookup in enumerate(as_completed(lookups), start=1):
                 progress(f"Reading the albums: {done} of {len(links)}")
@@ -106,8 +109,9 @@ class ArtistImplementation(OtherSitesImplementation):
         # Listed in the Site's order of its list types, not in the order the lookups happened to finish.
         facts = tuple(f"{counts[type_]} {type_.names.singular if counts[type_] == 1 else type_.names.plural}"
                       for type_ in self.site.types_of(SectionKind.LIST) if counts[type_])
+        avatar, banner = pictures.result()
         return CreatorDetails(
-            ref=handle, url=root, title=str(name or handle), avatar_url=avatar.result(),
+            ref=handle, url=root, title=str(name or handle), avatar_url=avatar, banner_url=banner,
             facts=facts or (f"0 {self.site.types_of(SectionKind.LIST)[0].names.plural}",),
             sections=tuple(sections), **self.music(sections),
         )
@@ -115,9 +119,9 @@ class ArtistImplementation(OtherSitesImplementation):
     def handle(self, root: str) -> str:
         raise NotImplementedError
 
-    def avatar(self, root: str) -> str | None:
-        """The artist's picture, where the Site shows one that yt-dlp does not give."""
-        return None
+    def pictures(self, root: str) -> tuple[str | None, str | None]:
+        """The artist's picture and banner, where the Site shows ones that yt-dlp does not give."""
+        return None, None
 
     def music(self, sections: list[SectionRef]) -> dict:
         """Whether the creator is a music artist, and how sure the Site is."""
@@ -233,15 +237,19 @@ class SoundCloudImplementation(ArtistImplementation):
         return root.rstrip("/").rsplit("/", 1)[-1]
 
     def avatar(self, root: str) -> str | None:
-        """The account's profile picture, which yt-dlp leaves out: its page shares it as its og:image."""
+        return self.pictures(root)[0]
+
+    def pictures(self, root: str) -> tuple[str | None, str | None]:
+        """The account's profile picture and banner, which yt-dlp leaves out. Its page shares the picture as its
+        og:image, and gives its own script the banner, which SoundCloud calls the account's visual."""
         try:
             response = requests.get(root, headers={"User-Agent": _BROWSER}, timeout=_PAGE_TIMEOUT_SECONDS)
             response.raise_for_status()
         except requests.RequestException as exc:
-            logger.info("No picture for %s: %s", root, exc)
-            return None
+            logger.info("No pictures for %s: %s", root, exc)
+            return None, None
         found = _OG_IMAGE.search(response.text)
-        return html.unescape(found.group(1)) if found else None
+        return (html.unescape(found.group(1)) if found else None), _visual(response.text)
 
     def release_links(self, root: str) -> list[str]:
         listing = runner.run_json("--flat-playlist", "--ignore-errors", f"{root}/sets", cookies=sites.cookies_for(root))
@@ -272,6 +280,18 @@ class SoundCloudImplementation(ArtistImplementation):
         """Every track on the account's Tracks."""
         listing = runner.run_json("--flat-playlist", f"{root}/tracks", cookies=sites.cookies_for(root))
         return [entry for entry in listing.get("entries") or [] if isinstance(entry, dict) and entry.get("id")]
+
+
+def _visual(page: str) -> str | None:
+    """The banner of the account a SoundCloud page is, from what the page gives its own script."""
+    found = _HYDRATION.search(page)
+    try:
+        hydration = json.loads(found.group(1)) if found else []
+    except ValueError:
+        return None
+    user = next((item.get("data") for item in hydration if isinstance(item, dict) and item.get("hydratable") == "user"), None)
+    visuals = ((user or {}).get("visuals") or {}).get("visuals") or [] if isinstance(user, dict) else []
+    return next((str(visual["visual_url"]) for visual in visuals if isinstance(visual, dict) and visual.get("visual_url")), None)
 
 
 def _parts(url: str) -> list[str]:

@@ -8,7 +8,7 @@ from sources.ytdlp.sites import site_of
 
 
 def _without_identity(site):
-    return replace(site, key="", name="", domains=(), accesses=())
+    return replace(site, key="", name="", initials="", domains=(), accesses=())
 
 
 def test_a_contract_that_only_names_its_locked_content_takes_everything_else_from_other_sites():

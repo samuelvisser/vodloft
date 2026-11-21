@@ -11,11 +11,16 @@ from sources.ytdlp.site_implementations import IMPLEMENTATIONS, OtherSitesImplem
 
 @pytest.fixture(autouse=True)
 def soundcloud_page(monkeypatch):
-    """SoundCloud's account page, which shares the account's picture."""
+    """SoundCloud's account page, which shares the account's picture, and gives its own script its banner."""
     from sources.ytdlp.site_implementations import artists
 
     class Page:
-        text = '<meta property="og:image" content="https://i1.sndcdn.com/avatars-flume-t500x500.jpg">'
+        text = (
+            '<meta property="og:image" content="https://i1.sndcdn.com/avatars-flume-t500x500.jpg">'
+            '<script>window.__sc_hydration = [{"hydratable":"anonymousId","data":"1"},{"hydratable":"user","data":'
+            '{"avatar_url":"https://i1.sndcdn.com/avatars-flume-large.jpg","visuals":{"visuals":'
+            '[{"visual_url":"https://i1.sndcdn.com/visuals-flume-original.jpg"}]}}}];</script>'
+        )
 
         def raise_for_status(self):
             pass
@@ -88,6 +93,7 @@ def test_a_soundcloud_artist_has_its_albums_and_a_feed_of_all_its_tracks(monkeyp
     details = _implementation("https://soundcloud.com/flume").creator_details("https://soundcloud.com/flume", lambda step: None)
 
     assert (details.ref, details.title, details.avatar_url) == ("flume", "Flume", "https://i1.sndcdn.com/avatars-flume-t500x500.jpg")
+    assert details.banner_url == "https://i1.sndcdn.com/visuals-flume-original.jpg"
     assert [(s.ref, s.kind) for s in details.sections] == [("flume/sets/palaces", SectionKind.LIST), ("tracks", SectionKind.FEED)]
 
 

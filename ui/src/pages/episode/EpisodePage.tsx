@@ -17,6 +17,7 @@ import {useActiveOperation} from '../../components/OperationNotifier/OperationNo
 import {formatDate} from "../../utils/formatting";
 import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
+import SiteLink from '../../components/common/SiteLink'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge, ExpiredBadge} from '../../components/common/RemovedFromSource'
 import SeasonPlaceNote, {MovedBadge, ReassignedBadge, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
@@ -252,17 +253,7 @@ export default function EpisodePage() {
                     ]}/>
                     <div className="episode-title-actions">
                         {episode.sharingUrl && (
-                            <a
-                                className="btn btn-secondary episode-open-link"
-                                href={episode.sharingUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                aria-label={`Open on ${siteLabel}`}
-                                title={`Open on ${siteLabel}`}
-                            >
-                                <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                                <span className="episode-open-link-text">{siteLabel}</span>
-                            </a>
+                            <SiteLink className="btn-secondary episode-open-link" url={episode.sharingUrl} siteName={siteLabel} site={collection.site}/>
                         )}
                         <ActionMenu
                             items={[

@@ -5,7 +5,8 @@
 /* The banner hero: the banner, the creator's picture over its lower edge, their name beside it and their buttons on
    the right. A phone stacks them, with the buttons last. */
 .creator-header {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 18px;
+    /* The buttons take at most 60% of the row, so the name keeps room; the links fit themselves into it. */
+    display: grid; grid-template-columns: auto minmax(0, 1fr) fit-content(60%); column-gap: 18px;
     grid-template-areas: "banner banner banner" "avatar name actions" "about about about";
     align-items: end;
 }
@@ -22,7 +23,10 @@
 .creator-header--no-banner .creator-avatar { margin-top: 0; border: 0; width: 96px; height: 96px; margin-left: 0; }
 .creator-avatar--empty { background: rgba(100, 116, 139, 0.15); }
 .creator-header .creator-name { grid-area: name; margin: 0 0 8px; min-width: 0; font-size: 1.9rem; line-height: 1.15; overflow-wrap: anywhere; }
-.creator-actions { grid-area: actions; display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* One row: where the links' names do not fit, the page shows their Sites' icons instead (see useLinkFit). */
+.creator-actions { grid-area: actions; min-width: 0; display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: nowrap; justify-content: flex-end; }
+.creator-actions > * { flex-shrink: 0; white-space: nowrap; }
+.creator-actions .site-link { flex-shrink: 0; }
 .creator-about { grid-area: about; min-width: 0; padding: 10px 20px 0; display: flex; flex-direction: column; gap: 6px; }
 .creator-header--no-banner .creator-about { padding-left: 0; padding-right: 0; }
 .creator-facts { margin: 0; color: var(--muted); }
@@ -54,12 +58,16 @@
     }
     .creator-header--no-banner { grid-template-areas: "avatar" "name" "about" "actions"; }
     .creator-banner { aspect-ratio: 4 / 1; min-height: 0; margin: 0 -16px; border-radius: 0; }
+    .creator-facts { overflow-wrap: anywhere; }
     .creator-avatar { width: 88px; height: 88px; margin: -42px 0 0; border-width: 4px; font-size: 2rem; }
     .creator-header--no-banner .creator-avatar { width: 72px; height: 72px; margin-top: 0; }
     .creator-header .creator-name { margin: 8px 0 0; font-size: 1.6rem; }
     .creator-about { padding: 6px 0 0; }
-    .creator-actions { justify-content: flex-start; flex-wrap: nowrap; margin: 14px 0 0; }
-    .creator-actions > * { flex-shrink: 0; white-space: nowrap; }
+    .creator-actions { justify-content: flex-start; margin: 14px 0 0; }
+}
+@media (max-width: 560px) {
+    /* The page's own padding is 12px here, so the banner reaches the edges without making the page scroll sideways. */
+    .creator-banner { margin: 0 -12px; }
 }
 
 .creator-setup { display: flex; flex-direction: column; gap: 1.25rem; }
@@ -84,6 +92,10 @@
 .creator-section-row + .creator-section-row { border-top: 1px solid rgba(100, 116, 139, 0.24); }
 .creator-section-art {
     flex: 0 0 auto; width: 64px; height: 36px; border-radius: 4px; object-fit: cover;
+    display: grid; place-items: center; background: rgba(100, 116, 139, 0.15);
+}
+.creator-account-avatar {
+    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; object-fit: cover;
     display: grid; place-items: center; background: rgba(100, 116, 139, 0.15);
 }
 .creator-section-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }

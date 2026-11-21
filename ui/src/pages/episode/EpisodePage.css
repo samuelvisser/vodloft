@@ -500,7 +500,7 @@
         padding-inline: 12px;
     }
 
-    .episode-view .episode-open-link-text {
+    .episode-view .episode-open-link .site-link-label {
         display: none;
     }
 
@@ -587,3 +587,4 @@
 .episode-view .download-row-actions .icon-btn.is-active {
     color: #0ea5e9;
 }
+.episode-view .video-site-link { display: flex; margin-top: 12px; }

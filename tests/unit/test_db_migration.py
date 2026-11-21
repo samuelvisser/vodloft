@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "6007aa686523"
+HEAD_REVISION = "250f37a05db0"
 
 
 @pytest.fixture
@@ -2037,3 +2037,55 @@ def test_the_sites_get_their_order_and_the_always_listed_sites_become_rows(migra
     # Numbered by name, with The Daily Wire and NPO Start added beside the YouTube row the installation had.
     assert [key for key, _ in rows] == ["npo", "dailywire", "twitch", "youtube"]
     assert json.loads(dict(rows)["npo"]) == ["npo.nl"]
+
+
+def test_accounts_get_their_picture_and_own_collections_their_sites_name(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "6007aa686523")
+    with engine.begin() as connection:
+        for collection_id, title in ((1, "Northwind"), (2, "Northwind"), (3, "My own name"), (4, "Solo")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order) VALUES (:id, :uuid, :slug, :title, "
+                "'https://example.test/' || :slug, 'free', 'series', 'seasonal', 'Author', 'author', 'ytdlp', 'oldest_first')"
+            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": f"c-{collection_id}", "title": title})
+        known = set(connection.execute(text("SELECT key FROM sites")).scalars())
+        for key, name in (("youtube", "YouTube"), ("soundcloud", "SoundCloud"), ("twitch", "Twitch")):
+            if key not in known:
+                connection.execute(text(
+                    "INSERT INTO sites (key, name, domains, position) VALUES (:key, :name, '[]', 9)"
+                ), {"key": key, "name": name})
+        for creator_id, title, avatar in ((1, "Northwind", "nw.jpg"), (2, "Solo", "solo.jpg")):
+            connection.execute(text(
+                "INSERT INTO creators (id, uuid, slug, title, avatar_path, banner_path) "
+                "VALUES (:id, :uuid, :slug, :title, :avatar, :banner)"
+            ), {"id": creator_id, "uuid": f"creator-{creator_id}", "slug": title.lower(), "title": title, "avatar": avatar,
+                "banner": f"banner-{avatar}"})
+        accounts = (
+            # (id, creator, site, main collection)
+            (1, 1, "youtube", 1), (2, 1, "soundcloud", 2), (3, 1, "twitch", 3), (4, 2, "youtube", 4),
+        )
+        for account_id, creator_id, site_key, main in accounts:
+            connection.execute(text(
+                "INSERT INTO creator_accounts (id, creator_id, source_key, site_key, site_ref, main_collection_id) "
+                "VALUES (:id, :creator, 'ytdlp', :site, :ref, :main)"
+            ), {"id": account_id, "creator": creator_id, "site": site_key, "ref": f"ref-{account_id}", "main": main})
+
+    command.upgrade(config, "148e116c354b")
+
+    with engine.connect() as connection:
+        titles = dict(connection.execute(text("SELECT id, title FROM collections")).all())
+        avatars = dict(connection.execute(text("SELECT id, avatar_path FROM creator_accounts")).all())
+    # Only an own collection named exactly after a creator on several Sites takes its Site's name.
+    assert titles == {1: "Northwind YouTube", 2: "Northwind SoundCloud", 3: "My own name", 4: "Solo"}
+    # A creator's first account has their picture; the others get theirs on the next daily look.
+    assert avatars == {1: "nw.jpg", 2: None, 3: None, 4: "solo.jpg"}
+
+    # So does their banner; a background migration looks up the others' pictures.
+    command.upgrade(config, "250f37a05db0")
+    with engine.connect() as connection:
+        banners = dict(connection.execute(text("SELECT id, banner_path FROM creator_accounts")).all())
+    assert banners == {1: "banner-nw.jpg", 2: None, 3: None, 4: "banner-solo.jpg"}

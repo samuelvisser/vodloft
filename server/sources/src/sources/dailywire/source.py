@@ -86,6 +86,7 @@ class DailyWireSource(Source):
     domains = ("dailywire.com",)
     sites = (Site(
         "dailywire", "The Daily Wire", domains,
+        initials="DW",
         # Its own sign-in is how VODLoft signs in; no Source signs in on it with cookies.
         takes_cookies=False,
         stream_methods=frozenset({StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE}),

@@ -7,7 +7,9 @@ from .other_sites import OtherSites
 class X(OtherSites):
     key = "twitter"
     name = "X"
+    initials = "X"
     domains = ("x.com", "twitter.com")
+    icon = "fab:x-twitter"
     # yt-dlp downloads the videos of single posts; it can't list an account's posts, so X has no creators. X has
     # no subtitles, and keeps its videos at 1080p at most.
     downloads = replace(OtherSites.downloads, video_heights=(360, 480, 720, 1080), subtitles=False)

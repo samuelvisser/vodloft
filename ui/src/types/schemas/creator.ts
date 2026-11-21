@@ -4,7 +4,7 @@ import {DwMembershipLevelReg} from '../dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg} from '../collection'
 import {ApiDateTimeSchema} from './datetime'
 import {EpisodeReadViewSchema} from './episode'
-import {NamesSchema, SectionTypeSchema} from './source'
+import {NamesSchema, SectionTypeSchema, SiteReadSchema} from './source'
 
 export const SectionTargetValues = ['main', 'main_loose', 'own', 'exclude', 'keep_out'] as const
 export const CreatorPresetValues = ['one_show', 'per_list', 'pick'] as const
@@ -132,6 +132,10 @@ export type CreatorLookupRead = z.infer<typeof CreatorLookupReadSchema>
 
 const SiteSchema = z.object({
     key: z.string(), name: z.string(), creatorNames: NamesSchema, linkSeasons: z.boolean().default(false),
+    /** The Site's Font Awesome icon as prefix:name, such as fab:youtube; see SiteIcon. */
+    icon: z.string().nullable().optional(),
+    /** The Site's name in at most two letters, such as YT, shown beside a globe where it has no icon. */
+    initials: z.string(),
     /** The Site has sound only, such as Bandcamp. */
     audioOnly: z.boolean().default(false),
     /** What the Site calls one of its videos: a video, or a track on a Site with sound only. */
@@ -150,6 +154,8 @@ export const CreatorAccountReadSchema = z.object({
     siteRef: z.string(),
     url: z.string().nullable(),
     handle: z.string().nullable(),
+    /** The account's own picture on its Site. */
+    avatarUrl: z.string().nullable().default(null),
     checkedAt: z.string().nullable(),
     /** The collection named after the creator that takes this account's uploads. */
     mainCollectionSlug: z.string().nullable(),
@@ -217,6 +223,8 @@ export const CreatorPageReadSchema = CreatorReadSchema.extend({
         years: z.string(),
         firstPublishedDate: ApiDateTimeSchema.nullable(),
         links: z.array(z.string()),
+        /** The Site the collection is on, which tells whether its music is tracks or music videos. */
+        site: SiteReadSchema.nullable().default(null),
     })),
     /** The creator's movies in the Library. */
     movies: z.array(z.object({

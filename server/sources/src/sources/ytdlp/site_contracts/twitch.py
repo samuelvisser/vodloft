@@ -11,7 +11,9 @@ CLIP_TAG = "clip"
 class Twitch(OtherSites):
     key = "twitch"
     name = "Twitch"
+    initials = "TW"
     domains = ("twitch.tv",)
+    icon = "fab:twitch"
     creators = True
     creator_presets = CREATOR_PRESETS
     # A channel's videos are its past broadcasts, highlights and uploads; its clips are short parts of them that

@@ -50,7 +50,7 @@ export default function CollectionTile({collection, subtitle, showSource = true,
                 {image
                     ? <CollectionTileArt key={image} src={image}/>
                     : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
-                {badge && <span className="badge library-tile-badge">{badge}</span>}
+                {badge && <span className="badge library-tile-badge" title={badge}>{badge}</span>}
                 {showSource && <SourceBadge sourceKey={collection.sourceKey} className="library-tile-source"/>}
             </span>
             <span className="library-tile-copy">

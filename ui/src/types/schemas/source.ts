@@ -220,6 +220,10 @@ export type SectionType = z.infer<typeof SectionTypeSchema>
 export const SiteReadSchema = z.object({
     key: z.string(),
     name: z.string(),
+    /** The Site's Font Awesome icon as prefix:name, such as fab:youtube; see SiteIcon. */
+    icon: z.string().nullable().optional(),
+    /** The Site's name in at most two letters, such as YT, shown beside a globe where it has no icon. */
+    initials: z.string(),
     /** A collection on the Site shows what VODLoft has no access to until the user hides it. */
     showsLocked: z.boolean().optional().default(true),
     /** The Site has sound only, such as Bandcamp: a Music collection on it holds tracks, not music videos. */

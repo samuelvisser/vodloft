@@ -554,6 +554,18 @@ class SiteAPIRead(ResponseBase):
 
     @computed_field
     @property
+    def icon(self) -> str | None:
+        """The Site's Font Awesome icon as ``prefix:name``, such as ``fab:youtube``, shown where its name does not fit."""
+        return site_of(self.key).icon
+
+    @computed_field
+    @property
+    def initials(self) -> str:
+        """The Site's name in at most two letters, such as YT, shown beside a globe where it has no icon."""
+        return site_of(self.key).initials
+
+    @computed_field
+    @property
     def shows_locked(self) -> bool:
         """A collection on the Site shows what VODLoft has no access to until the user hides it."""
         return site_of(self.key).shows_locked

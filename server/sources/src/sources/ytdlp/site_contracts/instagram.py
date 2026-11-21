@@ -7,7 +7,9 @@ from .other_sites import OtherSites
 class Instagram(OtherSites):
     key = "instagram"
     name = "Instagram"
+    initials = "IG"
     domains = ("instagram.com",)
+    icon = "fab:instagram"
     # yt-dlp downloads single posts and reels; it can't list an account's posts, so Instagram has no creators.
     # Instagram has no subtitles, and keeps its videos at 1080p at most.
     downloads = replace(OtherSites.downloads, video_heights=(360, 480, 720, 1080), subtitles=False)

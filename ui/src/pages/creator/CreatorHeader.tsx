@@ -1,4 +1,4 @@
-import {useLayoutEffect, useRef, useState, type ReactNode} from 'react'
+import {useLayoutEffect, useRef, useState, type ReactNode, type Ref} from 'react'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {capitalized} from '../../types/creator'
 import LinkedText from '../../components/common/LinkedText'
@@ -15,6 +15,8 @@ type CreatorHeaderProps = {
     /** The id of the title, when it is the page's own heading. */
     titleId?: string
     actions?: ReactNode
+    /** The row of buttons, for a page that measures whether they fit. */
+    actionsRef?: Ref<HTMLDivElement>
     /** A row of figures under the description, such as how many collections the creator has. */
     stats?: ReactNode
 }
@@ -48,7 +50,7 @@ function CreatorDescription({text}: {text: string}) {
 }
 
 /** A creator's banner with their picture over it, their name, what their Site says about them, and their buttons. */
-export default function CreatorHeader({title, label, handle, avatarUrl, bannerUrl, facts = [], description, titleId, actions, stats}: CreatorHeaderProps) {
+export default function CreatorHeader({title, label, handle, avatarUrl, bannerUrl, facts = [], description, titleId, actions, actionsRef, stats}: CreatorHeaderProps) {
     const Heading = titleId ? 'h1' : 'h2'
     const banner = toImageUrl(bannerUrl)
     const avatar = toImageUrl(avatarUrl)
@@ -59,11 +61,13 @@ export default function CreatorHeader({title, label, handle, avatarUrl, bannerUr
                 ? <img className="creator-avatar" src={avatar} alt="" loading="lazy"/>
                 : <span className="creator-avatar creator-avatar--empty" aria-hidden="true">{title.slice(0, 1)}</span>}
             <Heading id={titleId} className="creator-name">{title}</Heading>
-            {actions && <div className="creator-actions">{actions}</div>}
+            {actions && <div ref={actionsRef} className="creator-actions">{actions}</div>}
             <div className="creator-about">
-                {/* Each fact stays whole, such as "1.7M subscribers": a line breaks only between them. */}
+                {/* Each fact stays whole, such as "1.7M subscribers": a line breaks only between them. The label can break
+                    anywhere, since it names every Site of a creator on several, such as "Creator on YouTube, SoundCloud and
+                    Twitch". */}
                 <p className="creator-facts">
-                    {[capitalized(label), handle, ...facts].filter(Boolean).map((fact) => fact!.replace(/ /g, '\u00a0')).join('\u00a0· ')}
+                    {[capitalized(label), ...[handle, ...facts].filter(Boolean).map((fact) => fact!.replace(/ /g, '\u00a0'))].join('\u00a0· ')}
                 </p>
                 {description && <CreatorDescription text={description}/>}
                 {stats}
