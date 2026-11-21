@@ -87,6 +87,8 @@ class _Moves:
     """The collections the moves made."""
     touched: set[int] = field(default_factory=set)
     """The collections that gained or lost videos."""
+    synced: set[int] = field(default_factory=set)
+    """The collections whose links changed, which are listed again once after all the moves."""
     seasons: dict[int, list[str]] = field(default_factory=dict)
     """The new seasons, by collection id."""
     seasoned: set[str] = field(default_factory=set)
@@ -288,7 +290,7 @@ def _feed_into(
     _add(s, target, episodes)
     moves.result.merge(move_reassigned(s, _handed_over(s, episodes, target), download_again=False))
     _drop_if_left_empty(s, account, source)
-    reindex_collection(s, target)
+    moves.synced.add(target.id)
     moves.touched |= {source.id, target.id}
 
 
@@ -366,7 +368,7 @@ def _list_into(
     if gathered:
         place_in_link_seasons(s, source, by_user=True)
     _drop_if_left_empty(s, account, source)
-    reindex_collection(s, target)
+    moves.synced.add(target.id)
     if as_season:
         moves.seasons.setdefault(target.id, []).append(section.title)
     moves.touched |= {source.id, target.id}
@@ -451,7 +453,7 @@ def _pending_into(
         ]))
         moves.touched.add(collection_id)
     settle_creator(s, target)
-    reindex_collection(s, target)
+    moves.synced.add(target.id)
     if as_season:
         moves.seasons.setdefault(target.id, []).append(section.title)
     moves.touched.add(target.id)
@@ -537,7 +539,7 @@ def _list_out(
     after = {episode.id for episode in _whole(s, source).values()} - leaving
     moves.flows.append(Flow(section, _media_names(account), source.id, None, sorted(before - after)))
     # A sync lets the videos only this list kept out come back, and the list's other videos leave.
-    reindex_collection(s, source)
+    moves.synced.add(source.id)
     moves.touched.add(source.id)
 
 
@@ -756,6 +758,11 @@ def follow_up(s: Session, done: _Moves, renumber: Mapping[str, bool]) -> None:
     collections. ``renumber`` says, by collection slug, which collections keep their numbers instead."""
     from task_manager.scheduler.transactional import queue_task_after_commit
 
+    # Each collection whose links changed is listed again once, however many feeds and lists it gained or lost.
+    for collection_id in sorted(done.synced):
+        collection = s.get(Collection, collection_id)
+        if collection is not None:
+            reindex_collection(s, collection)
     for collection_id in sorted(done.result.sources):
         queue_task_after_commit(s, def_key="remove_left_episodes", resource_type="collection", resource_id=collection_id)
     for collection_id in sorted(done.touched):
