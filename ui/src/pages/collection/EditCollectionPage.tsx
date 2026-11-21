@@ -292,7 +292,8 @@ export default function EditCollectionPage() {
       {collection && (
         <Breadcrumb className="page-breadcrumb" items={[
           {label: 'Library', to: '/library'},
-          {label: `Collection ${collection.title}`, to: `/collection/${collection.slug}`},
+          // A creator's collection often has the creator's name, so it says which of the two it is.
+          {label: collection.creatorSlug ? `Collection ${collection.title}` : collection.title, to: `/collection/${collection.slug}`},
         ]}/>
       )}
       <PageHeader
