@@ -1396,3 +1396,21 @@ def test_each_kind_of_list_has_its_own_setting_for_new_ones(client, session, tub
 
     # The album is added by itself; the playlist waits for the user's choice.
     assert ([section.ref for section in result.added], [section.ref for section in result.asked]) == (["PLalbum"], ["PLbarn"])
+
+
+def test_a_section_whose_id_is_a_path_gets_a_collection_its_link_can_open(client, session, monkeypatch):
+    import test_creators
+    from backend.db.models import Collection
+
+    album = SectionRef("workshop/sets/cabin-songs", f"{ROOT}/sets/cabin-songs", PLAYLISTS, "Cabin Songs", item_count=9)
+    monkeypatch.setattr(test_creators, "SECTIONS", (*SECTIONS, album))
+
+    added = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": album.ref, "target": "own"},
+    ]})
+
+    assert added.status_code == 201, added.text
+    assert session.scalar(select(Collection.slug).where(Collection.sharing_url == album.url)) == "workshop-sets-cabin-songs"
+    sections = {section["ref"]: section for section in added.json()["accounts"][0]["sections"]}
+    assert sections[album.ref]["collectionSlug"] == "workshop-sets-cabin-songs"
+    assert added.json()["collections"][0]["slug"] == "workshop-sets-cabin-songs"

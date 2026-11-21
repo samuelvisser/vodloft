@@ -54,6 +54,19 @@ def test_ytdlp_looks_up_a_drm_video_for_its_details(monkeypatch):
     assert len(calls) == 2
 
 
+def test_a_soundcloud_track_protected_by_drm_is_listed_with_its_details(monkeypatch):
+    # SoundCloud gives a protected track no formats at all, so yt-dlp only gives its details when it may find none.
+    def run_json(*args, **_kwargs):
+        if "--ignore-no-formats-error" not in args:
+            raise runner.YtDlpError("[soundcloud] 476476833: This video is DRM protected")
+        return {"id": "476476833", "extractor_key": "Soundcloud", "title": "Introit",
+                "webpage_url": "https://soundcloud.com/artist/introit"}
+
+    monkeypatch.setattr(runner, "run_json", run_json)
+    details = YtDlpSource().video_details("https://soundcloud.com/artist/introit")
+    assert (details.title, details.drm_protected) == ("Introit", True)
+
+
 def test_ytdlp_marks_a_video_whose_formats_all_have_drm(monkeypatch):
     info = {"id": "abc", "extractor_key": "Site", "title": "Locked", "formats": [{"has_drm": True}, {"has_drm": True}]}
     monkeypatch.setattr(runner, "run_json", lambda *args, **_kwargs: info)
