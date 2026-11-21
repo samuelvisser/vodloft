@@ -33,6 +33,7 @@ import {RequestedFieldsProvider, requestedOrigin} from '../../components/common/
 import {ProfileFitProvider} from '../../components/LocalMediaProfile/ProfileFit'
 import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
 import {apiUrl} from '../../lib/api'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
 function canonicalProfileValues(profile: LocalMediaProfileRead): LocalMediaProfileUpdateIn {
     if (profile.type === 'video') return VideoLocalMediaProfileUpdateSchema.parse(profile)
@@ -222,6 +223,10 @@ export default function EditLocalMediaProfilePage() {
 
     return (
         <section className="view" aria-labelledby="edit-media-profile-title">
+            <Breadcrumb className="page-breadcrumb" items={[
+                {label: 'Local Media Profiles', to: '/local-media-profiles'},
+                {label: profile.name, to: `/local-media-profile/${profile.slug}`},
+            ]}/>
             <div className="view-header">
                 <h1 id="edit-media-profile-title">Edit local media profile</h1>
                 {profile.type === 'collection' && <IndexingValuesEditorButton form={form}/>}

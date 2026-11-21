@@ -10,6 +10,7 @@ import {useMovies} from '../../lib/queries'
 import {MovieUpdateSchema} from '../../types/schemas/movie'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {apiUrl} from '../../lib/api'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
 const MovieEditSchema = z.object({
     title: z.string().trim().min(1, 'Movie name is required'),
@@ -120,6 +121,10 @@ export default function EditMoviePage() {
 
     return (
         <section className="view" aria-labelledby="edit-movie-title">
+            <Breadcrumb className="page-breadcrumb" items={[
+                {label: 'Library', to: '/library?type=movies'},
+                {label: movie.title, to: `/movie/${movie.slug}`},
+            ]}/>
             <div className="view-header">
                 <h1 id="edit-movie-title">Edit movie</h1>
                 <button type="button" className="btn" onClick={() => setMetadataOpen(true)}>

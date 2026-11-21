@@ -22,6 +22,7 @@ import {
 import CreatorSectionsEditor, {placedSections, placeKey, placeLabel, placeMove, placeOf} from './CreatorSectionsEditor'
 import MoveSectionsDialog, {type PlaceChange} from './MoveSectionsDialog'
 import './CreatorPages.css'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
 export default function EditCreatorPage() {
     const {slug} = useParams()
@@ -142,6 +143,10 @@ export default function EditCreatorPage() {
 
     return (
         <section className="view creator-view" aria-labelledby="edit-creator-title">
+            <Breadcrumb className="page-breadcrumb" items={[
+                {label: 'Library', to: '/library'},
+                {label: creator.title, to: `/creator/${creator.slug}`},
+            ]}/>
             <PageHeader
                 title="Edit creator" titleId="edit-creator-title"
                 subtitle={<p className="view-description"><Link className="quiet-link" to={`/creator/${creator.slug}`}>{creator.title}</Link> · {creatorKindText(creator)}</p>}
