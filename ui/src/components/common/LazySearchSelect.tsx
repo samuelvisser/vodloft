@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
 import Select, {components, type GroupBase, type MenuListProps} from 'react-select'
+import {useDialogMenuProps} from '../Modal/dialogMenus'
 
 export type LazySearchSelectOption = {
     value: string
@@ -47,6 +48,7 @@ export default function LazySearchSelect({
     maxMenuHeight = 360,
     ariaLabel,
 }: Props) {
+    const dialogMenuProps = useDialogMenuProps()
     const [inputValue, setInputValue] = useState('')
     const onSearchChangeRef = useRef(onSearchChange)
     const scrollSelectedWhenAvailable = useRef(false)
@@ -219,6 +221,7 @@ export default function LazySearchSelect({
 
     return (
         <Select<LazySearchSelectOption, false, GroupBase<LazySearchSelectOption>>
+            {...dialogMenuProps}
             inputId={inputId}
             className={className}
             classNamePrefix={classNamePrefix}

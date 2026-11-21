@@ -2,7 +2,7 @@ import {collectionWords, type Noun} from '../../lib/collectionWords'
 import {Fragment, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent} from 'react'
 import {Controller, useFieldArray, useWatch, type UseFormReturn} from 'react-hook-form'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import Select from 'react-select'
+import Select from '../common/ReactSelect'
 import Switch from 'react-switch'
 
 import {faIcon} from '../../icons/faIcon'

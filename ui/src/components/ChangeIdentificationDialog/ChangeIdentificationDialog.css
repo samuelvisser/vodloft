@@ -1,5 +1,4 @@
-/* Wide enough for an old and a new number next to an episode's title. When the dialog is taller than the
-   screen, its content scrolls and the buttons stay at the bottom. */
+/* Wide enough for an old and a new number next to an episode's title. */
 .modal.change-identification-dialog {
     --change-identification-line: var(--select-menu-border);
     --change-identification-soft: rgba(100, 116, 139, 0.08);
@@ -7,11 +6,6 @@
     --change-identification-danger-soft: rgba(220, 38, 38, 0.06);
     --change-identification-danger-line: rgba(220, 38, 38, 0.35);
     max-width: 560px;
-    max-height: calc(100vh - 48px);
-    max-height: calc(100dvh - 48px);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,21 +18,7 @@
     }
 }
 
-.change-identification-dialog .confirm-dialog-content {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    margin-right: -6px;
-    padding-right: 6px;
-}
-
-.change-identification-dialog .modal-header {
-    flex: none;
-}
-
 .change-identification-dialog .modal-actions {
-    flex: none;
     container-type: inline-size;
 }
 

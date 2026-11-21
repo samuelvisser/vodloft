@@ -3,7 +3,7 @@ import {zodResolver} from '@hookform/resolvers/zod'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useQueryClient} from '@tanstack/react-query'
 import {Controller, useForm} from 'react-hook-form'
-import Select from 'react-select'
+import Select from '../common/ReactSelect'
 import Switch from 'react-switch'
 import toast from '../../lib/toast'
 

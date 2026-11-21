@@ -13,7 +13,7 @@ import {
     DownloadProfileUpdateIn, DownloadProfileUpdateOut, DownloadProfileUpdateSchema,
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
-import Select from 'react-select'
+import Select from '../../components/common/ReactSelect'
 import {safeReturnPath, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import LocalMediaProfileFitNote from '../../components/DownloadProfile/LocalMediaProfileFitNote'
 import RequestedField, {RequestedFieldsProvider} from '../../components/common/RequestedField'
