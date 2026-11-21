@@ -11,14 +11,16 @@ from collections.abc import Iterable
 from dataclasses import replace
 from functools import lru_cache
 from typing import Optional
+from urllib.parse import urlsplit
 
-from sqlalchemy import select
+from sqlalchemy import select, union
 from sqlalchemy.orm import Session
 
-from backend.db.models import Collection, Episode, Movie, Site, Video
+from backend.db.models import Collection, CreatorAccount, Episode, LocalMediaProfileBase, Movie, Site, Video
 from backend.types.collection_contracts import CollectionWords, collection_contract
 from backend.types.link_season_types import OutsideVideos
-from backend.services.local_media_profile_sites import add_upcoming_site
+from backend.services.errors import ServiceError
+from backend.services.local_media_profile_sites import add_upcoming_site, builtin_sites
 from sources import EpisodeTag, Names, Site as SourceSite, collection_on_site, get_source, site_for, source_site, sources_for
 
 
@@ -171,8 +173,8 @@ class SiteLinkError(ValueError):
 def site_of_link(s: Session, url: str) -> SourceSite:
     """The Site of a link, as the Source VODLoft asks first for it tells, without a network request."""
     candidates = sources_for(url, preferred_sources(s))
-    if not candidates or not url.lower().startswith(("http://", "https://")):
-        raise SiteLinkError("Paste a link to a page on the site, starting with https://")
+    if not candidates or not url.lower().startswith(("http://", "https://")) or "." not in (urlsplit(url).hostname or ""):
+        raise SiteLinkError("Type the site's address, such as twitch.tv, or paste a link to a page on it")
     return site_for(url, candidates[0].id)
 
 
@@ -181,3 +183,44 @@ def add_site(s: Session, site: SourceSite) -> Site:
     record = site_record(s, site)
     s.flush()
     return record
+
+
+def sites_in_use(s: Session) -> set[str]:
+    """The keys of the Sites VODLoft has something from: a collection, a video, a creator, a movie, or an episode
+    of a collection that holds the links of several Sites."""
+    keys = set(s.scalars(union(
+        select(Collection.site_key).where(Collection.site_key.is_not(None)),
+        select(Video.site_key).where(Video.site_key.is_not(None)),
+        select(CreatorAccount.site_key),
+    )))
+    keys.update(
+        _site_of(url, source_key).key
+        for url, source_key in s.execute(select(Movie.sharing_url, Movie.source_key).where(Movie.sharing_url.is_not(None)).distinct())
+    )
+    keys.update(
+        _site_of(url, source_key).key
+        for url, source_key in s.execute(
+            select(Episode.sharing_url, Episode.source_key).join(Episode.collection)
+            .where(Collection.outside_videos == OutsideVideos.ONLY).distinct()
+        )
+    )
+    return keys
+
+
+def site_removable(site_key: str, in_use: set[str]) -> bool:
+    """Whether the user can remove a Site: one they added, or VODLoft saw, that has nothing in VODLoft. A Site a
+    Source is made for, such as The Daily Wire, always stays."""
+    return site_key not in in_use and site_key not in {site.key for site in builtin_sites()}
+
+
+def remove_site(s: Session, site_key: str) -> None:
+    """Forget a Site that has nothing in VODLoft, and take it out of the profiles that store media from it. Its
+    settings under ``siteSettings`` stay, so adding it again brings them back."""
+    if not site_removable(site_key, sites_in_use(s)):
+        raise ServiceError("This site has collections, videos or creators in VODLoft, so it can't be removed", status_code=409)
+    record = s.get(Site, site_key)
+    if record is not None:
+        s.delete(record)
+    for profile in s.scalars(select(LocalMediaProfileBase)):
+        if site_key in profile.site_keys:
+            profile.site_keys = [key for key in profile.site_keys if key != site_key]

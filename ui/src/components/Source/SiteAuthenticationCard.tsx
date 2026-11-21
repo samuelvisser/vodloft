@@ -139,7 +139,8 @@ function SiteAuthenticationRow({site, onSaved}: {site: SiteAuthenticationRead; o
     const takesCookies = site.cookieSourceNames.length > 0
     return (
         <SiteRow
-            name={site.name} domains={site.domains} badges={badges(site, apiKeyBadge)}
+            siteKey={site.key} name={site.name} domains={site.domains} badges={badges(site, apiKeyBadge)}
+            removable={site.removable}
             bodyClassName="source-section__body site-authentication__body"
         >
             {SignIn ? <SignIn/> : null}

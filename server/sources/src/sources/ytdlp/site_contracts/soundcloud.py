@@ -9,6 +9,7 @@ PLAYLIST_LIST = "playlist"
 class SoundCloud(OtherSites):
     key = "soundcloud"
     name = "SoundCloud"
+    domains = ("soundcloud.com",)
     audio_only = True
     creators = True
     # An account may be a music artist or anyone else, such as a podcast; a Music collection calls it an artist.

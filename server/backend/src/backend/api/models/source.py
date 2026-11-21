@@ -212,10 +212,20 @@ class SiteAuthenticationAPIRead(ResponseBase):
     cookies_status: Optional[CookiesStatusAPIRead] = None
     api_key_source_key: Optional[str] = None
     """The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key."""
+    removable: bool
+    """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
 
 
 class SiteAddAPIRequest(RequestBase):
     url: str = Field(min_length=1, max_length=2048)
+    """A link to a page on the Site, or only its address, such as ``twitch.tv``."""
+
+    @field_validator("url")
+    @classmethod
+    def _with_scheme(cls, value: str) -> str:
+        """An address typed without ``https://`` is the Site's https address."""
+        value = value.strip()
+        return value if not value or "://" in value else f"https://{value}"
 
 
 class SiteAddedAPIRead(ResponseBase):

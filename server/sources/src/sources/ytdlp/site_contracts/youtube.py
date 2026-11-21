@@ -24,6 +24,7 @@ from .other_sites import CREATOR_PRESETS, MEMBERS_KEY, PREMIUM_KEY, OtherSites
 class YouTube(OtherSites):
     key = "youtube"
     name = "YouTube"
+    domains = ("youtube.com", "youtu.be")
     # yt-dlp tells YouTube's Shorts and livestreams apart from its videos.
     episode_tags = (
         *VIDEO_TAGS,

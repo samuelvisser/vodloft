@@ -321,7 +321,10 @@ function SiteSettingsRow({site, group, groupKeys, draft, updateDraft, errorFor}:
 
     return (
         // An error opens the Site, so a refused save shows why.
-        <SiteRow name={site.name} domains={site.domains} badges={badges(group, settings)} forceOpen={errors.some(Boolean)}>
+        <SiteRow
+            siteKey={site.key} name={site.name} domains={site.domains} badges={badges(group, settings)}
+            removable={site.removable} forceOpen={errors.some(Boolean)}
+        >
             {shown.map((setting, index) => (
                 <SettingRow
                     key={setting.offered.key} site={site} setting={setting} error={errors[index]}
