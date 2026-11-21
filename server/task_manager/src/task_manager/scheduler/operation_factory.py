@@ -16,6 +16,14 @@ from task_manager.scheduler.types import OperationSource
 
 ResourceT = TypeVar("ResourceT")
 REQUEST_PRIORITY_CONTEXT_KEY = "request_priority"
+WORK_WEIGHT_CONTEXT_KEY = "work_weight"
+
+
+def work_weight(operation: TaskOperation) -> float:
+    """How much work the operation is against the other parts of an action made of several, as its definition said:
+    an action counts its parts by these weights, also while a part cannot say how far it is itself."""
+    value = (operation.context or {}).get(WORK_WEIGHT_CONTEXT_KEY)
+    return float(value) if isinstance(value, (int, float)) and value > 0 else 1.0
 
 
 class OperationDefinition(Generic[ResourceT]):
@@ -33,9 +41,13 @@ class OperationDefinition(Generic[ResourceT]):
         resource: ResourceT,
         *,
         source: str = OperationSource.UI.value,
+        work_weight: float | None = None,
     ) -> None:
         self.resource = resource
         self.source = source
+        self.work_weight = work_weight
+        """How much work the operation is, in the units of ``backend.types.work_weights``, when it is known in
+        advance; an action made of several parts counts this one by it."""
 
     @property
     def resource_id(self) -> int | None:
@@ -76,6 +88,8 @@ class OperationDefinition(Generic[ResourceT]):
         context = self.context()
         if self.request_priority is not None:
             context = {**context, REQUEST_PRIORITY_CONTEXT_KEY: self.request_priority}
+        if self.work_weight is not None:
+            context = {**context, WORK_WEIGHT_CONTEXT_KEY: self.work_weight}
         return context
 
 

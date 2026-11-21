@@ -8,6 +8,7 @@ from backend.db.models import Collection
 from backend.operations.collections import CollectionIndexOperation, CollectionSyncOperation
 from backend.services.errors import ServiceError
 from backend.services.sites import place_collection
+from backend.types import work_weights
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.link_season_types import LinkSeasons, OutsideVideos
@@ -56,10 +57,14 @@ def reindex_collection(s: Session, collection: Collection) -> None:
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
 
 
-def index_new_collection(s: Session, collection: Collection) -> None:
-    """Index a Collection that was just added, and tell everyone it is there."""
+def index_new_collection(s: Session, collection: Collection, *, expected_videos: int | None = None) -> None:
+    """Index a Collection that was just added, and tell everyone it is there. ``expected_videos``, when known, is how
+    many videos its link has, which weighs its indexing against the other parts of an action that added it."""
     s.flush()
-    create_operation(s, CollectionIndexOperation(collection))
+    create_operation(s, CollectionIndexOperation(
+        collection, work_weight=max(work_weights.DEFAULT, expected_videos * work_weights.LIST_VIDEO)
+        if expected_videos else None,
+    ))
     queue_event(s, "collection.added", CollectionAdded(collection))
 
 

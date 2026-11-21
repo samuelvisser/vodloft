@@ -192,8 +192,10 @@ class CollectionRenumberOperation(_CollectionOperation):
     kind = "collection.renumber"
     task = _CHANGE_IDENTIFICATION_TASK_KEY
 
-    def __init__(self, collection: Collection, *, renumber: bool, sections: Sequence[str] = ()) -> None:
-        super().__init__(collection)
+    def __init__(
+            self, collection: Collection, *, renumber: bool, sections: Sequence[str] = (), work_weight: float | None = None,
+    ) -> None:
+        super().__init__(collection, work_weight=work_weight)
         self.renumber = renumber
         self.sections = list(sections)
 

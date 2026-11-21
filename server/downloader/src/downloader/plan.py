@@ -10,9 +10,10 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from math import isfinite
 from typing import Literal
 from uuid import uuid4
+
+import progress_plan
 
 from .errors import DownloadError
 from .models import SubtitleRendition
@@ -154,24 +155,12 @@ class SidecarSpec:
             raise ValueError("yt-dlp writes a remote page's subtitles as SRT, or its info file as JSON")
 
 
-@dataclass(frozen=True)
-class StageSpec:
-    id: str
-    code: str
+@dataclass(frozen=True, kw_only=True)
+class StageSpec(progress_plan.StageSpec):
+    """A step of a download attempt: its phase, and what it works on."""
     phase: Phase
     resource: Resource = "none"
-    weight: float = 1.0
     asset_id: str | None = None
-    depends_on: tuple[str, ...] = ()
-    deadline_seconds: float | None = None
-
-    def __post_init__(self) -> None:
-        if not isfinite(self.weight) or self.weight < 0:
-            raise ValueError("Stage work weights must be finite and nonnegative")
-        if self.deadline_seconds is not None and (
-            not isfinite(self.deadline_seconds) or self.deadline_seconds <= 0
-        ):
-            raise ValueError("Stage deadlines must be finite and positive")
 
 
 EMBEDS_ARTWORK = frozenset({"mp4", "m4a", "m4v", "mp3", "mkv", "flac"})
@@ -328,14 +317,14 @@ def build_download_plan(
     # Work units are estimates for batch aggregation.
     media_bytes = max(1, source.expected_bytes or 100 * 1024 * 1024)
     stages = [
-        StageSpec("prepare", "prepare", "preparing", weight=0.02),
-        StageSpec("media", "download_media", "transferring", "media", depends_on=("prepare",)),
+        StageSpec(id="prepare", code="prepare", phase="preparing", weight=0.02),
+        StageSpec(id="media", code="download_media", phase="transferring", resource="media", depends_on=("prepare",)),
     ]
     for asset in assets:
         weight = max(0.002, (len(asset.content) if asset.content is not None else 512 * 1024) / media_bytes)
         stages.append(StageSpec(
-            f"acquire:{asset.id}", "generate_sidecar" if asset.content is not None else "download_sidecar",
-            "transferring", "sidecar", weight=weight, asset_id=asset.id,
+            id=f"acquire:{asset.id}", code="generate_sidecar" if asset.content is not None else "download_sidecar",
+            phase="transferring", resource="sidecar", weight=weight, asset_id=asset.id,
             # yt-dlp writes its subtitles and info file during the media transfer.
             depends_on=("media",) if asset.source_format == "ytdlp" else ("prepare",),
         ))
@@ -346,13 +335,13 @@ def build_download_plan(
     media_ready = "media"
     if source.remux_to_mp4:
         stages.append(StageSpec(
-            "remux", "remux", "finishing", "processing", weight=remux_weight,
+            id="remux", code="remux", phase="finishing", resource="processing", weight=remux_weight,
             depends_on=(media_ready,), deadline_seconds=3600,
         ))
         media_ready = "remux"
     if source.convert_video_to_m4a:
         stages.append(StageSpec(
-            "convert_audio", "convert_audio", "finishing", "processing", weight=remux_weight,
+            id="convert_audio", code="convert_audio", phase="finishing", resource="processing", weight=remux_weight,
             depends_on=(media_ready,), deadline_seconds=3600,
         ))
         media_ready = "convert_audio"
@@ -369,28 +358,29 @@ def build_download_plan(
             + tuple(f"acquire:{asset_id}" for asset_id in subtitle_asset_ids)
         )
         stages.append(StageSpec(
-            "embed", code, "finishing", "processing", weight=embed_weight,
+            id="embed", code=code, phase="finishing", resource="processing", weight=embed_weight,
             depends_on=dependencies, deadline_seconds=3600,
         ))
         media_ready = "embed"
     stages.append(StageSpec(
-        "publish", "publish_media", "finishing", "processing", weight=publish_weight,
+        id="publish", code="publish_media", phase="finishing", resource="processing", weight=publish_weight,
         depends_on=(media_ready, *(f"acquire:{asset.id}" for asset in assets)),
         deadline_seconds=3600,
     ))
     for asset in assets:
         if asset.publish:
             stages.append(StageSpec(
-                f"publish:{asset.id}", "publish_sidecar", "finishing", "none", 0.002, asset.id,
+                id=f"publish:{asset.id}", code="publish_sidecar", phase="finishing", resource="none", weight=0.002,
+                asset_id=asset.id,
                 depends_on=("publish", f"acquire:{asset.id}"), deadline_seconds=1800,
             ))
     stages.extend((
         StageSpec(
-            "verify", "verify", "finishing", weight=0.01,
+            id="verify", code="verify", phase="finishing", weight=0.01,
             depends_on=("publish", *(f"publish:{asset.id}" for asset in assets if asset.publish)),
             deadline_seconds=120,
         ),
-        StageSpec("finalize", "finalize", "finishing", weight=0.01,
+        StageSpec(id="finalize", code="finalize", phase="finishing", weight=0.01,
                   depends_on=("verify",), deadline_seconds=120),
     ))
     return DownloadPlan(

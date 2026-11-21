@@ -5,45 +5,32 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from threading import Event, RLock, Thread
 from time import monotonic, time
-from typing import Callable, Iterator, Literal
+from typing import Callable, Iterator
 from uuid import uuid4
+
+from progress_plan import (
+    Stage, StageState, completion_fraction, finished, measured, started, waiting,
+)
 
 from .errors import DownloadCanceled
 from .models import DownloadProgress
-from .plan import DownloadPlan, Phase, StageSpec
+from .plan import DownloadPlan, Phase
 from .transfer_context import TransferWait, transfer_context
 
-ActivityState = Literal["pending", "running", "waiting", "completed", "skipped", "failed", "canceled"]
+ActivityState = StageState
 
 
-@dataclass(frozen=True)
-class WaitInterval:
-    reason: str
-    started_at: float
-    finished_at: float | None = None
-    until: float | None = None
-
-
-@dataclass(frozen=True)
-class StageSnapshot:
-    id: str
-    code: str
+@dataclass(frozen=True, kw_only=True)
+class StageSnapshot(Stage):
+    """Where one step of a download attempt is: a step of a plan, with its phase, what it works on, and what it
+    transferred."""
     phase: Phase
     resource: str
-    weight: float
     asset_id: str | None = None
-    state: ActivityState = "pending"
-    started_at: float | None = None
-    finished_at: float | None = None
-    fraction: float | None = None
     bytes_received: int = 0
     total_bytes: int | None = None
     segments_done: int | None = None
     segments_total: int | None = None
-    wait: WaitInterval | None = None
-    waits: tuple[WaitInterval, ...] = ()
-    last_activity_at: float | None = None
-    deadline_at: float | None = None
 
 
 @dataclass(frozen=True)
@@ -77,21 +64,7 @@ def download_completion_fraction(snapshot: DownloadSnapshot) -> float:
     prediction, and terminal boundaries are the only source of completion for
     unmeasurable stages.
     """
-    total = 0.0
-    done = 0.0
-    for stage in snapshot.stages:
-        weight = max(0.0, float(stage.weight))
-        total += weight
-        if stage.state in ("completed", "skipped"):
-            fraction = 1.0
-        elif stage.state in ("running", "waiting") and stage.fraction is not None:
-            fraction = max(0.0, min(1.0, float(stage.fraction)))
-        else:
-            fraction = 0.0
-        done += weight * fraction
-    if total <= 0:
-        return 0.0
-    return max(0.0, min(1.0, done / total))
+    return completion_fraction(snapshot.stages)
 
 
 class DownloadTracker:
@@ -131,7 +104,7 @@ class DownloadTracker:
         self._step_start = self._started
         self._step_code = "prepare"
         self._stages = {"prepare": StageSnapshot(
-            "prepare", "prepare", "preparing", "none", 0.02,
+            id="prepare", code="prepare", phase="preparing", resource="none", weight=0.02,
             state="running", started_at=self._started, last_activity_at=self._started,
         )}
 
@@ -225,7 +198,8 @@ class DownloadTracker:
             self._plan = plan
             prepare = self._stages["prepare"]
             self._stages = {stage.id: StageSnapshot(
-                stage.id, stage.code, stage.phase, stage.resource, stage.weight, stage.asset_id,
+                id=stage.id, code=stage.code, phase=stage.phase, resource=stage.resource, weight=stage.weight,
+                asset_id=stage.asset_id,
             ) for stage in plan.stages}
             self._stages["prepare"] = prepare
             self._preparation_steps.append(StepTiming(self._step_code, self._step_start, time()))
@@ -246,11 +220,7 @@ class DownloadTracker:
             stage = self._stages[activity]
             if stage.state != "pending":
                 raise ValueError(f"Stage '{activity}' has already started")
-            self._stages[activity] = replace(
-                stage, state="running", started_at=stage.started_at or now,
-                last_activity_at=now,
-                deadline_at=now + deadline_seconds if deadline_seconds else None,
-            )
+            self._stages[activity] = started(stage, now, deadline_seconds=deadline_seconds)
             if foreground:
                 self._main = activity
                 self._phase = "finishing" if self._media_complete else stage.phase
@@ -266,14 +236,7 @@ class DownloadTracker:
     def _finish(self, activity: str, state: ActivityState) -> None:
         now = time()
         with self._lock:
-            stage = self._stages[activity]
-            waits = stage.waits
-            if stage.wait is not None:
-                waits += (replace(stage.wait, finished_at=now),)
-            self._stages[activity] = replace(
-                stage, state=state, fraction=1.0 if state in ("completed", "skipped") else stage.fraction,
-                finished_at=now, last_activity_at=now, wait=None, waits=waits,
-            )
+            self._stages[activity] = finished(self._stages[activity], state, now)
             if activity == "media" and state == "completed":
                 self._media_complete = True
                 self._phase = "finishing"
@@ -297,15 +260,7 @@ class DownloadTracker:
             previous = stage.wait
             if (previous.reason if previous else None) == reason and (previous.until if previous else None) == until:
                 return
-            waits = stage.waits
-            if previous is not None:
-                waits += (replace(previous, finished_at=now),)
-            current = WaitInterval(reason, now, until=until) if reason else None
-            self._stages[activity] = replace(
-                stage, wait=current, waits=waits, state="waiting" if current else "running",
-                last_activity_at=now,
-                deadline_at=(stage.deadline_at + now - previous.started_at) if previous and stage.deadline_at else stage.deadline_at,
-            )
+            self._stages[activity] = waiting(stage, reason, until, now)
             self._activity_at = now
         self.emit(force=True)
 
@@ -314,12 +269,11 @@ class DownloadTracker:
         with self._lock:
             stage = self._stages[activity]
             moved = progress.bytes_downloaded != stage.bytes_received or progress.segments_done != stage.segments_done
-            self._stages[activity] = replace(
-                stage, fraction=progress.fraction, bytes_received=progress.bytes_downloaded,
+            self._stages[activity] = replace(measured(
+                stage, progress.fraction, now, bytes_received=progress.bytes_downloaded,
                 total_bytes=progress.total_bytes, segments_done=progress.segments_done,
                 segments_total=progress.segments_total,
-                last_activity_at=now if moved else stage.last_activity_at,
-            )
+            ), last_activity_at=now if moved else stage.last_activity_at)
             if moved:
                 self._activity_at = now
         self.emit()

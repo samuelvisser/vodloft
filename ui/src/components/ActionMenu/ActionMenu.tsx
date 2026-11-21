@@ -226,6 +226,7 @@ export default function ActionMenu({label = 'Actions', items, note, className = 
                                                 {presentation && (
                                                     <ProgressExplanation
                                                         detail={presentation.detail}
+                                                        steps={presentation.steps}
                                                         buttonClassName="action-menu-item-control"
                                                     />
                                                 )}

@@ -33,6 +33,8 @@ from backend.services.download_options import effective_metadata_mode
 from backend.services.episode_filters import EpisodeSelection, evaluate, filter_leaving_out, retention_removes
 from backend.services.errors import ServiceError
 from backend.services.season_order import number_in_link_order
+from backend.services.sites import collection_words
+from backend.types import work_weights
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
 from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
 from backend.types.season_types import SeasonType
@@ -40,6 +42,7 @@ from backend.utils.episode import EpisodeIdentifierInfo
 from backend.utils.output_template import output_template_fields
 from config.settings.submodels import MetadataMode
 from downloader.plan import EMBEDS_METADATA
+from progress_plan import StageSpec
 from task_manager.scheduler.db import TaskOperation
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
@@ -336,6 +339,48 @@ def _profiles_with_files(s: Session, collection: Collection) -> list[int]:
     ))
 
 
+def identification_steps(s: Session, collection: Collection, *, renumbering: bool) -> list[StageSpec]:
+    """The plan of numbering the collection's episodes again: numbering them, one write that cannot say how far it is,
+    then for each Local Media Profile with files, renaming them and rewriting their metadata. Each step weighs what it
+    does, so an action that numbers several collections counts each by its size."""
+    episodes = collection_words(collection).episode.plural
+    count = s.scalar(select(func.count(Episode.id)).where(Episode.collection_id == collection.id)) or 0
+    steps = [StageSpec(
+        id="number", code="number_episodes", weight=max(work_weights.DEFAULT, count * work_weights.NUMBER_EPISODE),
+        label=f"Numbering the {episodes}" if renumbering else "Saving the new order",
+    )]
+    for profile_id, name, files in files_by_profile(s, collection.id):
+        steps += profile_file_steps(profile_id, name, files)
+    return steps
+
+
+def profile_file_steps(profile_id: int, name: str | None, files: int | None) -> list[StageSpec]:
+    """Renaming one Local Media Profile's files, then rewriting their metadata, after the numbering."""
+    of = f" of {name}" if name else ""
+    return [
+        StageSpec(id=f"rename:{profile_id}", code="rename_files", label=f"Renaming the files{of}",
+                  weight=(files or 1) * work_weights.MOVE_FILE, depends_on=("number",)),
+        StageSpec(id=f"rewrite:{profile_id}", code="rewrite_metadata", label=f"Rewriting the metadata{of}",
+                  weight=(files or 1) * work_weights.REWRITE_FILE, depends_on=(f"rename:{profile_id}",)),
+    ]
+
+
+def files_by_profile(s: Session, collection_id: int) -> list[tuple[int, str, int]]:
+    """Each Local Media Profile with files of the collection's episodes: its id, its name and how many files, for the
+    plan of the work that renames them and rewrites their metadata."""
+    return [(row.id, row.name, row.files) for row in s.execute(
+        select(
+            CollectionLocalMediaProfile.id, CollectionLocalMediaProfile.name,
+            func.count(EpisodeMediaDownload.id).label("files"),
+        )
+        .join(EpisodeMediaDownload, EpisodeMediaDownload.local_media_profile_id == CollectionLocalMediaProfile.id)
+        .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+        .where(Episode.collection_id == collection_id, EpisodeMediaDownload.artifact_status.in_(_PHYSICAL))
+        .group_by(CollectionLocalMediaProfile.id, CollectionLocalMediaProfile.name)
+        .order_by(CollectionLocalMediaProfile.id)
+    )]
+
+
 _KIND_NAMES = {EpIdType.TRAILER.value: "Trailer", EpIdType.AUX.value: "Auxiliary"}
 
 
@@ -433,7 +478,10 @@ def queue_renumber(s: Session, collection: Collection, *, renumber: bool, sectio
     ``sections``, the feeds and lists that moved.
 
     ``s`` is a write transaction's session."""
-    operation = create_operation(s, CollectionRenumberOperation(collection, renumber=renumber, sections=sections))
+    weight = sum(step.weight for step in identification_steps(s, collection, renumbering=renumber))
+    operation = create_operation(s, CollectionRenumberOperation(
+        collection, renumber=renumber, sections=sections, work_weight=weight,
+    ))
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
     s.flush()
     return operation

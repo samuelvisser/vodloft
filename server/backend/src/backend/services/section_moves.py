@@ -773,7 +773,9 @@ def follow_up(s: Session, done: _Moves, renumber: Mapping[str, bool]) -> None:
     for collection_id in done.new:
         collection = s.get(Collection, collection_id)
         if collection is not None:
-            index_new_collection(s, collection)
+            # The feed or list it was made of says how many videos it has, which its indexing weighs.
+            expected = s.scalar(select(CreatorSection.item_count).where(CreatorSection.url == collection.sharing_url))
+            index_new_collection(s, collection, expected_videos=expected)
 
 
 def as_one_operation(
