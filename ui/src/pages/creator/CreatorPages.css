@@ -26,7 +26,12 @@
 .creator-about { grid-area: about; min-width: 0; padding: 10px 20px 0; display: flex; flex-direction: column; gap: 6px; }
 .creator-header--no-banner .creator-about { padding-left: 0; padding-right: 0; }
 .creator-facts { margin: 0; color: var(--muted); }
-.creator-description-wrap { color: var(--muted); display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
+.creator-description-wrap { position: relative; color: var(--muted); }
+.creator-description-toggle { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+/* Over the end of the cut second line, fading the text under it into the page. */
+.creator-description-wrap.is-cut .creator-description-toggle {
+    position: absolute; right: 0; bottom: 0; padding-left: 1.75em; background: linear-gradient(to right, transparent, var(--bg) 1.25em);
+}
 .creator-description {
     margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     white-space: pre-line; overflow-wrap: anywhere;
