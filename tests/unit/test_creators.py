@@ -1467,3 +1467,21 @@ def test_deleting_an_accounts_own_collection_keeps_the_account(client, tube, ses
     assert [account["site"]["key"] for account in page["accounts"]] == ["tube", "clips"]
     assert page["accounts"][1]["mainCollectionSlug"] is None
     assert clips["mainCollectionSlug"] not in {collection["slug"] for collection in page["collections"]}
+
+
+def test_a_section_whose_id_is_a_path_gets_a_collection_its_link_can_open(client, session, monkeypatch):
+    import test_creators
+    from backend.db.models import Collection
+
+    album = SectionRef("workshop/sets/cabin-songs", f"{ROOT}/sets/cabin-songs", PLAYLISTS, "Cabin Songs", item_count=9)
+    monkeypatch.setattr(test_creators, "SECTIONS", (*SECTIONS, album))
+
+    added = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": album.ref, "target": "own"},
+    ]})
+
+    assert added.status_code == 201, added.text
+    assert session.scalar(select(Collection.slug).where(Collection.sharing_url == album.url)) == "workshop-sets-cabin-songs"
+    sections = {section["ref"]: section for section in added.json()["accounts"][0]["sections"]}
+    assert sections[album.ref]["collectionSlug"] == "workshop-sets-cabin-songs"
+    assert added.json()["collections"][0]["slug"] == "workshop-sets-cabin-songs"

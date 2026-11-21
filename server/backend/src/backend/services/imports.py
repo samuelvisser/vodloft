@@ -1188,7 +1188,7 @@ def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collec
     """The collection of the creator whose page the plan's link is, such as a Bandcamp artist: the creator is added
     with everything on it in one collection, each list a season of its own, and takes the plan's genre and rating
     for the collections it makes later."""
-    from backend.services.creators import NewCollectionSettings, SectionPlan, add_creator, rename_creator
+    from backend.services.creators import NewCollectionSettings, SectionPlan, add_creator, place_sections, rename_creator
     from backend.types.creator_types import NewSectionAction, SectionTarget
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
     from sources import SectionKind, get_source
@@ -1210,9 +1210,22 @@ def _create_creator_collection(session: Session, plan: CollectionPlan) -> Collec
     skipped = skipped_kinds(site, music)
     plans = [SectionPlan(section.ref, SectionTarget.MAIN) for section in details.sections if section.access is None
              and not (section.kind is SectionKind.LIST and section.type.key in skipped)]
+    identifier = EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based"))
+    if existing is not None:
+        # The artist is in the Library already without a collection of their own, such as with only some albums,
+        # each a collection of its own: the import makes it, with what is in none of their collections yet.
+        stored = {section.ref for section in existing.sections}
+        place_sections(
+            session, existing, [wanted for wanted in plans if wanted.ref in stored], type=kind, episode_identifier=identifier,
+        )
+        main = existing.main_collection
+        if main is None:
+            raise ValueError(f"{details.title} has nothing VODLoft can add")
+        if plan.title:
+            main.title = plan.title
+        return main
     creator, _made = add_creator(session, source_key=source.id, details=details, plans=plans, settings=NewCollectionSettings(
-        type=kind, episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")),
-        membership_level="FREE",
+        type=kind, episode_identifier=identifier, membership_level="FREE",
     # The other program downloaded every new album as it came out.
     ), new_lists={site.key: {
         kind.key: (NewSectionAction.IGNORE if kind.key in skipped else NewSectionAction.SEASON).value

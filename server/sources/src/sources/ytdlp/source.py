@@ -338,14 +338,15 @@ def _sponsorblock_segments(video_id: str, categories: Sequence[str]) -> tuple[Sp
 
 def _lookup(*args: str) -> dict:
     """Look up a link, the last argument, signed in on its Site. A video protected by DRM is looked up
-    again for its details alone."""
+    again for its details alone: with its protected formats, or without any where the Site gives none, such as a
+    track on SoundCloud."""
     cookies = sites.cookies_for(args[-1])
     try:
         return runner.run_json(*args, cookies=cookies)
     except runner.YtDlpError as exc:
         if not is_drm_message(str(exc)):
             raise
-    info = runner.run_json("--allow-unplayable-formats", *args, cookies=cookies)
+    info = runner.run_json("--allow-unplayable-formats", "--ignore-no-formats-error", *args, cookies=cookies)
     return {**info, "_has_drm": True}
 
 

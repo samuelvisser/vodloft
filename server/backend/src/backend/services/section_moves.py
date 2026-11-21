@@ -31,8 +31,8 @@ from backend.db.models import (
     EpisodeMediaDownload,
 )
 from backend.services.creators import (
-    SectionPlan, _make_seasons, _new_collection, _own_settings, _settings_of, _switch_off, feed_holder, gather,
-    gatherable, list_holder, lists_are_seasons, own_collection, section_collection_slug,
+    SectionPlan, _make_seasons, _new_collection, _own_settings, _settings_of, _switch_off, _take_sections, feed_holder,
+    gather, gatherable, list_holder, lists_are_seasons, make_main_collection, own_collection, section_collection_slug,
 )
 from backend.services.collections import index_new_collection, reindex_collection
 from backend.services.episode_identification import (
@@ -780,6 +780,8 @@ def _apply(
     if listed:
         # A skipped list moves as a waiting one does, now that its videos are known.
         save_left_out(s, listed)
+    done = _Moves()
+    _make_main_collections(s, creator, moves, done, added_by_id=added_by_id)
     checked = _checked(creator, moves, frozenset(listed or ()))
     involved = {
         collection.id: collection for item in checked
@@ -789,7 +791,6 @@ def _apply(
         busy = collection_busy(s, collection, "moving its episodes")
         if busy is not None:
             raise ServiceError(busy, field=_FIELD)
-    done = _Moves()
     # What leaves a collection goes first, so what joins one finds it as it will be.
     for item in sorted(checked, key=lambda item: item.move.target in _INTO_MAIN):
         account, section, source, target = item.account, item.section, item.source, item.target
@@ -831,6 +832,33 @@ def _apply(
     return done
 
 
+def _make_main_collections(
+    s: Session, creator: Creator, moves: Sequence[SectionMove], done: _Moves, *, added_by_id: int | None,
+) -> None:
+    """Make the own collection of each account that has none, such as an artist added with only some albums in
+    collections of their own, where a feed or list moves into it. It starts with none of the account's feeds and
+    lists: the moves bring them."""
+    for account in creator.accounts:
+        if account.main_collection is not None:
+            continue
+        joining = [
+            section for move in moves if move.account_id == account.id and move.target in _INTO_MAIN
+            and move.collection_slug is None
+            for section in account.sections if section.ref == move.ref
+        ]
+        if not joining:
+            continue
+        main, new = make_main_collection(
+            s, account, _settings_of(creator), added_by_id=added_by_id,
+            images=[section.image_path for section in sorted(joining, key=lambda section: section.site_position)],
+        )
+        _take_sections(account, main, [], {}, new=new)
+        s.flush()
+        if new:
+            done.new.append(main.id)
+        s.expire(creator, ["collections"])
+
+
 def _numbered_again(collection: Collection, renumber: Mapping[str, bool]) -> bool:
     """Whether the collection numbers its episodes again after the move: unless the user said not to, and never when
     it numbers them by date, which no move changes."""
@@ -866,8 +894,9 @@ def follow_up(s: Session, done: _Moves, renumber: Mapping[str, bool]) -> None:
     collections. ``renumber`` says, by collection slug, which collections keep their numbers instead."""
     from task_manager.scheduler.transactional import queue_task_after_commit
 
-    # Each collection whose links changed is listed again once, however many feeds and lists it gained or lost.
-    for collection_id in sorted(done.synced - done.dropping):
+    # Each collection whose links changed is listed again once, however many feeds and lists it gained or lost. A new
+    # one is listed for the first time below.
+    for collection_id in sorted(done.synced - done.dropping - set(done.new)):
         collection = s.get(Collection, collection_id)
         if collection is not None:
             reindex_collection(s, collection)

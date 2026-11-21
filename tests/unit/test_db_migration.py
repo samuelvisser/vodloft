@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "6f2d9b4e1a83"
+HEAD_REVISION = "0b8b8a447385"
 
 
 @pytest.fixture
@@ -2149,3 +2149,28 @@ def test_accounts_get_their_picture_and_own_collections_their_sites_name(migrati
     with engine.connect() as connection:
         banners = dict(connection.execute(text("SELECT id, banner_path FROM creator_accounts")).all())
     assert banners == {1: "banner-nw.jpg", 2: None, 3: None, 4: "banner-solo.jpg"}
+
+
+def test_a_collection_slug_with_slashes_becomes_one_a_link_can_hold(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "a4318a92a5ca")
+    slugs = (
+        (1, "artist/sets/first-album"), (2, "artist-sets-first-album"), (3, "PLcabin"), (4, "artist/album/second"),
+    )
+    with engine.begin() as connection:
+        for collection_id, slug in slugs:
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order) VALUES (:id, :uuid, :slug, 'Album', "
+                "'https://example.test/' || :id, 'free', 'music', 'seasonal', 'Artist', 'artist', 'ytdlp', 'oldest_first')"
+            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": slug})
+
+    command.upgrade(config, "0b8b8a447385")
+
+    with engine.connect() as connection:
+        found = dict(connection.execute(text("SELECT id, slug FROM collections")).all())
+    # A slug that is free already keeps it; one taken by another collection gets a number.
+    assert found == {1: "artist-sets-first-album-2", 2: "artist-sets-first-album", 3: "PLcabin", 4: "artist-album-second"}
