@@ -112,10 +112,12 @@ type Props = {
     collectionTitle?: string
     /** What the collection calls its seasons and episodes, such as albums and tracks. */
     words: CollectionWords
+    /** The collection's own yt-dlp options allow unplayable formats, so its media protected by DRM can still be tried. */
+    unplayableAllowed?: boolean
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, reassignedTo, collectionTitle, words}: Props) {
+export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, reassignedTo, collectionTitle, words, unplayableAllowed = false}: Props) {
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -155,7 +157,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
         <div className="episode-card" role="listitem" aria-label={ep.title} tabIndex={0} onKeyDown={onKeyDown}>
             <div className="cover" style={style} {...linkAreaHandlers(episodeHref, navigate)}>
                 <DownloadStatusIcons downloads={downloads ?? []}/>
-                {ep.drmProtected ? <DrmBadge onCover/>
+                {ep.drmProtected ? <DrmBadge onCover unplayableAllowed={unplayableAllowed}/>
                     // Media the account may watch only shows its open lock on its own page.
                     : ep.access && !ep.accessGranted ? <AccessBadge label={ep.accessLabel} description={ep.accessDescription} onCover/>
                     : ep.removedFromSource && !ep.removedByRetention ? <RemovedBadge onCover/>

@@ -103,7 +103,7 @@ function EpisodeShelf({slug, words}: {slug: string, words: CollectionWords}) {
             </div>
             <div className="episodes-row creator-shelf" role="list" ref={row}>
                 {episodes.map((episode) => (
-                    <EpisodeCard key={episode.id} ep={episode} collectionSlug={episode.collectionSlug} collectionTitle={episode.collectionTitle} words={words}/>
+                    <EpisodeCard key={episode.id} ep={episode} collectionSlug={episode.collectionSlug} collectionTitle={episode.collectionTitle} words={words} unplayableAllowed={episode.unplayableFormatsAllowed}/>
                 ))}
                 {hasNextPage && <div ref={endRef} className="creator-shelf-more" aria-hidden="true"/>}
             </div>

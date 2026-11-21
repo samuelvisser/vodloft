@@ -369,7 +369,7 @@ export default function EpisodePage() {
                 {isDownloadable && (
                     <div className="episode-downloads" aria-labelledby="episode-downloads-title">
                         <h2 id="episode-downloads-title">Downloads</h2>
-                        {drmBlocked && <DrmNotice/>}
+                        {episode.drmProtected && <DrmNotice unplayableAllowed={collection.allowsUnplayableFormats}/>}
                         {!drmBlocked && episode.accessLocked && <AccessNotice item={episode}/>}
                         {!locked && downloadStateError && (
                             <div className="form-error-card" role="alert">

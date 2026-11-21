@@ -494,7 +494,8 @@ def creator_episodes(s: Session, slug: str, *, cursor: str | None, limit: int) -
     if creator_id is None:
         raise CreatorNotFoundError(f"Creator '{slug}' not found")
     stmt = (
-        select(*episode_view_columns(), Collection.slug.label("collection_slug"), Collection.title.label("collection_title"))
+        select(*episode_view_columns(), Collection.slug.label("collection_slug"), Collection.title.label("collection_title"),
+               Collection.ytdlp_options.label("collection_ytdlp_options"))
         .join(Collection, Episode.collection_id == Collection.id)
         .where(Collection.creator_id == creator_id)
         .order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
