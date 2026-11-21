@@ -350,11 +350,13 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                     : place(account, {ref: section.ref, ...placeMove(to)})}),
             })
         }
+        // Not in the library, a section is skipped already, so Skip shows as its choice and choosing it does nothing.
         if (ignore) actions.push({key: 'skip', label: 'Skip', run: () => void place(account, {ref: section.ref, target: 'exclude'})})
-        if (section.kind === 'list' && section.status !== 'kept_out') {
+        else if (section.status !== 'kept_out' && !section.movieSlug) actions.push({key: 'skip', label: 'Skip', run: () => undefined})
+        if (section.kind === 'list') {
             actions.push({
                 key: 'keep_out', label: ignore ? placeLabel(creator, item, 'keep_out') : 'Keep its videos out',
-                run: () => answer(item, {target: 'keep_out'}, placeLabel(creator, item, 'keep_out')),
+                run: () => section.status !== 'kept_out' && answer(item, {target: 'keep_out'}, placeLabel(creator, item, 'keep_out')),
             })
         }
         if (section.status === 'kept_out') {
@@ -372,10 +374,12 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
             Object.fromEntries(actions.map((action) => [action.key, {label: action.label}])),
         )
         const working = busy === key || unhiding === key
+        // What it is now: skipped, or kept out. A new one waits for a choice.
+        const current = ignore || item.section.movieSlug ? null : item.section.status === 'kept_out' ? 'keep_out' : 'skip'
         return (
             <div className="creator-section-choice">
                 <SimpleSelect
-                    aria-label={`What to do with ${item.section.title}`} registry={registry} value={null}
+                    aria-label={`What to do with ${item.section.title}`} registry={registry} value={working ? null : current}
                     placeholder={working ? 'Working…' : 'Choose…'} isLoading={working}
                     isDisabled={busy !== null || unhiding !== null}
                     menuPortalTarget={document.body} menuPlacement="auto"
