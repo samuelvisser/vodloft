@@ -15,7 +15,7 @@ type ProfileTableActionsProps = {
 }
 
 /** Bulk edit, which becomes Done while it is on: a PageHeader button. */
-export function BulkEditToggle({selection}: {selection: BulkSelection}) {
+export function BulkEditToggle<K>({selection}: {selection: BulkSelection<K>}) {
     return (
         <PageHeaderAction
             icon={selection.active ? faIcon('fass', 'check') : faIcon('fass', 'list-check')}
@@ -39,7 +39,7 @@ export function ProfileTableActions({selection, addTo, addLabel}: ProfileTableAc
 }
 
 /** Select all, beside the filters' count: it takes every item the filters match, loaded or not. */
-export function SelectAll({selection, filtered}: {selection: BulkSelection, filtered: boolean}) {
+export function SelectAll<K>({selection, filtered}: {selection: BulkSelection<K>, filtered: boolean}) {
     if (!selection.active) return null
     const count = selection.matchingCount
     const all = selection.allState === 'all'

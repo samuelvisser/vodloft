@@ -42,6 +42,11 @@ tr.bulk-row.is-selected > td { background: rgba(59, 130, 246, .12); }
 .bulk-action-bar__hidden { padding: 2px 8px; border-radius: 999px; background: rgba(234, 88, 12, .14); color: #c2410c; font-size: 12px; }
 .bulk-action-bar__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .bulk-action-bar__actions .btn { display: inline-flex; align-items: center; gap: 7px; }
+/* How many of the chosen ones an action applies to, when not all */
+.bulk-action-count {
+  min-width: 20px; padding: 0 6px; border-radius: 999px; background: rgba(255, 255, 255, .25); font-size: 12px; line-height: 20px; text-align: center;
+}
+.btn:not(.btn-primary):not(.btn-danger) .bulk-action-count { background: rgba(148, 163, 184, .25); }
 
 /* Change settings */
 .bulk-dialog { max-height: calc(100dvh - 48px); overflow-y: auto; }

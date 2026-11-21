@@ -13,15 +13,15 @@ export function useBulkSelection(
 ) {
     const [active, setActive] = useState(false)
     const matchingIds = useProfileTableIds(tablePrefix, path, filters, active).data?.ids
-    return useSelection(active, setActive, matchingIds)
+    return useSelection<number>(active, setActive, matchingIds)
 }
 
 /**
- * Which of a list's items are chosen while bulk edit is on, by id. ``matchingIds`` are the ones the filters show,
+ * Which of a list's items are chosen while bulk edit is on, by id or another key. ``matchingIds`` are the ones the filters show,
  * which Select all takes; undefined while they are not known yet.
  */
-export function useSelection(active: boolean, setActive: (active: boolean) => void, matchingIds: readonly number[] | undefined) {
-    const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
+export function useSelection<K = number>(active: boolean, setActive: (active: boolean) => void, matchingIds: readonly K[] | undefined) {
+    const [selected, setSelected] = useState<ReadonlySet<K>>(new Set())
 
     const matching = useMemo(() => new Set(matchingIds ?? []), [matchingIds])
     const selectedMatching = useMemo(() => [...selected].filter((id) => matching.has(id)).length, [selected, matching])
@@ -29,7 +29,7 @@ export function useSelection(active: boolean, setActive: (active: boolean) => vo
         ? 'none'
         : selectedMatching === matching.size ? 'all' : 'some'
 
-    const toggle = useCallback((id: number) => setSelected((current) => {
+    const toggle = useCallback((id: K) => setSelected((current) => {
         const next = new Set(current)
         if (next.has(id)) next.delete(id)
         else next.add(id)
@@ -69,4 +69,4 @@ export function useSelection(active: boolean, setActive: (active: boolean) => vo
     }
 }
 
-export type BulkSelection = ReturnType<typeof useSelection>
+export type BulkSelection<K = number> = ReturnType<typeof useSelection<K>>

@@ -237,10 +237,6 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
 .creator-more-tile.bulk-tile { cursor: pointer; }
 .creator-more-tile.is-selected { border-style: solid; border-color: #3b82f6; background: rgba(59, 130, 246, .10); }
 .creator-more-tile.is-selected .creator-more-art > * { filter: none; }
-.bulk-action-count {
-    min-width: 20px; padding: 0 6px; border-radius: 999px; background: rgba(255, 255, 255, .25); font-size: 12px; line-height: 20px; text-align: center;
-}
-.btn:not(.btn-primary):not(.btn-danger) .bulk-action-count { background: rgba(148, 163, 184, .25); }
 .creator-more-body { border-top: 1px solid rgba(100, 116, 139, .3); padding: 14px; }
 .creator-more-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
 .creator-more-grid.is-cut > :nth-child(n + 13) { display: none; }

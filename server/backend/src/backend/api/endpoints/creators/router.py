@@ -19,6 +19,8 @@ from backend.services.source_requests import asking_source
 from backend.api.endpoints.movies.service import look_up_movies
 
 from . import lookups
+from .bulk import delete_creators
+from backend.api.models.profile_bulk import BulkResultRead, BulkSelectionIn
 from .service import (
     CreatorNotFoundError, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
     list_skipped_moved, look_up_creator, lookup_creator_names, record_creator_opened, preview_creator_moves, show_sections, update_creator,
@@ -49,6 +51,12 @@ def lookup_creator(body: CreatorLookupAPIRequest, access: Access = signed_in()):
         return {"creator": found.model_dump(mode="json", by_alias=True)}
 
     return stream_steps(look_up, "Could not look up this creator")
+
+
+@router.post("/bulk/delete", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
+def creators_bulk_delete(body: BulkSelectionIn):
+    """Take the chosen creators out of the Library. Their collections stay, with their episodes and files."""
+    return run_write_transaction(lambda s: delete_creators(s, body))
 
 
 @router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CreatorPageAPIRead, status_code=status.HTTP_201_CREATED)
