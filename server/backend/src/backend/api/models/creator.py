@@ -183,6 +183,8 @@ class CreatorCollectionAPIRead(ResponseBase):
     """When its oldest episode came out."""
     links: list[str] = Field(default_factory=list)
     """The titles of the creator's sections it takes."""
+    site: Optional[SiteAPIRead] = None
+    """The website the collection is on, which tells whether its music is tracks or music videos."""
 
 
 class CreatorAccountAPIRead(ResponseBase):

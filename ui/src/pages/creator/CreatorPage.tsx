@@ -14,7 +14,7 @@ import {createSelectRegistry} from '../../utils/selectRegistry'
 import EpisodeCard, {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {DrmBadge} from '../../components/common/DrmProtected'
 import CollectionTile from '../../components/CollectionTile/CollectionTile'
-import OpenOnSiteLink from '../../components/common/OpenOnSiteLink'
+import SiteLink from '../../components/common/SiteLink'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
 import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
@@ -230,7 +230,7 @@ export default function CreatorPage() {
                 )}
                 actions={(linkButtons.length > 0 || mayManage) && (
                     <>
-                        {linkButtons.map((link) => <OpenOnSiteLink key={link.url} url={link.url} siteName={link.siteName} site={link.site} iconOnly={linkFit.fit === 'icons'}/>)}
+                        {linkButtons.map((link) => <SiteLink key={link.url} url={link.url} siteName={link.siteName} site={link.site} compact={linkFit.fit === 'icons'}/>)}
                         {mayManage && (
                             <>
                                 <PageHeaderAction icon={faIcon('fass', 'pen')} label="Edit" variant="secondary" to={`/edit-creator/${creator.slug}`}/>

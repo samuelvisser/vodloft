@@ -1,7 +1,7 @@
 import {sourceControls} from '../../lib/sourceControls'
 import type {TaskOperationRead} from '../../types/schemas/operation'
 import {operationControls as sharedOperationControls} from '../../lib/operationControls'
-import OpenOnSiteLink from '../../components/common/OpenOnSiteLink'
+import SiteLink from '../../components/common/SiteLink'
 import CreatorLink from '../../components/Creator/CreatorLink'
 import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
 import {useMovedEpisodes, useReassignedEpisodes} from '../../components/Episode/SeasonPlaceNote'
@@ -669,7 +669,7 @@ export default function CollectionPage() {
 
           <div className="collection-page-actions">
             {collection.sharingUrl && openOnName && (
-              <OpenOnSiteLink className="collection-open-link" url={collection.sharingUrl} siteName={openOnName}/>
+              <SiteLink className="collection-open-link" url={collection.sharingUrl} siteName={openOnName} site={collection.site}/>
             )}
             {can('library', 'manage') && (
               <>

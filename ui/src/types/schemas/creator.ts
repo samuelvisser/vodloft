@@ -4,7 +4,7 @@ import {DwMembershipLevelReg} from '../dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg} from '../collection'
 import {ApiDateTimeSchema} from './datetime'
 import {EpisodeReadViewSchema} from './episode'
-import {NamesSchema, SectionTypeSchema} from './source'
+import {NamesSchema, SectionTypeSchema, SiteReadSchema} from './source'
 
 export const SectionTargetValues = ['main', 'main_loose', 'own', 'exclude', 'keep_out'] as const
 export const CreatorPresetValues = ['one_show', 'per_list', 'pick'] as const
@@ -223,6 +223,8 @@ export const CreatorPageReadSchema = CreatorReadSchema.extend({
         years: z.string(),
         firstPublishedDate: ApiDateTimeSchema.nullable(),
         links: z.array(z.string()),
+        /** The Site the collection is on, which tells whether its music is tracks or music videos. */
+        site: SiteReadSchema.nullable().default(null),
     })),
     /** The creator's movies in the Library. */
     movies: z.array(z.object({

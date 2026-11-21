@@ -955,7 +955,12 @@ def test_the_own_collections_of_a_creator_on_several_sites_are_named_after_their
     # Combined, both own collections take their Site's name, and each account keeps its own picture.
     assert client.post("/api/creators/workshop/combine", json={"otherSlug": "nw-clips"}).status_code == 200
     assert _main_titles(client, "workshop") == {"tube": "Northwind Workshop Tube", "clips": "Northwind Workshop Clips"}
-    accounts = client.get("/api/creators/workshop").json()["accounts"]
+    # Each collection tells its Site, which names what it holds, such as tracks on a Site with sound only.
+    page = client.get("/api/creators/workshop").json()
+    assert {collection["slug"]: collection["site"]["key"] for collection in page["collections"]} == {
+        "UCworkshop": "tube", "UCworkshop-shorts": "tube", "clips-northwind": "clips",
+    }
+    accounts = page["accounts"]
     assert [account["avatarUrl"] for account in accounts] == [None, "https://clips.example/northwind.jpg"]
 
     # Split off, the names stay; combined again, no Site's name is added twice.
