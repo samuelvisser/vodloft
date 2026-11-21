@@ -57,7 +57,8 @@ function RemoveSiteButton({siteKey, name}: {siteKey: string; name: string}) {
                 >
                     <p>
                         VODLoft has nothing from {name}, so it leaves every list of sites, with its cookies file.
-                        Adding something from it, or adding it again, brings it back with the settings it had.
+                        Add it again, or add something from it, to bring it back with everything VODLoft offers
+                        there and the settings it had.
                     </p>
                 </ConfirmDialog>
             ) : null}

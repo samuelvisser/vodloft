@@ -184,6 +184,10 @@ def session():
     Base.metadata.create_all(engine)
     use_database(engine)
     s = sessionmaker(bind=engine)()
+    from backend.db.initial_seed import _seed_sites
+
+    _seed_sites(s)
+    s.commit()
     yield s
     s.close()
     engine.dispose()
