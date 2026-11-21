@@ -22,12 +22,11 @@ class Twitch(OtherSites):
             selected_by_default=False, rss_episode_type=RssEpisodeType.BONUS,
         ),
     )
-    # A channel's Videos and Clips, and its collections. Twitch calls its playlists collections, which is VODLoft's
-    # word for something else, so VODLoft calls them playlists.
+    # A channel's Videos and Clips, and its collections, Twitch's playlists.
     section_types = (
         YtdlpFeedSectionType("videos", Names("video", "videos"), "videos?filter=all"),
         YtdlpFeedSectionType("clips", Names("clip", "clips"), "clips?filter=clips&range=all", role=SectionRole.SHORT, episode_tag=CLIP_TAG),
-        SectionType(LIST_TYPE, SectionKind.LIST, Names("playlist", "playlists")),
+        SectionType(LIST_TYPE, SectionKind.LIST, Names("collection", "collections")),
     )
     link_seasons = True
     # Twitch keeps highlights, uploads and clips, but deletes past broadcasts after a while.
