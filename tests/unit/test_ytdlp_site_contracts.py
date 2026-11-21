@@ -8,7 +8,7 @@ from sources.ytdlp.sites import site_of
 
 
 def _without_identity(site):
-    return replace(site, key="", name="", domains=(), accesses=())
+    return replace(site, key="", name="", initials="", domains=(), accesses=())
 
 
 def test_a_contract_that_only_names_its_locked_content_takes_everything_else_from_other_sites():
@@ -100,3 +100,91 @@ def test_each_feed_gives_its_videos_a_tag_of_its_site_and_youtube_tells_its_feed
         assert len({type_.episode_tag for type_ in feeds}) == len(feeds), key
     youtube = {type_.key: type_.episode_tag for type_ in site_of("youtube").section_types if type_.kind is SectionKind.FEED}
     assert youtube == {"videos": "ep", "shorts": "short", "live": "livestream"}
+
+
+def _implementation(url):
+    from sources.ytdlp import sites
+    from sources.ytdlp.site_implementations import IMPLEMENTATIONS, OtherSitesImplementation
+
+    site = sites.site_for(url)
+    return IMPLEMENTATIONS.get(site.key, OtherSitesImplementation)(site, lambda url: {})
+
+
+@pytest.mark.parametrize(("url", "root", "page"), [
+    ("https://www.twitch.tv/Spamfish", "https://www.twitch.tv/spamfish", True),
+    ("https://m.twitch.tv/spamfish/videos?filter=archives", "https://www.twitch.tv/spamfish", True),
+    ("https://www.twitch.tv/spamfish/clip/SomeClip", "https://www.twitch.tv/spamfish", False),
+    ("https://www.twitch.tv/videos/123", None, False),
+    ("https://www.twitch.tv/directory/category/chess", None, False),
+    ("https://www.tiktok.com/@scout2015", "https://www.tiktok.com/@scout2015", True),
+    ("https://www.tiktok.com/@scout2015/video/6718335390845095173", "https://www.tiktok.com/@scout2015", False),
+])
+def test_twitch_channels_and_tiktok_accounts_are_creators(url, root, page):
+    implementation = _implementation(url)
+    assert implementation.creator_root(url) == root
+    assert implementation.creator_page(url) == (root if page else None)
+
+
+def test_a_twitch_channels_collection_lists_its_videos_and_clips():
+    implementation = _implementation("https://www.twitch.tv/spamfish")
+    videos = "https://www.twitch.tv/spamfish/videos?filter=all"
+    # The channel's front page shows its stream; a collection of it lists its videos.
+    assert implementation.collection_link("https://www.twitch.tv/spamfish") == videos
+    assert implementation.collection_link("https://www.twitch.tv/spamfish/videos?filter=archives").endswith("archives")
+    assert implementation.is_creator_page(videos)
+    assert implementation.listing_urls(videos) == [videos, "https://www.twitch.tv/spamfish/clips?filter=clips&range=all"]
+    assert implementation.listing_urls(videos, frozenset({"videos?filter=all"})) == [videos]
+
+
+def test_a_twitch_clip_gets_the_clip_tag():
+    implementation = _implementation("https://www.twitch.tv/spamfish")
+    assert implementation.episode_tag({"extractor_key": "TwitchClips"}, "https://clips.twitch.tv/SomeClip") == "clip"
+    assert implementation.episode_tag({"extractor_key": "TwitchVod"}, "https://www.twitch.tv/videos/1") == "ep"
+
+
+def test_instagram_and_x_have_no_creators_and_no_subtitles():
+    for key in ("instagram", "twitter"):
+        site = site_of(key)
+        assert not site.creators and not site.downloads.subtitles and site.cookies_help
+
+
+def test_the_twitch_api_values_are_tested_before_they_are_stored_and_a_stored_secret_stays(monkeypatch, tmp_path):
+    from sources import ApiKeyRejected, cookies, site_api_keys
+    from sources.ytdlp import twitch_api
+    from sources.ytdlp.source import YtDlpSource
+
+    monkeypatch.setattr(cookies, "cookies_directory", lambda: tmp_path / "cookies")
+    tested = []
+    monkeypatch.setattr(twitch_api, "test", lambda values: tested.append(dict(values)))
+    source, twitch = YtDlpSource(), site_of("twitch")
+
+    with pytest.raises(ApiKeyRejected) as refused:
+        source.save_site_api(twitch, {"client_id": "an-id", "client_secret": ""})
+    assert refused.value.field == "client_secret" and not tested
+
+    source.save_site_api(twitch, {"client_id": "an-id", "client_secret": "the-secret"})
+    source.save_site_api(twitch, {"client_id": "another-id", "client_secret": ""})
+    assert tested[-1] == {"client_id": "another-id", "client_secret": "the-secret"}
+    status = source.site_api_status(twitch)
+    # A secret is only shown by its last characters.
+    assert status.hints == {"client_id": "another-id", "client_secret": "…cret"}
+    assert source.search_ready(twitch)
+    source.remove_site_api(twitch)
+    assert site_api_keys.load("twitch") is None and not source.search_ready(twitch)
+
+
+def test_twitch_search_lists_channels_that_add_as_creators(monkeypatch, tmp_path):
+    from sources import cookies, site_api_keys
+    from sources.ytdlp import twitch_api
+    from sources.ytdlp.source import YtDlpSource
+
+    monkeypatch.setattr(cookies, "cookies_directory", lambda: tmp_path / "cookies")
+    site_api_keys.save("twitch", {"client_id": "an-id", "client_secret": "the-secret"})
+    monkeypatch.setattr(twitch_api, "_get", lambda values, path, params: {"data": [
+        {"broadcaster_login": "spamfish", "display_name": "Spamfish", "is_live": True, "game_name": "Chess", "title": "Live!"},
+    ]})
+    found = YtDlpSource().search(site_of("twitch"), "spamfish")
+    [channel] = found.results
+    assert channel.url == "https://www.twitch.tv/spamfish/videos?filter=all"
+    assert channel.creator_url == "https://www.twitch.tv/spamfish"
+    assert channel.facts == ("Live now", "Chess")

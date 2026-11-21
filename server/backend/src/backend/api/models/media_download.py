@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import AliasChoices, AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
-from backend.api.models.source import LockableResponse, SourcedResponse
+from backend.api.models.source import RetentionResponse, SourcedResponse
 from backend.api.models.pagination import CursorPageRead
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
@@ -116,7 +116,7 @@ class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):
     updated_at: datetime
 
 
-class MediaDownloadAPIReadView(SourcedResponse, LockableResponse, MediaDownloadAPIRead):
+class MediaDownloadAPIReadView(SourcedResponse, RetentionResponse, MediaDownloadAPIRead):
     """Persistent artifact context plus the latest canonical TaskRun facts."""
 
     source_key: str = Field(validation_alias=AliasPath("media", "source_key"))
@@ -125,6 +125,7 @@ class MediaDownloadAPIReadView(SourcedResponse, LockableResponse, MediaDownloadA
         validation_alias=AliasChoices(AliasPath("collection", "site_key"), AliasPath("media", "site_key")),
     )
     access: Optional[str] = Field(default=None, validation_alias=AliasPath("media", "access"))
+    removed_by_retention: bool = Field(default=False, validation_alias=AliasPath("media", "removed_by_retention"))
     access_refused_at: Optional[datetime] = Field(default=None, validation_alias=AliasPath("media", "access_refused_at"))
     access_check_at: Optional[datetime] = Field(default=None, validation_alias=AliasPath("media", "access_check_at"))
     media_slug: Optional[str] = Field(default=None, validation_alias=AliasPath("media", "slug"))

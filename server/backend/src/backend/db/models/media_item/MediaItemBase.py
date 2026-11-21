@@ -1,11 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, TYPE_CHECKING
 
-from sqlalchemy import String, false, func
+from sqlalchemy import String, and_, false, func
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
-from backend.db.datetime_types import UTCDateTime
+from backend.db.datetime_types import UTCDateTime, utc_datetime
 from backend.types.media_types import MediaType
 
 if TYPE_CHECKING:
@@ -43,6 +44,13 @@ class MediaItemBase(Base):
     removed_from_source: Mapped[bool] = mapped_column(
         default=False, server_default=false(), comment="The Source no longer has the media; downloaded files are kept",
     )
+    retention_due_at: Mapped[Optional[datetime]] = mapped_column(
+        UTCDateTime(),
+        comment=(
+            "While the Source no longer has the media: from when its Site's retention may have removed it, the least "
+            "time the Site keeps media after publication, less a little leeway"
+        ),
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
@@ -54,6 +62,23 @@ class MediaItemBase(Base):
     downloads: Mapped[List["MediaDownloadBase"]] = relationship(
         back_populates="media", cascade="all, delete-orphan"
     )
+
+    @hybrid_property
+    def removed_by_retention(self) -> bool:
+        """The Site removed the media itself, as it removes all its media after a while (its retention): it left the
+        Source once it was old enough for that. Media that leaves sooner is missing until then."""
+        return (
+            bool(self.removed_from_source) and self.retention_due_at is not None
+            and utc_datetime(self.retention_due_at) <= datetime.now(timezone.utc)
+        )
+
+    @removed_by_retention.inplace.expression
+    @classmethod
+    def _removed_by_retention_expression(cls):
+        return and_(
+            cls.removed_from_source.is_(True), cls.retention_due_at.is_not(None),
+            cls.retention_due_at <= datetime.now(timezone.utc),
+        )
 
     def __repr__(self) -> str:
         return (

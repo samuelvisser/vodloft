@@ -18,6 +18,11 @@ from sources import SiteSetting, StreamMethod, UpgradeImprovement, collection_on
     ("https://www.twitch.tv/videos/123", "ytdlp", "twitch", "Twitch"),
     ("https://rumble.com/c/someone", "ytdlp", "rumble", "Rumble"),
     ("https://www.example.com/clip.mp4", "ytdlp", "generic:example.com", "example.com"),
+    # A site's home page, which only yt-dlp's generic extractor handles, is still on the site whose domain it is.
+    ("https://instagram.com", "ytdlp", "instagram", "Instagram"),
+    ("https://www.twitch.tv/", "ytdlp", "twitch", "Twitch"),
+    ("https://x.com", "ytdlp", "twitter", "X"),
+    ("https://notinstagram.com", "ytdlp", "generic:notinstagram.com", "notinstagram.com"),
     # A Site a Source is made for wins, whichever Source fetches the link.
     ("https://www.dailywire.com/show/a-show", "ytdlp", "dailywire", "The Daily Wire"),
     ("https://www.dailywire.com/show/a-show", "dailywire", "dailywire", "The Daily Wire"),
@@ -180,3 +185,35 @@ def test_a_site_remembers_every_domain_it_was_seen_on(session):
         session.flush()
         assert video.site_key == "youtube"
     assert video.site.domains == ["youtube.com", "youtu.be"]
+
+
+def test_add_media_offers_only_the_search_and_catalogue_of_added_sites():
+    from backend.api.endpoints.sources.service import list_sources
+
+    class OnlyYouTubeAdded:
+        def scalars(self, _query):
+            return ["youtube"]
+
+    sources = {source.id: source for source in list_sources(OnlyYouTubeAdded())}
+    assert {site.key: site.added for site in sources["ytdlp"].search_sites} == {"youtube": True, "twitch": False, "soundcloud": False}
+    assert [(site.key, site.added) for site in sources["dailywire"].sites] == [("dailywire", False)]
+    assert [(site.key, site.added) for site in sources["npo"].search_sites] == [("npo", False)]
+
+
+def test_add_media_only_searches_twitch_once_its_api_is_set_up(monkeypatch, tmp_path):
+    from backend.api.endpoints.sources.service import list_sources
+    from sources import cookies, site_api_keys
+
+    monkeypatch.setattr(cookies, "cookies_directory", lambda: tmp_path / "cookies")
+
+    class TwitchAdded:
+        def scalars(self, _query):
+            return ["twitch"]
+
+    def twitch():
+        sources = {source.id: source for source in list_sources(TwitchAdded())}
+        return next(site for site in sources["ytdlp"].search_sites if site.key == "twitch")
+
+    assert twitch().added and not twitch().ready
+    site_api_keys.save("twitch", {"client_id": "an-id", "client_secret": "a-secret"})
+    assert twitch().ready

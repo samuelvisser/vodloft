@@ -144,6 +144,8 @@ function compactEpisodes(data: EpisodeReadView[]): EpisodeReadView[] {
     accessLabel: episode.accessLabel,
     accessDescription: episode.accessDescription,
     removedFromSource: episode.removedFromSource,
+    removedByRetention: episode.removedByRetention,
+    removedBy: episode.removedBy,
     thumbnailLandscapePath: episode.thumbnailLandscapePath ?? null,
     thumbnailPortraitPath: episode.thumbnailPortraitPath ?? null,
     thumbnailSquarePath: episode.thumbnailSquarePath ?? null,

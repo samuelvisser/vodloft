@@ -517,6 +517,46 @@ export async function saveSiteCookies(siteKey: string, content: string | null): 
     return SiteAuthenticationReadSchema.parse(await response.json())
 }
 
+/** Save and test the values of a Site's own API ('save'), test the stored ones ('test') or remove them ('remove'). */
+export async function changeSiteApi(
+    siteKey: string, action: 'save' | 'test' | 'remove', values?: Record<string, string>,
+): Promise<SiteAuthenticationRead> {
+    const base = `${apiUrl()}/sources/authentication/${encodeURIComponent(siteKey)}/api`
+    const response = await fetch(action === 'test' ? `${base}/test` : base, {
+        method: {save: 'PUT', test: 'POST', remove: 'DELETE'}[action],
+        credentials: 'include',
+        headers: action === 'save' ? {'Content-Type': 'application/json'} : undefined,
+        body: action === 'save' ? JSON.stringify({values}) : undefined,
+    })
+    if (response.status === 422) {
+        const body = await response.json().catch(() => null)
+        const detail = body?.detail
+        if (typeof detail?.message === 'string') throw new ApiKeyRejectedError(detail.message, detail.fixUrl ?? null)
+    }
+    if (!response.ok) throw await responseError(response)
+    return SiteAuthenticationReadSchema.parse(await response.json())
+}
+
+/** Remove a Site that has nothing in VODLoft, with its cookies file, from every list of Sites. */
+export function useRemoveSite() {
+    const queryClient = useQueryClient()
+    return async (siteKey: string) => {
+        const response = await fetch(`${apiUrl()}/sources/sites/${encodeURIComponent(siteKey)}`, {
+            method: 'DELETE',
+            credentials: 'include',
+        })
+        if (!response.ok) throw await responseError(response)
+        await Promise.all([
+            queryClient.invalidateQueries({queryKey: ['siteAuthentication']}),
+            queryClient.invalidateQueries({queryKey: ['sitesSettings']}),
+            queryClient.invalidateQueries({queryKey: ['sourceSites']}),
+            queryClient.invalidateQueries({queryKey: ['localMediaProfileSites']}),
+            // Add Media only offers the search of a Site that is added.
+            queryClient.invalidateQueries({queryKey: ['sources']}),
+        ])
+    }
+}
+
 /** The yt-dlp options a Source gives every download. */
 export function useSourceYtdlpOptions(sourceId: string) {
     return useQuery<string, Error, string, readonly ['sourceYtdlpOptions', string]>({
@@ -1525,6 +1565,8 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         accessGranted: false,
         accessLabel: null,
         accessDescription: null,
+        removedByRetention: false,
+        removedBy: null,
         type: contextString(operation, 'media_type') || 'episode',
         mediaItemId,
         localMediaProfileId,

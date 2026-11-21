@@ -1,8 +1,9 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
 import {Link, useNavigate, useParams, useSearchParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
+import {siteIcon} from '../../icons/siteIcons'
 import {can} from '../../lib/access'
 import {apiFetch} from '../../lib/api'
 import {checkCreator, combineCreators, useCreator, useCreatorEpisodes, useCreators} from '../../lib/queries'
@@ -31,6 +32,41 @@ function listedSources(titles: string[]) {
     if (titles.length === 1) return titles[0]
     if (titles.length <= 3) return titles.slice(0, -1).join(', ') + ' and ' + titles[titles.length - 1]
     return `${titles.slice(0, 2).join(', ')} and ${titles.length - 2} more`
+}
+
+/** How a creator's links to their Sites show: by name, as their Sites' icons, or in the Actions menu. */
+type LinkFit = 'names' | 'icons' | 'menu'
+const LINK_FITS: LinkFit[] = ['names', 'icons', 'menu']
+
+/**
+ * The fullest way the creator's links fit in one row beside the other buttons: their Sites' names, else their icons,
+ * else the Actions menu, for a user who has that menu (`menu`). It measures again whenever the page's width or the
+ * number of links changes.
+ */
+function useLinkFit(count: number, menu: boolean) {
+    const ref = useRef<HTMLDivElement>(null)
+    const [width, setWidth] = useState(0)
+    const key = `${count}:${width}`
+    const [measured, setMeasured] = useState<{key: string, fit: LinkFit}>({key, fit: 'names'})
+    const fit = measured.key === key ? measured.fit : 'names'
+    const last: LinkFit = menu ? 'menu' : 'icons'
+    useEffect(() => {
+        const row = ref.current?.parentElement
+        if (!row) return
+        const observer = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width)))
+        observer.observe(row)
+        return () => observer.disconnect()
+        // The row shows once the creator has loaded, with their links.
+    }, [count])
+    useLayoutEffect(() => {
+        const element = ref.current
+        if (!element || fit === last) return
+        // The row ends on the right on a computer, where scrollWidth misses what overflows on the left: measure the buttons.
+        const buttons = [...element.children].map((child) => child.getBoundingClientRect())
+        const used = buttons.length ? Math.max(...buttons.map((box) => box.right)) - Math.min(...buttons.map((box) => box.left)) : 0
+        if (used > element.clientWidth + 1) setMeasured({key, fit: LINK_FITS[LINK_FITS.indexOf(fit) + 1]})
+    }, [key, fit, last])
+    return {ref, fit}
 }
 
 /** How long ago something happened, in words: "2 days ago". */
@@ -114,6 +150,8 @@ export default function CreatorPage() {
         ...Object.fromEntries(others.map((other) => [other.slug, {label: `${other.title} (${other.kind})`}])),
     }), [others, slug])
 
+    const linkFit = useLinkFit(creator?.accounts.filter((account) => account.url).length ?? 0, can('library', 'manage'))
+
     // Right after the page opens, before its request starts, there is no creator yet and no error either.
     if (!creator && !error) return <section className="view"><p>Loading…</p></section>
     if (error || !creator) {
@@ -157,9 +195,11 @@ export default function CreatorPage() {
     // The feeds and playlists whose place the Edit page changes, named together, such as "feeds and playlists".
     const placed = placedSections(creator).map(({section}) => section)
     const placedNames = placed.length ? joinedNames(placed.map((section) => groupNames(section, placed))) : null
-    const links = creator.accounts.filter((account) => account.url).map((account) => ({siteName: account.site.name, url: account.url!}))
-    // Two sites fit as buttons; more go into the Actions menu.
-    const linkButtons = links.length <= 2 ? links : []
+    const links = creator.accounts.filter((account) => account.url).map((account) => ({
+        siteName: account.site.name, site: account.site, url: account.url!,
+    }))
+    // The links show their Sites' names while those fit, then just their icons, and else go into the Actions menu.
+    const linkButtons = linkFit.fit === 'menu' ? [] : links
     const episodes = creator.collections.reduce((total, collection) => total + collection.episodeCount, 0)
     const words = wordsOf(creator.words)
     const fileWords = words
@@ -172,7 +212,7 @@ export default function CreatorPage() {
     return (
         <section className="view creator-view" aria-labelledby="creator-title">
             <CreatorHeader
-                title={creator.title} label={creatorKindText(creator)}
+                title={creator.title} label={creatorKindText(creator)} actionsRef={linkFit.ref}
                 handle={creator.accounts[0]?.handle}
                 avatarUrl={creator.avatarUrl} bannerUrl={creator.bannerUrl} facts={creator.facts}
                 description={creator.description} titleId="creator-title"
@@ -187,7 +227,7 @@ export default function CreatorPage() {
                 )}
                 actions={(linkButtons.length > 0 || mayManage) && (
                     <>
-                        {linkButtons.map((link) => <OpenOnSiteLink key={link.url} url={link.url} siteName={link.siteName}/>)}
+                        {linkButtons.map((link) => <OpenOnSiteLink key={link.url} url={link.url} siteName={link.siteName} site={link.site} iconOnly={linkFit.fit === 'icons'}/>)}
                         {mayManage && (
                             <>
                                 <PageHeaderAction icon={faIcon('fass', 'pen')} label="Edit" variant="secondary" to={`/edit-creator/${creator.slug}`}/>
@@ -199,7 +239,8 @@ export default function CreatorPage() {
                                     onSelect: () => void check(),
                                 }, ...(linkButtons.length ? [] : links.map((link) => ({
                                     label: `Open on ${link.siteName}`,
-                                    icon: faIcon('fass', 'arrow-up-right-from-square'),
+                                    // The menu names the site, so a site without an icon of its own shows just the globe.
+                                    icon: siteIcon(link.site.icon) ?? faIcon('fass', 'globe'),
                                     onSelect: () => window.open(link.url, '_blank', 'noreferrer'),
                                 }))),
                                 {

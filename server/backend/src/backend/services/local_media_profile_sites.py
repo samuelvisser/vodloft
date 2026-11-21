@@ -14,7 +14,7 @@ from sqlalchemy import Connection, select
 from sqlalchemy.orm import Session
 
 from config.settings.site_settings import SiteSettingGroup
-from sources import ANY_DOMAIN, DownloadOptions, Feature, Site, SiteSetting, Source, all_sources, named_sites, site_of
+from sources import ANY_DOMAIN, DownloadOptions, Feature, Site, SiteSetting, Source, all_sources, site_of
 
 from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, LocalMediaProfileType, PreferredFormat
 
@@ -65,31 +65,20 @@ def _upcoming_downloads(profile_type: LocalMediaProfileType | str | None = None)
 _UNSEEN_SITE = "generic:upcoming.invalid"
 
 
-def builtin_sites() -> list[Site]:
-    """The Sites VODLoft knows before it has anything from them: the ones a Source is made for, and the ones a
-    Source takes an API key for, such as YouTube."""
-    found = {site.key: site for site in named_sites()}
-    for source in all_sources():
-        if source.has(Feature.API_KEY):
-            for site in source.api_key_sites:
-                found.setdefault(site.key, site)
-    return list(found.values())
-
-
 def known_sites(s: Session) -> list[Site]:
-    """Every Site VODLoft knows: the built-in ones and every Site it has seen, by name."""
+    """Every Site VODLoft knows, by name."""
     from backend.db.models import Site as SiteRecord
 
-    found = {site.key: site for site in builtin_sites()}
-    for key, name in s.execute(select(SiteRecord.key, SiteRecord.name)).all():
-        found[key] = Site(key, name)
-    return sorted(found.values(), key=lambda site: site.name.lower())
+    return sorted(
+        (Site(key, name) for key, name in s.execute(select(SiteRecord.key, SiteRecord.name)).all()),
+        key=lambda site: site.name.lower(),
+    )
 
 
 def known_site_keys(connection: Connection | Session) -> set[str]:
     from backend.db.models import Site as SiteRecord
 
-    return {site.key for site in builtin_sites()} | set(connection.execute(select(SiteRecord.key)).scalars())
+    return set(connection.execute(select(SiteRecord.key)).scalars())
 
 
 def every_known_site(connection: Connection | Session, profile_type: LocalMediaProfileType | str) -> list[str]:
@@ -122,8 +111,6 @@ def add_upcoming_site(s: Session, site_key: str) -> None:
     """A Site VODLoft sees for the first time joins every profile that includes upcoming Sites."""
     from backend.db.models import LocalMediaProfileBase
 
-    if site_key in {site.key for site in builtin_sites()}:
-        return
     for profile in s.scalars(select(LocalMediaProfileBase).where(LocalMediaProfileBase.include_upcoming_sites.is_(True))):
         if site_key not in profile.site_keys and site_offered_for_type(profile.type, site_key):
             profile.site_keys = [*profile.site_keys, site_key]

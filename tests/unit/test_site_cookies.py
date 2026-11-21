@@ -42,6 +42,14 @@ def _site(session, key: str, name: str, *domains: str) -> None:
     session.commit()
 
 
+def _fresh(session) -> None:
+    """The Sites a new VODLoft starts with."""
+    from backend.db.initial_seed import _seed_sites
+
+    _seed_sites(session)
+    session.commit()
+
+
 def _stored(site_key: str) -> list[str] | None:
     from sources import cookies
 
@@ -109,30 +117,101 @@ def test_one_cookies_file_is_sorted_into_the_sites(session):
         site_cookies.sort_cookies(session, b"not a cookies file")
 
 
-def test_a_cookies_file_goes_to_known_sites_and_others_wait_for_a_link(session):
+def test_a_cookies_file_goes_to_the_sites_its_domains_tell(session):
+    from backend.services import site_cookies
+
+    result = site_cookies.add_cookies_file(_file(YOUTUBE, TWITCH, GOOGLE))
+    # youtube.com and twitch.tv are their Sites' own domains, so YouTube and Twitch are added for their
+    # cookies. google.com tells no Site, so it waits for a link.
+    assert sorted(site.name for site in result.sites) == ["Twitch", "YouTube"]
+    assert result.other_domains == ("google.com",)
+
+
+def test_a_site_is_added_by_its_address_or_a_link(session):
     from fastapi import HTTPException
 
     from backend.api.endpoints.sources import router
     from backend.api.models.source import SiteAddAPIRequest
+
+    for url in ("twitch.tv", "https://www.twitch.tv", "https://www.twitch.tv/somechannel"):
+        added = router.add_site_by_link(SiteAddAPIRequest(url=url))
+        assert (added.key, added.name) == ("twitch", "Twitch")
+    # A site's home page is on its own Site, not a Site named after its domain.
+    added = router.add_site_by_link(SiteAddAPIRequest(url="Instagram.com"))
+    assert (added.key, added.name) == ("instagram", "Instagram")
+    for url in ("ftp://example.com", "nonsense"):
+        with pytest.raises(HTTPException):
+            router.add_site_by_link(SiteAddAPIRequest(url=url))
+
+
+def test_a_site_without_anything_in_vodloft_can_be_removed(session):
+    from backend.db.models import LocalMediaProfileBase, Site
+    from backend.services import site_cookies
+    from sources import cookies
+
+    _site(session, "twitch", "Twitch", "twitch.tv")
+    cookies.store_site_cookies("twitch", [TWITCH])
+    assert {site.key: site.removable for site in site_cookies.list_site_authentication(session)} == {"twitch": True}
+
+    site_cookies.remove_known_site("twitch")
+    session.expire_all()
+    assert session.get(Site, "twitch") is None
+    assert _stored("twitch") is None
+    assert "twitch" not in {site.key for site in site_cookies.list_site_authentication(session)}
+    assert all("twitch" not in profile.site_keys for profile in session.query(LocalMediaProfileBase))
+    with pytest.raises(site_cookies.SiteNotKnownError):
+        site_cookies.remove_known_site("twitch")
+
+
+@pytest.mark.parametrize(("key", "address"), [
+    ("youtube", "youtube.com"), ("dailywire", "dailywire.com"), ("soundcloud", "soundcloud.com"), ("npo", "npo.nl"),
+])
+def test_a_site_vodloft_starts_with_comes_back_whole(session, key, address):
+    from backend.api.endpoints.sources import router
+    from backend.api.models.source import SiteAddAPIRequest
+    from backend.db.initial_seed import _seed_sites
     from backend.services import site_cookies
 
-    result = site_cookies.add_cookies_file(_file(YOUTUBE, TWITCH))
-    # YouTube is always known, for its API key, so its cookies go there; twitch.tv alone tells no Site,
-    # so it waits for a link.
-    assert [site.name for site in result.sites] == ["YouTube"]
-    assert result.other_domains == ("twitch.tv",)
+    _seed_sites(session)
+    _site(session, "npo", "NPO Start", "npo.nl")
+    before = {site.key: site for site in site_cookies.list_site_authentication(session)}[key]
+    assert before.removable
 
-    added = router.add_site_by_link(SiteAddAPIRequest(url="https://www.twitch.tv/somechannel"))
-    assert (added.key, added.name) == ("twitch", "Twitch")
-    assert [site.name for site in site_cookies.add_cookies_file(_file(TWITCH)).sites] == ["Twitch"]
-    with pytest.raises(HTTPException):
-        router.add_site_by_link(SiteAddAPIRequest(url="twitch.tv"))
+    site_cookies.remove_known_site(key)
+    session.expire_all()
+    assert key not in {site.key for site in site_cookies.list_site_authentication(session)}
+
+    router.add_site_by_link(SiteAddAPIRequest(url=address))
+    session.expire_all()
+    after = {site.key: site for site in site_cookies.list_site_authentication(session)}[key]
+    # The Daily Wire's own sign-in, YouTube's API key and NPO Start's cookies file all come back. A Site added
+    # again comes last.
+    assert after == before
+
+
+def test_a_site_with_a_video_stays(session):
+    from backend.db.models import Video
+    from backend.services import site_cookies
+    from backend.services.errors import ServiceError
+
+    _site(session, "twitch", "Twitch", "twitch.tv")
+    from backend.utils.helpers import generate_uuid
+
+    session.add(Video(
+        uuid=generate_uuid(), type="video", source_key="ytdlp", slug="a-clip", title="A clip", duration=0,
+        sharing_url="https://www.twitch.tv/videos/1", site_key="twitch",
+    ))
+    session.commit()
+    assert {site.key: site.removable for site in site_cookies.list_site_authentication(session)}["twitch"] is False
+    with pytest.raises(ServiceError):
+        site_cookies.remove_known_site("twitch")
 
 
 def test_every_site_lists_how_it_authenticates(session):
     from backend.services import site_cookies
 
-    _site(session, "youtube", "YouTube", "youtube.com")
+    _fresh(session)
+    _site(session, "npo", "NPO Start", "npo.nl")
     site_cookies.save_site_cookies(session, "youtube", _file(YOUTUBE))
     sites = {site.key: site for site in site_cookies.list_site_authentication(session)}
     assert sites["dailywire"].sign_in_source_key == "dailywire"
@@ -148,6 +227,7 @@ def test_every_site_lists_how_it_authenticates(session):
 def test_youtube_is_listed_for_its_api_key_before_anything_from_it(session):
     from backend.services import site_cookies
 
+    _fresh(session)
     # A fresh install has seen no YouTube video yet, but onboarding still offers the YouTube API key.
     youtube = {site.key: site for site in site_cookies.list_site_authentication(session)}["youtube"]
     assert (youtube.name, youtube.domains, youtube.api_key_source_key) == ("YouTube", ("youtube.com",), "ytdlp")
@@ -163,7 +243,7 @@ def test_the_migration_gives_each_site_its_own_cookies_file(session, tmp_path, m
     old_npo = tmp_path / "config" / "npo" / "cookies.txt"
     old_ytdlp.parent.mkdir(parents=True)
     old_npo.parent.mkdir(parents=True)
-    old_ytdlp.write_bytes(_file(YOUTUBE, TWITCH, ".npo.nl\tTRUE\t/\tTRUE\t0\tsession\tfrom-yt-dlp"))
+    old_ytdlp.write_bytes(_file(YOUTUBE, TWITCH, GOOGLE, ".npo.nl\tTRUE\t/\tTRUE\t0\tsession\tfrom-yt-dlp"))
     old_npo.write_bytes(_file(NPO))
 
     class Context:
@@ -174,10 +254,11 @@ def test_the_migration_gives_each_site_its_own_cookies_file(session, tmp_path, m
             pass
 
     asyncio.run(migration.migrate(Context()))
-    assert (_stored("youtube"), _stored("npo")) == ([YOUTUBE], [NPO])
+    # twitch.tv is Twitch's own domain, so Twitch gets its cookies; google.com tells no Site.
+    assert (_stored("youtube"), _stored("twitch"), _stored("npo")) == ([YOUTUBE], [TWITCH], [NPO])
     assert not old_ytdlp.exists() and not old_npo.exists()
     kept = old_ytdlp.with_name("cookies-not-sorted.txt").read_text()
-    assert TWITCH in kept and YOUTUBE not in kept
+    assert GOOGLE in kept and TWITCH not in kept and YOUTUBE not in kept
 
 
 def test_pinchflats_cookies_file_is_sorted_into_the_sites(session):
@@ -194,6 +275,7 @@ def test_a_site_that_takes_no_cookies_never_gets_a_cookies_file(session):
     from backend.services import site_cookies
     from sources.ytdlp.sites import cookies_for
 
+    _fresh(session)
     dailywire = ".dailywire.com\tTRUE\t/\tTRUE\t0\tsession\tdw"
     with pytest.raises(ValueError, match="takes no cookies file"):
         site_cookies.save_site_cookies(session, "dailywire", _file(dailywire))

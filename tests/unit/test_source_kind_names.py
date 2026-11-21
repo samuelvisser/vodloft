@@ -1,6 +1,13 @@
 """A Source can name the common kinds of media in its own words (Beta 0.6.0)."""
 
 
+class _NoSites:
+    """A session without any Site added."""
+
+    def scalars(self, _query):
+        return []
+
+
 def _names(source):
     return {kind: names.singular for kind, names in source.kind_names.items()}
 
@@ -8,7 +15,7 @@ def _names(source):
 def test_sources_list_their_own_words_for_each_kind_or_vodlofts():
     from backend.api.endpoints.sources.service import list_sources
 
-    names = {source.id: _names(source) for source in list_sources()}
+    names = {source.id: _names(source) for source in list_sources(_NoSites())}
 
     vodloft = {"collection": "collection", "movie": "movie", "episode": "episode", "video": "video", "creator": "creator"}
     assert names["dailywire"] == {**vodloft, "collection": "show", "creator": "host"}
@@ -20,6 +27,6 @@ def test_sources_list_their_own_words_for_each_kind_or_vodlofts():
 def test_kind_names_are_sent_as_camel_case_json():
     from backend.api.endpoints.sources.service import list_sources
 
-    dailywire = next(source for source in list_sources() if source.id == "dailywire")
+    dailywire = next(source for source in list_sources(_NoSites()) if source.id == "dailywire")
 
     assert dailywire.model_dump(by_alias=True)["kindNames"]["collection"] == {"singular": "show", "plural": "shows", "a": "a show"}

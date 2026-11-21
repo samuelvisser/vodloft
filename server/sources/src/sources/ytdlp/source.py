@@ -6,7 +6,7 @@ import threading
 import time
 
 import requests
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit
@@ -17,10 +17,10 @@ from downloader.ytdlp import is_drm_message, is_unsupported_url_message
 from ..contract import (
     Chapter,
     ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, combined_tags, CreatorDetails, SectionRef, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
-    ResolvedLink, SearchResults, CollectionDetails, Site, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
+    ResolvedLink, SearchResults, CollectionDetails, Site, SiteApiStatus, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
-from .. import pacing, ytdlp_runner as runner
+from .. import pacing, site_api_keys, ytdlp_runner as runner
 from . import sites, thumbnails, youtube_rss
 from .site_contracts import CONTRACTS
 from .site_implementations import IMPLEMENTATIONS, OtherSitesImplementation
@@ -38,7 +38,6 @@ _CACHE_SECONDS = 300
 _LISTING_PAUSE_SECONDS = 1.0
 _UNAVAILABLE_TITLES = {"[Private video]", "[Deleted video]"}
 # yt-dlp reports a livestream that is still live, upcoming or long finished alike.
-_LIVE_STATUSES = {"is_live", "is_upcoming", "was_live", "post_live"}
 # Where a video is in its life, as yt-dlp's live_status says. An upcoming video past its start is delayed.
 _PUBLISH_STATUSES = {
     "is_upcoming": EpisodePublishStatus.SCHEDULED,
@@ -108,26 +107,6 @@ def _feeds(ref: mapping.YouTubeRef, feeds: frozenset[str] | None) -> list[dict[s
 def _is_youtube(url: str) -> bool:
     host = link_host(url)
     return on_domain(host, "youtube.com") or host == "youtu.be"
-
-
-def _tag(info: dict, url: str) -> str:
-    """Short and Livestream, as yt-dlp's full extraction of a YouTube video says.
-
-    yt-dlp calls a premiere a video, also while it is upcoming or playing for
-    the first time, so then a live status alone does not make it a livestream.
-    A finished broadcast does.
-    """
-    if not str(info.get("extractor_key") or "").startswith("Youtube"):
-        return MAIN_TAG
-    media_type = info.get("media_type")
-    if media_type in {"short", "livestream"}:
-        return media_type
-    live_status = info.get("live_status")
-    if live_status == "was_live" or (media_type is None and live_status in _LIVE_STATUSES):
-        return "livestream"
-    if "/shorts/" in (info.get("webpage_url") or url):
-        return "short"
-    return MAIN_TAG
 
 
 def _scheduled_at(info: dict) -> datetime | None:
@@ -421,7 +400,7 @@ class YtDlpSource(Source):
     name = "yt-dlp"
     domains = (ANY_DOMAIN,)
     features = frozenset({
-        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY,
+        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.PROGRAM_UPDATES, Feature.COOKIES, Feature.OPTIONAL_COOKIES, Feature.API_KEY, Feature.SITE_API,
         Feature.QUICK_CHECK, Feature.CATALOGUE_REFRESH, Feature.SEARCH,
         Feature.FORMAT_CHOICES, Feature.YTDLP_OPTIONS, Feature.METADATA_REFRESH,
         Feature.PENDING_CHECKS, Feature.CREATORS, Feature.CHAPTERS, Feature.LINK_COLLECTIONS,
@@ -548,7 +527,8 @@ class YtDlpSource(Source):
         )
 
     def resolve(self, url: str) -> ResolvedLink | None:
-        url = collection_url(self._implementation(url).full_link(url))
+        implementation = self._implementation(url)
+        url = implementation.collection_link(implementation.full_link(url))
         # A creator's own page can be added as the creator instead.
         channel = self._implementation(url).creator_page(url)
         creator_names = sites.site_for(channel).creator_names if channel else None
@@ -673,8 +653,7 @@ class YtDlpSource(Source):
             videos=formats.videos, subtitle_languages=languages, sponsorblock=sponsorblock, duration=formats.duration,
         )
 
-    @staticmethod
-    def _video(info: dict, url: str) -> VideoDetails:
+    def _video(self, info: dict, url: str) -> VideoDetails:
         duration = info.get("duration")
         return VideoDetails(
             slug=video_slug(info),
@@ -688,7 +667,7 @@ class YtDlpSource(Source):
             published_at=_published_at(info),
             drm_protected=_drm_protected(info),
             access=_access(info),
-            tag=_tag(info, url),
+            tag=self._implementation(info.get("webpage_url") or url).episode_tag(info, url),
             publish_status=_publish_status(info),
             scheduled_at=_scheduled_at(info),
             chapters=_chapters(info),
@@ -710,7 +689,7 @@ class YtDlpSource(Source):
         )
 
     def collection_details(self, url: str) -> CollectionDetails:
-        url = collection_url(url)
+        url = self._implementation(url).collection_link(url)
         if collection := self._api_collection(url):
             return collection
         info = self._info(url)
@@ -1137,6 +1116,39 @@ class YtDlpSource(Source):
     def search_sites(self) -> tuple[Site, ...]:
         return sites.search_sites()
 
+    def _site_implementation(self, site: Site) -> OtherSitesImplementation:
+        return IMPLEMENTATIONS.get(site.key, OtherSitesImplementation)(site, self._info)
+
+    def site_api_status(self, site: Site) -> SiteApiStatus:
+        if site.site_api is None:
+            raise ApiKeyRejected(f"VODLoft uses no API of {site.name}")
+        return site_api_keys.status(site.key, site.site_api)
+
+    def save_site_api(self, site: Site, values: Mapping[str, str]) -> None:
+        if site.site_api is None:
+            raise ApiKeyRejected(f"VODLoft uses no API of {site.name}")
+        known = site_api_keys.load(site.key) or {}
+        # A secret left empty keeps the one stored, so changing only the ID does not ask for the secret again.
+        cleaned = {field.key: (values.get(field.key) or "").strip() or known.get(field.key, "") for field in site.site_api.fields}
+        if missing := next((field for field in site.site_api.fields if not cleaned[field.key]), None):
+            raise ApiKeyRejected(f"Fill in the {missing.label[:1].lower()}{missing.label[1:]}", field=missing.key)
+        self._site_implementation(site).test_api(cleaned)
+        site_api_keys.save(site.key, cleaned)
+
+    def test_site_api(self, site: Site) -> None:
+        values = site_api_keys.load(site.key)
+        if values is None:
+            raise ApiKeyRejected(f"The {site.site_api.name if site.site_api else 'API'} is not set up")
+        try:
+            self._site_implementation(site).test_api(values)
+        except ApiKeyRejected as exc:
+            site_api_keys.record_problem(site.key, str(exc))
+            raise
+        site_api_keys.record_problem(site.key, None)
+
+    def remove_site_api(self, site: Site) -> None:
+        site_api_keys.remove(site.key)
+
     def search(self, site: Site, query: str) -> SearchResults:
         """The Site's search, as its implementation does it. The same search within an hour is answered from memory."""
         query = " ".join(query.split())
@@ -1148,7 +1160,7 @@ class YtDlpSource(Source):
             cached = self._searches.get(key)
         if cached is not None and now - cached[0] < _SEARCH_CACHE_SECONDS:
             return cached[1]
-        answer = IMPLEMENTATIONS.get(site.key, OtherSitesImplementation)(site, self._info).search(query)
+        answer = self._site_implementation(site).search(query)
         with self._cache_lock:
             self._searches = {k: v for k, v in self._searches.items() if now - v[0] < _SEARCH_CACHE_SECONDS}
             self._searches[key] = (now, answer)

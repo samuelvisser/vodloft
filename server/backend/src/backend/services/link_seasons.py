@@ -778,7 +778,9 @@ def held_back(episode: Episode) -> bool:
     from backend.services.removed_downloads import awaits_keep_answer
 
     return any(
-        download.kept or awaits_keep_answer(download, removed_from_source=episode.removed_from_source)
+        download.kept or awaits_keep_answer(
+            download, removed_from_source=episode.removed_from_source, removed_by_retention=episode.removed_by_retention,
+        )
         for download in episode.downloads
     )
 

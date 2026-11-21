@@ -4,7 +4,7 @@ from datetime import datetime
 from collections.abc import Iterable, Mapping
 from typing import Literal, Optional
 
-from pydantic import AliasChoices, AliasPath, Field, computed_field, field_validator
+from pydantic import AliasChoices, AliasPath, Field, ValidationInfo, computed_field, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.media_access import access_granted, access_locked, site_access
@@ -87,6 +87,30 @@ class LockableResponse(ResponseBase):
         return found.description if found is not None else None
 
 
+class RetentionAPIRead(ResponseBase):
+    """A Site that removes its media itself after a while, such as Twitch its past broadcasts."""
+
+    site_name: str
+    retention: str
+    """How the Site removes its media, as a sentence."""
+
+
+class RetentionResponse(LockableResponse):
+    """Media on a Site that may have removed it itself, as it removes all its media after a while."""
+
+    removed_by_retention: bool = False
+
+    @computed_field
+    @property
+    def removed_by(self) -> Optional[RetentionAPIRead]:
+        """The Site whose retention removed the media, and how that Site removes its media; None for media its Site
+        did not remove so."""
+        if not self.removed_by_retention or self.site_key is None:
+            return None
+        site = site_of(self.site_key)
+        return RetentionAPIRead(site_name=site.name, retention=site.retention.description if site.retention else "")
+
+
 class DownloadOptionsAPIRead(ResponseBase):
     """What a Local Media Profile can download for a Site, or for any Site of a Source."""
 
@@ -116,13 +140,33 @@ class DownloadProfileDefaultsAPIRead(ResponseBase):
     upgrade_length_minutes: int
 
 
-class SearchSiteAPIRead(ResponseBase):
-    """A Site a Source finds things on by name, such as YouTube or SoundCloud for yt-dlp."""
+class SourceSiteAddedAPIRead(ResponseBase):
+    """A Site of a Source, and whether it is added to VODLoft, so Add Media offers to browse or search it."""
 
     key: str
     name: str
+    added: bool = False
+    """Told by the ``added_sites`` the Sources are read with."""
+
+    @model_validator(mode="after")
+    def _added(self, info: ValidationInfo) -> "SourceSiteAddedAPIRead":
+        self.added = self.key in (info.context or {}).get("added_sites", ())
+        return self
+
+
+class SearchSiteAPIRead(SourceSiteAddedAPIRead):
+    """A Site a Source finds things on by name, such as YouTube or SoundCloud for yt-dlp."""
+
     costly_search: bool
     """Each search costs something, so the search page searches when asked instead of while the user types."""
+    ready: bool = False
+    """The Source can search the Site now: one whose search goes through its own API once that is set up. Told by
+    the ``ready_sites`` the Sources are read with."""
+
+    @model_validator(mode="after")
+    def _ready(self, info: ValidationInfo) -> "SearchSiteAPIRead":
+        self.ready = self.key in (info.context or {}).get("ready_sites", ())
+        return self
 
 
 class SourceAPIRead(ResponseBase):
@@ -131,6 +175,8 @@ class SourceAPIRead(ResponseBase):
     domains: list[str]
     features: list[str]
     sites_label: Optional[str] = None
+    sites: list[SourceSiteAddedAPIRead] = Field(default_factory=list)
+    """The Sites the Source is made for, such as The Daily Wire, whose catalogue it browses."""
     search_sites: list[SearchSiteAPIRead] = Field(default_factory=list)
     """The Sites the Source can search by name, each with a search button of its own."""
     kind_names: dict[str, NamesAPIRead] = Field(validation_alias="named_kinds")
@@ -205,6 +251,41 @@ class CookiesStatusAPIRead(ResponseBase):
     detail: Optional[str] = None
 
 
+class ApiFieldAPIRead(ResponseBase):
+    key: str
+    label: str
+    secret: bool
+
+
+class GuideStepAPIRead(ResponseBase):
+    text: str
+    button: Optional[str] = None
+    url: Optional[str] = None
+
+
+class SiteApiAPIRead(ResponseBase):
+    """A Site's own free API that the user can register VODLoft with, such as Twitch's."""
+
+    name: str
+    fields: list[ApiFieldAPIRead]
+    benefits: str
+    steps: list[GuideStepAPIRead]
+    searches: bool
+    """The Site's search goes through the API, so Add Media only searches the Site once it is set up."""
+
+
+class SiteApiStatusAPIRead(ResponseBase):
+    hints: dict[str, str]
+    """The values that are set, by their field's key: a secret by its last few characters."""
+    problem: Optional[str] = None
+    set_up: bool
+
+
+class SiteApiValuesAPIUpdate(RequestBase):
+    values: dict[str, str] = Field(max_length=8)
+    """The values by their field's key. A secret left empty keeps the one stored."""
+
+
 class SiteAuthenticationAPIRead(ResponseBase):
     """A Site, and how VODLoft signs in on it or gets at its API: a Source's own sign-in, the Site's cookies
     file, or a Source's API key."""
@@ -222,10 +303,23 @@ class SiteAuthenticationAPIRead(ResponseBase):
     cookies_status: Optional[CookiesStatusAPIRead] = None
     api_key_source_key: Optional[str] = None
     """The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key."""
+    site_api: Optional[SiteApiAPIRead] = None
+    """The Site's own API, on a Site that has one a Source uses."""
+    site_api_status: Optional[SiteApiStatusAPIRead] = None
+    removable: bool
+    """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
 
 
 class SiteAddAPIRequest(RequestBase):
     url: str = Field(min_length=1, max_length=2048)
+    """A link to a page on the Site, or only its address, such as ``twitch.tv``."""
+
+    @field_validator("url")
+    @classmethod
+    def _with_scheme(cls, value: str) -> str:
+        """An address typed without ``https://`` is the Site's https address."""
+        value = value.strip()
+        return value if not value or "://" in value else f"https://{value}"
 
 
 class SiteAddedAPIRead(ResponseBase):
@@ -457,6 +551,18 @@ class SiteAPIRead(ResponseBase):
 
     key: str
     name: str
+
+    @computed_field
+    @property
+    def icon(self) -> str | None:
+        """The Site's Font Awesome icon as ``prefix:name``, such as ``fab:youtube``, shown where its name does not fit."""
+        return site_of(self.key).icon
+
+    @computed_field
+    @property
+    def initials(self) -> str:
+        """The Site's name in at most two letters, such as YT, shown beside a globe where it has no icon."""
+        return site_of(self.key).initials
 
     @computed_field
     @property

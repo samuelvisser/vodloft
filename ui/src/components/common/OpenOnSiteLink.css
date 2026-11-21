@@ -4,3 +4,7 @@
     .open-on-site-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .open-on-site-prefix { display: none; }
 }
+
+/* Just the site's icon, where its name does not fit; the button's title still names the site. */
+.open-on-site--icon { justify-content: center; min-width: 2.5em; padding-inline: 10px; }
+.open-on-site--icon > .site-icon { font-size: 1.15em; }

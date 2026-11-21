@@ -36,6 +36,8 @@ class SiteSettingsAPIRead(ResponseBase):
     settings: list[OfferedSettingAPIRead]
     upgrade_improvements: list[UpgradeImprovement]
     """What the upgrade check can count as better on the Site, in the order it shows them."""
+    removable: bool
+    """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
 
 
 class SitesSettingsAPIRead(ResponseBase):

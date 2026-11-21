@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "7c41e2a9d5b3"
+HEAD_REVISION = "6007aa686523"
 
 
 @pytest.fixture
@@ -613,7 +613,8 @@ def test_sites_migration_places_named_sources_and_moves_the_domain_preference(mi
             "INSERT INTO source_domain_preferences (domain, source_key) VALUES ('npo.nl', 'ytdlp')"
         ))
 
-    command.upgrade(config, HEAD_REVISION)
+    # Up to the migration before the one that adds the Sites VODLoft used to always list.
+    command.upgrade(config, "7c41e2a9d5b3")
 
     with engine.connect() as connection:
         assert connection.execute(text(
@@ -2015,3 +2016,24 @@ def test_a_music_collection_repeats_a_video_in_each_album_and_others_keep_one(mi
     assert "repeat_videos" not in {c["name"] for c in inspect(engine).get_columns("collections")}
     unique = {tuple(c["column_names"]) for c in inspect(engine).get_unique_constraints("media_items_episode")}
     assert ("collection_id", "source_slug") in unique
+
+
+def test_the_sites_get_their_order_and_the_always_listed_sites_become_rows(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "7c41e2a9d5b3")
+    with engine.begin() as connection:
+        for key, name, domain in (("youtube", "YouTube", "youtube.com"), ("twitch", "Twitch", "twitch.tv")):
+            connection.execute(text("INSERT INTO sites (key, name, domains) VALUES (:key, :name, :domains)"), {
+                "key": key, "name": name, "domains": json.dumps([domain]),
+            })
+
+    command.upgrade(config, "710584a17632")
+
+    with engine.connect() as connection:
+        rows = connection.execute(text("SELECT key, domains FROM sites ORDER BY position")).all()
+    # Numbered by name, with The Daily Wire and NPO Start added beside the YouTube row the installation had.
+    assert [key for key, _ in rows] == ["npo", "dailywire", "twitch", "youtube"]
+    assert json.loads(dict(rows)["npo"]) == ["npo.nl"]

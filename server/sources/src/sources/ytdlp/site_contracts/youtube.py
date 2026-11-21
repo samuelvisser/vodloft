@@ -24,6 +24,9 @@ from .other_sites import CREATOR_PRESETS, MEMBERS_KEY, PREMIUM_KEY, OtherSites
 class YouTube(OtherSites):
     key = "youtube"
     name = "YouTube"
+    initials = "YT"
+    domains = ("youtube.com", "youtu.be")
+    icon = "fab:youtube"
     # Each search costs YouTube Data API quota, or runs yt-dlp without a key, so it searches when asked.
     searchable = True
     costly_search = True

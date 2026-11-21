@@ -132,6 +132,10 @@ export type CreatorLookupRead = z.infer<typeof CreatorLookupReadSchema>
 
 const SiteSchema = z.object({
     key: z.string(), name: z.string(), creatorNames: NamesSchema, linkSeasons: z.boolean().default(false),
+    /** The Site's Font Awesome icon as prefix:name, such as fab:youtube; see SiteIcon. */
+    icon: z.string().nullable().optional(),
+    /** The Site's name in at most two letters, such as YT, shown beside a globe where it has no icon. */
+    initials: z.string(),
     /** The Site has sound only, such as Bandcamp. */
     audioOnly: z.boolean().default(false),
     /** What the Site calls one of its videos: a video, or a track on a Site with sound only. */
