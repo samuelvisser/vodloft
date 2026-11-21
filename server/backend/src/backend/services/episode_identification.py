@@ -30,7 +30,9 @@ from backend.db.models import Collection, CollectionLocalMediaProfile, DownloadP
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.operations.collections import CollectionIdentificationChangeOperation, CollectionRenumberOperation
 from backend.services.download_options import effective_metadata_mode
-from backend.services.episode_filters import EpisodeSelection, evaluate, filter_leaving_out, retention_removes
+from backend.services.episode_filters import (
+    EpisodeSelection, evaluate, filter_leaving_out, retention_downloads, retention_removes,
+)
 from backend.services.errors import ServiceError
 from backend.services.season_order import number_in_link_order
 from backend.services.sites import collection_words
@@ -511,9 +513,7 @@ def _download_profile_changes(
     downloads: dict[int, list[EpisodeMediaDownload]] = {}
     with s.no_autoflush:
         for profile in profiles:
-            downloads[profile.id] = list(s.scalars(
-                select(EpisodeMediaDownload).where(EpisodeMediaDownload.download_profile_id == profile.id)
-            ))
+            downloads[profile.id] = retention_downloads(s, profile)
             before[profile.id] = _judge(s, profile, ordered, downloads[profile.id])
         old = {episode.id: episode.episode_identifier for episode in episodes}
         try:
@@ -545,11 +545,14 @@ def _download_profile_changes(
 def _judge(
         s: Session, profile: DownloadProfile, episodes: list[Episode], downloads: list[EpisodeMediaDownload],
 ) -> tuple[set[int], set[int], set[int]]:
-    """The episodes the profile wants, and its downloads on disk that its filters leave out and that its cleanup
-    deletes."""
+    """The episodes the profile wants, its downloads on disk that its filters leave out, and the downloads on disk
+    that its cleanup deletes, manual ones included when it includes them."""
     evaluation = evaluate(s, EpisodeSelection.of_profile(profile), episodes=episodes)
     on_disk = [download for download in downloads if download.artifact_status in _ON_DISK]
-    out = {download.id for download in on_disk if filter_leaving_out(evaluation, download) is not None}
+    out = {
+        download.id for download in on_disk
+        if download.download_profile_id == profile.id and filter_leaving_out(evaluation, download) is not None
+    }
     removed = {
         download.id for download in on_disk
         if retention_removes(evaluation, download, delete_older_episodes=profile.delete_older_episodes)
