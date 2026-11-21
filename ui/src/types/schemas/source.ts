@@ -17,7 +17,6 @@ export const SourceFeature = {
     VIDEOS: 'videos',
     EPISODE_LISTS: 'episode_lists',
     SEARCH: 'search',
-    COSTLY_SEARCH: 'costly_search',
     PROGRAM_UPDATES: 'program_updates',
     COOKIES: 'cookies',
     OPTIONAL_COOKIES: 'optional_cookies',
@@ -89,6 +88,15 @@ export const DownloadOptionsSchema = z.object({
 })
 export type DownloadOptions = z.infer<typeof DownloadOptionsSchema>
 
+/** A Site a Source finds things on by name. A costly search, such as one that uses API quota, runs when asked
+ *  instead of while the user types. */
+export const SearchSiteReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+    costlySearch: z.boolean(),
+})
+export type SearchSiteRead = z.infer<typeof SearchSiteReadSchema>
+
 export const SourceReadSchema = z.object({
     id: z.string(),
     name: z.string(),
@@ -96,7 +104,8 @@ export const SourceReadSchema = z.object({
     features: z.array(z.string()),
     /** What the Source downloads from, when its name does not say so, such as YouTube, and many more. */
     sitesLabel: z.string().nullable().optional(),
-    searchLabel: z.string().nullable().optional(),
+    /** The Sites the Source can search by name, such as YouTube and SoundCloud for yt-dlp, each searched on its own. */
+    searchSites: z.array(SearchSiteReadSchema).default([]),
     /** What the Source calls each kind of media, such as show for a Daily Wire collection, or VODLoft's word. */
     kindNames: z.record(z.string(), NamesSchema),
     /** The Sites the Source is made for, such as The Daily Wire; none for a Source of many sites. */
@@ -176,11 +185,6 @@ export const SearchResultsReadSchema = z.object({
     notice: SearchNoticeReadSchema.nullable(),
 })
 export type SearchResultsRead = z.infer<typeof SearchResultsReadSchema>
-
-/** What a search button names: the Source's own label, such as YouTube for yt-dlp, or its name. */
-export function searchName(source: SourceRead | null | undefined): string | undefined {
-    return source?.searchLabel ?? source?.name
-}
 
 /** What the Source calls a kind of media, such as show for a Daily Wire collection; none until the Source is known. */
 export function kindNames(source: SourceRead | null | undefined, kind: string): Names | undefined {

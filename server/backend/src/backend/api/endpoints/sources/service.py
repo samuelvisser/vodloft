@@ -87,11 +87,14 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
     )
 
 
-def search_source(access: Access, source: Source, query: str) -> SearchResultsAPIRead:
-    """Search a Source, leaving out results on domains the user may not use."""
+def search_source(access: Access, source: Source, site_key: str, query: str) -> SearchResultsAPIRead:
+    """Search one of a Source's search Sites, leaving out results on domains the user may not use."""
     access.check_source(source)
-    with asking_source(f"{source.name} could not be searched"):
-        answer = source.search(query)
+    site = next((site for site in source.search_sites if site.key == site_key), None)
+    if site is None:
+        raise SourceFeatureMissingError(f"{source.name} cannot search {site_key}")
+    with asking_source(f"{site.name} could not be searched"):
+        answer = source.search(site, query)
     results = SearchResultsAPIRead.model_validate(answer)
     return results.model_copy(update={
         "results": [
