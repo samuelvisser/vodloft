@@ -219,7 +219,7 @@ class SoundCloudImplementation(ArtistImplementation):
         return urlunsplit(urlsplit(url)._replace(query="", fragment=""))
 
     def search(self, query: str) -> SearchResults:
-        return SearchResults(soundcloud_search.search(query, self.avatar))
+        return soundcloud_search.search(query, self.avatar)
 
     def creator_root(self, url: str) -> str | None:
         parts = urlsplit(url)

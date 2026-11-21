@@ -1,5 +1,5 @@
-"""SoundCloud: searched through yt-dlp, which finds tracks, with the accounts behind them first; and the short links
-its apps share, which lead to its own pages."""
+"""SoundCloud: searched through SoundCloud's web API by way of yt-dlp's extractor, or with yt-dlp's track search when
+that fails; and the short links its apps share, which lead to its own pages."""
 from __future__ import annotations
 
 import pytest
@@ -25,8 +25,51 @@ def _track(track_id: str, account: str, name: str, title: str) -> dict:
     }
 
 
+class FakeExtractor:
+    """yt-dlp's SoundCloud extractor, answering SoundCloud's web API with recorded answers."""
+
+    _API_V2_BASE = "https://api-v2.soundcloud.com/"
+    _HEADERS = {}
+    answers: dict[str, list[dict]] = {}
+    calls: list[tuple[str, dict]] = []
+
+    def initialize(self):
+        pass
+
+    def _call_api(self, url, video_id, query=None, headers=None, note=None):
+        endpoint = url.removeprefix(self._API_V2_BASE)
+        self.calls.append((endpoint, query))
+        if endpoint not in self.answers:
+            raise RuntimeError("HTTP Error 401: Unauthorized")
+        return {"collection": self.answers[endpoint]}
+
+
+class FakeYoutubeDL:
+    def __init__(self, options):
+        self.options = options
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def get_info_extractor(self, key):
+        assert key == "Soundcloud"
+        return FakeExtractor()
+
+
 @pytest.fixture
-def searches(monkeypatch):
+def api(monkeypatch):
+    import yt_dlp
+
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYoutubeDL)
+    FakeExtractor.answers, FakeExtractor.calls = {}, []
+    return FakeExtractor
+
+
+@pytest.fixture
+def searches(monkeypatch, api):
     calls = []
 
     def run_json(*args, **_kwargs):
@@ -47,8 +90,43 @@ def test_youtube_and_soundcloud_are_searched_each_on_their_own():
         ("youtube", "YouTube", True), ("soundcloud", "SoundCloud", True)]
 
 
-def test_a_search_finds_tracks_and_the_accounts_that_made_most_of_them_first(searches):
-    results = YtDlpSource().search(SOUNDCLOUD, "for king and country").results
+def test_soundclouds_own_search_finds_accounts_albums_playlists_and_tracks(api):
+    user = {"username": "for KING & COUNTRY", "avatar_url": "https://i1.sndcdn.com/avatars-fkac-large.jpg"}
+    api.answers = {
+        "search/users": [{**user, "permalink": "forkingandcountry", "permalink_url": "https://soundcloud.com/forkingandcountry",
+                          "followers_count": 24335, "track_count": 203}],
+        "search/albums": [{"id": 7, "title": "the most beautiful colours", "set_type": "ep", "track_count": 10,
+                           "permalink_url": "https://soundcloud.com/forkingandcountry/sets/colours", "user": user,
+                           "artwork_url": "https://i1.sndcdn.com/artworks-colours-large.jpg", "release_date": "2026-09-18T00:00:00Z"}],
+        "search/playlists_without_albums": [{"id": 8, "title": "Best of", "set_type": "", "track_count": 24,
+                                             "permalink_url": "https://soundcloud.com/dava/sets/best-of", "user": {"username": "Dava"},
+                                             "artwork_url": None, "tracks": [{"artwork_url": "https://i1.sndcdn.com/artworks-first-large.jpg"}]}],
+        "search/tracks": [{"id": 9, "title": "TOGETHER", "duration": 206_000, "playback_count": 200_100,
+                           "display_date": "2020-05-01T00:00:00Z", "permalink_url": "https://soundcloud.com/forkingandcountry/together",
+                           "artwork_url": "https://i1.sndcdn.com/artworks-together-large.png", "user": user}],
+    }
+
+    answer = YtDlpSource().search(SOUNDCLOUD, "for king and country")
+
+    assert answer.notice is None
+    assert [call[1] for call in api.calls] == [{"q": "for king and country", "limit": limit} for limit in (5, 5, 5, 20)]
+    assert [(r.kind, r.kind_label, r.title, r.author_name, r.url, r.image_url, r.facts) for r in answer.results] == [
+        (LinkKind.COLLECTION, "Account", "for KING & COUNTRY", None, "https://soundcloud.com/forkingandcountry",
+         "https://i1.sndcdn.com/avatars-fkac-t500x500.jpg", ("24.3K followers", "203 tracks")),
+        (LinkKind.COLLECTION, "EP", "the most beautiful colours", "for KING & COUNTRY", "https://soundcloud.com/forkingandcountry/sets/colours",
+         "https://i1.sndcdn.com/artworks-colours-t500x500.jpg", ("10 tracks", "18 Sep 2026")),
+        (LinkKind.COLLECTION, "Playlist", "Best of", "Dava", "https://soundcloud.com/dava/sets/best-of",
+         "https://i1.sndcdn.com/artworks-first-t500x500.jpg", ("24 tracks",)),
+        (LinkKind.VIDEO, "Track", "TOGETHER", "for KING & COUNTRY", "https://soundcloud.com/forkingandcountry/together",
+         "https://i1.sndcdn.com/artworks-together-t500x500.png", ("3:26", "1 May 2020", "200.1K plays")),
+    ]
+
+
+def test_when_soundclouds_search_fails_the_track_search_answers_and_says_so(searches):
+    answer = YtDlpSource().search(SOUNDCLOUD, "for king and country")
+    results = answer.results
+
+    assert (answer.notice.badge, answer.notice.tone) == ("Tracks only", "warning")
 
     assert searches == [("--flat-playlist", "scsearch20:for king and country")]
     assert [(r.kind, r.kind_label, r.title, r.url, r.facts) for r in results[:2]] == [

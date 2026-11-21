@@ -13,7 +13,8 @@ class SoundCloud(OtherSites):
     creators = True
     # Its apps share short links, which redirect to its pages.
     share_hosts = ("on.soundcloud.com",)
-    # yt-dlp finds its tracks by name. Each search runs yt-dlp, which takes a few seconds, so it searches when asked.
+    # Its accounts, albums, playlists and tracks are found by name. Each search asks SoundCloud four times, or runs
+    # yt-dlp when that fails, so it searches when asked instead of while the user types.
     searchable = True
     costly_search = True
     # An account may be a music artist or anyone else, such as a podcast; a Music collection calls it an artist.

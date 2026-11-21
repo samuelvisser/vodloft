@@ -22,7 +22,7 @@ The Daily Wire has the most complete support: browse its catalogue, add collecti
 
 yt-dlp also tries any site no other Source claims. Such a link is labelled "Other sites · best effort": it often works for a plain page with one video, but not always.
 
-Sites change often, and yt-dlp has to keep up. VODLoft updates yt-dlp once a week, and **Update now** on its card does it straight away. A cookies file per site lets yt-dlp reach videos that need a signed-in viewer (see [[Settings#authentication]]), and an optional free YouTube Data API key makes YouTube channels much faster to list and check. **Search YouTube** on the Add media page finds YouTube channels, playlists and videos by name, with or without a key, and **Search SoundCloud** finds SoundCloud tracks and the accounts that made them. See [[Settings#yt-dlp]], [[Collections-and-Library#search-youtube]] and [[Collections-and-Library#search-soundcloud]].
+Sites change often, and yt-dlp has to keep up. VODLoft updates yt-dlp once a week, and **Update now** on its card does it straight away. A cookies file per site lets yt-dlp reach videos that need a signed-in viewer (see [[Settings#authentication]]), and an optional free YouTube Data API key makes YouTube channels much faster to list and check. **Search YouTube** on the Add media page finds YouTube channels, playlists and videos by name, with or without a key, and **Search SoundCloud** finds SoundCloud accounts, albums, playlists and tracks. See [[Settings#yt-dlp]], [[Collections-and-Library#search-youtube]] and [[Collections-and-Library#search-soundcloud]].
 
 ### NPO Start
 

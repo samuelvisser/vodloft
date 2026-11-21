@@ -213,7 +213,7 @@ With a YouTube Data API key this costs 1 unit per 50 episodes a day. Without a k
 
 ### Search SoundCloud
 
-**Search SoundCloud** on the Add media page finds SoundCloud tracks by name, with the accounts that made the most of them listed first. Type a search and choose **Search** or press Enter: each search takes a few seconds, so VODLoft does not search while you type. Picking an account lets you add it as a creator, with its albums and playlists, or only its tracks; picking a track adds it under **Videos**. SoundCloud's albums and playlists can't be searched on their own: add them from their account, or paste their link.
+**Search SoundCloud** on the Add media page finds SoundCloud accounts, albums, playlists and tracks by name, the way SoundCloud's own search does, with follower and track counts. Type a search and choose **Search** or press Enter. Picking an account lets you add it as a creator, with its albums and playlists, or only its tracks; picking an album or playlist continues to the Add Collection wizard; picking a track adds it under **Videos**. No key or account is needed: VODLoft searches the way yt-dlp reaches SoundCloud. If SoundCloud's search ever stops answering, VODLoft searches only its tracks instead, lists the accounts that made them first, and says so above the results.
 
 A link you share from the SoundCloud app, such as `on.soundcloud.com/…`, works like the full link: VODLoft follows it to the page it stands for, so an artist's share link can be added as the creator.
 
