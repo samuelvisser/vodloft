@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from .core import load_database_models
@@ -62,9 +62,13 @@ alone."""
 
 
 def _seed_sites(session: Session) -> None:
-    """Add the default Sites. They come before the profiles, which start with every Site VODLoft knows."""
+    """Make the default Sites the only ones. They come before the profiles, which start with every Site VODLoft
+    knows. A new SQLite database runs every migration first, and one of those adds the Sites older versions always
+    listed, so those rows go: a new database has nothing from them."""
+    from backend.db.models import Site
     from backend.services.sites import add_site, site_of_link
 
+    session.execute(delete(Site))
     for address in DEFAULT_SITES:
         add_site(session, site_of_link(session, address))
 
