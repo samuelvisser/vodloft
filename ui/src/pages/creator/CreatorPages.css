@@ -250,6 +250,8 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
 .creator-more-tile.is-addable { cursor: pointer; }
 .creator-more-tile-new { position: absolute; top: 12px; left: 8px; margin: 0; z-index: 1; }
 .creator-more-add { position: absolute; top: 8px; right: 8px; z-index: 2; }
+/* Its open menu sits over the other tiles and their + buttons. */
+.creator-more-add:has(.action-menu-popover) { z-index: 90; }
 .creator-more-plus { width: 34px; height: 34px; padding: 0; justify-content: center; border-radius: 50%; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
 .creator-more-add .action-menu-trigger--icon { box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
 .creator-more-all { display: flex; justify-content: center; margin-top: 12px; }
