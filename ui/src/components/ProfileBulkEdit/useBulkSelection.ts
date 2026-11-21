@@ -13,6 +13,14 @@ export function useBulkSelection(
 ) {
     const [active, setActive] = useState(false)
     const matchingIds = useProfileTableIds(tablePrefix, path, filters, active).data?.ids
+    return useSelection(active, setActive, matchingIds)
+}
+
+/**
+ * Which of a list's items are chosen while bulk edit is on, by id. ``matchingIds`` are the ones the filters show,
+ * which Select all takes; undefined while they are not known yet.
+ */
+export function useSelection(active: boolean, setActive: (active: boolean) => void, matchingIds: readonly number[] | undefined) {
     const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
 
     const matching = useMemo(() => new Set(matchingIds ?? []), [matchingIds])
@@ -39,11 +47,11 @@ export function useBulkSelection(
     }), [matching])
 
     const clear = useCallback(() => setSelected(new Set()), [])
-    const start = useCallback(() => setActive(true), [])
+    const start = useCallback(() => setActive(true), [setActive])
     const stop = useCallback(() => {
         setActive(false)
         setSelected(new Set())
-    }, [])
+    }, [setActive])
 
     return {
         active,
@@ -55,10 +63,10 @@ export function useBulkSelection(
         toggleAll,
         clear,
         allState,
-        /** How many profiles the filters match, once known. */
+        /** How many the filters match, once known. */
         matchingCount: matchingIds?.length,
         hidden: matchingIds === undefined ? 0 : selected.size - selectedMatching,
     }
 }
 
-export type BulkSelection = ReturnType<typeof useBulkSelection>
+export type BulkSelection = ReturnType<typeof useSelection>

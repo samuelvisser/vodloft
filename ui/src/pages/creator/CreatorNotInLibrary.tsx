@@ -16,6 +16,7 @@ import {SECTION_ACTIONS} from './sectionActions'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
 import {isListOutside, useAnswerList} from './useAnswerList'
 import CreatorBulkBar from './CreatorBulkEdit'
+import {BulkTileCheck} from '../../components/ProfileBulkEdit/BulkEditControls'
 import {PageHeaderAction} from '../../components/common/PageHeader'
 import '../../components/ProfileBulkEdit/ProfileBulkEdit.css'
 
@@ -243,12 +244,7 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                                     </span>
                                     {item.section.status === 'new' && <span className="creator-more-new creator-more-tile-new">New</span>}
                                     {selecting ? (
-                                        <label className="creator-more-check" onClick={(event) => event.stopPropagation()}>
-                                            <input
-                                                type="checkbox" className="bulk-check" checked={isChosen}
-                                                aria-label={`Choose ${item.section.title}`} onChange={() => choose(item)}
-                                            />
-                                        </label>
+                                        <BulkTileCheck title={item.section.title} chosen={isChosen} onToggle={() => choose(item)}/>
                                     ) : mayAdd && <div className="creator-more-add">{addButton(item)}</div>}
                                     <span className="library-tile-copy">
                                         <span className="library-tile-title">{item.section.title}</span>

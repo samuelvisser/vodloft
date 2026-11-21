@@ -234,11 +234,6 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
 .creator-more-head .page-header-action { flex: 0 0 auto; }
 /* Bulk edit: select all above the tiles, and a check on each tile instead of its + */
 .creator-more-select { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
-.creator-more-check {
-    position: absolute; top: 8px; right: 8px; z-index: 2; display: grid; place-items: center; width: 34px; height: 34px;
-    border-radius: 50%; background: rgba(15, 23, 42, .65); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); cursor: pointer;
-}
-.creator-more-check .bulk-check { width: 20px; height: 20px; }
 .creator-more-tile.bulk-tile { cursor: pointer; }
 .creator-more-tile.is-selected { border-style: solid; border-color: #3b82f6; background: rgba(59, 130, 246, .10); }
 .creator-more-tile.is-selected .creator-more-art > * { filter: none; }

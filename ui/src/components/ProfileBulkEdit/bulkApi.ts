@@ -32,8 +32,13 @@ export async function bulkChange(endpoint: BulkEndpoint, ids: readonly number[],
     return parsed(await postBulkChange(endpoint, ids, changes), BulkResultSchema)
 }
 
-export async function bulkDelete(endpoint: BulkEndpoint, ids: readonly number[]): Promise<BulkResult> {
-    return parsed(await post(endpoint, 'delete', {ids}), BulkResultSchema)
+/** An action on each chosen item, such as ``delete`` or a Collection's ``sync``. */
+export async function bulkAction(endpoint: BulkEndpoint, action: string, ids: readonly number[]): Promise<BulkResult> {
+    return parsed(await post(endpoint, action, {ids}), BulkResultSchema)
+}
+
+export function bulkDelete(endpoint: BulkEndpoint, ids: readonly number[]): Promise<BulkResult> {
+    return bulkAction(endpoint, 'delete', ids)
 }
 
 /** "3 download profiles", for messages about a bulk change. */

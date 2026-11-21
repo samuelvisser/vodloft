@@ -5,6 +5,7 @@ from .as_view import collection_view_router
 from .existing_files.router import router as existing_files_router
 from .seasons.router import router as collection_seasons_router
 from .sync_log import collection_scans
+from .bulk import change_collections, delete_collections, summarize_collections, sync_collections
 from backend.api.endpoints.creators.service import (
     CollectionNotFoundError, add_collection_to_creator, collection_creator_leave, collection_creator_match, collection_link, join_collection_creator,
     leave_collection_creator, look_up_collection_creator, preview_collection_join,
@@ -61,6 +62,8 @@ from ...models.collection import (
     CollectionRedownloadEpisodesAPIRequest,
 )
 from ...models.source import EpisodeTagAPIRead
+from ...models.collection import CollectionBulkChangesIn
+from ...models.profile_bulk import BulkChangeIn, BulkResultRead, BulkSelectionIn, BulkSummaryRead
 from backend.api.endpoints.creators import lookups as creator_lookups
 from backend.api.endpoints.reconcile import collection_scope, move, preview_move
 from backend.api.models.creator import CreatorSectionMovesPreviewAPIRead, MovesWaitingAPIRead, ReconcileAPIIn, ReconcileAPIRead
@@ -99,6 +102,31 @@ def collection_list():
     """
     with db_session() as s:
         return get_collections_list(s)
+
+
+@router.post("/bulk/summary", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkSummaryRead)
+def collections_bulk_summary(body: BulkSelectionIn):
+    """What the chosen Collections are set to now, for the Library's bulk edit."""
+    with db_session() as s:
+        return summarize_collections(s, body)
+
+
+@router.post("/bulk/change", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
+def collections_bulk_change(body: BulkChangeIn[CollectionBulkChangesIn]):
+    """Give the chosen Collections the same settings; a setting a Collection's Site doesn't have is left alone."""
+    return run_write_transaction(lambda s: change_collections(s, body))
+
+
+@router.post("/bulk/sync", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
+def collections_bulk_sync(body: BulkSelectionIn):
+    """Look for new episodes of the chosen Collections now."""
+    return run_write_transaction(lambda s: sync_collections(s, body))
+
+
+@router.post("/bulk/delete", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
+def collections_bulk_delete(body: BulkSelectionIn):
+    """Delete the chosen Collections, as deleting each on its Edit page does."""
+    return run_write_transaction(lambda s: delete_collections(s, body))
 
 
 @router.post("", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=CollectionAPIRead, status_code=status.HTTP_201_CREATED)

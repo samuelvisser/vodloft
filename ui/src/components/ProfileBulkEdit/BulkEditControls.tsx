@@ -14,24 +14,31 @@ type ProfileTableActionsProps = {
     addLabel: string
 }
 
-/** Bulk edit, which becomes Done while it is on, and Add: the buttons in a profile table's PageHeader. */
+/** Bulk edit, which becomes Done while it is on: a PageHeader button. */
+export function BulkEditToggle({selection}: {selection: BulkSelection}) {
+    return (
+        <PageHeaderAction
+            icon={selection.active ? faIcon('fass', 'check') : faIcon('fass', 'list-check')}
+            label={selection.active ? 'Done' : 'Bulk edit'}
+            variant="secondary"
+            keepLabel={selection.active}
+            toggled={selection.active}
+            onClick={selection.active ? selection.stop : selection.start}
+        />
+    )
+}
+
+/** Bulk edit and Add: the buttons in a profile table's PageHeader. */
 export function ProfileTableActions({selection, addTo, addLabel}: ProfileTableActionsProps) {
     return (
         <>
-            <PageHeaderAction
-                icon={selection.active ? faIcon('fass', 'check') : faIcon('fass', 'list-check')}
-                label={selection.active ? 'Done' : 'Bulk edit'}
-                variant="secondary"
-                keepLabel={selection.active}
-                toggled={selection.active}
-                onClick={selection.active ? selection.stop : selection.start}
-            />
+            <BulkEditToggle selection={selection}/>
             <PageHeaderAction icon={faIcon('fass', 'plus')} label={addLabel} to={addTo}/>
         </>
     )
 }
 
-/** Select all, beside the filters' count: it takes every profile the filters match, loaded or not. */
+/** Select all, beside the filters' count: it takes every item the filters match, loaded or not. */
 export function SelectAll({selection, filtered}: {selection: BulkSelection, filtered: boolean}) {
     if (!selection.active) return null
     const count = selection.matchingCount
@@ -47,6 +54,15 @@ export function SelectAll({selection, filtered}: {selection: BulkSelection, filt
                 onChange={selection.toggleAll}
             />
             <span>{all ? 'Deselect all' : 'Select all'}{filtered && count ? ` ${count.toLocaleString()} matching` : ''}</span>
+        </label>
+    )
+}
+
+/** The check on a tile's artwork while bulk edit is on; the whole tile toggles it too. */
+export function BulkTileCheck({title, chosen, onToggle}: {title: string, chosen: boolean, onToggle: () => void}) {
+    return (
+        <label className="bulk-tile-check" onClick={(event) => event.stopPropagation()}>
+            <input type="checkbox" className="bulk-check" checked={chosen} aria-label={`Choose ${title}`} onChange={onToggle}/>
         </label>
     )
 }

@@ -7,6 +7,16 @@
 th.bulk-check-cell, td.bulk-check-cell { width: 1%; padding-right: 0 !important; }
 tr.bulk-row.is-selected > td { background: rgba(59, 130, 246, .12); }
 
+/* A tile, such as the Library's, that bulk edit chooses: a check on its artwork */
+.bulk-tile-check {
+  position: absolute; top: 8px; right: 8px; z-index: 2; display: grid; place-items: center; width: 34px; height: 34px;
+  border-radius: 50%; background: rgba(15, 23, 42, .65); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); cursor: pointer;
+}
+.bulk-tile-check .bulk-check { width: 20px; height: 20px; }
+.bulk-tile { cursor: pointer; user-select: none; }
+.library-tile.is-selected { border-color: #3b82f6; background: rgba(59, 130, 246, .10); box-shadow: 0 0 0 1px #3b82f6; }
+.movie-poster-card.is-selected .movie-poster-art { box-shadow: 0 0 0 3px #3b82f6; }
+
 .mobile-data-card.bulk-card { display: grid; grid-template-columns: auto minmax(0, 1fr); }
 .mobile-data-card.bulk-card .mobile-data-chevron { display: none; }
 .mobile-data-card.bulk-card.is-selected { border-color: #3b82f6; background: rgba(59, 130, 246, .10); }
