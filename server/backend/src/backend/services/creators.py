@@ -278,7 +278,7 @@ def _section_record(section: SectionRef, position: int, status: SectionStatus = 
 def _new_account(s: Session, creator: Creator, source_key: str, site_key: str, details: CreatorDetails) -> CreatorAccount:
     account = CreatorAccount(
         source_key=source_key, site_key=site_key, site_ref=details.ref, url=details.url, handle=details.handle,
-        avatar_path=details.avatar_url,
+        avatar_path=details.avatar_url, banner_path=details.banner_url,
     )
     account.sections = [
         _section_record(section, position) for position, section in enumerate(details.sections)
@@ -463,12 +463,16 @@ def _place(
             url = main_feed.url if main_feed is not None else account.url
             if not url:
                 raise ServiceError(f"{creator.title} has no page that lists all of its videos")
-            # An artist without a picture of their own shows their newest album's cover.
-            image = creator.avatar_path or next((sections[plan.ref].image_path for plan in main_plans if sections[plan.ref].image_path), None)
+            # The account's own picture on its Site, not that of the creator's other accounts. An artist without a
+            # picture of their own shows their newest album's cover.
+            image = account.avatar_path or next(
+                (sections[plan.ref].image_path for plan in main_plans if sections[plan.ref].image_path), None,
+            )
             main = _new_collection(
                 s, account, settings, title=main_collection_title(account), slug=account.site_ref, url=url,
                 description=creator.description, image=image, added_by_id=added_by_id,
             )
+            main.background_image_path = account.banner_path
             account.main_collection = main
             made.append(main)
         else:
@@ -663,6 +667,22 @@ class FollowResult:
     ignored: list[CreatorSection]
 
 
+def take_account_pictures(account: CreatorAccount, *, avatar: str | None, banner: str | None) -> None:
+    """Keep the account's picture and banner on its Site. Its own collection shows them, as its picture and its
+    background, where it still shows what the Site gave before, or what the creator's other accounts have."""
+    main = account.main_collection
+    for field, shown_as, value in (
+        ("avatar_path", "thumbnail_landscape_path", avatar), ("banner_path", "background_image_path", banner),
+    ):
+        if not value:
+            continue
+        from_site = {getattr(account, field), getattr(account.creator, field)}
+        from_site |= {getattr(other, field) for other in account.creator.accounts}
+        if main is not None and getattr(main, shown_as) in from_site:
+            setattr(main, shown_as, value)
+        setattr(account, field, value)
+
+
 def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails, *, now: datetime) -> FollowResult:
     """Take in what the Site says about a creator's account now: its handle and its sections' titles and counts, the
     sections it did not have before, which the creator's setting adds, ignores or asks about, new playlists too, and
@@ -671,6 +691,7 @@ def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails,
 
     ``details`` was looked up before the write transaction; ``s`` is a write transaction's session."""
     creator = account.creator
+    take_account_pictures(account, avatar=details.avatar_url, banner=details.banner_url)
     if creator.accounts[0] is account:
         # A name the user gave stays.
         if details.title and details.title != creator.title and not creator.title_from_user:
@@ -682,7 +703,7 @@ def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails,
         ):
             if value and getattr(creator, field) != value:
                 setattr(creator, field, value)
-    for field, value in (("handle", details.handle), ("url", details.url), ("avatar_path", details.avatar_url)):
+    for field, value in (("handle", details.handle), ("url", details.url)):
         if value and getattr(account, field) != value:
             setattr(account, field, value)
     account.checked_at = now
@@ -1055,7 +1076,7 @@ def split_account(s: Session, account: CreatorAccount, details: CreatorDetails |
         title=details.title if details else creator.title,
         description=details.description if details else creator.description,
         avatar_path=details.avatar_url if details else account.avatar_path or creator.avatar_path,
-        banner_path=details.banner_url if details else creator.banner_path,
+        banner_path=details.banner_url if details else account.banner_path or creator.banner_path,
         links=list(details.links) if details else [], facts=list(details.facts) if details else [],
         added_by_id=creator.added_by_id, new_lists={site: dict(actions) for site, actions in creator.new_lists.items()}, genre=creator.genre,
         content_rating=creator.content_rating,

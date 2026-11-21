@@ -929,7 +929,7 @@ class ClipsSource(ListedSource):
     def creator_details(self, ref, progress=lambda step: None):
         return CreatorDetails(
             ref="clips-northwind", url=CLIPS_ROOT, title="Northwind Workshop", handle="@nw-clips",
-            avatar_url="https://clips.example/northwind.jpg",
+            avatar_url="https://clips.example/northwind.jpg", banner_url="https://clips.example/banner.jpg",
             sections=(SectionRef("videos", f"{CLIPS_ROOT}/videos", VIDEOS),),
         )
 
@@ -989,6 +989,53 @@ def test_an_account_that_joins_a_creator_names_both_own_collections_after_their_
     split = client.post(f"/api/creators/workshop/accounts/{accounts[1]['id']}/split").json()
     assert client.post(f"/api/creators/{split['slug']}/combine", json={"otherSlug": "workshop"}).status_code == 200
     assert _main_titles(client, split["slug"]) == {"clips": "Northwind Workshop Clips", "tube": "Workshop Videos"}
+
+
+def test_an_accounts_own_collection_shows_the_pictures_of_its_own_site(client, tube, session):
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, CreatorAccount
+    from backend.services.creators import take_account_pictures
+
+    registry.register(ClipsSource())
+    _one_show(client)
+
+    def tube_picture(s):
+        creator = s.scalar(select(CreatorAccount).where(CreatorAccount.site_key == "tube")).creator
+        creator.avatar_path = creator.accounts[0].avatar_path = "https://tube.example/northwind.jpg"
+    run_write_transaction(tube_picture)
+    assert _add_clips(client, into="workshop").status_code == 201
+
+    def pictures(s):
+        main = s.scalar(select(Collection).where(Collection.slug == "clips-northwind"))
+        return main.thumbnail_landscape_path, main.background_image_path
+    clips = ("https://clips.example/northwind.jpg", "https://clips.example/banner.jpg")
+    assert run_write_transaction(pictures) == clips
+
+    # An account added before it kept its own pictures showed the other Site's picture until it was looked up again.
+    def as_before(s):
+        account = s.scalar(select(CreatorAccount).where(CreatorAccount.site_key == "clips"))
+        account.avatar_path = account.banner_path = None
+        account.main_collection.thumbnail_landscape_path = "https://tube.example/northwind.jpg"
+        account.main_collection.background_image_path = None
+    run_write_transaction(as_before)
+
+    def look_up(s):
+        account = s.scalar(select(CreatorAccount).where(CreatorAccount.site_key == "clips"))
+        take_account_pictures(account, avatar=clips[0], banner=clips[1])
+    run_write_transaction(look_up)
+    assert run_write_transaction(pictures) == clips
+
+    # A picture the user chose stays when the Site's changes.
+    def chosen(s):
+        s.scalar(select(Collection).where(Collection.slug == "clips-northwind")).thumbnail_landscape_path = "mine.jpg"
+    run_write_transaction(chosen)
+
+    def new_picture(s):
+        account = s.scalar(select(CreatorAccount).where(CreatorAccount.site_key == "clips"))
+        take_account_pictures(account, avatar="https://clips.example/new.jpg", banner=None)
+        return account.avatar_path
+    assert run_write_transaction(new_picture) == "https://clips.example/new.jpg"
+    assert run_write_transaction(pictures) == ("mine.jpg", clips[1])
 
 
 def _video(session, collection, slug, published):

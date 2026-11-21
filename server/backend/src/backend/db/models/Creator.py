@@ -92,6 +92,7 @@ class CreatorAccount(Base):
     url: Mapped[Optional[str]] = mapped_column(comment="The account's page; empty when the Site has none, such as a Daily Wire host")
     handle: Mapped[Optional[str]]
     avatar_path: Mapped[Optional[str]] = mapped_column(comment="The account's own picture on its Site")
+    banner_path: Mapped[Optional[str]] = mapped_column(comment="The account's own banner on its Site")
     main_collection_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("collections.id", ondelete="SET NULL", use_alter=True),
         comment="The collection named after the creator that takes this account's uploads",
