@@ -956,16 +956,23 @@ def gather(s: Session, account: CreatorAccount, collection: Collection) -> Colle
 
 def offered_lists(collection: Collection) -> list[CollectionList]:
     """The lists the collection's Seasons dialog offers to switch on or off. A collection that gathers some of an
-    account's lists, other than the account's own collection, only offers the ones the creator gave it, and not one
-    that another collection of the creator holds now: it can switch its lists off, but never take another's."""
-    account = collection.creator_account
-    if account is None or account.main_collection is collection:
+    account's lists only offers the ones it knows, which for one other than the account's own collection are the
+    ones the creator gave it, and not one that another collection of the creator holds now: it can switch its lists
+    off, but never take another's."""
+    account = collection.creator_account or next((
+        account for account in (collection.creator.accounts if collection.creator else [])
+        if account.main_collection_id == collection.id
+    ), None)
+    if account is None:
         return list(collection.lists)
     elsewhere = {
         link.ref for other in account.gatherers if other is not collection for link in other.lists if is_in(other, link)
     } | {
-        section.ref for section in account.sections
-        if section.kind == SectionKind.LIST and own_collection(account, section) not in (None, collection)
+        section.ref for section in account.sections if section.kind == SectionKind.LIST and any(
+            other is not collection and (
+                other.sharing_url == section.url or other.slug == section_collection_slug(account.site_ref, section)
+            ) for other in account.creator.collections
+        )
     }
     return [link for link in collection.lists if link.added_by_user or link.ref not in elsewhere]
 

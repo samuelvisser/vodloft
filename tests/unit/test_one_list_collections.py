@@ -129,3 +129,16 @@ def test_the_migration_makes_an_older_collection_of_one_list_with_another_list_h
     assert own.as_season and own.season.name == "Tool Reviews"
     assert {season.name for season in tools.seasons} == {"Tool Reviews"}
     assert {episode.season_id for episode in session.scalars(select(Episode).where(Episode.collection_id == tools_id))} == {own.season_id}
+
+
+def test_the_creators_own_collection_does_not_offer_a_list_that_has_a_collection_of_its_own(client, session):
+    from backend.api.endpoints.collections.seasons.service import seasons_view
+
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "PLcabin", "target": "main"}, {"ref": "PLtools", "target": "own"},
+    ]})
+
+    assert response.status_code == 201, response.text
+    offered = {playlist.title for playlist in seasons_view(session, "UCworkshop").playlists}
+    assert "Tool Reviews" not in offered
+    assert "Building the Cabin" in offered
