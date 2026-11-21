@@ -54,8 +54,8 @@ class EpisodeFilterField(StrEnum):
     TYPES = "types"
     SEASONS = "seasons"
     UNPLAYABLE_FORMATS = "unplayable"
-    """Media yt-dlp only downloads with --allow-unplayable-formats, such as media protected by DRM. Offered
-    for Collections whose own yt-dlp options allow unplayable formats."""
+    """Media yt-dlp only downloads with --allow-unplayable-formats: media protected by DRM, or that yt-dlp found
+    no playable formats for. Offered for Collections whose own yt-dlp options allow unplayable formats."""
     PUBLISHED = "published"
     """A date line: the last N days, the latest N episodes, or since a date."""
     DOWNLOADED = "downloaded"

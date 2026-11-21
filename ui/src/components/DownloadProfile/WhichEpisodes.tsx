@@ -358,8 +358,8 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
             return (
                 <div className="help">
                     Matches what yt-dlp can only download because this collection’s yt-dlp options
-                    include <code>--allow-unplayable-formats</code>, such as media protected by DRM. VODLoft saves what
-                    yt-dlp downloads as it is, so it may not play.
+                    include <code>--allow-unplayable-formats</code>: media protected by DRM, or that yt-dlp found no
+                    playable formats for. VODLoft saves what yt-dlp downloads as it is, so it may not play.
                 </div>
             )
         }

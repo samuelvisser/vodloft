@@ -18,7 +18,7 @@ from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBa
 from backend.services.collection_cookies import note_failed_download
 from backend.services.download_plans import prepare_download_plan
 from backend.services.download_relocation import remove_folders_left_empty
-from backend.services.unplayable_formats import tries_unplayable_formats
+from backend.services.unplayable_formats import downloads_unplayable_formats, tries_unplayable_formats
 from backend.services.media_access import lock_refused, media_access, media_site_key, site_access
 from backend.services.sites import episode_site
 from backend.services.throttle_guard import record_throttled
@@ -34,7 +34,9 @@ from config import get_settings
 from config.network import is_no_internet_error
 from sources import UnknownSourceError, get_source
 from sources.pacing import RequestCanceled, request_context
-from downloader import AccessRequiredError, DownloadCanceled, EncryptedMediaError, ThrottledError, media_duration
+from downloader import (
+    AccessRequiredError, DownloadCanceled, EncryptedMediaError, ThrottledError, UnplayableFormatsError, media_duration,
+)
 from downloader.capacity import resources
 from downloader.coordinator import DownloadExecution, execute_download_plan
 from downloader.storage.replacement import (
@@ -101,10 +103,10 @@ _TRY_UNPLAYABLE = "try_unplayable"
 
 
 def _stop_unplayable_retry(session: Session, media_download_id: int) -> bool:
-    """After a failed download of media protected by DRM that yt-dlp tried with unplayable formats allowed, by its
-    Collection's own options: stop retrying it, and say so. Its download stays offered."""
+    """After a failed download that yt-dlp made with ``--allow-unplayable-formats``, by its Collection's own options:
+    stop retrying it, and say so. Its download stays offered."""
     download = session.get(MediaDownloadBase, media_download_id)
-    if download is None or not (download.media.drm_protected and tries_unplayable_formats(download.media)):
+    if download is None or not downloads_unplayable_formats(download.media):
         return False
     download.automatic_retry_suppressed = True
     return True
@@ -123,6 +125,16 @@ def _mark_drm_protected(session: Session, media_download_id: int) -> bool | str:
     if tries_unplayable_formats(download.media):
         return _TRY_UNPLAYABLE
     download.automatic_retry_suppressed = True
+    return True
+
+
+def _mark_unplayable(session: Session, media_download_id: int) -> bool:
+    """yt-dlp found no playable formats for the media, though it is not protected by DRM. In a Collection whose own
+    yt-dlp options allow unplayable formats, mark it, so that its retry downloads it with them."""
+    download = session.get(MediaDownloadBase, media_download_id)
+    if download is None or not tries_unplayable_formats(download.media):
+        return False
+    download.media.unplayable_formats = True
     return True
 
 
@@ -460,6 +472,9 @@ def run_download(
             if outcome:
                 # Retrying cannot help; the item now shows it cannot be downloaded.
                 return TaskResult(summary=f"{title} is protected by DRM and cannot be downloaded", outcome="failed")
+        if isinstance(exc, UnplayableFormatsError) and run_write_transaction(lambda w: _mark_unplayable(w, media_download_id)):
+            # Its retry downloads it with unplayable formats allowed.
+            raise
         if refused is not None:
             label = run_write_transaction(lambda w: _lock_media(w, media_download_id, refused))
             if label is not None:

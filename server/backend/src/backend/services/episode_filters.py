@@ -39,7 +39,7 @@ from backend.db.models import Collection, DownloadProfile, DownloadProfileFilter
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.media_access import AccessLocks
 from backend.services.removed_downloads import awaits_keep_answer
-from backend.services.unplayable_formats import collection_allows_unplayable_formats
+from backend.services.unplayable_formats import collection_allows_unplayable_formats, needs_unplayable_formats
 from backend.services.regex_check import PatternError, compile_pattern, search, split_inline_ignore_case
 from backend.types.download_profile_types import (
     DATE_FIELDS,
@@ -117,7 +117,7 @@ def filter_matches(item: EpisodeFilter, episode: Episode) -> Optional[bool]:
     if item.field == EpisodeFilterField.SEASONS:
         return episode.season is not None and episode.season.slug in (item.season_slugs or ())
     if item.field == EpisodeFilterField.UNPLAYABLE_FORMATS:
-        return episode.drm_protected
+        return needs_unplayable_formats(episode)
     if item.field == EpisodeFilterField.DURATION:
         duration = episode.duration or 0
         if duration <= 0 or not item.duration_seconds:

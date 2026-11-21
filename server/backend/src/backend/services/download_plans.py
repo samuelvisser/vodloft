@@ -28,7 +28,7 @@ from backend.services.download_quality import (
 from backend.types.download_profile_types import AutoSubtitles
 from backend.services.source_options import ytdlp_source_options
 from backend.services.throttle_guard import refuses_throttled
-from backend.services.unplayable_formats import tries_unplayable_formats
+from backend.services.unplayable_formats import downloads_unplayable_formats
 from backend.services.movies import update_movie_extra_source_metadata
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat, keeps_tracks
@@ -96,9 +96,10 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     option_texts = [("the yt-dlp Source", ytdlp_source_options(session))]
     if episode is not None:
         option_texts.append((f"the Collection '{episode.collection.title}'", episode.collection.ytdlp_options))
-    # Media protected by DRM is only tried with --allow-unplayable-formats, when its Collection's own options have it.
-    # yt-dlp then merges and converts nothing, so other media is downloaded without it.
-    unplayable = media.drm_protected and tries_unplayable_formats(media)
+    # Only media protected by DRM, or that yt-dlp found no playable formats for, is downloaded with
+    # --allow-unplayable-formats, when its Collection's own options have it. yt-dlp then merges and converts nothing,
+    # so other media is downloaded without it.
+    unplayable = downloads_unplayable_formats(media)
     subtitle_request = ytdlp_subtitles(profile, AutoSubtitles.NEVER)
     default_languages = default_subtitle_languages(profile)
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
@@ -275,6 +276,12 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         # yt-dlp writes the video's info file while it downloads the media.
         assets.append(SidecarSpec(
             "info_json", "info_json", url=source.url, extension="json", target_suffix=".info.json",
+            source_format="ytdlp", required=False,
+        ))
+    if source.ytdlp_unplayable and not source.audio_only:
+        # A site without one file of both gives yt-dlp the sound as a file of its own, kept beside the video.
+        assets.append(SidecarSpec(
+            "separate_audio", "audio", url=source.url, extension="m4a", target_suffix=".audio.m4a",
             source_format="ytdlp", required=False,
         ))
     if (publish_subtitles or embed_subtitles) and source.ytdlp_command:

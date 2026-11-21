@@ -121,8 +121,8 @@ class SidecarSpec:
     attempts: int = 3
     allowed_extensions: tuple[str, ...] = ()
     source_format: Literal["direct", "hls_webvtt", "ytdlp"] = "direct"
-    """``ytdlp``: what yt-dlp writes while it downloads the media: the subtitles, one file per language, or the
-    video's info file."""
+    """``ytdlp``: what yt-dlp writes while it downloads the media: the subtitles, one file per language, the
+    video's info file, or the sound it kept beside the video without merging them."""
     language: str | None = None
     forced: bool = False
     title: str | None = None
@@ -152,9 +152,12 @@ class SidecarSpec:
         ):
             raise ValueError("HLS WebVTT assets must be remote subtitle playlists converted to SRT")
         if self.source_format == "ytdlp" and (
-            self.url is None or (self.kind, self.extension) not in (("subtitle", "srt"), ("info_json", "json"))
+            self.url is None
+            or (self.kind, self.extension) not in (("subtitle", "srt"), ("info_json", "json"), ("audio", "m4a"))
         ):
-            raise ValueError("yt-dlp writes a remote page's subtitles as SRT, or its info file as JSON")
+            raise ValueError(
+                "yt-dlp writes a remote page's subtitles as SRT, its info file as JSON, or its separate sound as M4A"
+            )
 
 
 @dataclass(frozen=True, kw_only=True)

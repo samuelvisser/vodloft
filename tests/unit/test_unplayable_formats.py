@@ -83,7 +83,7 @@ def test_unplayable_formats_download_one_file_and_process_nothing():
     )
     command = source.ytdlp_command
     assert command[:2] == ("yt-dlp", "--allow-unplayable-formats")
-    assert command[command.index("-f") + 1] == "b[ext=mp4]"
+    assert command[command.index("-f") + 1] == "b[ext=mp4]/bv*[ext=mp4]+ba[ext=m4a]"
     assert command[command.index("-S") + 1].startswith("res:1080,")
     for processing in ("--merge-output-format", "--remux-video", "-x", "--sponsorblock-remove", "--remove-chapters"):
         assert processing not in command
@@ -137,8 +137,8 @@ def _download(session, collection, slug):
     from backend.db.models.media_download import EpisodeMediaDownload
 
     episode = next(episode for episode in collection.episodes if episode.slug == slug)
-    local = CollectionLocalMediaProfile(slug="collections", name="Collections", preferred_format="format_1080p",
-                                        output_template="/downloads/{{ collection_title }}/{{ episode_title }}.ext")
+    local = CollectionLocalMediaProfile(slug=f"collections-{slug}", name=f"Collections {slug}", preferred_format="format_1080p",
+                                        output_template=f"/downloads/{slug}/{{{{ episode_title }}}}.ext")
     session.add(local)
     session.flush()
     download = EpisodeMediaDownload(
@@ -174,3 +174,58 @@ def test_media_found_protected_while_downloading_is_tried_again_with_unplayable_
     collection.ytdlp_options = ""
     assert _mark_drm_protected(session, download.id) is True
     assert download.automatic_retry_suppressed is True
+
+
+UNMERGED_YTDLP = """
+import pathlib, sys
+args = sys.argv[1:]
+work = pathlib.Path(args[args.index("-P") + 1])
+# With --allow-unplayable-formats yt-dlp leaves the video and its sound unmerged.
+(work / "media.f137.mp4").write_bytes(b"v" * 30)
+(work / "media.f140.m4a").write_bytes(b"a" * 7)
+print("[vodloft-file] " + str(work / "media.mp4"))
+"""
+
+
+def test_video_and_sound_left_unmerged_are_both_kept(tmp_path):
+    import sys
+
+    from downloader.ytdlp import download_ytdlp
+
+    script = tmp_path / "unmerged_ytdlp.py"
+    script.write_text(UNMERGED_YTDLP)
+    audio_dir = tmp_path / "sidecars"
+    audio_dir.mkdir()
+    result = download_ytdlp(
+        "https://site.example/v", str(tmp_path / "out.mp4"), command=(sys.executable, str(script)),
+        separate_audio_dir=audio_dir,
+    )
+    assert (tmp_path / "out.mp4").read_bytes() == b"v" * 30
+    assert result.separate_audio == str(audio_dir / "media.audio.m4a")
+    assert (audio_dir / "media.audio.m4a").read_bytes() == b"a" * 7
+
+
+def test_no_playable_formats_is_an_unplayable_formats_error():
+    from downloader import UnplayableFormatsError
+    from downloader.ytdlp import _error
+
+    assert isinstance(_error(["ERROR: [site] 1: No video formats found!"]), UnplayableFormatsError)
+
+
+def test_media_without_playable_formats_is_tried_again_with_unplayable_formats(session):
+    from backend.services.unplayable_formats import downloads_unplayable_formats
+    from task_manager.tasks.download_adapter import _mark_unplayable, _stop_unplayable_retry
+
+    collection = _collection(session)
+    download = _download(session, collection, "open")
+    assert _mark_unplayable(session, download.id) is True
+    assert download.media.unplayable_formats is True and download.media.drm_protected is False
+    assert downloads_unplayable_formats(download.media)
+    assert not download.automatic_retry_suppressed
+    # When that retry fails too, it is not retried again.
+    assert _stop_unplayable_retry(session, download.id) is True
+    assert download.automatic_retry_suppressed is True
+
+    collection.ytdlp_options = ""
+    other = _download(session, collection, "locked")
+    assert _mark_unplayable(session, other.id) is False

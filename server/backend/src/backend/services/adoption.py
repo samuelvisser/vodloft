@@ -133,6 +133,9 @@ def sidecar_assets(media_path: Path) -> list[tuple[str, str, Path]]:
         found.append(("nfo", "nfo", media_path.parent / f"{stem}.nfo"))
     if f"{stem}.info.json" in names:
         found.append(("info_json", "info_json", media_path.parent / f"{stem}.info.json"))
+    if f"{stem}.audio.m4a" in names:
+        # The sound yt-dlp kept apart from a video of unplayable formats.
+        found.append(("separate_audio", "audio", media_path.parent / f"{stem}.audio.m4a"))
     for name in names:
         if not name.startswith(f"{stem}."):
             continue
