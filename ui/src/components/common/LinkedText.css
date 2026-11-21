@@ -1,0 +1,13 @@
+/* A web address in a description: underlined in the text's own color, with the open-link icon after it. */
+a.text-link, a.text-link:visited {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-thickness: 1px;
+    /* A long address wraps anywhere rather than widen the page on a phone. */
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+a.text-link:hover, a.text-link:focus-visible { color: var(--link-color); }
+.text-link-end { white-space: nowrap; }
+.text-link-icon { display: inline-block; margin-left: .3em; font-size: .75em; }

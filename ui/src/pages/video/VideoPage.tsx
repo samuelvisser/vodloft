@@ -24,6 +24,7 @@ import {apiUrl} from '../../lib/api'
 import DurationPill from '../../components/common/DurationPill'
 import {addLocalMediaProfilePath} from '../../types/local_media_profile'
 import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
+import LinkedText from '../../components/common/LinkedText'
 
 /** The site a video is on, since one Source can serve many sites. */
 export default function VideoPage() {
@@ -202,7 +203,7 @@ export default function VideoPage() {
                 {!!video.description?.trim() && (
                     <section className="episode-description" aria-labelledby="video-description-title">
                         <h2 id="video-description-title">Description</h2>
-                        <p>{video.description}</p>
+                        <p><LinkedText text={video.description}/></p>
                     </section>
                 )}
 

@@ -30,6 +30,7 @@ import EpisodeTypePill from '../../components/Episode/EpisodeTypePill'
 import {fileWordsFor, wordsFor} from '../../lib/collectionWords'
 import {addLocalMediaProfilePath} from '../../types/local_media_profile'
 import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
+import LinkedText from '../../components/common/LinkedText'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -367,7 +368,7 @@ export default function EpisodePage() {
                 {!!episode.description?.trim() && (
                     <section className="episode-description" aria-labelledby="episode-description-title">
                         <h2 id="episode-description-title">Description</h2>
-                        <p>{episode.description}</p>
+                        <p><LinkedText text={episode.description}/></p>
                     </section>
                 )}
 
