@@ -2,7 +2,7 @@ import {useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode} fr
 import Switch from 'react-switch'
 import {Link} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 
 import FolderField from '../ExistingFiles/FolderField'
 import SimpleSelect from '../common/SimpleSelect'

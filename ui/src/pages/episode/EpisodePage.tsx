@@ -1,7 +1,7 @@
 import {sourceControls} from '../../lib/sourceControls'
 import {useState} from 'react'
 import {Link, useLocation, useNavigate, useParams} from 'react-router-dom'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, usePublishStatusLabels, useSkippedByFilter, useSourceLookup, useWaitingForCountdown} from '../../lib/queries'

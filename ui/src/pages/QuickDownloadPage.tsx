@@ -2,7 +2,7 @@ import {FormEvent, useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useQueryClient} from '@tanstack/react-query'
 import {useSearchParams} from 'react-router-dom'
-import {toast} from 'react-hot-toast'
+import {toast} from '../lib/toast'
 import {faIcon} from '../icons/faIcon'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'

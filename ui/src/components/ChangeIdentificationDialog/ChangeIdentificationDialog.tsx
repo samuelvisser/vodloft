@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import Switch from 'react-switch'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {toast} from 'react-hot-toast'
+import {toast} from '../../lib/toast'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'

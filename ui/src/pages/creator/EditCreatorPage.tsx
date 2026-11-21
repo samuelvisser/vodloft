@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {toast} from 'react-hot-toast'
+import {toast} from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {Link, useNavigate, useParams} from 'react-router-dom'

@@ -1,7 +1,7 @@
 import type {Noun} from '../../lib/collectionWords'
 import {useEffect, useMemo, useState, type ReactNode} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'
