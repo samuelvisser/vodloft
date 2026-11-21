@@ -25,6 +25,7 @@ import {apiUrl} from '../../lib/api'
 import SeasonsDialog from '../../components/CollectionSeasons/SeasonsDialog'
 import PageHeader, {PageHeaderAction} from '../../components/common/PageHeader'
 import {collectionWords, wordsFor} from '../../lib/collectionWords'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
 const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
   default: {label: 'Like other Collections'},
@@ -288,6 +289,12 @@ export default function EditCollectionPage() {
 
   return (
     <section className="view" aria-labelledby="edit-collection-title">
+      {collection && (
+        <Breadcrumb className="page-breadcrumb" items={[
+          {label: 'Library', to: '/library'},
+          {label: collection.title, to: `/collection/${collection.slug}`},
+        ]}/>
+      )}
       <PageHeader
         title="Edit collection" titleId="edit-collection-title"
         actions={collection && (

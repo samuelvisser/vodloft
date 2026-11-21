@@ -28,6 +28,7 @@ import {
     downloadsSummary, leftOutByText, mayDeleteOutOfScope, OutOfScopeChecklist, useDeleteOutOfScope, useOutOfScopePicks,
 } from '../../components/DownloadProfile/OutOfScopeDownloadsDialog'
 import type {OutOfScopePreview} from '../../types/schemas/download_profile'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
 type RouteParams = { id?: string }
 
@@ -214,6 +215,12 @@ export default function EditDownloadProfilePage() {
 
     return (
         <section className="view" aria-labelledby="edit-download-profile-title">
+            {downloadProfile && (
+                <Breadcrumb className="page-breadcrumb" items={[
+                    {label: 'Download Profiles', to: '/download-profiles'},
+                    {label: 'Profile', to: `/download-profile/${downloadProfile.id}`},
+                ]}/>
+            )}
             <div className="view-header">
                 <h1 id="edit-download-profile-title">Edit Download Profile</h1>
             </div>

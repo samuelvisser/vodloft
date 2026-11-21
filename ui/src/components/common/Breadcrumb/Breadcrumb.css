@@ -1,0 +1,48 @@
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    color: var(--muted, #777);
+    font-size: 0.9rem;
+}
+
+/* Each step is a chevron and a link; the chevron sits in the trail's own gap. */
+.breadcrumb .breadcrumb-step {
+    display: contents;
+}
+
+.breadcrumb a {
+    flex: 0 0 auto;
+}
+
+/* A long last name is cut short rather than pushing the page's buttons onto a row of their own. */
+.breadcrumb .breadcrumb-step:last-child a {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.breadcrumb svg {
+    flex: 0 0 auto;
+    width: 9px;
+    opacity: 0.6;
+}
+
+/* On a page with no row of buttons beside it, the trail stands on its own above the title. */
+.breadcrumb.page-breadcrumb {
+    margin-bottom: 12px;
+}
+
+@media (max-width: 720px) {
+    .breadcrumb {
+        gap: 8px;
+        font-size: 0.82rem;
+    }
+
+    .breadcrumb.page-breadcrumb {
+        margin-bottom: 10px;
+    }
+}
