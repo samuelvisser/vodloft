@@ -5,18 +5,19 @@ import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {toast} from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
 import {addCreatorSections, showCreatorSections} from '../../lib/queries'
-import {capitalized, joinedNames} from '../../types/creator'
+import {joinedNames} from '../../types/creator'
 import type {CreatorPageRead} from '../../types/schemas/creator'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {BulkBar} from '../../components/ProfileBulkEdit/BulkEditControls'
-import {isMovie, mainSeasonOf, mainTitleOf, placeLabel, placeMove, type AccountSection, type Place} from './CreatorSectionsEditor'
+import {isMovie, placeLabel, placeMove, type AccountSection, type Place} from './CreatorSectionsEditor'
 import NewCreatorCollectionDialog from './NewCreatorCollectionDialog'
-import AnotherCollectionDialog, {otherCollections} from './AnotherCollectionDialog'
+import AddToCollectionDialog, {collectionChoices} from './AddToCollectionDialog'
+import {SECTION_ACTIONS, SECTIONS_ACTIONS} from './sectionActions'
 import {TitleList, namedSections, sectionNouns} from './sectionNames'
 import {isWaitingList, useAnswerList} from './useAnswerList'
 
 type BulkAction = {
-    id: 'main' | 'contents' | 'own' | 'another' | 'movie' | 'skip' | 'keep_out' | 'show'
+    id: 'collection' | 'own' | 'movie' | 'skip' | 'keep_out' | 'show'
     label: string
     icon: IconProp
     /** The chosen sections the action applies to. */
@@ -24,48 +25,33 @@ type BulkAction = {
 }
 
 /** What can be done with the chosen sections, each with the ones it applies to: the choices of each section's + menu. */
-function bulkActions(creator: CreatorPageRead, chosen: AccountSection[], onEdit: boolean): BulkAction[] {
+function bulkActions(creator: CreatorPageRead, chosen: AccountSection[]): BulkAction[] {
     const movies = chosen.filter(({account, section}) => isMovie(account, section))
     const sections = chosen.filter(({account, section}) => !isMovie(account, section))
-    const toMain = sections.filter(({account, section}) => section.kind === 'feed' || (section.kind === 'list' && account.site.linkSeasons))
-    const contents = sections.filter(({account, section}) => section.kind === 'list' && account.site.linkSeasons)
-    // Another collection of the creator: the ones of one account, which share its collections.
-    const gatherable = sections.filter((item) => otherCollections(creator, item).length > 0)
-    const another = gatherable.filter(({account}) => account.id === gatherable[0]?.account.id)
+    // Into a collection of the creator: the ones of one account, which share its collections.
+    const collected = sections.filter((item) => collectionChoices(creator, item).length > 0)
+    const toCollection = collected.filter(({account}) => account.id === collected[0]?.account.id)
     const lists = sections.filter(({section}) => section.kind === 'list')
     // Those already hidden on the creator page stay hidden.
     const hideable = chosen.filter(({section}) => section.status !== 'ignored')
     const hidden = chosen.filter(({section}) => section.status === 'ignored')
-    const mains = new Set(toMain.map(({account}) => mainTitleOf(creator, account)))
-    const mainLabel = () => {
-        if (mains.size !== 1) return 'Add to main collections'
-        const main = [...mains][0]
-        if (toMain.every(({section}) => section.kind === 'list')) return `${mainSeasonOf(creator, toMain[0].account).Plural} of ${main}`
-        return `Add to ${main}`
-    }
     const movieLabel = () => {
         if (movies.every(({section}) => section.movieSlug)) return `Join ${creator.title}`
         if (movies.every(({section}) => !section.movieSlug)) return 'Add to your library'
         return `Add ${joinedNames([...new Map(movies.map(({section}) => [section.names.plural, section.names])).values()]).plural}`
     }
-    const contentsMains = new Set(contents.map(({account}) => mainTitleOf(creator, account)))
     const actions: (BulkAction | false)[] = [
-        toMain.length > 0 && {id: 'main', label: mainLabel(), icon: faIcon('fass', 'plus'), items: toMain},
-        contents.length > 0 && {
-            id: 'contents', label: contentsMains.size === 1 ? `Add contents to ${[...contentsMains][0]}` : 'Add contents to main collections',
-            icon: faIcon('fass', 'layer-group'), items: contents,
-        },
+        toCollection.length > 0 && {id: 'collection', label: SECTION_ACTIONS.collection, icon: faIcon('fass', 'folder-tree'), items: toCollection},
         sections.length > 0 && {
-            id: 'own', label: sections.length === 1 ? 'Own collection' : 'Own collections', icon: faIcon('fass', 'folder-plus'),
+            id: 'own', label: sections.length === 1 ? SECTION_ACTIONS.own : SECTIONS_ACTIONS.own, icon: faIcon('fass', 'folder-plus'),
             items: sections,
         },
-        another.length > 0 && {id: 'another', label: 'Another collection…', icon: faIcon('fass', 'folder-tree'), items: another},
         movies.length > 0 && {id: 'movie', label: movieLabel(), icon: faIcon('fass', 'film'), items: movies},
         hideable.length > 0 && {
-            id: 'skip', label: onEdit ? 'Hide on creator page' : 'Do not show here again', icon: faIcon('fass', 'eye-slash'), items: hideable,
+            id: 'skip', label: SECTION_ACTIONS.skip, icon: faIcon('fass', 'eye-slash'), items: hideable,
         },
-        lists.length > 0 && {id: 'keep_out', label: lists.length === 1 ? 'Keep its videos out' : 'Keep their videos out', icon: faIcon('fass', 'ban'), items: lists},
-        hidden.length > 0 && {id: 'show', label: 'Show on creator page', icon: faIcon('fass', 'eye'), items: hidden},
+        lists.length > 0 && {id: 'keep_out', label: lists.length === 1 ? SECTION_ACTIONS.keepOut : SECTIONS_ACTIONS.keepOut, icon: faIcon('fass', 'ban'), items: lists},
+        hidden.length > 0 && {id: 'show', label: SECTION_ACTIONS.show, icon: faIcon('fass', 'eye'), items: hidden},
     ]
     return actions.filter((action): action is BulkAction => !!action)
 }
@@ -73,34 +59,6 @@ function bulkActions(creator: CreatorPageRead, chosen: AccountSection[], onEdit:
 /** What an action does, in words, before the user says yes. */
 function ActionNote({creator, action, onEdit}: {creator: CreatorPageRead, action: BulkAction, onEdit: boolean}) {
     const {items} = action
-    if (action.id === 'main') {
-        const main = mainTitleOf(creator, items[0].account)
-        const feeds = items.filter(({section}) => section.kind === 'feed')
-        const lists = items.filter(({section}) => section.kind === 'list')
-        const season = mainSeasonOf(creator, items[0].account)
-        const listed = (titles: string[]) => titles.length === 1 ? titles[0] : `${titles.slice(0, -1).join(', ')} and ${titles[titles.length - 1]}`
-        const listNoun = joinedNames([...new Map(lists.map(({section}) => [section.names.singular, section.names])).values()]).singular
-        const parts = [
-            feeds.length > 0 && `${listed(feeds.map(({section}) => section.title))} ${feeds.length === 1 ? 'goes' : 'go'} into ${main}`,
-            lists.length === 1 && `${lists[0].section.title} becomes ${season.a} of ${main}`,
-            lists.length > 1 && `each ${listNoun} becomes ${season.a} of ${main}`,
-        ].filter((part): part is string => !!part)
-        return (
-            <p>
-                {capitalized(parts.join(', and '))}. VODLoft keeps adding what {creator.title} puts in {items.length === 1 ? 'it' : 'them'}.
-            </p>
-        )
-    }
-    if (action.id === 'contents') {
-        const main = mainTitleOf(creator, items[0].account)
-        const season = mainSeasonOf(creator, items[0].account)
-        return (
-            <p>
-                {items.length === 1 ? `${items[0].section.title}'s` : 'Their'} {items[0].account.site.mediaNames.plural} join the others in {main},
-                without {season.a} of their own. VODLoft keeps adding what {creator.title} puts in {items.length === 1 ? 'it' : 'them'}.
-            </p>
-        )
-    }
     if (action.id === 'movie') {
         const owned = items.filter(({section}) => section.movieSlug).length
         const added = items.length - owned
@@ -137,12 +95,10 @@ function ActionNote({creator, action, onEdit}: {creator: CreatorPageRead, action
     )
 }
 
-const TARGETS: Record<'main' | 'contents' | 'movie' | 'skip', 'main' | 'main_loose' | 'own' | 'exclude'> = {
-    main: 'main', contents: 'main_loose', movie: 'own', skip: 'exclude',
-}
+const TARGETS: Record<'movie' | 'skip', 'own' | 'exclude'> = {movie: 'own', skip: 'exclude'}
 
 /** The actions that move a list's videos: a list that waits for the user's choice goes through the move dialog. */
-const MOVING = new Set<BulkAction['id']>(['main', 'contents'])
+const MOVING = new Set<BulkAction['id']>(['collection'])
 
 /**
  * The bar of actions for the creator's chosen sections that are not in the Library, and what each opens: a question
@@ -168,7 +124,7 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
     const {answerAll, dialog: answerDialog} = useAnswerList(creator, onDone)
     const none = chosen.length === 0
     // While none is chosen, the bar shows what the list's sections can have, unavailable.
-    const actions = bulkActions(creator, none ? items : chosen, onEdit)
+    const actions = bulkActions(creator, none ? items : chosen)
     const nouns = sectionNouns(items).plural
 
     /** Add ``items`` at ``place``: the ones that wait for a choice through the move dialog, the others at once. */
@@ -215,10 +171,8 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
 
     const choose = (action: BulkAction) => {
         if (action.id === 'own') setOwning(action.items)
-        else if (action.id === 'another') setPicking(action)
-        else if (action.id === 'keep_out') answerAll(action.items, {target: 'keep_out'}, 'Skip, and keep its videos out')
-        // The move dialog asks instead, when every one waits for a choice.
-        else if (MOVING.has(action.id) && action.items.every(isWaitingList)) void apply(action)
+        else if (action.id === 'collection') setPicking(action)
+        else if (action.id === 'keep_out') answerAll(action.items, {target: 'keep_out'}, SECTION_ACTIONS.keepOut)
         else setConfirming(action)
     }
 
@@ -226,10 +180,6 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
         const named = namedSections(action.items)
         if (action.id === 'show') return `Show ${named} on ${creator.title}'s page again?`
         if (action.id === 'skip') return onEdit ? `Hide ${named} on ${creator.title}'s page?` : `Stop showing ${named} here?`
-        if (action.id === 'main' || action.id === 'contents') {
-            const main = mainTitleOf(creator, action.items[0].account)
-            return `Add ${named} to ${main}?`
-        }
         if (action.items.every(({section}) => section.movieSlug)) return `Make ${named} ${creator.title}'s?`
         return `Add ${named} to your library?`
     }
@@ -271,9 +221,9 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
                 </ConfirmDialog>
             )}
             {picking && (
-                <AnotherCollectionDialog
+                <AddToCollectionDialog
                     creator={creator} item={picking.items[0]} confirmLabel="Add"
-                    title={`Another collection for ${namedSections(picking.items)}`} several={picking.items.length > 1}
+                    title={`Add ${namedSections(picking.items)} to a collection`} several={picking.items.length > 1}
                     onDismiss={() => setPicking(null)}
                     onPick={async (place) => { setPicking(null); await apply(picking, place) }}
                 />
