@@ -15,6 +15,7 @@ import SourceBadge from '../../components/Source/SourceBadge'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
 import ActionConfirmDialogue, {type ActionConfirmDialogueLocalMediaProfile} from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
+import RedownloadSwitch from '../../components/ActionConfirmDialogue/RedownloadSwitch'
 import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
 import {useActiveOperation} from '../../components/OperationNotifier/OperationNotifier'
 import RunningActions from '../../components/RunningActions/RunningActions'
@@ -1035,30 +1036,22 @@ export default function CollectionPage() {
         <p>
           Delete downloaded {fileWords.episode.singular} files in "{collection.title}".
         </p>
-        <div className="form-row">
-          <div className="bulk-delete-redownload">
-            <label htmlFor="bulk-delete-redownload">Re-download the deleted {fileWords.episode.plural}</label>
-            <Switch
-              id="bulk-delete-redownload"
-              checked={redownloadAfterDelete}
-              onChange={setRedownloadAfterDelete}
-              onColor="#0ea5e9" offColor="#d1d5db" uncheckedIcon={false} checkedIcon={false}
-            />
-          </div>
-          <div className="help">
-            {redownloadAfterDelete ? (
-              <>
-                VODLoft downloads each deleted {fileWords.episode.singular} again right away.
-                This can take a long time, use significant bandwidth, and is usually not needed.
-              </>
-            ) : (
-              <>
-                When you delete everything, VODLoft first disables any Download Profiles attached to the selected Local Media Profile or Profiles. Re-enable a disabled Download Profile whenever you want VODLoft to download its eligible {fileWords.episode.plural} again.
-                Deleting only older {fileWords.episode.plural} leaves Download Profiles on, so they may download those {fileWords.episode.plural} again.
-              </>
-            )}
-          </div>
-        </div>
+        <RedownloadSwitch
+          label={`Re-download the deleted ${fileWords.episode.plural}`}
+          checked={redownloadAfterDelete}
+          onChange={setRedownloadAfterDelete}
+          help={redownloadAfterDelete ? (
+            <>
+              VODLoft downloads each deleted {fileWords.episode.singular} again right away.
+              This can take a long time, use significant bandwidth, and is usually not needed.
+            </>
+          ) : (
+            <>
+              When you delete everything, VODLoft first disables any Download Profiles attached to the selected Local Media Profile or Profiles. Re-enable a disabled Download Profile whenever you want VODLoft to download its eligible {fileWords.episode.plural} again.
+              Deleting only older {fileWords.episode.plural} leaves Download Profiles on, so they may download those {fileWords.episode.plural} again.
+            </>
+          )}
+        />
       </ActionConfirmDialogue>
 
     </section>

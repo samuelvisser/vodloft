@@ -100,6 +100,28 @@ def test_scoped_redownload_operations_have_no_coordinator_target(
     assert definition.context()["downloads_requested"] == 2
 
 
+def test_movie_delete_downloads_operation_keeps_per_download_targets():
+    from backend.operations.movies import MovieDeleteDownloadsOperation
+
+    resource = SimpleNamespace(id=12, slug="movie", title="Movie")
+    definition = MovieDeleteDownloadsOperation(resource, media_download_ids=[4, 5, 4])
+    targets = definition.targets()
+
+    assert definition.kind == "movie.delete_downloads"
+    assert definition.resource_type == "movie"
+    assert definition.context() == {
+        "movie_slug": "movie",
+        "movie_title": "Movie",
+        "downloads_requested": 2,
+    }
+    assert [target.slot_key for target in targets] == ["media_download:4", "media_download:5"]
+    assert all(target.task_key == "media_download_bulk_action_worker" for target in targets)
+    assert [target.task_kwargs for target in targets] == [
+        {"media_download_id": 4, "action": "delete_artifact"},
+        {"media_download_id": 5, "action": "delete_artifact"},
+    ]
+
+
 def test_weighted_progress_uses_average_known_size_for_unknown_items():
     from task_manager.tasks.helpers.progress import weighted_progress_percent
 

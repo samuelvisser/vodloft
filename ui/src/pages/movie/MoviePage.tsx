@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
+import RedownloadSwitch from '../../components/ActionConfirmDialogue/RedownloadSwitch'
 import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
 import RunningActions from '../../components/RunningActions/RunningActions'
 import DownloadProgressStatus from '../../components/DownloadProgress/DownloadProgressStatus'
@@ -148,6 +149,11 @@ export default function MoviePage() {
         'movie',
         localMovie?.id ?? null,
     )
+    const deleteDownloadsOperation = useActiveOperation(
+        'movie.delete_downloads',
+        'movie',
+        localMovie?.id ?? null,
+    )
     const videoProfiles = useMemo(
         // A profile limited to other Sites still shows the download it already made. A movie that is not in the
         // library yet comes from The Daily Wire, whose Site has its Source's key.
@@ -171,7 +177,8 @@ export default function MoviePage() {
     const [submitting, setSubmitting] = useState<string | null>(null)
     const [addingMovie, setAddingMovie] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
-    const [redownloadConfirm, setRedownloadConfirm] = useState(false)
+    const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
+    const [redownloadAfterDelete, setRedownloadAfterDelete] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [retryingMetadata, setRetryingMetadata] = useState(false)
     const [refreshingExtrasStarting, setRefreshingExtrasStarting] = useState(false)
@@ -482,8 +489,8 @@ export default function MoviePage() {
         ? extraDownloadsBySlug.get(featuredTrailer.slug)
         : undefined
     const controlBusy = downloadControlBusy !== null
-    const hasRedownloadableMedia = (downloads ?? []).some((download) => download.artifactStatus !== 'absent')
-    const redownloadBusy = redownloadOperation !== undefined
+    const hasDownloadedMedia = (downloads ?? []).some((download) => download.artifactStatus !== 'absent')
+    const deleteDownloadsBusy = deleteDownloadsOperation !== undefined || redownloadOperation !== undefined
 
     const actionItems: ActionMenuItem[] = [
         ...(collectionsExtras ? [{
@@ -501,20 +508,27 @@ export default function MoviePage() {
             onSelect: () => void refreshMovieExtras(),
         }] : []),
         {
-            label: 'Delete and re-download all media',
-            icon: faIcon('fass', 'arrows-rotate'),
+            label: 'Delete downloads',
+            icon: faIcon('fass', 'trash'),
             tone: 'danger',
             separatorBefore: true,
-            disabled: redownloadBusy || !hasRedownloadableMedia,
-            disabledReason: redownloadOperation
-                ? 'A re-download operation is running for this movie.'
-                : !hasRedownloadableMedia
-                    ? 'This movie has no previously downloaded media.'
-                    : undefined,
-            operation: redownloadOperation,
-            starting: isStarting('movie.redownload_media'),
-            controls: operationControls(redownloadOperation, 're-download', false),
-            onSelect: () => setRedownloadConfirm(true),
+            disabled: deleteDownloadsBusy || !hasDownloadedMedia,
+            disabledReason: deleteDownloadsOperation
+                ? 'A delete downloads operation is running for this movie.'
+                : redownloadOperation
+                    ? 'A re-download operation is running for this movie.'
+                    : !hasDownloadedMedia
+                        ? 'This movie has no downloaded media.'
+                        : undefined,
+            operation: deleteDownloadsOperation ?? redownloadOperation,
+            starting: isStarting('movie.delete_downloads') || isStarting('movie.redownload_media'),
+            controls: deleteDownloadsOperation
+                ? operationControls(deleteDownloadsOperation, 'delete downloads')
+                : operationControls(redownloadOperation, 're-download', false),
+            onSelect: () => {
+                setRedownloadAfterDelete(false)
+                setDeleteDownloadsConfirm(true)
+            },
         },
     ]
 
@@ -730,23 +744,29 @@ export default function MoviePage() {
             <DownloadLogDialog row={logDownload} onClose={() => setLogDownloadId(null)}/>
 
             <ActionConfirmDialogue
-                open={redownloadConfirm && Boolean(localMovie)}
-                operationDefinition={frontendOperationDefinitions['movie.redownload_media']}
-                onStartingChange={onStartingChange('movie.redownload_media')}
-                requestPath={`/movies/${encodeURIComponent(slug || '')}/redownload-media`}
+                open={deleteDownloadsConfirm && Boolean(localMovie)}
+                operationDefinition={frontendOperationDefinitions[redownloadAfterDelete ? 'movie.redownload_media' : 'movie.delete_downloads']}
+                onStartingChange={onStartingChange(redownloadAfterDelete ? 'movie.redownload_media' : 'movie.delete_downloads')}
+                requestPath={`/movies/${encodeURIComponent(slug || '')}/${redownloadAfterDelete ? 'redownload-media' : 'delete-downloads'}`}
                 resourceLabel={movie.title}
-                title="Delete and re-download all media"
-                onDismiss={() => setRedownloadConfirm(false)}
-                icon={faIcon('fass', 'arrows-rotate')}
+                title="Delete downloads"
+                onDismiss={() => setDeleteDownloadsConfirm(false)}
+                icon={faIcon('fass', 'trash')}
                 iconTone="danger"
-                confirmLabel="Delete and re-download"
-                disabled={redownloadBusy || !hasRedownloadableMedia}
+                confirmLabel={redownloadAfterDelete ? 'Delete and re-download' : 'Delete downloads'}
+                disabled={deleteDownloadsBusy || !hasDownloadedMedia}
             >
                 <p>
-                    Delete every previously downloaded file for "{movie.title}", including the main movie
-                    and movie extras, and download those files again. Media that has never been downloaded
-                    will not be added by this action.
+                    Delete every downloaded file for "{movie.title}", including the main movie and movie extras.
                 </p>
+                <RedownloadSwitch
+                    label="Re-download the deleted files"
+                    checked={redownloadAfterDelete}
+                    onChange={setRedownloadAfterDelete}
+                    help={redownloadAfterDelete
+                        ? 'VODLoft downloads each deleted file again right away. Media that has never been downloaded will not be added.'
+                        : 'The files are not downloaded again until you download them yourself.'}
+                />
             </ActionConfirmDialogue>
 
             <ConfirmDialog

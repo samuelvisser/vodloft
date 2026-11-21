@@ -5,6 +5,7 @@ from ...models.movie import *
 from ...models.media_download import MediaDownloadAPICreate
 from ...models.operations import (
     MediaDownloadOperationAccepted,
+    MovieDeleteDownloadsOperationAccepted,
     MovieRedownloadOperationAccepted,
     TaskOperationAccepted,
 )
@@ -20,7 +21,7 @@ from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
 )
 from backend.security.access import Access, Area, Level
-from backend.security.deps import requires, signed_in
+from backend.security.deps import may_delete_files, requires, signed_in
 from backend.db.core import run_write_transaction
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
@@ -128,6 +129,20 @@ def movie_redownload_media(movie_slug: str):
     """Delete and re-download all existing movie and movie-extra artifacts."""
     def work(s):
         return request_movie_redownload(s, movie_slug)
+
+    return run_write_transaction(work)
+
+
+@router.post(
+    "/{movie_slug}/delete-downloads",
+    dependencies=[requires(Area.MANAGED_DOWNLOADS, Level.MANAGE), may_delete_files()],
+    response_model=MovieDeleteDownloadsOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def movie_delete_downloads(movie_slug: str):
+    """Delete all existing movie and movie-extra files, keeping their download records."""
+    def work(s):
+        return request_movie_download_delete(s, movie_slug)
 
     return run_write_transaction(work)
 

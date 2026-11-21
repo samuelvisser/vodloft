@@ -33,6 +33,10 @@ class MovieRedownloadOperationAccepted(TaskOperationAccepted):
     downloads_queued: int
 
 
+class MovieDeleteDownloadsOperationAccepted(TaskOperationAccepted):
+    downloads_queued: int
+
+
 class CollectionDownloadAllOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
 

@@ -353,10 +353,3 @@
 
 .rename-season-folders { display: flex; align-items: flex-start; gap: .6rem; margin-top: .75rem; font-weight: normal; cursor: pointer; }
 .rename-season-folders > span { display: flex; flex-direction: column; gap: 2px; }
-
-.bulk-delete-redownload {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
