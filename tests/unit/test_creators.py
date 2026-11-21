@@ -6,7 +6,7 @@ import json
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from sources import (
     CreatorDetails, CreatorPreset, Feature, Names, SectionKind, SectionRef, SectionRole, SectionType, Site, registry,
@@ -176,6 +176,26 @@ def test_adding_a_creator_puts_sections_into_the_new_collection_of_another(clien
     assert {(link.ref, link.enabled, link.as_season) for link in cabin.lists if link.enabled} == {
         ("PLcabin", True, False), ("PLtools", True, True),
     }
+
+
+def test_adding_a_deleted_creator_again_takes_back_their_collection(client, session):
+    from backend.db.models import Collection
+
+    plan = [{"ref": "videos", "target": "main"}, {"ref": "PLcabin", "target": "main"}]
+    assert client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan}).status_code == 201
+    assert client.delete("/api/creators/workshop").status_code == 204
+
+    # The collection stays, a plain one; adding the creator again makes it theirs instead of a second one of its link.
+    _steps, body = _lookup(client)
+    assert {section["ref"]: section["collectionSlug"] for section in body["sections"]}["videos"] == "UCworkshop"
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "PLtools", "target": "main"},
+    ]})
+    assert response.status_code == 201, response.text
+    assert [(c["slug"], c["links"]) for c in response.json()["collections"]] == [
+        ("UCworkshop", ["Videos", "Building the Cabin", "Tool Reviews"]),
+    ]
+    assert session.scalar(select(func.count()).select_from(Collection)) == 1
 
 
 def test_a_section_only_joins_the_new_collection_of_a_section_that_gets_one(client):

@@ -485,19 +485,28 @@ def _place(
             url = main_feed.url if main_feed is not None else account.url
             if not url:
                 raise ServiceError(f"{creator.title} has no page that lists all of its videos")
-            # The account's own picture on its Site, not that of the creator's other accounts. An artist without a
-            # picture of their own shows their newest album's cover.
-            image = account.avatar_path or next(
-                (sections[plan.ref].image_path for plan in main_plans if sections[plan.ref].image_path), None,
-            )
-            main = _new_collection(
-                s, account, settings, title=main_collection_title(account), slug=account.site_ref, url=url,
-                description=creator.description, image=image, added_by_id=added_by_id,
-            )
-            main.background_image_path = account.banner_path
-            account.main_collection = main
-            made.append(main)
-        else:
+            # A collection of this link left from before, such as when the creator was deleted, which kept their
+            # collections as plain ones, becomes the creator's own collection again.
+            left = s.scalar(select(Collection).where(Collection.sharing_url == url, Collection.creator_id.is_(None)))
+            if left is not None:
+                belong_to(left, creator)
+                left.creator_account = account
+                account.main_collection = left
+                main = left
+            else:
+                # The account's own picture on its Site, not that of the creator's other accounts. An artist without a
+                # picture of their own shows their newest album's cover.
+                image = account.avatar_path or next(
+                    (sections[plan.ref].image_path for plan in main_plans if sections[plan.ref].image_path), None,
+                )
+                main = _new_collection(
+                    s, account, settings, title=main_collection_title(account), slug=account.site_ref, url=url,
+                    description=creator.description, image=image, added_by_id=added_by_id,
+                )
+                main.background_image_path = account.banner_path
+                account.main_collection = main
+                made.append(main)
+        if main not in made:
             changed.append(main)
         _take_sections(account, main, main_plans, sections, new=main in made)
     for plan in wanted:
