@@ -103,6 +103,7 @@ class DownloadProfileAPIBaseIn(RequestBase):
     download_with_countdown: bool
     redownload_final: bool
     delete_older_episodes: bool
+    retention_includes_manual: bool = False
     upgrade_check: bool
     upgrade_after_days: int = Field(ge=1, le=365)
     upgrade_repeat: UpgradeRepeat
@@ -157,6 +158,7 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     download_with_countdown: bool
     redownload_final: bool
     delete_older_episodes: bool
+    retention_includes_manual: bool
     upgrade_check: bool
     upgrade_after_days: int
     upgrade_repeat: UpgradeRepeat

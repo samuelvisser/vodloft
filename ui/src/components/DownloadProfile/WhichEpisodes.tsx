@@ -124,7 +124,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
 
     // One line is open at a time. What it was when opened lets Cancel put it back; a new line has nothing and is removed.
     const [openId, setOpenId] = useState<string | null>(null)
-    const snapshot = useRef<{filter: EpisodeFilter; deleteOlder: boolean} | null>(null)
+    const snapshot = useRef<{filter: EpisodeFilter; deleteOlder: boolean; includeManual: boolean} | null>(null)
     const [showWhich, setShowWhich] = useState(false)
     // Which episodes the list shows: all, the ones that download, the ones that can't be, or the ones one line leaves out.
     const [shown, setShown] = useState<string>('all')
@@ -184,7 +184,11 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
 
     const openLine = (id: string, index: number) => {
         // A copy: the form changes the line's own object in place while it is edited.
-        snapshot.current = {filter: structuredClone(getValues(`filters.${index}`)), deleteOlder: !!getValues('deleteOlderEpisodes')}
+        snapshot.current = {
+            filter: structuredClone(getValues(`filters.${index}`)),
+            deleteOlder: !!getValues('deleteOlderEpisodes'),
+            includeManual: !!getValues('retentionIncludesManual'),
+        }
         setOpenId(id)
     }
     const closeLine = () => {
@@ -195,6 +199,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
         if (snapshot.current) {
             setValue(`filters.${index}`, snapshot.current.filter, {shouldDirty: true, shouldValidate: true})
             setValue('deleteOlderEpisodes', snapshot.current.deleteOlder, {shouldDirty: true})
+            setValue('retentionIncludesManual', snapshot.current.includeManual, {shouldDirty: true})
         } else {
             remove(index)
         }
@@ -463,6 +468,27 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                                 )}
                             />
                             <div className="help">Downloads you keep, and downloads a Keep filter matches, are never deleted.</div>
+                        </div>
+                    )}
+                    {deletes && deleteOlder && (
+                        <div className="form-row">
+                            <label htmlFor={`${id}-delete-manual`}>Also delete manual downloads</label>
+                            <Controller
+                                control={control}
+                                name="retentionIncludesManual"
+                                render={({field}) => (
+                                    <Switch
+                                        id={`${id}-delete-manual`}
+                                        checked={!!field.value}
+                                        onChange={(checked) => field.onChange(checked)}
+                                        onColor="#0ea5e9"
+                                        offColor="#d1d5db"
+                                        uncheckedIcon={false}
+                                        checkedIcon={false}
+                                    />
+                                )}
+                            />
+                            <div className="help">Downloads you made by hand of this collection’s episodes, in the same Local Media Profile, are deleted by this limit too, unless you keep them.</div>
                         </div>
                     )}
                 </>

@@ -106,6 +106,10 @@ its download record and download history go as well, so it no longer appears on 
 
 Downloads you keep, and downloads a Keep filter matches, are never deleted.
 
+By default a profile only deletes its own downloads: episodes you downloaded by hand stay. Turn on **Also delete
+manual downloads**, below the delete switch, and the date filter also deletes the episodes of this collection you
+downloaded by hand to the same Local Media Profile, once they fall outside it. Pin one to keep it.
+
 When the Source removes an episode VODLoft already downloaded, your file may be the last copy. The Home page then asks
 whether to keep it, and the question stays until you answer. Until then no date filter deletes that download.
 **Keep** pins it, as the pin button below does. **Don't keep** lets the date filter handle it as if the episode were

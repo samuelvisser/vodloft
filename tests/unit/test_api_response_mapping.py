@@ -68,6 +68,7 @@ def test_download_profile_view_uses_relationship_aliases():
         download_with_countdown=False,
         redownload_final=False,
         delete_older_episodes=True,
+        retention_includes_manual=False,
         auto_subtitles="fallback",
         sponsorblock_enabled=False,
         sponsorblock_segments={},
