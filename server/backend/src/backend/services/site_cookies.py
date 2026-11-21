@@ -76,11 +76,10 @@ class SortedCookies:
 
 
 def _known_sites(s: Session) -> dict[str, tuple[Site, tuple[str, ...]]]:
-    """Every Site VODLoft knows, with every domain it knows for it: the Sites it has a row for, which a new
-    VODLoft starts with for the Sites a Source is made for or takes an API key for, and the Sites that still
-    have a cookies file."""
+    """Every Site VODLoft knows, with every domain it knows for it: the Sites it has a row for, in the order
+    VODLoft got them, and then the Sites that still have a cookies file."""
     found: dict[str, tuple[Site, tuple[str, ...]]] = {}
-    for record in s.scalars(select(SiteRecord)).all():
+    for record in s.scalars(select(SiteRecord).order_by(SiteRecord.position, SiteRecord.name)).all():
         site = site_of(record.key)
         merged = tuple(dict.fromkeys((*site.domains, *record.domains)))
         found[record.key] = (replace(site, key=record.key, name=record.name, domains=merged), merged)
@@ -141,12 +140,9 @@ def _authentication(site: Site, domains: tuple[str, ...], in_use: set[str]) -> S
 
 
 def list_site_authentication(s: Session) -> list[SiteAuthentication]:
-    """Every Site VODLoft knows, with how it signs in there. Sites with a sign-in, cookies or an API key come first."""
+    """Every Site VODLoft knows, with how it signs in there, in the order VODLoft got them."""
     in_use = sites_in_use(s)
-    listings = [_authentication(site, domains, in_use) for site, domains in _known_sites(s).values()]
-    return sorted(listings, key=lambda listing: (
-        not (listing.sign_in_source_key or listing.has_cookies or listing.api_key_source_key), listing.name.lower(),
-    ))
+    return [_authentication(site, domains, in_use) for site, domains in _known_sites(s).values()]
 
 
 def site_authentication(s: Session, site_key: str) -> SiteAuthentication:

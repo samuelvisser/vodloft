@@ -13,7 +13,7 @@ from functools import lru_cache
 from typing import Optional
 from urllib.parse import urlsplit
 
-from sqlalchemy import select, union
+from sqlalchemy import func, select, union
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, CreatorAccount, Episode, LocalMediaProfileBase, Movie, Site, Video
@@ -36,7 +36,8 @@ def site_record(s: Session, site: SourceSite) -> Site:
     """The row of a Site, made when VODLoft sees the Site for the first time, with the domain seen added."""
     record = s.get(Site, site.key)
     if record is None:
-        record = Site(key=site.key, name=site.name, domains=list(site.domains))
+        last = s.scalar(select(func.max(Site.position))) or 0
+        record = Site(key=site.key, name=site.name, domains=list(site.domains), position=last + 1)
         s.add(record)
         s.flush()
         add_upcoming_site(s, site.key)

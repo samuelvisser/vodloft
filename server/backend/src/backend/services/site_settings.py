@@ -204,7 +204,7 @@ def list_sites_settings(s: Session) -> list[SiteSettingsListing]:
     found = _sources_of_sites(s)
     in_use = sites_in_use(s)
     listings = []
-    for record in s.scalars(select(SiteRecord).order_by(SiteRecord.name)).all():
+    for record in s.scalars(select(SiteRecord).order_by(SiteRecord.position, SiteRecord.name)).all():
         site = site_of(record.key)
         refreshes, follows = found.get(record.key, (True, True))
         keys = offered_settings(site, refreshes=refreshes, follows_pending=follows)
