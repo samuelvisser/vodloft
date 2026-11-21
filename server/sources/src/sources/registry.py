@@ -66,6 +66,12 @@ def site_of(site_key: str) -> Site:
     return next((site for source in _sources.values() if (site := source.site_of(site_key)) is not None), Site(site_key, site_key))
 
 
+def has_site_contract(site_key: str) -> bool:
+    """Whether some Source has a contract of its own for the Site with the key, such as YouTube's or The Daily
+    Wire's; a site only yt-dlp's defaults cover has none."""
+    return any(source.has_site_contract(site_key) for source in _sources.values())
+
+
 def named_site_for(url: str) -> Site | None:
     """The Site a Source is made for that the link is on, by the most specific domain."""
     host = link_host(url)

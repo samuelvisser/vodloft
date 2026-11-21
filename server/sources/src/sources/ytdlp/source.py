@@ -426,6 +426,9 @@ class YtDlpSource(Source):
     def site_of(self, site_key: str) -> Site:
         return sites.site_of(site_key)
 
+    def has_site_contract(self, site_key: str) -> bool:
+        return site_key in CONTRACTS
+
     def episode_tags_for(self, url: str | None) -> tuple[EpisodeTag, ...]:
         """The tags of the link's Site, or without a link, of every site with a contract of its own, such as
         YouTube's Shorts and Livestreams."""

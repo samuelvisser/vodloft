@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from collections.abc import Iterable, Mapping
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import AliasChoices, AliasPath, Field, ValidationInfo, computed_field, field_validator, model_validator
 
@@ -308,6 +308,17 @@ class SiteAuthenticationAPIRead(ResponseBase):
     site_api_status: Optional[SiteApiStatusAPIRead] = None
     removable: bool
     """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
+
+
+class MediaLinksAPIRequest(RequestBase):
+    """Links found in a description, to tell which of them are on a Site VODLoft knows for media."""
+
+    urls: list[Annotated[str, Field(min_length=1, max_length=2048)]] = Field(max_length=100)
+
+
+class MediaLinksAPIRead(ResponseBase):
+    urls: list[str]
+    """The links of the request that are on a Site VODLoft knows, which the user can look up to add."""
 
 
 class SiteAddAPIRequest(RequestBase):

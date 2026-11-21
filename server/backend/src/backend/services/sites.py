@@ -17,11 +17,12 @@ from sqlalchemy import func, select, union
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, CreatorAccount, Episode, LocalMediaProfileBase, Movie, Site, Video
+from backend.security.access import Access
 from backend.types.collection_contracts import CollectionWords, collection_contract
 from backend.types.link_season_types import OutsideVideos
 from backend.services.errors import ServiceError
 from backend.services.local_media_profile_sites import add_upcoming_site
-from sources import EpisodeTag, Names, Site as SourceSite, collection_on_site, get_source, site_for, source_site, sources_for
+from sources import EpisodeTag, Names, Site as SourceSite, collection_on_site, get_source, has_site_contract, site_for, source_site, sources_for
 
 
 class CollectionAlreadyAddedError(ValueError):
@@ -177,6 +178,25 @@ def site_of_link(s: Session, url: str) -> SourceSite:
     if not candidates or not url.lower().startswith(("http://", "https://")) or "." not in (urlsplit(url).hostname or ""):
         raise SiteLinkError("Type the site's address, such as twitch.tv, or paste a link to a page on it")
     return site_for(url, candidates[0].id)
+
+
+def media_links(s: Session, access: Access, urls: Iterable[str]) -> list[str]:
+    """The links, of ``urls``, that are on a Site VODLoft knows for media: one a Source has a contract of its own for,
+    such as YouTube, or one in VODLoft's Sites, which the user added or VODLoft has media from. Only links the user may
+    look up count. Telling a link's Site needs no network request."""
+    preferred = preferred_sources(s)
+    added = set(s.scalars(select(Site.key)))
+    found = []
+    for url in dict.fromkeys(urls):
+        if not url.lower().startswith(("http://", "https://")):
+            continue
+        candidates = [source for source in sources_for(url, preferred) if access.allows_link(source.id, url)]
+        if not candidates:
+            continue
+        key = site_for(url, candidates[0].id).key
+        if key in added or has_site_contract(key):
+            found.append(url)
+    return found
 
 
 def add_site(s: Session, site: SourceSite) -> Site:

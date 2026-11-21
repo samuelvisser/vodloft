@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
-    ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, SearchResultsAPIRead,
+    ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, MediaLinksAPIRequest, MediaLinksAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
     SiteAddAPIRequest, SiteAddedAPIRead, SiteApiValuesAPIUpdate, SiteAuthenticationAPIRead,
 )
@@ -15,7 +15,7 @@ from backend.services.site_cookies import (
     save_site_api, save_site_cookies, test_site_api,
 )
 from backend.services.errors import ServiceError
-from backend.services.sites import SiteLinkError, add_site, episode_tags_named, site_of_link
+from backend.services.sites import SiteLinkError, add_site, episode_tags_named, media_links, site_of_link
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType
 from backend.services.access_checks import access_changed
@@ -132,6 +132,13 @@ def resolve(body: ResolveAPIRequest, access: Access = signed_in()):
         # Adding the creator is one click away, and looking them up takes seconds.
         look_up_creator_ahead(link.source.id, link.creator_url)
     return link
+
+
+@router.post("/media-links", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=MediaLinksAPIRead)
+def known_media_links(body: MediaLinksAPIRequest, access: Access = signed_in()):
+    """Which links of a description are on a Site VODLoft knows for media, so the UI links only those to Add media."""
+    with db_session() as s:
+        return MediaLinksAPIRead(urls=media_links(s, access, body.urls))
 
 
 @router.get("/sources/{source_id}/episode-tags", dependencies=[requires_any((Area.LIBRARY, Level.VIEW), (Area.DOWNLOAD_PROFILES, Level.VIEW), (Area.ADD_MEDIA, Level.VIEW))], response_model=list[EpisodeTagAPIRead])

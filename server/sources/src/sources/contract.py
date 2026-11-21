@@ -1212,6 +1212,11 @@ class Source(ABC):
         that tells its Sites apart in ``site_for`` implements it."""
         return next((site for site in self.sites if site.key == site_key), None)
 
+    def has_site_contract(self, site_key: str) -> bool:
+        """Whether this Source has a contract of its own for the Site with the key, rather than only the
+        defaults it offers any site."""
+        return self.site_of(site_key) is not None
+
     def collection_ref(self, url: str) -> str | None:
         """The id one of this Source's ``sites`` gives the collection at the link, told from the
         link alone, or None when it is not a collection's link. A Source that names Sites implements it."""
