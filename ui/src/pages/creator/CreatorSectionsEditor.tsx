@@ -495,7 +495,10 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                     <div className="creator-section-list">
                         {creator.accounts.map((account) => (
                             <div key={account.id} className="creator-section-row">
-                                <span className="creator-section-art" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'circle-user')}/></span>
+                                {/* The account's own picture on its Site; VODLoft gets one on its next daily look. */}
+                                {account.avatarUrl
+                                    ? <img className="creator-account-avatar" src={toImageUrl(account.avatarUrl)} alt="" loading="lazy"/>
+                                    : <span className="creator-account-avatar" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'circle-user')}/></span>}
                                 <div className="creator-section-copy">
                                     <b>{account.site.name}</b>
                                     <span>{[account.handle, `${account.sections.length} ${account.sections.length === 1 ? 'section' : 'sections'}`].filter(Boolean).join(' · ')}</span>

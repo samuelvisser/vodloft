@@ -7,6 +7,7 @@ import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import toast from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
+import SiteLink from '../../components/common/SiteLink'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
 import RedownloadSwitch from '../../components/ActionConfirmDialogue/RedownloadSwitch'
@@ -558,9 +559,7 @@ export default function MoviePage() {
                     </a>
                 )}
                 {movie.sharingUrl && (
-                    <a className="btn" href={movie.sharingUrl} target="_blank" rel="noreferrer">
-                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')}/> Open on {sourceName}
-                    </a>
+                    <SiteLink url={movie.sharingUrl} siteName={localMovie?.site?.name ?? sourceName} site={localMovie?.site}/>
                 )}
                 {localMovies && !localMovie && can('library', 'manage') && (
                     <button type="button" className="btn btn-primary" onClick={() => void addMovie()} disabled={addingMovie || submitting !== null}>

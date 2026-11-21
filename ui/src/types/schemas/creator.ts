@@ -4,7 +4,7 @@ import {DwMembershipLevelReg} from '../dailywire_user_info'
 import {CollectionTypeReg, EpisodeIdentifierReg} from '../collection'
 import {ApiDateTimeSchema} from './datetime'
 import {EpisodeReadViewSchema} from './episode'
-import {NamesSchema, SectionTypeSchema} from './source'
+import {NamesSchema, SectionTypeSchema, SiteReadSchema} from './source'
 
 export const SectionTargetValues = ['main', 'main_loose', 'own', 'exclude', 'keep_out'] as const
 export const CreatorPresetValues = ['one_show', 'per_list', 'pick'] as const
@@ -163,6 +163,8 @@ export const CreatorAccountReadSchema = z.object({
     siteRef: z.string(),
     url: z.string().nullable(),
     handle: z.string().nullable(),
+    /** The account's own picture on its Site. */
+    avatarUrl: z.string().nullable().default(null),
     checkedAt: z.string().nullable(),
     /** The collection named after the creator that takes this account's uploads. */
     mainCollectionSlug: z.string().nullable(),
@@ -232,6 +234,8 @@ export const CreatorPageReadSchema = CreatorReadSchema.extend({
         links: z.array(z.string()),
         /** The one season the videos in none of its lists share, such as Singles; null when they get one per year. */
         looseSeason: z.string().nullable().optional(),
+        /** The Site the collection is on, which tells whether its music is tracks or music videos. */
+        site: SiteReadSchema.nullable().default(null),
     })),
     /** The creator's movies in the Library. */
     movies: z.array(z.object({

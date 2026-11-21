@@ -26,7 +26,7 @@
 /* One row: where the links' names do not fit, the page shows their Sites' icons instead (see useLinkFit). */
 .creator-actions { grid-area: actions; min-width: 0; display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: nowrap; justify-content: flex-end; }
 .creator-actions > * { flex-shrink: 0; white-space: nowrap; }
-.creator-actions .open-on-site { flex-shrink: 0; }
+.creator-actions .site-link { flex-shrink: 0; }
 .creator-about { grid-area: about; min-width: 0; padding: 10px 20px 0; display: flex; flex-direction: column; gap: 6px; }
 .creator-header--no-banner .creator-about { padding-left: 0; padding-right: 0; }
 .creator-facts { margin: 0; color: var(--muted); }
@@ -92,6 +92,10 @@
 .creator-section-row + .creator-section-row { border-top: 1px solid rgba(100, 116, 139, 0.24); }
 .creator-section-art {
     flex: 0 0 auto; width: 64px; height: 36px; border-radius: 4px; object-fit: cover;
+    display: grid; place-items: center; background: rgba(100, 116, 139, 0.15);
+}
+.creator-account-avatar {
+    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; object-fit: cover;
     display: grid; place-items: center; background: rgba(100, 116, 139, 0.15);
 }
 .creator-section-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }

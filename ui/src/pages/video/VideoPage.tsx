@@ -11,6 +11,7 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import SourceBadge from '../../components/Source/SourceBadge'
 import {VideoDownloadRow} from '../../components/Video/VideoDownloadRow'
 import {faIcon} from '../../icons/faIcon'
+import SiteLink from '../../components/common/SiteLink'
 import {useLocalMediaProfiles, useSourceLookup, useVideo, useVideoDownloads} from '../../lib/queries'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {VideoReadSchema} from '../../types/schemas/video'
@@ -192,11 +193,9 @@ export default function VideoPage() {
                                 </span>
                             </>
                         )}
-                        <span className="episode-summary-separator" aria-hidden="true"/>
-                        <a className="episode-summary-item" href={video.sharingUrl} target="_blank" rel="noreferrer">
-                            <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                            <span>Open on {video.site?.name ?? siteName(video.sharingUrl) ?? sourceName}</span>
-                        </a>
+                    </div>
+                    <div className="video-site-link">
+                        <SiteLink url={video.sharingUrl} siteName={video.site?.name ?? siteName(video.sharingUrl) ?? sourceName} site={video.site}/>
                     </div>
                 </header>
 
