@@ -27,6 +27,7 @@ import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions
 import CreatorHeader from './CreatorHeader'
 import LookupSteps from './LookupSteps'
 import {SECTION_ACTIONS} from './sectionActions'
+import AddToNewCollectionDialog from './AddToNewCollectionDialog'
 import './CreatorPages.css'
 
 /** The starting points, in the words of what this creator has: playlists on YouTube, shows on The Daily Wire. */
@@ -38,13 +39,16 @@ function presetText(key: CreatorCreateIn['preset'], hasFeeds: boolean, creator: 
         help: `All ${hasFeeds ? `feeds and ${plural}` : plural} start skipped.`,
     }
     if (music) {
-        if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with ${singular === 'album' ? 'every album' : `each ${singular} as an album`}${hasFeeds ? ' and the other tracks by year' : ''}.`}
-        if (key === 'per_list') return {label: 'A collection per album', help: `Each ${singular} is a Music collection of its own.`}
+        // Where the Site marks some types of list as albums, such as SoundCloud's albums, only those are kept.
+        const kept = creator.albumNames ?? {singular, plural}
+        const rest = creator.skippedListNames ? ` ${capitalized(creator.skippedListNames.plural)} start skipped.` : ''
+        if (key === 'one_show') return {label: 'One discography', help: `One Music collection, with ${kept.singular === 'album' ? 'every album' : `each ${kept.singular} as an album`}${hasFeeds ? ` and the other ${creator.mediaNames.plural} in the ${collectionWords('music').season.singular} ${creator.musicLooseSeason}` : ''}.${rest}`}
+        if (key === 'per_list') return {label: 'A collection per album', help: `Each ${kept.singular} is a Music collection of its own.${rest}`}
         return skipped
     }
     if (key === 'one_show') {
         // A Site offers it only where its lists can be seasons, so not The Daily Wire's shows.
-        return {label: 'One collection', help: `${capitalized(plural)} as named seasons, the rest as seasons based on their year.`}
+        return {label: 'One collection', help: `${capitalized(plural)} as named seasons, the rest in the ${collectionWords('series').season.singular} ${creator.looseSeason}.`}
     }
     if (key === 'per_list') {
         return {
@@ -56,9 +60,37 @@ function presetText(key: CreatorCreateIn['preset'], hasFeeds: boolean, creator: 
 }
 
 type Choice = 'main' | 'main_loose' | 'own' | 'exclude' | 'keep_out'
+/** The select's own entries besides the targets: where the section goes now when that is another section's new
+ *  collection, and the dialog that picks one. */
+type ChoiceKey = Choice | 'into' | 'pick'
 
-function choiceOf(plan: SectionPlan | undefined): Choice {
-    return plan?.target ?? 'exclude'
+function choiceOf(plan: SectionPlan | undefined): ChoiceKey {
+    return plan?.intoRef ? 'into' : plan?.target ?? 'exclude'
+}
+
+/** The title the new collection of a feed or list of its own gets, as the backend names it. */
+function ownTitle(creator: CreatorLookupRead, section: CreatorSectionRead) {
+    return section.kind === 'feed' ? `${creator.title} ${section.title}` : section.title
+}
+
+/** Where a feed or list goes when it joins another section's new collection, in words. */
+function intoLabel(creator: CreatorLookupRead, section: CreatorSectionRead, plan: SectionPlan, music: boolean) {
+    const target = creator.sections.find((item) => item.ref === plan.intoRef)
+    const title = target ? ownTitle(creator, target) : plan.intoRef
+    if (section.kind === 'feed') return `In ${title}`
+    const {season} = collectionWords(music ? 'music' : 'series')
+    return plan.target === 'main_loose' ? `Add its contents to ${title}` : `${season.Singular} of ${title}`
+}
+
+/** The feeds and lists set to become a collection of their own that ``section`` can go into: a feed's always, a
+ *  list's where lists can be seasons, as on the Edit page. A Site's main feed has the main collection's link. */
+function intoChoices(creator: CreatorLookupRead, section: CreatorSectionRead, plans: SectionPlan[]): CreatorSectionRead[] {
+    if (section.kind !== 'feed' && !(section.kind === 'list' && creator.linkSeasons)) return []
+    if (section.kind === 'feed' && section.role === 'main') return []
+    const owning = new Set(plans.filter((plan) => plan.target === 'own').map((plan) => plan.ref))
+    return creator.sections.filter((other) => other.ref !== section.ref && owning.has(other.ref) && !other.collectionSlug && (
+        other.kind === 'feed' || (other.kind === 'list' && creator.linkSeasons)
+    ))
 }
 
 /** What happens with a list of each kind the creator adds later, to start with, as the server says: an artist's new
@@ -68,8 +100,9 @@ function newListsFor(creator: CreatorLookupRead, music: boolean): NewLists {
 }
 
 
-/** What the Site's sections can become, in the words of this creator. */
-function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, music: boolean) {
+/** What the Site's sections can become, in the words of this creator: the creator's own collection first, then the
+ *  new collection of another feed or list (``into`` is where it goes now, ``pick`` asks for one), then the rest. */
+function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, music: boolean, plans: SectionPlan[]) {
     if (isMovie(creator, section)) {
         // A movie in the library joins the creator; another one is added to the library, as one of theirs.
         return createSelectRegistry(`CreatorMovie-${creator.ref}-${section.ref}-${creator.title}-${!!section.movieSlug}`, (
@@ -78,19 +111,34 @@ function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, mus
                 : {own: {label: 'Add to your library'}, exclude: {label: 'Skip'}}
         ) as Record<Choice, {label: string}>)
     }
-    const spec: Partial<Record<Choice, {label: string}>> = {}
+    const spec: Partial<Record<ChoiceKey, {label: string}>> = {}
     // The same names as where the Edit page says each one is: the creator's main collection is named after them.
-    if (section.kind === 'feed') spec.main = {label: `In ${creator.title}`}
-    else if (section.kind === 'list' && creator.linkSeasons) {
-        const {season} = collectionWords(music ? 'music' : 'series')
+    const {season} = collectionWords(music ? 'music' : 'series')
+    // The new collection puts the videos in none of its lists in one season, such as the album Singles.
+    if (section.kind === 'feed') {
+        spec.main = {label: creator.linkSeasons ? `In ${creator.title} as ${season.singular} ${music ? creator.musicLooseSeason : creator.looseSeason}` : `In ${creator.title}`}
+    } else if (section.kind === 'list' && creator.linkSeasons) {
         spec.main = {label: `${season.Singular} of ${creator.title}`}
         spec.main_loose = {label: `Add its contents to ${creator.title}`}
     }
+    const plan = plans.find((item) => item.ref === section.ref)
+    if (plan?.intoRef) spec.into = {label: intoLabel(creator, section, plan, music)}
+    if (intoChoices(creator, section, plans).length) spec.pick = {label: SECTION_ACTIONS.collection}
     spec.own = {label: SECTION_ACTIONS.own}
     spec.exclude = {label: SECTION_ACTIONS.skip}
     // Its videos stay out of every collection of the creator, also when another feed or list has them.
-    if (section.kind === 'list') spec.keep_out = {label: SECTION_ACTIONS.keepOut}
-    return createSelectRegistry(`CreatorSection-${creator.ref}-${section.ref}-${music}`, spec as Record<Choice, {label: string}>)
+    if (section.kind === 'list') spec.keep_out = {label: SECTION_ACTIONS.keepOut(creator.mediaNames)}
+    return createSelectRegistry(
+        `CreatorSection-${creator.ref}-${section.ref}-${music}-${Object.values(spec).map((item) => item.label).join('|')}`,
+        spec as Record<ChoiceKey, {label: string}>,
+    )
+}
+
+/** Whether a line goes above the choice: above the other collections, and above the choices after them. */
+function separated(registry: ReturnType<typeof choicesFor>, value: string) {
+    const keys: string[] = registry.options.map((option) => option.value)
+    const first = keys.find((key) => key === 'into' || key === 'pick')
+    return keys.indexOf(value) > 0 && (value === first || value === 'own')
 }
 
 /** A single item that is a movie, which VODLoft adds from this page, unlike a single track. */
@@ -270,9 +318,11 @@ export default function AddCreatorPage() {
     const newListKinds = creator ? (music ? creator.musicNewLists : creator.newLists) : []
     const byRef = useMemo(() => new Map(plans.map((plan) => [plan.ref, plan])), [plans])
     const registries = useMemo(
-        () => new Map((creator?.sections ?? []).map((section) => [section.ref, choicesFor(creator!, section, music)])),
-        [creator, music],
+        () => new Map((creator?.sections ?? []).map((section) => [section.ref, choicesFor(creator!, section, music, plans)])),
+        [creator, music, plans],
     )
+    // The feed or list whose new collection to pick for another one to go into.
+    const [picking, setPicking] = useState<CreatorSectionRead | null>(null)
     // Every choice select is as wide as the longest choice any of them has, so they line up.
     const choiceLabels = useMemo(() => (creator?.sections ?? [])
         .filter((section) => (section.kind !== 'item' || isMovie(creator!, section)) && !section.collectionSlug)
@@ -291,8 +341,18 @@ export default function AddCreatorPage() {
         if (creator) setValue('newLists', newListsFor(creator, kind === 'music'))
         choosePreset(preset ?? creator?.presets[0]?.key, kind === 'music')
     }
-    const choose = (section: string, choice: Choice) => {
-        setValue('sections', plans.map((plan) => plan.ref === section ? {ref: section, target: choice} : plan), {shouldValidate: true})
+    const choose = (section: string, choice: ChoiceKey, intoRef?: string) => {
+        if (choice === 'into') return
+        if (choice === 'pick') {
+            setPicking(creator?.sections.find((item) => item.ref === section) ?? null)
+            return
+        }
+        // A section that no longer gets a collection of its own takes the ones that joined it into the creator's own.
+        const left = choice !== 'own' && byRef.get(section)?.target === 'own'
+        setValue('sections', plans.map((plan) => plan.ref === section
+            ? {ref: section, target: choice, ...(intoRef ? {intoRef} : {})}
+            : left && plan.intoRef === section ? {ref: plan.ref, target: plan.target} : plan,
+        ), {shouldValidate: true})
     }
 
     const onSubmit = buildServerAwareSubmit<CreatorCreateIn, CreatorCreateOut>(form, (data) => fetch(`${apiUrl()}/creators`, {
@@ -382,7 +442,7 @@ export default function AddCreatorPage() {
     const joiningMovies = keptMovies.filter((plan) => sectionOf.get(plan.ref)?.movieSlug).map((plan) => sectionOf.get(plan.ref)!.movieTitle ?? sectionOf.get(plan.ref)!.title)
     const mainFeed = creator.sections.find((section) => section.kind === 'feed' && section.role === 'main')
     const newCollections: NewCollection[] = [
-        ...(kept.some((plan) => plan.target === 'main') ? [{key: MAIN_KEY, title: intoTitle ?? creator.title, url: mainFeed?.url ?? creator.url}] : []),
+        ...(kept.some((plan) => plan.target === 'main' && !plan.intoRef) ? [{key: MAIN_KEY, title: intoTitle ?? creator.title, url: mainFeed?.url ?? creator.url}] : []),
         ...kept.filter((plan) => plan.target === 'own' && sectionOf.get(plan.ref)?.kind !== 'item').map((plan) => {
             const section = sectionOf.get(plan.ref)
             return {
@@ -515,7 +575,11 @@ export default function AddCreatorPage() {
                                                 registry={registries.get(section.ref)!}
                                                 fitLabels={choiceLabels}
                                                 value={choiceOf(byRef.get(section.ref))}
-                                                onChange={(value) => choose(section.ref, value as Choice)}
+                                                onChange={(value) => choose(section.ref, value as ChoiceKey)}
+                                                menuPortalTarget={document.body} menuPlacement="auto"
+                                                styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                                                // Lines set the other collections apart from the creator's own and from the rest.
+                                                classNames={{option: ({data}) => separated(registries.get(section.ref)!, data.value) ? 'creator-choice-separated' : ''}}
                                             />
                                         </div>
                                     )}
@@ -525,6 +589,22 @@ export default function AddCreatorPage() {
                     </div>
                 ))}
 
+
+                {picking && (
+                    <AddToNewCollectionDialog
+                        section={picking}
+                        collections={intoChoices(creator, picking, plans).map((section) => ({ref: section.ref, title: ownTitle(creator, section)}))}
+                        plan={byRef.get(picking.ref)}
+                        seasons={picking.kind === 'list' && creator.linkSeasons}
+                        season={collectionWords(music ? 'music' : 'series').season}
+                        media={picking.kind === 'feed' ? picking.names.plural : creator.mediaNames.plural}
+                        onPick={(intoRef, asSeason) => {
+                            choose(picking.ref, asSeason ? 'main' : 'main_loose', intoRef)
+                            setPicking(null)
+                        }}
+                        onDismiss={() => setPicking(null)}
+                    />
+                )}
 
                 {!into && <div className="creator-section-group">
                     <h2>When a new {creator.newListNames.singular} is added</h2>

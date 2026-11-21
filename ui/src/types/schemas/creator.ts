@@ -45,6 +45,8 @@ export const SectionPlanSchema = z.object({
     target: z.enum(SectionTargetValues),
     /** With main or main_loose: another of the creator's collections it goes into instead of their own. */
     collectionSlug: z.string().optional(),
+    /** With main or main_loose: the feed or list of the same creator whose new collection of its own it goes into. */
+    intoRef: z.string().optional(),
 })
 export type SectionPlan = z.infer<typeof SectionPlanSchema>
 
@@ -127,6 +129,13 @@ export const CreatorLookupReadSchema = z.object({
     newListNames: NamesSchema,
     /** What the Site calls the lists and shows its creators add, such as playlists, or shows on The Daily Wire. */
     sectionGrowingNames: NamesSchema,
+    /** The types of list the Site marks as an artist's albums, such as SoundCloud's albums: an artist's presets keep
+     *  only those, and skip the others, ``skippedListNames``. */
+    albumNames: NamesSchema.nullable().optional(),
+    skippedListNames: NamesSchema.nullable().optional(),
+    /** The season a new collection puts the videos in none of its lists in, such as Videos, or Singles for an artist. */
+    looseSeason: z.string(),
+    musicLooseSeason: z.string(),
 })
 export type CreatorLookupRead = z.infer<typeof CreatorLookupReadSchema>
 
@@ -221,6 +230,8 @@ export const CreatorPageReadSchema = CreatorReadSchema.extend({
         years: z.string(),
         firstPublishedDate: ApiDateTimeSchema.nullable(),
         links: z.array(z.string()),
+        /** The one season the videos in none of its lists share, such as Singles; null when they get one per year. */
+        looseSeason: z.string().nullable().optional(),
     })),
     /** The creator's movies in the Library. */
     movies: z.array(z.object({

@@ -160,10 +160,10 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
                         onSelect: () => void add(item, {ref: item.section.ref, target: 'exclude'}),
                     },
                     ...(item.section.kind === 'list' ? [{
-                        label: SECTION_ACTIONS.keepOut,
+                        label: SECTION_ACTIONS.keepOut(item.account.site.mediaNames),
                         description: `Its ${item.account.site.mediaNames.plural} leave every collection of ${creator.title} too, also when another feed or list has them`,
                         disabled: busy !== null,
-                        onSelect: () => answer(item, {target: 'keep_out'}, SECTION_ACTIONS.keepOut),
+                        onSelect: () => answer(item, {target: 'keep_out'}, SECTION_ACTIONS.keepOut(item.account.site.mediaNames)),
                     }] : []),
                 ]}
             />

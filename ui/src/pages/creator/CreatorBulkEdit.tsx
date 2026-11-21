@@ -25,6 +25,11 @@ type BulkAction = {
 }
 
 /** What can be done with the chosen sections, each with the ones it applies to: the choices of each section's + menu. */
+/** What the sections' Sites call what they hold together, such as tracks, or "videos and tracks" across Sites. */
+function mediaOf(items: AccountSection[]) {
+    return joinedNames([...new Map(items.map(({account}) => [account.site.mediaNames.plural, account.site.mediaNames])).values()])
+}
+
 function bulkActions(creator: CreatorPageRead, chosen: AccountSection[]): BulkAction[] {
     const movies = chosen.filter(({account, section}) => isMovie(account, section))
     const sections = chosen.filter(({account, section}) => !isMovie(account, section))
@@ -50,7 +55,7 @@ function bulkActions(creator: CreatorPageRead, chosen: AccountSection[]): BulkAc
         hideable.length > 0 && {
             id: 'skip', label: SECTION_ACTIONS.skip, icon: faIcon('fass', 'eye-slash'), items: hideable,
         },
-        lists.length > 0 && {id: 'keep_out', label: lists.length === 1 ? SECTION_ACTIONS.keepOut : SECTIONS_ACTIONS.keepOut, icon: faIcon('fass', 'ban'), items: lists},
+        lists.length > 0 && {id: 'keep_out', label: lists.length === 1 ? SECTION_ACTIONS.keepOut(mediaOf(lists)) : SECTIONS_ACTIONS.keepOut(mediaOf(lists)), icon: faIcon('fass', 'ban'), items: lists},
         hidden.length > 0 && {id: 'show', label: SECTION_ACTIONS.show, icon: faIcon('fass', 'eye'), items: hidden},
     ]
     return actions.filter((action): action is BulkAction => !!action)
@@ -172,7 +177,7 @@ export default function CreatorBulkBar({creator, items, chosen, onEdit = false, 
     const choose = (action: BulkAction) => {
         if (action.id === 'own') setOwning(action.items)
         else if (action.id === 'collection') setPicking(action)
-        else if (action.id === 'keep_out') answerAll(action.items, {target: 'keep_out'}, SECTION_ACTIONS.keepOut)
+        else if (action.id === 'keep_out') answerAll(action.items, {target: 'keep_out'}, (item) => SECTION_ACTIONS.keepOut(item.account.site.mediaNames))
         else setConfirming(action)
     }
 
