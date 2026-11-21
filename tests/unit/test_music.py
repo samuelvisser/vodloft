@@ -42,6 +42,9 @@ def test_a_profile_for_music_keeps_tracks_when_it_downloads_audio_only_and_music
         CollectionLocalMediaProfileAPICreate(preferred_format="format_audio_only", audio_format="flac", **MUSIC)
     with pytest.raises(ValidationError, match="FLAC is for profiles for Music that download audio only"):
         CollectionLocalMediaProfileAPICreate(collection_scope="music", preferred_format="format_1080p", audio_format="flac", **MUSIC)
+    # An HLS bundle is for podcast apps, not for music.
+    with pytest.raises(ValidationError, match="Profiles for Music cannot keep an HLS bundle"):
+        CollectionLocalMediaProfileAPICreate(collection_scope="music", preferred_format="format_hls", **MUSIC)
     # A profile for Music that downloads video calls each one a music video.
     videos = CollectionLocalMediaProfileAPICreate(preferred_format="format_1080p", collection_scope="music", **MUSIC)
     assert (keeps_tracks(videos), videos.episode_nfo, videos.subtitle_mode) == (False, "music_video", "sidecar")

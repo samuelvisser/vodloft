@@ -5,7 +5,7 @@ Bandcamp is the album's path, slashes and all, so the link to its page led nowhe
 from it, as a new collection gets.
 
 Revision ID: 0b8b8a447385
-Revises: a4318a92a5ca
+Revises: 6f2d9b4e1a83
 Create Date: 2026-11-21
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from alembic import op
 
 
 revision = "0b8b8a447385"
-down_revision = "a4318a92a5ca"
+down_revision = "6f2d9b4e1a83"
 branch_labels = None
 depends_on = None
 
