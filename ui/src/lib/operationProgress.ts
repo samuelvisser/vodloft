@@ -40,7 +40,7 @@ function presentWithoutPlan(operation?: TaskOperationRead, starting = false): Pr
     if (starting && !operation) return workingPresentation('Starting')
     if (!operation || !ACTIVE_OPERATION_STATUSES.has(operation.status)) return undefined
     if (operation.kind === 'media.download' || operation.kind === 'quick.download') return presentDownloadProgress(undefined, operation)
-    if (operation.status === 'QUEUED') return waitingPresentation('download_capacity')
+    if (operation.status === 'QUEUED') return waitingPresentation('task_queue')
     const wait = operation.progressMeta?.wait_state as {reason?: string; message?: string; until?: number | null} | undefined
     if (operation.status === 'WAITING') return waitingPresentation(wait?.reason || 'dependency', wait?.message || operation.message, operation.progress ?? null, wait?.until)
     const batch = operation.progressMeta?.batch as {completed?: number; requested?: number; finishing?: number; failed?: number; canceled?: number} | undefined

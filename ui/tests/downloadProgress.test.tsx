@@ -262,3 +262,8 @@ test('a running download lists the steps of its plan with the transfer percentag
     ])
     assert.equal(presentDownloadProgress(undefined,operation({status:'SUCCEEDED'})).steps,undefined)
 })
+test('a queued task that is not a download does not wait for a download slot',()=>{
+    const view=presentOperationProgress(operation({kind:'collection.change_identification',resourceType:'collection',status:'QUEUED'}))
+    assert.equal(view?.label,'Queued...');assert.equal(view?.detail,'Waiting for its turn to start.')
+    assert.match(presentDownloadProgress(undefined,operation({status:'QUEUED'})).detail,/download slot/)
+})
