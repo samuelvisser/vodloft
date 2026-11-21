@@ -140,6 +140,9 @@ def _shared(key: tuple[str, str], work: Callable[[PlanTracker], CreatorDetails],
         mine = lookup is None or now - lookup.started >= _FRESH_SECONDS
         if mine:
             lookup = _lookups[key] = _SiteLookup()
+    if not mine and lookup.future.done():
+        # Found already: there is nothing left to follow, so the lookup shows no steps.
+        return lookup.future.result()
     if plan is not None:
         lookup.follow(plan.site)
     if not mine:

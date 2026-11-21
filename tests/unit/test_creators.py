@@ -680,6 +680,18 @@ def test_a_failed_lookup_ends_with_what_went_wrong(client, tube, monkeypatch):
     assert lines[-1] == {"error": "Could not look up this creator: This creator does not exist"}
 
 
+def test_a_creator_found_a_moment_ago_shows_no_steps(client, tube):
+    """Pasting a creator's link looks them up ahead; once that is done, the Add creator page answers at once."""
+    from backend.api.endpoints.creators import service
+
+    service.look_up_creator("tube", ROOT, None)
+    response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
+    lines = [json.loads(line) for line in response.text.splitlines()]
+
+    assert _steps(lines) == [("Checking what is in your library already", "completed")]
+    assert lines[-1]["creator"]["title"] == "Northwind Workshop"
+
+
 def test_a_lookup_that_joins_one_already_running_follows_its_steps(client, tube, monkeypatch):
     """Pasting a creator's link starts looking them up; the Add creator page then follows that lookup, counts and all."""
     from backend.api.endpoints.creators import service

@@ -26,6 +26,7 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
 import CreatorHeader from './CreatorHeader'
 import LookupSteps from './LookupSteps'
+import {useSlow} from '../../lib/useSlow'
 import type {ProgressStep} from '../../types/progress'
 import {SECTION_ACTIONS} from './sectionActions'
 import AddToNewCollectionDialog from './AddToNewCollectionDialog'
@@ -289,6 +290,8 @@ export default function AddCreatorPage() {
         ])),
     }), [libraryCreators, creatorWord])
     const intoTitle = libraryCreators?.find((other) => other.slug === into)?.title
+    // A lookup found already answers in a moment, so its progress only shows once it takes a while.
+    const slow = useSlow(!creator && !error)
 
     useEffect(() => {
         const controller = new AbortController()
@@ -393,7 +396,7 @@ export default function AddCreatorPage() {
         return (
             <section className="view creator-view" aria-labelledby="add-creator-title">
                 <div className="view-header"><h1 id="add-creator-title">{label ? `Add ${label}` : 'Add'}</h1></div>
-                <AddCreatorSkeleton steps={steps} label={label}/>
+                {slow && <AddCreatorSkeleton steps={steps} label={label}/>}
             </section>
         )
     }
