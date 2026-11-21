@@ -38,7 +38,7 @@ import ExistingFilesBanner from '../../components/ExistingFiles/ExistingFilesBan
 import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
 import LockedEpisodesFilter from '../../components/Episode/LockedEpisodesFilter'
-import {apiFetch, apiUrl, publicAddress} from '../../lib/api'
+import {ApiError, apiFetch, apiUrl, publicAddress} from '../../lib/api'
 import {collectionWords, downloadsBySeason, fileWordsFor, wordsFor} from '../../lib/collectionWords'
 import {isCollectionLocalMediaProfileAvailableFor, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
 
@@ -444,7 +444,7 @@ export default function CollectionPage() {
     return (
       <section className="view collection-view">
         <div className="view-header"><h1>Show</h1></div>
-        <p>{(error as any)?.message ?? 'Collection not found.'}</p>
+        <p>{error instanceof ApiError && error.status === 404 ? 'This collection no longer exists.' : (error as any)?.message ?? 'Collection not found.'}</p>
       </section>
     )
   }

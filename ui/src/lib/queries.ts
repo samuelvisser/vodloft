@@ -12,6 +12,7 @@ import {
 } from '@tanstack/react-query'
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveCollectionsToStorage} from './cache'
+import {forgetDeletedCollection} from './deletedCollection'
 import {
     type LazyCollectionPage,
     type LazyCollectionPageRequest,
@@ -1217,10 +1218,18 @@ export function useDailywireMovie(slug?: string) {
 
 export function useCollection(id?: string) {
     const qc = useQueryClient()
-    return useQuery({
+    const result = useQuery({
         ...collectionQueryOptions(id, qc),
         enabled: !!id,
     })
+    // A collection deleted elsewhere, such as by a creator's Edit page, another tab or another device, can still be
+    // in the cached collection list it starts from. When the server says it is gone, the caches that list it forget
+    // it; the page itself is left as it is.
+    const gone = result.error instanceof ApiError && result.error.status === 404
+    useEffect(() => {
+        if (gone && id) void forgetDeletedCollection(qc, id, {keepCollectionQuery: true})
+    }, [gone, id, qc])
+    return result
 }
 
 export function useEpisodePages(
