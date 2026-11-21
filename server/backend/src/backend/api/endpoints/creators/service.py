@@ -29,13 +29,14 @@ from backend.db.models import Creator, CreatorAccount, Collection, Episode, Movi
 from backend.services import creators
 from backend.services.creators import NewCollectionSettings, SectionPlan
 from backend.services.errors import ServiceError
-from backend.services.link_seasons import is_in
+from backend.services.link_seasons import is_in, link_seasons_on, loose_in_one_season, loose_season_name
 from backend.services.new_lists import kinds_names, list_kinds, new_sections_settings
 from backend.services.sites import collection_site
 from backend.types.creator_types import SectionTarget
 from task_manager.scheduler.transactional import queue_task_after_commit
+from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
-from sources import CreatorDetails, Feature, ItemRef, Names, SectionRef, SectionType, Site, get_source
+from sources import CreatorDetails, Feature, ItemRef, Names, SectionKind, SectionRef, SectionType, Site, get_source
 from backend.services.source_requests import asking_source
 
 
@@ -166,6 +167,10 @@ class _Lookup:
     music_new_lists: list
     new_list_names: Names
     site: Site
+    album_names: Names | None = None
+    skipped_list_names: Names | None = None
+    loose_season: str = ""
+    music_loose_season: str = ""
     creator_slug: str | None = None
     links: list[str] = field(default_factory=list)
     facts: list[str] = field(default_factory=list)
@@ -181,6 +186,9 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
     movies = creators.takes_movies(source_key)
     movies_kept = creators.movies_in_library(s, source_key, details.sections)
     existing = creators.account_in_library(s, site.key, details.ref)
+    lists = [type_ for type_ in site.section_types if type_.kind is SectionKind.LIST]
+    albums = [type_ for type_ in lists if type_.albums]
+    skipped = [type_ for type_ in lists if not type_.albums] if albums else []
     return CreatorLookupAPIRead.model_validate(_Lookup(
         details=details, source_key=source_key, site_key=site.key, site_name=site.name,
         creator_names=site.creator_names, section_types=site.section_types, audio_only=site.audio_only,
@@ -194,8 +202,12 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
         presets=[
             _Preset(
                 preset.value, creators.preset_plan(details, preset, movies=movies, movies_in_library=movies_kept),
-                # A music artist on a site with videos keeps their albums, not all of their uploads.
-                creators.preset_plan(details, preset, feeds=site.audio_only, movies=movies, movies_in_library=movies_kept),
+                # A music artist on a site with videos keeps their albums, not all of their uploads, and on a Site that
+                # tells albums apart, such as SoundCloud, only those.
+                creators.preset_plan(
+                    details, preset, feeds=site.audio_only, movies=movies, movies_in_library=movies_kept,
+                    albums=[type_.key for type_ in albums],
+                ),
             )
             for preset in site.creator_presets
         ],
@@ -203,6 +215,11 @@ def creator_lookup(s: Session, source_key: str, details: CreatorDetails) -> Crea
         music_new_lists=new_sections_settings(list_kinds([site]), None, music=True),
         new_list_names=kinds_names(list_kinds([site])),
         site=site,
+        # A new collection puts the videos in none of its lists in one season of their own, such as Singles.
+        loose_season=collection_contract(CollectionType.SERIES).loose_season_on(site),
+        music_loose_season=collection_contract(CollectionType.MUSIC).loose_season_on(site),
+        album_names=Names.joined(type_.names for type_ in albums) if albums else None,
+        skipped_list_names=Names.joined(type_.names for type_ in skipped) if skipped else None,
         creator_slug=existing.creator.slug if existing is not None else None,
         links=list(details.links), facts=list(details.facts),
     ))
@@ -231,6 +248,7 @@ def _plans(body: CreatorAPICreate | CreatorSectionsAPIAdd) -> list[SectionPlan]:
         SectionPlan(
             plan.ref, SectionTarget(plan.target), CollectionType(plan.type) if plan.type else None,
             EpisodeIdentifier(plan.episode_identifier) if plan.episode_identifier else None, plan.collection_slug,
+            plan.into_ref,
         )
         for plan in body.sections
     ]
@@ -393,6 +411,12 @@ class _CollectionRead:
         if self.first_published_date is None or self.last_published_date is None:
             return ""
         return f"{self.first_published_date.year}-{self.last_published_date.year}"
+
+    @property
+    def loose_season(self) -> str | None:
+        if not (link_seasons_on(self.collection) and loose_in_one_season(self.collection)):
+            return None
+        return loose_season_name(self.collection)
 
     def __getattr__(self, name):
         return getattr(self.collection, name)

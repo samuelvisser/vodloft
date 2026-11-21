@@ -56,6 +56,9 @@ class SectionPlan:
     collection_slug: str | None = None
     """For a section that goes into a collection that gathers the account's feeds and lists: which one, when it is
     not the account's own collection."""
+    into_ref: str | None = None
+    """For a section that goes into the collection of its own that another section of the same plans gets, with
+    ``target`` main or main_loose: that section's ref, such as an album that joins a playlist's new collection."""
 
 
 def creator_site(source_key: str, url_or_site_key: str) -> Site:
@@ -83,14 +86,17 @@ def takes_movies(source_key: str) -> bool:
 
 def preset_plan(
     details: CreatorDetails, preset: CreatorPreset, *, feeds: bool = True, movies: bool = False,
-    movies_in_library: Refs[str] = (),
+    movies_in_library: Refs[str] = (), albums: Refs[str] = (),
 ) -> list[SectionPlan]:
     """What a preset does with each section. The user can change any of it before the creator is added. Without
     ``feeds``, such as for a music artist on a video site, whose uploads are much more than their albums, the feeds
     start skipped, so the artist's collection holds only what their lists give it.
 
     With ``movies``, the creator's single items are movies: the presets add them, and a movie already in the library,
-    by its ref in ``movies_in_library``, joins the creator with every preset."""
+    by its ref in ``movies_in_library``, joins the creator with every preset.
+
+    ``albums`` are the keys of the list types the Site marks as an artist's albums, such as SoundCloud's albums: when
+    there are any, only lists of those types are kept, and the others, such as playlists, start skipped."""
     plans = []
     for section in details.sections:
         target = SectionTarget.EXCLUDE
@@ -101,6 +107,8 @@ def preset_plan(
             # The creator's own collection lists its Shorts and Live too, tagged, so they need no collection of their own.
             if section.kind is SectionKind.FEED:
                 target = SectionTarget.MAIN if feeds else SectionTarget.EXCLUDE
+            elif section.kind is SectionKind.LIST and albums and section.type.key not in albums:
+                target = SectionTarget.EXCLUDE
             elif section.kind is SectionKind.SHOW or preset is CreatorPreset.PER_LIST:
                 target = SectionTarget.OWN
             else:
@@ -441,6 +449,20 @@ def _place(
         ):
             plan = replace(plan, target=SectionTarget.OWN)
         wanted.append(plan)
+    # Sections that go into the collection of its own that another section gets, by that section's ref.
+    into_new: dict[str, list[SectionPlan]] = {}
+    for plan in wanted:
+        if plan.target in _INTO_MAIN and plan.into_ref is not None:
+            into_new.setdefault(plan.into_ref, []).append(plan)
+    owning = {plan.ref for plan in wanted if plan.target is SectionTarget.OWN}
+    for ref, taking in into_new.items():
+        if ref not in owning or ref in {plan.ref for plan in taking} or (
+            sections[ref].kind == SectionKind.LIST and not lists_are_seasons(site)
+        ) or sections[ref].kind not in (SectionKind.FEED, SectionKind.LIST):
+            raise ServiceError(
+                f"{sections[taking[0].ref].title} can only go into a new collection of another feed or list", field="sections",
+            )
+    wanted = [plan for plan in wanted if plan.into_ref is None or plan.target not in _INTO_MAIN]
     elsewhere: dict[str, list[SectionPlan]] = {}
     for plan in wanted:
         if plan.target in _INTO_MAIN and plan.collection_slug is not None and (
@@ -463,19 +485,28 @@ def _place(
             url = main_feed.url if main_feed is not None else account.url
             if not url:
                 raise ServiceError(f"{creator.title} has no page that lists all of its videos")
-            # The account's own picture on its Site, not that of the creator's other accounts. An artist without a
-            # picture of their own shows their newest album's cover.
-            image = account.avatar_path or next(
-                (sections[plan.ref].image_path for plan in main_plans if sections[plan.ref].image_path), None,
-            )
-            main = _new_collection(
-                s, account, settings, title=main_collection_title(account), slug=account.site_ref, url=url,
-                description=creator.description, image=image, added_by_id=added_by_id,
-            )
-            main.background_image_path = account.banner_path
-            account.main_collection = main
-            made.append(main)
-        else:
+            # A collection of this link left from before, such as when the creator was deleted, which kept their
+            # collections as plain ones, becomes the creator's own collection again.
+            left = s.scalar(select(Collection).where(Collection.sharing_url == url, Collection.creator_id.is_(None)))
+            if left is not None:
+                belong_to(left, creator)
+                left.creator_account = account
+                account.main_collection = left
+                main = left
+            else:
+                # The account's own picture on its Site, not that of the creator's other accounts. An artist without a
+                # picture of their own shows their newest album's cover.
+                image = account.avatar_path or next(
+                    (sections[plan.ref].image_path for plan in main_plans if sections[plan.ref].image_path), None,
+                )
+                main = _new_collection(
+                    s, account, settings, title=main_collection_title(account), slug=account.site_ref, url=url,
+                    description=creator.description, image=image, added_by_id=added_by_id,
+                )
+                main.background_image_path = account.banner_path
+                account.main_collection = main
+                made.append(main)
+        if main not in made:
             changed.append(main)
         _take_sections(account, main, main_plans, sections, new=main in made)
     for plan in wanted:
@@ -483,10 +514,15 @@ def _place(
             continue
         own = sections[plan.ref]
         title = own.title if own.kind != SectionKind.FEED else f"{creator.title} {own.title}"
-        made.append(_new_collection(
+        collection = _new_collection(
             s, account, _own_settings(settings, plan, own), title=title, slug=section_collection_slug(account.site_ref, own), url=own.url,
             description=own.description, image=own.image_path, added_by_id=added_by_id,
-        ))
+        )
+        made.append(collection)
+        if plan.ref in into_new:
+            # It gathers the feeds and lists that join it, as a collection made from one does on the Edit page.
+            s.flush()
+            _take_sections(account, gather(s, account, collection), into_new[plan.ref], sections, new=False)
     s.flush()
     for collection in made:
         index_new_collection(s, collection)
@@ -585,7 +621,7 @@ def place_sections(
     for plan in plans:
         section = sections[plan.ref]
         if plan.target is SectionTarget.KEEP_OUT and section.kind != SectionKind.LIST:
-            raise ServiceError(f"Only a list keeps its videos out; skip {section.title} instead", field="sections")
+            raise ServiceError(f"Only a list can be blacklisted; skip {section.title} instead", field="sections")
         if plan.target in _NOT_ADDED:
             # A list kept out keeps its videos out of the creator's collections, also the ones their feeds list; one
             # that stops keeping them out lets them back in. A skipped list changes nothing.

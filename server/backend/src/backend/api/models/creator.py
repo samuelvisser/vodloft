@@ -121,6 +121,15 @@ class CreatorLookupAPIRead(ResponseBase):
     from other lists, those others are skipped."""
     new_list_names: NamesAPIRead
     """Those kinds of list named together, such as albums and playlists."""
+    album_names: Optional[NamesAPIRead] = None
+    """The types of list the Site marks as an artist's albums, named together, such as SoundCloud's albums. A music
+    artist's presets keep only those."""
+    skipped_list_names: Optional[NamesAPIRead] = None
+    """The Site's other types of list, such as SoundCloud's playlists, which a music artist's presets skip."""
+    loose_season: str
+    """The season a new collection of the creator puts the videos in none of its lists in, such as Videos."""
+    music_loose_season: str
+    """The same for a music artist, such as Singles."""
     creator_slug: Optional[str] = None
     """The creator's slug, when it is already in the Library."""
     music: bool = False
@@ -142,6 +151,9 @@ class SectionPlanAPIIn(RequestBase):
     collection_slug: Optional[str] = None
     """For a section that goes into another collection of the creator's than the account's own collection, with
     ``target`` main or main_loose: that collection, one of the account's ``gatherable_slugs``."""
+    into_ref: Optional[str] = None
+    """For a section that goes into the new collection of its own of another feed or list of the same request, with
+    ``target`` main or main_loose: that feed's or list's ref."""
 
 
 class CreatorAPICreate(RequestBase):
@@ -183,6 +195,9 @@ class CreatorCollectionAPIRead(ResponseBase):
     """When its oldest episode came out."""
     links: list[str] = Field(default_factory=list)
     """The titles of the creator's sections it takes."""
+    loose_season: Optional[str] = None
+    """The one season the videos in none of its lists share, such as Singles; None when they get a season per year,
+    or it has no lists as seasons."""
     site: Optional[SiteAPIRead] = None
     """The website the collection is on, which tells whether its music is tracks or music videos."""
 

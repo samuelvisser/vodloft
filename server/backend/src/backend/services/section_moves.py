@@ -745,7 +745,7 @@ def _checked(creator: Creator, moves: Sequence[SectionMove], listed: AbstractSet
             continue
         pending = _pending_list(section, origin, listed)
         if move.target is SectionTarget.KEEP_OUT and section.kind != SectionKind.LIST:
-            raise ServiceError(f"Only a list keeps its videos out; skip {section.title} instead", field=_FIELD)
+            raise ServiceError(f"Only a list can be blacklisted; skip {section.title} instead", field=_FIELD)
         if move.target is SectionTarget.KEEP_OUT and section.status == SectionStatus.KEPT_OUT.value:
             continue
         if origin is SectionTarget.EXCLUDE and not pending:
