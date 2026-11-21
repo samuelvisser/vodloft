@@ -106,9 +106,10 @@ class TwitchImplementation(OtherSitesImplementation):
             raise runner.YtDlpError("This link is not a Twitch channel")
         with ThreadPoolExecutor(max_workers=len(self.feed_types) + 2, thread_name_prefix="channel-lookup") as pool:
             listings = self.read_feeds(root, pool, plan)
+            # The collections take longest, so their step comes last.
             plan.add(
-                StageSpec(id="collections", code="read_lists", label=f"Reading the {self.site.section_list_names.plural}"),
                 StageSpec(id="page", code="read_page", label="Reading the channel's page"),
+                StageSpec(id="collections", code="read_lists", label=f"Reading the {self.site.section_list_names.plural}"),
             )
             playlists = plan.follow("collections", pool.submit(self.playlists, root))
             page = plan.follow("page", pool.submit(self.page_facts, root))
