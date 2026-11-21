@@ -21,7 +21,7 @@ from backend.services.custom_indexes import (
 )
 from backend.services.download_options import effective_filename_mode
 from backend.services.errors import NotFoundError, ServiceError
-from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
+from backend.types.local_media_profile_types import keeps_tracks
 from backend.services.profile_file_renames import request_collection_local_media_profile_file_rename
 from backend.services.local_media_profile_inputs import (
     CollectionLocalMediaProfileInput, LocalMediaProfileInput, VideoLocalMediaProfileInput, NewCollectionLocalMediaProfile,
@@ -236,19 +236,26 @@ def update_collection_local_media_profile(
 
 
 def _refuse_tracks_switch_with_downloads(s: Session, item: CollectionLocalMediaProfile, fields: CollectionLocalMediaProfileInput):
-    """A profile that keeps music as tracks has audio files only, and any other has the files of its own kind, so a
-    profile only switches to or from Music tracks before it downloaded anything."""
-    if "collection_scope" not in fields.model_fields_set:
+    """A profile for Music that downloads audio only keeps tracks, which are audio files with music tags, and any other
+    profile keeps the files of its own kind. So a profile only starts or stops keeping tracks before it downloaded
+    anything: a profile for Music can't switch between audio only and video once it has downloads, though it can
+    change between video qualities."""
+    if keeps_tracks(item) == keeps_tracks(fields):
         return
-    tracks = CollectionLocalMediaProfileScope.MUSIC_TRACKS.value
-    if (item.collection_scope == tracks) == (fields.collection_scope == tracks):
+    if s.scalar(select(MediaDownloadBase.id).where(MediaDownloadBase.local_media_profile_id == item.id).limit(1)) is None:
         return
-    if s.scalar(select(MediaDownloadBase.id).where(MediaDownloadBase.local_media_profile_id == item.id).limit(1)) is not None:
-        if item.collection_scope == tracks:
-            message = "This profile already has downloaded music tracks, so what it is available for can't change."
-        else:
-            message = "This profile already has downloads, so it can't be changed to Music tracks."
-        raise ServiceError(message, field="collectionScope")
+    if item.collection_scope == fields.collection_scope:
+        message = (
+            "This profile already has downloaded music tracks, so it keeps downloading audio only."
+            if keeps_tracks(item) else
+            "This profile already has downloaded music videos, so it can't switch to audio only."
+        )
+        raise ServiceError(message, field="preferredFormat")
+    if keeps_tracks(item):
+        message = "This profile already has downloaded music tracks, so what it is available for can't change."
+    else:
+        message = "This profile already has downloads, so it can't be changed to Music with audio only."
+    raise ServiceError(message, field="collectionScope", other_fields={"preferredFormat": message})
 
 
 def create_video_local_media_profile(s: Session, fields: VideoLocalMediaProfileInput) -> VideoLocalMediaProfile:

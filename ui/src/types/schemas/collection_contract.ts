@@ -14,8 +14,6 @@ export const CollectionContractSchema = z.object({
     looseSeason: z.string().nullable(),
     /** What a new Local Media Profile for a collection of the type keeps, such as podcast. */
     profileScope: z.string(),
-    /** What it keeps when it is made for sound, such as music_tracks. */
-    audioProfileScope: z.string(),
     /** What a Local Media Profile can keep to be offered for a collection of the type. */
     profileScopes: z.array(z.string()),
     /** Downloads pick the collection's seasons; otherwise its newest episodes, by days or a number of episodes. */

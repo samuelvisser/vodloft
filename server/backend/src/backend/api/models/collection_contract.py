@@ -29,8 +29,6 @@ class CollectionContractAPIRead(ResponseBase):
     """What the season of what is in none of a collection's lists is called, such as Singles; none for the Site's."""
     profile_scope: str
     """What a new Local Media Profile for a collection of the type keeps, such as podcast."""
-    audio_profile_scope: str
-    """What it keeps when it is made for sound, such as music_tracks."""
     profile_scopes: list[str]
     """What a Local Media Profile can keep to be offered for a collection of the type."""
     downloads_by_season: bool

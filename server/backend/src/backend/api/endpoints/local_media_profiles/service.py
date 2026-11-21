@@ -238,9 +238,7 @@ def _filtered(s: Session, filters: LocalMediaProfileListQuery):
         ]),
         UsedFor.VIDEO: is_video & video_scope.in_([VideoLocalMediaProfileScope.VIDEOS.value, VideoLocalMediaProfileScope.BOTH.value]),
         UsedFor.MOVIE: is_video & video_scope.in_([VideoLocalMediaProfileScope.MOVIES.value, VideoLocalMediaProfileScope.BOTH.value]),
-        UsedFor.MUSIC: is_collection & scope.in_([
-            CollectionLocalMediaProfileScope.MUSIC_TRACKS.value, CollectionLocalMediaProfileScope.MUSIC_VIDEOS.value,
-        ]),
+        UsedFor.MUSIC: is_collection & (scope == CollectionLocalMediaProfileScope.MUSIC.value),
     }
     has_files = (
         select(MediaDownloadBase.id)

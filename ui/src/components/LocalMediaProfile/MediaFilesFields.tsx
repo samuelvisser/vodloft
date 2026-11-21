@@ -5,7 +5,7 @@ import {EditorView} from '@codemirror/view'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
 import {useLibraryDefaults} from '../../lib/settings'
-import {EpisodeNfoReg, profileSitesOffering, type LocalMediaProfileType} from '../../types/local_media_profile'
+import {EpisodeNfoReg, musicKind, profileSitesOffering, type LocalMediaProfileType} from '../../types/local_media_profile'
 import {useLocalMediaProfileSites} from '../../lib/queries'
 import ReadMore from '../../utils/ReadMore'
 import SimpleSelect from '../common/SimpleSelect'
@@ -137,9 +137,9 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
     const {control, formState: {errors}} = form
     const {data: defaults} = useLibraryDefaults()
     const [metadataMode, showNfo] = useWatch({control, name: ['metadataMode', 'showNfo']}) as [string | undefined, boolean | undefined]
-    const collectionScope = useWatch({control, name: 'collectionScope'}) as string | undefined
-    // A profile for the music videos of Music collections calls each one a music video.
-    const musicVideos = collectionScope === 'music_videos'
+    const [collectionScope, preferredFormat] = useWatch({control, name: ['collectionScope', 'preferredFormat']}) as [string | undefined, string | undefined]
+    // A profile for Music that downloads video calls each one a music video.
+    const musicVideos = mode === 'collection' && musicKind(collectionScope, preferredFormat) === 'music_videos'
     const effectiveMetadata = (metadataMode ?? 'system') === 'system' ? defaults?.metadataMode : metadataMode
     const offersInfoFile = useOffersInfoFile(form, mode)
     const writesNfo = isBeside(METADATA, effectiveMetadata) || (mode === 'collection' && !!showNfo)
@@ -184,7 +184,7 @@ export default function MediaFilesFields({form, mode}: {form: UseFormReturn<any>
                         )}
                     />
                     <div className="help">
-                        {musicVideos ? 'A profile for the music videos of Music collections calls each one a music video. ' : ''}
+                        {musicVideos ? 'A profile for Music that downloads video calls each one a music video. ' : ''}
                         Music videos get a musicvideo NFO with the creator's artist, which Jellyfin, Emby and Kodi keep in a Music Videos library.
                     </div>
                     {errors.episodeNfo && <div className="error" role="alert">{String(errors.episodeNfo.message)}</div>}

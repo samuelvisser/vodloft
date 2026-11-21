@@ -38,6 +38,7 @@ from backend.types.local_media_profile_types import (
     VideoContainer,
     VideoLocalMediaProfileScope,
     goal_video_codecs,
+    keeps_tracks,
 )
 from backend.utils.custom_index import INDEXING_VALUE_KEY_MAX_LENGTH, is_valid_custom_index_key
 from backend.utils.helpers import slugify
@@ -253,8 +254,8 @@ class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
 
     type: Literal["collection"] = LocalMediaProfileType.COLLECTION.value
     collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.PODCAST_AND_SERIES
-    """Which collections the profile is offered for. For Music tracks it keeps them as audio tracks with music tags,
-    and for Music videos as music videos."""
+    """Which collections the profile is offered for. For Music it keeps them as audio tracks with music tags when it
+    downloads audio only, and as music videos when it downloads video."""
     download_collection_assets: bool | None = None
     show_nfo: bool = False
     """Write tvshow.nfo in the collection's folder and season.nfo in each season's folder."""
@@ -274,16 +275,14 @@ class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
         return validate_metadata_template(value)
 
     @model_validator(mode="after")
-    def _music_is_audio(self):
-        if self.collection_scope == CollectionLocalMediaProfileScope.MUSIC_TRACKS:
-            if self.preferred_format != PreferredFormat.FORMAT_AUDIO_ONLY:
-                raise FieldValueError("preferred_format", "A profile for Music tracks downloads audio only")
-        else:
-            if self.collection_scope == CollectionLocalMediaProfileScope.MUSIC_VIDEOS:
-                # It keeps a Music collection's videos as video, so it calls them music videos.
-                self.episode_nfo = EpisodeNfo.MUSIC_VIDEO
-            if self.audio_format == AudioFormat.FLAC:
-                raise FieldValueError("audio_format", "FLAC is for profiles for Music tracks")
+    def _music_tracks_or_videos(self):
+        if keeps_tracks(self):
+            return self
+        if self.collection_scope == CollectionLocalMediaProfileScope.MUSIC:
+            # It keeps a Music collection's videos as video, so it calls them music videos.
+            self.episode_nfo = EpisodeNfo.MUSIC_VIDEO
+        if self.audio_format == AudioFormat.FLAC:
+            raise FieldValueError("audio_format", "FLAC is for profiles for Music that download audio only")
         return self
 
     @model_validator(mode="after")
@@ -314,7 +313,7 @@ class NewCollectionLocalMediaProfile(CollectionLocalMediaProfileInput):
         if "subtitle_mode" not in self.model_fields_set:
             self.subtitle_mode = (
                 LocalMediaProfileSubtitleMode.NO_SUBTITLES
-                if self.collection_scope in (CollectionLocalMediaProfileScope.PODCAST, CollectionLocalMediaProfileScope.MUSIC_TRACKS)
+                if self.collection_scope == CollectionLocalMediaProfileScope.PODCAST or keeps_tracks(self)
                 else LocalMediaProfileSubtitleMode.SIDECAR
             )
         return self
@@ -336,7 +335,7 @@ class VideoLocalMediaProfileInput(LocalMediaProfileInput):
     @classmethod
     def _no_flac(cls, value: AudioFormat) -> AudioFormat:
         if value == AudioFormat.FLAC:
-            raise ValueError("FLAC is for profiles for Music tracks")
+            raise ValueError("FLAC is for profiles for Music that download audio only")
         return value
 
     @field_validator("preferred_format")

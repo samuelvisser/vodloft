@@ -145,7 +145,7 @@ const COLLECTION_VARIABLES: readonly OutputTemplateVariable[] = [
         description: 'Who the music is by: the creator, else the collection\'s author',
         readMore: {
             paragraphs: [
-                'Meant for profiles for Music tracks, such as {{ artist }}/{{ year }} - {{ album }}/{{ track_number_padded }} - {{ title }}.',
+                'Meant for profiles for Music that download audio only, such as {{ artist }}/{{ year }} - {{ album }}/{{ track_number_padded }} - {{ title }}.',
             ],
         },
     },
@@ -206,19 +206,17 @@ const VARIABLES_BY_MODE: Record<LocalMediaProfileMode, readonly OutputTemplateVa
 /** The numbers VODLoft keeps for every episode, which the template help lists as built-in Indexing values. */
 export const BUILT_IN_INDEXING_VALUES: ReadonlySet<string> = new Set(['episode_index', 'extra_index'])
 
-// A Music collection's albums are its seasons. A profile for Music tracks or Music videos lists them as albums, by
+// A Music collection's albums are its seasons. A profile for Music lists them as albums, by
 // the album_* names that hold the same values, and every other Collection profile lists them as seasons.
 const SEASON_VARIABLES: ReadonlySet<string> = new Set(['season', 'season_name', 'season_number'])
 const ALBUM_VARIABLES: ReadonlySet<string> = new Set(['album_slug', 'album_number'])
-
-const MUSIC_SCOPES: ReadonlySet<string> = new Set(['music_tracks', 'music_videos'])
 
 export function getOutputTemplateVariables(
     mode: LocalMediaProfileMode,
     customVariables: readonly OutputTemplateVariable[] = [],
     collectionScope?: string,
 ): readonly OutputTemplateVariable[] {
-    const music = mode === 'collection' && !!collectionScope && MUSIC_SCOPES.has(collectionScope)
+    const music = mode === 'collection' && collectionScope === 'music'
     const baseVariables = VARIABLES_BY_MODE[mode].filter((variable) => (
         music ? !SEASON_VARIABLES.has(variable.name) : !ALBUM_VARIABLES.has(variable.name)
     ))

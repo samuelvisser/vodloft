@@ -73,9 +73,9 @@ Every collection is a **Podcast**, a **Series** or **Music**. You choose when ad
 
 - A **Podcast** downloads its newest episodes, by date or by number.
 - A **Series** downloads by season.
-- **Music** is an artist's music: each season is an album, and each episode a track. It downloads by season, like a Series, and takes Collection profiles available for Music tracks or Music videos (see [[Local-Media-Profiles#music-tracks-and-music-videos]]). VODLoft uses those words everywhere for it: its pages, menus and windows say album instead of season, and track instead of episode. On a site with videos, such as YouTube, what the collection lists are called music videos.
+- **Music** is an artist's music: each season is an album, and each episode a track. It downloads by season, like a Series, and takes Collection profiles available for Music, which keep tracks or music videos (see [[Local-Media-Profiles#music-tracks-and-music-videos]]). VODLoft uses those words everywhere for it: its pages, menus and windows say album instead of season, and track instead of episode. On a site with videos, such as YouTube, what the collection lists are called music videos.
 
-A collection can only change to a type its Download Profiles suit. To make a Series into Music, remove its Download Profiles first, and add new ones with a profile for Music tracks or Music videos.
+A collection can only change to a type its Download Profiles suit. To make a Series into Music, remove its Download Profiles first, and add new ones with a profile for Music.
 
 ### Changing how episodes are numbered
 
@@ -255,7 +255,7 @@ A musician on **Bandcamp** or **SoundCloud** can be added the same way: paste a 
 
 Bandcamp only has artists, and The Daily Wire only hosts, so VODLoft knows. Elsewhere the Add creator page asks **What is …?**: the creator as their site calls them, such as a YouTube channel, or a **Music artist**. VODLoft picks one for you: a YouTube channel with a **Releases** tab, or a SoundCloud account with albums, starts as a music artist, and the page says why. Pick the other one if it guessed wrong.
 
-An artist's collections are **Music** collections. **One discography** puts every album in one collection, with each album as a season named after it and the other tracks under **Singles**; **A collection per album** gives each album its own. For an artist on YouTube both leave the channel's Videos, Live and Shorts out: the artist's collection holds only what their playlists give it, each playlist as an album, and a playlist the artist adds later becomes a new album. Download them with a profile for Music tracks (see [[Local-Media-Profiles#music-tracks-and-music-videos]]), which tags every track with its album, artist and track number, such as 3/10.
+An artist's collections are **Music** collections. **One discography** puts every album in one collection, with each album as a season named after it and the other tracks under **Singles**; **A collection per album** gives each album its own. For an artist on YouTube both leave the channel's Videos, Live and Shorts out: the artist's collection holds only what their playlists give it, each playlist as an album, and a playlist the artist adds later becomes a new album. Download them with a profile for Music that downloads audio only (see [[Local-Media-Profiles#music-tracks-and-music-videos]]), which tags every track with its album, artist and track number, such as 3/10.
 
 Looking up an artist reads each album once, so an artist with many albums takes a minute; the page shows how far it is. YouTube's Releases tab cannot be read yet.
 
@@ -264,9 +264,10 @@ A creator with a Music collection is called an **artist**, on its page and in th
 ### Music videos
 
 An artist's music videos are a collection of their own on the artist's page, beside the albums: they go to a Music
-Videos library, not a Music library. Make it a Music collection and give it a Collection profile for **Music videos**,
+Videos library, not a Music library. Make it a Music collection and give it a Collection profile for **Music** that downloads video,
 made from the **Music videos** preset (see [[Local-Media-Profiles#media-server-presets]]), which files each video under
-the artist's name with a `musicvideo` NFO. **Add one** on such a collection's page sets a new profile up that way.
+the artist's name with a `musicvideo` NFO. A new profile for Music starts with Audio only, so choose a video
+download, such as 1080p, and the form moves it to that preset.
 
 Official videos are often on another channel than the albums, such as the artist's label. A collection can join any
 creator in your Library, whatever its link: see [Adding a collection to a creator](#adding-a-collection-to-a-creator-and-removing-it).

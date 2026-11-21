@@ -34,12 +34,14 @@ import {
     type LocalMediaProfileType,
 } from '../../types/local_media_profile'
 import RequestedField from '../common/RequestedField'
+import {KEEPS_TRACKS_REASON, NO_TRACKS_REASON, switchProfileKind, useTracksLock} from './musicKind'
 import {useProfileFit} from './ProfileFit'
 import './QualityField.css'
 
 type Props = {
     form: UseFormReturn<any>
     mode: LocalMediaProfileType
+    isCreating: boolean
 }
 
 const OPTIONS = {shouldDirty: true, shouldValidate: true} as const
@@ -50,7 +52,7 @@ type DownloadOption = {value: string; label: string}
  * Quality: what to download (video up to a resolution, audio only or HLS), a goal, and your own codec order.
  * Only what the profile's Sites offer is shown; each Site gets the nearest it has.
  */
-export default function QualityField({form, mode}: Props) {
+export default function QualityField({form, mode, isCreating}: Props) {
     const {control, setValue, formState: {errors}} = form
     // A link from a Download Profile can ask for the format its Stream Profile streams.
     const fit = useProfileFit(mode)
@@ -82,14 +84,28 @@ export default function QualityField({form, mode}: Props) {
         ].join(', ')
     }, [sites, mode, siteKeys, includeUpcomingSites])
 
+    // A new download can change what a profile for Music keeps: tracks or music videos.
+    const chooseFormat = (next: string) => {
+        const scope = form.getValues('collectionScope') as string | undefined
+        const previous = form.getValues('preferredFormat') as string | undefined
+        setValue('preferredFormat', next, OPTIONS)
+        if (mode !== 'collection') return ['preferredFormat']
+        return ['preferredFormat', ...switchProfileKind(form, {scope, format: previous}, {scope, format: next}, isCreating)]
+    }
     // Choosing fewer Sources can take away the chosen download; move to the nearest one they offer.
     useEffect(() => {
         if (!offered || !preferredFormat || offersFormat(offered, preferredFormat)) return
         // Sites with sound only offer no video to move to, only the sound.
         const nearest = nearestVideoFormat(offered, preferredFormat) ?? (offered.audioOnly ? 'format_audio_only' : undefined)
-        if (nearest) setValue('preferredFormat', nearest, OPTIONS)
-    }, [offered, preferredFormat, setValue])
-    const music = useWatch({control, name: 'collectionScope'}) === 'music_tracks'
+        if (nearest) chooseFormat(nearest)
+        // chooseFormat only reads the form, so a new one each render needs no new run.
+    }, [offered, preferredFormat])
+    const collectionScope = useWatch({control, name: 'collectionScope'}) as string | undefined
+    const music = mode === 'collection' && collectionScope === 'music'
+    // A profile for Music keeps tracks when it downloads audio only, so with downloads it stays on one side of that.
+    const {hasDownloads, savedTracks} = useTracksLock(form, isCreating)
+    const tracksLocked = music && hasDownloads && savedTracks
+    const tracksBlocked = music && hasDownloads && !savedTracks
     const audioOnly = preferredFormat === 'format_audio_only'
     const hls = preferredFormat === 'format_hls'
     const codecs = videoCodecs ?? []
@@ -120,7 +136,7 @@ export default function QualityField({form, mode}: Props) {
     }
 
     const option = (value: string): DownloadOption => ({value, label: QualityDownloadReg.getLabelLoose(value)})
-    const downloadGroups = music ? [{label: 'Music', options: [option('format_audio_only')]}] : [
+    const downloadGroups = tracksLocked ? [{label: 'Music', options: [option('format_audio_only')]}] : [
         {
             label: 'Video, up to',
             options: LADDER_STEPS.filter((step) => !offered || offered.videoHeights.includes(FORMAT_HEIGHTS[step])).map(option),
@@ -146,7 +162,7 @@ export default function QualityField({form, mode}: Props) {
                     requested={fit.format}
                     value={preferredFormat}
                     fields={['preferredFormat']}
-                    apply={() => setValue('preferredFormat', fit.format, OPTIONS)}
+                    apply={() => chooseFormat(fit.format!)}
                     fits={() => preferredFormat === fit.format}
                     incompatible={fit.format && <>
                         This profile no longer downloads {PreferredFormatReg.getLabelLoose(fit.format)}, the format the
@@ -158,11 +174,16 @@ export default function QualityField({form, mode}: Props) {
                     classNamePrefix="select"
                     options={downloadGroups}
                     value={downloadValue}
-                    onChange={(choice) => choice && setValue('preferredFormat', choice.value, OPTIONS)}
+                    onChange={(choice) => choice && chooseFormat(choice.value)}
+                    isOptionDisabled={(choice) => tracksBlocked && choice.value === 'format_audio_only'}
                     formatOptionLabel={(choice, {context}) => {
                         if (isLadderStep(choice.value)) return context === 'value' ? `Video, up to ${choice.label}` : choice.label
-                        // A profile for Music tracks keeps tracks, not podcasts.
-                        const help = music && choice.value === 'format_audio_only' ? 'No video, for tracks' : QualityDownloadReg.getHelp(choice.value as any)
+                        // A profile for Music keeps tracks, not podcasts, when it downloads audio only, and music videos
+                        // otherwise.
+                        const help = !music ? QualityDownloadReg.getHelp(choice.value as any)
+                            : choice.value === 'format_audio_only' ? 'No video, kept as tracks with music tags'
+                            : choice.value === 'format_hls' ? QualityDownloadReg.getHelp(choice.value as any)
+                            : undefined
                         return context === 'menu' && help
                             ? <span className="quality-download-option">{choice.label}<small>{help}</small></span>
                             : choice.label
@@ -173,8 +194,14 @@ export default function QualityField({form, mode}: Props) {
                 </RequestedField>
                 {errors.preferredFormat && <div className="error" role="alert">{String(errors.preferredFormat.message)}</div>}
                 <div className="help">
-                    {music
-                        ? 'A profile for Music tracks keeps audio only.'
+                    {tracksLocked
+                        ? KEEPS_TRACKS_REASON
+                        : tracksBlocked && !audioOnly
+                        ? NO_TRACKS_REASON
+                        : music && audioOnly
+                        ? 'Audio only: tracks, with the artist, album and track number music players read.'
+                        : music && !hls
+                        ? 'Music videos, with a musicvideo NFO. VODLoft downloads the highest resolution the site has up to this, and falls back to lower ones.'
                         : audioOnly
                         ? 'Audio only: no video is downloaded.'
                         : hls

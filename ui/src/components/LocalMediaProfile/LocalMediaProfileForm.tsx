@@ -117,7 +117,7 @@ export default function LocalMediaProfileForm({form, mode, isCreating, onCollect
                     form={form} title="Quality" description="How video and audio are downloaded"
                     summary={summaries.quality} fields={QUALITY_FIELDS} defaultOpen={isCreating}
                 >
-                    <QualityField form={form} mode={mode}/>
+                    <QualityField form={form} mode={mode} isCreating={isCreating}/>
                 </LocalMediaProfileSection>
 
                 <LocalMediaProfileSection

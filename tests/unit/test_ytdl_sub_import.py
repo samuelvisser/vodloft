@@ -257,7 +257,7 @@ def test_a_discography_becomes_an_artist_creator_with_a_music_profile(tmp_path):
     plan = _plan(_write(tmp_path, MUSIC), ("/music", "/downloads/music"))
 
     profile = next(profile for profile in plan.profiles if profile.name == "Bandcamp")
-    assert (profile.name, profile.settings.get("type", "collection"), profile.settings["collection_scope"]) == ("Bandcamp", "collection", "music_tracks")
+    assert (profile.name, profile.settings.get("type", "collection"), profile.settings["collection_scope"]) == ("Bandcamp", "collection", "music")
     assert profile.settings["preferred_format"] == "format_audio_only"
     assert profile.output_template == (
         "/downloads/music/{{ artist }}/[{{ year }}] {{ album }}/{{ track_number_padded }} - {{ title }}.ext"
@@ -503,7 +503,7 @@ def test_an_imported_discography_adds_the_artist_with_each_album_a_season(instal
     # The artist's page is the collection, and each album a link season of it.
     assert collection.sharing_url == "https://emilyharpist.bandcamp.com"
     assert [(link.title, link.enabled) for link in collection.lists] == [("Harp", True)]
-    assert session.scalar(select(CollectionLocalMediaProfile.collection_scope).where(CollectionLocalMediaProfile.name == "Bandcamp")) == "music_tracks"
+    assert session.scalar(select(CollectionLocalMediaProfile.collection_scope).where(CollectionLocalMediaProfile.name == "Bandcamp")) == "music"
 
 
 def test_an_import_without_creators_makes_the_artist_one_plain_collection(installation, monkeypatch):

@@ -9,9 +9,8 @@ import contracts from './fixtures/collectionContracts.json'
 setCollectionContracts(contracts)
 
 test('a new profile fits what it is added for', () => {
-    assert.equal(addLocalMediaProfilePath({collectionType: 'music', siteKey: 'bandcamp', audio: true}), '/add-local-media-profile?type=collection&for=music_tracks&site=bandcamp')
-    // A Music collection on YouTube has music videos.
-    assert.equal(addLocalMediaProfilePath({collectionType: 'music', siteKey: 'youtube'}), '/add-local-media-profile?type=collection&for=music_videos&site=youtube')
+    // A profile for Music keeps tracks or music videos by what it downloads.
+    assert.equal(addLocalMediaProfilePath({collectionType: 'music', siteKey: 'bandcamp'}), '/add-local-media-profile?type=collection&for=music&site=bandcamp')
     assert.equal(addLocalMediaProfilePath({collectionType: 'podcast'}), '/add-local-media-profile?type=collection&for=podcast')
     assert.equal(addLocalMediaProfilePath({collectionType: 'series', siteKey: 'youtube', format: 'format_1080p'}), '/add-local-media-profile?type=collection&for=series&site=youtube&format=format_1080p')
     assert.equal(

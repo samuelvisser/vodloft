@@ -112,7 +112,7 @@ const AudioPresetReg = createSelectRegistry('OutputTemplatePreset', {
 const MusicPresetReg = createSelectRegistry('OutputTemplatePreset', {music: PRESET_NAMES.music})
 const AllPresetReg = createSelectRegistry('OutputTemplatePreset', PRESET_NAMES)
 
-/** The presets a profile can start from: Audiobookshelf only keeps audio, and a profile for Music tracks files them by
+/** The presets a profile can start from: Audiobookshelf only keeps audio, and a profile for Music that keeps tracks files them by
  *  artist and album. */
 export function outputTemplatePresetRegistry(audioOnly: boolean, music = false) {
     if (music) return MusicPresetReg

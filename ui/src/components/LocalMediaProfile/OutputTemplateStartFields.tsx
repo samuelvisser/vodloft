@@ -5,7 +5,7 @@ import {type UseFormReturn, useWatch} from 'react-hook-form'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import SimpleSelect from '../common/SimpleSelect'
 import {useLibraryDefaults} from '../../lib/settings'
-import {FilenameRestrictionModeReg} from '../../types/local_media_profile'
+import {FilenameRestrictionModeReg, musicKind} from '../../types/local_media_profile'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import ReadMore from '../../utils/ReadMore'
 import {faIcon} from '../../icons/faIcon'
@@ -74,7 +74,8 @@ export default function OutputTemplateStartFields({form, mode, isCreating}: {
     const [presetOpen, setPresetOpen] = useState(isCreating)
     const preferredFormat = useWatch({control, name: 'preferredFormat'})
     const [pendingPreset, setPendingPreset] = useState<string | null>(null)
-    const music = useWatch({control, name: 'collectionScope'}) === 'music_tracks'
+    // A profile for Music that downloads audio only keeps tracks, filed by artist and album.
+    const music = musicKind(useWatch({control, name: 'collectionScope'}), preferredFormat) === 'tracks'
     const revealFields = useRevealFields()
     const outputTemplate = useWatch({control, name: 'outputTemplate'}) as string | undefined
     const choiceValues = useWatch({control, name: [...PRESET_CHOICE_FIELDS]}) as unknown[]

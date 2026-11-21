@@ -95,7 +95,7 @@ def collection_creator_names(collection: Collection) -> Names:
 def collection_words(collection: Collection, *, audio: bool | None = None) -> CollectionWords:
     """What a collection calls its seasons and episodes, by its type's contract: the tracks of a Music collection on a
     Site with sound only, such as Bandcamp, and its music videos elsewhere. Pass ``audio`` where the files are meant,
-    which a profile for Music tracks keeps as sound."""
+    which a profile for Music that downloads audio only keeps as sound."""
     return collection_contract(collection.type).words_for(collection_site(collection).audio_only if audio is None else audio)
 
 

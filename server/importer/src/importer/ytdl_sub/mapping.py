@@ -13,7 +13,7 @@ highest one, as in ytdl-sub.
 
 A Bandcamp or SoundCloud discography becomes the artist, a creator, with its albums the seasons of one Music
 collection, with a Music Local Media Profile that keeps ytdl-sub's folder per artist and per album. An artist's music
-videos are a Music collection of their own, with a profile for Music videos; a ``+`` map's categories, such as
+videos are a Music collection of their own, with a Music profile that downloads video; a ``+`` map's categories, such as
 Concerts, are its link seasons. Every music collection names the artist as ytdl-sub does, and an artist's albums and
 music videos join one artist: two collections, "<artist> albums" and "<artist> music videos", or one collection with
 both profiles when they download the same link.
@@ -98,7 +98,7 @@ _EPISODE_NUMBER = re.compile(r"\.e(\d+) - ")
 _HEIGHTS = ((4320, "format_8k"), (2160, "format_4k"), (1440, "format_1440p"), (1080, "format_1080p"),
             (720, "format_720p"), (480, "format_480p"), (360, "format_360p"))
 _AUDIO_FORMATS = {"mp3": "mp3", "opus": "opus", "m4a": "m4a", "aac": "m4a"}
-# Lossless, which only a profile for Music tracks keeps.
+# Lossless, which only a profile for Music that downloads audio only keeps.
 _MUSIC_AUDIO_FORMATS = {**_AUDIO_FORMATS, "flac": "flac"}
 _THROTTLE_OPTIONS = frozenset({
     "sleep_interval", "max_sleep_interval", "sleep_interval_requests", "sleep_interval_subtitles", "ratelimit",
@@ -594,17 +594,17 @@ def _metadata_templates(sub: Subscription, layout: _Layout, warnings: list[Impor
 
 
 _MUSIC_SETTINGS: dict[str, object] = {
-    "collection_scope": "music_tracks", "metadata_mode": "embed", "thumbnail_mode": "embed",
+    "collection_scope": "music", "metadata_mode": "embed", "thumbnail_mode": "embed",
     "show_nfo": False, "kodi_safe_nfo": False, "download_collection_assets": False,
 }
-"""A Local Media Profile for Music tracks: tags and a square cover in each file, as ytdl-sub's music presets write
+"""A Local Media Profile for Music that downloads audio only, so it keeps tracks: tags and a square cover in each file, as ytdl-sub's music presets write
 them."""
 
 
 _MUSIC_VIDEO_SETTINGS: dict[str, object] = {
-    "collection_scope": "music_videos", "episode_nfo": "music_video", "show_nfo": False, "download_collection_assets": False,
+    "collection_scope": "music", "episode_nfo": "music_video", "show_nfo": False, "download_collection_assets": False,
 }
-"""A Collection profile of music videos: a musicvideo NFO by the creator as artist, and no show or season files."""
+"""A Local Media Profile for Music that downloads video, so it keeps music videos: a musicvideo NFO by the creator as artist, and no show or season files."""
 
 
 def _music_video_overrides(sub: Subscription) -> dict[str, str]:

@@ -242,7 +242,7 @@ in `backend.types.collection_contracts`, the way a Site's lives in its Site cont
 - Other facts of a type live there too, and code reads them instead of comparing the type: `loose_season` (Singles
   for Music, over the Site's own `loose_season`), `site_order` and `album_lists` (an artist's albums keep their order
   and are the lists that become seasons), `media_are_episodes`, `downloads_by_season`, and the Local Media Profile
-  scopes a type offers (`profile_scopes`) and starts a new profile with (`profile_scope`, `audio_profile_scope`).
+  scopes a type offers (`profile_scopes`) and starts a new profile with (`profile_scope`).
 - The UI gets every contract with the public config and names things only through `ui/src/lib/collectionWords.ts`.
   A creator's words come from the API (`words`, from `creator_words`), not from the types of its collections.
 

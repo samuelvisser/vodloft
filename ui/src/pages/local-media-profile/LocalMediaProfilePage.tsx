@@ -110,7 +110,7 @@ export default function LocalMediaProfilePage() {
         )
     }
 
-    // What the profile keeps: a profile for Music tracks keeps tracks.
+    // What the profile keeps: a profile for Music that downloads audio only keeps tracks.
     const kept = collectionWords(keepsTracks(profile) ? 'music' : null, 'audio').episode
     const actionBusy = Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation || moveOperation)
     const runningActionReason = renameOperation

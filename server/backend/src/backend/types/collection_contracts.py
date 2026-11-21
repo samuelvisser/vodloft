@@ -36,7 +36,7 @@ class CollectionContract:
     """What its seasons and episodes are called, when they are video."""
     audio_words: CollectionWords | None = None
     """What they are called when they are sound only, such as the tracks of a Music collection on a Site with sound
-    only or the files of a profile for Music tracks; the same as ``words`` unless the contract sets it."""
+    only or the files of a profile for Music that downloads audio only; the same as ``words`` unless the contract sets it."""
 
     creator_names: Names | None = None
     """What a collection of the type calls the creator behind it, whatever their Site calls its creators, such as
@@ -57,8 +57,6 @@ class CollectionContract:
 
     profile_scope: ProfileScope = ProfileScope.PODCAST_AND_SERIES
     """What a new Local Media Profile made for a collection of the type keeps, such as Podcasts."""
-    audio_profile_scope: ProfileScope | None = None
-    """What it keeps when it is made for sound, such as Music tracks; the same as ``profile_scope`` unless set."""
 
     downloads_by_season: bool = True
     """Downloads pick the collection's seasons, as for a series or an artist's albums; otherwise its newest episodes,
@@ -71,8 +69,6 @@ class CollectionContract:
     def __post_init__(self) -> None:
         if self.audio_words is None:
             object.__setattr__(self, "audio_words", self.words)
-        if self.audio_profile_scope is None:
-            object.__setattr__(self, "audio_profile_scope", self.profile_scope)
 
     @property
     def profile_scopes(self) -> tuple[ProfileScope, ...]:
@@ -112,8 +108,7 @@ MUSIC = CollectionContract(
     media_are_episodes=True,
     site_order=True,
     album_lists=True,
-    profile_scope=ProfileScope.MUSIC_VIDEOS,
-    audio_profile_scope=ProfileScope.MUSIC_TRACKS,
+    profile_scope=ProfileScope.MUSIC,
     repeat_videos=RepeatVideos.EACH_SEASON,
 )
 """An artist's music: each season an album, each episode a music video, or a track where it is sound only. Its

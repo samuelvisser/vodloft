@@ -105,10 +105,9 @@ export default function EpisodePage() {
         isFetching: isEpisodeFetching,
     } = useEpisode(episodeId)
     const {data: profiles, error: profilesError} = useLocalMediaProfiles()
-    // A Music collection's files are tracks while only profiles for Music tracks, which keep sound, are offered for it.
+    // A Music collection's files are tracks while only profiles for Music that download audio only are offered for it.
     const fileWords = fileWordsFor(collection, profiles
-        ?.filter((profile) => isCollectionLocalMediaProfileAvailableFor(profile, collection?.type))
-        .map((profile) => profile.type === 'collection' ? profile.collectionScope : 'video'))
+        ?.filter((profile) => isCollectionLocalMediaProfileAvailableFor(profile, collection?.type)))
     const {data: waitingForCountdown} = useWaitingForCountdown(
         collection?.id,
         String(episode?.publishStatus) === 'published_preliminary',
@@ -383,7 +382,7 @@ export default function EpisodePage() {
                         {!locked && !downloadStateError && profiles !== undefined && !collectionProfiles?.length && (
                             <p>
                                 {profiles.length ? `No Local Media Profile fits ${collection.title} yet.` : 'No Local Media Profiles configured yet.'}{' '}
-                                <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, audio: collection.site?.audioOnly, from: collection.title, collectionId: collection.id, returnTo: `${location.pathname}${location.search}`})}>Add one</Link>
+                                <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, from: collection.title, collectionId: collection.id, returnTo: `${location.pathname}${location.search}`})}>Add one</Link>
                                 {' '}to download this {words.episode.singular}.
                             </p>
                         )}

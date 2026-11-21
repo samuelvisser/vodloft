@@ -29,8 +29,7 @@ export function useProfileFit(mode: LocalMediaProfileType): ProfileFit {
 const SCOPE_FITS: Record<string, {fits: readonly string[], needs: string}> = {
     podcast: {fits: ['podcast', 'podcast-and-series'], needs: 'Podcasts, or Podcasts and Series'},
     series: {fits: ['series', 'podcast-and-series'], needs: 'Series, or Podcasts and Series'},
-    music_tracks: {fits: ['music_tracks'], needs: 'Music tracks'},
-    music_videos: {fits: ['music_videos'], needs: 'Music videos'},
+    music: {fits: ['music'], needs: 'Music'},
     videos: {fits: ['videos', 'both'], needs: 'Videos, or Videos and movies'},
     movies: {fits: ['movies', 'both'], needs: 'Movies, or Videos and movies'},
 }
