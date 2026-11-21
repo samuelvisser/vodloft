@@ -75,7 +75,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
+    ResolvedLinkReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
     SourceReadSchema, type Names, NamesSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -768,6 +768,28 @@ export function useResolvedLink(url: string | undefined) {
         enabled: !!url,
         queryFn: ({signal}) => resolveLink(url!, signal),
         staleTime: 5 * 60 * 1000,
+        retry: false,
+    })
+}
+
+/** Which of the links are on a Site VODLoft knows for media, so a description links only those to Add media. */
+export function useMediaLinks(urls: string[]) {
+    const enabled = urls.length > 0 && can('add_media')
+    return useQuery<Set<string>, Error, Set<string>, readonly ['mediaLinks', string[]]>({
+        queryKey: ['mediaLinks', urls] as const,
+        enabled,
+        queryFn: async ({signal}) => {
+            const response = await fetch(`${apiUrl()}/media-links`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({urls}),
+                signal,
+            })
+            if (!response.ok) throw await responseError(response)
+            return new Set(MediaLinksReadSchema.parse(await response.json()).urls)
+        },
+        staleTime: 30 * 60 * 1000,
         retry: false,
     })
 }

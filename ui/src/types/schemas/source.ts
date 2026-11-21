@@ -122,6 +122,9 @@ export function sourceHas(source: SourceRead | null | undefined, feature: Source
     return !!source?.features.includes(feature)
 }
 
+/** The links of a description that are on a Site VODLoft knows for media. */
+export const MediaLinksReadSchema = z.object({urls: z.array(z.string())})
+
 export const ResolvedLinkReadSchema = z.object({
     source: SourceReadSchema,
     /** A creator link, such as a Daily Wire host's page, is added as a creator only. */

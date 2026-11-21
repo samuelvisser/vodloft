@@ -180,3 +180,23 @@ def test_a_site_remembers_every_domain_it_was_seen_on(session):
         session.flush()
         assert video.site_key == "youtube"
     assert video.site.domains == ["youtube.com", "youtu.be"]
+
+
+def test_only_links_on_a_site_vodloft_knows_are_media_links(session):
+    from backend.db.models import Site as SiteRecord
+    from backend.security.access import Access
+    from backend.services.sites import media_links
+
+    links = [
+        "https://www.youtube.com/@Faith-May2005",  # A Site with a contract of its own
+        "https://www.dailywire.com/show/a-show",  # A Site a Source is made for
+        "https://streamyard.com/pal/d/5072102071074816",  # Only yt-dlp's generic extractor, and not added
+        "https://www.example.com/clip.mp4",  # Not added yet
+        "mailto:someone@example.com",
+    ]
+    assert media_links(session, Access.full(), links) == links[:2]
+
+    # A site the user added, or that VODLoft has media from, is in VODLoft's Sites.
+    session.add(SiteRecord(key="generic:example.com", name="example.com", domains=["example.com"]))
+    session.flush()
+    assert media_links(session, Access.full(), links) == [*links[:2], "https://www.example.com/clip.mp4"]
