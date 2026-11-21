@@ -84,11 +84,12 @@ class BackgroundMigrationContext:
         total: int,
         message: str | None = None,
     ) -> None:
-        if total <= 0:
-            raise ValueError("Background migration progress total must be positive")
+        if total < 0:
+            raise ValueError("Background migration progress total cannot be negative")
+        # A migration that found nothing to do reports 0 of 0, which is done.
         current = max(0, min(int(current), int(total)))
         self._set(
-            fraction=current / total,
+            fraction=current / total if total else 1,
             message=message or self.migration.title,
             item_current=current,
             item_total=total,
