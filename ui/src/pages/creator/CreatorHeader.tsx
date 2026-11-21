@@ -63,9 +63,11 @@ export default function CreatorHeader({title, label, handle, avatarUrl, bannerUr
             <Heading id={titleId} className="creator-name">{title}</Heading>
             {actions && <div ref={actionsRef} className="creator-actions">{actions}</div>}
             <div className="creator-about">
-                {/* Each fact stays whole, such as "1.7M subscribers": a line breaks only between them. */}
+                {/* Each fact stays whole, such as "1.7M subscribers": a line breaks only between them. The label can break
+                    anywhere, since it names every Site of a creator on several, such as "Creator on YouTube, SoundCloud and
+                    Twitch". */}
                 <p className="creator-facts">
-                    {[capitalized(label), handle, ...facts].filter(Boolean).map((fact) => fact!.replace(/ /g, '\u00a0')).join('\u00a0· ')}
+                    {[capitalized(label), ...[handle, ...facts].filter(Boolean).map((fact) => fact!.replace(/ /g, '\u00a0'))].join('\u00a0· ')}
                 </p>
                 {description && <CreatorDescription text={description}/>}
                 {stats}

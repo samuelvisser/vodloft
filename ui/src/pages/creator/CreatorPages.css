@@ -58,11 +58,16 @@
     }
     .creator-header--no-banner { grid-template-areas: "avatar" "name" "about" "actions"; }
     .creator-banner { aspect-ratio: 4 / 1; min-height: 0; margin: 0 -16px; border-radius: 0; }
+    .creator-facts { overflow-wrap: anywhere; }
     .creator-avatar { width: 88px; height: 88px; margin: -42px 0 0; border-width: 4px; font-size: 2rem; }
     .creator-header--no-banner .creator-avatar { width: 72px; height: 72px; margin-top: 0; }
     .creator-header .creator-name { margin: 8px 0 0; font-size: 1.6rem; }
     .creator-about { padding: 6px 0 0; }
     .creator-actions { justify-content: flex-start; margin: 14px 0 0; }
+}
+@media (max-width: 560px) {
+    /* The page's own padding is 12px here, so the banner reaches the edges without making the page scroll sideways. */
+    .creator-banner { margin: 0 -12px; }
 }
 
 .creator-setup { display: flex; flex-direction: column; gap: 1.25rem; }
