@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import {faIcon} from '../../icons/faIcon'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
+import RedownloadSwitch from '../../components/ActionConfirmDialogue/RedownloadSwitch'
 import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
 import RunningActions from '../../components/RunningActions/RunningActions'
 import DisabledReason from '../../components/common/DisabledReason'
@@ -52,7 +53,7 @@ export default function LocalMediaProfilePage() {
 
     const [renameConfirm, setRenameConfirm] = useState(false)
     const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
-    const [redownloadConfirm, setRedownloadConfirm] = useState(false)
+    const [redownloadAfterDelete, setRedownloadAfterDelete] = useState(false)
     const [deleteProfileConfirm, setDeleteProfileConfirm] = useState(false)
     const [deletingProfile, setDeletingProfile] = useState(false)
     const [operationControlBusy, setOperationControlBusy] = useState<string | null>(null)
@@ -272,43 +273,22 @@ export default function LocalMediaProfilePage() {
             disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
             disabledReason: deleteDownloadsOperation
                 ? 'A delete downloads operation is running for this profile.'
-                : renameOperation
-                    ? 'A file rename operation is running for this profile.'
-                    : redownloadOperation
-                        ? 'A re-download operation is running for this profile.'
-                        : statistics.managedMediaCount === 0
-                            ? 'This Local Media Profile does not manage any downloads.'
-                            : undefined,
-            operation: deleteDownloadsOperation,
-            starting: isStarting('local_media_profile.delete_downloads'),
-            controls: operationControls(
-                deleteDownloadsOperation,
-                'delete downloads',
-            ),
-            onSelect: () => setDeleteDownloadsConfirm(true),
-        },
-        {
-            label: 'Delete and re-download all media',
-            icon: faIcon('fass', 'arrows-rotate'),
-            tone: 'danger',
-            disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
-            disabledReason: redownloadOperation
-                ? 'A re-download operation is running for this profile.'
-                : deleteDownloadsOperation
-                    ? 'A delete downloads operation is running for this profile.'
+                : redownloadOperation
+                    ? 'A re-download operation is running for this profile.'
                     : renameOperation
                         ? 'A file rename operation is running for this profile.'
                         : statistics.managedMediaCount === 0
                             ? 'This Local Media Profile does not manage any downloads.'
                             : undefined,
-            operation: redownloadOperation,
-            starting: isStarting('local_media_profile.redownload_media'),
-            controls: operationControls(
-                redownloadOperation,
-                're-download',
-                false,
-            ),
-            onSelect: () => setRedownloadConfirm(true),
+            operation: deleteDownloadsOperation ?? redownloadOperation,
+            starting: isStarting('local_media_profile.delete_downloads') || isStarting('local_media_profile.redownload_media'),
+            controls: deleteDownloadsOperation
+                ? operationControls(deleteDownloadsOperation, 'delete downloads')
+                : operationControls(redownloadOperation, 're-download', false),
+            onSelect: () => {
+                setRedownloadAfterDelete(false)
+                setDeleteDownloadsConfirm(true)
+            },
         },
     ]
 
@@ -460,46 +440,31 @@ export default function LocalMediaProfilePage() {
 
             <ActionConfirmDialogue
                 open={deleteDownloadsConfirm}
-                operationDefinition={frontendOperationDefinitions['local_media_profile.delete_downloads']}
-                onStartingChange={onStartingChange('local_media_profile.delete_downloads')}
-                requestPath={`/local-media-profiles/${encodeURIComponent(profile.slug)}/delete-downloads`}
+                operationDefinition={frontendOperationDefinitions[redownloadAfterDelete ? 'local_media_profile.redownload_media' : 'local_media_profile.delete_downloads']}
+                onStartingChange={onStartingChange(redownloadAfterDelete ? 'local_media_profile.redownload_media' : 'local_media_profile.delete_downloads')}
+                requestPath={`/local-media-profiles/${encodeURIComponent(profile.slug)}/${redownloadAfterDelete ? 'redownload-media' : 'delete-downloads'}`}
                 resourceLabel={profile.name}
                 title="Delete all downloads"
                 onDismiss={() => setDeleteDownloadsConfirm(false)}
                 icon={faIcon('fass', 'trash')}
                 iconTone="danger"
-                confirmLabel="Delete downloads"
-                disabled={Boolean(renameOperation || redownloadOperation)}
+                confirmLabel={redownloadAfterDelete ? 'Delete and re-download' : 'Delete downloads'}
+                disabled={Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)}
             >
                 <p>
                     Delete every downloaded file managed by "{profile.name}". MediaDownload
                     records remain attached to the profile so their history is preserved.
                 </p>
-                {statistics.downloadProfileCount > 0 && (
-                    <p>
-                        VODLoft will disable Download Profiles that use this Local Media Profile
-                        before deleting files so automatic downloads do not immediately recreate them.
-                    </p>
-                )}
-            </ActionConfirmDialogue>
-
-            <ActionConfirmDialogue
-                open={redownloadConfirm}
-                operationDefinition={frontendOperationDefinitions['local_media_profile.redownload_media']}
-                onStartingChange={onStartingChange('local_media_profile.redownload_media')}
-                requestPath={`/local-media-profiles/${encodeURIComponent(profile.slug)}/redownload-media`}
-                resourceLabel={profile.name}
-                title="Delete and re-download all media"
-                onDismiss={() => setRedownloadConfirm(false)}
-                icon={faIcon('fass', 'arrows-rotate')}
-                iconTone="danger"
-                confirmLabel="Delete and re-download"
-                disabled={Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)}
-            >
-                <p>
-                    Delete all previously downloaded files managed by "{profile.name}" and download
-                    them again. Media that has never been downloaded will not be added by this action.
-                </p>
+                <RedownloadSwitch
+                    label="Re-download the deleted files"
+                    checked={redownloadAfterDelete}
+                    onChange={setRedownloadAfterDelete}
+                    help={redownloadAfterDelete
+                        ? 'VODLoft downloads each deleted file again right away. Media that has never been downloaded will not be added.'
+                        : statistics.downloadProfileCount > 0
+                            ? 'VODLoft will disable Download Profiles that use this Local Media Profile before deleting files so automatic downloads do not immediately recreate them.'
+                            : 'The files are not downloaded again.'}
+                />
             </ActionConfirmDialogue>
 
             <ConfirmDialog

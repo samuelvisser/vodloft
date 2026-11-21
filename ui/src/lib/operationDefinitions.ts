@@ -717,6 +717,17 @@ export const frontendOperationDefinitions = {
     label: 'Movie extra refresh',
     invalidate: invalidateMovie,
   },
+  'movie.delete_downloads': {
+    kind: 'movie.delete_downloads',
+    resourceType: 'movie',
+    label: 'Delete downloads',
+    invalidate: invalidateMovieFiles,
+    success: (operation) => {
+      const movieTitle = contextString(operation, 'movie_title') || operation.title
+      const files = resultNumber(operation, 'files_deleted') ?? operation.progressTotal
+      return `Deleted downloads for ${movieTitle}: ${files} ${plural(files, 'file', 'files')} removed`
+    },
+  },
   'movie.redownload_media': {
     kind: 'movie.redownload_media',
     resourceType: 'movie',
