@@ -60,7 +60,7 @@ def episode_live(source: Source, episode: EpisodeRef, *, fresh: bool = False) ->
 
 
 def _live(source: Source, episode: EpisodeRef) -> LiveStream | None:
-    with ytdlp_call_options(source, episode.ytdlp_options):
+    with ytdlp_call_options(source, *episode.ytdlp_options):
         return source.live_stream(episode.url, use_cookies=episode.use_cookies)
 
 

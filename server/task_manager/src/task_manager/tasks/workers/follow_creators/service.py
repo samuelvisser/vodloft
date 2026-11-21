@@ -23,9 +23,10 @@ def _look_up(s: Session, account_id: int) -> tuple[str, CreatorDetails] | None:
     if account is None:
         return None
     title, source_key, ref = account.creator.title, account.source_key, account.url or account.site_ref
+    options = ytdlp_call_options(source_key, account.creator.ytdlp_options, session=s)
     # No transaction stays open while the Source looks the account up.
     s.rollback()
-    with ytdlp_call_options(source_key):
+    with options:
         return title, get_source(source_key).creator_details(ref)
 
 

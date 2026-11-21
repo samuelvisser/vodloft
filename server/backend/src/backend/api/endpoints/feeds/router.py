@@ -110,7 +110,7 @@ def _require_media(profile, kind: StreamMediaKind, what: str) -> None:
 
 def _episode_ref(episode) -> EpisodeRef:
     return EpisodeRef(uuid=episode.uuid, url=episode.sharing_url, use_cookies=uses_cookies(episode.collection),
-        ytdlp_options=episode.collection.ytdlp_options,
+        ytdlp_options=episode.collection.ytdlp_option_texts,
     )
 
 

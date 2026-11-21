@@ -23,6 +23,8 @@ import CreatorSectionsEditor, {placedSections, placeKey, placeLabel, placeMove, 
 import MoveSectionsDialog, {type PlaceChange} from './MoveSectionsDialog'
 import './CreatorPages.css'
 import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
+import OptionsEditor from '../../components/common/OptionsEditor/OptionsEditor'
+import ReadMore from '../../utils/ReadMore'
 
 export default function EditCreatorPage() {
     const {slug} = useParams()
@@ -46,7 +48,7 @@ export default function EditCreatorPage() {
         if (!creator) return
         reset({
             title: creator.title, newLists: newListsValues(creator.newLists), genre: creator.genre ?? '', contentRating: creator.contentRating ?? '',
-            places: {},
+            ytdlpOptions: creator.ytdlpOptions, places: {},
         })
     }, [creator, reset])
 
@@ -76,6 +78,7 @@ export default function EditCreatorPage() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 title: data.title, newLists: data.newLists, genre: data.genre || null, contentRating: data.contentRating || null,
+                ...(creator.takesYtdlpOptions ? {ytdlpOptions: data.ytdlpOptions} : {}),
                 ...(moves.length > 0 ? {moves, renumber: renumber.current} : {}),
             }),
         })
@@ -197,6 +200,30 @@ export default function EditCreatorPage() {
                            aria-invalid={!!errors.contentRating}/>
                     {errors.contentRating && <div className="error" role="alert">{errors.contentRating.message}</div>}
                 </div>
+
+                {creator.takesYtdlpOptions && (
+                    <div className="form-row creator-membership">
+                        <label htmlFor="creator-ytdlp-options">Your own yt-dlp options</label>
+                        <OptionsEditor
+                            id="creator-ytdlp-options"
+                            value={watch('ytdlpOptions') ?? ''}
+                            onChange={(value) => setValue('ytdlpOptions', value, {shouldDirty: true, shouldValidate: !!errors.ytdlpOptions})}
+                            invalid={!!errors.ytdlpOptions}
+                            describedBy={errors.ytdlpOptions ? 'creator-ytdlp-options-errors' : 'creator-ytdlp-options-help'}
+                        />
+                        {errors.ytdlpOptions && (
+                            <div id="creator-ytdlp-options-errors" className="error" role="alert">{errors.ytdlpOptions.message}</div>
+                        )}
+                        <div className="help" id="creator-ytdlp-options-help">
+                            <ReadMore summary={`Options for every collection of this ${creator.creatorNames.singular}, on top of the yt-dlp Source’s options in Settings. Most leave this empty.`}>
+                                <p>These lines come after the yt-dlp options in Settings, under Sources, and before a collection’s own options.
+                                    So for an option set in more than one place, the collection’s own wins, then this {creator.creatorNames.singular}’s.
+                                    Each line is checked with yt-dlp’s own parser, and the same options are blocked as in Settings.
+                                    Collections that don’t use yt-dlp, such as those from The Daily Wire, don’t use these options.</p>
+                            </ReadMore>
+                        </div>
+                    </div>
+                )}
 
                 <CreatorSectionsEditor
                     creator={creator} part="places" places={places}

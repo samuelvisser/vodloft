@@ -28,26 +28,28 @@ def save_ytdlp_source_options(session: Session, text: str) -> str:
     return row.ytdlp_options
 
 
-def ytdlp_call_arguments(session: Session, source: Source | str, collection_options: str | None = None) -> tuple[str, ...]:
-    """The network and site options of the Source's and the collection's own yt-dlp options.
+def ytdlp_call_arguments(session: Session, source: Source | str, *option_texts: str | None) -> tuple[str, ...]:
+    """The network and site options of the Source's yt-dlp options and of ``option_texts``, such as a collection's
+    ``ytdlp_option_texts`` (its creator's and its own), in that order.
 
     These reach every yt-dlp call, not only downloads: a proxy or a site's extractor arguments are
     needed to find a collection's videos as much as to download them.
     """
     if not (get_source(source) if isinstance(source, str) else source).has(Feature.YTDLP_OPTIONS):
         return ()
-    texts = (ytdlp_source_options(session), collection_options or "")
+    texts = (ytdlp_source_options(session), *(text or "" for text in option_texts))
     return tuple(argument for text in texts for argument in every_call_arguments(text))
 
 
 def ytdlp_call_options(
-    source: Source | str, collection_options: str | None = None, *, session: Session | None = None,
+    source: Source | str, *option_texts: str | None, session: Session | None = None,
 ) -> AbstractContextManager[None]:
-    """yt-dlp calls in the returned block use the Source's and the collection's network and site options.
+    """yt-dlp calls in the returned block use the network and site options of the Source and of ``option_texts``, such
+    as a collection's ``ytdlp_option_texts``.
 
     The options are read right away, so a caller can close its transaction before the slow calls.
     """
     if session is not None:
-        return call_options(ytdlp_call_arguments(session, source, collection_options))
+        return call_options(ytdlp_call_arguments(session, source, *option_texts))
     with get_session() as own:
-        return call_options(ytdlp_call_arguments(own, source, collection_options))
+        return call_options(ytdlp_call_arguments(own, source, *option_texts))

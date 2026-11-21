@@ -202,6 +202,10 @@ export const CreatorReadSchema = z.object({
     words: CollectionWordsSchema,
     genre: z.string().nullable(),
     contentRating: z.string().nullable(),
+    /** Your own yt-dlp options for the creator's collections, after the yt-dlp Source's and before each collection's own. */
+    ytdlpOptions: z.string().default(''),
+    /** One of the creator's accounts or collections comes from a Source that takes yt-dlp options. */
+    takesYtdlpOptions: z.boolean().default(false),
 })
 export type CreatorRead = z.infer<typeof CreatorReadSchema>
 
@@ -301,6 +305,7 @@ export const CreatorUpdateSchema = z.object({
     newLists: NewListsSchema.default({}),
     genre: z.string().trim().max(200).default(''),
     contentRating: z.string().trim().max(50).default(''),
+    ytdlpOptions: z.string().max(8000).default(''),
     places: SectionPlacesSchema.default({}),
 })
 export type CreatorUpdateIn = z.input<typeof CreatorUpdateSchema>

@@ -65,8 +65,8 @@ class EpisodeRef:
     uuid: str
     url: str
     use_cookies: bool
-    # The collection's own yt-dlp options, whose network and site options the lookup uses too.
-    ytdlp_options: str | None = None
+    # The collection's creator's and own yt-dlp options, whose network and site options the lookup uses too.
+    ytdlp_options: tuple[str, ...] = ()
 
 
 # --- Looking tracks up -----------------------------------------------------------------------------
@@ -96,7 +96,7 @@ def episode_tracks(source: Source, episode: EpisodeRef, *, fresh: bool = False) 
 
 
 def _look_up_tracks(source: Source, episode: EpisodeRef) -> MediaTracks | None:
-    with ytdlp_call_options(source, episode.ytdlp_options):
+    with ytdlp_call_options(source, *episode.ytdlp_options):
         return source.media_tracks(episode.url, use_cookies=episode.use_cookies)
 
 

@@ -175,7 +175,7 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
     collection = s.get(Collection, collection_id)
     if collection is None:
         return 0
-    with ytdlp_call_options(source, collection.ytdlp_options, session=s):
+    with ytdlp_call_options(source, *collection.ytdlp_option_texts, session=s):
         return _index_listed_collection(s, collection_id=collection_id, source=source, progress=progress, dry_run=dry_run)
 
 
@@ -387,7 +387,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
     collection = s.get(Collection, collection_id)
     if collection is None:
         return RefreshCounts()
-    with ytdlp_call_options(source, collection.ytdlp_options, session=s):
+    with ytdlp_call_options(source, *collection.ytdlp_option_texts, session=s):
         return _refresh_listed_collection(s, collection, source)
 
 

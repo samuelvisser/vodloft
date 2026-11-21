@@ -93,6 +93,10 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     chapters = ytdlp_chapters(site_choices) if site_choices else YtdlpChapters()
     option_texts = [("the yt-dlp Source", ytdlp_source_options(session))]
     if episode is not None:
+        # The creator's options come before the collection's own, so that the collection's win.
+        creator = episode.collection.creator
+        if creator is not None:
+            option_texts.append((f"the creator '{creator.title}'", creator.ytdlp_options))
         option_texts.append((f"the Collection '{episode.collection.title}'", episode.collection.ytdlp_options))
     subtitle_request = ytdlp_subtitles(profile, AutoSubtitles.NEVER)
     default_languages = default_subtitle_languages(profile)

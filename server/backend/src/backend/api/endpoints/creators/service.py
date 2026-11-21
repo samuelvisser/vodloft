@@ -356,6 +356,10 @@ class _CreatorRead:
         return kinds_names(creators.creator_list_kinds(self.creator))
 
     @property
+    def takes_ytdlp_options(self) -> bool:
+        return creators.takes_ytdlp_options(self.creator)
+
+    @property
     def open_count(self) -> int:
         """How often its page and its collections' pages were opened."""
         return self.creator.open_count + sum(collection.open_count for collection in self.creator.collections)
@@ -596,7 +600,7 @@ def update_creator(
         creators.rename_creator(creator, title)
         creator.title_from_user = True
     creators.update_creator_settings(s, creator, creators.CreatorSettings(
-        dict(body.new_lists), body.genre, body.content_rating,
+        dict(body.new_lists), body.genre, body.content_rating, body.ytdlp_options,
     ))
     s.flush()
     if body.moves:

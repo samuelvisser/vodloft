@@ -1396,3 +1396,38 @@ def test_each_kind_of_list_has_its_own_setting_for_new_ones(client, session, tub
 
     # The album is added by itself; the playlist waits for the user's choice.
     assert ([section.ref for section in result.added], [section.ref for section in result.asked]) == (["PLalbum"], ["PLbarn"])
+
+
+def test_a_creators_own_ytdlp_options_reach_its_collections_before_their_own(client, session, tube, monkeypatch):
+    from backend.db.models import Collection
+    from backend.services.source_options import ytdlp_call_options
+    from sources import ytdlp_runner
+
+    _one_show(client)
+    # A Source without your own yt-dlp options has no field for them.
+    page = client.get("/api/creators/workshop").json()
+    assert (page["takesYtdlpOptions"], page["ytdlpOptions"]) == (False, "")
+    refused = client.patch("/api/creators/workshop", json={"ytdlpOptions": "--impersonate chrome"})
+    assert refused.status_code == 422
+
+    monkeypatch.setattr(CreatorSource, "features", CreatorSource.features | {Feature.YTDLP_OPTIONS})
+    assert client.get("/api/creators/workshop").json()["takesYtdlpOptions"] is True
+    # The same lines are refused as for a collection.
+    blocked = client.patch("/api/creators/workshop", json={"ytdlpOptions": "-o out.mp4"})
+    assert blocked.status_code == 422
+    assert blocked.json()["detail"][0]["loc"][-1] == "ytdlpOptions"
+
+    saved = client.patch("/api/creators/workshop", json={"ytdlpOptions": "--impersonate chrome\n--proxy http://a:1\n"})
+    assert saved.json()["ytdlpOptions"] == "--impersonate chrome\n--proxy http://a:1"
+    # Leaving them out keeps them.
+    assert client.patch("/api/creators/workshop", json={"genre": "DIY"}).json()["ytdlpOptions"].startswith("--impersonate")
+
+    session.expire_all()
+    collection = session.scalar(select(Collection).where(Collection.slug == "UCworkshop"))
+    collection.ytdlp_options = "--proxy http://b:2"
+    assert collection.ytdlp_option_texts == ("--impersonate chrome\n--proxy http://a:1", "--proxy http://b:2")
+    with ytdlp_call_options("tube", *collection.ytdlp_option_texts, session=session):
+        # yt-dlp takes the last of an option given twice: the collection's own proxy.
+        assert ytdlp_runner.command()[-6:] == (
+            "--impersonate", "chrome", "--proxy", "http://a:1", "--proxy", "http://b:2",
+        )

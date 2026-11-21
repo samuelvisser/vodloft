@@ -99,7 +99,7 @@ def _check_collection(s: Session, *, collection: Collection, source: Source) -> 
     """Look at the collection's newest videos, and add the ones it does not have yet. When it found some and the
     collection's playlists are seasons, it looks at the playlists too, so a new video goes to its playlist's season
     before it is downloaded."""
-    with ytdlp_call_options(source, collection.ytdlp_options, session=s):
+    with ytdlp_call_options(source, *collection.ytdlp_option_texts, session=s):
         return _check_collection_now(s, collection=collection, source=source)
 
 

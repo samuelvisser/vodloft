@@ -301,8 +301,9 @@ parser as you type, and gets one of these results:
 - **VODLoft already has a setting for this**, naming that setting: for example subtitles, thumbnails, the container
   or SponsorBlock.
 
-The options can only be saved when every line passes. A Collection can add its own options on its Edit page, for
-exceptions; they come after these, so for an option set in both places the Collection's wins.
+The options can only be saved when every line passes. A creator can add options of their own on their Edit page,
+for all their collections, and a Collection can add its own on its Edit page, for exceptions. They come in that order
+after these, so for an option set in more than one place the Collection's own wins, then the creator's.
 
 #### YouTube Data API key
 

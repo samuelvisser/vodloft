@@ -73,7 +73,7 @@ def episode_stream(source: Source, episode, *, audio: bool, fresh: bool = False)
     ``fresh`` looks it up again, for a URL the site stopped accepting.
     """
     url, use_cookies = episode.sharing_url, uses_cookies(episode.collection)
-    options = episode.collection.ytdlp_options
+    options = episode.collection.ytdlp_option_texts
     return _streams.get(
         (episode.uuid, audio),
         lambda: look_up_at_site(source, "stream", url, lambda: _stream(source, url, audio, use_cookies, options)),
@@ -81,8 +81,8 @@ def episode_stream(source: Source, episode, *, audio: bool, fresh: bool = False)
     )
 
 
-def _stream(source: Source, url: str, audio: bool, use_cookies: bool, options: str | None) -> MediaStream | None:
-    with ytdlp_call_options(source, options):
+def _stream(source: Source, url: str, audio: bool, use_cookies: bool, options: tuple[str, ...]) -> MediaStream | None:
+    with ytdlp_call_options(source, *options):
         return source.media_stream(url, audio=audio, use_cookies=use_cookies)
 
 

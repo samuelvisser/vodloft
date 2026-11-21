@@ -254,11 +254,11 @@ def test_an_mp4_plays_youtubes_own_file_until_the_joined_one_is_ready(tracks_mod
 
     def profile(proxy):
         return SimpleNamespace(
-            collection=SimpleNamespace(sharing_url="https://www.youtube.com/@channel", source_key="ytdlp", ytdlp_options=""),
+            collection=SimpleNamespace(sharing_url="https://www.youtube.com/@channel", source_key="ytdlp", ytdlp_option_texts=()),
             preferred_format="format_1080p", proxy_source_stream=proxy,
         )
 
-    episode = SimpleNamespace(uuid="e1", slug="e1", sharing_url="https://www.youtube.com/watch?v=abc", collection=SimpleNamespace(ytdlp_options=""))
+    episode = SimpleNamespace(uuid="e1", slug="e1", sharing_url="https://www.youtube.com/watch?v=abc", collection=SimpleNamespace(ytdlp_option_texts=()))
     app = FastAPI()
 
     @app.get("/{proxy}")

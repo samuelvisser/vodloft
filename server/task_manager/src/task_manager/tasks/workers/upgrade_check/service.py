@@ -104,8 +104,8 @@ def _check(s: Session, download_id: int, now: datetime) -> UpgradeResult | None:
     episode = download.media
     source = get_source(episode.source_key)
     url, categories = episode.sharing_url, sponsorblock_categories(download, episode_site(episode))
-    collection_options = episode.collection.ytdlp_options if isinstance(episode, Episode) else None
-    options = ytdlp_call_options(source, collection_options, session=s)
+    collection_options = episode.collection.ytdlp_option_texts if isinstance(episode, Episode) else ()
+    options = ytdlp_call_options(source, *collection_options, session=s)
     s.rollback()
     try:
         with options:

@@ -150,7 +150,7 @@ class _Upstream:
 def _episode(duration=10.0):
     return SimpleNamespace(
         uuid=f"episode-{id(object())}", sharing_url="https://www.youtube.com/watch?v=abc", duration=duration,
-        collection=SimpleNamespace(cookies_mode="automatic", cookies_needed_until=None, ytdlp_options=""),
+        collection=SimpleNamespace(cookies_mode="automatic", cookies_needed_until=None, ytdlp_option_texts=()),
     )
 
 
