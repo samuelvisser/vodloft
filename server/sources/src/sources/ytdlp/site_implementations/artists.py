@@ -14,6 +14,8 @@ from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
+from progress_plan import PlanTracker, StageSpec
+
 from ...contract import CreatorDetails, SearchResults, SectionKind, SectionRef
 from ... import ytdlp_runner as runner
 from .. import sites, soundcloud_search, thumbnails
@@ -63,7 +65,7 @@ class ArtistImplementation(OtherSitesImplementation):
         root = self.creator_root(url)
         if root is None:
             raise runner.YtDlpError(f"This link is not an artist on {self.site.name}")
-        return [section for section in self.creator_details(root, lambda step: None).sections if section.kind is SectionKind.LIST]
+        return [section for section in self.creator_details(root, PlanTracker()).sections if section.kind is SectionKind.LIST]
 
     def all_music(self, url: str, newest_albums: int | None = None) -> list[dict] | None:
         return self.tracks(self.creator_root(url), newest_albums) if self.is_creator_page(url) else None
@@ -82,26 +84,36 @@ class ArtistImplementation(OtherSitesImplementation):
         """Which of the Site's types of list each album link is."""
         raise NotImplementedError
 
-    def creator_details(self, root: str, progress: Callable[[str], None]) -> CreatorDetails:
+    def creator_details(self, root: str, plan: PlanTracker) -> CreatorDetails:
         root = self.creator_root(root) or root
         cookies = sites.cookies_for(root)
-        progress("Listing the albums")
-        links = self.release_links(root)
+        # Named by what the Site calls its lists, such as "albums and playlists" on SoundCloud.
+        lists = self.site.section_list_names.plural
+        plan.add(
+            StageSpec(id="list", code="list_lists", label=f"Listing the {lists}"),
+            StageSpec(id="read", code="read_lists", label=f"Reading the {lists}"),
+        )
         found: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE) as pool:
+            # The artist's feeds and pictures are read beside their lists.
+            listings = self.read_feeds(root, pool, plan)
             pictures = pool.submit(self.pictures, root)
-            lookups = {pool.submit(self.look_up, url, cookies): url for url in links}
-            for done, lookup in enumerate(as_completed(lookups), start=1):
-                progress(f"Reading the albums: {done} of {len(links)}")
-                try:
-                    found[lookups[lookup]] = lookup.result()
-                except runner.YtDlpError as exc:
-                    logger.info("Leaving out %s: %s", lookups[lookup], exc)
-            key_of = self.list_key(root, cookies)
+            with plan.running("list"):
+                links = self.release_links(root)
+                key_of = self.list_key(root, cookies)
+            with plan.running("read"):
+                plan.progress("read", 0.0, done=0, total=len(links))
+                lookups = {pool.submit(self.look_up, url, cookies): url for url in links}
+                for done, lookup in enumerate(as_completed(lookups), start=1):
+                    plan.progress("read", done / len(links), done=done, total=len(links))
+                    try:
+                        found[lookups[lookup]] = lookup.result()
+                    except runner.YtDlpError as exc:
+                        logger.info("Leaving out %s: %s", lookups[lookup], exc)
             releases = [self._release(url, info, key_of(url)) for url, info in found.items()]
             releases.sort(key=lambda release: release[0], reverse=True)
             sections = [section for _date, section in releases]
-            sections += self.feed_sections(root, self.read_feeds(root, pool))
+            sections += self.feed_sections(root, listings)
         name = next(filter(None, (_artist_name(info) for info in found.values())), None)
         handle = self.handle(root)
         # How many of each type of list the artist has, in the Site's words, such as "2 albums" and "1 playlist".

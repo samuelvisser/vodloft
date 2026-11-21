@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+from progress_plan import PlanTracker
 from sources import SectionKind
 from sources import ytdlp_runner as runner
 from sources.ytdlp import sites
@@ -67,9 +68,12 @@ def _bandcamp(*args, cookies=None):
 
 def test_a_bandcamp_artist_lists_albums_newest_first_and_tracks_on_their_own_as_singles(monkeypatch):
     monkeypatch.setattr(runner, "run_json", _bandcamp)
-    steps = []
+    counts = []
+    plan = PlanTracker(sink=lambda snapshot: counts.extend(
+        (stage.done, stage.total) for stage in snapshot.stages if stage.id == "read" and stage.total is not None
+    ))
 
-    details = _implementation("https://tycho.bandcamp.com").creator_details("https://tycho.bandcamp.com", steps.append)
+    details = _implementation("https://tycho.bandcamp.com").creator_details("https://tycho.bandcamp.com", plan)
 
     assert (details.ref, details.url, details.title, details.facts, details.music) == (
         "tycho", "https://tycho.bandcamp.com", "Tycho", ("2 albums",), True,
@@ -79,7 +83,12 @@ def test_a_bandcamp_artist_lists_albums_newest_first_and_tracks_on_their_own_as_
         ("Epoch", SectionKind.LIST, "2016", 13),
         ("Dive", SectionKind.LIST, "2011", 10),
     ]
-    assert steps[0] == "Listing the albums" and steps[-1] == "Reading the albums: 3 of 3"
+    stages = plan.snapshot().stages
+    assert [(stage.label, stage.state) for stage in stages] == [
+        ("Listing the albums", "completed"), ("Reading the albums", "completed"),
+    ]
+    # Reading the albums counts them as it goes, one count after the other on the same step.
+    assert counts[0] == (0, 3) and counts[-1] == (3, 3)
 
 
 def test_a_soundcloud_artist_has_its_albums_and_a_feed_of_all_its_tracks(monkeypatch):
@@ -90,7 +99,7 @@ def test_a_soundcloud_artist_has_its_albums_and_a_feed_of_all_its_tracks(monkeyp
         return {"_type": "playlist", "title": "Palaces", "album_artist": "Flume", "release_date": "20220520", "playlist_count": 13}
 
     monkeypatch.setattr(runner, "run_json", soundcloud)
-    details = _implementation("https://soundcloud.com/flume").creator_details("https://soundcloud.com/flume", lambda step: None)
+    details = _implementation("https://soundcloud.com/flume").creator_details("https://soundcloud.com/flume", PlanTracker())
 
     assert (details.ref, details.title, details.avatar_url) == ("flume", "Flume", "https://i1.sndcdn.com/avatars-flume-t500x500.jpg")
     assert details.banner_url == "https://i1.sndcdn.com/visuals-flume-original.jpg"
@@ -108,7 +117,7 @@ def test_a_soundcloud_artists_albums_are_told_from_their_playlists(monkeypatch):
         return {"_type": "playlist", "title": url.rsplit("/", 1)[-1], "release_date": "20220520"}
 
     monkeypatch.setattr(runner, "run_json", soundcloud)
-    details = _implementation("https://soundcloud.com/flume").creator_details("https://soundcloud.com/flume", lambda step: None)
+    details = _implementation("https://soundcloud.com/flume").creator_details("https://soundcloud.com/flume", PlanTracker())
 
     lists = {s.ref: s.type.key for s in details.sections if s.kind is SectionKind.LIST}
     assert lists == {"flume/sets/palaces": "album", "flume/sets/favourites": "playlist"}

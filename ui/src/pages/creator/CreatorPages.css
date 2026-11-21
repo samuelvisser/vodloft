@@ -180,6 +180,8 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
 .creator-lookup-steps li { display: flex; align-items: center; gap: .5rem; }
 .creator-lookup-steps li.is-done { opacity: .6; }
 .creator-lookup-steps li.is-done svg { color: #16a34a; }
+.creator-lookup-steps li.is-pending { opacity: .45; }
+.creator-lookup-steps li.is-failed svg { color: #dc2626; }
 .creator-skeleton .skeleton-block {
     display: block; background: #e5e7eb; animation: creator-skeleton-pulse 1.5s ease-in-out infinite;
 }
