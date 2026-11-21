@@ -45,6 +45,7 @@ import {apiUrl} from '../../lib/api'
 import {type DownloadStarts, startLabel, useDownloadStarts} from '../../lib/downloadStarts'
 import {refreshFrontendPuller} from '../../lib/puller'
 import {addLocalMediaProfilePath} from '../../types/local_media_profile'
+import LinkedText from '../../components/common/LinkedText'
 
 type MovieExtraSummary = {
     id?: number
@@ -594,7 +595,7 @@ export default function MoviePage() {
             <div className="movie-detail-layout">
                 <div className="movie-description">
                     <h2>About this movie</h2>
-                    <p>{movie.description || `${sourceName} did not provide a description for this movie.`}</p>
+                    <p>{movie.description ? <LinkedText text={movie.description}/> : `${sourceName} did not provide a description for this movie.`}</p>
                 </div>
 
                 <aside className="movie-download-panel" aria-labelledby="download-movie-title">
