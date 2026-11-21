@@ -15,15 +15,15 @@ export function RemovedBadge({onCover = false, asText = false}: {onCover?: boole
 }
 
 /** Marks media its Site removed itself, as the Site removes all its media after a while, such as Twitch its past
- *  broadcasts. VODLoft expected it to go, so it is not missing; as text, a label on a details line. */
-export function RemovedByRetentionBadge({removedBy}: {removedBy: {siteName: string, retention: string}}) {
+ *  broadcasts: it expired there. VODLoft expected it to go, so it is not missing; as text, a label on a details line. */
+export function ExpiredBadge({removedBy}: {removedBy: {siteName: string, retention: string}}) {
     return (
         <span
             className="episode-summary-item episode-summary-label removed-label"
             title={`${removedBy.retention} Your downloads stay, but ${removedBy.siteName} no longer offers it.`}
         >
             <FontAwesomeIcon icon={faIcon('fass', 'clock-rotate-left')} aria-hidden="true"/>
-            Removed by {removedBy.siteName}&apos;s retention
+            Expired on {removedBy.siteName}
         </span>
     )
 }

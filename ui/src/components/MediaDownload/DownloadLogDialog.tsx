@@ -263,7 +263,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                 {row.removedBy ? (
                     <p className="confirm-dialog-warning" role="alert">
                         <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')} aria-hidden="true"/>
-                        <span>{row.removedBy.siteName} no longer offers this, as it removes its media after a while.
+                        <span>This expired on {row.removedBy.siteName}, which removes its media after a while.
                         Once you delete this download, VODLoft can&apos;t download it again, so it is gone for good.</span>
                     </p>
                 ) : null}

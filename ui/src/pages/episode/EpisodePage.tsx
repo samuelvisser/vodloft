@@ -18,7 +18,7 @@ import {formatDate} from "../../utils/formatting";
 import './EpisodePage.css'
 import {faIcon} from '../../icons/faIcon'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
-import {RemovedBadge, RemovedByRetentionBadge} from '../../components/common/RemovedFromSource'
+import {RemovedBadge, ExpiredBadge} from '../../components/common/RemovedFromSource'
 import SeasonPlaceNote, {MovedBadge, ReassignedBadge, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
 import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
 import {can} from '../../lib/access'
@@ -315,7 +315,7 @@ export default function EpisodePage() {
                         {episode.drmProtected && <DrmBadge asText/>}
                         <ItemAccessBadge item={episode} asText/>
                         {episode.removedBy
-                            ? <RemovedByRetentionBadge removedBy={episode.removedBy}/>
+                            ? <ExpiredBadge removedBy={episode.removedBy}/>
                             : episode.removedFromSource && <RemovedBadge asText/>}
                         {reassignedTo && <ReassignedBadge collectionTitle={reassignedTo} asText/>}
                         {moved && <MovedBadge asText words={words}/>}
@@ -420,7 +420,7 @@ export default function EpisodePage() {
                                             season={words.season}
                                             waitsForCountdown={containsCountdown && waitsForCountdown}
                                             goneReason={episode.removedBy
-                                                ? `${episode.removedBy.siteName} removed this ${words.episode.singular}, so it can't be downloaded again`
+                                                ? `This ${words.episode.singular} expired on ${episode.removedBy.siteName}, so it can't be downloaded again`
                                                 : undefined}
                                         />
                                     )

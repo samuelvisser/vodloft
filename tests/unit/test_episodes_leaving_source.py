@@ -2,6 +2,7 @@
 One that went live and is not published yet waits four hours first."""
 from __future__ import annotations
 
+import importlib
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -10,7 +11,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-NOW = datetime(2026, 11, 18, 10, tzinfo=timezone.utc)
+NOW = datetime.now(timezone.utc)
+"""Now: whether media counts as removed by its Site's retention follows the clock."""
 
 
 @pytest.fixture
@@ -122,6 +124,40 @@ def test_a_video_that_leaves_before_its_site_keeps_it_is_missing_as_on_any_site(
     episode = session.get(Episode, episode_id)
     assert episode.removed_from_source and not episode.removed_by_retention
     assert [download.media_item_id for download in downloads_awaiting_keep_answer(session)] == [episode_id]
+
+
+def test_a_video_that_leaves_half_a_day_early_still_counts_as_removed_by_retention(session):
+    from backend.db.models import Episode
+    from backend.services.removed_downloads import downloads_awaiting_keep_answer
+
+    episode_id = _episode(
+        session, files=True, url="https://www.twitch.tv/spamfish/videos?filter=all", age=timedelta(days=6, hours=13),
+    )
+
+    assert _left(session, episode_id) is False
+    assert session.get(Episode, episode_id).removed_by_retention
+    assert downloads_awaiting_keep_answer(session) == []
+
+
+def test_a_missing_video_counts_as_removed_by_retention_once_its_site_would_have_removed_it(session, monkeypatch):
+    from backend.db.models import Episode
+    media_item = importlib.import_module("backend.db.models.media_item.MediaItemBase")
+    from backend.services.removed_downloads import downloads_awaiting_keep_answer
+
+    episode_id = _episode(session, files=True, url="https://www.twitch.tv/spamfish/videos?filter=all", age=timedelta(days=2))
+    assert _left(session, episode_id) is False
+    assert [download.media_item_id for download in downloads_awaiting_keep_answer(session)] == [episode_id]
+
+    class FiveDaysLater(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW + timedelta(days=5)
+
+    # Nobody answered Home, and the video is now 7 days old: Twitch would have removed it by now anyway.
+    monkeypatch.setattr(media_item, "datetime", FiveDaysLater)
+    session.expire_all()
+    assert session.get(Episode, episode_id).removed_by_retention
+    assert downloads_awaiting_keep_answer(session) == []
 
 
 @pytest.mark.parametrize("status", ["live", "source_processing", "published_preliminary"])
