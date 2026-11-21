@@ -2,7 +2,7 @@ import {useEffect, useId, useMemo, useState} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import Select from 'react-select'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 import {z} from 'zod'
 
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'

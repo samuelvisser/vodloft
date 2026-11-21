@@ -2,7 +2,7 @@ import {addedByLabel} from '../../lib/access'
 import {useState} from 'react'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import ActionMenu from '../../components/ActionMenu/ActionMenu'

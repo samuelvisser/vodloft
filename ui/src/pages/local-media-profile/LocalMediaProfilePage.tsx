@@ -4,7 +4,7 @@ import {operationControls as sharedOperationControls} from '../../lib/operationC
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useQueryClient} from '@tanstack/react-query'
 import {Link, useNavigate, useParams} from 'react-router-dom'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'

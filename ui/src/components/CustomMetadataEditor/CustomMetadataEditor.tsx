@@ -2,7 +2,7 @@ import {useEffect, useId, useMemo, useRef, useState} from 'react'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useFieldArray, useForm} from 'react-hook-form'
 import {useQueryClient, type QueryKey} from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'

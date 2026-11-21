@@ -1,6 +1,6 @@
 import {useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import Modal from '../Modal/Modal'
 import {getErrorMessageFromResponse} from '../../utils/helpers'

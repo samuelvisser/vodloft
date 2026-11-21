@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 
 import {faIcon} from '../../icons/faIcon'
 import PathChangeList, {type PathChange} from '../common/PathChangeList'

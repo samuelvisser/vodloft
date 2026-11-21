@@ -3,7 +3,7 @@ import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {z} from 'zod'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
 import {OperationStartError, useStartOperation} from '../../lib/operations'

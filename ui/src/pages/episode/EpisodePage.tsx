@@ -1,7 +1,7 @@
 import {sourceControls} from '../../lib/sourceControls'
 import {useState} from 'react'
-import {Link, useNavigate, useParams} from 'react-router-dom'
-import toast from 'react-hot-toast'
+import {Link, useLocation, useNavigate, useParams} from 'react-router-dom'
+import toast from '../../lib/toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import {useCollection, useEpisode, useEpisodeDownloads, useLocalMediaProfiles, usePublishStatusLabels, useSkippedByFilter, useSourceLookup, useWaitingForCountdown} from '../../lib/queries'
@@ -122,6 +122,7 @@ export default function EpisodePage() {
         hasDomainData: hasDownloadState,
     } = useEpisodeDownloads(episodeId)
     const navigate = useNavigate()
+    const location = useLocation()
     // Its collection's playlists put it in another season, where it waits for the user to move it.
     const {data: seasonPlace} = useSeasonPlace(episodeId)
     const moved = !!seasonPlace?.belongsElsewhere
@@ -388,7 +389,7 @@ export default function EpisodePage() {
                         {!locked && !downloadStateError && profiles !== undefined && !collectionProfiles?.length && (
                             <p>
                                 {profiles.length ? `No Local Media Profile fits ${collection.title} yet.` : 'No Local Media Profiles configured yet.'}{' '}
-                                <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, audio: collection.site?.audioOnly, from: collection.title, collectionId: collection.id})}>Add one</Link>
+                                <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, audio: collection.site?.audioOnly, from: collection.title, collectionId: collection.id, returnTo: `${location.pathname}${location.search}`})}>Add one</Link>
                                 {' '}to download this {words.episode.singular}.
                             </p>
                         )}

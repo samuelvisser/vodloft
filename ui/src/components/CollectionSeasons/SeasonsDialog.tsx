@@ -5,7 +5,7 @@ import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import Switch from 'react-switch'
 import {Link} from 'react-router-dom'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 
 import {apiUrl} from '../../lib/api'
 import {faIcon} from '../../icons/faIcon'

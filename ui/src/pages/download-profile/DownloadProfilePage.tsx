@@ -2,7 +2,7 @@ import {collectionWords} from '../../lib/collectionWords'
 import {useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams} from 'react-router-dom'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 
 import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
 import RunningActions from '../../components/RunningActions/RunningActions'

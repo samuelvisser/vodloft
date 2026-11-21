@@ -3,7 +3,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useQueryClient} from '@tanstack/react-query'
 import {Link} from 'react-router-dom'
 import Switch from 'react-switch'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 
 import {faIcon} from '../../icons/faIcon'
 import {changeDestination, deleteDestination, notificationKeys, testDestination} from '../../lib/notifications'

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
+import toast from './lib/toast'
 import Sidebar from './components/Sidebar'
 import Footer from './components/Sidebar/Footer'
 import OnboardingFlow from './components/Onboarding/OnboardingFlow'
