@@ -1,4 +1,6 @@
 import {useState} from 'react'
+import type {TaskOperationRead} from '../../types/schemas/operation'
+import {operationControls as sharedOperationControls} from '../../lib/operationControls'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useQueryClient} from '@tanstack/react-query'
 import {Link, useNavigate, useParams} from 'react-router-dom'
@@ -148,29 +150,12 @@ export default function LocalMediaProfilePage() {
         }
     }
 
-    const operationControls = (
-        operationId: string | undefined,
-        label: string,
-        restartable = true,
-    ) => {
-        if (!operationId) return undefined
-        const controlsBusy = operationControlBusy !== null
-        return [
-            ...(restartable ? [{
-                label: `Restart ${label}`,
-                icon: faIcon('fass', 'rotate-right'),
-                disabled: controlsBusy,
-                onSelect: () => void controlTaskOperation(operationId, 'restart', label),
-            }] : []),
-            {
-                label: `Cancel ${label}`,
-                icon: faIcon('fass', 'xmark'),
-                tone: 'danger' as const,
-                disabled: controlsBusy,
-                onSelect: () => void controlTaskOperation(operationId, 'cancel', label),
-            },
-        ]
-    }
+    const operationControls = (operation: TaskOperationRead | undefined, label: string, restartable = true) => (
+        sharedOperationControls(operation, label, {
+            restartable, busy: operationControlBusy !== null,
+            onControl: (operationId, action) => void controlTaskOperation(operationId, action, label),
+        })
+    )
 
     const deleteProfile = async () => {
         if (deletingProfile || actionBusy) return
@@ -255,7 +240,7 @@ export default function LocalMediaProfilePage() {
                                 ? `This Local Media Profile does not manage any ${kept.plural} yet.`
                                 : undefined,
                 operation: moveOperation,
-                controls: operationControls(moveOperation?.id, 'move', false),
+                controls: operationControls(moveOperation, 'move', false),
                 onSelect: () => setMoveOpen(true),
             },
         ] : []),
@@ -276,7 +261,7 @@ export default function LocalMediaProfilePage() {
                             : undefined,
             operation: renameOperation,
             starting: isStarting('local_media_profile.rename_files'),
-            controls: operationControls(renameOperation?.id, 'file rename'),
+            controls: operationControls(renameOperation, 'file rename'),
             onSelect: () => setRenameConfirm(true),
         },
         {
@@ -297,7 +282,7 @@ export default function LocalMediaProfilePage() {
             operation: deleteDownloadsOperation,
             starting: isStarting('local_media_profile.delete_downloads'),
             controls: operationControls(
-                deleteDownloadsOperation?.id,
+                deleteDownloadsOperation,
                 'delete downloads',
             ),
             onSelect: () => setDeleteDownloadsConfirm(true),
@@ -319,7 +304,7 @@ export default function LocalMediaProfilePage() {
             operation: redownloadOperation,
             starting: isStarting('local_media_profile.redownload_media'),
             controls: operationControls(
-                redownloadOperation?.id,
+                redownloadOperation,
                 're-download',
                 false,
             ),

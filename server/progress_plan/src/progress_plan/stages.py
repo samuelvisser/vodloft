@@ -31,6 +31,8 @@ class StageSpec:
     """The step's share of the work, against the weights of the other steps."""
     label: str | None = None
     """What the step does in words, such as "Numbering the episodes"."""
+    unit: str | None = None
+    """What the step counts as it goes, in the plural, such as "episodes", for a step that says how many it did."""
     depends_on: tuple[str, ...] = ()
     deadline_seconds: float | None = None
 
@@ -53,6 +55,10 @@ class Stage:
     finished_at: float | None = None
     fraction: float | None = None
     """How far the running step is, from 0 to 1, or None while it cannot measure itself."""
+    unit: str | None = None
+    """What the step counts, in the plural, when it counts: then ``done`` of ``total`` are done."""
+    done: int | None = None
+    total: int | None = None
     wait: WaitInterval | None = None
     waits: tuple[WaitInterval, ...] = ()
     last_activity_at: float | None = None
@@ -159,7 +165,9 @@ class PlanTracker:
     def _add(self, spec: StageSpec) -> None:
         if spec.id in self._stages:
             raise ValueError(f"The plan already has a stage '{spec.id}'")
-        self._stages[spec.id] = Stage(id=spec.id, code=spec.code, weight=spec.weight, label=spec.label)
+        self._stages[spec.id] = Stage(
+            id=spec.id, code=spec.code, weight=spec.weight, label=spec.label, unit=spec.unit,
+        )
 
     def add(self, *steps: StageSpec) -> None:
         with self._lock:
@@ -177,11 +185,13 @@ class PlanTracker:
             self._main = step
         self._emit()
 
-    def progress(self, step: str, fraction: float | None) -> None:
-        """How far the running step is, from 0 to 1, or None when it cannot tell."""
+    def progress(self, step: str, fraction: float | None, *, done: int | None = None, total: int | None = None) -> None:
+        """How far the running step is, from 0 to 1, or None when it cannot tell, and for a step that counts, how many
+        of how many it did."""
+        counted = {"done": done, "total": total} if total is not None else {}
         with self._lock:
             self._stages[step] = measured(
-                self._stages[step], None if fraction is None else max(0.0, min(1.0, fraction)), time(),
+                self._stages[step], None if fraction is None else max(0.0, min(1.0, fraction)), time(), **counted,
             )
         self._emit()
 

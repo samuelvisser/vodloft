@@ -275,6 +275,7 @@ def monitor_stalled_work(
                     operation_id,
                     reason=reason,
                     acknowledge=False,
+                    force=True,
                 )
             if canceled is not None:
                 operations_canceled += 1

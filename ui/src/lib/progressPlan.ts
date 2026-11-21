@@ -7,5 +7,6 @@ export function planSteps<S extends PlanStage>(stages: S[], label: (stage: S) =>
     return stages.map((stage): ProgressStep => ({
         id: stage.id, label: label(stage), state: stage.state,
         percent: stage.fraction == null ? null : Math.max(0, Math.min(100, Math.floor(stage.fraction * 100))),
+        ...(stage.total != null && {count: `${stage.done ?? 0}/${stage.total}${stage.unit ? ` ${stage.unit}` : ''}`}),
     }))
 }

@@ -73,3 +73,16 @@ def test_the_package_never_imports_vodloft():
                 [node.module] if isinstance(node, ast.ImportFrom) and node.module and node.level == 0 else []
             )
             assert not {name.split(".")[0] for name in names} & vodloft, path
+
+
+def test_a_step_that_counts_says_how_many_of_how_many_it_did():
+    from progress_plan import PlanTracker, StageSpec
+
+    plan = PlanTracker([StageSpec(id="rewrite", code="rewrite_metadata", unit="episodes")])
+    plan.start("rewrite")
+    plan.progress("rewrite", 0.1, done=11, total=110)
+    stage = plan.snapshot().main
+    assert (stage.unit, stage.done, stage.total, stage.fraction) == ("episodes", 11, 110, 0.1)
+    # A step that does not count leaves its count as it was.
+    plan.progress("rewrite", 0.2)
+    assert (plan.snapshot().main.done, plan.snapshot().main.fraction) == (11, 0.2)

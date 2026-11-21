@@ -367,6 +367,25 @@ def test_numbering_again_weighs_its_plan_for_an_action_made_of_several(session):
         _episode(session, collection, index, f"ep.{index}")
 
     steps = identification_steps(session, collection, renumbering=True)
-    assert [(step.id, step.label, step.weight) for step in steps] == [("number", "Numbering the episodes", 2.0)]
+    assert [(step.id, step.label, step.weight) for step in steps] == [("number", "Numbering the episodes", 40.0)]
     operation = queue_renumber(session, collection, renumber=True)
-    assert work_weight(operation) == 2.0
+    assert work_weight(operation) == 40.0
+
+
+def test_rewriting_counts_the_episodes_it_rewrote_in_the_collections_words(session):
+    from progress_plan import PlanTracker
+
+    from backend.services.episode_identification import identification_steps, profile_file_steps
+    from task_manager.tasks.helpers.progress import PlanStep, report_plan, update_progress
+
+    collection = _collection(session, source_key="ytdlp", identification="numbered")
+    assert [step.unit for step in identification_steps(session, collection, renumbering=True)] == [None]
+    steps = profile_file_steps(3, "Plex", 110, unit="episodes")
+    assert [step.unit for step in steps] == [None, "episodes"]
+
+    progress = _Progress()
+    plan = PlanTracker(steps, sink=report_plan(progress))
+    plan.start("rewrite:3")
+    update_progress(PlanStep(plan, progress, "rewrite:3"), 10, "Rewriting a.mp4", done=11, total=110)
+    rewrite = progress.reports[-1][2]["plan"]["stages"][1]
+    assert (rewrite["unit"], rewrite["done"], rewrite["total"]) == ("episodes", 11, 110)

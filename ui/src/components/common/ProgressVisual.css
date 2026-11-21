@@ -17,6 +17,7 @@
 .vl-progress-step {display:flex;align-items:baseline;gap:6px}
 .vl-progress-step-label {flex:1 1 auto;min-width:0}
 .vl-progress-step-percent {flex:0 0 auto;opacity:.75;font-variant-numeric:tabular-nums}
+.vl-progress-step-count {display:block;opacity:.75;font-variant-numeric:tabular-nums}
 .vl-progress-step.is-pending, .vl-progress-step.is-skipped {opacity:.6}
 .vl-progress-step.is-completed svg {color:var(--success,#16a34a)}
 .vl-progress-step.is-failed svg, .vl-progress-step.is-canceled svg {color:var(--danger,#dc2626)}

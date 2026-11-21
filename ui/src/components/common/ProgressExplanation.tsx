@@ -107,7 +107,12 @@ export default function ProgressExplanation({detail, steps, buttonClassName = 'i
                                     icon={STEP_ICONS[step.state]} spin={step.state === 'running'}
                                     aria-label={STEP_STATES[step.state]} fixedWidth
                                 />
-                                <span className="vl-progress-step-label">{step.label}</span>
+                                <span className="vl-progress-step-label">
+                                    {step.label}
+                                    {step.state === 'running' && step.count && (
+                                        <small className="vl-progress-step-count">{step.count}</small>
+                                    )}
+                                </span>
                                 {step.state === 'running' && step.percent != null && (
                                     <span className="vl-progress-step-percent">{step.percent}%</span>
                                 )}

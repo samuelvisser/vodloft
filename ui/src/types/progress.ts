@@ -7,6 +7,8 @@ export type ProgressStep = {
     state: 'pending' | 'running' | 'waiting' | 'completed' | 'skipped' | 'failed' | 'canceled'
     /** How far the running step is, or null while it cannot measure itself. */
     percent: number | null
+    /** How many the running step did of how many, such as "12/110 episodes", for a step that counts. */
+    count?: string
 }
 
 export type ProgressPresentation = {

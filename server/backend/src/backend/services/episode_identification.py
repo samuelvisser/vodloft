@@ -350,17 +350,18 @@ def identification_steps(s: Session, collection: Collection, *, renumbering: boo
         label=f"Numbering the {episodes}" if renumbering else "Saving the new order",
     )]
     for profile_id, name, files in files_by_profile(s, collection.id):
-        steps += profile_file_steps(profile_id, name, files)
+        steps += profile_file_steps(profile_id, name, files, unit=episodes)
     return steps
 
 
-def profile_file_steps(profile_id: int, name: str | None, files: int | None) -> list[StageSpec]:
-    """Renaming one Local Media Profile's files, then rewriting their metadata, after the numbering."""
+def profile_file_steps(profile_id: int, name: str | None, files: int | None, *, unit: str | None) -> list[StageSpec]:
+    """Renaming one Local Media Profile's files, then rewriting their metadata, after the numbering. The rewriting
+    counts the ``unit`` it rewrote, each with its file."""
     of = f" of {name}" if name else ""
     return [
         StageSpec(id=f"rename:{profile_id}", code="rename_files", label=f"Renaming the files{of}",
                   weight=(files or 1) * work_weights.MOVE_FILE, depends_on=("number",)),
-        StageSpec(id=f"rewrite:{profile_id}", code="rewrite_metadata", label=f"Rewriting the metadata{of}",
+        StageSpec(id=f"rewrite:{profile_id}", code="rewrite_metadata", label=f"Rewriting the metadata{of}", unit=unit,
                   weight=(files or 1) * work_weights.REWRITE_FILE, depends_on=(f"rename:{profile_id}",)),
     ]
 

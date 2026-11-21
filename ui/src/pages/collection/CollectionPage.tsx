@@ -1,4 +1,6 @@
 import {sourceControls} from '../../lib/sourceControls'
+import type {TaskOperationRead} from '../../types/schemas/operation'
+import {operationControls as sharedOperationControls} from '../../lib/operationControls'
 import OpenOnSiteLink from '../../components/common/OpenOnSiteLink'
 import CreatorLink from '../../components/Creator/CreatorLink'
 import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
@@ -507,29 +509,12 @@ export default function CollectionPage() {
     }
   }
 
-  const operationControls = (
-    operationId: string | undefined,
-    label: string,
-    restartable = true,
-  ) => {
-    if (!operationId) return undefined
-    const controlsBusy = operationControlBusy !== null
-    return [
-      ...(restartable ? [{
-        label: `Restart ${label}`,
-        icon: faIcon('fass', 'rotate-right'),
-        disabled: controlsBusy,
-        onSelect: () => void controlTaskOperation(operationId, 'restart', label),
-      }] : []),
-      {
-        label: `Cancel ${label}`,
-        icon: faIcon('fass', 'xmark'),
-        tone: 'danger' as const,
-        disabled: controlsBusy,
-        onSelect: () => void controlTaskOperation(operationId, 'cancel', label),
-      },
-    ]
-  }
+  const operationControls = (operation: TaskOperationRead | undefined, label: string, restartable = true) => (
+    sharedOperationControls(operation, label, {
+      restartable, busy: operationControlBusy !== null,
+      onControl: (operationId, action) => void controlTaskOperation(operationId, action, label),
+    })
+  )
 
   const syncNow = async () => {
     if (syncBusy) {
@@ -572,7 +557,7 @@ export default function CollectionPage() {
       disabledReason: downloadAllBusy ? `A bulk download is running for ${collection.title}.` : undefined,
       operation: downloadAllOperation,
       starting: isStarting('collection.download_all'),
-      controls: operationControls(downloadAllOperation?.id, 'bulk download'),
+      controls: operationControls(downloadAllOperation, 'bulk download'),
       onSelect: () => setDownloadAllConfirm(true),
     },
     ...(lockedCount ? [{
@@ -598,7 +583,7 @@ export default function CollectionPage() {
       disabledReason: metadataRefreshDisabledReason,
       operation: metadataRefreshOperation,
       starting: isStarting('collection.refresh_metadata'),
-      controls: operationControls(metadataRefreshOperation?.id, 'metadata refresh'),
+      controls: operationControls(metadataRefreshOperation, 'metadata refresh'),
       onSelect: () => setMetadataRefreshConfirm(true),
     }] : []),
     ...(waitingCount ? [{
@@ -614,7 +599,7 @@ export default function CollectionPage() {
       disabledReason: fileRenameDisabledReason,
       operation: fileRenameOperation,
       starting: isStarting('collection.rename_files'),
-      controls: operationControls(fileRenameOperation?.id, 'File Rename'),
+      controls: operationControls(fileRenameOperation, 'File Rename'),
       onSelect: () => setFileRenameConfirm(true),
     },
     {
@@ -624,7 +609,7 @@ export default function CollectionPage() {
       disabledReason: metadataRewriteDisabledReason,
       operation: metadataRewriteOperation,
       starting: isStarting('collection.rewrite_metadata'),
-      controls: operationControls(metadataRewriteOperation?.id, 'metadata rewrite'),
+      controls: operationControls(metadataRewriteOperation, 'metadata rewrite'),
       onSelect: () => setMetadataRewriteConfirm(true),
     },
     {
@@ -643,8 +628,8 @@ export default function CollectionPage() {
       operation: bulkDeleteOperation,
       starting: isStarting('collection.delete_downloads') || isStarting('collection.redownload_episodes'),
       controls: deleteDownloadsOperation
-        ? operationControls(deleteDownloadsOperation.id, 'bulk delete downloads')
-        : operationControls(redownloadOperation?.id, 'bulk delete and re-download', false),
+        ? operationControls(deleteDownloadsOperation, 'bulk delete downloads')
+        : operationControls(redownloadOperation, 'bulk delete and re-download', false),
       onSelect: () => {
         setRedownloadAfterDelete(false)
         setDeleteDownloadsConfirm(true)
@@ -717,7 +702,7 @@ export default function CollectionPage() {
                 label: `Changing ${words.episode.singular} identification`,
                 icon: faIcon('fass', 'list-ol'),
                 operation: identificationOperation,
-                controls: operationControls(identificationOperation?.id, `${words.episode.singular} identification change`, false),
+                controls: operationControls(identificationOperation, `${words.episode.singular} identification change`, false),
               },
               {
                 label: 'Sync',

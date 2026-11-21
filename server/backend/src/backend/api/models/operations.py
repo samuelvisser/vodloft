@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import Field
+from pydantic import AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase
+from task_manager.scheduler.operation_control import OPERATION_CANCELABLE_CONTEXT_KEY
 
 
 class OperationsSeenRequest(RequestBase):
@@ -101,6 +102,8 @@ class TaskOperationRead(ResponseBase):
     result: Optional[dict[str, Any]]
     context: Optional[dict[str, Any]]
     progress_meta: Optional[dict[str, Any]] = None
+    # Whether a person may cancel it, as its definition said; every place that offers to cancel it asks this.
+    cancelable: bool = Field(default=True, validation_alias=AliasPath("context", OPERATION_CANCELABLE_CONTEXT_KEY))
     error: Optional[str]
     notification_seen_at: Optional[datetime]
     started_at: Optional[datetime]

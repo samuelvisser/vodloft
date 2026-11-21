@@ -27,7 +27,9 @@ export function presentOperationProgress(operation?: TaskOperationRead, starting
     const plan = operation && presentation ? planOf(operation) : undefined
     if (!presentation || !plan) return presentation
     // Its details list the steps; while the step it is on cannot measure itself, it shows that step's name.
-    const detail = plan.main ? `${plan.main.label}.` : presentation.detail
+    const detail = plan.main
+        ? `${plan.main.label}${plan.main.count ? `: ${plan.main.count} done` : ''}.`
+        : presentation.detail
     if (presentation.mode === 'indeterminate' && plan.main) {
         return {...presentation, label: `${plan.main.label}...`, compactLabel: `${plan.main.label}...`, detail, steps: plan.steps}
     }

@@ -5,6 +5,7 @@ from typing import Any, ClassVar, Generic, TypeVar
 from sqlalchemy.orm import Session
 
 from task_manager.scheduler.db import TaskOperation
+from task_manager.scheduler.operation_control import OPERATION_CANCELABLE_CONTEXT_KEY
 from task_manager.scheduler.operations import (
     OperationDependencySpec,
     OperationTargetSpec,
@@ -33,6 +34,9 @@ class OperationDefinition(Generic[ResourceT]):
     resource_type: ClassVar[str]
     task: ClassVar[str | None] = None
     request_priority: ClassVar[RequestPriority | None] = None
+    cancelable: ClassVar[bool] = True
+    """Whether a person may cancel the operation. Work that stopping halfway would leave half done says False, and
+    then no part of VODLoft offers to cancel it."""
     """How the operation's requests to a Source queue behind others. "bulk"
     work, which touches many items at once, goes before background checks."""
 
@@ -90,6 +94,8 @@ class OperationDefinition(Generic[ResourceT]):
             context = {**context, REQUEST_PRIORITY_CONTEXT_KEY: self.request_priority}
         if self.work_weight is not None:
             context = {**context, WORK_WEIGHT_CONTEXT_KEY: self.work_weight}
+        if not self.cancelable:
+            context = {**context, OPERATION_CANCELABLE_CONTEXT_KEY: False}
         return context
 
 

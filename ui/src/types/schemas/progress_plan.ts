@@ -15,6 +15,8 @@ export const PlanStageSchema = z.object({
     started_at: z.number().nullable(), finished_at: z.number().nullable(),
     // How far the running step is, from 0 to 1, or null while it cannot measure itself.
     fraction: z.number().nullable(),
+    // What a step that counts as it goes counts, in the plural, and how many of how many it did.
+    unit: z.string().nullable().optional(), done: z.int().nullable().optional(), total: z.int().nullable().optional(),
     wait: PlanWaitSchema.nullable(), waits: PlanWaitSchema.array(),
     last_activity_at: z.number().nullable(), deadline_at: z.number().nullable(),
 })

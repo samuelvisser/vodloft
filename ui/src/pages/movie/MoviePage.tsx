@@ -1,4 +1,6 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
+import type {TaskOperationRead} from '../../types/schemas/operation'
+import {operationControls as sharedOperationControls} from '../../lib/operationControls'
 import {addedByLabel, can} from '../../lib/access'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams} from 'react-router-dom'
@@ -429,29 +431,12 @@ export default function MoviePage() {
         }
     }
 
-    const operationControls = (
-        operationId: string | undefined,
-        label: string,
-        restartable = true,
-    ) => {
-        if (!operationId) return undefined
-        const controlsBusy = operationControlBusy !== null
-        return [
-            ...(restartable ? [{
-                label: `Restart ${label}`,
-                icon: faIcon('fass', 'rotate-right'),
-                disabled: controlsBusy,
-                onSelect: () => void controlTaskOperation(operationId, 'restart', label),
-            }] : []),
-            {
-                label: `Cancel ${label}`,
-                icon: faIcon('fass', 'xmark'),
-                tone: 'danger' as const,
-                disabled: controlsBusy,
-                onSelect: () => void controlTaskOperation(operationId, 'cancel', label),
-            },
-        ]
-    }
+    const operationControls = (operation: TaskOperationRead | undefined, label: string, restartable = true) => (
+        sharedOperationControls(operation, label, {
+            restartable, busy: operationControlBusy !== null,
+            onControl: (operationId, action) => void controlTaskOperation(operationId, action, label),
+        })
+    )
 
     const deleteMovie = async () => {
         if (!slug || !localMovie || deleting) return
@@ -512,7 +497,7 @@ export default function MoviePage() {
                     : undefined,
             operation: refreshExtrasOperation,
             starting: refreshingExtrasStarting,
-            controls: operationControls(refreshExtrasOperation?.id, 'movie-extra refresh'),
+            controls: operationControls(refreshExtrasOperation, 'movie-extra refresh'),
             onSelect: () => void refreshMovieExtras(),
         }] : []),
         {
@@ -528,7 +513,7 @@ export default function MoviePage() {
                     : undefined,
             operation: redownloadOperation,
             starting: isStarting('movie.redownload_media'),
-            controls: operationControls(redownloadOperation?.id, 're-download', false),
+            controls: operationControls(redownloadOperation, 're-download', false),
             onSelect: () => setRedownloadConfirm(true),
         },
     ]

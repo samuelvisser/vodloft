@@ -26,7 +26,10 @@ def run_rewrite_collection_profile_metadata(*, collection_id: int, local_media_p
 
     counts = MetadataRewriteCounts(files_considered=len(rewrites) + untaggable, files_skipped=untaggable)
     for done, rewrite in enumerate(rewrites):
-        update_progress(progress, round(100 * done / len(rewrites)), f"Rewriting {rewrite.media_path.name}")
+        update_progress(
+            progress, round(100 * done / len(rewrites)), f"Rewriting {rewrite.media_path.name}",
+            done=done, total=len(rewrites),
+        )
         try:
             rewrite_metadata(rewrite)
             record_metadata_rewrite(rewrite)
@@ -38,5 +41,5 @@ def run_rewrite_collection_profile_metadata(*, collection_id: int, local_media_p
         counts.files_retagged += rewrite.tags is not None
         counts.nfos_written += rewrite.nfo is not None
     summary = counts.summary()
-    update_progress(progress, 100, summary)
+    update_progress(progress, 100, summary, done=len(rewrites), total=len(rewrites))
     return TaskResult(summary=summary, data=counts.as_data())

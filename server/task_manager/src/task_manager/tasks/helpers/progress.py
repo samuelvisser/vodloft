@@ -85,10 +85,13 @@ def weighted_progress_percent(
     return max(0, min(100, int(weighted_progress / max(1, total_weight))))
 
 
-def update_progress(progress, percentage: int | None, msg: str):
+def update_progress(progress, percentage: int | None, msg: str, *, done: int | None = None, total: int | None = None):
     """Small helper to update the progress in any worker. A percentage of None says the step that starts now cannot
-    tell how far it is, so its progress bar moves without a percentage until a later update gives one."""
-    if progress:
+    tell how far it is, so its progress bar moves without a percentage until a later update gives one. Work that
+    counts what it does gives ``done`` of ``total``, which a step of a plan shows."""
+    if isinstance(progress, PlanStep):
+        progress.set(percentage, msg, done=done, total=total)
+    elif progress:
         progress.set(percentage, msg)
     else:
         print(f"{'…' if percentage is None else f'{percentage}%'}: {msg}")
@@ -129,5 +132,8 @@ class PlanStep:
     def __call__(self) -> bool:
         return bool(self._progress()) if callable(self._progress) else False
 
-    def set(self, percentage: int | None, message: str | None = None, **_) -> None:
-        self._tracker.progress(self._step, None if percentage is None else percentage / 100)
+    def set(
+            self, percentage: int | None, message: str | None = None, *, done: int | None = None,
+            total: int | None = None, **_,
+    ) -> None:
+        self._tracker.progress(self._step, None if percentage is None else percentage / 100, done=done, total=total)
