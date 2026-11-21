@@ -6,7 +6,7 @@ from .existing_files.router import router as existing_files_router
 from .seasons.router import router as collection_seasons_router
 from .sync_log import collection_scans
 from backend.api.endpoints.creators.service import (
-    CollectionNotFoundError, add_collection_to_creator, collection_creator_leave, collection_creator_match, collection_link, join_collection_creator,
+    CollectionNotFoundError, LookupPlan, add_collection_to_creator, collection_creator_leave, collection_creator_match, collection_link, join_collection_creator,
     leave_collection_creator, look_up_collection_creator, preview_collection_join,
 )
 from backend.api.models.creator import (
@@ -64,7 +64,7 @@ from ...models.source import EpisodeTagAPIRead
 from backend.api.endpoints.creators import lookups as creator_lookups
 from backend.api.endpoints.reconcile import collection_scope, move, preview_move
 from backend.api.models.creator import CreatorSectionMovesPreviewAPIRead, MovesWaitingAPIRead, ReconcileAPIIn, ReconcileAPIRead
-from backend.api.steps import STEPS_RESPONSE, stream_steps
+from backend.api.steps import STEPS_RESPONSE, plan_lines, stream_steps
 from backend.app import db_session
 from backend.types.collection_types import EpisodeIdentifier
 from backend.security.access import Access, Area, Level
@@ -408,16 +408,17 @@ def _collection_found(work):
 def collection_creator_match_get(collection_slug: str):
     """Find the creator behind the collection's link, and which of its sections the collection is.
 
-    Asking the Site takes a while, so the answer is a line of JSON per step, ``{"step": "..."}``, then
+    Asking the Site takes a while, so the answer is sent as it goes, a line of JSON each: ``{"plan": ...}`` each time
+    the plan of looking the creator up changes, the way the creator lookup sends it, then
     ``{"match": CollectionCreatorMatchAPIRead}`` or ``{"error": "..."}``.
     """
     with db_session() as s:
         link = _collection_found(lambda: collection_link(s, collection_slug))
 
     def match(send) -> dict:
-        details = look_up_collection_creator(link, lambda step: send(step=step))
-        send(step="Checking what is in your library already")
-        with db_session() as s:
+        plan = LookupPlan(plan_lines(send))
+        details = look_up_collection_creator(link, plan)
+        with db_session() as s, plan.step("check_library", "Checking what is in your library already"):
             found = collection_creator_match(s, collection_slug, link.source_key, details)
         found.lookup_id = creator_lookups.keep(("collection", collection_slug, link.source_key, link.url), details)
         return {"match": found.model_dump(mode="json", by_alias=True)}

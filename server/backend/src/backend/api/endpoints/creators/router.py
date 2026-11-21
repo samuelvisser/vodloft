@@ -9,7 +9,7 @@ from backend.api.models.creator import (
 from backend.api.pagination import InvalidCursorError
 from backend.api.endpoints.reconcile import creator_scope, move, preview_move
 from backend.api.models.source import NamesAPIRead
-from backend.api.steps import STEPS_RESPONSE, stream_steps
+from backend.api.steps import STEPS_RESPONSE, plan_lines, stream_steps
 from backend.app import db_session
 from backend.db.core import run_write_transaction
 from backend.security.access import Access, Area, Level
@@ -20,7 +20,7 @@ from backend.api.endpoints.movies.service import look_up_movies
 
 from . import lookups
 from .service import (
-    CreatorNotFoundError, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
+    CreatorNotFoundError, LookupPlan, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
     list_skipped_moved, look_up_creator, lookup_creator_names, record_creator_opened, preview_creator_moves, show_sections, update_creator,
 )
 
@@ -31,19 +31,19 @@ router = APIRouter(prefix="/creators", tags=["Creators"])
 def lookup_creator(body: CreatorLookupAPIRequest, access: Access = signed_in()):
     """Look a creator up at its Site: who it is, its sections, and what each way of adding it does with them.
 
-    Looking a creator up can take a minute, so the answer is a line of JSON per step: first ``{"step": "...",
-    "creatorNames": {"one", "many", "a"}}`` with what the Site calls a creator, then ``{"step": "..."}`` while it
-    works, then ``{"creator": CreatorLookupAPIRead}`` or ``{"error": "..."}``.
+    Looking a creator up can take a minute, so the answer is sent as it goes, a line of JSON each: first
+    ``{"creatorNames": {"singular", "plural", "a"}}`` with what the Site calls a creator, then ``{"plan": ...}`` each
+    time the lookup's plan of steps changes, then ``{"creator": CreatorLookupAPIRead}`` or ``{"error": "..."}``.
     """
     access.check_link_at(body.source_key, body.url)
 
     def look_up(send) -> dict:
         names = lookup_creator_names(body.source_key, body.url)
-        send(step=f"Looking the {names.singular} up", creatorNames=NamesAPIRead.model_validate(names).model_dump(mode="json"))
+        send(creatorNames=NamesAPIRead.model_validate(names).model_dump(mode="json"))
+        plan = LookupPlan(plan_lines(send))
         with asking_source(f"Could not look up this {names.singular}"):
-            details = look_up_creator(body.source_key, body.url, body.ref, lambda step: send(step=step))
-        send(step="Checking what is in your library already")
-        with db_session() as s:
+            details = look_up_creator(body.source_key, body.url, body.ref, plan)
+        with db_session() as s, plan.step("check_library", "Checking what is in your library already"):
             found = CreatorLookupAPIRead.model_validate(creator_lookup(s, body.source_key, details))
         found.lookup_id = lookups.keep(("creator", body.source_key, body.url, body.ref), details)
         return {"creator": found.model_dump(mode="json", by_alias=True)}

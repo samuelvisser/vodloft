@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from concurrent.futures import Future
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from math import isfinite
 from threading import RLock
@@ -194,6 +197,37 @@ class PlanTracker:
                 self._stages[step], None if fraction is None else max(0.0, min(1.0, fraction)), time(), **counted,
             )
         self._emit()
+
+    @contextmanager
+    def running(self, step: str) -> Iterator[None]:
+        """Runs the step for as long as the block does: done when it ends, failed when it raises."""
+        self.start(step)
+        try:
+            yield
+        except BaseException:
+            self.fail(step)
+            raise
+        self.complete(step)
+
+    def follow(self, step: str, future: Future, *, failed: StageState = "failed") -> Future:
+        """Runs the step while ``future`` does, for work started at once beside other work: done when it finishes, and
+        ``failed``, such as skipped for something that may well not be there, when it raises. Returns a future of the
+        same outcome that is only done once the step has ended, so work waiting for it never runs ahead of its plan."""
+        self.start(step)
+        followed: Future = Future()
+
+        def finish(inner: Future) -> None:
+            error = None if inner.cancelled() else inner.exception()
+            self._end(step, failed if inner.cancelled() or error is not None else "completed")
+            if inner.cancelled():
+                followed.cancel()
+            elif error is not None:
+                followed.set_exception(error)
+            else:
+                followed.set_result(inner.result())
+
+        future.add_done_callback(finish)
+        return followed
 
     def complete(self, step: str) -> None:
         self._end(step, "completed")

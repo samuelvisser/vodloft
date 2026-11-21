@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlsplit, urlunsplit
+
+from progress_plan import PlanTracker, StageSpec
 
 from ...contract import LIST_TYPE, MAIN_TAG, CollectionDetails, CreatorDetails, SearchResults, SectionRef, link_host, on_domain
 from ... import ytdlp_runner as runner
@@ -120,7 +121,7 @@ class YouTubeImplementation(OtherSitesImplementation):
         ref = mapping.youtube_ref(collection_url(url))
         return ref is not None and ref.kind != "playlist" and ref.tab == "videos" and channel_root(collection_url(url)) is not None
 
-    def creator_details(self, ref: str, progress: Callable[[str], None]) -> CreatorDetails:
+    def creator_details(self, ref: str, plan: PlanTracker) -> CreatorDetails:
         """A channel through yt-dlp, which costs no API quota: its details, the feeds it has, and its playlists.
         ``ref`` is the channel's link or its ID.
 
@@ -128,12 +129,16 @@ class YouTubeImplementation(OtherSitesImplementation):
         root = channel_root(ref) if ref.startswith("http") else mapping.channel_url(ref)
         if root is None:
             raise runner.YtDlpError("This link is not a YouTube channel")
-        progress("Reading the channel, its videos and its playlists")
         main = next(type_ for type_ in self.feed_types if type_.key == "videos")
         with ThreadPoolExecutor(max_workers=len(self.feed_types) + 2, thread_name_prefix="channel-lookup") as pool:
-            listings = self.read_feeds(root, pool)
-            playlists = pool.submit(self.playlists, root)
-            releases = pool.submit(self.has_releases, root)
+            listings = self.read_feeds(root, pool, plan)
+            # The playlists take longest, so their step comes last.
+            plan.add(
+                StageSpec(id="releases", code="read_releases", label="Checking for releases"),
+                StageSpec(id="playlists", code="read_lists", label=f"Reading the {self.site.section_list_names.plural}"),
+            )
+            playlists = plan.follow("playlists", pool.submit(self.playlists, root))
+            releases = plan.follow("releases", pool.submit(self.has_releases, root))
             info = listings[main.key].result()
             channel_id = str(info.get("channel_id") or "")
             if not channel_id:

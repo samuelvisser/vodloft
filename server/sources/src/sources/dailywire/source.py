@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
 import requests
 
 from downloader.hls import is_master_playlist, media_playlist_segments, parse_master_playlist
+
+from progress_plan import PlanTracker, StageSpec
 
 from ..contract import (
     Access, CreatorDetails, CreatorPreset, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
@@ -199,7 +201,7 @@ class DailyWireSource(Source):
         catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
         return next((show.author_slug for show in catalog.collections if show.slug == slug and show.author_slug), None)
 
-    def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
+    def creator_details(self, ref: str, plan: PlanTracker | None = None) -> CreatorDetails:
         """A host, by the slug The Daily Wire gives them or by the link to their page, such as
         https://www.dailywire.com/hosts/ben-shapiro: their shows and movies from the Browse page."""
         if ref.startswith("http"):
@@ -207,8 +209,10 @@ class DailyWireSource(Source):
             if parsed is None or parsed[0] is not LinkKind.CREATOR:
                 raise ValueError("This is not a link to a host on The Daily Wire")
             ref = parsed[1]
-        progress("Reading The Daily Wire's shows and movies")
-        catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
+        plan = plan or PlanTracker()
+        plan.add(StageSpec(id="catalog", code="read_catalog", label="Reading The Daily Wire's shows and movies"))
+        with plan.running("catalog"):
+            catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
         shows = [show for show in catalog.collections if show.author_slug == ref]
         movies = [movie for movie in catalog.movies if movie.author_slug == ref]
         if not shows and not movies:

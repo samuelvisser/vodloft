@@ -5,11 +5,12 @@ from __future__ import annotations
 import html
 import logging
 import re
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlsplit
 
 import requests
+
+from progress_plan import PlanTracker, StageSpec
 
 from ...contract import LIST_TYPE, MAIN_TAG, ApiKeyRejected, CreatorDetails, SearchNotice, SearchResults, SectionRef
 from ... import site_api_keys
@@ -97,17 +98,21 @@ class TwitchImplementation(OtherSitesImplementation):
         """A clip, as yt-dlp's extractor of clips says; every other video is a video."""
         return CLIP_TAG if info.get("extractor_key") == "TwitchClips" or "/clip/" in url else MAIN_TAG
 
-    def creator_details(self, ref: str, progress: Callable[[str], None]) -> CreatorDetails:
+    def creator_details(self, ref: str, plan: PlanTracker) -> CreatorDetails:
         """A channel: its name and picture from its page, the feeds it has, and its collections, all looked up at
         once."""
         root = self.creator_root(ref)
         if root is None:
             raise runner.YtDlpError("This link is not a Twitch channel")
-        progress("Reading the channel, its videos and its collections")
         with ThreadPoolExecutor(max_workers=len(self.feed_types) + 2, thread_name_prefix="channel-lookup") as pool:
-            listings = self.read_feeds(root, pool)
-            playlists = pool.submit(self.playlists, root)
-            page = pool.submit(self.page_facts, root)
+            listings = self.read_feeds(root, pool, plan)
+            # The collections take longest, so their step comes last.
+            plan.add(
+                StageSpec(id="page", code="read_page", label="Reading the channel's page"),
+                StageSpec(id="collections", code="read_lists", label=f"Reading the {self.site.section_list_names.plural}"),
+            )
+            playlists = plan.follow("collections", pool.submit(self.playlists, root))
+            page = plan.follow("page", pool.submit(self.page_facts, root))
             sections = self.feed_sections(root, listings) + playlists.result()
             name, avatar = page.result()
         login = root.rsplit("/", 1)[-1]

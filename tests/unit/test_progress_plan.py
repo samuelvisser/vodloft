@@ -86,3 +86,29 @@ def test_a_step_that_counts_says_how_many_of_how_many_it_did():
     # A step that does not count leaves its count as it was.
     plan.progress("rewrite", 0.2)
     assert (plan.snapshot().main.done, plan.snapshot().main.fraction) == (11, 0.2)
+
+
+def test_a_step_runs_for_a_block_or_beside_other_work_while_a_future_does():
+    from concurrent.futures import Future
+
+    from progress_plan import PlanTracker, StageSpec
+
+    plan = PlanTracker([StageSpec(id=key, code=key) for key in ("block", "broken", "main", "extra")])
+    with plan.running("block"):
+        assert plan.snapshot().main.state == "running"
+    with pytest.raises(ValueError), plan.running("broken"):
+        raise ValueError("gone")
+    main, extra = Future(), Future()
+    followed = plan.follow("main", main)
+    skipped = plan.follow("extra", extra, failed="skipped")
+    assert {stage.id: stage.state for stage in plan.snapshot().stages}["main"] == "running"
+    main.set_result({"title": "Palaces"})
+    extra.set_exception(LookupError("no such page"))
+
+    # The followed work's outcome, once its step has ended.
+    assert followed.result() == {"title": "Palaces"}
+    assert isinstance(skipped.exception(), LookupError)
+
+    assert {stage.id: stage.state for stage in plan.snapshot().stages} == {
+        "block": "completed", "broken": "failed", "main": "completed", "extra": "skipped",
+    }

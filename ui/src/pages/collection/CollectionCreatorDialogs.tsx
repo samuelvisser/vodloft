@@ -12,6 +12,7 @@ import {capitalized} from '../../types/creator'
 import SimpleSelect from '../../components/common/SimpleSelect'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import LookupSteps from '../creator/LookupSteps'
+import {useSlow} from '../../lib/useSlow'
 import {CollectionMoves} from '../creator/MoveSectionsDialog'
 import '../../components/ChangeIdentificationDialog/ChangeIdentificationDialog.css'
 import '../creator/CreatorPages.css'
@@ -70,6 +71,8 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
     }), [collectionSlug, creatorNames, libraryCreators, findsCreator])
     const chosen = libraryCreators?.find((other) => other.slug === target)
     const match = useCollectionCreatorMatch(collectionSlug, open && target === 'behind')
+    // A lookup found already answers in a moment, so its progress only shows once it takes a while.
+    const slowMatch = useSlow(match.isLoading)
     const refresh = useRefresh(collectionSlug)
     const creator = match.data
     const matched = !!creator?.sectionTitle
@@ -147,7 +150,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                     <li>{words.season.Plural}, {words.episode.singular} numbers, profiles and files stay as they are. Nothing is indexed again.</li>
                 </ul>
             )}
-            {!chosen && match.isLoading && (
+            {!chosen && slowMatch && (
                 <div className="creator-skeleton creator-join" aria-busy="true">
                     <LookupSteps steps={match.steps} first={`Finding the ${creatorNames?.singular} behind the link`}/>
                     <div className="creator-join-who" aria-hidden="true">
