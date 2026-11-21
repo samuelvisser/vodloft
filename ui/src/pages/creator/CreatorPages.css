@@ -207,6 +207,8 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
 .creator-more-text b { font-size: 1rem; }
 .creator-more-short { display: none; }
 .creator-more-sub { color: var(--muted); font-size: .85rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Open, it says how to add them: let that wrap instead of cutting it off. */
+.creator-more.is-open .creator-more-sub { white-space: normal; overflow: visible; }
 .creator-more-new {
     display: inline-block; margin-left: 8px; padding: 2px 7px; border-radius: 999px; background: #f59e0b; color: #1f1300;
     font-size: .68rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; vertical-align: 2px;
