@@ -21,6 +21,9 @@ import {
     useLazyCollection,
 } from './lazyCollection'
 import {useFrontendPuller} from './puller'
+import {lookupSteps} from './progressPlan'
+import {PlanSchema} from '../types/schemas/progress_plan'
+import type {ProgressStep} from '../types/progress'
 import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/siteSettings'
 import {
     CreatorEpisodePageReadSchema, CreatorLookupReadSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorLookupRead, type CreatorPageRead, type CreatorRead,
@@ -854,10 +857,11 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
 }
 
 /** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
-/** Look a creator up at its Site. It can take a minute: ``onStep`` hears what the lookup is doing as it goes. */
-/** Reads an answer sent a line of JSON per step: tells ``onStep`` each step, and returns the line after them. */
-async function readSteps(
-    response: Response, onStep: (step: string, line: Record<string, unknown>) => void,
+/** Look a creator up at its Site. It can take a minute: ``onPlan`` hears the steps of its plan as they go. */
+/** Reads a creator lookup's answer, sent a line of JSON at a time: tells ``onPlan`` the steps of the lookup's plan each
+ * time it changes, and ``onNames`` what the Site calls a creator, and returns the result line after them. */
+async function readLookup(
+    response: Response, {onPlan, onNames}: {onPlan: (steps: ProgressStep[]) => void, onNames?: (names: Names) => void},
 ): Promise<Record<string, unknown>> {
     if (!response.ok || !response.body) throw await responseError(response)
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -869,7 +873,8 @@ async function readSteps(
         buffered = done ? '' : lines.pop() ?? ''
         for (const line of lines.filter((item) => item.trim())) {
             const message = JSON.parse(line) as Record<string, unknown>
-            if (typeof message.step === 'string') onStep(message.step, message)
+            if (message.plan) onPlan(lookupSteps(PlanSchema.parse(message.plan)))
+            else if (message.creatorNames) onNames?.(NamesSchema.parse(message.creatorNames))
             else if (typeof message.error === 'string') throw new ApiError(message.error, 502)
             else return message
         }
@@ -879,7 +884,7 @@ async function readSteps(
 
 export async function lookUpCreator(
     body: {sourceKey: string, url?: string | null, ref?: string | null},
-    onStep: (step: string, creatorNames?: Names) => void,
+    on: {onPlan: (steps: ProgressStep[]) => void, onNames: (names: Names) => void},
     signal?: AbortSignal,
 ): Promise<CreatorLookupRead> {
     const response = await fetch(`${apiUrl()}/creators/lookup`, {
@@ -889,7 +894,7 @@ export async function lookUpCreator(
         body: JSON.stringify(body),
         signal,
     })
-    const result = await readSteps(response, (step, line) => onStep(step, line.creatorNames ? NamesSchema.parse(line.creatorNames) : undefined))
+    const result = await readLookup(response, on)
     return CreatorLookupReadSchema.parse(result.creator)
 }
 
@@ -1053,7 +1058,7 @@ function collectionCreatorPath(slug: string, rest = ''): string {
 /** Find the creator behind a collection's links, and which of its sections each link becomes. Slow: asks the site. */
 /** The creator behind a collection's link, with the steps of looking it up so far. */
 export function useCollectionCreatorMatch(slug: string, enabled: boolean) {
-    const [steps, setSteps] = useState<string[]>([])
+    const [steps, setSteps] = useState<ProgressStep[]>([])
     const query = useQuery<CollectionCreatorMatch, Error>({
         queryKey: ['collection-creator-match', slug] as const,
         enabled,
@@ -1062,7 +1067,7 @@ export function useCollectionCreatorMatch(slug: string, enabled: boolean) {
         queryFn: async ({signal}) => {
             setSteps([])
             const response = await fetch(collectionCreatorPath(slug, '/match'), {credentials: 'include', signal})
-            const result = await readSteps(response, (step) => setSteps((done) => [...done, step]))
+            const result = await readLookup(response, {onPlan: setSteps})
             return CollectionCreatorMatchSchema.parse(result.match)
         },
     })

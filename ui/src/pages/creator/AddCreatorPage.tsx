@@ -26,6 +26,7 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
 import CreatorHeader from './CreatorHeader'
 import LookupSteps from './LookupSteps'
+import type {ProgressStep} from '../../types/progress'
 import {SECTION_ACTIONS} from './sectionActions'
 import AddToNewCollectionDialog from './AddToNewCollectionDialog'
 import './CreatorPages.css'
@@ -159,7 +160,7 @@ function sectionFacts(creator: CreatorLookupRead, section: CreatorSectionRead): 
 }
 
 /** What the lookup has done so far, over the shape of the page it is filling in. */
-function AddCreatorSkeleton({steps, label}: {steps: string[], label: string}) {
+function AddCreatorSkeleton({steps, label}: {steps: ProgressStep[], label: string}) {
     return (
         <div className="creator-skeleton" aria-busy="true">
             <LookupSteps steps={steps} first={label ? `Looking the ${label} up` : 'Looking it up'}/>
@@ -261,7 +262,7 @@ export default function AddCreatorPage() {
     const ref = params.get('ref')
     const [creator, setCreator] = useState<CreatorLookupRead | null>(null)
     const [error, setError] = useState<string | null>(null)
-    const [steps, setSteps] = useState<string[]>([])
+    const [steps, setSteps] = useState<ProgressStep[]>([])
     // What the Site calls the creator, which the backend tells with the lookup's first step.
     const [label, setLabel] = useState('')
     // The type and episode identification of each collection the creator adds, by MAIN_KEY or the section's ref.
@@ -292,10 +293,7 @@ export default function AddCreatorPage() {
     useEffect(() => {
         const controller = new AbortController()
         setSteps([])
-        lookUpCreator({sourceKey, url, ref}, (step, creatorNames) => {
-            if (creatorNames) setLabel(creatorNames.singular)
-            setSteps((done) => [...done, step])
-        }, controller.signal)
+        lookUpCreator({sourceKey, url, ref}, {onPlan: setSteps, onNames: (names) => setLabel(names.singular)}, controller.signal)
             .then((found) => {
                 setCreator(found)
                 setLabel(found.creatorNames.singular)
