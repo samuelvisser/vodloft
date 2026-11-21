@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Site as SiteRecord
-from backend.services.sites import SiteLinkError, site_of_link, site_record
+from backend.services.sites import SiteLinkError, remove_site, site_of_link, site_record, site_removable, sites_in_use
 from sources import ANY_DOMAIN, CookiesStatus, Feature, Site, Source, all_sources, named_sites, site_of, sources_for
 from sources import cookies as cookie_files
 
@@ -52,6 +52,8 @@ class SiteAuthentication:
     cookies_status: Optional[CookiesStatus]
     api_key_source_key: Optional[str]
     """The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key."""
+    removable: bool
+    """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
 
     @property
     def has_cookies(self) -> bool:
@@ -119,7 +121,7 @@ def _status(site_key: str, sources: list[Source]) -> Optional[CookiesStatus]:
     return next((status for source in sources if (status := source.cookies_status(site_key)) is not None), None)
 
 
-def _authentication(site: Site, domains: tuple[str, ...]) -> SiteAuthentication:
+def _authentication(site: Site, domains: tuple[str, ...], in_use: set[str]) -> SiteAuthentication:
     sources = _cookie_sources(site, domains)
     count = _cookie_count(site.key)
     owner = next(
@@ -137,12 +139,14 @@ def _authentication(site: Site, domains: tuple[str, ...]) -> SiteAuthentication:
         cookie_source_names=tuple(source.name for source in sources), cookies_help=site.cookies_help,
         cookie_count=count, cookies_status=_status(site.key, sources) if count else None,
         api_key_source_key=api_key.id if api_key is not None else None,
+        removable=site_removable(site.key, in_use),
     )
 
 
 def list_site_authentication(s: Session) -> list[SiteAuthentication]:
     """Every Site VODLoft knows, with how it signs in there. Sites with a sign-in, cookies or an API key come first."""
-    listings = [_authentication(site, domains) for site, domains in _known_sites(s).values()]
+    in_use = sites_in_use(s)
+    listings = [_authentication(site, domains, in_use) for site, domains in _known_sites(s).values()]
     return sorted(listings, key=lambda listing: (
         not (listing.sign_in_source_key or listing.has_cookies or listing.api_key_source_key), listing.name.lower(),
     ))
@@ -152,7 +156,7 @@ def site_authentication(s: Session, site_key: str) -> SiteAuthentication:
     known = _known_sites(s)
     if site_key not in known:
         raise SiteNotKnownError(f"VODLoft does not know the Site '{site_key}'")
-    return _authentication(*known[site_key])
+    return _authentication(*known[site_key], sites_in_use(s))
 
 
 def _changed(site: Site, domains: tuple[str, ...]) -> None:
@@ -181,7 +185,7 @@ def save_site_cookies(s: Session, site_key: str, content: bytes) -> SiteAuthenti
     cookie_files.store_site_cookies(site_key, lines)
     _changed(site, domains)
     logger.info("Stored a cookies file for %s with %s cookies", site.name, len(lines))
-    return _authentication(site, domains)
+    return _authentication(site, domains, sites_in_use(s))
 
 
 def remove_site_cookies(s: Session, site_key: str) -> SiteAuthentication:
@@ -191,7 +195,21 @@ def remove_site_cookies(s: Session, site_key: str) -> SiteAuthentication:
     site, domains = known[site_key]
     cookie_files.remove_site_cookies(site_key)
     _changed(site, domains)
-    return _authentication(site, domains)
+    return _authentication(site, domains, sites_in_use(s))
+
+
+def remove_known_site(site_key: str) -> None:
+    """Forget a Site that has nothing in VODLoft, with its cookies file. Raises ServiceError for a Site that has
+    something in VODLoft or that a Source is made for."""
+    with _reading() as s:
+        known = _known_sites(s).get(site_key)
+    if known is None:
+        raise SiteNotKnownError(f"VODLoft does not know the Site '{site_key}'")
+    run_write_transaction(lambda s: remove_site(s, site_key))
+    if cookie_files.site_cookies(site_key) is not None:
+        cookie_files.remove_site_cookies(site_key)
+        _changed(*known)
+    logger.info("Removed the site %s", known[0].name)
 
 
 def sites_for_cookies(s: Session, content: bytes) -> list[Site]:

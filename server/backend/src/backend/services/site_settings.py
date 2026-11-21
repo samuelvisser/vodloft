@@ -24,6 +24,8 @@ from config.settings.site_settings import (
 )
 from sources import Site, site_of
 
+from backend.services.sites import site_removable, sites_in_use
+
 _UPGRADE_SETTINGS = frozenset({
     SiteSetting.UPGRADE_CHECK, SiteSetting.UPGRADE_AFTER_DAYS, SiteSetting.UPGRADE_REPEAT,
     SiteSetting.UPGRADE_IMPROVEMENTS, SiteSetting.UPGRADE_LENGTH_MINUTES,
@@ -154,6 +156,8 @@ class SiteSettingsListing:
     record: SiteRecord
     site: Site
     settings: list[OfferedSetting]
+    removable: bool
+    """The user can remove the Site: VODLoft has nothing from it and no Source is made for it."""
 
     @property
     def upgrade_improvements(self) -> tuple[UpgradeImprovement, ...]:
@@ -189,10 +193,13 @@ def list_sites_settings(s: Session) -> list[SiteSettingsListing]:
     """Every Site VODLoft has seen, with the settings it shows. A Site without collections or videos yet
     shows every setting it offers."""
     found = _sources_of_sites(s)
+    in_use = sites_in_use(s)
     listings = []
     for record in s.scalars(select(SiteRecord).order_by(SiteRecord.name)).all():
         site = site_of(record.key)
         refreshes, follows = found.get(record.key, (True, True))
         keys = offered_settings(site, refreshes=refreshes, follows_pending=follows)
-        listings.append(SiteSettingsListing(record, site, [_offered_setting(site, key) for key in keys]))
+        listings.append(SiteSettingsListing(
+            record, site, [_offered_setting(site, key) for key in keys], site_removable(record.key, in_use),
+        ))
     return listings

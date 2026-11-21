@@ -18,6 +18,11 @@ from sources import SiteSetting, StreamMethod, UpgradeImprovement, collection_on
     ("https://www.twitch.tv/videos/123", "ytdlp", "twitch", "Twitch"),
     ("https://rumble.com/c/someone", "ytdlp", "rumble", "Rumble"),
     ("https://www.example.com/clip.mp4", "ytdlp", "generic:example.com", "example.com"),
+    # A site's home page, which only yt-dlp's generic extractor handles, is still on the site whose domain it is.
+    ("https://instagram.com", "ytdlp", "instagram", "Instagram"),
+    ("https://www.twitch.tv/", "ytdlp", "twitch", "Twitch"),
+    ("https://x.com", "ytdlp", "twitter", "X"),
+    ("https://notinstagram.com", "ytdlp", "generic:notinstagram.com", "notinstagram.com"),
     # A Site a Source is made for wins, whichever Source fetches the link.
     ("https://www.dailywire.com/show/a-show", "ytdlp", "dailywire", "The Daily Wire"),
     ("https://www.dailywire.com/show/a-show", "dailywire", "dailywire", "The Daily Wire"),

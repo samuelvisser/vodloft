@@ -313,6 +313,8 @@ export const SiteAuthenticationReadSchema = z.object({
     cookiesStatus: z.object({label: z.string(), ok: z.boolean(), detail: z.string().nullable()}).nullable(),
     /** The Source whose API key is for the Site, such as yt-dlp's YouTube Data API key. */
     apiKeySourceKey: z.string().nullable(),
+    /** The user can remove the Site: VODLoft has nothing from it and no Source is made for it. */
+    removable: z.boolean(),
 })
 export type SiteAuthenticationRead = z.infer<typeof SiteAuthenticationReadSchema>
 

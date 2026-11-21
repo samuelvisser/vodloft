@@ -8,10 +8,25 @@ import {SiteAddedReadSchema, type SiteAddedRead} from '../../types/schemas/sourc
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import './SiteSettingsCard.css'
 
+const SITE_ADDRESS_MESSAGE = "Type the site's address, such as twitch.tv, or paste a link to a page on it"
+
+/** Whether a link names a site on the internet: its host has a domain, such as twitch.tv. */
+const onAnInternetSite = (url: string) => {
+    try {
+        return new URL(url).hostname.includes('.')
+    } catch {
+        return false
+    }
+}
+
 const AddSiteSchema = z.object({
-    url: z.string().trim().min(1, 'Paste a link to a channel or video on the site').url('Paste a whole link, starting with https://'),
+    url: z.string().trim().min(1, SITE_ADDRESS_MESSAGE)
+        // An address typed without https://, such as twitch.tv, is the site's https address.
+        .transform((url) => url.includes('://') ? url : `https://${url}`)
+        .pipe(z.url(SITE_ADDRESS_MESSAGE).refine(onAnInternetSite, SITE_ADDRESS_MESSAGE)),
 })
 type AddSiteValues = z.input<typeof AddSiteSchema>
+type AddSiteData = z.output<typeof AddSiteSchema>
 
 /** Add a Site by a link to it, before VODLoft has anything from it, so it gets its own settings and authentication.
  *  Every list of Sites shows it once it is added. */
@@ -22,13 +37,13 @@ export default function AddSiteByLink() {
         defaultValues: {url: ''},
     })
     const {register, formState: {errors, isSubmitting}} = form
-    const onSubmit = buildServerAwareSubmit<AddSiteValues, AddSiteValues, SiteAddedRead>(
+    const onSubmit = buildServerAwareSubmit<AddSiteValues, AddSiteData, SiteAddedRead>(
         form,
         async (data) => fetch(`${apiUrl()}/sources/sites`, {
             method: 'POST',
             credentials: 'include',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({url: data.url.trim()}),
+            body: JSON.stringify({url: data.url}),
         }),
         {
             parseSuccess: async (response) => SiteAddedReadSchema.parse(await response.json()),
@@ -46,15 +61,15 @@ export default function AddSiteByLink() {
         <form className="site-add" onSubmit={onSubmit} noValidate>
             <div className="site-add__line">
                 <input
-                    className="input settings-input" type="url" placeholder="Add a site: https://www.twitch.tv/…"
-                    aria-label="Link to a channel or video on the site to add" aria-invalid={Boolean(errors.url)}
+                    className="input settings-input" type="url" placeholder="Add a site: twitch.tv"
+                    aria-label="Address of the site to add, or a link to a page on it" aria-invalid={Boolean(errors.url)}
                     {...register('url')}
                 />
                 <button className="btn" type="submit" disabled={isSubmitting}>Add site</button>
             </div>
             {errors.url
                 ? <div className="error" role="alert">{String(errors.url.message)}</div>
-                : <div className="site-add__help">A site shows up once you add something from it. Paste a link to a channel or video to add it now.</div>}
+                : <div className="site-add__help">A site shows up once you add something from it. Type its address, such as twitch.tv, or paste a link to a page on it to add it now.</div>}
         </form>
     )
 }

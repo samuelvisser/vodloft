@@ -11,8 +11,9 @@ from backend.api.endpoints.creators.service import look_up_creator_ahead
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.site_cookies import (
-    SiteAuthentication, SiteNotKnownError, list_site_authentication, remove_site_cookies, save_site_cookies,
+    SiteAuthentication, SiteNotKnownError, list_site_authentication, remove_known_site, remove_site_cookies, save_site_cookies,
 )
+from backend.services.errors import ServiceError
 from backend.services.sites import SiteLinkError, add_site, episode_tags_named, site_of_link
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType
@@ -91,6 +92,17 @@ def add_site_by_link(body: SiteAddAPIRequest):
         except SiteLinkError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
     return run_write_transaction(lambda s: SiteAddedAPIRead.model_validate(add_site(s, site)))
+
+
+@router.delete("/sources/sites/{key}", status_code=204, dependencies=[requires_any((Area.SOURCES, Level.MANAGE), (Area.SETTINGS, Level.MANAGE))])
+def remove_site_by_key(key: str):
+    """Remove a Site that has nothing in VODLoft, such as one added by a link, with its cookies file."""
+    try:
+        remove_known_site(key)
+    except SiteNotKnownError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @router.put("/sources/sites/{key}", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=SourceSiteAPIRead)
