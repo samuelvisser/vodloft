@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "a4318a92a5ca"
+HEAD_REVISION = "ee7b43f4d6a1"
 
 
 @pytest.fixture
@@ -2122,3 +2122,40 @@ def test_accounts_get_their_picture_and_own_collections_their_sites_name(migrati
     with engine.connect() as connection:
         banners = dict(connection.execute(text("SELECT id, banner_path FROM creator_accounts")).all())
     assert banners == {1: "banner-nw.jpg", 2: None, 3: None, 4: "banner-solo.jpg"}
+
+
+def test_yt_dlp_options_vodloft_now_refuses_become_comments(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+    from sources.ytdlp_options import check_ytdlp_options
+
+    config = get_alembic_config()
+    command.upgrade(config, "a4318a92a5ca")
+    collection_options = "--concurrent-fragments 4\n--limit-rate 2M\n# --test\n--remove-chapters Intro --no-mtime"
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key, episode_order, ytdlp_options) VALUES (1, 'c1', 'c1', 'Channel', "
+            "'https://example.test/c1', 'free', 'series', 'seasonal', 'Author', 'author', 'ytdlp', 'newest_first', "
+            ":options)"
+        ), {"options": collection_options})
+        connection.execute(text("UPDATE settings SET ytdlp_options = :options"), {"options": "--no-warn\n-N 4"})
+
+    command.upgrade(config, "ee7b43f4d6a1")
+
+    with engine.connect() as connection:
+        collection = connection.execute(text("SELECT ytdlp_options FROM collections")).scalar_one()
+        source = connection.execute(text("SELECT ytdlp_options FROM settings")).scalar()
+    note = "# Turned off by VODLoft, which no longer takes this option here: "
+    assert collection.splitlines() == [
+        "--concurrent-fragments 4", f"{note}--limit-rate 2M", "# --test", f"{note}--remove-chapters Intro --no-mtime",
+    ]
+    # An abbreviated option is matched the way yt-dlp matches it.
+    assert source.splitlines() == [f"{note}--no-warn", "-N 4"]
+    # What is left passes VODLoft's check, so downloads keep working.
+    assert all(line.status == "valid" for line in check_ytdlp_options(collection))
+    assert all(line.status == "valid" for line in check_ytdlp_options(source))
+
+    command.downgrade(config, "a4318a92a5ca")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT ytdlp_options FROM collections")).scalar_one() == collection_options
