@@ -18,7 +18,7 @@ names and get their new metadata.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Container, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import PurePath
@@ -37,6 +37,7 @@ from backend.services.sites import collection_words
 from backend.types import work_weights
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
 from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
+from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.season_types import SeasonType
 from backend.utils.episode import EpisodeIdentifierInfo
 from backend.utils.output_template import output_template_fields
@@ -349,35 +350,44 @@ def identification_steps(s: Session, collection: Collection, *, renumbering: boo
         id="number", code="number_episodes", weight=max(work_weights.DEFAULT, count * work_weights.NUMBER_EPISODE),
         label=f"Numbering the {episodes}" if renumbering else "Saving the new order",
     )]
-    for profile_id, name, files in files_by_profile(s, collection.id):
-        steps += profile_file_steps(profile_id, name, files, unit=episodes)
+    return steps + profile_file_steps(s, collection)
+
+
+def profile_file_steps(s: Session, collection: Collection, profile_ids: Container[int] | None = None) -> list[StageSpec]:
+    """Renaming each Local Media Profile's files, then rewriting their metadata, after the numbering: of every profile
+    with files, or of those of ``profile_ids``. The rewriting counts what it rewrote as the profile's files are called,
+    such as the tracks of a profile for an artist's sound."""
+    steps = []
+    for profile_id, name, files, audio in files_by_profile(s, collection.id):
+        if profile_ids is None or profile_id in profile_ids:
+            unit = collection_words(collection, audio=True if audio else None).episode.plural
+            steps += _file_steps(profile_id, name, files, unit)
     return steps
 
 
-def profile_file_steps(profile_id: int, name: str | None, files: int | None, *, unit: str | None) -> list[StageSpec]:
-    """Renaming one Local Media Profile's files, then rewriting their metadata, after the numbering. The rewriting
-    counts the ``unit`` it rewrote, each with its file."""
-    of = f" of {name}" if name else ""
+def _file_steps(profile_id: int, name: str, files: int, unit: str) -> list[StageSpec]:
+    of = f" of {name}"
     return [
         StageSpec(id=f"rename:{profile_id}", code="rename_files", label=f"Renaming the files{of}",
-                  weight=(files or 1) * work_weights.MOVE_FILE, depends_on=("number",)),
+                  weight=max(1, files) * work_weights.MOVE_FILE, depends_on=("number",)),
         StageSpec(id=f"rewrite:{profile_id}", code="rewrite_metadata", label=f"Rewriting the metadata{of}", unit=unit,
-                  weight=(files or 1) * work_weights.REWRITE_FILE, depends_on=(f"rename:{profile_id}",)),
+                  weight=max(1, files) * work_weights.REWRITE_FILE, depends_on=(f"rename:{profile_id}",)),
     ]
 
 
-def files_by_profile(s: Session, collection_id: int) -> list[tuple[int, str, int]]:
-    """Each Local Media Profile with files of the collection's episodes: its id, its name and how many files, for the
-    plan of the work that renames them and rewrites their metadata."""
-    return [(row.id, row.name, row.files) for row in s.execute(
+def files_by_profile(s: Session, collection_id: int) -> list[tuple[int, str, int, bool]]:
+    """Each Local Media Profile with files of the collection's episodes: its id, its name, how many files and whether
+    they are sound only, for the plan of the work that renames them and rewrites their metadata."""
+    return [(row.id, row.name, row.files, row.preferred_format == PreferredFormat.FORMAT_AUDIO_ONLY) for row in s.execute(
         select(
-            CollectionLocalMediaProfile.id, CollectionLocalMediaProfile.name,
+            CollectionLocalMediaProfile.id, CollectionLocalMediaProfile.name, CollectionLocalMediaProfile.preferred_format,
             func.count(EpisodeMediaDownload.id).label("files"),
         )
         .join(EpisodeMediaDownload, EpisodeMediaDownload.local_media_profile_id == CollectionLocalMediaProfile.id)
         .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
         .where(Episode.collection_id == collection_id, EpisodeMediaDownload.artifact_status.in_(_PHYSICAL))
-        .group_by(CollectionLocalMediaProfile.id, CollectionLocalMediaProfile.name)
+        .group_by(CollectionLocalMediaProfile.id, CollectionLocalMediaProfile.name,
+                  CollectionLocalMediaProfile.preferred_format)
         .order_by(CollectionLocalMediaProfile.id)
     )]
 

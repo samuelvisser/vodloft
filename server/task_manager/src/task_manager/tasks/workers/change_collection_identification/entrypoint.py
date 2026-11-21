@@ -9,7 +9,6 @@ from backend.db.models import Collection
 from backend.services.collection_assets import request_collection_asset_reconciliation
 from backend.services.custom_indexes import request_collection_custom_index_reconciliation
 from backend.services.episode_identification import change_identification, identification_steps, profile_file_steps
-from backend.services.sites import collection_words
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
 from backend.utils.custom_index import CustomIndexNotReadyError
 from task_manager.events.transactional import queue_event
@@ -28,15 +27,16 @@ _DATA_KEYS = ("files_renamed", "files_unchanged", "files_skipped_existing", "fil
               "files_skipped", "files_failed", "rename_failed")
 
 
-def _plan(collection_id: int, renumbering: bool) -> tuple[list[StageSpec], str | None]:
-    """The steps of the work, and what the collection calls its episodes, which its rewriting steps count."""
+def _plan(collection_id: int, *, renumbering: bool, profile_ids: list[int] | None = None) -> list[StageSpec]:
+    """The steps of the work, or with ``profile_ids``, only the file steps of those Local Media Profiles."""
     s = get_session()
     try:
         collection = s.get(Collection, collection_id)
         if collection is None:
-            return [], None
-        return (identification_steps(s, collection, renumbering=renumbering),
-                collection_words(collection).episode.plural)
+            return []
+        if profile_ids is not None:
+            return profile_file_steps(s, collection, profile_ids)
+        return identification_steps(s, collection, renumbering=renumbering)
     finally:
         s.rollback()
         s.close()
@@ -63,8 +63,7 @@ async def change_collection_identification(
         raise ValueError("Changing episode identification requires a Collection and an identification")
     identification = EpisodeIdentifier(episode_identifier)
     order = EpisodeOrder(episode_order) if episode_order else None
-    steps, episodes = _plan(resource_id, renumber)
-    plan = PlanTracker(steps, sink=report_plan(progress))
+    plan = PlanTracker(_plan(resource_id, renumbering=renumber), sink=report_plan(progress))
     # Numbering is one write that cannot say how far it is, so its step has no fraction until it is done.
     plan.start("number")
 
@@ -78,8 +77,9 @@ async def change_collection_identification(
     plan.complete("number")
     planned = {stage.id for stage in plan.snapshot().stages}
     # A profile that got files meanwhile has steps of its own now.
-    plan.add(*(step for profile_id in profile_ids for step in profile_file_steps(profile_id, None, None, unit=episodes)
-               if step.id not in planned))
+    added = [profile_id for profile_id in profile_ids if f"rename:{profile_id}" not in planned]
+    if added:
+        plan.add(*_plan(resource_id, renumbering=renumber, profile_ids=added))
 
     totals = dict.fromkeys(_DATA_KEYS, 0)
     for profile_id in profile_ids:

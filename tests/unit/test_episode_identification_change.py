@@ -1,6 +1,8 @@
 """Changing how a collection numbers its episodes: the new identifiers, what the change would do, and the files."""
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import json
 import shutil
 import subprocess
@@ -372,20 +374,34 @@ def test_numbering_again_weighs_its_plan_for_an_action_made_of_several(session):
     assert work_weight(operation) == 40.0
 
 
-def test_rewriting_counts_the_episodes_it_rewrote_in_the_collections_words(session):
+def test_rewriting_counts_what_each_profile_calls_its_files(session):
+    """An artist's music videos are music videos, and its sound only are tracks."""
     from progress_plan import PlanTracker
 
-    from backend.services.episode_identification import identification_steps, profile_file_steps
+    from backend.db.models import LocalMediaProfile
+    from backend.services.episode_identification import identification_steps
     from task_manager.tasks.helpers.progress import PlanStep, report_plan, update_progress
 
     collection = _collection(session, source_key="ytdlp", identification="numbered")
-    assert [step.unit for step in identification_steps(session, collection, renumbering=True)] == [None]
-    steps = profile_file_steps(3, "Plex", 110, unit="episodes")
-    assert [step.unit for step in steps] == [None, "episodes"]
+    collection.type = "music"
+    episode = _episode(session, collection, 1, "ep.1")
+    videos = _profile(session, collection)
+    _download(session, videos, episode)
+    sound = LocalMediaProfile(slug="sound", name="Sound", preferred_format="format_audio_only",
+                              output_template="/music/{{ episode_label }}.ext")
+    session.add(sound)
+    session.flush()
+    _download(session, SimpleNamespace(local_media_profile_id=sound.id, id=videos.id), episode,
+              file_path="/tmp/show-1.m4a")
+
+    steps = identification_steps(session, collection, renumbering=True)
+    assert [(step.id, step.unit) for step in steps if step.code == "rewrite_metadata"] == [
+        (f"rewrite:{videos.local_media_profile_id}", "music videos"), (f"rewrite:{sound.id}", "tracks"),
+    ]
 
     progress = _Progress()
     plan = PlanTracker(steps, sink=report_plan(progress))
-    plan.start("rewrite:3")
-    update_progress(PlanStep(plan, progress, "rewrite:3"), 10, "Rewriting a.mp4", done=11, total=110)
-    rewrite = progress.reports[-1][2]["plan"]["stages"][1]
-    assert (rewrite["unit"], rewrite["done"], rewrite["total"]) == ("episodes", 11, 110)
+    plan.start(f"rewrite:{sound.id}")
+    update_progress(PlanStep(plan, progress, f"rewrite:{sound.id}"), 10, "Rewriting a.m4a", done=11, total=110)
+    rewrite = next(stage for stage in progress.reports[-1][2]["plan"]["stages"] if stage["id"] == f"rewrite:{sound.id}")
+    assert (rewrite["unit"], rewrite["done"], rewrite["total"]) == ("tracks", 11, 110)
