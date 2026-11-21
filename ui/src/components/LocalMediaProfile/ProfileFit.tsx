@@ -12,6 +12,8 @@ export type ProfileFit = {
     site?: string | null
     /** The download format, such as the one a Stream Profile streams. It only fills the field in. */
     format?: string | null
+    /** The collection whose page the link is on: the example episodes come from it. */
+    collectionId?: number
 }
 
 const ProfileFitContext = createContext<ProfileFit>({})

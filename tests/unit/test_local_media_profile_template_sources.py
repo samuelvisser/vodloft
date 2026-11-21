@@ -472,6 +472,36 @@ def test_a_saved_profile_starts_on_a_collection_that_downloads_to_it(db_session)
     assert output_template.get_random_collection_template_source(db_session, local_media_profile_id=999) is not None
 
 
+def test_a_profile_opened_from_a_collection_takes_its_example_from_that_collection(db_session):
+    from backend.api.endpoints.local_media_profiles import output_template
+    from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope
+    from backend.types.collection_types import CollectionType
+
+    podcasts = [
+        _make_collection(db_session, slug=f"podcast-{number}", collection_type=CollectionType.PODCAST.value)
+        for number in range(5)
+    ]
+    for podcast in podcasts:
+        _add_episode(db_session, podcast, index=1)
+    music = _make_collection(db_session, slug="artist", collection_type=CollectionType.MUSIC.value)
+    for index in range(1, 4):
+        _add_episode(db_session, music, index=index)
+    empty = _make_collection(db_session, slug="empty", collection_type=CollectionType.PODCAST.value)
+    db_session.flush()
+
+    # Even while the profile is still available for something the collection is not.
+    for _ in range(5):
+        source = output_template.get_random_collection_template_source(
+            db_session, CollectionLocalMediaProfileScope.PODCAST_AND_SERIES, collection_id=music.id,
+        )
+        assert source.values["collection"] == "artist"
+    # A collection without episodes leaves the choice to the profile.
+    source = output_template.get_random_collection_template_source(
+        db_session, CollectionLocalMediaProfileScope.PODCAST, collection_id=empty.id,
+    )
+    assert source is not None and source.values["collection"].startswith("podcast-")
+
+
 def test_collection_source_anchor_opens_at_selected_episode_in_natural_order(db_session):
     from backend.api.endpoints.local_media_profiles.output_template import (
         get_output_template_source_page,

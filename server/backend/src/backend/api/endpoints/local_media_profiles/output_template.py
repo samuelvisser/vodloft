@@ -508,11 +508,18 @@ def get_random_collection_template_source(
     *,
     local_media_profile_id: int | None = None,
     site_keys: list[str] | None = None,
+    collection_id: int | None = None,
 ) -> LocalMediaProfileTemplateSource | None:
     """Choose an example uniformly by Collection, then uniformly within that Collection.
 
-    With a profile, a Collection that downloads to it is chosen when there is one.
+    A profile opened from a Collection's page always takes its example from that Collection, whatever the profile is
+    available for so far. With a profile, a Collection that downloads to it is chosen when there is one.
     """
+    if collection_id is not None:
+        episode = _random_episode_of(session, collection_id)
+        if episode is not None:
+            return _collection_template_source(episode)
+
     candidates = (
         select(Episode.collection_id)
         .join(Episode.collection)
@@ -533,14 +540,19 @@ def get_random_collection_template_source(
     if collection_id is None:
         return None
 
-    episode = session.scalar(
+    episode = _random_episode_of(session, collection_id)
+    return _collection_template_source(episode) if episode is not None else None
+
+
+def _random_episode_of(session: Session, collection_id: int) -> Episode | None:
+    """Any episode of the Collection that is in a season, each as likely as the next."""
+    return session.scalar(
         select(Episode)
         .join(Episode.season)
         .where(Episode.collection_id == collection_id)
         .order_by(func.random())
         .limit(1)
     )
-    return _collection_template_source(episode) if episode is not None else None
 
 
 def get_example_template_sources(collection: ExampleCollection) -> list[LocalMediaProfileTemplateSource]:

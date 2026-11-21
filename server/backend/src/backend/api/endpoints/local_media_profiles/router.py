@@ -195,11 +195,13 @@ def local_media_profile_random_collection_template_source(
     collection_scope: CollectionLocalMediaProfileScope = Query(CollectionLocalMediaProfileScope.PODCAST_AND_SERIES),
     local_media_profile_id: int | None = Query(None, description="Prefer a Collection that uses this profile"),
     sites: str | None = Query(None, max_length=4096, description=_SITES_HELP),
+    collection_id: int | None = Query(None, description="Take the episode from this Collection when it has one"),
 ):
     """Choose a fresh initial episode without weighting Collections by episode count."""
     with db_session() as s:
         return get_random_collection_template_source(
             s, collection_scope, local_media_profile_id=local_media_profile_id, site_keys=_site_keys(sites),
+            collection_id=collection_id,
         )
 
 
