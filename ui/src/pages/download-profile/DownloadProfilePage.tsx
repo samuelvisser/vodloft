@@ -1,7 +1,8 @@
+import {collectionWords} from '../../lib/collectionWords'
 import {useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Link, useNavigate, useParams} from 'react-router-dom'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 
 import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
 import RunningActions from '../../components/RunningActions/RunningActions'
@@ -62,11 +63,12 @@ export default function DownloadProfilePage() {
     const resourceLabel = `${profile.collectionTitle} (${profile.localMediaProfileName})`
     const localMediaProfile = localMediaProfiles?.find((item) => item.id === profile.localMediaProfileId)
     const typeLabel = (key: string) => tags?.find((tag) => tag.key === key)?.label ?? key
+    const season = collectionWords(profile.collectionType).season
     const seasonLabel = (slug: string) => seasons?.find((season) => season.slug === slug)?.name ?? slug
     const sentence = (filter: DownloadProfileRead['filters'][number]) => plainText(
-        filterSentence(filter, typeLabel, seasonLabel, profile.deleteOlderEpisodes),
+        filterSentence(filter, typeLabel, seasonLabel, profile.deleteOlderEpisodes, undefined, season),
     )
-    const filterText = (index: number) => leftOutByText(profile.filters[index], typeLabel, seasonLabel, profile.deleteOlderEpisodes)
+    const filterText = (index: number) => leftOutByText(profile.filters[index], typeLabel, seasonLabel, profile.deleteOlderEpisodes, season)
     const outside = statistics ? statistics.outOfScope + statistics.outOfScopeKept : 0
     // Counting walks the filters over every episode of the Collection, which takes a while on a busy server.
     const counted = (value: number | string | undefined) => value !== undefined ? value : (
@@ -205,7 +207,9 @@ export default function DownloadProfilePage() {
                     </div>
                     <div>
                         <dt>Delete older episodes</dt>
-                        <dd>{profile.deleteOlderEpisodes ? 'Yes, when a date line leaves them out' : 'No'}</dd>
+                        <dd>{!profile.deleteOlderEpisodes ? 'No' : profile.retentionIncludesManual
+                            ? 'Yes, when a date line leaves them out, manual downloads too'
+                            : 'Yes, when a date line leaves them out'}</dd>
                     </div>
                 </dl>
             </article>

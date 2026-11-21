@@ -16,6 +16,7 @@ from backend.types.media_types import MediaType
 from .MediaItemBase import MediaItemBase
 
 if TYPE_CHECKING:
+    from backend.db.models.Creator import Creator
     from .MovieExtra import MovieExtra
 
 
@@ -33,6 +34,9 @@ class Movie(MediaItemBase, MediaContentMetadataMixin, HasMetadataMixin, HasTaskR
     author_slug: Mapped[Optional[str]]
     logo_image_path: Mapped[Optional[str]]
     mature_rating: Mapped[Optional[str]]
+    creator_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("creators.id", ondelete="SET NULL"), index=True, comment="The creator the movie belongs to",
+    )
 
     has_video: Mapped[bool] = mapped_column(default=False, server_default="0")
     is_downloadable: Mapped[Optional[bool]]
@@ -103,6 +107,7 @@ class Movie(MediaItemBase, MediaContentMetadataMixin, HasMetadataMixin, HasTaskR
         uselist=False,
         post_update=True,
     )
+    creator: Mapped[Optional["Creator"]] = relationship(back_populates="movies", foreign_keys=[creator_id])
 
     def __repr__(self) -> str:
         return f"<Movie(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

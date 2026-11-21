@@ -2,11 +2,6 @@ import {z} from 'zod'
 
 import {createServerErrorMapper} from '../../utils/serverMessageMap'
 import {
-    MovieLocalMediaProfileCreateSchema,
-    MovieLocalMediaProfileReadSchema,
-    MovieLocalMediaProfileUpdateSchema,
-} from './movie_local_media_profile'
-import {
     CollectionLocalMediaProfileCreateSchema,
     CollectionLocalMediaProfileReadSchema,
     CollectionLocalMediaProfileUpdateSchema,
@@ -18,7 +13,6 @@ import {
 } from './video_local_media_profile'
 
 export * from './local_media_profile_base'
-export * from './movie_local_media_profile'
 export * from './collection_local_media_profile'
 export * from './video_local_media_profile'
 
@@ -30,7 +24,7 @@ export const LocalMediaProfileServerErrors = createServerErrorMapper({
 
 
 const DATE_OUTPUT_TEMPLATE_FIELDS = [
-    'date', 'time', 'datetime', 'year', 'month', 'day', 'hour', 'minute', 'second',
+    'date', 'time', 'datetime', 'year', 'month', 'day', 'hour', 'minute', 'second', 'day_of_year', 'day_of_year_reversed',
 ] as const
 
 export const COLLECTION_OUTPUT_TEMPLATE_FIELDS = [
@@ -39,21 +33,19 @@ export const COLLECTION_OUTPUT_TEMPLATE_FIELDS = [
     'episode_number', 'episode_sub_number', 'episode_label', 'episode_identifier', 'episode_published_date',
     'episode_published_time', 'episode_published_datetime', 'episode_index',
     'collection_author', 'collection_site_id', 'episode_site_id', 'episode_uploader', 'duration_seconds',
+    'creator_title', 'creator_handle', 'creator_kind', 'section_title', 'section_kind',
+    'artist', 'album', 'track_number', 'track_number_padded',
     ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 
-export const MOVIE_OUTPUT_TEMPLATE_FIELDS = [
+// A Video profile keeps single videos, and movies with their extras. The movie_ values are empty for a single video.
+export const VIDEO_OUTPUT_TEMPLATE_FIELDS = [
     'movie_slug', 'movie_title', 'movie_extended_title', 'movie_author',
     'movie_mature_rating', 'movie_duration_seconds',
     'movie_date', 'movie_time', 'movie_datetime', 'movie_year', 'movie_month', 'movie_day',
-    'movie_hour', 'movie_minute', 'movie_second',
+    'movie_hour', 'movie_minute', 'movie_second', 'movie_day_of_year', 'movie_day_of_year_reversed',
     'slug', 'title', 'extended_title', 'author', 'mature_rating', 'rating',
-    'duration_seconds', 'media_type',
-    ...DATE_OUTPUT_TEMPLATE_FIELDS,
-] as const
-
-export const VIDEO_OUTPUT_TEMPLATE_FIELDS = [
-    'slug', 'title', 'author', 'duration_seconds', 'source',
+    'duration_seconds', 'media_type', 'source',
     ...DATE_OUTPUT_TEMPLATE_FIELDS,
 ] as const
 
@@ -61,7 +53,6 @@ export const VIDEO_OUTPUT_TEMPLATE_FIELDS = [
 // ---------- Strict request (create/update) ----------
 export const LocalMediaProfileCreateSchema = z.discriminatedUnion('type', [
     CollectionLocalMediaProfileCreateSchema,
-    MovieLocalMediaProfileCreateSchema,
     VideoLocalMediaProfileCreateSchema,
 ])
 export type LocalMediaProfileCreateIn = z.input<typeof LocalMediaProfileCreateSchema>
@@ -69,7 +60,6 @@ export type LocalMediaProfileCreateOut = z.output<typeof LocalMediaProfileCreate
 
 export const LocalMediaProfileUpdateSchema = z.discriminatedUnion('type', [
     CollectionLocalMediaProfileUpdateSchema,
-    MovieLocalMediaProfileUpdateSchema,
     VideoLocalMediaProfileUpdateSchema,
 ])
 export type LocalMediaProfileUpdateIn = z.input<typeof LocalMediaProfileUpdateSchema>
@@ -79,7 +69,6 @@ export type LocalMediaProfileUpdateOut = z.output<typeof LocalMediaProfileUpdate
 // ------------ Lenient response (read) ------------
 export const LocalMediaProfileReadSchema = z.discriminatedUnion('type', [
     CollectionLocalMediaProfileReadSchema,
-    MovieLocalMediaProfileReadSchema,
     VideoLocalMediaProfileReadSchema,
 ])
 export type LocalMediaProfileRead = z.infer<typeof LocalMediaProfileReadSchema>

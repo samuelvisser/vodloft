@@ -8,6 +8,7 @@ import {
     type CompletionContext,
 } from '@codemirror/autocomplete'
 import {indentUnit} from '@codemirror/language'
+import type {Extension} from '@codemirror/state'
 import {EditorView, type ViewUpdate} from '@codemirror/view'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
@@ -25,6 +26,8 @@ import CustomIndexAdvisories from './CustomIndexAdvisories'
 import OpaqueOutputTemplateCode from './OpaqueOutputTemplateCode'
 import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStartFields'
 import CollectionRootNote from './CollectionRootNote'
+import {useSetExampleEpisode} from './ExampleEpisodeContext'
+import {useProfileFit} from './ProfileFit'
 import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
 import {
     analyzeJinjaStatement,
@@ -42,6 +45,7 @@ import {
     type OutputTemplateVariable,
 } from './outputTemplateVariables'
 import type {IndexingValueEntry} from '../../types/schemas/custom_metadata'
+import {musicKind} from '../../types/local_media_profile'
 import {isExampleSource, useCollectionExamples} from '../../lib/collectionExamples'
 import './OutputTemplateEditor.css'
 import './OutputTemplateEditorIde.css'
@@ -478,6 +482,164 @@ export function TemplateCodeEditor({
     )
 }
 
+/**
+ * Completes variables, filters and Jinja statements as a template is typed: the menu opens after `{{`, `{%` and `|`.
+ * Only Collection output templates offer custom_index.
+ */
+export function useJinjaCompletions(variables: readonly OutputTemplateVariable[], offersCustomIndex: boolean): Extension[] {
+    const variableCompletionOptions = useMemo<Completion[]>(
+        () => variables.map((variable) => ({
+            label: variable.name,
+            type: 'variable',
+            detail: variable.description,
+        })),
+        [variables],
+    )
+    const printVariableCompletionOptions = useMemo<Completion[]>(
+        () => variableCompletionOptions.map((option) => ({
+            ...option,
+            apply: (view, completion, from, to) => {
+                const variableStart = view.state.sliceDoc(0, from).lastIndexOf('{{')
+                const replaceFrom = variableStart >= 0 ? variableStart + 2 : from
+                const closingBraces = /^\s*}}/.exec(view.state.sliceDoc(to))
+                const replaceTo = closingBraces ? to + closingBraces[0].length : to
+                const insert = ` ${completion.label} }}`
+                view.dispatch({
+                    changes: {from: replaceFrom, to: replaceTo, insert},
+                    selection: {anchor: replaceFrom + insert.length},
+                    annotations: pickedCompletion.of(completion),
+                })
+            },
+        })),
+        [variableCompletionOptions],
+    )
+    const statementCompletionOptions = useMemo<Completion[]>(
+        () => jinjaStatements
+            .filter(({label}) => !label.startsWith('end'))
+            .map((statement) => ({
+                label: statement.label,
+                type: 'keyword',
+                detail: statement.detail,
+                apply: (view, completion, from, to) => {
+                    const insert = ` ${statement.label}${statement.acceptsExpression ? '  ' : ' '}%}`
+                    const anchorOffset = statement.acceptsExpression
+                        ? ` ${statement.label} `.length
+                        : insert.length
+                    replaceJinjaStatementCompletion(view, completion, from, to, insert, anchorOffset)
+                },
+            })),
+        [],
+    )
+    return useMemo(() => {
+        const filterCompletionSource = (context: CompletionContext) => {
+            const beforeCursor = context.state.sliceDoc(0, context.pos)
+            const expression = activeJinjaExpression(beforeCursor)
+            if (expression === null) return null
+
+            const filterMatch = /\|\s*([A-Za-z_][A-Za-z0-9_]*)?$/.exec(expression)
+            if (!filterMatch) return null
+            if (isInsideQuotedString(expression.slice(0, filterMatch.index))) return null
+
+            const currentWord = filterMatch[1] ?? ''
+            return {
+                from: context.pos - currentWord.length,
+                options: [
+                    ...vodloftFilterCompletionOptions
+                        .filter((option) => offersCustomIndex || option.label !== 'custom_index')
+                        .map((option) => currentWord ? option : {...option, boost: 99}),
+                    ...jinjaNativeFilterCompletionOptions,
+                ],
+                validFor: /^(?:[A-Za-z_][A-Za-z0-9_]*)?$/,
+            }
+        }
+        const variableCompletionSource = (context: CompletionContext) => {
+            const beforeCursor = context.state.sliceDoc(0, context.pos)
+            const variableStart = beforeCursor.lastIndexOf('{{')
+            const variableEnd = beforeCursor.lastIndexOf('}}')
+            const statementStart = beforeCursor.lastIndexOf('{%')
+            const statementEnd = beforeCursor.lastIndexOf('%}')
+
+            if (variableStart > variableEnd && variableStart > statementStart) {
+                const expression = beforeCursor.slice(variableStart + 2)
+                if (!/^\s*[A-Za-z_][A-Za-z0-9_]*$/.test(expression) && !/^\s*$/.test(expression)) return null
+                const currentWord = expression.match(/[A-Za-z_][A-Za-z0-9_]*$/)?.[0] ?? ''
+
+                return {
+                    from: context.pos - currentWord.length,
+                    options: printVariableCompletionOptions,
+                    validFor: /^(?:[A-Za-z_][A-Za-z0-9_]*)?$/,
+                }
+            }
+
+            if (statementStart <= statementEnd) return null
+            const statement = beforeCursor.slice(statementStart + 2)
+            const expression = statementVariableExpression(statement)
+            if (expression === null) return null
+
+            const currentWord = expression.match(/[A-Za-z_][A-Za-z0-9_]*$/)?.[0] ?? ''
+            if (!currentWord && !context.explicit) return null
+            const expressionBeforeWord = expression.slice(0, expression.length - currentWord.length)
+            if (isInsideQuotedString(expressionBeforeWord)) return null
+
+            const previousSignificantCharacter = expressionBeforeWord.trimEnd().slice(-1)
+            if (previousSignificantCharacter === '.' || previousSignificantCharacter === '|') return null
+
+            return {
+                from: context.pos - currentWord.length,
+                options: variableCompletionOptions,
+                validFor: /^(?:[A-Za-z_][A-Za-z0-9_]*)?$/,
+            }
+        }
+        const statementCompletionSource = (context: CompletionContext) => {
+            const beforeCursor = context.state.sliceDoc(0, context.pos)
+            const statementStart = beforeCursor.lastIndexOf('{%')
+            const statementEnd = beforeCursor.lastIndexOf('%}')
+            if (statementStart <= statementEnd) return null
+
+            const statement = beforeCursor.slice(statementStart + 2)
+            if (!/^\s*[A-Za-z_]*$/.test(statement)) return null
+            const currentWord = statement.match(/[A-Za-z_]*$/)?.[0] ?? ''
+            const openBlocks = getOpenJinjaBlocks(beforeCursor.slice(0, statementStart))
+            const currentBlock = openBlocks[openBlocks.length - 1]
+            const hasElse = currentBlock?.branches.some(({statement: branch}) => branch.keyword === 'else') ?? false
+            const contextualOptions = openBlocks
+                .map((_block, index) => closingBlockCompletion(openBlocks, index + 1))
+            const generalOptions = statementCompletionOptions.filter(({label}) => {
+                if (label === 'elif') return currentBlock?.keyword === 'if' && !hasElse
+                if (label === 'else') {
+                    return (currentBlock?.keyword === 'if' || currentBlock?.keyword === 'for') && !hasElse
+                }
+                return true
+            })
+
+            return {
+                from: context.pos - currentWord.length,
+                options: [...contextualOptions, ...generalOptions],
+                validFor: /^[A-Za-z_]*$/,
+            }
+        }
+        const openCompletionsAfterJinjaDelimiter = EditorView.updateListener.of((update) => {
+            if (!update.docChanged || !update.state.selection.main.empty) return
+            const cursor = update.state.selection.main.head
+            if (cursor < 1) return
+
+            const beforeCursor = update.state.doc.sliceString(0, cursor)
+            const delimiter = cursor >= 2 ? beforeCursor.slice(-2) : ''
+            const justTypedFilter = beforeCursor.endsWith('|') && activeJinjaExpression(beforeCursor) !== null
+            if (delimiter === '{{' || delimiter === '{%' || justTypedFilter) {
+                queueMicrotask(() => startCompletion(update.view))
+            }
+        })
+        return [
+            autocompletion({
+                override: [filterCompletionSource, variableCompletionSource, statementCompletionSource],
+                positionInfo: (_view, list, _option, info, space) => positionCompletionInfo(list, info, space),
+            }),
+            openCompletionsAfterJinjaDelimiter,
+        ]
+    }, [offersCustomIndex, printVariableCompletionOptions, statementCompletionOptions, variableCompletionOptions])
+}
+
 function PreviewPathPart({part}: { part: string }) {
     const leadingSpaceCount = part.match(/^ +/)?.[0].length ?? 0
     return (
@@ -581,12 +743,20 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
     const preferredFormat = useWatch({control, name: 'preferredFormat'}) ?? ''
     const filenameRestrictionMode = useWatch({control, name: 'filenameRestrictionMode'})
-    const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'both'
+    const collectionScope = useWatch({control, name: 'collectionScope'}) ?? 'podcast-and-series'
+    const videoScope = useWatch({control, name: 'videoScope' as any}) ?? 'both'
+    const sourceLabel = mode !== 'collection'
+        ? ({videos: 'Example video', movies: 'Example movie'} as Record<string, string>)[videoScope] ?? 'Example video or movie'
+        : ({tracks: 'Example track', music_videos: 'Example music video'} as Record<string, string>)[musicKind(collectionScope, preferredFormat) ?? ''] ?? 'Example episode'
     const indexingValues = useWatch({control, name: 'indexingValues'}) ?? []
-    // Movies are only on The Daily Wire, so a movie profile has no Sites filter.
     const watchedSiteKeys = useWatch({control, name: 'siteKeys'}) as string[] | null | undefined
-    const siteKeys = mode !== 'movie' && Array.isArray(watchedSiteKeys) ? watchedSiteKeys : undefined
+    const siteKeys = Array.isArray(watchedSiteKeys) ? watchedSiteKeys : undefined
     const siteKeysKey = siteKeys ? [...siteKeys].sort().join(',') : null
+    // A Collection profile's own episode title and description render for the same example as the path.
+    const [episodeTitleTemplate, episodeDescriptionTemplate] = useWatch({
+        control, name: ['episodeTitleTemplate', 'episodeDescriptionTemplate'],
+    }) as [string | null | undefined, string | null | undefined]
+    const setExampleEpisode = useSetExampleEpisode()
     const rawLocalMediaProfileId = useWatch({control, name: 'id'})
     const localMediaProfileId = typeof rawLocalMediaProfileId === 'number'
         ? rawLocalMediaProfileId
@@ -626,14 +796,16 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
         anchorSourceId: isExampleSource(selectedSource) ? undefined : selectedSource?.id,
         siteKeys,
     })
+    // Opened from a collection's page, the first example is always one of that collection's episodes.
+    const {collectionId: fitCollectionId} = useProfileFit('collection')
     const randomCollectionSourceQuery = useRandomCollectionTemplateSource(
-        collectionScope, mode === 'collection', localMediaProfileId, siteKeys,
+        collectionScope, mode === 'collection', localMediaProfileId, siteKeys, fitCollectionId,
     )
     const variableQuery = useLocalMediaProfileTemplateVariables(mode)
     const customVariables = (variableQuery.data ?? []) as OutputTemplateVariable[]
     const variables = useMemo(
-        () => getOutputTemplateVariables(mode, customVariables),
-        [customVariables, mode],
+        () => getOutputTemplateVariables(mode, customVariables, collectionScope),
+        [customVariables, mode, collectionScope],
     )
     const metadataNames = useMemo(() => new Set(customVariables.map(({name}) => name)), [customVariables])
     const variableEntries = useMemo(
@@ -657,6 +829,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
     const [provisionalIndexingValueNames, setProvisionalIndexingValueNames] = useState<string[]>([])
     const [replacedTyped, setReplacedTyped] = useState<{mode: string, characters: string[]}>({mode: '', characters: []})
+    const [shortenedNames, setShortenedNames] = useState<string[]>([])
     const usedVariables = useMemo(
         () => {
             const used = new Set(usedVariableNames)
@@ -666,166 +839,15 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
     )
     const usedVariablesKey = usedVariables.map(({name}) => name).join('|')
     const missingMetadataVariables = useMemo(() => {
-        if (mode === 'video') return []
-        const prefix = mode === 'movie' ? 'meta_movie_' : 'meta_collection_'
+        const prefix = mode === 'video' ? 'meta_movie_' : 'meta_collection_'
         const available = new Set(customVariables.map(({name}) => name))
         return [...new Set(
             usedVariableNames.filter((name) => name.startsWith(prefix) && !available.has(name)),
         )].sort()
     }, [customVariables, mode, usedVariableNames])
 
-    const variableCompletionOptions = useMemo<Completion[]>(
-        () => variables.map((variable) => ({
-            label: variable.name,
-            type: 'variable',
-            detail: variable.description,
-        })),
-        [variables],
-    )
-    const printVariableCompletionOptions = useMemo<Completion[]>(
-        () => variableCompletionOptions.map((option) => ({
-            ...option,
-            apply: (view, completion, from, to) => {
-                const variableStart = view.state.sliceDoc(0, from).lastIndexOf('{{')
-                const replaceFrom = variableStart >= 0 ? variableStart + 2 : from
-                const closingBraces = /^\s*}}/.exec(view.state.sliceDoc(to))
-                const replaceTo = closingBraces ? to + closingBraces[0].length : to
-                const insert = ` ${completion.label} }}`
-                view.dispatch({
-                    changes: {from: replaceFrom, to: replaceTo, insert},
-                    selection: {anchor: replaceFrom + insert.length},
-                    annotations: pickedCompletion.of(completion),
-                })
-            },
-        })),
-        [variableCompletionOptions],
-    )
-    const statementCompletionOptions = useMemo<Completion[]>(
-        () => jinjaStatements
-            .filter(({label}) => !label.startsWith('end'))
-            .map((statement) => ({
-                label: statement.label,
-                type: 'keyword',
-                detail: statement.detail,
-                apply: (view, completion, from, to) => {
-                    const insert = ` ${statement.label}${statement.acceptsExpression ? '  ' : ' '}%}`
-                    const anchorOffset = statement.acceptsExpression
-                        ? ` ${statement.label} `.length
-                        : insert.length
-                    replaceJinjaStatementCompletion(view, completion, from, to, insert, anchorOffset)
-                },
-            })),
-        [],
-    )
-    const editorExtensions = useMemo(() => {
-        const filterCompletionSource = (context: CompletionContext) => {
-            const beforeCursor = context.state.sliceDoc(0, context.pos)
-            const expression = activeJinjaExpression(beforeCursor)
-            if (expression === null) return null
-
-            const filterMatch = /\|\s*([A-Za-z_][A-Za-z0-9_]*)?$/.exec(expression)
-            if (!filterMatch) return null
-            if (isInsideQuotedString(expression.slice(0, filterMatch.index))) return null
-
-            const currentWord = filterMatch[1] ?? ''
-            return {
-                from: context.pos - currentWord.length,
-                options: [
-                    ...vodloftFilterCompletionOptions
-                        .filter((option) => mode === 'collection' || option.label !== 'custom_index')
-                        .map((option) => currentWord ? option : {...option, boost: 99}),
-                    ...jinjaNativeFilterCompletionOptions,
-                ],
-                validFor: /^(?:[A-Za-z_][A-Za-z0-9_]*)?$/,
-            }
-        }
-        const variableCompletionSource = (context: CompletionContext) => {
-            const beforeCursor = context.state.sliceDoc(0, context.pos)
-            const variableStart = beforeCursor.lastIndexOf('{{')
-            const variableEnd = beforeCursor.lastIndexOf('}}')
-            const statementStart = beforeCursor.lastIndexOf('{%')
-            const statementEnd = beforeCursor.lastIndexOf('%}')
-
-            if (variableStart > variableEnd && variableStart > statementStart) {
-                const expression = beforeCursor.slice(variableStart + 2)
-                if (!/^\s*[A-Za-z_][A-Za-z0-9_]*$/.test(expression) && !/^\s*$/.test(expression)) return null
-                const currentWord = expression.match(/[A-Za-z_][A-Za-z0-9_]*$/)?.[0] ?? ''
-
-                return {
-                    from: context.pos - currentWord.length,
-                    options: printVariableCompletionOptions,
-                    validFor: /^(?:[A-Za-z_][A-Za-z0-9_]*)?$/,
-                }
-            }
-
-            if (statementStart <= statementEnd) return null
-            const statement = beforeCursor.slice(statementStart + 2)
-            const expression = statementVariableExpression(statement)
-            if (expression === null) return null
-
-            const currentWord = expression.match(/[A-Za-z_][A-Za-z0-9_]*$/)?.[0] ?? ''
-            if (!currentWord && !context.explicit) return null
-            const expressionBeforeWord = expression.slice(0, expression.length - currentWord.length)
-            if (isInsideQuotedString(expressionBeforeWord)) return null
-
-            const previousSignificantCharacter = expressionBeforeWord.trimEnd().slice(-1)
-            if (previousSignificantCharacter === '.' || previousSignificantCharacter === '|') return null
-
-            return {
-                from: context.pos - currentWord.length,
-                options: variableCompletionOptions,
-                validFor: /^(?:[A-Za-z_][A-Za-z0-9_]*)?$/,
-            }
-        }
-        const statementCompletionSource = (context: CompletionContext) => {
-            const beforeCursor = context.state.sliceDoc(0, context.pos)
-            const statementStart = beforeCursor.lastIndexOf('{%')
-            const statementEnd = beforeCursor.lastIndexOf('%}')
-            if (statementStart <= statementEnd) return null
-
-            const statement = beforeCursor.slice(statementStart + 2)
-            if (!/^\s*[A-Za-z_]*$/.test(statement)) return null
-            const currentWord = statement.match(/[A-Za-z_]*$/)?.[0] ?? ''
-            const openBlocks = getOpenJinjaBlocks(beforeCursor.slice(0, statementStart))
-            const currentBlock = openBlocks[openBlocks.length - 1]
-            const hasElse = currentBlock?.branches.some(({statement: branch}) => branch.keyword === 'else') ?? false
-            const contextualOptions = openBlocks
-                .map((_block, index) => closingBlockCompletion(openBlocks, index + 1))
-            const generalOptions = statementCompletionOptions.filter(({label}) => {
-                if (label === 'elif') return currentBlock?.keyword === 'if' && !hasElse
-                if (label === 'else') {
-                    return (currentBlock?.keyword === 'if' || currentBlock?.keyword === 'for') && !hasElse
-                }
-                return true
-            })
-
-            return {
-                from: context.pos - currentWord.length,
-                options: [...contextualOptions, ...generalOptions],
-                validFor: /^[A-Za-z_]*$/,
-            }
-        }
-        const openCompletionsAfterJinjaDelimiter = EditorView.updateListener.of((update) => {
-            if (!update.docChanged || !update.state.selection.main.empty) return
-            const cursor = update.state.selection.main.head
-            if (cursor < 1) return
-
-            const beforeCursor = update.state.doc.sliceString(0, cursor)
-            const delimiter = cursor >= 2 ? beforeCursor.slice(-2) : ''
-            const justTypedFilter = beforeCursor.endsWith('|') && activeJinjaExpression(beforeCursor) !== null
-            if (delimiter === '{{' || delimiter === '{%' || justTypedFilter) {
-                queueMicrotask(() => startCompletion(update.view))
-            }
-        })
-        return [
-            ...templateEditorExtensions,
-            autocompletion({
-                override: [filterCompletionSource, variableCompletionSource, statementCompletionSource],
-                positionInfo: (_view, list, _option, info, space) => positionCompletionInfo(list, info, space),
-            }),
-            openCompletionsAfterJinjaDelimiter,
-        ]
-    }, [mode, printVariableCompletionOptions, statementCompletionOptions, variableCompletionOptions])
+    const completions = useJinjaCompletions(variables, mode === 'collection')
+    const editorExtensions = useMemo(() => [...templateEditorExtensions, ...completions], [completions])
 
     const sources = useMemo(() => {
         const byId = new Map<string, LocalMediaProfileTemplateSource>()
@@ -897,7 +919,15 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
         sourceId: selectedSource.id,
         localMediaProfileId: mode === 'collection' ? localMediaProfileId : null,
         indexingValues: mode === 'collection' ? indexingValues : null,
+        ...(mode === 'collection' && setExampleEpisode ? {
+            episodeTitleTemplate: episodeTitleTemplate || null,
+            episodeDescriptionTemplate: episodeDescriptionTemplate || null,
+        } : {}),
     } : null)
+    const exampleLabel = selectedSource?.label ?? null
+    useEffect(() => {
+        setExampleEpisode?.({label: exampleLabel, metadata: preview.result?.metadata ?? null, loading: preview.loading})
+    }, [exampleLabel, preview.loading, preview.result, setExampleEpisode])
     const previewPath = preview.result?.output.outputPath ?? ''
     // Only an example of the collection being added tells its root: an episode of another collection has its own.
     const collectionRootPath = isExampleSource(selectedSource) ? preview.result?.collectionRoot?.path : null
@@ -931,6 +961,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
             mode: output.filenameMode,
             characters: output.replacedTypedCharacters,
         } : {mode: '', characters: []})
+        setShortenedNames(output?.outputPath ? output.shortenedNames : [])
     }, [preview.loading, preview.result])
 
     function chooseSource(source: LocalMediaProfileTemplateSource) {
@@ -1044,6 +1075,14 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                             {' '}will be replaced in file names. The preview shows the result.
                         </div>
                     )}
+                    {shortenedNames.length > 0 && (
+                        <div className="template-metadata-warning" role="status">
+                            {shortenedNames.length === 1 ? 'A name is' : `${shortenedNames.length} names are`} too
+                            long for the file system, which allows 255 bytes per file or folder name. VODLoft shortens
+                            the values the template fills in, and leaves room for subtitle and NFO files beside the
+                            media. The preview shows the result.
+                        </div>
+                    )}
                     {pathHasLeadingSpace && (
                         <div className="template-metadata-warning" role="status">
                             One or more path parts begins with a space. This is usually not intentional.
@@ -1055,12 +1094,13 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                         <div className="template-playground-heading">
                             <div>
                                 <h3 id="template-preview-heading">Example output</h3>
-                                <p>{readOnly ? 'Pick an episode to see where its file would go.' : 'Try different values here. Your profile is not changed.'}</p>
+                                <p>{readOnly ? `Pick ${sourceLabel === 'Example track' ? 'a track' : sourceLabel === 'Example music video' ? 'a music video' : 'an episode'} to see where its file would go.` : 'Try different values here. Your profile is not changed.'}</p>
                             </div>
                             <label className="template-source-label" htmlFor="template-example-source">
-                                <span>Example episode</span>
+                                <span>{sourceLabel}</span>
                                 <TemplateSourceSelect
                                     mode={mode}
+                                    label={sourceLabel}
                                     sources={sources}
                                     selectedSource={selectedSource}
                                     isLoading={
@@ -1089,7 +1129,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                             <p className="error" role="alert">Examples could not be loaded. Try refreshing the page.</p>
                         )}
                         {selectedSource?.fallback && (
-                            <p className="template-preview-status">No {({collection: 'episodes', movie: 'movies', video: 'videos'} as const)[mode]} found yet, so example values are
+                            <p className="template-preview-status">No {({collection: 'episodes', video: 'videos or movies'} as const)[mode]} found yet, so example values are
                                 being used.</p>
                         )}
 
@@ -1198,7 +1238,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                         {metadataEntries.length > 0 && (
                             <>
                                 <hr className="output-template-help-divider" />
-                                <h4>{mode === 'movie' ? 'Movie metadata' : 'Collection metadata'}</h4>
+                                <h4>{mode === 'video' ? 'Video metadata' : 'Collection metadata'}</h4>
                                 <VariableReference entries={metadataEntries} />
                             </>
                         )}

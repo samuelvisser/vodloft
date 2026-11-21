@@ -22,8 +22,19 @@ _MOVIE_ALIASES = {
     "author": "movie_author", "mature_rating": "movie_mature_rating", "rating": "movie_mature_rating",
     "duration_seconds": "movie_duration_seconds",
     **{name: f"movie_{name}" for name in (
-        "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second",
+        "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second", "day_of_year",
+        "day_of_year_reversed",
     )},
+}
+
+
+_EMPTY_FOR_VIDEOS = {
+    name: "" for name in (
+        "movie_slug", "movie_title", "movie_extended_title", "movie_author", "movie_mature_rating",
+        "movie_duration_seconds", "mature_rating", "rating",
+        *(f"movie_{field}" for field in ("date", "time", "datetime", "year", "month", "day", "hour", "minute", "second", "day_of_year",
+                                              "day_of_year_reversed")),
+    )
 }
 
 
@@ -42,7 +53,7 @@ def analyze_profile_outputs(
     environment: Environment,
     namespace: str,
 ) -> ProfileOutputAnalysis:
-    """Analyze Collection and Video profiles, or separately analyze movie features and extras.
+    """Analyze a Collection profile, or a Video profile separately for movies, their extras and single videos.
 
     Movie parent/item aliases coincide for the feature, but NOT for its extras.
     Local custom indexes remain profile-scoped symbols and are never evaluated.
@@ -50,7 +61,7 @@ def analyze_profile_outputs(
     extension = {"format_audio_only": "m4a", "format_hls": "m3u8"}.get(preferred_format, "mp4")
     if profile_type == "collection":
         scenarios = (analyze_template(template, environment=environment, aliases=_COLLECTION_ALIASES, namespace=namespace),)
-    elif profile_type == "movie":
+    elif profile_type == "video":
         feature = analyze_template(template, environment=environment, aliases=_MOVIE_ALIASES,
                                    known_values={"media_type": "movie"}, namespace=namespace)
         extra = analyze_template(
@@ -59,12 +70,14 @@ def analyze_profile_outputs(
             assumptions=((nodes.Compare(nodes.Name("media_type", "load"), [nodes.Operand("ne", nodes.Const("movie"))]), True),),
             namespace=namespace,
         )
-        scenarios = (feature, extra)
-    elif profile_type == "video":
-        # video_output_template_values has no alias pairs: every name is its own value.
-        scenarios = (analyze_template(template, environment=environment, namespace=namespace),)
+        # video_output_template_values leaves the movie values empty.
+        video = analyze_template(
+            template, environment=environment, aliases={"extended_title": "title"},
+            known_values={**_EMPTY_FOR_VIDEOS, "media_type": "video"}, namespace=namespace,
+        )
+        scenarios = (feature, extra, video)
     else:
-        raise ValueError("Output analysis requires a Collection, Movie or Video Local Media Profile")
+        raise ValueError("Output analysis requires a Collection, Music or Video Local Media Profile")
     return ProfileOutputAnalysis(profile_type, extension, scenarios)
 
 

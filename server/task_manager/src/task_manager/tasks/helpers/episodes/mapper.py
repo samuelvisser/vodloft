@@ -15,7 +15,6 @@ from sources.dailywire.api.records import DwEpisodeRecord
 from task_manager.tasks.helpers.episodes.identifier import (
     EpisodeWithIdentifier,
     IdentifierMaxValues,
-    direct_identifier_for_episode,
     identify_episodes_in_season,
 )
 from task_manager.tasks.helpers.progress import (
@@ -78,10 +77,9 @@ def get_dw_episodes_since_ep(
     progress_bounds: ProgressBounds = ProgressBounds(1, 100),
     order: RecordOrder,
     prefetched_by_season: dict[int, list[DwEpisodeRecord]] | None = None,
-    vacated_identifiers: set[str] | None = None,
     occupied_identifiers: set[str] | None = None,
 ) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
-    """Fetch episodes after the settled cursor, including vacated replacements."""
+    """Fetch episodes after the settled cursor."""
     if since_episode is not None:
         index = next(
             (
@@ -108,19 +106,8 @@ def get_dw_episodes_since_ep(
         progress=progress,
         order=order,
         prefetched_by_season=prefetched_by_season,
-        vacated_identifiers=vacated_identifiers,
         occupied_identifiers=occupied_identifiers,
     )
-
-
-def _is_vacated_replacement(
-    identifier_type: EpisodeIdentifier,
-    season: Season,
-    episode: DwEpisodeRecord,
-    vacated_identifiers: set[str],
-) -> bool:
-    desired = direct_identifier_for_episode(identifier_type, season, episode)
-    return desired is not None and desired in vacated_identifiers
 
 
 def _resolve_trailer_candidates(
@@ -172,14 +159,12 @@ def _scan_seasons(
     progress: Optional[Any],
     order: RecordOrder,
     prefetched_by_season: dict[int, list[DwEpisodeRecord]] | None = None,
-    vacated_identifiers: set[str] | None = None,
     occupied_identifiers: set[str] | None = None,
 ) -> Tuple[EpisodeMapTuple, IdentifierMaxValues]:
     ep_map: EpisodeMapTuple = OrderedDict()
     current_values: IdentifierMaxValues = dict(prev_max_values) if prev_max_values else {}
     known_episode_slugs = known_episode_slugs or set()
     prefetched_by_season = prefetched_by_season or {}
-    available_vacated_identifiers = set(vacated_identifiers or ())
     # Identifier allocation mutates this set while scanning multiple seasons.
     # Keep that mutation local so the caller's persisted-identifier snapshot can
     # be reused for the authoritative post-detail identifier pass.
@@ -225,17 +210,7 @@ def _scan_seasons(
                 None,
             )
             if cursor_index is not None:
-                before_cursor = [
-                    rec
-                    for rec in eps[:cursor_index]
-                    if _is_vacated_replacement(
-                        identifier_type,
-                        season,
-                        rec,
-                        available_vacated_identifiers,
-                    )
-                ]
-                eps = before_cursor + eps[cursor_index + 1 :]
+                eps = eps[cursor_index + 1 :]
 
         if known_episode_slugs:
             eps = [rec for rec in eps if rec.slug not in known_episode_slugs]
@@ -247,8 +222,6 @@ def _scan_seasons(
             season=season,
             occupied_identifiers=occupied,
         )
-        for identifier, _episode in eps_with_id:
-            available_vacated_identifiers.discard(identifier)
 
         if order == RecordOrder.DESC:
             eps_with_id.reverse()

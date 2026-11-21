@@ -4,6 +4,8 @@ from enum import Enum, StrEnum
 class CollectionType(Enum):
     PODCAST = "podcast"
     SERIES = "series"
+    MUSIC = "music"
+    """An artist's music: each season an album, each episode a track. Only Music profiles keep it."""
 
 class EpisodeIdentifier(Enum):
     DATE_BASED = "date_based"

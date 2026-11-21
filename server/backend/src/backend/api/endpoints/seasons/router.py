@@ -58,16 +58,3 @@ def season_update(collection_slug: str, season_slug: str, body: SeasonAPIUpdate)
 
     return run_write_transaction(work)
 
-
-@router.delete("/{season_slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=SeasonAPIRead)
-def season_delete(collection_slug: str, season_slug: str):
-    """
-    Delete a season from the system.
-
-    Permanently removes the specified season and its associated data.
-    Returns the deleted season's information for confirmation.
-    """
-    def work(s):
-        return delete_season(s, collection_slug, season_slug)
-
-    return run_write_transaction(work)

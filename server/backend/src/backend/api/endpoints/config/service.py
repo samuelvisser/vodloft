@@ -5,7 +5,9 @@ from config import get_settings
 from backend.db import get_session
 from backend.services.users import accounts_enabled
 
+from backend.api.models.collection_contract import CollectionContractsAPIRead
 from backend.api.models.config_public import *
+from backend.types.collection_contracts import CONTRACTS, DEFAULT_WORDS
 
 
 def get_public_config() -> ConfigPublicRead:
@@ -21,6 +23,7 @@ def get_public_config() -> ConfigPublicRead:
             enabled=s.admin_auth.enabled
         ),
         user_accounts=PublicUserAccounts(enabled=_accounts_enabled()),
+        collection_contracts=get_collection_contracts(),
     )
 
     return config
@@ -28,3 +31,9 @@ def get_public_config() -> ConfigPublicRead:
 def _accounts_enabled() -> bool:
     with get_session() as session:
         return accounts_enabled(session)
+
+
+def get_collection_contracts() -> CollectionContractsAPIRead:
+    """What each collection type calls its seasons and episodes. It is the same for everyone and holds nothing of the
+    Library, so the UI gets it with the public config, before anyone signs in."""
+    return CollectionContractsAPIRead.model_validate({"words": DEFAULT_WORDS, "types": list(CONTRACTS.values())})

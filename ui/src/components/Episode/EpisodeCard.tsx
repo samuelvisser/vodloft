@@ -7,9 +7,11 @@ import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {DrmBadge} from '../common/DrmProtected'
 import {AccessBadge} from '../common/AccessLocked'
 import {RemovedBadge} from '../common/RemovedFromSource'
+import {MovedBadge, ReassignedBadge} from './SeasonPlaceNote'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../common/DurationPill'
 import EpisodeTypePill from './EpisodeTypePill'
+import type {CollectionWords} from '../../lib/collectionWords'
 
 // Beyond this many downloads for one episode, collapse the rest into a "+N" pill
 // instead of letting icons overflow the thumbnail.
@@ -102,10 +104,18 @@ type Props = {
     ep: EpisodeReadView
     collectionSlug: string
     downloads?: MediaDownloadViewRead[]
+    /** Belongs in another season now, and waits for the user to move it there. */
+    moved?: boolean
+    /** The collection its creator places the downloaded episode in now, when that is another one. */
+    reassignedTo?: string
+    /** The title of the episode's collection, for a list of episodes from several collections. */
+    collectionTitle?: string
+    /** What the collection calls its seasons and episodes, such as albums and tracks. */
+    words: CollectionWords
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
+export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, reassignedTo, collectionTitle, words}: Props) {
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -115,7 +125,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
 
     // Episode thumbnails are landscape by default; if missing/empty, use a placeholder with the episode index.
     const landscapePath = (ep.thumbnailLandscapePath && ep.thumbnailLandscapePath.trim() !== '') ? ep.thumbnailLandscapePath : undefined
-    const imageUrl = landscapePath ? toImageUrl(landscapePath) : `https://placehold.co/640x360/png?text=Episode+%23${ep.index}`
+    const imageUrl = landscapePath ? toImageUrl(landscapePath) : `https://placehold.co/640x360/png?text=${encodeURIComponent(words.episode.Singular)}+%23${ep.index}`
     const style = imageUrl ? {backgroundImage: `url(${imageUrl})`} : undefined
     const isLive = String(ep.publishStatus).toLowerCase() === 'live'
     // An episode that has not started yet has no length, so its pill says it is upcoming instead.
@@ -130,7 +140,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
     const dateText = ep.publishedDate && !DATE_LABEL.test(ep.episodeLabel)
         ? ep.publishedDate.toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'})
         : undefined
-    const metaText = [numberText, dateText].filter(Boolean).join(' · ')
+    const metaText = [collectionTitle, numberText, dateText].filter(Boolean).join(' · ')
 
     const navigate = useNavigate()
     const episodeHref = `/collection/${collectionSlug}/episode/${ep.slug}`
@@ -148,9 +158,11 @@ export default function EpisodeCard({ep, collectionSlug, downloads}: Props) {
                 {ep.drmProtected ? <DrmBadge onCover/>
                     // Media the account may watch only shows its open lock on its own page.
                     : ep.access && !ep.accessGranted ? <AccessBadge label={ep.accessLabel} description={ep.accessDescription} onCover/>
-                    : ep.removedFromSource && <RemovedBadge onCover/>}
+                    : ep.removedFromSource && !ep.removedByRetention ? <RemovedBadge onCover/>
+                    : reassignedTo ? <ReassignedBadge collectionTitle={reassignedTo} onCover/>
+                    : moved && <MovedBadge onCover words={words}/>}
                 {isLive && (
-                    <span style={LIVE_BADGE_STYLE} aria-label="Episode is live">
+                    <span style={LIVE_BADGE_STYLE} aria-label={`${words.episode.Singular} is live`}>
                         <span style={LIVE_BADGE_DOT_STYLE} aria-hidden/>
                         Live
                     </span>

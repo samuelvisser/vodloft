@@ -112,7 +112,7 @@ class YouTubeApiClient:
     def _get(self, endpoint: str, params: dict, *, share: Share, units: int = 1, force: bool = False) -> dict:
         last_error: YouTubeApiError | None = None
         for attempt in range(len(_RETRY_PAUSES_SECONDS) + 1):
-            if not quota.try_spend(share, units, force=force):
+            if not quota.try_spend(share, units, call=endpoint, force=force):
                 raise QuotaExceededError(f"The YouTube API {share.value} share of today's quota is used up")
             try:
                 response = self._session.get(

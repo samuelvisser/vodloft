@@ -46,13 +46,15 @@ def checks_profile(site: Site, profile: DownloadProfile) -> bool:
 
 
 def kept_length(download: EpisodeMediaDownload) -> float | None:
-    """The length of the video the download was made from: the file's, with the SponsorBlock segments it cut out."""
+    """The length of the video the download was made from: the file's, with the SponsorBlock segments and the
+    chapters it cut out."""
     if not download.duration:
         return None
     cut = sorted(
         (float(segment["start"]), float(segment["end"])) for segment in download.sponsorblock_segments or ()
         if isinstance(segment, dict) and segment.get("action") == "cut" and "start" in segment and "end" in segment
-    )
+    ) + [(float(chapter["start"]), float(chapter["end"])) for chapter in download.cut_chapters or ()]
+    cut.sort()
     removed, reached = 0.0, 0.0
     for start, end in cut:
         # Segments can overlap; each second counts once.
@@ -189,8 +191,13 @@ def upgrade_findings(
     local_media_profile: LocalMediaProfileBase,
     site: Site,
 ) -> UpgradeFindings:
-    """Compare what the video is offered as now with what the download kept."""
+    """Compare what the video is offered as now with what the download kept.
+
+    A part of a split video keeps only its own stretch of the video, so the whole video's length and SponsorBlock
+    segments say nothing about it.
+    """
     wanted = checked_improvements(site, profile)
+    part = isinstance(download.media, Episode) and download.media.part_of is not None
     found: list[UpgradeImprovement] = []
     could_improve = False
     best_height: int | None = None
@@ -229,14 +236,14 @@ def upgrade_findings(
         elif missing:
             could_improve = True
 
-    if offer.sponsorblock is not None:
+    if offer.sponsorblock is not None and not part:
         # Segments keep arriving for days, so SponsorBlock can always improve a download later.
         could_improve = True
         kept = [segment for segment in download.sponsorblock_segments or () if isinstance(segment, dict)]
         if any(not _has_segment(kept, segment.category, segment.start, segment.end) for segment in offer.sponsorblock):
             found.append(UpgradeImprovement.SPONSORBLOCK)
 
-    if UpgradeImprovement.LENGTH.value in wanted:
+    if UpgradeImprovement.LENGTH.value in wanted and not part:
         # The site can edit an episode at any time. A countdown download is replaced by the final version anyway.
         could_improve = True
         if not download.redownload_when_final and length_changed(download, offer.duration, profile):

@@ -4,11 +4,21 @@ from typing import NamedTuple
 
 class LocalMediaProfileType(StrEnum):
     COLLECTION = "collection"
-    MOVIE = "movie"
+    """The episodes of collections: podcasts, series, and music as tracks or music videos."""
     VIDEO = "video"
+    """Single videos, and movies with their extras."""
 
     # Only used by the polymorphic parent mapper.
     BASE = "base"
+
+    @property
+    def for_collections(self) -> bool:
+        """Whether profiles of this type keep collections' episodes."""
+        return self is LocalMediaProfileType.COLLECTION
+
+    @property
+    def label(self) -> str:
+        return self.value.title()
 
 
 class LocalMediaProfileStorageMode(StrEnum):
@@ -47,10 +57,47 @@ class LocalMediaProfileSubtitleMode(StrEnum):
     EMBED_AND_SIDECAR = "embed_and_sidecar"
 
 
+class EpisodeNfo(StrEnum):
+    """What an episode's NFO file and embedded metadata call it."""
+    EPISODE = "episode"
+    """An episode of a show."""
+    MUSIC_VIDEO = "music_video"
+    """A music video by the collection's artist, which media servers keep in a Music Videos library."""
+
+
 class CollectionLocalMediaProfileScope(StrEnum):
-    BOTH = "both"
+    PODCAST_AND_SERIES = "podcast-and-series"
+    """Podcasts and series."""
     PODCAST = "podcast"
     SERIES = "series"
+    MUSIC = "music"
+    """Music collections: as audio tracks with the tags music players read when the profile downloads audio only, and
+    as music videos otherwise."""
+
+    def collection_types(self) -> tuple[str, ...]:
+        """The collection types a profile with this scope keeps."""
+        if self is CollectionLocalMediaProfileScope.PODCAST_AND_SERIES:
+            return (CollectionLocalMediaProfileScope.PODCAST.value, CollectionLocalMediaProfileScope.SERIES.value)
+        return (self.value,)
+
+
+def keeps_tracks(profile) -> bool:
+    """Whether a Local Media Profile keeps music collections as tracks, tagged for music players: a profile for Music
+    that downloads audio only. One for Music that downloads video keeps music videos."""
+    return (
+        getattr(profile, "collection_scope", None) == CollectionLocalMediaProfileScope.MUSIC
+        and getattr(profile, "preferred_format", None) == PreferredFormat.FORMAT_AUDIO_ONLY
+    )
+
+
+class VideoLocalMediaProfileScope(StrEnum):
+    """What a Video profile is offered for: single videos, movies with their extras, or both."""
+    BOTH = "both"
+    VIDEOS = "videos"
+    MOVIES = "movies"
+
+    def keeps(self, kind: "VideoLocalMediaProfileScope") -> bool:
+        return self is VideoLocalMediaProfileScope.BOTH or self is kind
 
 
 class PreferredFormat(StrEnum):
@@ -113,6 +160,8 @@ class AudioFormat(StrEnum):
     M4A = "m4a"
     OPUS = "opus"
     MP3 = "mp3"
+    FLAC = "flac"
+    """Lossless. It keeps what the site sends without losing more, but it is no better than the site's own audio."""
 
 
 class SubtitleLanguageMode(StrEnum):

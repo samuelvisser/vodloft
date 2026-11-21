@@ -267,6 +267,15 @@ class YouTubeApiSettings(SubmodelBase):
         ge=10,
         description="Shortest time between two quick checks of the same collection",
     )
+    usage_log_enabled: bool = Field(
+        default=False,
+        description="Keep a log file of every API call and a summary of each day, which survives restarts",
+    )
+    usage_log_max_lines: int = Field(
+        default=100_000,
+        ge=100,
+        description="Lines the usage log keeps; older lines are removed",
+    )
 
     @model_validator(mode="after")
     def _shares_fit_in_the_daily_quota(self):
@@ -327,15 +336,6 @@ class TrackNewEpisodeSchedule(SubmodelBase):
         min_length=1,
         description="Cron schedule for the full re-scan of collections whose Source has quick checks",
     )
-    monitor_no_usable_media_episode_cron_enabled: bool = Field(
-        default=True,
-        description="Enable the cron schedule for rechecking episodes quarantined without usable media",
-    )
-    monitor_no_usable_media_episode_cron: str = Field(
-        ...,
-        min_length=1,
-        description="Cron schedule for rechecking episodes quarantined without usable media",
-    )
     metadata_refresh_intervals: str = Field(
         ...,
         min_length=1,
@@ -378,11 +378,6 @@ class EpisodeStatusTiming(SubmodelBase):
         default=60,
         ge=0,
         description="Maximum minutes after publishedAt an episode may remain in the Daily Wire processing signature",
-    )
-    no_usable_media_delete_after_minutes: int = Field(
-        default=4 * 60,
-        ge=0,
-        description="Minutes an episode may remain in no_usable_media before a current Daily Wire 404 may be deleted",
     )
 
 
@@ -449,6 +444,12 @@ class DownloadSettings(SubmodelBase):
         description=(
             "Delay in minutes after episode publication before a delayed download may start (unless explicitly bypassed)"
         ),
+    )
+    daily_download_limit: int = Field(
+        default=0,
+        ge=0,
+        le=10000,
+        description="Automatic downloads a Site may start in 24 hours; 0 for no limit. Downloads started by hand don't count",
     )
     ensure_safe_delay: bool = Field(
         default=False,

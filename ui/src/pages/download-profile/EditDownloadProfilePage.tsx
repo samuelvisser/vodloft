@@ -1,11 +1,12 @@
+import {collectionWords} from '../../lib/collectionWords'
 import {type FormEvent, useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {Controller, useForm} from 'react-hook-form'
+import {Controller, useForm, useWatch} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {Link, useNavigate, useParams} from 'react-router-dom'
+import {Link, useNavigate, useParams, useSearchParams} from 'react-router-dom'
 import {
     downloadProfileOutOfScopePreviewQuery, useDownloadProfileOutOfScopePreview, useDownloadProfilesByCollectionSlug,
-    useEpisodeTagsInCollection, useLocalMediaProfiles, useCollectionSeasons, type OutOfScopePreviewBody,
+    useCollections, useEpisodeTagsInCollection, useLocalMediaProfiles, useCollectionSeasons, type OutOfScopePreviewBody,
 } from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
@@ -13,7 +14,9 @@ import {
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import Select from 'react-select'
-import {isLocalMediaProfileAvailableForSite, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import {safeReturnPath, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
+import LocalMediaProfileFitNote from '../../components/DownloadProfile/LocalMediaProfileFitNote'
+import RequestedField, {RequestedFieldsProvider} from '../../components/common/RequestedField'
 import {DownloadProfileReadView} from "../../types/schemas/download_profile_view";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import ReadMore from "../../utils/ReadMore";
@@ -25,6 +28,7 @@ import {
     downloadsSummary, leftOutByText, mayDeleteOutOfScope, OutOfScopeChecklist, useDeleteOutOfScope, useOutOfScopePicks,
 } from '../../components/DownloadProfile/OutOfScopeDownloadsDialog'
 import type {OutOfScopePreview} from '../../types/schemas/download_profile'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
 type RouteParams = { id?: string }
 
@@ -69,20 +73,10 @@ export default function EditDownloadProfilePage() {
         form.reset(DownloadProfileUpdateSchema.parse(downloadProfile))
     }, [isFetchedAfterMount, downloadProfile, id, form])
 
-    const collectionType = downloadProfile?.collectionType
-    // The profile already in use stays offered after it was limited to other Sites.
-    const offeredProfiles = useMemo(
-        () => mediaProfiles?.filter((profile) => (
-            profile.id === downloadProfile?.localMediaProfileId
-            || isLocalMediaProfileAvailableForSite(profile, downloadProfile?.collectionSiteKey)
-        )),
-        [mediaProfiles, downloadProfile?.localMediaProfileId, downloadProfile?.collectionSiteKey],
-    )
-    const mediaProfileReg = useLocalMediaProfileSelectRegistry(
-        offeredProfiles,
-        'collection',
-        collectionType === 'podcast' || collectionType === 'series' ? collectionType : undefined,
-    )
+    const {data: collections} = useCollections()
+    const collection = collections?.find((candidate) => candidate.slug === downloadProfile?.collectionSlug)
+    // Every Collection profile can be chosen; one that doesn't fit the collection says so under the field.
+    const mediaProfileReg = useLocalMediaProfileSelectRegistry(mediaProfiles, 'collection')
     // A collection has one Download Profile per Local Media Profile.
     const usedLocalMediaProfiles = useMemo(() => new Set(
         (collectionProfiles ?? [])
@@ -90,7 +84,24 @@ export default function EditDownloadProfilePage() {
             .map((profile) => profile.localMediaProfileId),
     ), [collectionProfiles, profileId])
 
-    const onCancel = useCallback(() => navigate('/download-profiles'), [navigate])
+    // Opened from a Stream Profile's form: back there once saved or cancelled.
+    const [searchParams] = useSearchParams()
+    const returnTo = safeReturnPath(searchParams.get('returnTo'))
+    // A Local Media Profile the user just created for this form, from the button under its field.
+    const requestedProfileId = Number(searchParams.get('localMediaProfile')) || undefined
+    const returnHere = useMemo(() => {
+        const params = new URLSearchParams(searchParams)
+        params.delete('localMediaProfile')
+        const query = params.toString()
+        return `/edit-download-profile/${id}${query ? `?${query}` : ''}`
+    }, [searchParams, id])
+    const localMediaProfileId = useWatch({control: form.control, name: 'localMediaProfileId'})
+    const applyRequestedProfile = () => {
+        // The list can still be the one from before the profile was created, until it loads again.
+        if (!mediaProfiles?.some((profile) => profile.id === requestedProfileId)) return false
+        form.setValue('localMediaProfileId', requestedProfileId!, {shouldDirty: true, shouldValidate: true})
+    }
+    const onCancel = useCallback(() => navigate(returnTo ?? '/download-profiles'), [navigate, returnTo])
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
     // Narrowing the filters never deletes by itself: saving asks whether to delete the downloads that fall out.
@@ -132,7 +143,7 @@ export default function EditDownloadProfilePage() {
             await deleteOutOfScope({notKept: false, kept: false, include: toDelete})
             return
         }
-        navigate('/download-profiles')
+        navigate(returnTo ?? '/download-profiles')
     }
 
     const onSubmit = buildServerAwareSubmit(form, async (dataOut: DownloadProfileUpdateOut) => {
@@ -183,7 +194,7 @@ export default function EditDownloadProfilePage() {
     const typeLabel = (key: string) => tags?.find((tag) => tag.key === key)?.label ?? key
     const seasonLabel = (slug: string) => seasonsData?.find((season) => season.slug === slug)?.name ?? slug
     const previewFilterText = (index: number) => leftOutByText(
-        fallingOut?.body.filters[index] as Parameters<typeof leftOutByText>[0], typeLabel, seasonLabel, fallingOut?.deleteOlder ?? false,
+        fallingOut?.body.filters[index] as Parameters<typeof leftOutByText>[0], typeLabel, seasonLabel, fallingOut?.deleteOlder ?? false, collectionWords(downloadProfile?.collectionType).season,
     )
 
     const {formState: {isSubmitting}} = form
@@ -204,6 +215,12 @@ export default function EditDownloadProfilePage() {
 
     return (
         <section className="view" aria-labelledby="edit-download-profile-title">
+            {downloadProfile && (
+                <Breadcrumb className="page-breadcrumb" items={[
+                    {label: 'Download Profiles', to: '/download-profiles'},
+                    {label: 'Profile', to: `/download-profile/${downloadProfile.id}`},
+                ]}/>
+            )}
             <div className="view-header">
                 <h1 id="edit-download-profile-title">Edit Download Profile</h1>
             </div>
@@ -213,6 +230,7 @@ export default function EditDownloadProfilePage() {
             ) : error ? (
                 <p>{error.message}</p>
             ) : (
+                <RequestedFieldsProvider mode="edit" ready={!!downloadProfile && initializedId.current === id}>
                 <form className="form" onSubmit={onFormSubmit} noValidate>
                     {errors.root && (
                         <div className="form-error-card" role="alert" aria-live="polite">
@@ -229,6 +247,13 @@ export default function EditDownloadProfilePage() {
 
                     <div className="form-row">
                         <label htmlFor="local-media-profile">Local Media Profile</label>
+                        <RequestedField
+                            id="localMediaProfile"
+                            requested={requestedProfileId}
+                            value={localMediaProfileId}
+                            apply={applyRequestedProfile}
+                            changed="The Local Media Profile you just created was chosen here. Save to use it."
+                        >
                         <Controller
                             control={form.control}
                             name="localMediaProfileId"
@@ -248,6 +273,14 @@ export default function EditDownloadProfilePage() {
                                 />
                             )}
                         />
+                        </RequestedField>
+                        <LocalMediaProfileFitNote
+                            profiles={mediaProfiles}
+                            selectedId={localMediaProfileId}
+                            used={usedLocalMediaProfiles}
+                            collection={collection}
+                            returnTo={returnHere}
+                        />
                         {errors.localMediaProfileId && (
                             <div id="local-media-profile-errors" className="error" role="alert" aria-live="polite">
                                 {errors.localMediaProfileId.message as string}
@@ -266,6 +299,7 @@ export default function EditDownloadProfilePage() {
                         form={form}
                         episodeIdentifier={episodeIdentifier}
                         collectionId={downloadProfile?.collectionId}
+                        collectionType={downloadProfile?.collectionType}
                         seasons={seasonsData}
                         collectionRoot={false}
                     />
@@ -284,6 +318,7 @@ export default function EditDownloadProfilePage() {
                         <input type="submit" className="btn btn-primary" value="Save changes" disabled={isSubmitting}/>
                     </div>
                 </form>
+                </RequestedFieldsProvider>
             )}
 
             <ConfirmDialog

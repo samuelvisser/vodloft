@@ -6,7 +6,7 @@ services, so a profile is checked the same way wherever it comes from.
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, computed_field, field_validator, model_validator
 
@@ -24,6 +24,7 @@ from backend.types.local_media_profile_types import (
     AudioFormat,
     CodecFallback,
     CollectionLocalMediaProfileScope,
+    EpisodeNfo,
     LocalMediaProfileFilenameMode,
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
@@ -35,16 +36,21 @@ from backend.types.local_media_profile_types import (
     SubtitleLanguageMode,
     VideoCodec,
     VideoContainer,
+    VideoLocalMediaProfileScope,
     goal_video_codecs,
+    keeps_tracks,
 )
 from backend.utils.custom_index import INDEXING_VALUE_KEY_MAX_LENGTH, is_valid_custom_index_key
 from backend.utils.helpers import slugify
+from backend.utils.metadata_template import (
+    DESCRIPTION_TEMPLATE_MAX_LENGTH, TITLE_TEMPLATE_MAX_LENGTH, validate_metadata_template,
+)
 from backend.utils.output_template import (
     COLLECTION_OUTPUT_TEMPLATE_FIELDS,
     COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    MOVIE_OUTPUT_TEMPLATE_FIELDS,
-    MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
-    movie_template_has_media_item_field,
+    VIDEO_OUTPUT_TEMPLATE_FIELDS,
+    VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
+    template_has_media_item_field,
     output_template_custom_index_keys,
     validate_output_template_path_requirements,
 )
@@ -106,6 +112,8 @@ class LocalMediaProfileInput(InputModel):
     """How file and folder names are made safe; System follows Settings."""
     file_date_from_publish_date: bool = False
     """Downloaded files get the date the media was published."""
+    save_info_json: bool = False
+    """The site's info file, which yt-dlp writes, is saved beside the media."""
     subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
     subtitle_languages: list[str] = Field(default_factory=lambda: ["en"], max_length=20)
     subtitle_language_mode: SubtitleLanguageMode = SubtitleLanguageMode.LISTED
@@ -127,6 +135,19 @@ class LocalMediaProfileInput(InputModel):
     auto_subtitles: AutoSubtitles | None = None
     sponsorblock_enabled: bool | None = None
     sponsorblock_segments: dict[SponsorBlockCategory, SponsorBlockAction] | None = None
+    keep_chapters: bool | None = None
+    cut_chapters: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=20)
+    """Regular expressions: a chapter whose title matches one is cut out of the file."""
+
+    @field_validator("cut_chapters")
+    @classmethod
+    def _chapter_patterns(cls, value: list[str]) -> list[str]:
+        for pattern in value:
+            try:
+                re.compile(pattern)
+            except re.error as error:
+                raise ValueError(f"{pattern!r} is not a valid regular expression: {error}") from None
+        return list(dict.fromkeys(value))
 
     @field_validator("sponsorblock_segments")
     @classmethod
@@ -220,22 +241,49 @@ class LocalMediaProfileInput(InputModel):
         }
 
 
-_SITE_CHOICES = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments")
+_SITE_CHOICES = ("auto_subtitles", "sponsorblock_enabled", "sponsorblock_segments", "keep_chapters")
 _KEPT_WHEN_UNSET = {
     "site_keys", "include_upcoming_sites", *_SITE_CHOICES, "subtitle_mode", "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs",
     "codec_fallback", "container", "audio_codec", "audio_format", "audio_language",
-    "kodi_safe_nfo", "file_date_from_publish_date", "show_nfo",
+    "kodi_safe_nfo", "file_date_from_publish_date", "show_nfo", "cut_chapters", "save_info_json",
+    "episode_title_template", "episode_description_template", "episode_nfo",
 }
 
 class CollectionLocalMediaProfileInput(LocalMediaProfileInput):
     """A Collection Local Media Profile's fields; an update leaves the kept fields it does not send."""
 
     type: Literal["collection"] = LocalMediaProfileType.COLLECTION.value
-    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.BOTH
+    collection_scope: CollectionLocalMediaProfileScope = CollectionLocalMediaProfileScope.PODCAST_AND_SERIES
+    """Which collections the profile is offered for. For Music it keeps them as audio tracks with music tags when it
+    downloads audio only, and as music videos when it downloads video."""
     download_collection_assets: bool | None = None
     show_nfo: bool = False
     """Write tvshow.nfo in the collection's folder and season.nfo in each season's folder."""
+    episode_nfo: EpisodeNfo = EpisodeNfo.EPISODE
+    """What each episode's NFO file and embedded metadata call it: an episode of a show, or a music video."""
     indexing_values: list[IndexingValueDefinition] = Field(default_factory=list, max_length=100)
+    episode_title_template: str | None = Field(default=None, max_length=TITLE_TEMPLATE_MAX_LENGTH)
+    """A Jinja template for each episode's title in its NFO and embedded metadata; empty keeps the site's."""
+    episode_description_template: str | None = Field(default=None, max_length=DESCRIPTION_TEMPLATE_MAX_LENGTH)
+    """A Jinja template for each episode's description in its NFO and embedded metadata; empty keeps the site's."""
+
+    @field_validator("episode_title_template", "episode_description_template")
+    @classmethod
+    def _validate_metadata_template(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return validate_metadata_template(value)
+
+    @model_validator(mode="after")
+    def _music_tracks_or_videos(self):
+        if keeps_tracks(self):
+            return self
+        if self.collection_scope == CollectionLocalMediaProfileScope.MUSIC:
+            # It keeps a Music collection's videos as video, so it calls them music videos.
+            self.episode_nfo = EpisodeNfo.MUSIC_VIDEO
+        if self.audio_format == AudioFormat.FLAC:
+            raise FieldValueError("audio_format", "FLAC is for profiles for Music that download audio only")
+        return self
 
     @model_validator(mode="after")
     def _unique_index_keys(self):
@@ -265,26 +313,36 @@ class NewCollectionLocalMediaProfile(CollectionLocalMediaProfileInput):
         if "subtitle_mode" not in self.model_fields_set:
             self.subtitle_mode = (
                 LocalMediaProfileSubtitleMode.NO_SUBTITLES
-                if self.collection_scope == CollectionLocalMediaProfileScope.PODCAST
+                if self.collection_scope == CollectionLocalMediaProfileScope.PODCAST or keeps_tracks(self)
                 else LocalMediaProfileSubtitleMode.SIDECAR
             )
         return self
 
 _MOVIE_EXTRA_COLLISION_MESSAGE = (
-    "Movie and movie-extra downloads could resolve to the same file. Include at least "
-    "one variable that describes the downloaded item, such as {{ title }}, {{ slug }}, "
-    "{{ duration_seconds }}, or {{ media_type }}."
+    "A movie and its extras could get the same file. Include at least one variable that "
+    "describes the downloaded item, such as {{ title }}, {{ slug }}, {{ duration_seconds }} "
+    "or {{ media_type }}."
 )
 
-class MovieLocalMediaProfileInput(LocalMediaProfileInput):
-    type: Literal["movie"] = LocalMediaProfileType.MOVIE.value
-    subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
+class VideoLocalMediaProfileInput(LocalMediaProfileInput):
+    """A Video Local Media Profile's fields. It keeps single videos, and movies with their extras."""
+
+    type: Literal["video"] = LocalMediaProfileType.VIDEO.value
+    video_scope: VideoLocalMediaProfileScope = VideoLocalMediaProfileScope.BOTH
+    """What the profile is offered for: single videos, movies with their extras, or both."""
+
+    @field_validator("audio_format")
+    @classmethod
+    def _no_flac(cls, value: AudioFormat) -> AudioFormat:
+        if value == AudioFormat.FLAC:
+            raise ValueError("FLAC is for profiles for Music that download audio only")
+        return value
 
     @field_validator("preferred_format")
     @classmethod
-    def _require_video_format(cls, value: PreferredFormat) -> PreferredFormat:
-        if value in {PreferredFormat.FORMAT_AUDIO_ONLY, PreferredFormat.FORMAT_HLS}:
-            raise ValueError("Movie Local Media Profiles require a normal video format")
+    def _reject_hls(cls, value: PreferredFormat) -> PreferredFormat:
+        if value == PreferredFormat.FORMAT_HLS:
+            raise ValueError("Video Local Media Profiles cannot keep an HLS bundle")
         return value
 
     @field_validator("output_template")
@@ -292,11 +350,11 @@ class MovieLocalMediaProfileInput(LocalMediaProfileInput):
     def _validate_output_template(cls, value: str) -> str:
         validate_output_template_path_requirements(
             value,
-            allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
-            allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
+            allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
+            allowed_metadata_scopes=VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
         )
         if output_template_custom_index_keys(value):
             raise ValueError("custom_index is only available to Collection Local Media Profiles")
-        if not movie_template_has_media_item_field(value):
+        if not template_has_media_item_field(value):
             raise ValueError(_MOVIE_EXTRA_COLLISION_MESSAGE)
         return value

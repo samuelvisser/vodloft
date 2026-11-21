@@ -6,7 +6,6 @@ def test_settings_cron_operations_target_the_scheduled_workers():
         FileWatcherCronOperation,
         FindEpisodesCronOperation,
         FullRescanCronOperation,
-        MonitorNoUsableMediaCronOperation,
         QuickCheckCronOperation,
         VerifyDownloadsCronOperation,
     )
@@ -15,7 +14,6 @@ def test_settings_cron_operations_target_the_scheduled_workers():
         (FindEpisodesCronOperation(), "fetch_new_episodes", "collection", None),
         (QuickCheckCronOperation(), "quick_check_new_videos", "system", 0),
         (FullRescanCronOperation(), "rescan_quick_checked_collections", "collection", None),
-        (MonitorNoUsableMediaCronOperation(), "monitor_no_usable_media_episode", "collection", 0),
         (VerifyDownloadsCronOperation(), "download_profile_worker", "download_profile", 0),
         (FileWatcherCronOperation(), "file_watcher", "collection", 0),
     )
@@ -34,7 +32,6 @@ def test_settings_cron_operations_have_distinct_system_kinds():
         FileWatcherCronOperation,
         FindEpisodesCronOperation,
         FullRescanCronOperation,
-        MonitorNoUsableMediaCronOperation,
         QuickCheckCronOperation,
         VerifyDownloadsCronOperation,
     )
@@ -43,7 +40,6 @@ def test_settings_cron_operations_have_distinct_system_kinds():
         FindEpisodesCronOperation(),
         QuickCheckCronOperation(),
         FullRescanCronOperation(),
-        MonitorNoUsableMediaCronOperation(),
         VerifyDownloadsCronOperation(),
         FileWatcherCronOperation(),
     )
@@ -52,7 +48,6 @@ def test_settings_cron_operations_have_distinct_system_kinds():
         "system.cron.find_episodes",
         "system.cron.quick_check",
         "system.cron.full_rescan",
-        "system.cron.monitor_no_usable_media",
         "system.cron.verify_downloads",
         "system.cron.file_watcher",
     }

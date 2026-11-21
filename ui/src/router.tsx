@@ -14,6 +14,9 @@ import SettingsPage from './pages/SettingsPage'
 import LogsPage from './pages/LogsPage'
 import TasksPage from './pages/TasksPage'
 import AddCollectionPage from './pages/collection/AddCollectionPage'
+import AddCreatorPage from './pages/creator/AddCreatorPage'
+import CreatorPage from './pages/creator/CreatorPage'
+import EditCreatorPage from './pages/creator/EditCreatorPage'
 import AddLocalMediaProfilePage from './pages/local-media-profile/AddLocalMediaProfilePage'
 import EditLocalMediaProfilePage from './pages/local-media-profile/EditLocalMediaProfilePage'
 import LocalMediaProfilePage from './pages/local-media-profile/LocalMediaProfilePage'
@@ -84,7 +87,7 @@ export const router = createBrowserRouter(
       <Route path="library" element={g('library', <LibraryPage />)} />
       <Route path="collections" element={<Navigate to="/library?type=collections" replace />} />
       <Route path="browse" element={g('add_media', <BrowsePage />)} />
-      <Route path="browse/:sourceId" element={g('add_media', <SourceSearchPage />)} />
+      <Route path="browse/:sourceId/:siteKey" element={g('add_media', <SourceSearchPage />)} />
       <Route path="add" element={g('add_media', <AddMediaPage />)} />
       <Route path="quick-download" element={g('quick_downloads', <QuickDownloadPage />)} />
       <Route path="downloads" element={g('managed_downloads', <DownloadsPage />)} />
@@ -94,6 +97,9 @@ export const router = createBrowserRouter(
       <Route path="tasks" element={g('tasks', <TasksPage />)} />
       <Route path="existing-files" element={g('library', <ExistingFilesPage />, 'manage')} />
       <Route path="add-collection" element={g('add_media', <AddCollectionRoute />)} />
+      <Route path="add-creator" element={g('add_media', <AddCreatorPage />)} />
+      <Route path="creator/:slug" element={g('library', <CreatorPage />)} />
+      <Route path="edit-creator/:slug" element={g('library', <EditCreatorPage />, 'manage')} />
       <Route path="add-local-media-profile" element={g('local_media_profiles', <AddLocalMediaProfilePage />, 'manage')} />
       <Route path="local-media-profile/:slug" element={g('local_media_profiles', <LocalMediaProfilePage />)} />
       <Route path="edit-local-media-profile/:slug" element={g('local_media_profiles', <EditLocalMediaProfilePage />, 'manage')} />

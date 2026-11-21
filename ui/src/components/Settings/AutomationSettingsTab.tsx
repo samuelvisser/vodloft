@@ -10,7 +10,6 @@ import {
     ToggleField,
 } from './SettingsControls'
 import ReadMore from "../../utils/ReadMore";
-import {formatDurationMinutes} from "../../utils/formatting";
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 
 const PENDING_SYSTEM_FIELDS = [
@@ -181,40 +180,6 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         </ReadMore>
                     }
                 />
-                <CronEditor
-                    id="settings-monitor-no-usable-media-episode-cron"
-                    label="Monitor episodes without usable media"
-                    runNow={{
-                        definition: frontendOperationDefinitions['system.cron.monitor_no_usable_media'],
-                        job: 'monitor-no-usable-media',
-                        ledger: {definitionKey: 'monitor_no_usable_media_episode', resourceType: 'collection', resourceId: 0},
-                    }}
-                    value={draft.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron}
-                    enabled={draft.newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled}
-                    error={errorFor('newEpisodeSchedule.monitorNoUsableMediaEpisodeCron')}
-                    environmentVariable={environmentVariableFor('newEpisodeSchedule.monitorNoUsableMediaEpisodeCron')}
-                    enabledEnvironmentVariable={environmentVariableFor('newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled')}
-                    onChange={(value) => updateDraft((next) => {
-                        next.newEpisodeSchedule.monitorNoUsableMediaEpisodeCron = value
-                    })}
-                    onEnabledChange={(enabled) => updateDraft((next) => {
-                        next.newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled = enabled
-                    })}
-                    help={
-                        <ReadMore summary={<span>Rechecks every episode without usable media for recovery or confirmed removal.</span>}>
-                            <p>
-                                VODLoft rechecks all <code>no_usable_media</code> episodes on this schedule, regardless of why
-                                they entered quarantine.
-                            </p>
-                            <p>
-                                If this worker finds that the episode has usable media once again, it is restored and automatically
-                                picked up by download- and stream profiles. If
-                                after {' '}{formatDurationMinutes(draft.episodeStatusTiming.noUsableMediaDeleteAfterMinutes)} the
-                                episode still did not return to its source, it is deleted.
-                            </p>
-                        </ReadMore>
-                    }
-                />
             </SettingsSection>
 
             <SettingsSection
@@ -331,39 +296,14 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                         next.episodeStatusTiming.dwProcessingMaxMinutes = value
                     })}
                     help={
-                        <ReadMore summary={<span>Set to no usable media if still at DW processing after this duration.</span>}>
+                        <ReadMore summary={<span>Treat an episode still processing at The Daily Wire after this duration as removed from it.</span>}>
                             <p>
-                                Usually, VODLoft can determine an episode's status accurately. However, sometimes it might get stuck in <code>DW
-                                processing</code>.
-                                This setting acts as a safety net to ensure <code>DW processing</code> episodes will be considered <code>no usable
-                                media</code> if
-                                this duration elapsed without a change in <code>DW processing</code> status.
+                                Usually, VODLoft can determine an episode's status accurately. However, sometimes an episode might get stuck
+                                in <code>Processing at the source</code>. Once this duration passed, VODLoft treats it like an episode The
+                                Daily Wire no longer has: without files it is deleted after a few more hours, with files it is marked Removed.
                             </p>
                             <p>
                                 This duration is measured starting from the time the episode was published.
-                            </p>
-                        </ReadMore>
-                    }
-                />
-                <DurationField
-                    id="settings-no-usable-media-delete-after"
-                    label="No usable media deletion delay"
-                    value={draft.episodeStatusTiming.noUsableMediaDeleteAfterMinutes}
-                    backendUnit="minutes"
-                    error={errorFor('episodeStatusTiming.noUsableMediaDeleteAfterMinutes')}
-                    environmentVariable={environmentVariableFor('episodeStatusTiming.noUsableMediaDeleteAfterMinutes')}
-                    onChange={(value) => updateDraft((next) => {
-                        next.episodeStatusTiming.noUsableMediaDeleteAfterMinutes = value
-                    })}
-                    help={
-                        <ReadMore summary={<span>How long an episode may remain in no usable media state before it is deleted.</span>}>
-                            <p>
-                                An episode is considered in <code>no usable media</code> if it contains no media, its media is corrupted,
-                                or if it returns <code>404</code> from its source. In all of these case, this might be a temporary issue.
-                                However, if it remains in this state after this duration, it may be deleted from VODLoft.
-                            </p>
-                            <p>
-                                This duration is measured starting from the time the episode was marked as <code>no usable media</code>.
                             </p>
                         </ReadMore>
                     }

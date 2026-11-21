@@ -42,6 +42,8 @@ export const SiteSettingsReadSchema = z.object({
     domains: z.array(z.string()),
     settings: z.array(OfferedSettingSchema),
     upgradeImprovements: z.array(UpgradeImprovementSchema),
+    /** The user can remove the Site: VODLoft has nothing from it and no Source is made for it. */
+    removable: z.boolean(),
 })
 export type SiteSettingsRead = z.infer<typeof SiteSettingsReadSchema>
 

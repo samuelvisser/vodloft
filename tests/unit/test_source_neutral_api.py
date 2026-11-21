@@ -101,7 +101,8 @@ def _collection(source_key: str):
         id=1, uuid="collection-uuid", slug="a-collection", title="A Collection", sharing_url="https://example.test/a-collection",
         membership_level="ALL_ACCESS", type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value, author_name="Host", author_slug="host",
-        source_key=source_key, ytdlp_options="", cookies_mode="automatic", check_frequency="default", episode_order="newest_first",
+        source_key=source_key, ytdlp_options="", cookies_mode="automatic", split_chapters=False, check_frequency="default",
+        episode_order="newest_first",
         created_at=now, updated_at=now,
     )
 
@@ -118,16 +119,37 @@ def test_daily_wire_links_are_parsed_by_path():
     assert parse_link("https://www.dailywire.com/show/the-ben-shapiro-show") == (LinkKind.COLLECTION, "the-ben-shapiro-show")
     assert parse_link("https://www.dailywire.com/videos/run-hide-fight/") == (LinkKind.MOVIE, "run-hide-fight")
     assert parse_link("https://www.dailywire.com/episode/ep-1?x=1") == (LinkKind.EPISODE, "ep-1")
+    assert parse_link("https://www.dailywire.com/hosts/jordan-b-peterson") == (LinkKind.CREATOR, "jordan-b-peterson")
     assert parse_link("https://www.dailywire.com/") is None
     assert parse_link("https://www.dailywire.com/about/team") is None
+
+
+def test_a_daily_wire_host_link_is_their_creator(monkeypatch):
+    from types import SimpleNamespace
+
+    from sources.dailywire import links
+
+    show = SimpleNamespace(slug="the-jordan-b-peterson-podcast", author_slug="jordan-b-peterson",
+                           author_name="Jordan B Peterson", author_headshot_path="https://img/jbp.jpg")
+    catalog = SimpleNamespace(collections=[show], movies=[])
+    monkeypatch.setattr(links, "_access_token", lambda: None)
+    monkeypatch.setattr(links.MiddlewareClient, "get_catalog", lambda self: catalog)
+
+    found = links.resolve_link("https://www.dailywire.com/hosts/jordan-b-peterson")
+    assert (found.kind, found.slug, found.title) == (LinkKind.CREATOR, "jordan-b-peterson", "Jordan B Peterson")
+    assert found.creator_url == "https://www.dailywire.com/hosts/jordan-b-peterson"
+    assert found.creator_names.singular == "host"
+    assert links.resolve_link("https://www.dailywire.com/hosts/nobody") is None
 
 
 def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
     response = client.post("/api/resolve", json={"url": "stub.example/watch/clip-1"})
     assert response.status_code == 200
     body = response.json()
-    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "sitesLabel": None, "searchLabel": None, "kindNames": {}, "releaseDate": "start",
-        "downloadOptions": {"videoHeights": [360, 480, 720, 1080, 1440, 2160, 4320], "audioOnly": True, "hlsBundle": False, "hlsHeights": [], "subtitles": False, "qualityChoices": False},
+    # A Source that names no kinds itself gets VODLoft's own name for each.
+    assert body["source"].pop("kindNames")["movie"] == {"singular": "movie", "plural": "movies", "a": "a movie"}
+    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "sitesLabel": None, "sites": [{"key": "stub", "name": "Stub", "added": False}], "searchSites": [], "siteKeys": ["stub"], "releaseDate": "start",
+        "downloadOptions": {"videoHeights": [360, 480, 720, 1080, 1440, 2160, 4320], "audioOnly": True, "hlsBundle": False, "hlsHeights": [], "subtitles": False, "qualityChoices": False, "infoFile": False},
     }
     assert body["kind"] == "movie"
     assert body["slug"] == "clip-1"
@@ -294,19 +316,21 @@ def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
     from sources import Feature
 
     stub = registry.get_source("stub")
-    assert client.get("/api/sources/stub/search", params={"q": "clip"}).status_code == 404
+    assert client.get("/api/sources/stub/search", params={"site": "stub", "q": "clip"}).status_code == 404
 
     monkeypatch.setattr(type(stub), "features", frozenset({Feature.SEARCH}))
-    monkeypatch.setattr(stub, "search", lambda query, **_: SearchResults([
+    monkeypatch.setattr(type(stub), "search_sites", (Site("stub", "Stub Site", searchable=True),))
+    assert client.get("/api/sources/stub/search", params={"site": "other", "q": "clip"}).status_code == 404
+    monkeypatch.setattr(stub, "search", lambda site, query: SearchResults([
         ResolvedLink(kind=LinkKind.COLLECTION, slug="clips", url="https://stub.example/collection/clips", title=f"{query} collection",
                      kind_label="Channel", facts=("3 videos",)),
     ], SearchNotice(badge="Search via stub", text="Answered by the stub")), raising=False)
-    body = client.get("/api/sources/stub/search", params={"q": "clip"}).json()
+    body = client.get("/api/sources/stub/search", params={"site": "stub", "q": "clip"}).json()
     assert body == {
         "results": [{
             "kind": "collection", "slug": "clips", "url": "https://stub.example/collection/clips", "title": "clip collection",
             "description": None, "imageUrl": None, "authorName": None, "collectionSlug": None, "collectionUrl": None,
-            "kindLabel": "Channel", "facts": ["3 videos"], "access": None, "accessLabel": None,
+            "kindLabel": "Channel", "facts": ["3 videos"], "access": None, "accessLabel": None, "creatorNames": None,
         }],
         "notice": {
             "badge": "Search via stub", "text": "Answered by the stub", "tone": "neutral",

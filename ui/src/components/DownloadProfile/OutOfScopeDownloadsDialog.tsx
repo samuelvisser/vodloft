@@ -1,6 +1,7 @@
+import type {Noun} from '../../lib/collectionWords'
 import {useEffect, useMemo, useState, type ReactNode} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'
@@ -61,10 +62,10 @@ export function useDeleteOutOfScope(profileId: number, resourceLabel: string) {
 /** "Left out by: skip if the duration is shorter than 4 minutes" */
 export function leftOutByText(
     filter: FilterLike | undefined, typeLabel: (key: string) => string, seasonLabel: (slug: string) => string,
-    deleteOlder: boolean,
+    deleteOlder: boolean, season?: Pick<Noun, 'singular' | 'plural'>,
 ): string {
     if (!filter) return ''
-    const sentence = plainText(filterSentence(filter, typeLabel, seasonLabel, deleteOlder))
+    const sentence = plainText(filterSentence(filter, typeLabel, seasonLabel, deleteOlder, undefined, season))
     return `Left out by: ${sentence.replace(/^\w/, (c) => c.toLowerCase())}`
 }
 

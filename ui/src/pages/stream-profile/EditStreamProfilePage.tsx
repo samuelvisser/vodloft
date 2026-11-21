@@ -14,6 +14,13 @@ import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
 import {faIcon} from '../../icons/faIcon'
 import {downloadedEpisodeTypes} from '../../components/DownloadProfile/episodeFilters'
 import {apiUrl} from '../../lib/api'
+import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
+import {
+    clearStreamProfileDraft,
+    editStreamProfileDraftKey,
+    loadStreamProfileDraft,
+    saveStreamProfileDraft,
+} from '../../components/StreamProfile/streamProfileDraft'
 
 
 type RouteParams = { type?: string; id?: string }
@@ -60,18 +67,47 @@ export default function EditStreamProfilePage() {
     })
     const {formState: {errors, isSubmitting}} = form
 
+    // Changes not saved yet are kept in this browser, such as while the user creates the Download Profile this
+    // profile needs, and come back with the form.
+    const draftKey = editStreamProfileDraftKey(type ?? '', id ?? '')
+    const [restoredDraft, setRestoredDraft] = useState(false)
+    const [draftReady, setDraftReady] = useState(false)
+
     // A later background refetch must not undo the user's edits, so the form is filled once.
     const initializedId = useRef<string | undefined>(undefined)
+    const savedValues = useCallback(() => streamProfile && updateSchema.parse({
+        ...streamProfile.streamProfileImpl,
+        title: streamProfile.streamProfileImpl.effectiveTitle,
+    }), [streamProfile, updateSchema])
     useEffect(() => {
         if (!isFetchedAfterMount || !streamProfile || initializedId.current === id) return
         initializedId.current = id
-        form.reset(updateSchema.parse({
-            ...streamProfile.streamProfileImpl,
-            title: streamProfile.streamProfileImpl.effectiveTitle,
-        }))
-    }, [isFetchedAfterMount, streamProfile, id, form, updateSchema])
+        const saved = savedValues()
+        const draft = loadStreamProfileDraft(draftKey)
+        const restored = draft && draft.mode === type ? {...saved, ...draft.values} : saved
+        const changed = JSON.stringify(restored) !== JSON.stringify(saved)
+        form.reset(restored)
+        setRestoredDraft(changed)
+        if (draft && !changed) clearStreamProfileDraft(draftKey)
+        setDraftReady(true)
+    }, [isFetchedAfterMount, streamProfile, id, form, savedValues, draftKey, type])
 
-    const onCancel = useCallback(() => navigate('/stream-profiles'), [navigate])
+    useEffect(() => {
+        if (!draftReady || !isStreamProfileType(type)) return
+        const subscription = form.watch((values) => saveStreamProfileDraft(draftKey, {mode: type, values}))
+        return () => subscription.unsubscribe()
+    }, [draftReady, draftKey, form, type])
+
+    const discardRestoredDraft = useCallback(() => {
+        clearStreamProfileDraft(draftKey)
+        form.reset(savedValues())
+        setRestoredDraft(false)
+    }, [draftKey, form, savedValues])
+
+    const onCancel = useCallback(() => {
+        clearStreamProfileDraft(draftKey)
+        navigate('/stream-profiles')
+    }, [draftKey, navigate])
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 
     const [regenerating, setRegenerating] = useState(false)
@@ -110,6 +146,7 @@ export default function EditStreamProfilePage() {
     const onSuccess = async () => {
         await qc.invalidateQueries({queryKey: ['streamProfilesView']})
         void qc.invalidateQueries({queryKey: ['streamProfile', id], refetchType: 'none'})
+        clearStreamProfileDraft(draftKey)
         navigate('/stream-profiles')
     }
 
@@ -144,7 +181,7 @@ export default function EditStreamProfilePage() {
             ) : error ? (
                 <p>{error.message}</p>
             ) : (
-                <form className="form" onSubmit={onSubmit} noValidate>
+                <form id="edit-stream-profile-form" className="form" onSubmit={onSubmit} noValidate>
                     <div className="form-row">
                         <label>Profile type</label>
                         <div style={{padding: '6px 0'}}>{profileType.label}</div>
@@ -190,6 +227,20 @@ export default function EditStreamProfilePage() {
                     </div>
                 </form>
             )}
+
+            {restoredDraft ? (
+                <UnsavedChangesBar
+                    title="Unsaved changes restored"
+                    message="This form was restored from changes saved in this browser. They have not been saved to VODLoft yet."
+                >
+                    <button className="btn" type="button" disabled={isSubmitting} onClick={discardRestoredDraft}>
+                        Discard
+                    </button>
+                    <button className="btn btn-primary" type="submit" form="edit-stream-profile-form" disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving…' : 'Save changes'}
+                    </button>
+                </UnsavedChangesBar>
+            ) : null}
 
             <ConfirmDeleteDialog
                 ref={confirmRef}

@@ -4,6 +4,7 @@
  * Only exposes things here that React might actually need (ignores secrets or backend-only config)
  */
 import {z} from 'zod'
+import {CollectionContractsSchema} from './collection_contract'
 
 export const _PublicSessionConfigSchema = z.object({
     ttlSeconds: z.int(),
@@ -22,5 +23,7 @@ export const ConfigPublicSchema = z.object({
     loginSession: _PublicSessionConfigSchema,
     adminAuth: _PublicAdminAuthSchema,
     userAccounts: _PublicUserAccountsSchema,
+    /** What each collection type calls its seasons and episodes. */
+    collectionContracts: CollectionContractsSchema,
 })
 export type ConfigPublic = z.infer<typeof ConfigPublicSchema>

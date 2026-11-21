@@ -6,3 +6,20 @@
     padding-top: 0;
     border-top: 0;
 }
+
+/* The values of a Site's own API, such as Twitch's client ID and secret, one under the other. */
+.site-api-form {
+    display: grid;
+    gap: 10px;
+    max-width: 520px;
+}
+
+.site-api-form__field {
+    display: grid;
+    gap: 4px;
+}
+
+.site-api-form__field > span:first-child {
+    font-size: 13px;
+    font-weight: 600;
+}

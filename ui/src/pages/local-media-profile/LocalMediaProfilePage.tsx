@@ -1,11 +1,14 @@
 import {useState} from 'react'
+import type {TaskOperationRead} from '../../types/schemas/operation'
+import {operationControls as sharedOperationControls} from '../../lib/operationControls'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useQueryClient} from '@tanstack/react-query'
 import {Link, useNavigate, useParams} from 'react-router-dom'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
 
 import ActionConfirmDialogue from '../../components/ActionConfirmDialogue/ActionConfirmDialogue'
+import RedownloadSwitch from '../../components/ActionConfirmDialogue/RedownloadSwitch'
 import ActionMenu, {type ActionMenuItem} from '../../components/ActionMenu/ActionMenu'
 import RunningActions from '../../components/RunningActions/RunningActions'
 import DisabledReason from '../../components/common/DisabledReason'
@@ -32,9 +35,10 @@ import {formatBytes} from '../../utils/formatting'
 import {can} from '../../lib/access'
 import {downloadProfilesUrlForLocalMediaProfile} from '../../lib/downloadProfileFilters'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
-import {localMediaProfileEndpoint, sitesForLocalMediaProfileType, takesUpcomingSites} from '../../types/local_media_profile'
+import {keepsTracks, localMediaProfileEndpoint, sitesForLocalMediaProfileType, takesUpcomingSites} from '../../types/local_media_profile'
 import './LocalMediaProfilePage.css'
 import {apiUrl} from '../../lib/api'
+import {collectionWords} from '../../lib/collectionWords'
 
 const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
 
@@ -49,7 +53,7 @@ export default function LocalMediaProfilePage() {
 
     const [renameConfirm, setRenameConfirm] = useState(false)
     const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
-    const [redownloadConfirm, setRedownloadConfirm] = useState(false)
+    const [redownloadAfterDelete, setRedownloadAfterDelete] = useState(false)
     const [deleteProfileConfirm, setDeleteProfileConfirm] = useState(false)
     const [deletingProfile, setDeletingProfile] = useState(false)
     const [operationControlBusy, setOperationControlBusy] = useState<string | null>(null)
@@ -106,6 +110,8 @@ export default function LocalMediaProfilePage() {
         )
     }
 
+    // What the profile keeps: a profile for Music that downloads audio only keeps tracks.
+    const kept = collectionWords(keepsTracks(profile) ? 'music' : null, 'audio').episode
     const actionBusy = Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation || moveOperation)
     const runningActionReason = renameOperation
         ? 'A file rename operation is running for this profile.'
@@ -114,13 +120,13 @@ export default function LocalMediaProfilePage() {
             : redownloadOperation
                 ? 'A re-download operation is running for this profile.'
                 : moveOperation
-                    ? 'Episodes are being moved to another profile.'
+                    ? `${kept.Plural} are being moved to another profile.`
                     : undefined
     const deleteDisabledReason = runningActionReason
         ? `${runningActionReason} Wait for it to finish before deleting the profile.`
         : undefined
-    const managedLabel = profile.type === 'collection' ? 'Managed episodes' : 'Managed items'
-    const downloadedLabel = profile.type === 'collection' ? 'Downloaded episodes' : 'Downloaded items'
+    const managedLabel = profile.type === 'video' ? 'Managed items' : `Managed ${kept.plural}`
+    const downloadedLabel = profile.type === 'video' ? 'Downloaded items' : `Downloaded ${kept.plural}`
 
     const controlTaskOperation = async (
         operationId: string,
@@ -145,29 +151,12 @@ export default function LocalMediaProfilePage() {
         }
     }
 
-    const operationControls = (
-        operationId: string | undefined,
-        label: string,
-        restartable = true,
-    ) => {
-        if (!operationId) return undefined
-        const controlsBusy = operationControlBusy !== null
-        return [
-            ...(restartable ? [{
-                label: `Restart ${label}`,
-                icon: faIcon('fass', 'rotate-right'),
-                disabled: controlsBusy,
-                onSelect: () => void controlTaskOperation(operationId, 'restart', label),
-            }] : []),
-            {
-                label: `Cancel ${label}`,
-                icon: faIcon('fass', 'xmark'),
-                tone: 'danger' as const,
-                disabled: controlsBusy,
-                onSelect: () => void controlTaskOperation(operationId, 'cancel', label),
-            },
-        ]
-    }
+    const operationControls = (operation: TaskOperationRead | undefined, label: string, restartable = true) => (
+        sharedOperationControls(operation, label, {
+            restartable, busy: operationControlBusy !== null,
+            onControl: (operationId, action) => void controlTaskOperation(operationId, action, label),
+        })
+    )
 
     const deleteProfile = async () => {
         if (deletingProfile || actionBusy) return
@@ -238,7 +227,7 @@ export default function LocalMediaProfilePage() {
                 onSelect: () => void matchExistingFiles(),
             },
             {
-                label: 'Move episodes to another profile',
+                label: `Move ${kept.plural} to another profile`,
                 icon: faIcon('fass', 'file-export'),
                 disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)
                     || statistics.managedMediaCount === 0,
@@ -249,10 +238,10 @@ export default function LocalMediaProfilePage() {
                         : redownloadOperation
                             ? 'A re-download operation is running for this profile.'
                             : statistics.managedMediaCount === 0
-                                ? 'This Local Media Profile does not manage any episodes yet.'
+                                ? `This Local Media Profile does not manage any ${kept.plural} yet.`
                                 : undefined,
                 operation: moveOperation,
-                controls: operationControls(moveOperation?.id, 'move', false),
+                controls: operationControls(moveOperation, 'move', false),
                 onSelect: () => setMoveOpen(true),
             },
         ] : []),
@@ -273,7 +262,7 @@ export default function LocalMediaProfilePage() {
                             : undefined,
             operation: renameOperation,
             starting: isStarting('local_media_profile.rename_files'),
-            controls: operationControls(renameOperation?.id, 'file rename'),
+            controls: operationControls(renameOperation, 'file rename'),
             onSelect: () => setRenameConfirm(true),
         },
         {
@@ -284,43 +273,22 @@ export default function LocalMediaProfilePage() {
             disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
             disabledReason: deleteDownloadsOperation
                 ? 'A delete downloads operation is running for this profile.'
-                : renameOperation
-                    ? 'A file rename operation is running for this profile.'
-                    : redownloadOperation
-                        ? 'A re-download operation is running for this profile.'
-                        : statistics.managedMediaCount === 0
-                            ? 'This Local Media Profile does not manage any downloads.'
-                            : undefined,
-            operation: deleteDownloadsOperation,
-            starting: isStarting('local_media_profile.delete_downloads'),
-            controls: operationControls(
-                deleteDownloadsOperation?.id,
-                'delete downloads',
-            ),
-            onSelect: () => setDeleteDownloadsConfirm(true),
-        },
-        {
-            label: 'Delete and re-download all media',
-            icon: faIcon('fass', 'arrows-rotate'),
-            tone: 'danger',
-            disabled: Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation) || statistics.managedMediaCount === 0,
-            disabledReason: redownloadOperation
-                ? 'A re-download operation is running for this profile.'
-                : deleteDownloadsOperation
-                    ? 'A delete downloads operation is running for this profile.'
+                : redownloadOperation
+                    ? 'A re-download operation is running for this profile.'
                     : renameOperation
                         ? 'A file rename operation is running for this profile.'
                         : statistics.managedMediaCount === 0
                             ? 'This Local Media Profile does not manage any downloads.'
                             : undefined,
-            operation: redownloadOperation,
-            starting: isStarting('local_media_profile.redownload_media'),
-            controls: operationControls(
-                redownloadOperation?.id,
-                're-download',
-                false,
-            ),
-            onSelect: () => setRedownloadConfirm(true),
+            operation: deleteDownloadsOperation ?? redownloadOperation,
+            starting: isStarting('local_media_profile.delete_downloads') || isStarting('local_media_profile.redownload_media'),
+            controls: deleteDownloadsOperation
+                ? operationControls(deleteDownloadsOperation, 'delete downloads')
+                : operationControls(redownloadOperation, 're-download', false),
+            onSelect: () => {
+                setRedownloadAfterDelete(false)
+                setDeleteDownloadsConfirm(true)
+            },
         },
     ]
 
@@ -472,46 +440,31 @@ export default function LocalMediaProfilePage() {
 
             <ActionConfirmDialogue
                 open={deleteDownloadsConfirm}
-                operationDefinition={frontendOperationDefinitions['local_media_profile.delete_downloads']}
-                onStartingChange={onStartingChange('local_media_profile.delete_downloads')}
-                requestPath={`/local-media-profiles/${encodeURIComponent(profile.slug)}/delete-downloads`}
+                operationDefinition={frontendOperationDefinitions[redownloadAfterDelete ? 'local_media_profile.redownload_media' : 'local_media_profile.delete_downloads']}
+                onStartingChange={onStartingChange(redownloadAfterDelete ? 'local_media_profile.redownload_media' : 'local_media_profile.delete_downloads')}
+                requestPath={`/local-media-profiles/${encodeURIComponent(profile.slug)}/${redownloadAfterDelete ? 'redownload-media' : 'delete-downloads'}`}
                 resourceLabel={profile.name}
                 title="Delete all downloads"
                 onDismiss={() => setDeleteDownloadsConfirm(false)}
                 icon={faIcon('fass', 'trash')}
                 iconTone="danger"
-                confirmLabel="Delete downloads"
-                disabled={Boolean(renameOperation || redownloadOperation)}
+                confirmLabel={redownloadAfterDelete ? 'Delete and re-download' : 'Delete downloads'}
+                disabled={Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)}
             >
                 <p>
                     Delete every downloaded file managed by "{profile.name}". MediaDownload
                     records remain attached to the profile so their history is preserved.
                 </p>
-                {statistics.downloadProfileCount > 0 && (
-                    <p>
-                        VODLoft will disable Download Profiles that use this Local Media Profile
-                        before deleting files so automatic downloads do not immediately recreate them.
-                    </p>
-                )}
-            </ActionConfirmDialogue>
-
-            <ActionConfirmDialogue
-                open={redownloadConfirm}
-                operationDefinition={frontendOperationDefinitions['local_media_profile.redownload_media']}
-                onStartingChange={onStartingChange('local_media_profile.redownload_media')}
-                requestPath={`/local-media-profiles/${encodeURIComponent(profile.slug)}/redownload-media`}
-                resourceLabel={profile.name}
-                title="Delete and re-download all media"
-                onDismiss={() => setRedownloadConfirm(false)}
-                icon={faIcon('fass', 'arrows-rotate')}
-                iconTone="danger"
-                confirmLabel="Delete and re-download"
-                disabled={Boolean(renameOperation || deleteDownloadsOperation || redownloadOperation)}
-            >
-                <p>
-                    Delete all previously downloaded files managed by "{profile.name}" and download
-                    them again. Media that has never been downloaded will not be added by this action.
-                </p>
+                <RedownloadSwitch
+                    label="Re-download the deleted files"
+                    checked={redownloadAfterDelete}
+                    onChange={setRedownloadAfterDelete}
+                    help={redownloadAfterDelete
+                        ? 'VODLoft downloads each deleted file again right away. Media that has never been downloaded will not be added.'
+                        : statistics.downloadProfileCount > 0
+                            ? 'VODLoft will disable Download Profiles that use this Local Media Profile before deleting files so automatic downloads do not immediately recreate them.'
+                            : 'The files are not downloaded again.'}
+                />
             </ActionConfirmDialogue>
 
             <ConfirmDialog

@@ -1,7 +1,7 @@
 import {useEffect, useId, useMemo, useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
 import SimpleSelect from '../common/SimpleSelect'
 import Modal from '../Modal/Modal'

@@ -131,7 +131,7 @@ def test_automatic_downloads_skip_protected_episodes(session):
         def movie_playback(self, **_kwargs):
             raise NotImplementedError
 
-        def list_episodes(self, url, *, known):
+        def list_episodes(self, url, *, known, feeds=None):
             return iter([_details("open"), _details("locked", drm=True)])
 
     collection = Collection(

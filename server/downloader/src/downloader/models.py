@@ -111,6 +111,13 @@ class SponsorSegment(NamedTuple):
     """``chapter`` or ``cut``."""
 
 
+class CutChapter(NamedTuple):
+    """A chapter of the video as it was published that the download cut out, because its title matched."""
+    title: str
+    start: float
+    end: float
+
+
 @dataclass(frozen=True)
 class DownloadResult:
     """Outcome of a completed download."""
@@ -124,6 +131,10 @@ class DownloadResult:
     """The SponsorBlock segments found, when the download asked SponsorBlock."""
     video: VideoStream | None = None
     """The video stream kept, when the downloader knows it."""
+    cut_chapters: tuple[CutChapter, ...] | None = None
+    """The chapters cut out by their title, when the download was asked to cut any."""
+    info_json: str | None = None
+    """The video's info file yt-dlp wrote, when the download asked for one."""
 
 
 # Called periodically during a download with a progress snapshot.

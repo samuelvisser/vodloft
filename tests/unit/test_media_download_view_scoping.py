@@ -13,7 +13,7 @@ def test_media_download_view_filters_episode_collection_and_movie_in_sql():
         Episode,
         Movie,
         MovieExtra,
-        MovieLocalMediaProfile,
+        VideoLocalMediaProfile,
         Season,
         Collection,
         CollectionLocalMediaProfile,
@@ -104,7 +104,7 @@ def test_media_download_view_filters_episode_collection_and_movie_in_sql():
             description=None,
             duration=30,
         )
-        movie_profile = MovieLocalMediaProfile(
+        movie_profile = VideoLocalMediaProfile(
             slug="movie-profile",
             name="Movie Profile",
             output_template="/downloads/{{ title }}.ext",

@@ -119,13 +119,13 @@ test('builtin advice without a safe edit still shows its warning', () => {
     assert.equal(result.elements.filter(({type}) => type === 'button').length, 0)
 })
 
-test('episode_index is exposed in the shared collection variable reference, not movies', () => {
+test('episode_index is exposed in the shared collection variable reference, not videos', () => {
     const {getOutputTemplateVariables} = load('src/components/LocalMediaProfile/outputTemplateVariables.ts', {})
     const variable = getOutputTemplateVariables('collection').find(({name}) => name === 'episode_index')
     assert.ok(variable)
     assert.match(variable.description, /whole collection/)
     assert.match(variable.readMore.paragraphs.join(' '), /gaps/i)
-    assert.ok(!getOutputTemplateVariables('movie').some(({name}) => name === 'episode_index'))
+    assert.ok(!getOutputTemplateVariables('video').some(({name}) => name === 'episode_index'))
 })
 
 for (const after of [

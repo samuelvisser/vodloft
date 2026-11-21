@@ -35,13 +35,39 @@ class MediaServerMetadata:
     content_rating: str | None = None
     parent_movie_title: str | None = None
     media_type: str | None = None
+    album: str | None = None
+    """For a track: the album it is on, which music players group by."""
+    track_number: int | None = None
+    track_count: int | None = None
+    """How many tracks the album has; the track tag reads like 3/10 with it."""
+
+    @property
+    def is_track(self) -> bool:
+        return self.kind == "track"
+
+    @property
+    def is_music_video(self) -> bool:
+        return self.kind == "musicvideo"
+
+    def cleared_ffmpeg_tags(self) -> tuple[str, ...]:
+        """The tags VODLoft writes that this metadata has no value for, so rewriting a file's tags clears them
+        instead of leaving an old value behind, such as an episode number once a collection numbers by date."""
+        tags = self.ffmpeg_tags()
+        return tuple(key for key in REWRITTEN_FFMPEG_TAGS if key not in tags)
 
     def ffmpeg_tags(self) -> dict[str, str]:
         tags: dict[str, str] = {"title": self.title}
         if self.description:
             tags["description"] = self.description
             tags["comment"] = self.description
-        if self.collection_title:
+        if self.is_track:
+            # Music players group by album and album artist, and sort by track number.
+            if self.album:
+                tags["album"] = self.album
+            if self.track_number is not None:
+                total = f"/{self.track_count}" if self.track_count and self.track_count >= self.track_number else ""
+                tags["track"] = f"{self.track_number}{total}"
+        elif self.collection_title:
             tags["show"] = self.collection_title
             tags["album"] = self.collection_title
         if self.authors:
@@ -52,7 +78,7 @@ class MediaServerMetadata:
             tags["date"] = self.aired.isoformat()
         elif self.release_date:
             tags["date"] = self.release_date.isoformat()
-        if self.season_number is not None:
+        if self.season_number is not None and not self.is_track:
             tags["season_number"] = str(self.season_number)
         if self.episode_number is not None:
             tags["episode_id"] = str(self.episode_number)
@@ -81,6 +107,14 @@ class MediaServerMetadata:
         if self.media_type:
             tags["media_type"] = self.media_type
         return tags
+
+
+# Every tag ffmpeg_tags writes, apart from the Source's own id, whose name depends on the Source.
+REWRITTEN_FFMPEG_TAGS = (
+    "title", "description", "comment", "album", "track", "show", "artist", "album_artist", "date", "season_number",
+    "episode_id", "episode_sort", "genre", "director", "writer", "actor", "publisher", "language", "country",
+    "rating", "purl", "media_type",
+)
 
 
 def write_nfo(media_path: str, metadata: MediaServerMetadata) -> str:
@@ -115,7 +149,7 @@ def write_nfo(media_path: str, metadata: MediaServerMetadata) -> str:
 
 
 # The root element of each kind of NFO file; movies, their extras and videos are all a "movie".
-_NFO_ROOTS = {"episode": "episodedetails", "tvshow": "tvshow", "season": "season"}
+_NFO_ROOTS = {"episode": "episodedetails", "tvshow": "tvshow", "season": "season", "musicvideo": "musicvideo"}
 
 
 def _nfo_root(metadata: MediaServerMetadata) -> ET.Element:
@@ -132,6 +166,8 @@ def _nfo_root(metadata: MediaServerMetadata) -> ET.Element:
     _text(root, "premiered", metadata.release_date)
     if metadata.release_date:
         _text(root, "year", metadata.release_date.year)
+    elif metadata.is_music_video and metadata.aired:
+        _text(root, "year", metadata.aired.year)
     if metadata.duration_seconds and metadata.duration_seconds > 0:
         _text(root, "runtime", max(1, round(metadata.duration_seconds / 60)))
     _text(root, "mpaa", metadata.content_rating)
@@ -150,7 +186,8 @@ def _nfo_root(metadata: MediaServerMetadata) -> ET.Element:
     for value in metadata.studios:
         _text(root, "studio", value)
     for value in metadata.authors:
-        _text(root, "credits", value)
+        # A music video's artist is who media servers file it under.
+        _text(root, "artist" if metadata.is_music_video else "credits", value)
     for value in metadata.cast:
         actor = ET.SubElement(root, "actor")
         _text(actor, "name", value)

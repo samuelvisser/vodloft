@@ -9,6 +9,7 @@ const WAITS: Record<string, [string, string]> = {
     upstream_retry: ['Retry wait', 'The server requested a delay before retrying.'],
     retry_backoff: ['Retry wait', 'Waiting before retrying the network request.'],
     download_capacity: ['Queued', 'Waiting for an available media download slot.'],
+    task_queue: ['Queued', 'Waiting for its turn to start.'],
     sidecar_capacity: ['Asset queue', 'Waiting for an auxiliary download slot.'],
     processing_capacity: ['Processing queue', 'Waiting for a local processing slot.'],
     custom_indexes: ['Preparing...', 'Waiting for Custom Index assignments.'],

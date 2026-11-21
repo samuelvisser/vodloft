@@ -167,12 +167,12 @@ def test_a_clear_stream_downloads_with_yt_dlp_and_a_protected_one_is_marked(npo)
 
 def test_search_finds_series_and_programmes(npo):
     source, _ = npo
-    results = source.search("huis").results
+    results = source.search(source.sites[0], "huis").results
     assert [(r.kind, r.title, r.url) for r in results] == [
         (LinkKind.COLLECTION, "Een huis vol", "https://npo.nl/start/serie/een-huis-vol/afleveringen"),
         (LinkKind.VIDEO, "De film", "https://npo.nl/start/afspelen/de-film_1"),
     ]
-    assert source.search("  ").results == []
+    assert source.search(source.sites[0], "  ").results == []
 
 
 @pytest.fixture
@@ -184,6 +184,11 @@ def session():
     Base.metadata.create_all(engine)
     use_database(engine)
     s = sessionmaker(bind=engine)()
+    from backend.services.sites import site_record
+    from sources import named_sites
+
+    site_record(s, next(site for site in named_sites() if site.key == "npo"))
+    s.commit()
     yield s
     s.close()
     engine.dispose()

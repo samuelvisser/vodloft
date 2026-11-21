@@ -11,11 +11,13 @@ from fastapi import HTTPException
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.episode import *
+from backend.api.models.source import NamesAPIRead
 from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor, keyset_after, KeysetField
-from backend.db.models import Collection
+from backend.db.models import Collection, CollectionList, CollectionListItem
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
-from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
+from backend.types.collection_contracts import collection_contract
+from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.services.episode_download_delay import episode_download_delay_ready_at
@@ -39,7 +41,6 @@ class _EpisodeAPIReadSource:
 
 
 _METADATA_REFRESH_TASK_KEY = "refresh_episode_metadata"
-_EARLY_DELETE_TASK_KEY = "monitor_no_usable_media_episode"
 
 
 def _episode_api_read(episode: Episode) -> EpisodeAPIRead:
@@ -89,6 +90,34 @@ def _episode_view_order(s: Session, collection_slug: str, season_id: int | None)
     return EpisodeOrder(row.episode_order)
 
 
+def episode_view_columns():
+    """The columns of an episode's grid card, ``EpisodeAPIReadView``, for a select that joins its Collection."""
+    return (
+        Episode.id.label("id"),
+        Episode.source_key.label("source_key"),
+        Episode.collection_id.label("collection_id"),
+        Episode.season_id.label("season_id"),
+        Episode.index.label("index"),
+        Episode.episode_identifier.label("episode_identifier"),
+        Episode.dw_episode_number.label("dw_episode_number"),
+        Episode.publish_status.label("publish_status"),
+        Episode.drm_protected.label("drm_protected"),
+        Episode.access.label("access"),
+        Collection.site_key.label("site_key"),
+        Episode.access_refused_at.label("access_refused_at"),
+        Episode.access_check_at.label("access_check_at"),
+        Episode.removed_from_source.label("removed_from_source"),
+        Episode.removed_by_retention.label("removed_by_retention"),
+        Episode.title.label("title"),
+        Episode.duration.label("duration"),
+        Episode.slug.label("slug"),
+        Episode.thumbnail_landscape_path.label("thumbnail_landscape_path"),
+        Episode.thumbnail_portrait_path.label("thumbnail_portrait_path"),
+        Episode.thumbnail_square_path.label("thumbnail_square_path"),
+        Episode.published_date.label("published_date"),
+    )
+
+
 def _episode_view_stmt(
         collection_slug: str,
         season_id: int | None = None,
@@ -100,29 +129,7 @@ def _episode_view_stmt(
     # constructing full ORM entities (and their select-in metadata relationship), then sending and
     # validating descriptions/timestamps that the grid never renders.
     stmt = (
-        select(
-            Episode.id.label("id"),
-            Episode.source_key.label("source_key"),
-            Episode.collection_id.label("collection_id"),
-            Episode.season_id.label("season_id"),
-            Episode.index.label("index"),
-            Episode.episode_identifier.label("episode_identifier"),
-            Episode.dw_episode_number.label("dw_episode_number"),
-            Episode.publish_status.label("publish_status"),
-            Episode.drm_protected.label("drm_protected"),
-            Episode.access.label("access"),
-            Collection.site_key.label("site_key"),
-            Episode.access_refused_at.label("access_refused_at"),
-            Episode.access_check_at.label("access_check_at"),
-            Episode.removed_from_source.label("removed_from_source"),
-            Episode.title.label("title"),
-            Episode.duration.label("duration"),
-            Episode.slug.label("slug"),
-            Episode.thumbnail_landscape_path.label("thumbnail_landscape_path"),
-            Episode.thumbnail_portrait_path.label("thumbnail_portrait_path"),
-            Episode.thumbnail_square_path.label("thumbnail_square_path"),
-            Episode.published_date.label("published_date"),
-        )
+        select(*episode_view_columns())
         .join(Collection, Episode.collection_id == Collection.id)
         .where(Collection.slug == collection_slug)
     )
@@ -132,10 +139,17 @@ def _episode_view_stmt(
         stmt = stmt.where(~without_access_clause(Episode))
     newest_first = order == EpisodeOrder.NEWEST_FIRST
     if season_id is not None:
+        # A link season shows its videos in its Site's order, as its playlist or album lists them.
+        position = (
+            select(CollectionListItem.position)
+            .join(CollectionList, CollectionList.id == CollectionListItem.list_id)
+            .where(CollectionList.season_id == season_id, CollectionListItem.source_slug == Episode.source_slug)
+            .scalar_subquery()
+        )
         stmt = stmt.where(Episode.season_id == season_id)
         if newest_first:
-            return stmt.order_by(Episode.index.desc(), Episode.id.desc())
-        return stmt.order_by(Episode.index.asc(), Episode.id.asc())
+            return stmt.order_by(position.desc().nulls_first(), Episode.index.desc(), Episode.id.desc())
+        return stmt.order_by(position.asc().nulls_last(), Episode.index.asc(), Episode.id.asc())
     if newest_first:
         return stmt.order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
     return stmt.order_by(Episode.published_date.asc().nulls_last(), Episode.id.asc())
@@ -397,58 +411,6 @@ def request_episode_metadata_refresh(
     }
 
 
-def request_episode_early_delete(
-        s: Session,
-        episode_slug: str,
-) -> dict[str, bool | str]:
-    """Queue an immediate no-usable-media verification for a confirmed missing episode."""
-    episode = (
-        s.query(Episode)
-        .filter_by(slug=episode_slug)
-        .one_or_none()
-    )
-    if episode is None:
-        raise HTTPException(status_code=404, detail="Episode not found")
-    if not episode.early_delete_available:
-        raise HTTPException(
-            status_code=409,
-            detail="Early Delete is only available after Daily Wire has returned 404 for this episode",
-        )
-
-    collection = episode.collection
-    target = OperationTargetSpec(
-        task_key=_EARLY_DELETE_TASK_KEY,
-        resource_type="collection",
-        resource_id=episode.collection_id,
-        task_kwargs={
-            "episode_id": episode.id,
-            "force": True,
-        },
-        slot_key=f"{_EARLY_DELETE_TASK_KEY}:episode:{episode.id}:force",
-    )
-    operation = create_operation(
-        s,
-        kind="episode.early_delete",
-        resource_type="episode",
-        resource_id=episode.id,
-        title=episode.title,
-        targets=[target],
-        context={
-            "episode_slug": episode.slug,
-            "episode_title": episode.title,
-            "collection_id": episode.collection_id,
-            "collection_slug": collection.slug if collection is not None else None,
-            "collection_title": collection.title if collection is not None else None,
-        },
-    )
-    queue_operation_target_dispatch(s, operation.id, target.resolved_slot_key())
-    s.flush()
-    return {
-        "queued": True,
-        "operation_id": operation.id,
-    }
-
-
 def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
     collection = s.get(Collection, body.collection_id)
     if collection is None:
@@ -553,3 +515,42 @@ def delete_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
     s.delete(episode)
     s.flush()
     return payload
+
+
+def _episode_or_404(s: Session, episode_slug: str) -> Episode:
+    episode = s.query(Episode).filter_by(slug=episode_slug).one_or_none()
+    if episode is None:
+        raise HTTPException(status_code=404, detail="Episode not found")
+    return episode
+
+
+def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPIRead:
+    """Where the episode belongs now that its collection's playlists changed. Reading only: nothing is made."""
+    from backend.services.link_seasons import belongs_elsewhere, section_list_names
+
+    from backend.services.reassigned import reassignment_of
+
+    episode = _episode_or_404(s, episode_slug)
+    reassigned = reassignment_of(s, episode)
+    if reassigned is not None:
+        target = reassigned.target.collection
+        return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False, collection_slug=target.slug, collection_title=target.title)
+    belonging = belongs_elsewhere(s, episode)
+    if belonging is None:
+        return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False)
+    collection = episode.collection
+    # The Site's own word for the list, such as playlist on YouTube or album on Bandcamp.
+    names = NamesAPIRead.model_validate(section_list_names(collection))
+    if belonging.link is not None:
+        season = belonging.link.season
+        return EpisodeSeasonPlaceAPIRead(
+            belongs_elsewhere=True, season_name=season.name if season else belonging.link.title,
+            link_title=belonging.link.title, link_names=names,
+        )
+    season = next((season for season in collection.seasons if season.loose), None) if belonging.loose else None
+    if season is None and not belonging.loose and episode.published_date is not None:
+        season = next((x for x in collection.seasons if x.slug == str(episode.published_date.year)), None)
+    name = season.name if season is not None else (
+        str(episode.published_date.year) if not belonging.loose and episode.published_date else None
+    )
+    return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=True, season_name=name, link_names=names)

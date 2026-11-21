@@ -34,7 +34,7 @@ from backend.db.models import (
 )
 from backend.db.models.media_download.MediaDownloadAsset import MediaDownloadAsset
 from backend.services.media_download_history import record_media_download_history
-from backend.services.sites import collection_site
+from backend.services.sites import episode_site
 from backend.services.upgrade_check import schedule_imported_upgrade_check
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
@@ -131,6 +131,8 @@ def sidecar_assets(media_path: Path) -> list[tuple[str, str, Path]]:
         found.append(("artwork", "thumbnail", media_path.parent / thumbnail))
     if f"{stem}.nfo" in names:
         found.append(("nfo", "nfo", media_path.parent / f"{stem}.nfo"))
+    if f"{stem}.info.json" in names:
+        found.append(("info_json", "info_json", media_path.parent / f"{stem}.info.json"))
     for name in names:
         if not name.startswith(f"{stem}."):
             continue
@@ -220,7 +222,7 @@ def adopt(
             ))
         profile = session.get(DownloadProfile, download.download_profile_id) if download.download_profile_id else None
         schedule_imported_upgrade_check(
-            download, profile, media.published_date, collection_site(media.collection), datetime.now(timezone.utc),
+            download, profile, media.published_date, episode_site(media), datetime.now(timezone.utc),
         )
     download.assets.clear()
     session.flush()

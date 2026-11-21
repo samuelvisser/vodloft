@@ -16,7 +16,7 @@ def test_upcoming_movie_allows_extras_but_not_full_movie(tmp_path, monkeypatch):
     from backend.services import movies as movie_service
     from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db.core import Base
-    from backend.db.models import MovieLocalMediaProfile
+    from backend.db.models import VideoLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
     from config import get_settings
     from sources.dailywire.api.records import DwMovieExtraRecord, DwMovieRecord
@@ -27,7 +27,7 @@ def test_upcoming_movie_allows_extras_but_not_full_movie(tmp_path, monkeypatch):
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     monkeypatch.setattr(movie_service, "ensure_movie_release_metadata", lambda _s, _movie: None)
 
-    profile = MovieLocalMediaProfile(
+    profile = VideoLocalMediaProfile(
         slug="movies",
         name="Movies",
         output_template="/downloads/{{ movie_title }}/{{ slug }}.ext",
@@ -88,7 +88,7 @@ def test_released_movie_downloads_even_when_daily_wire_turns_off_offline_downloa
     from backend.services import movies as movie_service
     from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db.core import Base
-    from backend.db.models import MovieLocalMediaProfile
+    from backend.db.models import VideoLocalMediaProfile
     from backend.db.models.media_download import MovieMediaDownload
     from config import get_settings
     from sources.dailywire.api.records import DwMovieRecord
@@ -99,7 +99,7 @@ def test_released_movie_downloads_even_when_daily_wire_turns_off_offline_downloa
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     monkeypatch.setattr(movie_service, "ensure_movie_release_metadata", lambda _s, _movie: None)
 
-    profile = MovieLocalMediaProfile(
+    profile = VideoLocalMediaProfile(
         slug="movies",
         name="Movies",
         output_template="/downloads/{{ movie_title }}/{{ slug }}.ext",

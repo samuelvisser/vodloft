@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import Field
 
 from backend.api.models.base import ResponseBase
+from backend.utils.metadata_template import DESCRIPTION_TEMPLATE_MAX_LENGTH, TITLE_TEMPLATE_MAX_LENGTH
 from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplatePreview,
     LocalMediaProfileTemplatePreviewResult,
@@ -12,9 +13,11 @@ from backend.api.models.local_media_profile import (
 class LocalMediaProfilePreviewRequest(LocalMediaProfileTemplatePreview):
     """One unsaved profile and editable example shared by every form preview."""
 
-    type: Literal["collection", "movie", "video"]
+    type: Literal["collection", "video"]
     source_id: str | None = Field(default=None, max_length=100)
     local_media_profile_id: int | None = Field(default=None, gt=0)
+    episode_title_template: str | None = Field(default=None, max_length=TITLE_TEMPLATE_MAX_LENGTH)
+    episode_description_template: str | None = Field(default=None, max_length=DESCRIPTION_TEMPLATE_MAX_LENGTH)
 
 
 class LocalMediaProfilePreviewPlan(ResponseBase):
@@ -35,6 +38,16 @@ class LocalMediaProfileCollectionPreview(ResponseBase):
     system_enabled: bool
 
 
+class LocalMediaProfileMetadataPreview(ResponseBase):
+    """The title and description an episode's metadata gets, and why a template could not render."""
+
+    title: str
+    title_error: str | None = None
+    description: str
+    description_error: str | None = None
+
+
 class LocalMediaProfilePreviewResult(ResponseBase):
     output: LocalMediaProfileOutputPreview
     collection_root: LocalMediaProfileCollectionPreview | None = None
+    metadata: LocalMediaProfileMetadataPreview | None = None

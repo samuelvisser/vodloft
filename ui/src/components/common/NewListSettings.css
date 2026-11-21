@@ -1,0 +1,19 @@
+/* What happens with each kind of new list: one row each, in a column, like a creator's sections. */
+.new-list-settings { display: flex; flex-direction: column; border: 1px solid rgba(100, 116, 139, 0.24); border-radius: 12px; }
+.new-list-setting { display: flex; align-items: center; gap: .75rem; padding: .6rem .75rem; }
+.new-list-setting + .new-list-setting { border-top: 1px solid rgba(100, 116, 139, 0.24); }
+.new-list-setting-art {
+    flex: 0 0 auto; width: 36px; height: 36px; border-radius: 4px;
+    display: grid; place-items: center; background: rgba(100, 116, 139, 0.15);
+}
+.new-list-setting-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.new-list-setting-copy label { margin: 0; }
+.new-list-setting-copy span { opacity: .75; font-size: .875rem; }
+/* The selects take the width of the longest choice (SimpleSelect's fitLabels), so they line up. */
+.new-list-setting-choice { flex: 0 0 auto; min-width: 15rem; max-width: 50%; }
+
+/* On a phone the name (or, for a single row, what its choice does) sits beside the icon, with the select below. */
+@media (max-width: 640px) {
+    .new-list-setting { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: .75rem; row-gap: .5rem; }
+    .new-list-setting-choice { grid-column: 1 / -1; min-width: 0; max-width: none; }
+}

@@ -70,8 +70,6 @@ SettingFieldPath = Literal[
     "newEpisodeSchedule.quickCheckCron",
     "newEpisodeSchedule.fullRescanCronEnabled",
     "newEpisodeSchedule.fullRescanCron",
-    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
-    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
     "newEpisodeSchedule.upcomingAndLive",
     "newEpisodeSchedule.pendingUpcomingMinutes",
@@ -86,12 +84,12 @@ SettingFieldPath = Literal[
     "downloadProfileDefaults.autoSubtitles",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
-    "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
     "downloadSettings.verifyDownloadsCronEnabled",
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
     "downloadSettings.maxDownloadAttempts",
     "downloadSettings.episodeDownloadDelayMinutes",
+    "downloadSettings.dailyDownloadLimit",
     "downloadSettings.ensureSafeDelay",
     "downloadSettings.downloadTimeoutSeconds",
     "downloadSettings.downloadRoot",
@@ -118,6 +116,8 @@ SettingFieldPath = Literal[
     "youtubeApi.checksQuota",
     "youtubeApi.searchQuota",
     "youtubeApi.minCheckIntervalMinutes",
+    "youtubeApi.usageLogEnabled",
+    "youtubeApi.usageLogMaxLines",
     "fileWatcher.enabled",
     "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
@@ -178,8 +178,6 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "newEpisodeSchedule.quickCheckCron",
     "newEpisodeSchedule.fullRescanCronEnabled",
     "newEpisodeSchedule.fullRescanCron",
-    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCronEnabled",
-    "newEpisodeSchedule.monitorNoUsableMediaEpisodeCron",
     "newEpisodeSchedule.metadataRefreshIntervals",
     "newEpisodeSchedule.upcomingAndLive",
     "newEpisodeSchedule.pendingUpcomingMinutes",
@@ -194,12 +192,12 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadProfileDefaults.autoSubtitles",
     "episodeStatusTiming.publishedFinalAfterMinutes",
     "episodeStatusTiming.dwProcessingMaxMinutes",
-    "episodeStatusTiming.noUsableMediaDeleteAfterMinutes",
     "downloadSettings.verifyDownloadsCronEnabled",
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
     "downloadSettings.maxDownloadAttempts",
     "downloadSettings.episodeDownloadDelayMinutes",
+    "downloadSettings.dailyDownloadLimit",
     "downloadSettings.ensureSafeDelay",
     "downloadSettings.downloadTimeoutSeconds",
     "downloadSettings.downloadRoot",
@@ -225,6 +223,8 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "youtubeApi.checksQuota",
     "youtubeApi.searchQuota",
     "youtubeApi.minCheckIntervalMinutes",
+    "youtubeApi.usageLogEnabled",
+    "youtubeApi.usageLogMaxLines",
     "fileWatcher.enabled",
     "fileWatcher.scanCronEnabled",
     "fileWatcher.scanCron",
@@ -357,8 +357,6 @@ class TrackNewEpisodeScheduleValue(_SettingsValueModel):
     quick_check_cron: str = Field(min_length=1)
     full_rescan_cron_enabled: bool
     full_rescan_cron: str = Field(min_length=1)
-    monitor_no_usable_media_episode_cron_enabled: bool
-    monitor_no_usable_media_episode_cron: str = Field(min_length=1)
     metadata_refresh_intervals: str = Field(min_length=1)
     upcoming_and_live: bool
     pending_upcoming_minutes: int = Field(ge=PENDING_MINIMUM_MINUTES, le=24 * 60)
@@ -373,7 +371,6 @@ class TrackNewEpisodeScheduleValue(_SettingsValueModel):
 class EpisodeStatusTimingValue(_SettingsValueModel):
     published_final_after_minutes: int = Field(ge=0)
     dw_processing_max_minutes: int = Field(ge=0)
-    no_usable_media_delete_after_minutes: int = Field(ge=0)
 
 
 class DownloadSettingsValue(_SettingsValueModel):
@@ -382,6 +379,7 @@ class DownloadSettingsValue(_SettingsValueModel):
     max_concurrent_downloads: int = Field(ge=1)
     max_download_attempts: int = Field(ge=1)
     episode_download_delay_minutes: int = Field(ge=0)
+    daily_download_limit: int = Field(ge=0, le=10000)
     ensure_safe_delay: bool
     download_timeout_seconds: int = Field(ge=1)
     download_root: Path
@@ -430,6 +428,8 @@ class YouTubeApiSettingsValue(_SettingsValueModel):
     checks_quota: int = Field(ge=0)
     search_quota: int = Field(ge=0)
     min_check_interval_minutes: int = Field(ge=10)
+    usage_log_enabled: bool
+    usage_log_max_lines: int = Field(ge=100)
 
     @field_validator("search_quota")
     @classmethod
@@ -699,7 +699,6 @@ class LibraryDefaultsAPIRead(ResponseBase):
     download_collection_assets: bool
     filename_restriction_mode: FilenameRestrictionMode
     """The filename mode a new Local Media Profile starts with."""
-    no_usable_media_delete_after_minutes: int
 
 
 class SpeedLimitStatusRead(ResponseBase):

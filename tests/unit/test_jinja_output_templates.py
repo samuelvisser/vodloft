@@ -53,7 +53,7 @@ def test_movie_variables_separate_parent_movie_from_current_media() -> None:
     from backend.db.models import Movie, MovieExtra
     from backend.types.media_types import MediaType
     from backend.utils.output_template import (
-        MOVIE_OUTPUT_TEMPLATE_FIELDS,
+        VIDEO_OUTPUT_TEMPLATE_FIELDS,
         movie_output_template_values,
     )
 
@@ -86,7 +86,7 @@ def test_movie_variables_separate_parent_movie_from_current_media() -> None:
     movie_values = movie_output_template_values(movie)
     extra_values = movie_output_template_values(movie, extra)
 
-    assert movie_values.keys() == extra_values.keys() == MOVIE_OUTPUT_TEMPLATE_FIELDS
+    assert movie_values.keys() == extra_values.keys() == VIDEO_OUTPUT_TEMPLATE_FIELDS
     assert "movie" not in movie_values
     assert "movie_dw_id" not in movie_values
     assert "dw_id" not in movie_values
@@ -166,7 +166,7 @@ def test_preview_uses_edited_values_and_returns_referenced_variables():
     from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
 
     result = get_output_template_preview(None, LocalMediaProfileTemplatePreview(
-        type="movie",
+        type="video",
         preferred_format="format_1080p",
         output_template=(
             "/downloads/{{ movie_title }}/{{ title }}"

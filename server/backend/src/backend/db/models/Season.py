@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, UniqueConstraint, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, query_expression, relationship
 
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
@@ -34,12 +34,20 @@ class Season(Base, HasTaskResourcesMixin):
     )
     season_number: Mapped[int] = mapped_column(default=1, server_default="1", comment="Numbered based on it's logical order within the collection. Seasons of type 'extra' always are numbered 0")
 
+    loose: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="Holds the collection's videos that are in none of the playlists that are its seasons",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
+
+    newest_published_at: Mapped[datetime | None] = query_expression()
+    """When its newest episode came out, where a query loaded it."""
 
     # Relationships
     collection: Mapped["Collection"] = relationship(back_populates="seasons")

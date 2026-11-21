@@ -1,6 +1,6 @@
 [project]
 name = "VODLoft"
-version = "0.9.1"
+version = "0.10.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "backend",
@@ -9,6 +9,7 @@ dependencies = [
     "downloader",
     "importer",
     "jinja-analysis",
+    "progress-plan",
     "sources",
     "task-manager"
 ]
@@ -23,6 +24,7 @@ controller = { workspace = true }
 downloader = { workspace = true }
 importer = { workspace = true }
 jinja-analysis = { workspace = true }
+progress-plan = { workspace = true }
 sources = { workspace = true }
 task-manager = { workspace = true }
 

@@ -67,9 +67,9 @@ def _download(session: Session, profile, media, path: Path, content: bytes):
 
 
 def _library(session: Session, tmp_path: Path, template: str):
-    from backend.db.models import MovieLocalMediaProfile
+    from backend.db.models import VideoLocalMediaProfile
 
-    profile = MovieLocalMediaProfile(
+    profile = VideoLocalMediaProfile(
         slug="movie-to-plex", name="Movie to Plex", preferred_format="format_1080p",
         output_template=template,
     )

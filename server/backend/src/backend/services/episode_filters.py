@@ -14,7 +14,9 @@ behind a subscription VODLoft is not signed in with).
 Only a date line deletes. With delete older episodes on, a download is removed when an
 Only download date line leaves its episode out, unless a Keep filter or a person kept
 it, or the Source no longer has the episode and the Home page still asks whether to keep
-it. Changing the other filters never deletes anything.
+it. Changing the other filters never deletes anything. A profile that also includes manual
+downloads deletes the manual downloads of its Collection in its Local Media Profile the same
+way, once they are on disk.
 
 Everything that asks which episodes a profile wants uses this module: the Download
 Profile worker and its cleanup, the counts in the profile form, Skipped by filter,
@@ -33,6 +35,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, lazyload, selectinload
 
 from backend.db.models import Collection, DownloadProfile, DownloadProfileFilter, Episode
+from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.media_access import AccessLocks
 from backend.services.removed_downloads import awaits_keep_answer
 from backend.services.regex_check import PatternError, compile_pattern, search, split_inline_ignore_case
@@ -62,6 +65,7 @@ class EpisodeFilter(Protocol):
     days: Optional[int]
     count: Optional[int]
     starting_from: Optional[date]
+    until: Optional[date]
 
 
 @dataclass(frozen=True)
@@ -153,9 +157,15 @@ def _in_date_line(item: EpisodeFilter, episodes: Sequence[Episode], now: datetim
             episode.id for episode in episodes
             if (moment := published_at(episode)) is None or moment >= cutoff
         }
-    if item.field == EpisodeFilterField.PUBLISHED and item.starting_from is not None:
-        start = _local_start(item.starting_from)
-        return {episode.id for episode in episodes if (moment := published_at(episode)) is not None and moment >= start}
+    if item.field == EpisodeFilterField.PUBLISHED and (item.starting_from is not None or item.until is not None):
+        start = _local_start(item.starting_from) if item.starting_from is not None else None
+        # The whole of the last day counts.
+        end = _local_start(item.until + timedelta(days=1)) if item.until is not None else None
+        return {
+            episode.id for episode in episodes
+            if (moment := published_at(episode)) is not None
+            and (start is None or moment >= start) and (end is None or moment < end)
+        }
     return {episode.id for episode in episodes}
 
 
@@ -216,6 +226,8 @@ class Evaluation:
     """A Keep filter on the downloaded date protects downloads downloaded since each of these."""
     removed_from_source: set[int] = field(default_factory=set)
     """Episodes the Source no longer has: their downloads wait for the person's keep answer."""
+    removed_by_retention: set[int] = field(default_factory=set)
+    """Of those, the ones their Site's retention removed, which VODLoft expected to go: nothing waits for an answer."""
     as_if_at_source: Optional["Evaluation"] = None
     """The same walk with those episodes still at the Source. Retention judges their downloads by it
     once the person chose not to keep them, so the date lines apply to them as before."""
@@ -295,6 +307,7 @@ def _walk(
         kept=kept,
         keep_downloaded_since=keep_downloaded_since,
         removed_from_source={episode.id for episode in episodes if episode.removed_from_source},
+        removed_by_retention={episode.id for episode in episodes if episode.removed_by_retention},
     )
 
 
@@ -338,7 +351,10 @@ def kept_by(evaluation: Evaluation, download) -> Optional[DownloadKeptBy]:
         return DownloadKeptBy.HAND
     if download.media_item_id in evaluation.kept:
         return DownloadKeptBy.KEEP_FILTER
-    if awaits_keep_answer(download, removed_from_source=download.media_item_id in evaluation.removed_from_source):
+    if awaits_keep_answer(
+        download, removed_from_source=download.media_item_id in evaluation.removed_from_source,
+        removed_by_retention=download.media_item_id in evaluation.removed_by_retention,
+    ):
         return DownloadKeptBy.KEEP_QUESTION
     if download.downloaded_at is not None and any(
         download.downloaded_at >= since for since in evaluation.keep_downloaded_since
@@ -402,14 +418,42 @@ def left_out_by_date_line(evaluation: Evaluation, episode_id: int) -> bool:
     return index is not None and is_date_line(evaluation.filters[index])
 
 
-def retention_removes(evaluation: Evaluation, download, *, delete_older_episodes: bool) -> bool:
-    """Whether the profile's cleanup removes this download of its own.
+def retention_downloads(s: Session, profile: DownloadProfile) -> list[EpisodeMediaDownload]:
+    """The downloads the profile's retention judges: its own, and with manual downloads included, the manual
+    downloads of its Collection in its Local Media Profile.
 
-    A download that is not on disk yet goes as soon as a date line leaves its episode
-    out. One that is, only when the profile deletes older episodes.
+    A profile takes a manual download over once it downloads that episode itself, so the manual ones left are
+    the ones it does not download.
+    """
+    ours = EpisodeMediaDownload.download_profile_id == profile.id
+    if profile.delete_older_episodes and profile.retention_includes_manual:
+        manual = EpisodeMediaDownload.download_profile_id.is_(None) & (
+            EpisodeMediaDownload.local_media_profile_id == profile.local_media_profile_id
+        ) & EpisodeMediaDownload.media_item_id.in_(
+            select(Episode.id).where(Episode.collection_id == profile.collection_id)
+        )
+        ours = ours | manual
+    return list(s.scalars(
+        select(EpisodeMediaDownload).where(ours)
+        # Most stay: the few that go load their sidecar files and metadata rows when they are deleted.
+        .options(lazyload(EpisodeMediaDownload.assets), lazyload(EpisodeMediaDownload.meta_items))
+    ))
+
+
+def retention_removes(evaluation: Evaluation, download, *, delete_older_episodes: bool) -> bool:
+    """Whether the profile's cleanup removes this download of its own, or this manual download.
+
+    A download of its own that is not on disk yet goes as soon as a date line leaves its
+    episode out. One that is, only when the profile deletes older episodes. A manual
+    download goes only once it is on disk: one that is still waiting was just asked for.
     """
     if protected(evaluation, download):
         return False
+    if download.download_profile_id is None:
+        return (
+            delete_older_episodes and download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value
+            and date_line_leaves_out(evaluation, download)
+        )
     if download.artifact_status == MediaDownloadArtifactStatus.ABSENT.value and left_out_by_date_line(
         evaluation, download.media_item_id,
     ):
@@ -466,6 +510,7 @@ def set_profile_filters(profile: DownloadProfile, filters: Sequence[EpisodeFilte
             days=only(DATE_FIELDS, item, "days") or None,
             count=only((EpisodeFilterField.PUBLISHED,), item, "count") or None,
             starting_from=only((EpisodeFilterField.PUBLISHED,), item, "starting_from"),
+            until=only((EpisodeFilterField.PUBLISHED,), item, "until"),
         )
         for position, item in enumerate(filters)
     ]

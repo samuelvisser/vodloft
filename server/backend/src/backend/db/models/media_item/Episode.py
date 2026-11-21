@@ -3,9 +3,9 @@ from typing import Optional, TYPE_CHECKING
 
 from .MediaItemBase import MediaItemBase
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Boolean, ForeignKey, Index, PrimaryKeyConstraint, UniqueConstraint, text
+from sqlalchemy import Boolean, ForeignKey, Index, PrimaryKeyConstraint, UniqueConstraint, func, text
+from sqlalchemy.ext.hybrid import hybrid_property
 
-from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.db.mixins.HasMetadataMixin import HasMetadataMixin
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
@@ -21,7 +21,6 @@ from backend.utils.episode_publication_timing import (
     safe_live_ended_from_meta,
     safe_published_final_from_meta,
 )
-from backend.utils.episode_slug import is_no_show_today_slug
 
 if TYPE_CHECKING:
     from backend.db.models import Collection, Season
@@ -42,7 +41,8 @@ class Episode(
     __table_args__ = (
         UniqueConstraint("collection_id", "index", name="uq_episode_collection_index"),
         UniqueConstraint("collection_id", "episode_identifier", name="uq_unique_episode_identifier_per_collection"),
-        UniqueConstraint("collection_id", "source_slug", name="uq_episode_collection_source_slug"),
+        # A video can be in several seasons of a collection, as a track is on several albums, but once in each.
+        UniqueConstraint("season_id", "source_slug", name="uq_episode_season_source_slug"),
         Index(
             "ix_media_items_episode_collection_published_id",
             "collection_id",
@@ -102,10 +102,29 @@ class Episode(
     went_live_date: Mapped[Optional[datetime]]
     published_date: Mapped[Optional[datetime]]
     scheduled_date: Mapped[Optional[datetime]]
+    part_of: Mapped[Optional[str]] = mapped_column(
+        comment="The Source's slug of the video the episode is one part of, when its collection splits videos by chapter",
+    )
+    part_start: Mapped[Optional[float]] = mapped_column(comment="Where the part starts in its video, in seconds")
+    part_end: Mapped[Optional[float]] = mapped_column(comment="Where the part ends in its video, in seconds")
+    from_link_season: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="Added because a playlist that is a season lists it, not the collection's own link",
+    )
 
     # Relationships
     collection: Mapped["Collection"] = relationship(back_populates="episodes")
     season: Mapped["Season"] = relationship(back_populates="episodes")
+
+    @hybrid_property
+    def video_slug(self) -> str:
+        """The Source's slug of the video the episode comes from: the whole video's, for a part of one."""
+        return self.part_of or self.source_slug
+
+    @video_slug.inplace.expression
+    @classmethod
+    def _video_slug_expression(cls):
+        return func.coalesce(cls.part_of, cls.source_slug)
 
     @property
     def safe_live_ended(self) -> datetime | None:
@@ -158,19 +177,6 @@ class Episode(
     @property
     def episode_label(self) -> str:
         return self.episode_identifier_info.label
-
-    @property
-    def is_no_show_today(self) -> bool:
-        """Whether the stable Daily Wire slug marks this as a No Show Today placeholder."""
-        return is_no_show_today_slug(self.slug)
-
-    @property
-    def early_delete_available(self) -> bool:
-        """Whether the latest Daily Wire verification reported this episode missing."""
-        return (
-            self.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value
-            and self.get_meta("no_usable_media.reason") == "not_found"
-        )
 
     def download_dismissed(self, local_media_profile_id: int) -> bool:
         """Whether the user deleted this episode's download record for the Local Media Profile."""

@@ -4,7 +4,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {useSearchParams} from 'react-router-dom'
 import {type FieldErrors, type FieldPath, useForm} from 'react-hook-form'
-import toast from 'react-hot-toast'
+import toast from '../lib/toast'
 
 import AdvancedSettingsTab from '../components/Settings/AdvancedSettingsTab'
 import AutomationSettingsTab from '../components/Settings/AutomationSettingsTab'

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
 
 import requests
@@ -8,7 +8,7 @@ import requests
 from downloader.hls import is_master_playlist, media_playlist_segments, parse_master_playlist
 
 from ..contract import (
-    Access, MAIN_TAG, MIN_NEWEST_EPISODES, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
+    Access, CreatorDetails, CreatorPreset, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
     DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, SiteSetting, SiteSettings, Source, StreamMethod,
     ReleaseDate, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
@@ -19,7 +19,7 @@ from .api.types.user_info import DwMembershipLevel
 from .api.utils.validators.available_for_list import parse_tiers
 from .auth import DeviceAuthClient
 from .auth.storage import TokenStore
-from .links import _access_token, _first, parse_link, resolve_link
+from .links import HOST, _access_token, _first, collection_url, parse_link, resolve_link
 from . import membership
 from .membership import account_level, check_after_refusal, gives
 from .playback import resolve_movie_playback
@@ -86,6 +86,7 @@ class DailyWireSource(Source):
     domains = ("dailywire.com",)
     sites = (Site(
         "dailywire", "The Daily Wire", domains,
+        initials="DW",
         # Its own sign-in is how VODLoft signs in; no Source signs in on it with cookies.
         takes_cookies=False,
         stream_methods=frozenset({StreamMethod.FILE, StreamMethod.HLS, StreamMethod.LIVE}),
@@ -109,8 +110,28 @@ class DailyWireSource(Source):
             }),
         ),
         accesses=MEMBERSHIP_ACCESSES,
+        # A host has no feed to fold into one show: each of their shows keeps its own seasons.
+        creators=True,
+        creator_names=HOST,
+        section_types=(
+            SectionType("show", SectionKind.SHOW, Names("show", "shows")),
+            SectionType("movie", SectionKind.ITEM, Names("movie", "movies")),
+        ),
+        episode_tags=(
+            EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", Names("episode", "episodes"), main=True),
+            EpisodeTag(
+                "ep-extra", "Ep. Extra", "Extra content for a specific episode", Names("episode extra", "episode extras"), selected_by_default=False,
+                rss_episode_type=RssEpisodeType.BONUS,
+            ),
+            EpisodeTag(
+                "trailer", "Trailer", "A trailer for the show or its extra content", Names("trailer", "trailers"), selected_by_default=False,
+                rss_episode_type=RssEpisodeType.TRAILER,
+            ),
+            EpisodeTag("aux", "Auxiliary", "Extra content for the show", Names("auxiliary episode", "auxiliary episodes"), rss_episode_type=RssEpisodeType.BONUS),
+        ),
+        creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)
-    kind_names = MappingProxyType({LinkKind.COLLECTION: "Show"})
+    kind_names = MappingProxyType({LinkKind.COLLECTION: Names("show", "shows"), LinkKind.CREATOR: HOST})
     features = frozenset({
         Feature.COLLECTIONS,
         Feature.MOVIES,
@@ -121,19 +142,8 @@ class DailyWireSource(Source):
         Feature.MEMBERSHIP_LEVELS,
         Feature.EPISODE_LOOKUPS,
         Feature.OWN_STUDIO,
+        Feature.CREATORS,
     })
-    episode_tags = (
-        EpisodeTag(MAIN_TAG, "Episode", "A normal episode of the show", "episode", "episodes", main=True),
-        EpisodeTag(
-            "ep-extra", "Ep. Extra", "Extra content for a specific episode", "episode extra", "episode extras", selected_by_default=False,
-            rss_episode_type=RssEpisodeType.BONUS,
-        ),
-        EpisodeTag(
-            "trailer", "Trailer", "A trailer for the show or its extra content", "trailer", "trailers", selected_by_default=False,
-            rss_episode_type=RssEpisodeType.TRAILER,
-        ),
-        EpisodeTag("aux", "Auxiliary", "Extra content for the show", "auxiliary episode", "auxiliary episodes", rss_episode_type=RssEpisodeType.BONUS),
-    )
     release_date = ReleaseDate.END
     publish_status_labels = publish_status_labels_with(
         PublishStatusLabel(EpisodePublishStatus.SCHEDULED, "Scheduled", "The Daily Wire has scheduled the episode."),
@@ -180,6 +190,53 @@ class DailyWireSource(Source):
             found += [(record, season.slug) for record in dict.fromkeys(page.items) if record.slug not in known]
         found.sort(key=lambda item: item[0].published_date, reverse=True)
         return [_video(record, refs.get(season_slug)) for record, season_slug in found]
+
+    def creator_of(self, url: str) -> str | None:
+        """The host of a show."""
+        slug = self.collection_ref(url)
+        if slug is None:
+            return None
+        catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
+        return next((show.author_slug for show in catalog.collections if show.slug == slug and show.author_slug), None)
+
+    def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
+        """A host, by the slug The Daily Wire gives them or by the link to their page, such as
+        https://www.dailywire.com/hosts/ben-shapiro: their shows and movies from the Browse page."""
+        if ref.startswith("http"):
+            parsed = parse_link(ref)
+            if parsed is None or parsed[0] is not LinkKind.CREATOR:
+                raise ValueError("This is not a link to a host on The Daily Wire")
+            ref = parsed[1]
+        progress("Reading The Daily Wire's shows and movies")
+        catalog = MiddlewareClient(access_token=_access_token(), request_priority="interactive").get_catalog()
+        shows = [show for show in catalog.collections if show.author_slug == ref]
+        movies = [movie for movie in catalog.movies if movie.author_slug == ref]
+        if not shows and not movies:
+            raise ValueError("The Daily Wire has no host by that name")
+        first = shows[0] if shows else None
+        sections = tuple(
+            SectionRef(
+                ref=show.slug, url=collection_url(show.slug), title=show.title, type=self.sites[0].section_type("show"),
+                image_url=_first(show.thumbnail_landscape_path, show.background_image_path),
+                description=show.description,
+            )
+            for show in shows
+        ) + tuple(
+            SectionRef(
+                ref=movie.slug, url=f"https://www.dailywire.com/videos/{movie.slug}", title=movie.title,
+                type=self.sites[0].section_type("movie"),
+                image_url=_first(movie.thumbnail_landscape_path, movie.thumbnail_portrait_path),
+                description=movie.description,
+            )
+            for movie in movies
+        )
+        name = (first.author_name if first else None) or (movies[0].author_name if movies else None) or ref
+        return CreatorDetails(
+            ref=ref, url=None, title=name, avatar_url=first.author_headshot_path if first else None,
+            banner_url=first.background_image_path if first else None, sections=sections,
+            # The Daily Wire's creators are hosts, never music artists.
+            music_known=True,
+        )
 
     def episode_media(self, *, slug: str, members_only: bool, interactive: bool = False) -> EpisodeMedia:
         client = MiddlewareClient(request_priority="interactive") if interactive else MiddlewareClient()

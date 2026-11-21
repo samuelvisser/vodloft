@@ -7,7 +7,7 @@ from typing import Union
 from pydantic import Field
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.services.local_media_profile_inputs import IndexingValueDefinition, LocalMediaProfileInput, VideoCodecChoice
+from backend.services.local_media_profile_inputs import IndexingValueDefinition, VideoCodecChoice
 from backend.api.models.pagination import CursorPageRead
 from backend.api.models.source import DownloadOptionsAPIRead
 from backend.types.download_profile_types import AutoSubtitles, SponsorBlockAction
@@ -39,16 +39,13 @@ class VideoCodecChoiceAPI(RequestBase, VideoCodecChoice):
     """One codec in a Local Media Profile's order, as the UI sends it."""
 
 
-class LocalMediaProfileAPIBaseIn(RequestBase, LocalMediaProfileInput):
-    """Fields shared by all Local Media Profile request models."""
-
-
 class SiteDownloadChoicesAPIRead(ResponseBase):
     """What a Local Media Profile does with the settings only some Sites show."""
 
     auto_subtitles: AutoSubtitles
     sponsorblock_enabled: bool
     sponsorblock_segments: dict[str, SponsorBlockAction]
+    keep_chapters: bool
 
 
 class LocalMediaProfileAPIBaseOut(ResponseBase):
@@ -66,6 +63,7 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     kodi_safe_nfo: bool
     filename_restriction_mode: LocalMediaProfileFilenameMode
     file_date_from_publish_date: bool
+    save_info_json: bool
     subtitle_mode: Union[LocalMediaProfileSubtitleMode, str] = LocalMediaProfileSubtitleMode.SIDECAR
     subtitle_languages: list[str]
     subtitle_language_mode: Union[SubtitleLanguageMode, str]
@@ -81,6 +79,8 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     auto_subtitles: AutoSubtitles
     sponsorblock_enabled: bool
     sponsorblock_segments: dict[str, SponsorBlockAction]
+    keep_chapters: bool
+    cut_chapters: list[str]
     created_at: datetime
     updated_at: datetime
 
@@ -148,3 +148,5 @@ class LocalMediaProfileTemplatePreviewResult(ResponseBase):
     # The filename mode, and the characters typed in the template that it replaces.
     filename_mode: str = ""
     replaced_typed_characters: list[str] = Field(default_factory=list)
+    # File and folder names too long for the filesystem, as they were before VODLoft shortened them.
+    shortened_names: list[str] = Field(default_factory=list)

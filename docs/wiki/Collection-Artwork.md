@@ -26,7 +26,11 @@ VODLoft preserves native JPEG and PNG collection artwork. JPEG sources are store
 | `square.jpg` or `square.png` | Collection square thumbnail |
 | `clearlogo.png` | Collection logo |
 
-Missing artwork types are skipped. Existing custom artwork in alternate formats is preserved.
+| `season01-poster.jpg` or `.png` | The picture of the playlist that fills season 1, and so on for every season a playlist fills |
+
+Missing artwork types are skipped. Existing custom artwork in alternate formats is preserved. Season posters use the
+names Jellyfin, Emby, Kodi and Plex look for in the show's folder; when several playlists share a season, the first one
+the site lists gives its picture.
 
 The corresponding fallback setting is:
 

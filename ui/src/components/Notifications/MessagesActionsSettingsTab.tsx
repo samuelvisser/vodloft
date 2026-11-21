@@ -1,7 +1,7 @@
 import './notifications.css'
 import {useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 
 import {
     notificationKeys,

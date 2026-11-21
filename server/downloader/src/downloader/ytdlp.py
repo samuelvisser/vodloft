@@ -22,8 +22,10 @@ from .hls_bundle import BundleTrack, write_hls_bundle
 from .errors import (
     DownloadCanceled, DownloadError, EncryptedMediaError, FileTooLargeError, MediaUnavailableError, ThrottledError,
 )
-from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, SponsorSegment, VideoStream, WrittenSubtitle
-from .plan import ResolvedDownloadSource, YtdlpSponsorBlock, YtdlpSubtitles
+from .models import (
+    CancelCheck, CutChapter, DownloadProgress, DownloadResult, ProgressCallback, SponsorSegment, VideoStream, WrittenSubtitle,
+)
+from .plan import ResolvedDownloadSource, YtdlpChapters, YtdlpSponsorBlock, YtdlpSubtitles
 from .source import FORMAT_HEIGHTS
 from .subtitles import srt_to_webvtt, webvtt_to_srt
 
@@ -34,7 +36,8 @@ _FILE = "[vodloft-file]"
 _SPONSORBLOCK = "[vodloft-sponsorblock]"
 _VIDEO = "[vodloft-video]"
 _TRACK = "[vodloft-track]"
-_MARKS = (_FILE, _SPONSORBLOCK, _VIDEO, _TRACK)
+_CHAPTERS = "[vodloft-chapters]"
+_MARKS = (_FILE, _SPONSORBLOCK, _VIDEO, _TRACK, _CHAPTERS)
 _CODECS = (("avc", "h264"), ("h264", "h264"), ("hev", "h265"), ("hvc", "h265"), ("h265", "h265"), ("vp09", "vp9"), ("vp9", "vp9"), ("av01", "av1"), ("av1", "av1"))
 _SUBTITLE_FORMAT = ("--sub-format", "srt/vtt/best")
 # An HLS bundle keeps its subtitles as WebVTT, so it takes a site's own WebVTT first.
@@ -52,7 +55,7 @@ VIDEO_CODECS = ("av1", "vp9", "h264", "h265")
 _SORT_NAMES = {"av1": "av01", "vp9": "vp9", "h264": "h264", "h265": "h265"}
 _CODEC_PATTERNS = {"av1": "av0?1", "vp9": "vp0?9", "h264": "avc|h264", "h265": "hev|hvc|h265"}
 _AUDIO_SORT_NAMES = {"aac": "aac", "opus": "opus"}
-AUDIO_FORMATS = ("m4a", "opus", "mp3")
+AUDIO_FORMATS = ("m4a", "opus", "mp3", "flac")
 
 THROTTLED_HEIGHT = 360
 """The resolution a throttled YouTube still serves: a download that asked for more and got this or less while
@@ -117,7 +120,8 @@ def ytdlp_format_options(
     """
     language = quality.audio_language
     if audio_only:
-        preferred = {"m4a": "ba[ext=m4a]", "opus": "ba[acodec=opus]", "mp3": "ba"}[quality.audio_format]
+        # MP3 and FLAC are made from the best audio there is.
+        preferred = {"m4a": "ba[ext=m4a]", "opus": "ba[acodec=opus]", "mp3": "ba", "flac": "ba"}[quality.audio_format]
         choices = [*_with_language(preferred, language), *_with_language("ba", language), "b"]
         return ("-f", "/".join(dict.fromkeys(choices)), "-x", "--audio-format", quality.audio_format)
     height = FORMAT_HEIGHTS.get(preferred_format)
@@ -165,6 +169,19 @@ def ytdlp_sponsorblock_options(sponsorblock: YtdlpSponsorBlock) -> tuple[str, ..
     return options
 
 
+def ytdlp_chapter_options(chapters: YtdlpChapters) -> tuple[str, ...]:
+    """yt-dlp options that write the video's own chapters into the file, and cut out the ones whose title matches."""
+    options: tuple[str, ...] = ("--embed-chapters",) if chapters.keep else ()
+    for pattern in chapters.cut:
+        options += ("--remove-chapters", pattern)
+    return options
+
+
+def ytdlp_section_options(start: float, end: float) -> tuple[str, ...]:
+    """yt-dlp options that download only the video's stretch from ``start`` to ``end`` seconds."""
+    return ("--download-sections", f"*{start:.3f}-{end:.3f}")
+
+
 def resolve_ytdlp_source(
     url: str,
     *,
@@ -174,11 +191,15 @@ def resolve_ytdlp_source(
     quality: YtdlpQuality = YtdlpQuality(),
     subtitles: YtdlpSubtitles = YtdlpSubtitles(),
     sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock(),
+    chapters: YtdlpChapters = YtdlpChapters(),
     custom_options: tuple[str, ...] = (),
     ffmpeg_path: str = "ffmpeg",
     throttle_guard: bool = False,
+    section: tuple[float, float] | None = None,
 ) -> ResolvedDownloadSource:
     """``custom_options`` are the user's own yt-dlp options; VODLoft's own come after them and win.
+
+    With ``section``, the start and end of one stretch of the video in seconds, only that stretch is downloaded.
 
     With ``throttle_guard``, a video download that asks for more than ``THROTTLED_HEIGHT`` refuses a throttled
     file: see ``download_ytdlp``.
@@ -188,13 +209,24 @@ def resolve_ytdlp_source(
     hls = preferred_format == "format_hls"
     if hls and audio_only:
         raise DownloadError("HLS media format cannot be used for an audio-only download")
+    if hls and section is not None:
+        raise DownloadError("A part of a video cannot be kept as an HLS bundle")
     if hls:
         # Parts cut from separate video and audio files would no longer line up, so an HLS bundle only marks them.
         sponsorblock = YtdlpSponsorBlock(chapter=(*sponsorblock.chapter, *sponsorblock.cut))
+        # An HLS bundle's files stay as the site has them, so they get no chapters written in and none cut out.
+        chapters = YtdlpChapters()
+    if section is not None:
+        # A part of a video does not line up with the video's chapters.
+        chapters = YtdlpChapters()
     options = (
         *custom_options,
         *(ytdlp_hls_options(quality.audio_language) if hls else ytdlp_format_options(preferred_format, audio_only=audio_only, quality=quality)),
         *ytdlp_sponsorblock_options(sponsorblock),
+        *ytdlp_chapter_options(chapters),
+        # A video part starts on a keyframe of its own, so it begins exactly where its chapter does.
+        *(ytdlp_section_options(*section) if section is not None else ()),
+        *(("--force-keyframes-at-cuts",) if section is not None and not audio_only else ()),
     )
     if os.sep in ffmpeg_path:
         options += ("--ffmpeg-location", ffmpeg_path)
@@ -211,6 +243,7 @@ def resolve_ytdlp_source(
         ytdlp_command=(*command, *options),
         ytdlp_subtitles=subtitles,
         ytdlp_sponsorblock=sponsorblock,
+        ytdlp_chapters=chapters,
         ytdlp_throttle_guard=throttle_guard and not hls and not audio_only and (height or 0) > THROTTLED_HEIGHT,
     )
 
@@ -479,6 +512,27 @@ def _video_stream(text: str) -> VideoStream | None:
     return VideoStream(min(sides), video_codec_name(vcodec))
 
 
+def _cut_chapters(text: str, chapters: YtdlpChapters) -> tuple[CutChapter, ...]:
+    """The chapters yt-dlp printed whose title matches one of ``chapters.cut``, as yt-dlp's --remove-chapters finds them."""
+    try:
+        found = json.loads(text)
+    except ValueError:
+        return ()
+    patterns = [re.compile(pattern) for pattern in chapters.cut]
+    cut: list[CutChapter] = []
+    for entry in found if isinstance(found, list) else ():
+        if not isinstance(entry, dict):
+            continue
+        title, start, end = entry.get("title"), entry.get("start_time"), entry.get("end_time")
+        if not isinstance(title, str) or not all(
+            isinstance(value, (int, float)) and math.isfinite(value) for value in (start, end)
+        ):
+            continue
+        if any(pattern.search(title) for pattern in patterns):
+            cut.append(CutChapter(title, round(float(start), 3), round(float(end), 3)))
+    return tuple(cut)
+
+
 def _sponsor_segments(text: str, sponsorblock: YtdlpSponsorBlock) -> tuple[SponsorSegment, ...]:
     """The segments yt-dlp printed, with what the download did to each."""
     try:
@@ -509,13 +563,17 @@ def download_ytdlp(
         subtitles_dir: Path | None = None,
         subtitles: YtdlpSubtitles = YtdlpSubtitles(),
         sponsorblock: YtdlpSponsorBlock = YtdlpSponsorBlock(),
+        chapters: YtdlpChapters = YtdlpChapters(),
         throttle_guard: bool = False,
+        info_json_dir: Path | None = None,
 ) -> DownloadResult:
     """Run yt-dlp for ``url`` and move the file it produces to ``dest_path``.
 
     With ``subtitles_dir``, yt-dlp also writes the video's subtitles that
     ``subtitles`` asks for; each one is saved there as SRT and listed in the
     result. A subtitle that fails never fails the download.
+
+    With ``info_json_dir``, yt-dlp also writes the video's info file, saved there as ``media.info.json``.
 
     With ``throttle_guard``, a video of ``THROTTLED_HEIGHT`` or less that yt-dlp got while it warned that the
     site held formats back raises ``ThrottledError`` and is not kept. A video that has nothing better is kept.
@@ -532,13 +590,17 @@ def download_ytdlp(
         f"download:{_PROGRESS} %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s",
         "--print", f"after_move:{_FILE} %(filepath)s",
         *(("--print", f"after_move:{_SPONSORBLOCK} %(sponsorblock_chapters)j") if sponsorblock.enabled else ()),
+        # The chapters as published, before any is cut out.
+        *(("--print", f"before_dl:{_CHAPTERS} %(chapters)j") if chapters.cut else ()),
         "--print", f"after_move:{_VIDEO} %(width)s %(height)s %(vcodec)s",
         "-P", str(work), "-o", "media.%(ext)s",
         *(ytdlp_subtitle_options(subtitles) if subtitles_dir is not None else ()),
+        *(("--write-info-json",) if info_json_dir is not None else ()),
         "--", url,
     ]
     produced: str | None = None
     segments: tuple[SponsorSegment, ...] | None = None
+    cut_chapters: tuple[CutChapter, ...] | None = () if chapters.cut else None
     video: VideoStream | None = None
     try:
         output, marked, warnings = _run(argv, progress=progress, should_cancel=should_cancel)
@@ -549,6 +611,8 @@ def download_ytdlp(
                 video = _video_stream(line.removeprefix(_VIDEO).strip())
             elif line.startswith(_SPONSORBLOCK):
                 segments = _sponsor_segments(line.removeprefix(_SPONSORBLOCK).strip(), sponsorblock)
+            elif line.startswith(_CHAPTERS):
+                cut_chapters = _cut_chapters(line.removeprefix(_CHAPTERS).strip(), chapters)
         if not produced or not Path(produced).is_file():
             # --max-filesize ends without a file and without an error.
             if any("larger than max-filesize" in line for line in output):
@@ -563,9 +627,15 @@ def download_ytdlp(
             if subtitles.auto_generated == "always" and not (should_cancel and should_cancel()):
                 _write_auto_generated(url, work, command, subtitles)
             written = _keep_subtitles(work, subtitles_dir, subtitles)
+        info_json = None
+        if info_json_dir is not None and (work / "media.info.json").is_file():
+            info_json = str(info_json_dir / "media.info.json")
+            os.replace(work / "media.info.json", info_json)
         if progress:
             progress(DownloadProgress(bytes_downloaded=size, total_bytes=size))
-        return DownloadResult(path=dest_path, bytes_downloaded=size, subtitles=written, sponsorblock=segments, video=video)
+        return DownloadResult(path=dest_path, bytes_downloaded=size, subtitles=written, sponsorblock=segments, video=video,
+            cut_chapters=cut_chapters, info_json=info_json,
+        )
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

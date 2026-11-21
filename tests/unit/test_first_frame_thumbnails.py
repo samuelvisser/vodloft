@@ -58,14 +58,14 @@ def test_the_thumbnail_folder_is_next_to_the_config_file(tmp_path, monkeypatch):
 @pytest.mark.parametrize("status, missing", [(404, True), (200, False)])
 def test_a_youtube_still_is_missing_when_youtube_answers_404(monkeypatch, status, missing):
     head = _Head(status)
-    monkeypatch.setattr(thumbnails.requests, "head", head)
+    monkeypatch.setattr(thumbnails, "_head", head)
     assert thumbnails.still_missing("https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg") is missing
     assert head.urls == ["https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"]
 
 
 def test_no_picture_is_missing_and_other_pictures_are_taken_as_they_are(monkeypatch):
     head = _Head(404)
-    monkeypatch.setattr(thumbnails.requests, "head", head)
+    monkeypatch.setattr(thumbnails, "_head", head)
     assert thumbnails.still_missing(None) is True
     assert thumbnails.still_missing("https://example.com/picture.jpg") is False
     assert thumbnails.still_missing("thumbnails/abc.jpg") is False

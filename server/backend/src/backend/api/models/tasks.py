@@ -3,10 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional, Literal
 
-from pydantic import AliasPath, Field
+from pydantic import AliasPath, Field, computed_field
 
 from backend.api.models.base import ResponseBase, RequestBase
 from backend.api.models.pagination import CursorPageRead
+from backend.api.models.source import NamesAPIRead
+from backend.types.resource_names import RESOURCE_NAMES
 
 
 class TaskDefinitionRead(ResponseBase):
@@ -89,6 +91,13 @@ class TaskLedgerEntryRead(ResponseBase):
     runtime_ms: Optional[int]
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    @property
+    def resource_names(self) -> Optional[NamesAPIRead]:
+        """What the resource type is called, such as collection; none for a type VODLoft has no word for."""
+        names = RESOURCE_NAMES.get(self.resource_type)
+        return NamesAPIRead.model_validate(names) if names is not None else None
 
 
 class TaskLedgerPageRead(CursorPageRead[TaskLedgerEntryRead]):

@@ -2,7 +2,7 @@ import {addedByLabel} from '../../lib/access'
 import {useState} from 'react'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
 import ActionMenu from '../../components/ActionMenu/ActionMenu'
@@ -11,6 +11,7 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import SourceBadge from '../../components/Source/SourceBadge'
 import {VideoDownloadRow} from '../../components/Video/VideoDownloadRow'
 import {faIcon} from '../../icons/faIcon'
+import SiteLink from '../../components/common/SiteLink'
 import {useLocalMediaProfiles, useSourceLookup, useVideo, useVideoDownloads} from '../../lib/queries'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {VideoReadSchema} from '../../types/schemas/video'
@@ -19,9 +20,12 @@ import '../episode/EpisodePage.css'
 import {siteName} from '../../lib/siteName'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
-import {isLocalMediaProfileAvailableForSite} from '../../types/local_media_profile'
+import {isLocalMediaProfileAvailableForSite, videoProfileKeeps} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../../components/common/DurationPill'
+import {addLocalMediaProfilePath} from '../../types/local_media_profile'
+import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
+import LinkedText from '../../components/common/LinkedText'
 
 /** The site a video is on, since one Source can serve many sites. */
 export default function VideoPage() {
@@ -51,7 +55,7 @@ export default function VideoPage() {
     if (!video) return <section className="view episode-view" aria-busy="true"><p>Loading video…</p></section>
 
     // A profile limited to other Sites still shows the download it already made.
-    const videoProfiles = profiles?.filter((profile) => profile.type === 'video' && (
+    const videoProfiles = profiles?.filter((profile) => profile.type === 'video' && videoProfileKeeps(profile, 'videos') && (
         isLocalMediaProfileAvailableForSite(profile, video.site?.key)
         || !!downloads?.some((download) => download.localMediaProfileId === profile.id)
     ))
@@ -119,11 +123,10 @@ export default function VideoPage() {
             <article className="episode-details" aria-label="Video details">
                 {/* The menu shares the breadcrumb's row, so the title below gets the full width. */}
                 <div className="episode-topbar">
-                    <nav className="episode-breadcrumb" aria-label="Breadcrumb">
-                        <Link to="/library">Library</Link>
-                        <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
-                        <Link to="/library?type=videos">Videos</Link>
-                    </nav>
+                    <Breadcrumb items={[
+                        {label: 'Library', to: '/library'},
+                        {label: 'Videos', to: '/library?type=videos'},
+                    ]}/>
                     <div className="episode-title-actions">
                         <ActionMenu
                             items={[
@@ -190,18 +193,16 @@ export default function VideoPage() {
                                 </span>
                             </>
                         )}
-                        <span className="episode-summary-separator" aria-hidden="true"/>
-                        <a className="episode-summary-item" href={video.sharingUrl} target="_blank" rel="noreferrer">
-                            <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
-                            <span>Open on {video.site?.name ?? siteName(video.sharingUrl) ?? sourceName}</span>
-                        </a>
+                    </div>
+                    <div className="video-site-link">
+                        <SiteLink url={video.sharingUrl} siteName={video.site?.name ?? siteName(video.sharingUrl) ?? sourceName} site={video.site}/>
                     </div>
                 </header>
 
                 {!!video.description?.trim() && (
                     <section className="episode-description" aria-labelledby="video-description-title">
                         <h2 id="video-description-title">Description</h2>
-                        <p>{video.description}</p>
+                        <p><LinkedText text={video.description}/></p>
                     </section>
                 )}
 
@@ -222,7 +223,7 @@ export default function VideoPage() {
                     {!locked && !downloadStateError && profiles !== undefined && !videoProfiles?.length && (
                         <p>
                             No Video Local Media Profiles yet.{' '}
-                            <Link to="/add-local-media-profile?type=video">Add one</Link> to download this video.
+                            <Link to={addLocalMediaProfilePath({video: 'videos', siteKey: video.site?.key, from: video.title})}>Add one</Link> to download this video.
                         </p>
                     )}
                     {!locked && !downloadStateError && !!videoProfiles?.length && (

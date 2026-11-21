@@ -2,17 +2,21 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, with_expression
 from fastapi import HTTPException
 
 from backend.db.model_mapping import update_database_fields
 from backend.api.models.season import *
-from backend.db.models import Season
+from backend.db.models import Episode, Season
 
 
 def get_seasons_list(s: Session, collection_slug: str) -> list[SeasonAPIRead]:
+    # Its newest episode tells which season a collection page opens on.
+    newest = select(func.max(Episode.published_date)).where(Episode.season_id == Season.id).scalar_subquery()
     seasons = (
         s.query(Season)
+        .options(with_expression(Season.newest_published_at, newest))
         .filter(
             Season.collection.has(slug=collection_slug)
         )
@@ -74,28 +78,3 @@ def update_season(s: Session, collection_slug: str, season_slug: str, body: Seas
     s.flush()
     return SeasonAPIRead.model_validate(season)
 
-
-def delete_season(s: Session, collection_slug: str, season_slug: str) -> SeasonAPIRead:
-    season = (
-        s.query(Season)
-        .filter(
-            Season.slug == season_slug,
-            Season.collection.has(slug=collection_slug)
-        )
-        .one_or_none()
-    )
-    if season is None:
-        raise HTTPException(status_code=404, detail="Season not found")
-
-    payload = SeasonAPIRead.model_validate(season)
-
-    queue_event(s, "season.deleted", {
-        "resource_id": season.id,
-        "id": season.id,
-        "slug": season.slug,
-        "collection_id": season.collection_id
-    })
-
-    s.delete(season)
-    s.flush()
-    return payload

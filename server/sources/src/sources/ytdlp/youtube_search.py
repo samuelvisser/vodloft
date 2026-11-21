@@ -5,14 +5,15 @@ answered; the notice above the results says which one did, and why.
 """
 from __future__ import annotations
 
+import html
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 from urllib.parse import quote_plus
 
 from ..contract import LinkKind, ResolvedLink, SearchNotice
 from .. import ytdlp_runner as runner
 from ..cookies import site_cookies
+from .search_facts import date as _date, facts as _facts, length as _length, plural as _plural
 from .youtube_api import mapping, quota
 from .youtube_api.catalogue import Catalogue
 from .youtube_api.quota import Share
@@ -33,46 +34,19 @@ _PLAYLISTS_FILTER = "EgIQAw%253D%253D"
 SETTINGS_PATH = "/settings?tab=sources"
 
 
-def _count(value) -> str | None:
-    """18100000 as 18.1M, 2400 as 2.4K."""
-    try:
-        number = int(value)
-    except (TypeError, ValueError):
-        return None
-    for size, suffix in ((1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")):
-        if number >= size:
-            return f"{number / size:.1f}".removesuffix(".0") + suffix
-    return str(number)
-
-
-def _plural(value, word: str) -> str | None:
-    count = _count(value)
-    if count is None:
-        return None
-    return f"{count} {word}" if count == "1" else f"{count} {word}s"
-
-
-def _length(seconds: float | None) -> str | None:
-    if not seconds:
-        return None
-    seconds = int(seconds)
-    hours, rest = divmod(seconds, 3600)
-    minutes, seconds = divmod(rest, 60)
-    return f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
-
-
-def _date(value: datetime | None) -> str | None:
-    return f"{value.day} {value:%b %Y}" if value else None
-
-
-def _facts(*facts: str | None) -> tuple[str, ...]:
-    return tuple(fact for fact in facts if fact)
-
-
 # ---- The YouTube Data API ----
 
+def _snippet(item: dict) -> dict:
+    """The item's snippet. search.list escapes its text as HTML, such as ``Here&#39;s``; it is read as text."""
+    snippet = dict(item.get("snippet") or {})
+    for key in ("title", "description", "channelTitle"):
+        if isinstance(snippet.get(key), str):
+            snippet[key] = html.unescape(snippet[key])
+    return snippet
+
+
 def _api_channel(item: dict, channel: dict | None) -> ResolvedLink:
-    snippet = item.get("snippet") or {}
+    snippet = _snippet(item)
     channel_id = item["id"]["channelId"]
     stats = (channel or {}).get("statistics") or {}
     subscribers = None if stats.get("hiddenSubscriberCount") else _plural(stats.get("subscriberCount"), "subscriber")
@@ -85,7 +59,7 @@ def _api_channel(item: dict, channel: dict | None) -> ResolvedLink:
 
 
 def _api_playlist(item: dict, playlist: dict | None) -> ResolvedLink:
-    snippet = item.get("snippet") or {}
+    snippet = _snippet(item)
     playlist_id = item["id"]["playlistId"]
     count = ((playlist or {}).get("contentDetails") or {}).get("itemCount")
     return ResolvedLink(
@@ -97,7 +71,7 @@ def _api_playlist(item: dict, playlist: dict | None) -> ResolvedLink:
 
 
 def _api_video(item: dict, video: dict | None) -> ResolvedLink:
-    snippet = item.get("snippet") or {}
+    snippet = _snippet(item)
     video_id = item["id"]["videoId"]
     if video is not None and mapping.is_pending(video):
         when = "Live now" if (video.get("snippet") or {}).get("liveBroadcastContent") == "live" else "Upcoming"

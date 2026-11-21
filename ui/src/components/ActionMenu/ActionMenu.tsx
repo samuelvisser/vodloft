@@ -46,6 +46,8 @@ type Props = {
     /** A line at the foot of the menu about the item it acts on, for a fact that has no action of its own. */
     note?: string
     className?: string
+    /** Show the trigger as a round button with this icon, and `label` only for screen readers and as a tooltip. */
+    triggerIcon?: any
 }
 
 function normalizedProgress(value: number | undefined) {
@@ -53,7 +55,7 @@ function normalizedProgress(value: number | undefined) {
     return Math.max(0, Math.min(100, Math.round(value)))
 }
 
-export default function ActionMenu({label = 'Actions', items, note, className = ''}: Props) {
+export default function ActionMenu({label = 'Actions', items, note, className = '', triggerIcon}: Props) {
     const [open, setOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
     const triggerRef = useRef<HTMLButtonElement>(null)
@@ -135,14 +137,20 @@ export default function ActionMenu({label = 'Actions', items, note, className = 
             <button
                 ref={triggerRef}
                 type="button"
-                className="btn btn-secondary action-menu-trigger"
+                className={`btn btn-secondary action-menu-trigger${triggerIcon ? ' action-menu-trigger--icon' : ''}`}
                 aria-haspopup="menu"
                 aria-expanded={open}
                 aria-controls={menuId}
+                aria-label={triggerIcon ? label : undefined}
+                title={triggerIcon ? label : undefined}
                 onClick={() => setOpen((value) => !value)}
             >
-                <span>{label}</span>
-                <FontAwesomeIcon className="action-menu-caret" icon={faIcon('fass', 'chevron-down')} aria-hidden="true"/>
+                {triggerIcon ? <FontAwesomeIcon icon={triggerIcon} aria-hidden="true"/> : (
+                    <>
+                        <span>{label}</span>
+                        <FontAwesomeIcon className="action-menu-caret" icon={faIcon('fass', 'chevron-down')} aria-hidden="true"/>
+                    </>
+                )}
             </button>
 
             {open && (
@@ -218,6 +226,7 @@ export default function ActionMenu({label = 'Actions', items, note, className = 
                                                 {presentation && (
                                                     <ProgressExplanation
                                                         detail={presentation.detail}
+                                                        steps={presentation.steps}
                                                         buttonClassName="action-menu-item-control"
                                                     />
                                                 )}

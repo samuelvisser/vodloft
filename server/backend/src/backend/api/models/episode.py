@@ -8,7 +8,7 @@ from pydantic import AwareDatetime, computed_field, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.api.models.pagination import CursorPageRead
-from backend.api.models.source import LockableResponse, SourcedResponse
+from backend.api.models.source import NamesAPIRead, RetentionResponse, SourcedResponse
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import EpisodeIdentifierInfo
 
@@ -80,7 +80,7 @@ class _EpisodeIdentifierAPIOut(ResponseBase):
         return values
 
 
-class _EpisodeAPIBaseOut(SourcedResponse, LockableResponse, _EpisodeIdentifierAPIOut):
+class _EpisodeAPIBaseOut(SourcedResponse, RetentionResponse, _EpisodeIdentifierAPIOut):
     """Complete episode response fields shared by full read models."""
 
 
@@ -96,7 +96,6 @@ class _EpisodeAPIBaseOut(SourcedResponse, LockableResponse, _EpisodeIdentifierAP
     scheduled_date: Optional[datetime]
     metadata_refreshed_at: Optional[datetime] = None
     sharing_url: str
-    early_delete_available: bool = False
     download_delay_passed: bool
     download_delay_ready_at: Optional[datetime]
 
@@ -120,7 +119,7 @@ class EpisodeAPIRead(_EpisodeAPIBaseOut):
     updated_at: datetime
 
 
-class EpisodeAPIReadView(SourcedResponse, LockableResponse, _EpisodeIdentifierAPIOut):
+class EpisodeAPIReadView(SourcedResponse, RetentionResponse, _EpisodeIdentifierAPIOut):
     """Small episode representation used by collection grids and browser-side warm caches."""
 
     id: int
@@ -158,3 +157,18 @@ class EpisodeIndexedActivityAPIRead(ResponseBase):
     collection_title: str
     collection_slug: str
     indexed_at: datetime
+
+
+class EpisodeSeasonPlaceAPIRead(ResponseBase):
+    """Whether a video with files is in another season than its collection's playlists put it in now."""
+
+    belongs_elsewhere: bool
+    season_name: Optional[str] = None
+    """The season it belongs in now, when it is made already."""
+    link_title: Optional[str] = None
+    """The playlist it belongs in now; None when it belongs with the videos in no playlist."""
+    link_names: Optional[NamesAPIRead] = None
+    """What the collection's Site calls its link seasons, such as playlist, or album on Bandcamp."""
+    collection_slug: Optional[str] = None
+    """Reassigned: the collection of its creator that it belongs in now, when that is another one."""
+    collection_title: Optional[str] = None

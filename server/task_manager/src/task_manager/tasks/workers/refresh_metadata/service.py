@@ -14,8 +14,11 @@ next interval; after a restart it is tried once more.
 Items of a Source with ``Feature.METADATA_REFRESH`` are looked up per Source in
 one go, so the yt-dlp Source can ask the YouTube API for 50 videos at a time. The
 Daily Wire's episodes are looked up one by one by its own refresh, which also
-hands an episode over to the pending checks or the no-usable-media checks when
-The Daily Wire says it is live again or gone.
+hands an episode over to the pending checks when The Daily Wire says it is live
+again.
+
+An episode the Source no longer has is marked removed from it when it has files,
+and deleted when it has none.
 
 Refresh now, for one episode or a whole collection, looks an episode up the same
 way right away.
@@ -30,12 +33,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from backend.db.datetime_types import utc_datetime
 from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode, Site, Video
 from backend.services.media_access import lock_refused
+from backend.services.removed_downloads import back_at_source, left_source
+from backend.services.sites import episode_site_key
 from backend.services.metadata_refresh import (
     refresh_watch_expired,
     refreshes_one_by_one,
@@ -127,10 +132,14 @@ def _site_name(site: Optional[Site]) -> str:
 
 
 def _watched_episode(episode: Episode) -> _Watched:
+    # In a collection of links from several Sites, each episode follows its own Site.
+    site_key = episode_site_key(episode)
     site = episode.collection.site
+    if site_key != episode.collection.site_key:
+        site = object_session(episode).get(Site, site_key) if site_key else None
     return _Watched(
-        Episode, episode.id, episode.source_key, _site_name(site), ItemRef(episode.source_slug, episode.sharing_url),
-        best_effort_published_date(episode), site_refresh_offsets(episode.collection.site_key), refreshes_one_by_one(episode.source_key),
+        Episode, episode.id, episode.source_key, _site_name(site), ItemRef(episode.video_slug, episode.sharing_url),
+        best_effort_published_date(episode), site_refresh_offsets(site_key), refreshes_one_by_one(episode.source_key),
         episode.metadata_refreshed_at,
     )
 
@@ -201,9 +210,9 @@ def _refresh_one_by_one(s: Session, item: _Watched, counts: SiteCounts, now: dat
         if refreshed:
             counts.updated += 1
             return True
-        # It is live again or has no usable media, and the pending or no-usable-media checks follow it.
+        # It is live again, and the pending checks follow it, or The Daily Wire no longer has it.
         row = s.get(Episode, item.id)
-        if row is not None and row.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value:
+        if row is None or row.removed_from_source:
             counts.removed += 1
         return False
     counts.failed += 1
@@ -245,12 +254,20 @@ def _store(w: Session, item: _Watched, answer: _Answers | None, now: datetime) -
         if item.ref.slug in answer.removed:
             row.metadata_refreshed_at = now
             if not row.removed_from_source:
-                row.removed_from_source = True
                 counts.removed += 1
+            if isinstance(row, Episode):
+                if left_source(w, row, now=now):
+                    return counts
+            else:
+                row.removed_from_source = True
         elif (details := answer.details.get(item.ref.slug)) is not None or item.ref.slug in answer.refused:
-            row.removed_from_source = False
+            if isinstance(row, Episode):
+                back_at_source(row)
+            else:
+                row.removed_from_source = False
             row.metadata_refreshed_at = now
-            if details is not None:
+            # A part of a split video keeps its chapter's title and length.
+            if details is not None and not (isinstance(row, Episode) and row.part_of is not None):
                 counts.updated += apply_refreshed_details(row, details, now=now)
                 if isinstance(row, Episode):
                     check_upgrades_after_refresh(w, row)

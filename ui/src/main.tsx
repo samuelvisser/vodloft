@@ -17,7 +17,8 @@ import {
   scheduleCollectionDataCacheWarm,
 } from './lib/collectionDataCacheWarmer'
 import { loadAppConfig } from './general_utils.js'
-import { loadPublicConfig } from './lib/publicConfig'
+import { getPublicConfig, loadPublicConfig } from './lib/publicConfig'
+import { loadCollectionContracts } from './lib/collectionWords'
 import { router } from './router'
 import { registerServiceWorker } from './lib/registerServiceWorker'
 import { can, loadAccess } from './lib/access'
@@ -33,6 +34,9 @@ async function bootstrap() {
   } catch (error) {
     console.error('[publicConfig] Failed to load public config during bootstrap', error)
   }
+
+  // What each collection type calls its seasons and episodes, which every page names them by.
+  loadCollectionContracts(getPublicConfig()?.collectionContracts)
 
   // Who is signed in decides what to load; App shows the sign-in page when nobody is.
   try {

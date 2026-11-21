@@ -131,7 +131,7 @@ def test_the_api_and_ytdlp_make_the_same_episode(path):
         assert mapping.is_pending(api_item)
         return
     url = ytdlp_info["webpage_url"]
-    from_ytdlp = YtDlpSource._video(ytdlp_info, url)
+    from_ytdlp = YtDlpSource()._video(ytdlp_info, url)
     from_api = mapping.video(api_item, short=fixture["playlist"] == "UUSH")
 
     assert from_api.published_at == from_ytdlp.published_at
@@ -281,7 +281,7 @@ def test_a_rescan_only_details_new_videos_and_pays_from_the_checks_share(youtube
 def test_adding_a_collection_moves_on_to_the_checks_share_when_the_reserve_is_used(youtube):
     youtube.playlists["PL1"] = ["v1"]
     youtube.videos["v1"] = _video_item("v1")
-    assert quota.try_spend(Share.RESERVE, quota.status().usage(Share.RESERVE).limit)
+    assert quota.try_spend(Share.RESERVE, quota.status().usage(Share.RESERVE).limit, call="videos")
 
     found = list(YtDlpSource().list_episodes("https://www.youtube.com/playlist?list=PL1", known=frozenset()))
 

@@ -22,13 +22,16 @@ _WORKER_EXPORTS = {
     "refresh_metadata": ".workers.refresh_metadata",
     "rename_file_worker": ".workers.rename_file_worker",
     "rename_collection_profile_files": ".workers.rename_collection_profile_files",
+    "rewrite_collection_profile_metadata": ".workers.rewrite_collection_profile_metadata",
+    "change_collection_identification": ".workers.change_collection_identification",
     "rename_movie_profile_files": ".workers.rename_movie_profile_files",
     "move_collection_profile_episodes": ".workers.move_collection_profile_episodes",
     "delete_collection_downloads_worker": ".workers.delete_collection_downloads_worker",
+    "remove_left_episodes": ".workers.remove_left_episodes",
+    "remove_skipped_collection": ".workers.remove_skipped_collection",
     "media_download_bulk_action_worker": ".workers.media_download_bulk_action_worker",
     "media_download_attach_retries": ".workers.media_download_attach_retries",
     "fetch_new_episodes": ".workers.fetch_new_episodes",
-    "monitor_no_usable_media_episode": ".workers.monitor_no_usable_media_episode",
     "scan_existing_files": ".workers.scan_existing_files",
     "import_run": ".workers.import_run",
     "import_adopt_files": ".workers.import_run",
@@ -41,6 +44,7 @@ _WORKER_EXPORTS = {
     "upgrade_check": ".workers.upgrade_check",
     "check_locked_media": ".workers.check_locked_media",
     "rescan_quick_checked_collections": ".workers.quick_check_new_videos",
+    "follow_creators": ".workers.follow_creators",
 }
 
 

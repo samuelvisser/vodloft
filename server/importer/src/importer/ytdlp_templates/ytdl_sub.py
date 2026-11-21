@@ -65,10 +65,24 @@ ENTRY_VARIABLES: dict[str, tuple[str, str | None]] = {
     # ytdl-sub's own numbers, kept as VODLoft's Custom Indexes.
     "upload_date_index": (f"{PSEUDO_FIELD_PREFIX}upload_date_index", None),
     "upload_date_index_padded": (f"{PSEUDO_FIELD_PREFIX}upload_date_index_padded", None),
+    "upload_date_index_reversed_padded": (f"{PSEUDO_FIELD_PREFIX}upload_date_index_reversed_padded", None),
+    # Counted back, so the newest sorts first.
+    **{f"{kind}_day_of_year_reversed{padded}": (f"{PSEUDO_FIELD_PREFIX}day_of_year_reversed", None)
+       for kind in ("upload", "release") for padded in ("", "_padded")},
+    **{f"{kind}_year_truncated_reversed": (f"{PSEUDO_FIELD_PREFIX}year_truncated_reversed", None)
+       for kind in ("upload", "release")},
     "download_index": (f"{PSEUDO_FIELD_PREFIX}download_index", None),
     "download_index_padded6": (f"{PSEUDO_FIELD_PREFIX}download_index_padded6", None),
     "playlist_index_padded6": (f"{PSEUDO_FIELD_PREFIX}playlist_index_padded6", None),
     "subscription_name": (f"{PSEUDO_FIELD_PREFIX}subscription_name", None),
+    # A Music profile's own values for the artist, the album (the episode's season) and the track.
+    "music_artist": (f"{PSEUDO_FIELD_PREFIX}music_artist", None),
+    "music_album": (f"{PSEUDO_FIELD_PREFIX}music_album", None),
+    "music_track_number": (f"{PSEUDO_FIELD_PREFIX}music_track_number", None),
+    "music_track_number_padded": (f"{PSEUDO_FIELD_PREFIX}music_track_number_padded", None),
+    # A TV Show Collection's season, numbered as ytdl-sub numbers it: the import keeps each link's number.
+    "collection_season_number": (f"{PSEUDO_FIELD_PREFIX}season_number", None),
+    "collection_season_number_padded": (f"{PSEUDO_FIELD_PREFIX}season_number_padded", None),
     # Plex's variants swap digits for full-width ones, so Plex doesn't read "4x4" as an episode number.
     "title_sanitized_plex": (f"{PSEUDO_FIELD_PREFIX}title_plex", None),
     "uid_sanitized_plex": (f"{PSEUDO_FIELD_PREFIX}uid_plex", None),
@@ -81,6 +95,18 @@ YTDL_SUB_FIELDS: dict[str, FieldValue] = {
     f"{PSEUDO_FIELD_PREFIX}upload_date_index_padded": FieldValue(
         "'%02d' | format('day' | custom_index(per=date))", always=True, support="close", reason=_INDEX_REASON,
     ),
+    f"{PSEUDO_FIELD_PREFIX}upload_date_index_reversed_padded": FieldValue(
+        "'%02d' | format('day' | custom_index(per=date, start=99, step=-1))", always=True, support="close",
+        reason="Imported numbers are kept; new days start at 99 like ytdl-sub, and a second upload that day gets 98",
+    ),
+    f"{PSEUDO_FIELD_PREFIX}day_of_year_reversed": FieldValue(
+        "day_of_year_reversed", always=True, support="close",
+        reason="VODLoft uses the upload date; a premiere's release date can differ",
+    ),
+    f"{PSEUDO_FIELD_PREFIX}year_truncated_reversed": FieldValue(
+        "'%02d' | format(100 - (year | int) % 100)", always=True, support="close",
+        reason="VODLoft uses the upload date; a premiere's release date can differ",
+    ),
     f"{PSEUDO_FIELD_PREFIX}download_index": FieldValue(
         "'autonumber' | custom_index", "index", always=True, support="close", reason=_INDEX_REASON,
     ),
@@ -90,6 +116,12 @@ YTDL_SUB_FIELDS: dict[str, FieldValue] = {
     f"{PSEUDO_FIELD_PREFIX}playlist_index_padded6": FieldValue(
         "'%06d' | format('playlist' | custom_index)", always=True, support="close", reason=_INDEX_REASON,
     ),
+    f"{PSEUDO_FIELD_PREFIX}music_artist": FieldValue("artist", always=True),
+    f"{PSEUDO_FIELD_PREFIX}music_album": FieldValue("album", always=True),
+    f"{PSEUDO_FIELD_PREFIX}music_track_number": FieldValue("track_number", always=True),
+    f"{PSEUDO_FIELD_PREFIX}music_track_number_padded": FieldValue("track_number_padded", always=True),
+    f"{PSEUDO_FIELD_PREFIX}season_number": FieldValue("season_number", always=True),
+    f"{PSEUDO_FIELD_PREFIX}season_number_padded": FieldValue("'%02d' | format(season_number | int)", always=True),
     # The import names each Collection after its subscription.
     f"{PSEUDO_FIELD_PREFIX}subscription_name": FieldValue("collection_title", always=True),
     f"{PSEUDO_FIELD_PREFIX}title_plex": FieldValue(

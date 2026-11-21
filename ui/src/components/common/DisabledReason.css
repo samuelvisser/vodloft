@@ -99,3 +99,11 @@ span.vl-disabled-reason {
         transform: translateY(0);
     }
 }
+
+/* A short dropdown whose options can explain why they can't be chosen: the explanation shows past the menu's edge.
+   Only for a few options, which fit without scrolling. */
+.select-with-option-reasons .select__menu,
+.select-with-option-reasons .select__menu-list {
+    overflow: visible !important;
+    max-height: none !important;
+}

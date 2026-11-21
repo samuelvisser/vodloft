@@ -56,6 +56,22 @@ def test_collection_episode_tags_lists_only_the_types_its_episodes_have(session)
     assert [tag.key for tag in get_collection_episode_tags(session, "show")] == ["ep", "short"]
 
 
+@pytest.mark.parametrize("collection_type, url, main", [
+    ("podcast", "https://www.youtube.com/@show", "Episode"),
+    ("series", "https://www.youtube.com/@show", "Episode"),
+    ("music", "https://www.youtube.com/@show", "Music video"),
+    ("music", "https://show.bandcamp.com/music", "Track"),
+])
+def test_the_main_tag_is_named_as_the_collection_names_its_episodes(session, collection_type, url, main):
+    from backend.db.models import Collection
+    from backend.services.sites import collection_episode_tags
+
+    collection = Collection(source_key="ytdlp", type=collection_type, sharing_url=url)
+    tags = collection_episode_tags(collection)
+    assert (tags[0].key, tags[0].label) == ("ep", main)
+    assert tags[0].names.singular == main.lower()
+
+
 def test_episode_pages_of_one_type_follow_the_cursor(session):
     from backend.api.endpoints.episodes.service import get_episode_views_by_collection_page
 

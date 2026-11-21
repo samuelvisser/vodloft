@@ -7,12 +7,13 @@ from pathlib import Path
 import pytest
 
 from sources import LinkKind
-from sources.ytdlp import YtDlpSource
+from sources.ytdlp import YtDlpSource, sites
 from sources.ytdlp.youtube_api import Share, key as key_store, quota
 
 from test_youtube_api import quota_settings  # noqa: F401
 from test_youtube_catalogue import _video_item, lookups, youtube, ytdlp_dir  # noqa: F401
 
+YOUTUBE = sites.site_of("youtube")
 RECORDED = json.loads((Path(__file__).resolve().parents[1] / "fixtures" / "youtube-search" / "veritasium.json").read_text())
 CHANNELS = ("--flat-playlist", "--playlist-items", "1:5",
             "https://www.youtube.com/results?search_query=veritasium&sp=EgIQAg%253D%253D")
@@ -49,7 +50,7 @@ def test_with_a_key_the_api_answers_with_counts_durations_and_dates(youtube):
         _search_item("video", "v1", "Why no one has measured the speed of light"),
     ]
 
-    answer = YtDlpSource().search("veritasium")
+    answer = YtDlpSource().search(YOUTUBE, "veritasium")
 
     channel, playlist, video = answer.results
     assert (channel.kind, channel.slug, channel.kind_label, channel.facts) == (
@@ -64,16 +65,36 @@ def test_with_a_key_the_api_answers_with_counts_durations_and_dates(youtube):
     assert answer.notice.text == "About 18 API searches left today"
 
 
+def test_api_results_read_the_text_youtube_escapes_as_html(youtube):
+    youtube.search_results = [_search_item("video", "v1", "Here&#39;s what &quot;fast&quot; means &amp; why")]
+
+    (video,) = YtDlpSource().search(YOUTUBE, "veritasium").results
+
+    assert video.title == 'Here\'s what "fast" means & why'
+
+
+def test_a_channel_result_can_be_added_as_a_creator_and_a_playlist_cannot(youtube):
+    from backend.api.endpoints.sources.service import search_source
+    from backend.security.access import Access
+
+    youtube.search_results = [_search_item("channel", "UCv", "Veritasium"), _search_item("playlist", "PL1", "Physics")]
+
+    results = search_source(Access.full(), YtDlpSource(), "youtube", "veritasium").results
+
+    assert [(result.slug, result.creator_names and result.creator_names.singular) for result in results] == [
+        ("UCv", "creator"), ("PL1", None)]
+
+
 def test_the_same_search_within_an_hour_costs_nothing(youtube):
     source = YtDlpSource()
-    source.search("veritasium")
-    source.search("  Veritasium ")
+    source.search(YOUTUBE, "veritasium")
+    source.search(YOUTUBE, "  Veritasium ")
 
     assert [name for name, _ in youtube.calls] == ["search"]
 
 
 def test_without_a_key_ytdlp_answers_with_channels_playlists_and_videos(recorded):
-    answer = YtDlpSource().search("veritasium")
+    answer = YtDlpSource().search(YOUTUBE, "veritasium")
 
     assert [(r.kind_label, r.title) for r in answer.results] == [
         ("Channel", "Veritasium"), ("Channel", "2veritasium"),
@@ -91,7 +112,7 @@ def test_without_a_key_ytdlp_answers_with_channels_playlists_and_videos(recorded
 def test_with_the_search_quota_used_up_ytdlp_answers_with_a_warning(youtube, recorded):
     quota.mark_exhausted()
 
-    answer = YtDlpSource().search("veritasium")
+    answer = YtDlpSource().search(YOUTUBE, "veritasium")
 
     assert len(answer.results) == 6
     assert (answer.notice.badge, answer.notice.tone) == ("Slower search via yt-dlp", "warning")
@@ -102,7 +123,7 @@ def test_with_the_search_quota_used_up_ytdlp_answers_with_a_warning(youtube, rec
 def test_with_a_search_share_of_zero_ytdlp_answers_and_says_why(youtube, recorded, quota_settings):
     quota_settings(search_quota=0)
 
-    answer = YtDlpSource().search("veritasium")
+    answer = YtDlpSource().search(YOUTUBE, "veritasium")
 
     assert len(answer.results) == 6 and "turned off" in answer.notice.text
     assert youtube.calls == []
@@ -111,7 +132,7 @@ def test_with_a_search_share_of_zero_ytdlp_answers_and_says_why(youtube, recorde
 def test_when_the_api_fails_ytdlp_answers(youtube, recorded):
     youtube.failing.add("search")
 
-    answer = YtDlpSource().search("veritasium")
+    answer = YtDlpSource().search(YOUTUBE, "veritasium")
 
     assert len(answer.results) == 6 and answer.notice.tone == "warning"
 
@@ -120,6 +141,6 @@ def test_failed_channel_and_playlist_searches_still_leave_the_videos(lookups):
     answers, _ = lookups
     answers[VIDEOS] = RECORDED["videos"]
 
-    answer = YtDlpSource().search("veritasium")
+    answer = YtDlpSource().search(YOUTUBE, "veritasium")
 
     assert [r.kind_label for r in answer.results] == ["Video", "Video"]

@@ -2,51 +2,22 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import field_validator
-
-from backend.api.models.local_media_profile import (
-    LocalMediaProfileAPIBaseIn,
-    LocalMediaProfileAPIBaseOut,
-)
-from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat
-from backend.utils.output_template import (
-    VIDEO_OUTPUT_TEMPLATE_FIELDS,
-    output_template_custom_index_keys,
-    validate_output_template_path_requirements,
-)
+from backend.api.models.base import RequestBase
+from backend.api.models.local_media_profile import LocalMediaProfileAPIBaseOut
+from backend.services.local_media_profile_inputs import VideoLocalMediaProfileInput
+from backend.types.local_media_profile_types import LocalMediaProfileType, VideoLocalMediaProfileScope
 
 
-class _VideoLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
-    type: Literal["video"] = LocalMediaProfileType.VIDEO.value
-
-    @field_validator("preferred_format")
-    @classmethod
-    def _reject_hls(cls, value: PreferredFormat) -> PreferredFormat:
-        if value == PreferredFormat.FORMAT_HLS:
-            raise ValueError("Video Local Media Profiles cannot keep an HLS bundle")
-        return value
-
-    @field_validator("output_template")
-    @classmethod
-    def _validate_output_template(cls, value: str) -> str:
-        validate_output_template_path_requirements(value, allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS)
-        if output_template_custom_index_keys(value):
-            raise ValueError("custom_index is only available to Collection Local Media Profiles")
-        return value
-
-
-class VideoLocalMediaProfileAPICreate(_VideoLocalMediaProfileAPIBaseIn):
+class VideoLocalMediaProfileAPICreate(RequestBase, VideoLocalMediaProfileInput):
     """Create a Video Local Media Profile."""
 
-    # New Video profiles start without subtitles; they can be turned on like any other profile.
-    subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.NO_SUBTITLES
 
-
-class VideoLocalMediaProfileAPIUpdate(_VideoLocalMediaProfileAPIBaseIn):
+class VideoLocalMediaProfileAPIUpdate(RequestBase, VideoLocalMediaProfileInput):
     """Update a Video Local Media Profile."""
 
 
 class VideoLocalMediaProfileAPIRead(LocalMediaProfileAPIBaseOut):
-    """Read a Video Local Media Profile."""
+    """Read a Video Local Media Profile: one for single videos, and movies with their extras."""
 
     type: Literal["video"] = LocalMediaProfileType.VIDEO.value
+    video_scope: VideoLocalMediaProfileScope = VideoLocalMediaProfileScope.BOTH

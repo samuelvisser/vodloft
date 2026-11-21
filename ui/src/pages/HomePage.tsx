@@ -6,6 +6,7 @@ import {faIcon} from '../icons/faIcon'
 
 import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
 import KeepQuestions from '../components/KeepQuestions/KeepQuestions'
+import ApiKeyNote from '../components/ApiKeyNote/ApiKeyNote'
 import {
     useLocalMediaProfiles,
     useLocalMediaProfilesStorage,
@@ -15,6 +16,7 @@ import {
     useCollections,
     useKeepQuestions,
     useSourceProblems,
+    useMovesWaiting,
 } from '../lib/queries'
 import {
     DEFAULT_DOWNLOAD_STATUS_FILTER,
@@ -24,6 +26,8 @@ import {EpisodeIndexedActivityRead} from '../types/schemas/episode'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 import {formatBytes} from '../utils/formatting'
+import {wordsOf} from '../lib/collectionWords'
+import type {MovesWaiting} from '../types/schemas/creator'
 
 const IN_PROGRESS = ['preparing', 'waiting', 'canceling', 'downloading', 'local_processing'] as const
 const QUEUED = ['pending'] as const
@@ -45,6 +49,16 @@ function mediaContext(download: MediaDownloadViewRead) {
         return `${movieExtraTypeLabel(download.movieExtraType)} • ${download.movieTitle || 'Movie'}`
     }
     return download.movieTitle ? 'Movie' : download.collectionTitle || 'Episode'
+}
+
+/** Why a creator's or collection's episodes wait, in its own words. */
+function movesDetail(item: MovesWaiting) {
+    const {episode, season, count} = wordsOf(item.words)
+    const belong = (n: number) => `${count(n)} ${n === 1 ? 'belongs' : 'belong'}`
+    return [
+        item.reassigned ? `${belong(item.reassigned)} in another collection now (Reassigned)` : null,
+        item.moved ? `${belong(item.moved)} in another ${season.singular} now (Moved)` : null,
+    ].filter(Boolean).join('; ') + `. Downloaded ${episode.plural} stay where they are, files and all, until you move them.`
 }
 
 export default function HomePage() {
@@ -87,7 +101,10 @@ export default function HomePage() {
     const problems = problemsQuery.data
     const metadataProblems = movies?.filter((movie) => movie.releaseDateLookupStatus === 'error') || []
     const sourceProblems = sourceProblemsQuery.data ?? []
-    const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0 || sourceProblems.length > 0
+    // Downloaded episodes whose lists put them elsewhere wait for their Move action, files and all.
+    const movesWaiting = useMovesWaiting(can('library', 'view')).data ?? []
+    const episodesWaiting = movesWaiting.reduce((sum, item) => sum + item.reassigned + item.moved, 0)
+    const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0 || sourceProblems.length > 0 || episodesWaiting > 0
     // The keep question has its own card above, so it does not fill Needs attention.
     const needsAnAnswer = hasAttention || keepQuestionEpisodes > 0
     const downloadError = (
@@ -105,6 +122,7 @@ export default function HomePage() {
         metadataProblems.length ? `${metadataProblems.length} movie metadata problem${metadataProblems.length === 1 ? '' : 's'}` : null,
         profiles?.length === 0 ? 'No Local Media Profiles' : null,
         ...sourceProblems.map((problem) => problem.title),
+        episodesWaiting ? `${episodesWaiting} download${episodesWaiting === 1 ? '' : 's'} to move` : null,
         keepQuestionEpisodes ? `${keepQuestionEpisodes} download${keepQuestionEpisodes === 1 ? '' : 's'} removed from the Source` : null,
     ].filter(Boolean).join(' • ')
     const recentActivity = useMemo(() => {
@@ -159,6 +177,8 @@ export default function HomePage() {
 
             <KeepQuestions questions={keepQuestions}/>
 
+            <ApiKeyNote/>
+
             <div className="operation-stats" aria-label="VODLoft status summary">
                 <Link to={downloadsUrlForStatusFilters('downloading', 'local_processing')}><span>Active</span><strong>{IN_PROGRESS.reduce((total, status) => total + (downloadsQuery.facets[status] ?? 0), 0)}</strong></Link>
                 <Link to={downloadsUrlForStatusFilters('pending')}><span>Queued</span><strong>{downloadsQuery.facets.pending ?? 0}</strong></Link>
@@ -198,6 +218,16 @@ export default function HomePage() {
                     {sourceProblems.map((problem) => (
                         <Link className="operation-alert" key={`source-${problem.sourceKey}-${problem.title}`} to="/settings?tab=sources">
                             <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/><span><strong>{problem.title}</strong><small>{problem.detail}</small></span><span>Fix</span>
+                        </Link>
+                    ))}
+                    {movesWaiting.slice(0, HOME_SECTION_LIMIT).map((item) => (
+                        <Link className="operation-alert" key={`moves-${item.kind}-${item.slug}`} to={`/${item.kind}/${item.slug}?move=1`}>
+                            <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-arrow-left')}/>
+                            <span>
+                                <strong>{item.title}</strong>
+                                <small>{movesDetail(item)}</small>
+                            </span>
+                            <span>Move</span>
                         </Link>
                     ))}
                     {metadataProblems.slice(0, HOME_SECTION_LIMIT).map((movie) => (

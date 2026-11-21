@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
-import LocalMediaProfileForm, {LocalMediaProfileMode} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import LocalMediaProfileForm, {profileMode} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
 import IndexingValuesEditorButton from '../../components/LocalMediaProfile/IndexingValuesEditorButton'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
@@ -8,10 +8,6 @@ import {
     LocalMediaProfileCreateOut,
     LocalMediaProfileRead,
 } from '../../types/schemas/local_media_profile'
-import {
-    MovieLocalMediaProfileCreateIn,
-    MovieLocalMediaProfileCreateSchema,
-} from '../../types/schemas/movie_local_media_profile'
 import {
     CollectionLocalMediaProfileCreateIn,
     CollectionLocalMediaProfileCreateSchema,
@@ -24,6 +20,8 @@ import {useForm, UseFormReturn} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {WithRoot} from '../../types/form'
 import {buildLocalMediaProfileOnSubmit} from '../../components/LocalMediaProfile/LocalMediaProfileForm'
+import {OriginName, ProfileFitProvider} from '../../components/LocalMediaProfile/ProfileFit'
+import RequestedField, {RequestedFieldsProvider, requestedOrigin} from '../../components/common/RequestedField'
 import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
 import {
     addLocalMediaProfileDraftKey,
@@ -33,14 +31,13 @@ import {
 } from '../../components/LocalMediaProfile/localMediaProfileDraft'
 import UnsavedChangesBar from '../../components/FormDraft/UnsavedChangesBar'
 import {getZodDefaults} from '../../utils/defaultZod'
-import {LocalMediaProfileTypeReg, localMediaProfileEndpoint} from '../../types/local_media_profile'
+import {LocalMediaProfileType, LocalMediaProfileTypeReg, PreferredFormatReg, safeReturnPath, localMediaProfileEndpoint} from '../../types/local_media_profile'
 import {apiUrl} from '../../lib/api'
 
 
 /** The settings of an existing profile as a new profile, under a name the user still has to accept. */
 function duplicateValues(profile: LocalMediaProfileRead): LocalMediaProfileCreateIn {
     const values = {...profile, name: `${profile.name} (copy)`}
-    if (profile.type === 'movie') return MovieLocalMediaProfileCreateSchema.parse(values)
     if (profile.type === 'video') return VideoLocalMediaProfileCreateSchema.parse(values)
     return CollectionLocalMediaProfileCreateSchema.parse(values)
 }
@@ -102,11 +99,10 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
         [source],
     )
     const requestedMode = searchParams.get('type')
-    const explicitMode = !source && (requestedMode === 'movie' || requestedMode === 'collection' || requestedMode === 'video')
-        ? requestedMode
-        : undefined
-    const initialMode: LocalMediaProfileMode = explicitMode || (restoredDraft?.mode ?? 'collection')
-    const [mode, setMode] = useState<LocalMediaProfileMode>(initialMode)
+    const explicitType = !source && LocalMediaProfileTypeReg.is(requestedMode) ? requestedMode : undefined
+    const initialType: LocalMediaProfileType = explicitType || (restoredDraft?.mode ?? 'collection')
+    const [profileType, setProfileType] = useState<LocalMediaProfileType>(initialType)
+    const mode = profileMode(profileType)
     // A draft is only kept once something is typed, so a draft that is there holds the user's own changes.
     const showRestored = !source && !!restoredDraft
 
@@ -118,18 +114,6 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
             ...getZodDefaults(CollectionLocalMediaProfileCreateSchema),
             ...(restoredDraft?.mode === 'collection'
                 ? restoredDraft.values as Partial<CollectionLocalMediaProfileCreateIn>
-                : {}),
-        },
-    })
-
-    const formMovie = useForm<WithRoot<MovieLocalMediaProfileCreateIn>>({
-        resolver: zodResolver(MovieLocalMediaProfileCreateSchema),
-        mode: 'onBlur',
-        shouldFocusError: true,
-        defaultValues: {
-            ...getZodDefaults(MovieLocalMediaProfileCreateSchema),
-            ...(restoredDraft?.mode === 'movie'
-                ? restoredDraft.values as Partial<MovieLocalMediaProfileCreateIn>
                 : {}),
         },
     })
@@ -146,14 +130,26 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
         },
     })
 
-    const form = ({collection: formCollection, movie: formMovie, video: formVideo}[mode]) as UseFormReturn<any>
+    const form = ({collection: formCollection, video: formVideo}[profileType]) as UseFormReturn<any>
 
+    // Opened to download a collection, video or movie: the link asks for the profile type, what the profile is
+    // available for and the Site, and each of those fields starts as the broadest choice that fits it.
+    const fitsScope = searchParams.get('for')
+    const fitsSite = searchParams.get('site')
+    const fitsFormat = PreferredFormatReg.normalize(searchParams.get('format'))
+    // Opened from a collection's page: its examples come from that collection.
+    const rawCollectionId = Number(searchParams.get('collection') ?? NaN)
+    const fitsCollectionId = Number.isInteger(rawCollectionId) ? rawCollectionId : undefined
+    const fit = useMemo(
+        () => ({type: explicitType, scope: fitsScope, site: fitsSite, format: fitsFormat, collectionId: fitsCollectionId}),
+        [explicitType, fitsScope, fitsSite, fitsFormat, fitsCollectionId],
+    )
 
     useEffect(() => {
         if (!draftKey) return
         const saveDraft = (values: Partial<LocalMediaProfileCreateIn>) => {
             saveLocalMediaProfileDraft<LocalMediaProfileCreateIn>(draftKey, {
-                mode,
+                mode: profileType,
                 values,
             })
         }
@@ -162,10 +158,10 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
             saveDraft(values as Partial<LocalMediaProfileCreateIn>)
         })
         return () => subscription.unsubscribe()
-    }, [draftKey, form, mode])
+    }, [draftKey, form, profileType])
 
     const submitFn = async (data: LocalMediaProfileCreateOut) => {
-        const endpoint = localMediaProfileEndpoint(mode)
+        const endpoint = localMediaProfileEndpoint(profileType)
         return fetch(`${apiUrl()}/${endpoint}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -174,16 +170,26 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
         })
     }
 
-    const onSuccess = async () => {
+    // Opened from another form, such as a Download Profile that needs this profile: back there, with the new
+    // profile chosen.
+    const returnTo = source ? undefined : safeReturnPath(searchParams.get('returnTo'))
+    const onSuccess = async (created: {id?: number} | undefined) => {
         await qc.invalidateQueries({queryKey: ['localMediaProfiles']})
         if (draftKey) clearLocalMediaProfileDraft(draftKey)
-        navigate('/local-media-profiles')
+        if (returnTo && created?.id != null) {
+            const [path, query = ''] = returnTo.split('?', 2)
+            const params = new URLSearchParams(query)
+            params.set('localMediaProfile', String(created.id))
+            navigate(`${path}?${params}`)
+        } else {
+            navigate('/local-media-profiles')
+        }
     }
 
     const onCancel = useCallback(() => {
         if (draftKey) clearLocalMediaProfileDraft(draftKey)
-        navigate('/local-media-profiles')
-    }, [draftKey, navigate])
+        navigate(returnTo ?? '/local-media-profiles')
+    }, [draftKey, navigate, returnTo])
 
     const onCreate = buildLocalMediaProfileOnSubmit(form, submitFn, {
         onSuccess,
@@ -200,33 +206,40 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
                 {mode === 'collection' && <IndexingValuesEditorButton form={form}/>}
             </div>
 
+            <RequestedFieldsProvider mode="create" origin={requestedOrigin(searchParams)}>
+            <ProfileFitProvider value={fit}>
             <form id={formId} className="form local-media-profile-form" onSubmit={onCreate} noValidate>
                 <div className="form-row">
                     <label>Profile type</label>
                     {source ? (
                         <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(source.type)}</div>
-                    ) : <SegmentedOptions
+                    ) : <RequestedField
+                        id="type"
+                        requested={explicitType}
+                        value={profileType}
+                        apply={() => setProfileType(explicitType!)}
+                        fits={() => profileType === explicitType}
+                        incompatible={explicitType && <>
+                            A {LocalMediaProfileTypeReg.getLabel(profileType)} profile won't be offered <OriginName prefix="for"/>,
+                            which needs a {LocalMediaProfileTypeReg.getLabel(explicitType)} profile.
+                        </>}
+                    ><SegmentedOptions
                         name="local-media-profile-mode"
-                        value={mode}
-                        onChange={(value) => setMode(value as LocalMediaProfileMode)}
+                        value={profileType}
+                        onChange={(value) => setProfileType(value as LocalMediaProfileType)}
                         options={[
                             {
                                 value: 'collection',
                                 label: 'Collection',
-                                description: 'Store downloaded collection episodes',
-                            },
-                            {
-                                value: 'movie',
-                                label: 'Movie',
-                                description: 'Store manually downloaded movies and their extras',
+                                description: 'Store the episodes of podcasts and series, and the tracks or music videos of music',
                             },
                             {
                                 value: 'video',
                                 label: 'Video',
-                                description: 'Store single videos added on their own',
+                                description: 'Store single videos and movies added on their own',
                             },
                         ]}
-                    />}
+                    /></RequestedField>}
                 </div>
 
                 <LocalMediaProfileForm form={form} mode={mode} isCreating/>
@@ -236,6 +249,8 @@ function AddLocalMediaProfileForm({source, onDiscardDraft}: { source?: LocalMedi
                     <input type="submit" className="btn btn-primary" value="Create profile" disabled={isSubmitting}/>
                 </div>
             </form>
+            </ProfileFitProvider>
+            </RequestedFieldsProvider>
 
             {showRestored ? (
                 <UnsavedChangesBar

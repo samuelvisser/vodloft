@@ -8,7 +8,7 @@ from backend.types.download_profile_types import AutoSubtitles, SponsorBlockActi
 from backend.types.local_media_profile_types import CodecFallback, QualityGoal, SubtitleLanguageMode
 from downloader.models import SubtitleRendition
 from downloader.errors import DownloadError
-from downloader.plan import YtdlpSponsorBlock, YtdlpSubtitles
+from downloader.plan import YtdlpChapters, YtdlpSponsorBlock, YtdlpSubtitles
 from downloader.ytdlp import YtdlpQuality
 from sources.ytdlp_options import OptionsRefused, ytdlp_option_arguments
 
@@ -46,6 +46,11 @@ def ytdlp_sponsorblock(enabled: bool, segments: dict[str, str]) -> YtdlpSponsorB
         chapter=tuple(category for category, action in segments.items() if action == SponsorBlockAction.CHAPTER.value),
         cut=tuple(category for category, action in segments.items() if action == SponsorBlockAction.CUT.value),
     )
+
+
+def ytdlp_chapters(site_choices: dict) -> YtdlpChapters:
+    """What yt-dlp does with a video's own chapters, by a Local Media Profile's choices for the Site."""
+    return YtdlpChapters(keep=site_choices["keep_chapters"], cut=tuple(site_choices["cut_chapters"]))
 
 
 def custom_ytdlp_options(*texts: tuple[str, str]) -> tuple[str, ...]:

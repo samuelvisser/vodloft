@@ -64,6 +64,13 @@ class Catalogue:
         channel_id = ref.value if ref.kind == "channel" else self.channel(ref)["id"]
         return ref.uploads_playlist(channel_id)
 
+    def playlist_ids(self, ref: YouTubeRef, feeds: frozenset[str] | None) -> list[str]:
+        """The playlists that list the collection's videos, of only ``feeds`` when given."""
+        if ref.kind == "playlist":
+            return [ref.value]
+        channel_id = ref.value if ref.kind == "channel" else self.channel(ref)["id"]
+        return ref.feed_playlists(channel_id, feeds)
+
     def video_ids(self, playlist_id: str) -> list[str]:
         """Every video ID in the playlist, in its order, which is newest first for uploads."""
         ids: list[str] = []

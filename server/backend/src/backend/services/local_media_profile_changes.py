@@ -9,7 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
-from backend.db.models import Collection, CollectionLocalMediaProfile, CustomIndexState, LocalMediaProfileBase, MovieLocalMediaProfile
+from backend.db.models import (
+    Collection, CollectionLocalMediaProfile, CustomIndexState, LocalMediaProfileBase, MediaDownloadBase, VideoLocalMediaProfile,
+)
 from backend.services.collection_assets import request_profile_collection_assets
 from backend.services.custom_indexes import (
     compare_custom_index_assignments,
@@ -19,9 +21,10 @@ from backend.services.custom_indexes import (
 )
 from backend.services.download_options import effective_filename_mode
 from backend.services.errors import NotFoundError, ServiceError
+from backend.types.local_media_profile_types import keeps_tracks
 from backend.services.profile_file_renames import request_collection_local_media_profile_file_rename
 from backend.services.local_media_profile_inputs import (
-    CollectionLocalMediaProfileInput, LocalMediaProfileInput, MovieLocalMediaProfileInput, NewCollectionLocalMediaProfile,
+    CollectionLocalMediaProfileInput, LocalMediaProfileInput, VideoLocalMediaProfileInput, NewCollectionLocalMediaProfile,
 )
 from jinja_analysis import CustomIndexReachabilityStatus
 from jinja_analysis.comparison import OutputOverlap
@@ -193,7 +196,8 @@ def update_collection_local_media_profile(
     ensure_unique_profile_settings(s, CollectionLocalMediaProfile, fields, exclude_id=item.id)
     # Missing values on updates are not creation defaults; retain the
     # persisted selection, even if collection_scope was changed.
-    excluded_fields = {"indexing_values", *fields.fields_kept_on_update()}
+    _refuse_tracks_switch_with_downloads(s, item, fields)
+    excluded_fields = {"type", "indexing_values", *fields.fields_kept_on_update()}
     update_database_fields(item, fields, exclude_fields=excluded_fields)
     replace_indexing_value_definitions(item, fields.indexing_values)
     s.flush()
@@ -231,19 +235,42 @@ def update_collection_local_media_profile(
     return item
 
 
-def create_movie_local_media_profile(s: Session, fields: MovieLocalMediaProfileInput) -> MovieLocalMediaProfile:
-    ensure_unique_profile_settings(s, MovieLocalMediaProfile, fields)
-    item = create_database_fields(MovieLocalMediaProfile, fields)
+def _refuse_tracks_switch_with_downloads(s: Session, item: CollectionLocalMediaProfile, fields: CollectionLocalMediaProfileInput):
+    """A profile for Music that downloads audio only keeps tracks, which are audio files with music tags, and any other
+    profile keeps the files of its own kind. So a profile only starts or stops keeping tracks before it downloaded
+    anything: a profile for Music can't switch between audio only and video once it has downloads, though it can
+    change between video qualities."""
+    if keeps_tracks(item) == keeps_tracks(fields):
+        return
+    if s.scalar(select(MediaDownloadBase.id).where(MediaDownloadBase.local_media_profile_id == item.id).limit(1)) is None:
+        return
+    if item.collection_scope == fields.collection_scope:
+        message = (
+            "This profile already has downloaded music tracks, so it keeps downloading audio only."
+            if keeps_tracks(item) else
+            "This profile already has downloaded music videos, so it can't switch to audio only."
+        )
+        raise ServiceError(message, field="preferredFormat")
+    if keeps_tracks(item):
+        message = "This profile already has downloaded music tracks, so what it is available for can't change."
+    else:
+        message = "This profile already has downloads, so it can't be changed to Music with audio only."
+    raise ServiceError(message, field="collectionScope", other_fields={"preferredFormat": message})
+
+
+def create_video_local_media_profile(s: Session, fields: VideoLocalMediaProfileInput) -> VideoLocalMediaProfile:
+    ensure_unique_profile_settings(s, VideoLocalMediaProfile, fields)
+    item = create_database_fields(VideoLocalMediaProfile, fields)
     s.add(item)
     s.flush()
     return item
 
 
-def update_movie_local_media_profile(
-    s: Session, local_media_profile_slug: str, fields: MovieLocalMediaProfileInput,
-) -> MovieLocalMediaProfile:
-    item = _profile_by_slug(s, MovieLocalMediaProfile, local_media_profile_slug, "Movie Local Media Profile")
-    ensure_unique_profile_settings(s, MovieLocalMediaProfile, fields, exclude_id=item.id)
+def update_video_local_media_profile(
+    s: Session, local_media_profile_slug: str, fields: VideoLocalMediaProfileInput,
+) -> VideoLocalMediaProfile:
+    item = _profile_by_slug(s, VideoLocalMediaProfile, local_media_profile_slug, "Video Local Media Profile")
+    ensure_unique_profile_settings(s, VideoLocalMediaProfile, fields, exclude_id=item.id)
     update_database_fields(item, fields, exclude_fields=fields.fields_kept_on_update())
     s.flush()
     return item

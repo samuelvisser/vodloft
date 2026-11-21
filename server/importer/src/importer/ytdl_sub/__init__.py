@@ -1,4 +1,4 @@
-"""The ytdl-sub importer: TV show subscriptions, their presets and every video in their download archives."""
+"""The ytdl-sub importer: TV show and music subscriptions, their presets and every file in their download archives."""
 from ..registry import register
 from .archive import ArchiveEntry, archive_names, read_archive
 from .mapping import UPLOAD_FILES, YtdlSubImporter, plan_import

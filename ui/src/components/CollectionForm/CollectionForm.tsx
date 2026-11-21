@@ -1,3 +1,6 @@
+import { Link } from 'react-router-dom'
+import { capitalized } from '../../types/creator'
+
 export type CollectionFormValue = {
   name: string
   author: string
@@ -23,9 +26,11 @@ export const defaultCollectionFormValue: CollectionFormValue = {
 type Props = {
   value: CollectionFormValue
   onChange: (value: CollectionFormValue) => void
+  /** The creator the collection belongs to, whose name is its author, and what its Site calls a creator, such as host. */
+  creator?: { slug: string, title: string, word: string } | null
 }
 
-export default function CollectionForm({ value, onChange }: Props) {
+export default function CollectionForm({ value, onChange, creator }: Props) {
 
   return (
     <>
@@ -42,15 +47,23 @@ export default function CollectionForm({ value, onChange }: Props) {
       </div>
 
       <div className="form-row">
-        <label htmlFor="collection-author">Author</label>
+        <label htmlFor="collection-author">{creator ? capitalized(creator.word) : 'Author'}</label>
         <input
           id="collection-author"
           className="input"
           type="text"
           placeholder="Ben Shapiro"
-          value={value.author}
+          value={creator ? creator.title : value.author}
           onChange={(e) => onChange({ ...value, author: e.target.value })}
+          disabled={!!creator}
+          aria-describedby={creator ? 'collection-author-help' : undefined}
         />
+        {creator && (
+          <div className="help" id="collection-author-help">
+            The name of its {creator.word}. Change it on the{' '}
+            <Link to={`/edit-creator/${creator.slug}`}>{creator.word}'s Edit page</Link>.
+          </div>
+        )}
       </div>
 
 

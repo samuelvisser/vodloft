@@ -250,3 +250,86 @@ def test_episode_count_cleanup_keeps_available_files_when_delete_older_is_off(db
     assert set(rows) == {completed_episode.id}
     assert rows[completed_episode.id].artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
     assert rows[completed_episode.id].download_profile_id == profile.id
+
+
+def _manual(session, episode, local_media_profile, path, **fields):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.media_types import MediaType
+
+    path.write_bytes(b"data")
+    download = EpisodeMediaDownload(
+        type=MediaType.EPISODE.value, media_item_id=episode.id, local_media_profile_id=local_media_profile.id,
+        download_profile_id=None, **available_artifact(), file_path=str(path), **fields,
+    )
+    session.add(download)
+    session.flush()
+    return download
+
+
+@pytest.mark.parametrize("include_manual", [False, True])
+def test_cleanup_deletes_manual_downloads_only_when_the_profile_includes_them(db_session, tmp_path, include_manual):
+    from backend.db.models import LocalMediaProfile
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    local_media_profile = _make_local_media_profile(db_session)
+    other_media_profile = LocalMediaProfile(
+        slug="other-audio", name="Other audio", output_template="/other/{{ episode }}.ext",
+        preferred_format="format_audio_only",
+    )
+    db_session.add(other_media_profile)
+    now = datetime.now(timezone.utc)
+    old, older, newest = (
+        _make_episode(db_session, collection, season, index=index, published_at=now - timedelta(days=3 - index))
+        for index in range(1, 4)
+    )
+    profile = _make_podcast_profile(db_session, collection, local_media_profile, count=1, delete_older=True)
+    profile.retention_includes_manual = include_manual
+
+    out_of_window = _manual(db_session, old, local_media_profile, tmp_path / "old.m4a")
+    kept = _manual(db_session, older, local_media_profile, tmp_path / "kept.m4a", kept=True)
+    in_window = _manual(db_session, newest, local_media_profile, tmp_path / "newest.m4a")
+    other_library = _manual(db_session, old, other_media_profile, tmp_path / "other.m4a")
+    db_session.commit()
+
+    removed = cleanup_older_episodes(db_session, profile)
+    db_session.commit()
+
+    remaining = {row.id for row in db_session.query(EpisodeMediaDownload).all()}
+    if include_manual:
+        assert removed == 1
+        assert remaining == {kept.id, in_window.id, other_library.id}
+        assert not (tmp_path / "old.m4a").exists()
+    else:
+        assert removed == 0
+        assert out_of_window.id in remaining
+        assert (tmp_path / "old.m4a").exists()
+    assert (tmp_path / "kept.m4a").exists() and (tmp_path / "other.m4a").exists()
+
+
+def test_cleanup_leaves_a_waiting_manual_download_alone(db_session, tmp_path):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from backend.types.media_types import MediaType
+    from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
+
+    collection = _make_collection(db_session)
+    season = _make_season(db_session, collection)
+    local_media_profile = _make_local_media_profile(db_session)
+    now = datetime.now(timezone.utc)
+    old = _make_episode(db_session, collection, season, index=1, published_at=now - timedelta(days=1))
+    _make_episode(db_session, collection, season, index=2, published_at=now)
+    profile = _make_podcast_profile(db_session, collection, local_media_profile, count=1, delete_older=True)
+    profile.retention_includes_manual = True
+    waiting = EpisodeMediaDownload(
+        type=MediaType.EPISODE.value, media_item_id=old.id, local_media_profile_id=local_media_profile.id,
+        download_profile_id=None, artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
+        file_path=str(tmp_path / "waiting.m4a"),
+    )
+    db_session.add(waiting)
+    db_session.commit()
+
+    assert cleanup_older_episodes(db_session, profile) == 0
+    assert db_session.get(EpisodeMediaDownload, waiting.id) is not None

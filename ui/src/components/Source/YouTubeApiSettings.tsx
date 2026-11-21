@@ -4,7 +4,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {ApiKeyRejectedError, changeSourceApiKey, useSourceApi} from '../../lib/queries'
 import type {ApiStatusRead} from '../../types/schemas/source'
 import type {SettingsTabProps} from '../Settings/SettingsTabTypes'
-import {NumberField, SettingsSection} from '../Settings/SettingsControls'
+import {NumberField, SettingsSection, ToggleField} from '../Settings/SettingsControls'
 
 const SOURCE_ID = 'ytdlp'
 /** One search: the search call itself and one batch each of channel and video details. */
@@ -260,6 +260,32 @@ export default function YouTubeApiSettings({draft, updateDraft, environmentVaria
                     <div className="youtube-api-split__value">{Number.isFinite(keptFree) ? `${formatNumber(Math.max(keptFree, 0))} units` : '—'}</div>
                     <div className="settings-field__help">For adding collections, Test key and manual refreshes.</div>
                 </div>
+                <ToggleField
+                    id="settings-youtube-usage-log"
+                    label="Keep a usage log"
+                    checked={quota.usageLogEnabled}
+                    environmentVariable={environmentVariableFor('youtubeApi.usageLogEnabled')}
+                    onChange={(checked) => updateDraft((next) => {
+                        next.youtubeApi.usageLogEnabled = checked
+                    })}
+                    help="Writes every API call, and a summary of what each share used each day, to youtube-api-usage.log in the yt-dlp folder next to config.yml. Unlike the debug log, it survives restarts."
+                />
+                {quota.usageLogEnabled && (
+                    <NumberField
+                        id="settings-youtube-usage-log-lines"
+                        label="Usage log length"
+                        value={quota.usageLogMaxLines}
+                        min={100}
+                        step={10000}
+                        unit="lines"
+                        error={errorFor('youtubeApi.usageLogMaxLines')}
+                        environmentVariable={environmentVariableFor('youtubeApi.usageLogMaxLines')}
+                        onChange={(value) => updateDraft((next) => {
+                            next.youtubeApi.usageLogMaxLines = value
+                        })}
+                        help="The oldest lines are removed once the log is longer than this. A day with the whole quota used is a few thousand lines."
+                    />
+                )}
             </SettingsSection>
         </>
     )

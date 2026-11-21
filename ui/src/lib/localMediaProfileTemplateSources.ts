@@ -6,7 +6,7 @@ import {useLazyCollection} from './lazyCollection'
 import type {CollectionLocalMediaProfileScope} from '../types/local_media_profile'
 import {apiUrl} from './api'
 
-export type LocalMediaProfileTemplateSourceMode = 'collection' | 'movie' | 'video'
+export type LocalMediaProfileTemplateSourceMode = 'collection' | 'video'
 
 export type LocalMediaProfileTemplateVariable = {
     name: string
@@ -78,7 +78,7 @@ export function useLocalMediaProfileTemplateVariables(
 export function useLocalMediaProfileTemplateSources(
     mode: LocalMediaProfileTemplateSourceMode,
     {
-        collectionScope = 'both',
+        collectionScope = 'podcast-and-series',
         search = '',
         enabled = true,
         pageSize = 30,
@@ -127,23 +127,26 @@ export function useLocalMediaProfileTemplateSources(
 
 
 export function useRandomCollectionTemplateSource(
-    collectionScope: CollectionLocalMediaProfileScope = 'both',
+    collectionScope: CollectionLocalMediaProfileScope = 'podcast-and-series',
     enabled = true,
     /** A saved profile starts on an episode of a collection that downloads to it. */
     localMediaProfileId: number | null = null,
     siteKeys?: string[],
+    /** The collection the form was opened from, which the example always comes from. */
+    collectionId?: number,
 ) {
     const sites = sitesParam(siteKeys)
     // A per-mount key makes reopening the form request a fresh example instead
     // of reusing React Query's cache from the previous page visit.
     const [requestKey] = useState(() => Math.random())
     return useQuery<LocalMediaProfileTemplateSource | null>({
-        queryKey: ['randomCollectionTemplateSource', collectionScope, localMediaProfileId, sites ?? null, requestKey],
+        queryKey: ['randomCollectionTemplateSource', collectionScope, localMediaProfileId, sites ?? null, collectionId ?? null, requestKey],
         enabled,
         queryFn: ({signal}) => fetchTemplateJson(
             `sources/random-collection-episode?collection_scope=${encodeURIComponent(collectionScope)}`
             + (localMediaProfileId !== null ? `&local_media_profile_id=${localMediaProfileId}` : '')
-            + (sites !== undefined ? `&sites=${encodeURIComponent(sites)}` : ''),
+            + (sites !== undefined ? `&sites=${encodeURIComponent(sites)}` : '')
+            + (collectionId !== undefined ? `&collection_id=${collectionId}` : ''),
             signal,
             'no-store',
         ),

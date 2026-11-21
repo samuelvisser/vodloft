@@ -1,5 +1,6 @@
 import {z} from "zod";
 import {ApiDateTimeStringSchema} from './datetime'
+import {NamesSchema} from './source'
 
 export const TaskDefinitionReadSchema = z.looseObject({
   id: z.int(),
@@ -42,6 +43,8 @@ export const TaskLedgerEntryReadSchema = z.looseObject({
   definitionKey: z.string(),
   definitionTitle: z.string(),
   resourceType: z.string(),
+  /** What the resource type is called, such as collection; null for a type VODLoft has no word for. */
+  resourceNames: NamesSchema.nullable().optional(),
   resourceId: z.int().nullable(),
   status: z.string(),
   progress: z.int().nullable().optional(),

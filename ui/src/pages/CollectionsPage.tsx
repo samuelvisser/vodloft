@@ -4,7 +4,7 @@ import {useCollections} from '../lib/queries'
 import {CollectionRead} from '../types/schemas/collection'
 import DataTable, {Column} from '../components/DataTable/DataTable'
 import ConfirmDeleteDialog, {ConfirmDeleteDialogRef} from '../components/ConfirmDeleteDialog/ConfirmDeleteDialog'
-import {EpisodeIdentifierReg, CollectionTypeReg} from "../types/collection";
+import {episodeIdentifierRegFor, CollectionTypeReg} from "../types/collection";
 import {faIcon} from '../icons/faIcon'
 import {apiUrl} from '../lib/api'
 
@@ -31,7 +31,7 @@ export default function CollectionsPage() {
         },
         {
             header: 'Episode ID',
-            accessor: (s) => EpisodeIdentifierReg.getLabelLoose(s.episodeIdentifier),
+            accessor: (s) => episodeIdentifierRegFor(s.type).getLabelLoose(s.episodeIdentifier),
             align: 'center',
         },
     ]
@@ -59,7 +59,7 @@ export default function CollectionsPage() {
                             <span className="mobile-summary-meta">
                                 <span>{CollectionTypeReg.getLabelLoose(s.type)}</span>
                                 <span aria-hidden="true">•</span>
-                                <span>{EpisodeIdentifierReg.getLabelLoose(s.episodeIdentifier)}</span>
+                                <span>{episodeIdentifierRegFor(s.type).getLabelLoose(s.episodeIdentifier)}</span>
                             </span>
                         </>
                     )}

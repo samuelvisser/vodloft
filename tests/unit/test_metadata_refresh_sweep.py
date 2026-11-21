@@ -189,7 +189,8 @@ def test_a_lookup_that_keeps_failing_waits_for_the_next_interval(swept, session,
     assert len(swept.calls) == 4 and _episode(session, "flaky").title == "Back"
 
 
-def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, session, site_settings):
+def test_a_failed_lookup_is_tried_again_and_a_removed_upload_without_files_goes(swept, session, site_settings):
+    from backend.db.models import Episode
     from task_manager.tasks.workers.refresh_metadata.service import run_metadata_refresh
 
     collection = _site_collection(session, site_settings)
@@ -201,7 +202,8 @@ def test_a_failed_lookup_is_tried_again_and_a_removed_upload_is_marked(swept, se
     result = run_metadata_refresh(session, now=now)
 
     assert swept.calls == [["gone", "flaky"], ["flaky"], ["flaky"]]
-    assert _episode(session, "gone").removed_from_source
+    # Without files it is deleted.
+    assert session.query(Episode).filter(Episode.source_slug == "gone").one_or_none() is None
     assert not _episode(session, "flaky").removed_from_source
     assert result.sites["Tube"].failed == 1 and result.sites["Tube"].removed == 1
 

@@ -236,19 +236,19 @@ def test_a_video_download_needs_a_video_profile(video_sources, session):
 
     from backend.api.endpoints.media_downloads.service import create_video_download
     from backend.api.models.media_download import MediaDownloadAPICreate
-    from backend.db.models import MovieLocalMediaProfile
+    from backend.db.models import LocalMediaProfile
     from backend.services.videos import index_video
 
     video, _ = index_video(session, "clips", video_sources.video_details("https://clips.example/v/abc"))
-    movie_profile = MovieLocalMediaProfile(
-        slug="movies", name="Movies", output_template="/downloads/{{ title }}.ext", preferred_format="format_1080p",
+    collection_profile = LocalMediaProfile(
+        slug="shows", name="Shows", output_template="/downloads/{{ episode }}.ext", preferred_format="format_1080p",
     )
-    session.add(movie_profile)
+    session.add(collection_profile)
     session.flush()
     with pytest.raises(HTTPException) as exc:
-        create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=movie_profile.id))
+        create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=collection_profile.id))
     assert exc.value.status_code == 422
-    assert "Videos require a Video Local Media Profile" in exc.value.detail
+    assert "require a Video Local Media Profile" in exc.value.detail
 
     profile = _video_profile(session)
     download = create_video_download(session, video, MediaDownloadAPICreate(local_media_profile_id=profile.id))
@@ -410,9 +410,9 @@ def test_a_ytdlp_download_plans_thumbnails_and_nfo_in_every_container(video_sour
     assets = {asset.id: asset for asset in plan.assets}
     assert assets["artwork"].url == "https://img.clips.example/abc.jpg" and assets["artwork"].publish
     assert assets["nfo"].target_suffix == ".nfo" and b"<title>" in assets["nfo"].content
-    # An Opus file gets the thumbnail and NFO beside it; VODLoft can't embed into it.
+    # An Opus file gets its tags, and the thumbnail and NFO beside it: VODLoft can't embed artwork into it.
     assert (plan.artwork_asset_id == "artwork") is embeds
-    assert bool(plan.metadata_tags) is embeds
+    assert bool(plan.metadata_tags)
 
 
 def test_a_frame_vodloft_took_from_the_video_is_embedded_and_kept_beside_it(video_sources, session, monkeypatch, tmp_path):

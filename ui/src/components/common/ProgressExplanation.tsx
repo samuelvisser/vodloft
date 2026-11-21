@@ -3,6 +3,17 @@ import {createPortal} from 'react-dom'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import './ProgressVisual.css'
 import {faIcon} from '../../icons/faIcon'
+import type {ProgressStep} from '../../types/progress'
+
+const STEP_ICONS = {
+    pending: faIcon('fass', 'circle'), running: faIcon('fass', 'spinner'), waiting: faIcon('fass', 'clock'),
+    completed: faIcon('fass', 'circle-check'), skipped: faIcon('fass', 'ban'), failed: faIcon('fass', 'circle-xmark'),
+    canceled: faIcon('fass', 'xmark'),
+}
+const STEP_STATES = {
+    pending: 'To do', running: 'Running', waiting: 'Waiting', completed: 'Done', skipped: 'Skipped', failed: 'Failed',
+    canceled: 'Canceled',
+}
 
 type PopoverPosition = {
     top: number
@@ -13,8 +24,10 @@ const POPOVER_GAP = 6
 const VIEWPORT_GUTTER = 8
 const POPOVER_WIDTH = 260
 
-export default function ProgressExplanation({detail, buttonClassName = 'icon-btn'}: {
+export default function ProgressExplanation({detail, steps, buttonClassName = 'icon-btn'}: {
     detail: string
+    /** The steps of the action's plan, listed under its detail. */
+    steps?: ProgressStep[]
     buttonClassName?: string
 }) {
     const [open, setOpen] = useState(false)
@@ -46,7 +59,7 @@ export default function ProgressExplanation({detail, buttonClassName = 'icon-btn
 
     useLayoutEffect(() => {
         if (open) positionPopover()
-    }, [detail, open, positionPopover])
+    }, [detail, steps, open, positionPopover])
 
     useEffect(() => {
         if (!open) return
@@ -86,6 +99,27 @@ export default function ProgressExplanation({detail, buttonClassName = 'icon-btn
                 style={{top: position.top, left: position.left}}
             >
                 {detail}
+                {steps && steps.length > 1 && (
+                    <span className="vl-progress-steps" role="list" aria-label="Steps">
+                        {steps.map((step) => (
+                            <span key={step.id} role="listitem" className={`vl-progress-step is-${step.state}`}>
+                                <FontAwesomeIcon
+                                    icon={STEP_ICONS[step.state]} spin={step.state === 'running'}
+                                    aria-label={STEP_STATES[step.state]} fixedWidth
+                                />
+                                <span className="vl-progress-step-label">
+                                    {step.label}
+                                    {step.state === 'running' && step.count && (
+                                        <small className="vl-progress-step-count">{step.count}</small>
+                                    )}
+                                </span>
+                                {step.state === 'running' && step.percent != null && (
+                                    <span className="vl-progress-step-percent">{step.percent}%</span>
+                                )}
+                            </span>
+                        ))}
+                    </span>
+                )}
             </span>,
             document.body,
         )

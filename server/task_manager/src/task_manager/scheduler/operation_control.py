@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 RUN_CANCEL_REQUESTED_META_KEY = "_operation_cancel_requested"
 RUN_CANCEL_REASON_META_KEY = "_operation_cancel_reason"
 OPERATION_CANCEL_REQUESTED_CONTEXT_KEY = "cancel_requested"
+OPERATION_CANCELABLE_CONTEXT_KEY = "cancelable"
 
 _ACTIVE_OPERATION_STATUSES = {
     OperationStatus.QUEUED.value,
@@ -51,6 +52,12 @@ def _operation_context_cancel_requested(context: object) -> bool:
         isinstance(context, dict)
         and context.get(OPERATION_CANCEL_REQUESTED_CONTEXT_KEY) is True
     )
+
+
+def operation_cancelable(operation: TaskOperation) -> bool:
+    """Whether a person may cancel the operation, as its definition said. Work that stopping halfway would leave
+    half done, such as numbering a collection's episodes again, says it may not."""
+    return (operation.context or {}).get(OPERATION_CANCELABLE_CONTEXT_KEY) is not False
 
 
 def operation_cancel_requested(operation: TaskOperation) -> bool:
@@ -178,12 +185,16 @@ def cancel_operation(
         *,
         reason: str = "Canceled by user",
         acknowledge: bool = True,
+        force: bool = False,
 ) -> OperationSnapshot | None:
     """Cancel a high-level operation and every exclusively owned pending/running run.
 
     UI-initiated cancellation is acknowledged by the request itself. System
     cancellation (for example the stalled-work watchdog) leaves the notification
     unseen so OperationNotifier can explain why the work stopped.
+
+    An operation that may not be canceled refuses, also as a part of a canceled action, unless ``force`` says that
+    its work stopped already, as the watchdog finds of stalled work.
     """
     def work(session):
         cancelable_run_ids: set[int] = set()
@@ -194,6 +205,8 @@ def cancel_operation(
             return None
         if operation.status not in _ACTIVE_OPERATION_STATUSES:
             raise ValueError("Only an active operation can be canceled")
+        if not force and not operation_cancelable(operation):
+            raise ValueError("This action cannot be canceled: stopping it halfway would leave its work half done")
 
         completed = sum(
             dependency.child_operation is None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import re
 import unicodedata
 from collections.abc import Iterator
@@ -26,6 +27,7 @@ from .custom_index import (
 )
 from .episode import EpisodeIdentifierInfo
 from .filenames import clean_component, clean_value
+from .name_length import fit_name, note_filled_value, tracking_output_names
 from .output_template_jinja import TypedText, create_output_template_environment
 from config import get_settings
 from config.settings.submodels import FilenameRestrictionMode
@@ -41,7 +43,7 @@ _SINGLE_BRACE_TEMPLATE_VARIABLE = re.compile(
 )
 
 DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second",
+    "date", "time", "datetime", "year", "month", "day", "hour", "minute", "second", "day_of_year", "day_of_year_reversed",
 })
 MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     f"movie_{field}" for field in DATE_OUTPUT_TEMPLATE_FIELDS
@@ -53,25 +55,25 @@ COLLECTION_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "episode_number", "episode_sub_number", "episode_label", "episode_identifier", "episode_published_date",
     "episode_published_time", "episode_published_datetime", "episode_index", "extra_index",
     "collection_author", "collection_site_id", "episode_site_id", "episode_uploader", "duration_seconds",
+    "creator_title", "creator_handle", "creator_kind", "section_title", "section_kind",
+    "artist", "album", "album_slug", "album_number", "track_number", "track_number_padded",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
-MOVIE_OUTPUT_TEMPLATE_FIELDS = frozenset({
+# A Video profile keeps single videos and movies with their extras. The movie_* values are empty for a
+# single video, and source names the Site the media came from.
+VIDEO_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "movie_slug", "movie_title", "movie_extended_title", "movie_author",
     "movie_mature_rating", "movie_duration_seconds",
     "slug", "title", "extended_title",
-    "author", "mature_rating", "rating", "duration_seconds", "media_type",
+    "author", "mature_rating", "rating", "duration_seconds", "media_type", "source",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS | MOVIE_DATE_OUTPUT_TEMPLATE_FIELDS
 
-VIDEO_OUTPUT_TEMPLATE_FIELDS = frozenset({
-    "slug", "title", "author", "duration_seconds", "source",
-}) | DATE_OUTPUT_TEMPLATE_FIELDS
-
 COLLECTION_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"collection"})
-MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"movie"})
+VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES: frozenset[CustomMetadataScope] = frozenset({"movie"})
 
 # These are values likely to be different between Movies and Movie Extra's.
 # They are useful for verifying movie and movie extra paths are distinct.
-MOVIE_MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS = frozenset({
+MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS = frozenset({
     "slug", "title", "extended_title", "author", "duration_seconds", "media_type",
 }) | DATE_OUTPUT_TEMPLATE_FIELDS
 
@@ -309,7 +311,9 @@ def _sanitize_emitted_output_value(value: object) -> str:
     text = str(value) if isinstance(value, TypedText) else clean_value(value, mode)
     # Whatever the mode, a value can never add a path level or a line.
     text = text.replace("/", "\u29f8").replace("\x00", "")
-    return "".join(char for char in text if char == "\t" or ord(char) >= 32)
+    text = "".join(char for char in text if char == "\t" or ord(char) >= 32)
+    note_filled_value(text)
+    return text
 
 
 def _sanitize_rendered_path(
@@ -323,7 +327,10 @@ def _sanitize_rendered_path(
     parts = relative.split("/")
     last = len(parts) - 1
     sanitized = [
-        sanitize_path_component(part, mode=mode, extension=extension if index == last else None)
+        fit_name(
+            sanitize_path_component(part, mode=mode, extension=extension if index == last else None),
+            extension=extension if index == last else None,
+        )
         if part
         else ""
         for index, part in enumerate(parts)
@@ -354,9 +361,10 @@ def validate_output_template_fields(
     return output_template
 
 
-def movie_template_has_media_item_field(output_template: str) -> bool:
-    """Whether a movie template references a value that varies by downloaded item."""
-    return bool(output_template_fields(output_template) & MOVIE_MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS)
+def template_has_media_item_field(output_template: str) -> bool:
+    """Whether a Video profile's template references a value that varies by downloaded item, so a movie and its
+    extras get paths of their own."""
+    return bool(output_template_fields(output_template) & MEDIA_ITEM_UNIQUE_OUTPUT_TEMPLATE_FIELDS)
 
 
 def movie_template_uses_release_date(output_template: str) -> bool:
@@ -382,6 +390,9 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "season_index": str(episode.season.index) if episode.season else "",
         "season_type": episode.season.season_type if episode.season else "",
         "season_number": str(episode.season.season_number) if episode.season else "",
+        # A Music collection's albums are its seasons, so a Music profile can name them as albums.
+        "album_slug": episode.season.slug if episode.season else "",
+        "album_number": str(episode.season.season_number) if episode.season else "",
         "episode": episode.slug,
         "episode_index": str(episode.index),
         "extra_index": str(episode.extra_index) if episode.extra_index is not None else "",
@@ -401,6 +412,8 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "episode_published_time": published_at.strftime("%H:%M:%S") if published_at else "",
         "episode_published_datetime": published_at.strftime("%Y-%m-%d %H:%M:%S") if published_at else "",
         **_date_substitutions(published_at),
+        **_creator_values(episode),
+        **_music_values(episode),
     }
     values.update(custom_metadata_template_values(
         "collection",
@@ -413,7 +426,7 @@ def movie_output_template_values(
     movie: "Movie",
     media_item: "Movie | MovieExtra | None" = None,
 ) -> dict[str, str]:
-    """Build the complete Movie-profile context for a movie or one of its extras."""
+    """Build the complete Video-profile context for a movie or one of its extras."""
     item = media_item or movie
     is_movie_extra = getattr(item, "type", None) == "movie_extra"
     media_type = getattr(item, "movie_extra_type", "other") if is_movie_extra else "movie"
@@ -459,6 +472,7 @@ def movie_output_template_values(
         "rating": item_rating,
         "duration_seconds": item_duration_seconds,
         "media_type": media_type,
+        "source": _source_name(getattr(movie, "source_key", "")),
         **_date_substitutions(item_date),
     }
     values.update(custom_metadata_template_values(
@@ -468,20 +482,119 @@ def movie_output_template_values(
     return values
 
 
-def video_output_template_values(video: "Video") -> dict[str, str]:
-    """Build the complete Video-profile context for a single video."""
+CREATOR_OUTPUT_TEMPLATE_FIELDS = frozenset({"creator_title", "creator_handle", "creator_kind"})
+"""The creator values, which are the same for every episode of a collection, so a collection's folder may use them."""
+
+
+def creator_output_template_values(creator) -> dict[str, str]:
+    """Who made a collection added through a creator. Empty without a creator, so a template that uses them stays
+    valid for every collection."""
+    if creator is None:
+        return {field: "" for field in CREATOR_OUTPUT_TEMPLATE_FIELDS}
+    account = creator.accounts[0] if creator.accounts else None
+    return {
+        "creator_title": creator.title,
+        "creator_handle": ((account.handle if account is not None else None) or "").lstrip("@"),
+        "creator_kind": _creator_kind(creator),
+    }
+
+
+def _creator_values(episode: "Episode") -> dict[str, str]:
+    """The episode's creator, and which of the creator's sections it is in: the playlist that is its season, or the
+    section the collection is made from."""
+    collection = episode.collection
+    playlist = _episode_list(episode)
+    if playlist is not None:
+        title, kind = playlist.title, "list"
+    else:
+        creator = collection.creator
+        sections = creator.sections if creator is not None else []
+        section = next((section for section in sections if section.url == collection.sharing_url), None)
+        if section is None and creator is not None and collection.id in creator.main_collection_ids:
+            section = next((section for section in sections if section.kind == "feed" and section.role == "main"), None)
+        title, kind = (section.title, section.kind) if section is not None else ("", "")
+    return {
+        **creator_output_template_values(collection.creator),
+        "section_title": title,
+        "section_kind": kind,
+    }
+
+
+def _episode_list(episode: "Episode"):
+    """The list of the episode's season that has it: the season's own list, or, in a season of several lists, the
+    first of them that has the episode. In a collection that lays its lists out by year, the first list that has it."""
+    if not episode.collection.lists:
+        return None
+    from backend.services.link_seasons import lists_by_year
+
+    by_year = lists_by_year(episode.collection)
+    links = [
+        link for link in episode.collection.lists
+        if by_year or (episode.season_id is not None and link.season_id == episode.season_id)
+    ]
+    if len(links) <= 1 and not by_year:
+        return links[0] if links else None
+    if not links:
+        return None
+    from sqlalchemy import select
+    from sqlalchemy.orm import object_session
+
+    from backend.db.models import CollectionListItem
+    from backend.services.season_order import lists_by_season
+
+    s = object_session(episode)
+    if s is None:
+        return None if by_year else links[0]
+    holding = set(s.scalars(select(CollectionListItem.list_id).where(
+        CollectionListItem.list_id.in_([link.id for link in links]), CollectionListItem.source_slug == episode.source_slug,
+    )))
+    if by_year:
+        return next((link for link in links if link.id in holding), None)
+    ordered = lists_by_season(s, episode.collection).get(episode.season_id, links)
+    return next((link for link in ordered if link.id in holding), ordered[0])
+
+
+def _music_values(episode: "Episode") -> dict[str, str]:
+    """The episode as a track of an album, for a Music profile."""
+    from backend.utils.music import music_track
+
+    track = music_track(episode)
+    number = track.track_number
+    return {
+        "artist": track.artist,
+        "album": track.album,
+        "track_number": str(number) if number is not None else "",
+        "track_number_padded": f"{number:02d}" if number is not None else "",
+    }
+
+
+def _creator_kind(creator) -> str:
+    """What the creator is, such as "YouTube creator", "The Daily Wire host" or, on several Sites, "creator"."""
+    from backend.services.creators import creator_kind
+
+    return creator_kind(creator)
+
+
+def _source_name(source_key: str) -> str:
     from sources import UnknownSourceError, get_source
 
     try:
-        source_name = get_source(video.source_key).name
+        return get_source(source_key).name
     except UnknownSourceError:
-        source_name = video.source_key
+        return source_key
+
+
+def video_output_template_values(video: "Video") -> dict[str, str]:
+    """Build the complete Video-profile context for a single video. The movie values stay empty."""
     return {
+        **{field: "" for field in VIDEO_OUTPUT_TEMPLATE_FIELDS},
         "slug": video.slug,
         "title": video.title,
+        "extended_title": video.title,
         "author": video.author_name or "",
         "duration_seconds": str(round(video.duration or 0)),
-        "source": source_name,
+        "media_type": "video",
+        "source": _source_name(video.source_key),
         **_date_substitutions(video.published_at),
     }
 
@@ -658,7 +771,7 @@ def resolve_movie_output_path(
     filename_mode: FilenameRestrictionMode,
     extension: Optional[str] = None,
 ) -> Path:
-    """Resolve a Movie Local Media Profile for a movie or one of its extras."""
+    """Resolve a Video Local Media Profile for a movie or one of its extras."""
     if output_template_custom_index_keys(output_template):
         raise ValueError("custom_index is only available to Collection Local Media Profiles")
     return _render_output_path(
@@ -666,8 +779,8 @@ def resolve_movie_output_path(
         movie_output_template_values(movie, media_item),
         filename_mode=filename_mode,
         extension=extension,
-        allowed_fields=MOVIE_OUTPUT_TEMPLATE_FIELDS,
-        allowed_metadata_scopes=MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
+        allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
 
 
@@ -687,6 +800,7 @@ def resolve_video_output_path(
         filename_mode=filename_mode,
         extension=extension,
         allowed_fields=VIDEO_OUTPUT_TEMPLATE_FIELDS,
+        allowed_metadata_scopes=VIDEO_OUTPUT_TEMPLATE_METADATA_SCOPES,
     )
 
 
@@ -707,7 +821,14 @@ def _date_substitutions(value: Optional[date | datetime]) -> dict[str, str]:
         "hour": value_datetime.strftime("%H"),
         "minute": value_datetime.strftime("%M"),
         "second": value_datetime.strftime("%S"),
+        "day_of_year": value_datetime.strftime("%j"),
+        # Counts down to 001 on the last day of the year, so the newest day of a year sorts first.
+        "day_of_year_reversed": f"{_days_in_year(value_datetime.year) + 1 - value_datetime.timetuple().tm_yday:03d}",
     }
+
+
+def _days_in_year(year: int) -> int:
+    return 366 if calendar.isleap(year) else 365
 
 
 def replace_output_extension(resolved: str, extension: Optional[str]) -> str:
@@ -734,9 +855,9 @@ def _render_output_path(
     **render_options,
 ) -> Path:
     """Render a profile's template with the profile's filename mode, into a path in the download root."""
-    with rendering_with_filename_mode(filename_mode):
+    with rendering_with_filename_mode(filename_mode), tracking_output_names():
         rendered = render_output_template(output_template, values, **render_options)
-    return _finish_output_path(rendered, extension=extension, mode=filename_mode)
+        return _finish_output_path(rendered, extension=extension, mode=filename_mode)
 
 
 def _finish_output_path(resolved: str, *, extension: Optional[str], mode: FilenameRestrictionMode) -> Path:

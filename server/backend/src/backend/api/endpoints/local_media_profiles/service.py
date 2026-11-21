@@ -25,7 +25,7 @@ from backend.db.models import (
     MediaDownloadBase,
     Site,
 )
-from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope, LocalMediaProfileType
+from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope, LocalMediaProfileType, VideoLocalMediaProfileScope
 from backend.services.storage_used import is_physical_download, storage_size_bytes_sum
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from downloader import hls_asset_marker
@@ -227,15 +227,18 @@ def _filtered(s: Session, filters: LocalMediaProfileListQuery):
     profile = with_polymorphic(LocalMediaProfileBase, "*")
     scope = profile.CollectionLocalMediaProfile.collection_scope
     is_collection = profile.type == LocalMediaProfileType.COLLECTION.value
+    is_video = profile.type == LocalMediaProfileType.VIDEO.value
+    video_scope = profile.VideoLocalMediaProfile.video_scope
     used_for = {
         UsedFor.PODCAST: is_collection & scope.in_([
-            CollectionLocalMediaProfileScope.PODCAST.value, CollectionLocalMediaProfileScope.BOTH.value,
+            CollectionLocalMediaProfileScope.PODCAST.value, CollectionLocalMediaProfileScope.PODCAST_AND_SERIES.value,
         ]),
         UsedFor.SERIES: is_collection & scope.in_([
-            CollectionLocalMediaProfileScope.SERIES.value, CollectionLocalMediaProfileScope.BOTH.value,
+            CollectionLocalMediaProfileScope.SERIES.value, CollectionLocalMediaProfileScope.PODCAST_AND_SERIES.value,
         ]),
-        UsedFor.MOVIE: profile.type == LocalMediaProfileType.MOVIE.value,
-        UsedFor.VIDEO: profile.type == LocalMediaProfileType.VIDEO.value,
+        UsedFor.VIDEO: is_video & video_scope.in_([VideoLocalMediaProfileScope.VIDEOS.value, VideoLocalMediaProfileScope.BOTH.value]),
+        UsedFor.MOVIE: is_video & video_scope.in_([VideoLocalMediaProfileScope.MOVIES.value, VideoLocalMediaProfileScope.BOTH.value]),
+        UsedFor.MUSIC: is_collection & (scope == CollectionLocalMediaProfileScope.MUSIC.value),
     }
     has_files = (
         select(MediaDownloadBase.id)

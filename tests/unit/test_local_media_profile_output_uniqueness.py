@@ -68,19 +68,19 @@ def test_guaranteed_episode_aliases(left, right):
     ('year', 'movie_year'), ('author', 'movie_author'), ('rating', 'movie_mature_rating'),
 ])
 def test_movie_feature_aliases(left, right):
-    assert _compare('/downloads/{{ '+left+' }}.ext', '/downloads/{{ '+right+' }}.ext', kind='movie') == OutputOverlap.OVERLAP
+    assert _compare('/downloads/{{ '+left+' }}.ext', '/downloads/{{ '+right+' }}.ext', kind='video') == OutputOverlap.OVERLAP
 
 
 def test_movie_extras_are_not_mapped_to_parent_movie_title():
     left = '/downloads/{% if media_type == "movie" %}A/{% else %}extras/{% endif %}{{ title }}.ext'
     right = '/downloads/{% if media_type == "movie" %}B/{% else %}extras/{% endif %}{{ movie_title }}.ext'
-    assert _compare(left, right, kind='movie') == OutputOverlap.UNKNOWN
+    assert _compare(left, right, kind='video') == OutputOverlap.UNKNOWN
 
 
 def test_an_extra_only_collision_is_detected():
     left = '/downloads/{% if media_type == "movie" %}A/{% else %}extras/{% endif %}{{ title }}.ext'
     right = '/downloads/{% if media_type == "movie" %}B/{% else %}extras/{% endif %}{{ extended_title }}.ext'
-    assert _compare(left, right, kind='movie') == OutputOverlap.OVERLAP
+    assert _compare(left, right, kind='video') == OutputOverlap.OVERLAP
 
 
 @pytest.mark.parametrize(('left_format', 'right_format', 'expected'), [
@@ -114,7 +114,7 @@ def test_profile_scoped_indexes_do_not_create_false_guard_contradictions():
 def test_source_and_profile_types_are_separate():
     environment = _environment()
     left = analyze_profile_outputs('/downloads/{{ title }}.ext', 'collection', 'format_1080p', environment=environment, namespace='left')
-    right = analyze_profile_outputs('/downloads/{{ title }}.ext', 'movie', 'format_1080p', environment=environment, namespace='right')
+    right = analyze_profile_outputs('/downloads/{{ title }}.ext', 'video', 'format_1080p', environment=environment, namespace='right')
     assert compare_profile_outputs(left, right, environment=environment,
                                    finalize_path=lambda path, ext: path[:-3]+ext).status == OutputOverlap.DISJOINT
 

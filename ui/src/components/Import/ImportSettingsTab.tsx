@@ -7,7 +7,7 @@ import {useImporters} from '../../lib/imports'
 
 const DESCRIPTIONS: Record<string, string> = {
     pinchflat: 'Sources, media profiles, downloaded files and settings from Pinchflat.',
-    'ytdl-sub': 'TV show subscriptions, their presets and every downloaded video from ytdl-sub.',
+    'ytdl-sub': 'TV show and music subscriptions, their presets and every downloaded video and track from ytdl-sub.',
     wireloft: 'Everything from WireLoft: shows, movies, feeds, Download Profiles, files and the Daily Wire sign-in.',
 }
 

@@ -20,12 +20,19 @@ from backend.services.movies import (
     index_dailywire_movie,
     sync_indexed_dailywire_movie,
 )
+from backend.services.errors import ServiceError
+from sources import DAILYWIRE
 from sources.dailywire.api.records import DwMovieRecord
+from ..dailywire.movies.service import get_movie_for_action
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
 from task_manager.tasks.media_download_operations import attach_redownload_dependencies
 
-from backend.operations.movies import MovieExtrasRefreshOperation, MovieRedownloadOperation
+from backend.operations.movies import (
+    MovieDeleteDownloadsOperation,
+    MovieExtrasRefreshOperation,
+    MovieRedownloadOperation,
+)
 
 
 def get_movies_list(s: Session) -> list[MovieAPIRead]:
@@ -51,7 +58,8 @@ def request_movie_extras_refresh(s: Session, movie_slug: str) -> dict[str, bool 
     return {"queued": True, "operation_id": operation.id}
 
 
-def request_movie_redownload(s: Session, movie_slug: str) -> dict[str, bool | int | str]:
+def _movie_downloads_with_files(s: Session, movie_slug: str) -> tuple[Movie, tuple[MediaDownloadBase, ...]]:
+    """The movie and the downloads of it and its extras that have a file."""
     movie: Optional[Movie] = s.query(Movie).filter(Movie.slug == movie_slug).one_or_none()
     if movie is None:
         raise HTTPException(status_code=404, detail="Movie not found")
@@ -77,6 +85,11 @@ def request_movie_redownload(s: Session, movie_slug: str) -> dict[str, bool | in
         .order_by(MediaDownloadBase.id.asc())
         .all()
     )
+    return movie, downloads
+
+
+def request_movie_redownload(s: Session, movie_slug: str) -> dict[str, bool | int | str]:
+    movie, downloads = _movie_downloads_with_files(s, movie_slug)
     download_ids = tuple(download.id for download in downloads)
 
     operation = create_operation(
@@ -92,6 +105,34 @@ def request_movie_redownload(s: Session, movie_slug: str) -> dict[str, bool | in
         )
     else:
         attach_redownload_dependencies(s, operation, downloads)
+
+    s.flush()
+    return {
+        "queued": bool(download_ids),
+        "downloads_queued": len(download_ids),
+        "operation_id": operation.id,
+    }
+
+
+def request_movie_download_delete(s: Session, movie_slug: str) -> dict[str, bool | int | str]:
+    """Delete the files of a movie and its extras, keeping their download records."""
+    movie, downloads = _movie_downloads_with_files(s, movie_slug)
+    download_ids = tuple(download.id for download in downloads)
+
+    operation = create_operation(
+        s,
+        MovieDeleteDownloadsOperation(movie, media_download_ids=download_ids),
+    )
+    if not download_ids:
+        complete_operation(
+            s,
+            operation.id,
+            summary=f"No downloaded media exists for {movie.title}",
+            data={"files_deleted": 0, "downloads_requested": 0},
+        )
+    else:
+        for download_id in download_ids:
+            queue_operation_target_dispatch(s, operation.id, f"media_download:{download_id}")
 
     s.flush()
     return {
@@ -192,3 +233,18 @@ def delete_movie(s: Session, movie_slug: str) -> MovieAPIRead:
     s.delete(item)
     s.flush()
     return payload
+
+
+def look_up_movies(source_key: str, slugs: list[str]) -> list[DwMovieRecord]:
+    """The Source's records of the movies ``slugs``, such as a Daily Wire host's movies a creator adds, looked up
+    before the write transaction that adds them with ``add_movies``."""
+    if not slugs:
+        return []
+    if source_key != DAILYWIRE:
+        raise ServiceError("VODLoft can't add movies from this site")
+    return [get_movie_for_action(slug) for slug in slugs]
+
+
+def add_movies(s: Session, records: list[DwMovieRecord]) -> list[Movie]:
+    """Put movies looked up with ``look_up_movies`` in the Library. ``s`` is a write transaction's session."""
+    return [index_dailywire_movie(s, record)[0] for record in records]

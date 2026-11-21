@@ -1,7 +1,7 @@
 import {partialMatchKey, type QueryClient, type QueryKey} from '@tanstack/react-query'
 
-import {PUBLISH_STATUS_LABELS} from '../types/episode'
 import {type TaskOperationRead} from '../types/schemas/operation'
+import {collectionWords, type Noun} from './collectionWords'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from './cache'
 import {episodeQueryKeys} from './collectionQueryOptions'
 import {quickDownloadFileUrl, quickDownloadToastId} from './quickDownloads'
@@ -87,8 +87,18 @@ function httpErrorMessage(error: string | null | undefined): string | undefined 
   return undefined
 }
 
-function plural(value: number, singular: string, pluralForm = `${singular}s`) {
+function plural(value: number, singular: string, pluralForm: string) {
   return value === 1 ? singular : pluralForm
+}
+
+/** What the operation's collection calls its episodes, such as tracks, from its type. */
+function episodeWords(operation: TaskOperationRead): Noun {
+  return collectionWords(contextString(operation, 'collection_type') || null).episode
+}
+
+/** A number of the operation's collection's episodes, such as 12 tracks. */
+function episodeCount(operation: TaskOperationRead, count: number): string {
+  return collectionWords(contextString(operation, 'collection_type') || null).count(count)
 }
 
 function fileRenameSuccessMessage(operation: TaskOperationRead, title: string): string {
@@ -98,7 +108,7 @@ function fileRenameSuccessMessage(operation: TaskOperationRead, title: string): 
   const considered = resultNumber(operation, 'files_considered') ?? (renamed + unchanged)
   if (considered === 0) return `No existing files needed renaming for ${title}`
   const unchangedDetail = unchanged > 0 ? `; ${unchanged} already matched` : ''
-  return `File Rename finished for ${title}: ${renamed} ${plural(renamed, 'file')} renamed${unchangedDetail}`
+  return `File Rename finished for ${title}: ${renamed} ${plural(renamed, 'file', 'files')} renamed${unchangedDetail}`
 }
 
 function invalidateCollectionEpisodeQueries(
@@ -349,17 +359,6 @@ function invalidateEpisodeCronJob(
   )
 }
 
-function invalidateEpisodeAndDownloadCronJob(
-  operation: TaskOperationRead,
-  invalidations: InvalidationCollector,
-) {
-  invalidateEpisodeCronJob(operation, invalidations)
-  invalidations.push(
-    ['mediaDownloads'],
-    ['mediaDownloadsView'],
-  )
-}
-
 function invalidateDownloadCronJob(
   _operation: TaskOperationRead,
   invalidations: InvalidationCollector,
@@ -392,14 +391,6 @@ function invalidateFullRescanCron(
 ) {
   invalidateEpisodeCronJob(operation, invalidations)
   invalidateTaskLedgerDefinition('rescan_quick_checked_collections', invalidations)
-}
-
-function invalidateNoUsableMediaCron(
-  operation: TaskOperationRead,
-  invalidations: InvalidationCollector,
-) {
-  invalidateEpisodeAndDownloadCronJob(operation, invalidations)
-  invalidateTaskLedgerDefinition('monitor_no_usable_media_episode', invalidations)
 }
 
 function invalidateVerifyDownloadsCron(
@@ -437,12 +428,6 @@ export const frontendOperationDefinitions = {
     label: 'Re-scan collections with quick checks',
     invalidate: invalidateFullRescanCron,
   },
-  'system.cron.monitor_no_usable_media': {
-    kind: 'system.cron.monitor_no_usable_media',
-    resourceType: 'system',
-    label: 'Monitor episodes without usable media',
-    invalidate: invalidateNoUsableMediaCron,
-  },
   'system.cron.verify_downloads': {
     kind: 'system.cron.verify_downloads',
     resourceType: 'system',
@@ -465,7 +450,7 @@ export const frontendOperationDefinitions = {
       const count = resultNumber(operation, 'episodes_found')
       return count === undefined
         ? `Indexing finished for ${collectionTitle}`
-        : `Indexed ${collectionTitle}: ${count} ${plural(count, 'episode')} found`
+        : `Indexed ${collectionTitle}: ${episodeCount(operation, count)} found`
     },
   },
   'collection.sync': {
@@ -476,7 +461,7 @@ export const frontendOperationDefinitions = {
     success: (operation) => {
       const collectionTitle = contextString(operation, 'collection_title') || operation.title
       const count = resultNumber(operation, 'episodes_found') ?? 0
-      return `Sync finished for ${collectionTitle}: ${count} new ${plural(count, 'episode')} found`
+      return `Sync finished for ${collectionTitle}: ${count} new ${plural(count, episodeWords(operation).singular, episodeWords(operation).plural)} found`
     },
   },
   'collection.refresh_metadata': {
@@ -488,8 +473,8 @@ export const frontendOperationDefinitions = {
       const collectionTitle = contextString(operation, 'collection_title') || operation.title
       const count = operation.progressTotal
       return count === 0
-        ? `No episodes to refresh in ${collectionTitle}`
-        : `Metadata refresh completed for ${count} ${plural(count, 'episode')} in ${collectionTitle}`
+        ? `No ${episodeWords(operation).plural} to refresh in ${collectionTitle}`
+        : `Metadata refresh completed for ${episodeCount(operation, count)} in ${collectionTitle}`
     },
   },
   'episode.refresh_metadata': {
@@ -502,32 +487,6 @@ export const frontendOperationDefinitions = {
       return `Metadata refresh completed for ${episodeTitle}`
     },
   },
-  'episode.early_delete': {
-    kind: 'episode.early_delete',
-    resourceType: 'episode',
-    label: 'Early delete',
-    invalidate: invalidateEpisode,
-    success: (operation) => {
-      const episodeTitle = contextString(operation, 'episode_title') || operation.title
-      const outcome = resultString(operation, 'outcome')
-      if (outcome === 'recovered' || outcome === 'replaced') {
-        const publishStatus = resultString(operation, 'publish_status')
-        const statusLabel = publishStatus
-          ? (PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus)
-          : undefined
-        return statusLabel
-          ? `Recovered ${episodeTitle} to ${statusLabel} state`
-          : `Recovered ${episodeTitle}`
-      }
-      if (outcome === 'deleted') return `Deleted ${episodeTitle}`
-      if (outcome === 'retained') return `${episodeTitle} remains in No usable media state`
-      if (outcome === 'unverified') return `Could not verify ${episodeTitle}; it was not deleted`
-      if (outcome === 'already_resolved') {
-        return `${episodeTitle} no longer needs No usable media verification`
-      }
-      return `Early delete completed for ${episodeTitle}`
-    },
-  },
   'collection.rename_files': {
     kind: 'collection.rename_files',
     resourceType: 'collection',
@@ -536,6 +495,69 @@ export const frontendOperationDefinitions = {
     success: (operation) => {
       const collectionTitle = contextString(operation, 'collection_title') || operation.title
       return fileRenameSuccessMessage(operation, collectionTitle)
+    },
+  },
+  'collection.rewrite_metadata': {
+    kind: 'collection.rewrite_metadata',
+    resourceType: 'collection',
+    label: 'Metadata rewrite',
+    invalidate: invalidateCollectionFiles,
+    success: (operation) => {
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const retagged = resultNumber(operation, 'files_retagged') ?? 0
+      const nfos = resultNumber(operation, 'nfos_written') ?? 0
+      const failed = resultNumber(operation, 'files_failed') ?? 0
+      if (retagged + nfos === 0 && failed === 0) return `No downloaded files of ${collectionTitle} needed new metadata`
+      const parts = [
+        retagged > 0 ? `updated the tags of ${retagged} ${plural(retagged, 'file', 'files')}` : '',
+        nfos > 0 ? `wrote ${nfos} NFO ${plural(nfos, 'file', 'files')}` : '',
+      ].filter(Boolean)
+      const failedDetail = failed > 0 ? `; ${failed} ${plural(failed, 'file', 'files')} kept their old metadata` : ''
+      return `Metadata rewrite finished for ${collectionTitle}: ${parts.join(' and ') || 'nothing changed'}${failedDetail}`
+    },
+  },
+  'collection.change_identification': {
+    kind: 'collection.change_identification',
+    resourceType: 'collection',
+    label: 'Episode identification change',
+    invalidate: (operation, invalidations) => {
+      invalidateCollectionStructure(operation, invalidations)
+      invalidateCollectionFiles(operation, invalidations)
+    },
+    success: (operation) => {
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      return operation.result?.summary
+        ? `${collectionTitle}: ${operation.result.summary}`
+        : `${collectionTitle} numbers its episodes the new way`
+    },
+  },
+  'collection.renumber': {
+    kind: 'collection.renumber',
+    resourceType: 'collection',
+    label: 'Numbering again',
+    invalidate: (operation, invalidations) => {
+      invalidateCollectionStructure(operation, invalidations)
+      invalidateCollectionFiles(operation, invalidations)
+    },
+    success: (operation) => {
+      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      return operation.result?.summary
+        ? `${collectionTitle}: ${operation.result.summary}`
+        : `${collectionTitle} has its moved episodes in place`
+    },
+  },
+  'creator.move_sections': {
+    kind: 'creator.move_sections',
+    resourceType: 'creator',
+    label: 'Move',
+    invalidate: (operation, invalidations) => {
+      invalidations.push(['creator', contextString(operation, 'creator_slug')], ['creators'], ['collectionsView'])
+    },
+    success: (operation) => {
+      // What moved, in the Site's words the backend joined, such as "shorts and playlists".
+      const names = operation.context?.names as {plural?: string} | undefined
+      const title = contextString(operation, 'creator_title') || operation.title
+      return names?.plural ? `The ${names.plural} of ${title} are in place` : `${title} is done moving`
     },
   },
   'collection.scan_existing_files': {
@@ -590,8 +612,8 @@ export const frontendOperationDefinitions = {
       const target = contextString(operation, 'target_local_media_profile_name') || 'the other profile'
       const moved = resultNumber(operation, 'episodes_moved') ?? 0
       const skipped = resultNumber(operation, 'episodes_skipped') ?? 0
-      const stayed = skipped > 0 ? `; ${skipped} ${plural(skipped, 'episode')} stayed` : ''
-      return `Moved ${moved} ${plural(moved, 'episode')} to ${target}${stayed}`
+      const stayed = skipped > 0 ? `; ${episodeCount(operation, skipped)} stayed` : ''
+      return `Moved ${episodeCount(operation, moved)} to ${target}${stayed}`
     },
   },
   'local_media_profile.redownload_media': {
@@ -605,7 +627,7 @@ export const frontendOperationDefinitions = {
         ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
         ?? 0
-      return `Re-download finished for ${profileName}: ${count} ${plural(count, 'file')} re-downloaded`
+      return `Re-download finished for ${profileName}: ${count} ${plural(count, 'file', 'files')} re-downloaded`
     },
   },
   'local_media_profile.delete_downloads': {
@@ -618,9 +640,9 @@ export const frontendOperationDefinitions = {
       const files = resultNumber(operation, 'files_deleted') ?? operation.progressTotal
       const disabledProfiles = contextNumber(operation, 'download_profiles_disabled') ?? 0
       const disabledDetail = disabledProfiles > 0
-        ? `; ${disabledProfiles} ${plural(disabledProfiles, 'Download Profile')} disabled`
+        ? `; ${disabledProfiles} ${plural(disabledProfiles, 'Download Profile', 'Download Profiles')} disabled`
         : ''
-      return `Deleted downloads for ${profileName}: ${files} ${plural(files, 'file')} removed${disabledDetail}`
+      return `Deleted downloads for ${profileName}: ${files} ${plural(files, 'file', 'files')} removed${disabledDetail}`
     },
   },
   'download_profile.delete_out_of_scope': {
@@ -631,7 +653,7 @@ export const frontendOperationDefinitions = {
     success: (operation) => {
       const collectionTitle = contextString(operation, 'collection_title') || operation.title
       const deleted = resultNumber(operation, 'downloads_deleted') ?? operation.progressTotal
-      return `Deleted ${deleted} ${plural(deleted, 'download')} outside the filters of ${collectionTitle}`
+      return `Deleted ${deleted} ${plural(deleted, 'download', 'downloads')} outside the filters of ${collectionTitle}`
     },
   },
   'collection.delete_downloads': {
@@ -649,11 +671,11 @@ export const frontendOperationDefinitions = {
       const disabledProfiles = resultNumber(operation, 'download_profiles_disabled') ?? 0
       const profileDetail = profiles === undefined
         ? ''
-        : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
+        : ` using ${profiles} ${plural(profiles, 'Local Media Profile', 'Local Media Profiles')}`
       const disabledDetail = disabledProfiles > 0
-        ? `; ${disabledProfiles} ${plural(disabledProfiles, 'Download Profile')} disabled`
+        ? `; ${disabledProfiles} ${plural(disabledProfiles, 'Download Profile', 'Download Profiles')} disabled`
         : ''
-      return `Deleted downloads for ${collectionTitle}: ${files} episode ${plural(files, 'file')} deleted${profileDetail}${disabledDetail}`
+      return `Deleted downloads for ${collectionTitle}: ${files} ${episodeWords(operation).singular} ${plural(files, 'file', 'files')} deleted${profileDetail}${disabledDetail}`
     },
   },
   'collection.download_all': {
@@ -667,7 +689,7 @@ export const frontendOperationDefinitions = {
         ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
         ?? 0
-      return `Bulk download finished for ${collectionTitle}: ${completed} ${plural(completed, 'episode')} downloaded`
+      return `Bulk download finished for ${collectionTitle}: ${episodeCount(operation, completed)} downloaded`
     },
   },
   'collection.redownload_episodes': {
@@ -685,8 +707,8 @@ export const frontendOperationDefinitions = {
         ?? contextNumber(operation, 'local_media_profiles_requested')
       const profileDetail = profiles === undefined
         ? ''
-        : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
-      return `Bulk delete and re-download finished for ${collectionTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
+        : ` using ${profiles} ${plural(profiles, 'Local Media Profile', 'Local Media Profiles')}`
+      return `Bulk delete and re-download finished for ${collectionTitle}: ${files} ${episodeWords(operation).singular} ${plural(files, 'file', 'files')} re-downloaded${profileDetail}`
     },
   },
   'movie.refresh_extras': {
@@ -694,6 +716,17 @@ export const frontendOperationDefinitions = {
     resourceType: 'movie',
     label: 'Movie extra refresh',
     invalidate: invalidateMovie,
+  },
+  'movie.delete_downloads': {
+    kind: 'movie.delete_downloads',
+    resourceType: 'movie',
+    label: 'Delete downloads',
+    invalidate: invalidateMovieFiles,
+    success: (operation) => {
+      const movieTitle = contextString(operation, 'movie_title') || operation.title
+      const files = resultNumber(operation, 'files_deleted') ?? operation.progressTotal
+      return `Deleted downloads for ${movieTitle}: ${files} ${plural(files, 'file', 'files')} removed`
+    },
   },
   'movie.redownload_media': {
     kind: 'movie.redownload_media',
@@ -706,7 +739,7 @@ export const frontendOperationDefinitions = {
         ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
         ?? 0
-      return `Re-download finished for ${movieTitle}: ${count} ${plural(count, 'file')} re-downloaded`
+      return `Re-download finished for ${movieTitle}: ${count} ${plural(count, 'file', 'files')} re-downloaded`
     },
   },
   'media_download.bulk_retry': {
@@ -719,11 +752,11 @@ export const frontendOperationDefinitions = {
         ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
         ?? 0
-      return `Retry finished for ${count} ${plural(count, 'download')}`
+      return `Retry finished for ${count} ${plural(count, 'download', 'downloads')}`
     },
     canceled: (operation) => {
       const count = contextNumber(operation, 'downloads_requested') ?? 0
-      return `Retry all canceled before all ${count} ${plural(count, 'download')} finished`
+      return `Retry all canceled before all ${count} ${plural(count, 'download', 'downloads')} finished`
     },
     failed: (operation) => operation.error
       ? `Retry all failed: ${operation.error}`
@@ -736,7 +769,7 @@ export const frontendOperationDefinitions = {
     invalidate: invalidateMediaDownloadCollection,
     success: (operation) => {
       const count = operation.progressTotal
-      return `Canceled ${count} ${plural(count, 'download')}`
+      return `Canceled ${count} ${plural(count, 'download', 'downloads')}`
     },
     partial: (operation) => (
       `Canceled ${completedCount(operation)} of ${operation.progressTotal} downloads`
@@ -752,7 +785,7 @@ export const frontendOperationDefinitions = {
     invalidate: invalidateMediaDownloadCollection,
     success: (operation) => {
       const count = resultNumber(operation, 'downloads_deleted') ?? operation.progressTotal
-      return `Deleted ${count} ${plural(count, 'download record')}`
+      return `Deleted ${count} ${plural(count, 'download record', 'download records')}`
     },
     partial: (operation) => {
       const count = resultNumber(operation, 'downloads_deleted') ?? completedCount(operation)

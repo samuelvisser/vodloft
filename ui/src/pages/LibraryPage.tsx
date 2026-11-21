@@ -5,31 +5,56 @@ import {Link, useSearchParams} from 'react-router-dom'
 import {faIcon} from '../icons/faIcon'
 
 import {toImageUrl} from '../components/Episode/EpisodeCard'
-import CollectionIndexingProgress from '../components/CollectionIndexingProgress/CollectionIndexingProgress'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import SourceBadge from '../components/Source/SourceBadge'
-import CollectionTileArt from '../components/CollectionTileArt/CollectionTileArt'
+import CollectionTile from '../components/CollectionTile/CollectionTile'
 import {DrmBadge} from '../components/common/DrmProtected'
 import {AccessBadge} from '../components/common/AccessLocked'
 import FilterBar, {ChipFilter} from '../components/common/FilterBar'
 import DownloadStatusBadge from '../components/DownloadProgress/DownloadStatusBadge'
 import CollectionSort, {
     type CollectionSortOrder,
+    type LibrarySortable,
     compareCollections,
     DEFAULT_COLLECTION_SORT,
     isCollectionSortOrder,
 } from '../components/CollectionSort/CollectionSort'
 import {
-    useLibraryCounts, useLibraryDownloads, useLibraryPreferences, useMovies, useCollectionsView, useSaveLibraryPreferences, useVideos,
+    useCreators, useLibraryCounts, useLibraryDownloads, useLibraryPreferences, useMovies, useCollectionsView, useSaveLibraryPreferences, useVideos,
 } from '../lib/queries'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {CollectionTypeReg} from '../types/collection'
 import DurationPill from '../components/common/DurationPill'
 import './LibraryPage.css'
+import {capitalized, creatorKindText} from '../types/creator'
+import type {Names} from '../types/schemas/source'
+import type {CollectionReadView} from '../types/schemas/collection'
+import type {CreatorRead} from '../types/schemas/creator'
 import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
+import {wordsOf} from '../lib/collectionWords'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SITE_FILTER_STORAGE_KEY = 'librarySiteFilter'
+const LIBRARY_KIND_FILTER_STORAGE_KEY = 'libraryKindFilter'
+const KIND_VALUES = ['creator', 'collection']
+
+type Noun = {singular: string, plural: string}
+
+/** What the library's creators are called: as their Sites call them when they all call them the same, such as hosts. */
+function creatorNoun(creatorNames: Names[]): Noun {
+    const kinds = new Map(creatorNames.map((names) => [names.plural, names]))
+    return kinds.size === 1 ? [...kinds.values()][0] : {singular: 'creator', plural: 'creators'}
+}
+/** Creators and collections. */
+function kindOptions(creators: Noun) {
+    return [{value: 'creator', label: capitalized(creators.plural)}, {value: 'collection', label: 'Collections'}]
+}
+const COLLECTION_NOUN: Noun = {singular: 'collection', plural: 'collections'}
+const MEDIA_TYPE_NOUNS: Record<MediaType, Noun> = {
+    collections: COLLECTION_NOUN,
+    movies: {singular: 'movie', plural: 'movies'},
+    videos: {singular: 'video', plural: 'videos'},
+}
 const LIBRARY_COLLECTION_SORT_STORAGE_KEY = 'libraryCollectionSort'
 
 /** The order this browser remembers, for installs without user accounts. */
@@ -144,9 +169,11 @@ export default function LibraryPage() {
     const [params, setParams] = useSearchParams()
     const [collectionTypeFilter, setCollectionTypeFilter] = useState(() => loadLibraryChipFilter(LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY))
     const [siteFilter, setSiteFilter] = useState(() => loadLibraryChipFilter(LIBRARY_SITE_FILTER_STORAGE_KEY))
+    const [kindFilter, setKindFilter] = useState(() => loadLibraryChipFilter(LIBRARY_KIND_FILTER_STORAGE_KEY))
     const [search, setSearch] = useState('')
     const searchWords = useMemo(() => foldForSearch(search).split(/\s+/).filter(Boolean), [search])
     const {data: collections, isLoading: collectionsLoading, error: collectionsError} = useCollectionsView()
+    const {data: creators} = useCreators()
     const {data: movies, isLoading: moviesLoading, error: moviesError} = useMovies()
     const {data: videos, isLoading: videosLoading, error: videosError} = useVideos()
     const {data: downloads} = useLibraryDownloads()
@@ -189,9 +216,30 @@ export default function LibraryPage() {
         () => applicableChipFilter(collectionTypeFilter, CollectionTypeReg.values),
         [collectionTypeFilter],
     )
+    const hasCreators = !!creators?.length
+    const activeKindFilter = useMemo(
+        () => hasCreators ? applicableChipFilter(kindFilter, KIND_VALUES) : [],
+        [kindFilter, hasCreators],
+    )
+    // Creators come first. A creator matches a collection type when one of its collections has that type.
+    const filteredCreators = useMemo(() => {
+        if (!matchesChipFilter('creator', activeKindFilter)) return []
+        const typed = new Set((collections ?? [])
+            .filter((collection) => collection.creatorSlug && matchesChipFilter(collection.type, activeCollectionTypeFilter))
+            .map((collection) => collection.creatorSlug))
+        return creators?.filter((creator) => (
+            (activeCollectionTypeFilter.length === 0 || typed.has(creator.slug))
+            && creator.accounts.some((account) => matchesSiteFilter(account, activeSiteFilter))
+            && matchesLibrarySearch({title: creator.title, authorName: creator.accounts[0]?.handle}, searchWords)
+        )) ?? []
+    }, [creators, collections, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords])
     const filteredCollections = useMemo(() => {
+        if (!matchesChipFilter('collection', activeKindFilter)) return []
+        // A creator's collections are behind its card, unless a search looks for them or the card is filtered out.
+        const behindCard = new Set(searchWords.length > 0 ? [] : filteredCreators.map((creator) => creator.slug))
         const shown = collections?.filter((collection) => (
-            matchesChipFilter(collection.type, activeCollectionTypeFilter) && matchesSiteFilter(collection, activeSiteFilter)
+            !(collection.creatorSlug && behindCard.has(collection.creatorSlug))
+            && matchesChipFilter(collection.type, activeCollectionTypeFilter) && matchesSiteFilter(collection, activeSiteFilter)
             && matchesLibrarySearch(collection, searchWords)
         )) ?? []
         // While searching, the best matches come first; the chosen order only settles equal matches.
@@ -199,7 +247,40 @@ export default function LibraryPage() {
         return shown.sort((a, b) => (
             (ranks.get(a.slug) ?? 0) - (ranks.get(b.slug) ?? 0) || compareCollections(a, b, collectionSort)
         ))
-    }, [collections, activeCollectionTypeFilter, activeSiteFilter, searchWords, collectionSort])
+    }, [collections, filteredCreators, activeKindFilter, activeCollectionTypeFilter, activeSiteFilter, searchWords, collectionSort])
+    // Creators and collections share the chosen order: a creator counts as opened when its page or one of its
+    // collections was, and was released when its first collection was. While searching, creators come first.
+    const collectionTiles = useMemo(() => {
+        const firstPublished = new Map<string, Date>()
+        for (const collection of collections ?? []) {
+            const date = collection.firstPublishedDate
+            if (!collection.creatorSlug || !date) continue
+            const known = firstPublished.get(collection.creatorSlug)
+            if (!known || date < known) firstPublished.set(collection.creatorSlug, date)
+        }
+        type Tile = {sortable: LibrarySortable} & (
+            {kind: 'creator', creator: CreatorRead} | {kind: 'collection', collection: CollectionReadView})
+        const creatorTiles: Tile[] = filteredCreators.map((creator) => ({
+            kind: 'creator', creator,
+            sortable: {
+                title: creator.title, openCount: creator.openCount, lastOpenedAt: creator.lastOpenedAt,
+                firstPublishedDate: firstPublished.get(creator.slug) ?? null, createdAt: new Date(creator.createdAt),
+            },
+        }))
+        const tiles: Tile[] = filteredCollections.map((collection) => ({kind: 'collection', collection, sortable: collection}))
+        if (searchWords.length > 0) return [...creatorTiles, ...tiles]
+        // The collections are in order already; each creator goes in before the first collection it comes before.
+        const sortedCreators = creatorTiles.sort((a, b) => compareCollections(a.sortable, b.sortable, collectionSort))
+        const merged: Tile[] = []
+        let next = 0
+        for (const tile of tiles) {
+            while (next < sortedCreators.length && compareCollections(sortedCreators[next].sortable, tile.sortable, collectionSort) <= 0) {
+                merged.push(sortedCreators[next++])
+            }
+            merged.push(tile)
+        }
+        return [...merged, ...sortedCreators.slice(next)]
+    }, [collections, filteredCreators, filteredCollections, searchWords, collectionSort])
     const filteredMovies = useMemo(
         () => movies?.filter((movie) => (
             matchesSiteFilter(movie, activeSiteFilter) && matchesLibrarySearch(movie, searchWords)
@@ -254,6 +335,14 @@ export default function LibraryPage() {
         }
     }, [siteFilter])
 
+    useEffect(() => {
+        try {
+            localStorage.setItem(LIBRARY_KIND_FILTER_STORAGE_KEY, JSON.stringify(kindFilter))
+        } catch {
+            // As above: without storage the filter just isn't remembered.
+        }
+    }, [kindFilter])
+
     // The URL is the single source of truth for the selected library type, just
     // like on the Browse page. Never switch away from an explicitly requested
     // type based on which query happens to finish first.
@@ -273,14 +362,24 @@ export default function LibraryPage() {
     const showSort = activeType === 'collections' && hasCollections
     const showTypeFilter = activeType === 'collections' && hasCollections
     const showChips = siteOptions.length > 1 || showTypeFilter
+    const showKindFilter = showTypeFilter && hasCreators
     const activeFilterCount = (activeSiteFilter.length > 0 ? 1 : 0) + (showTypeFilter && activeCollectionTypeFilter.length > 0 ? 1 : 0)
+        + (showKindFilter && activeKindFilter.length > 0 ? 1 : 0)
     const filtered = activeFilterCount > 0 || searchWords.length > 0
-    const matchingCount = activeType === 'collections' ? filteredCollections.length
+    const matchingCount = activeType === 'collections' ? filteredCreators.length + filteredCollections.length
         : activeType === 'movies' ? filteredMovies.length
             : filteredVideos.length
+    // Name what the count holds: one kind of tile when the kind filter picks one, "items" when creators and
+    // collections show together.
+    const creatorsNoun = creatorNoun((creators ?? []).map((creator) => creator.creatorNames))
+    const matchingNoun = activeType !== 'collections' ? MEDIA_TYPE_NOUNS[activeType]
+        : !showKindFilter ? COLLECTION_NOUN
+            : activeKindFilter.length !== 1 ? {singular: 'item', plural: 'items'}
+                : activeKindFilter[0] === 'creator' ? creatorsNoun : COLLECTION_NOUN
     const resetFilters = () => {
         setSiteFilter([])
         setCollectionTypeFilter([])
+        setKindFilter([])
         setSearch('')
     }
 
@@ -290,7 +389,7 @@ export default function LibraryPage() {
                 className="library-header"
                 title="Library"
                 titleId="library-title"
-                subtitle={<p className="view-description">Collections, movies and videos indexed by VODLoft.</p>}
+                subtitle={<p className="view-description">{hasCreators ? 'Collections, creators, movies and videos' : 'Collections, movies and videos'} indexed by VODLoft.</p>}
                 actions={can('add_media') && <PageHeaderAction icon={faIcon('fass', 'plus')} label="Add media" to="/add"/>}
             >
                 {showTabs && (
@@ -316,13 +415,16 @@ export default function LibraryPage() {
                     activeCount={activeFilterCount}
                     footer={filtered && (
                         <div className="filter-bar-count" aria-live="polite">
-                            <strong>{matchingCount.toLocaleString()} matching {activeType}</strong>
+                            <strong>{matchingCount.toLocaleString()} matching {matchingCount === 1 ? matchingNoun.singular : matchingNoun.plural}</strong>
                             <button type="button" className="filter-chip-reset" onClick={resetFilters}>Reset filters</button>
                         </div>
                     )}
                 >
                     {showChips && (
                         <>
+                            {showKindFilter && (
+                                <ChipFilter label="Kind" options={kindOptions(creatorsNoun)} selected={activeKindFilter} onChange={setKindFilter}/>
+                            )}
                             <ChipFilter label="Site" options={siteOptions} selected={activeSiteFilter} onChange={setSiteFilter}/>
                             {showTypeFilter && (
                                 <ChipFilter label="Type" options={CollectionTypeReg.options} selected={activeCollectionTypeFilter} onChange={setCollectionTypeFilter}/>
@@ -350,37 +452,36 @@ export default function LibraryPage() {
             ) : activeType === 'videos' && hasVideos && !videos ? (
                 <LibraryTypeLoading what="videos" error={videosError}/>
             ) : activeType === 'collections' && hasCollections ? (
-                filteredCollections.length > 0 ? (
+                filteredCreators.length + filteredCollections.length > 0 ? (
                     <div className="library-collection-grid" role="list" aria-label="Collections">
-                        {filteredCollections.map((collection) => {
-                            // The tile is square, so square artwork comes first when a Source has it.
-                            const image = toImageUrl(
-                                collection.thumbnailSquarePath || collection.thumbnailPortraitPath || collection.thumbnailLandscapePath || collection.logoImagePath || collection.authorHeadshotPath,
-                            )
-                            // A yt-dlp channel's author is usually the channel itself: do not say its name twice.
-                            const showAuthor = !!collection.authorName && !sameName(collection.authorName, collection.title)
+                        {collectionTiles.map((tile) => {
+                            if (tile.kind === 'collection') {
+                                const collection = tile.collection
+                                return (
+                                    <CollectionTile
+                                        key={collection.slug} collection={collection}
+                                        // A yt-dlp creator's author is usually the creator itself: do not say its name twice.
+                                        subtitle={collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null}
+                                    />
+                                )
+                            }
+                            const creator = tile.creator
+                            const avatar = toImageUrl(creator.avatarUrl)
+                            const banner = toImageUrl(creator.bannerUrl)
                             return (
-                                <Link className="library-tile" to={`/collection/${collection.slug}`} key={collection.slug} role="listitem">
-                                    <span className="library-tile-art">
-                                        {image
-                                            ? <CollectionTileArt key={image} src={image}/>
-                                            : <span className="collection-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'podcast')}/></span>}
-                                        <SourceBadge sourceKey={collection.sourceKey} className="library-tile-source"/>
+                                <Link className="library-tile library-tile--creator" to={`/creator/${creator.slug}`} key={`creator-${creator.slug}`} role="listitem">
+                                    <span className="library-tile-art" style={banner ? {backgroundImage: `url("${banner}")`} : undefined}>
+                                        {avatar
+                                            ? <img className="library-creator-avatar" src={avatar} alt="" loading="lazy" decoding="async"/>
+                                            : <span className="library-creator-avatar library-creator-avatar--empty" aria-hidden="true">{creator.title.slice(0, 2).toUpperCase()}</span>}
+                                        {creator.accounts.length === 1 && <SourceBadge sourceKey={creator.accounts[0].sourceKey} className="library-tile-source"/>}
                                     </span>
                                     <span className="library-tile-copy">
-                                        <span className="library-tile-title">{collection.title}</span>
-                                        {showAuthor && <span className="library-tile-author">{collection.authorName}</span>}
-                                        <span className="library-tile-status">
-                                            <span className="library-tile-meta">
-                                                <span>{collection.episodeCount} episodes</span>
-                                                {collection.years && <span>{collection.years}</span>}
-                                            </span>
-                                            <CollectionIndexingProgress
-                                                collectionId={collection.id}
-                                                collectionSlug={collection.slug}
-                                                pollForStart={collection.episodeCount === 0}
-                                                className="library-collection-indexing"
-                                            />
+                                        <span className="library-tile-title">{creator.title}</span>
+                                        <span className="library-tile-author">{creatorKindText(creator)}</span>
+                                        <span className="library-tile-meta">
+                                            <span>{creator.collectionCount} {creator.collectionCount === 1 ? 'collection' : 'collections'}</span>
+                                            <span>{wordsOf(creator.words).count(creator.episodeCount)}</span>
                                         </span>
                                     </span>
                                 </Link>

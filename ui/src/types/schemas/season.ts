@@ -43,5 +43,6 @@ export const SeasonReadSchema = z.looseObject({
     seasonNumber: z.int(),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
+    newestPublishedAt: ApiDateTimeSchema.nullish(),
 })
 export type SeasonRead = z.infer<typeof SeasonReadSchema>;

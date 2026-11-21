@@ -36,7 +36,7 @@ export default function RunningActions({actions, className}: Props) {
                             {action.status ?? presentation.compactLabel ?? presentation.label}
                         </span>
                     </span>
-                    <ProgressExplanation detail={presentation.detail} buttonClassName="running-action-control"/>
+                    <ProgressExplanation detail={presentation.detail} steps={presentation.steps} buttonClassName="running-action-control"/>
                     {action.controls?.map((control) => (
                         <button
                             key={control.label}

@@ -85,9 +85,55 @@ def weighted_progress_percent(
     return max(0, min(100, int(weighted_progress / max(1, total_weight))))
 
 
-def update_progress(progress, percentage: int, msg: str):
-    """Small helper to update the progress in any worker"""
-    if progress:
+def update_progress(progress, percentage: int | None, msg: str, *, done: int | None = None, total: int | None = None):
+    """Small helper to update the progress in any worker. A percentage of None says the step that starts now cannot
+    tell how far it is, so its progress bar moves without a percentage until a later update gives one. Work that
+    counts what it does gives ``done`` of ``total``, which a step of a plan shows."""
+    if isinstance(progress, PlanStep):
+        progress.set(percentage, msg, done=done, total=total)
+    elif progress:
         progress.set(percentage, msg)
     else:
-        print(f"{percentage}%: {msg}")
+        print(f"{'…' if percentage is None else f'{percentage}%'}: {msg}")
+
+
+def report_plan(progress):
+    """A sink for a ``progress_plan.PlanTracker`` that reports the plan through a task's progress: its steps for the
+    UI to follow, the step it is on as its message, and how far the whole plan is as its percentage, or none while
+    the step it is on cannot measure itself."""
+    from dataclasses import asdict
+
+    from progress_plan import PlanSnapshot
+
+    def report(snapshot: PlanSnapshot) -> None:
+        if not progress:
+            return
+        main = snapshot.main
+        completion = min(99, int(100 * snapshot.fraction))
+        meta = {"plan": {"main_activity": snapshot.main_activity, "stages": [asdict(stage) for stage in snapshot.stages]}}
+        message = main.label if main is not None else None
+        percent = completion if snapshot.measurable else None
+        from task_manager.scheduler.executor import ProgressUpdater
+        if isinstance(progress, ProgressUpdater):
+            progress.set(percent, message, meta=meta, completion_percent=completion)
+        else:
+            progress.set(percent, message, meta=meta)
+
+    return report
+
+
+class PlanStep:
+    """A task's progress as one step of its plan sees it: what the step reports moves that step, and asking whether
+    to stop asks the task. For work that reports its own percentage, such as renaming files."""
+
+    def __init__(self, tracker, progress, step: str):
+        self._tracker, self._progress, self._step = tracker, progress, step
+
+    def __call__(self) -> bool:
+        return bool(self._progress()) if callable(self._progress) else False
+
+    def set(
+            self, percentage: int | None, message: str | None = None, *, done: int | None = None,
+            total: int | None = None, **_,
+    ) -> None:
+        self._tracker.progress(self._step, None if percentage is None else percentage / 100, done=done, total=total)

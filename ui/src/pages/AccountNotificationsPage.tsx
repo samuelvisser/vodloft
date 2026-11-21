@@ -3,7 +3,7 @@ import {useCallback} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useQueryClient} from '@tanstack/react-query'
 import {Link} from 'react-router-dom'
-import toast from 'react-hot-toast'
+import toast from '../lib/toast'
 
 import PageSubtitle from '../components/common/PageSubtitle'
 import History from '../components/Notifications/History'

@@ -107,7 +107,7 @@ class ProgressUpdater:
     """Generic progress and cooperative-cancellation channel for a TaskRun.
 
     Workers report percentage, message and structured live metadata through
-    ``set``. Percentage values are deliberately discarded when the registered
+    ``set``; a percentage of None says the current step cannot measure its own. Percentage values are deliberately discarded when the registered
     task has ``tracks_progress=False``, while messages, metadata, waits and
     cancellation remain available. Long-running libraries may also use the
     updater itself as a ``should_cancel`` callback; cancellation is then driven
@@ -168,13 +168,15 @@ class ProgressUpdater:
 
     def set(
             self,
-            percent: int,
+            percent: int | None,
             message: Optional[str] = None,
             meta: Optional[dict[str, Any]] = None,
             *, completion_percent: int | None = None,
             wait_state: dict[str, Any] | None | object = _WAIT_UNCHANGED,
     ) -> None:
-        p = max(0, min(100, int(percent)))
+        # None says the step running now cannot tell how far it is, so its operation shows no percentage until the
+        # next one that can.
+        p = None if percent is None else max(0, min(100, int(percent)))
         completion = (
             None
             if completion_percent is None

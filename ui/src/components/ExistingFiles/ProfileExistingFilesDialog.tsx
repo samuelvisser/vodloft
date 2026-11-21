@@ -1,7 +1,7 @@
 import {useState} from 'react'
 import {useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
 import Modal from '../Modal/Modal'
 import type {ExistingFile} from '../../types/schemas/existing_files'

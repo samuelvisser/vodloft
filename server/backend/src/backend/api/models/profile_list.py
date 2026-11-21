@@ -24,8 +24,9 @@ class StreamsFrom(StrEnum):
 class UsedFor(StrEnum):
     PODCAST = "podcast"
     SERIES = "series"
-    MOVIE = "movie"
     VIDEO = "video"
+    MOVIE = "movie"
+    MUSIC = "music"
 
 
 class StorageUse(StrEnum):

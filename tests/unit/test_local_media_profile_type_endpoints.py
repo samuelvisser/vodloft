@@ -12,7 +12,7 @@ def _methods(router, path: str) -> set[str]:
 
 def test_local_media_profile_mutations_are_type_specific() -> None:
     from backend.api.endpoints.local_media_profiles.router import router as base_router
-    from backend.api.endpoints.movie_local_media_profiles.router import (
+    from backend.api.endpoints.video_local_media_profiles.router import (
         router as movie_router,
     )
     from backend.api.endpoints.collection_local_media_profiles.router import (
@@ -40,21 +40,21 @@ def test_local_media_profile_mutations_are_type_specific() -> None:
 
     assert {"GET", "POST"} <= _methods(
         movie_router,
-        "/movie-local-media-profiles",
+        "/video-local-media-profiles",
     )
     assert {"GET", "PATCH", "DELETE"} <= _methods(
         movie_router,
-        "/movie-local-media-profiles/{local_media_profile_slug}",
+        "/video-local-media-profiles/{local_media_profile_slug}",
     )
 
 
 def test_local_media_profile_request_models_only_expose_their_own_fields() -> None:
-    from backend.api.models.movie_local_media_profile import (
-        MovieLocalMediaProfileAPICreate,
+    from backend.api.models.video_local_media_profile import (
+        VideoLocalMediaProfileAPICreate,
     )
     from backend.api.models.collection_local_media_profile import (
         CollectionLocalMediaProfileAPICreate,
     )
 
     assert "collection_scope" in CollectionLocalMediaProfileAPICreate.model_fields
-    assert "collection_scope" not in MovieLocalMediaProfileAPICreate.model_fields
+    assert "collection_scope" not in VideoLocalMediaProfileAPICreate.model_fields

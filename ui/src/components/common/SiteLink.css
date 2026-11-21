@@ -1,0 +1,10 @@
+@media (max-width: 460px) {
+    /* The site name loses its "Open on" first, then shortens, so the buttons beside it keep one row. */
+    .site-link { flex-shrink: 1; min-width: 0; }
+    .site-link-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .site-link-prefix { display: none; }
+}
+
+/* Just the site's icon, where its name does not fit; the button's title still names the site. */
+.site-link--compact { justify-content: center; min-width: 2.5em; padding-inline: 10px; }
+.site-link--compact > .site-icon { font-size: 1.15em; }

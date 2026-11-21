@@ -33,7 +33,7 @@ def test_deleting_one_movie_preserves_shared_source_other_placement_and_download
     from backend.api.endpoints.movies.service import delete_movie
     from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db import Base
-    from backend.db.models import Movie, MovieExtra, MovieExtraSource, MovieLocalMediaProfile
+    from backend.db.models import Movie, MovieExtra, MovieExtraSource, VideoLocalMediaProfile
     from backend.db.models.media_download import MovieExtraMediaDownload
     from config import get_settings
     from sources.dailywire.api.records import DwMovieExtraRecord
@@ -44,7 +44,7 @@ def test_deleting_one_movie_preserves_shared_source_other_placement_and_download
     Base.metadata.create_all(engine)
     session = Session(engine)
     try:
-        profile = MovieLocalMediaProfile(
+        profile = VideoLocalMediaProfile(
             slug="movies",
             name="Movies",
             output_template="/downloads/{{ movie_title }}/{{ slug }}.ext",

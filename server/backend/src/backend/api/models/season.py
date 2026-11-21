@@ -46,6 +46,8 @@ class SeasonAPIRead(_SeasonAPIBaseOut):
     """Response body for a season."""
     created_at: datetime
     updated_at: datetime
+    newest_published_at: datetime | None = None
+    """When its newest episode came out, in the list of a collection's seasons."""
 
 
 

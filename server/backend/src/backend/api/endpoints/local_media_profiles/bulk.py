@@ -18,13 +18,11 @@ from backend.services.local_media_profile_sites import profile_download_options
 from backend.types.local_media_profile_types import LocalMediaProfileType
 
 from ..collection_local_media_profiles.service import delete_collection_local_media_profile
-from ..movie_local_media_profiles.service import delete_movie_local_media_profile
 from ..video_local_media_profiles.service import delete_video_local_media_profile
 from .service import ensure_local_media_profile_can_be_deleted
 
 _DELETE = {
     LocalMediaProfileType.COLLECTION.value: delete_collection_local_media_profile,
-    LocalMediaProfileType.MOVIE.value: delete_movie_local_media_profile,
     LocalMediaProfileType.VIDEO.value: delete_video_local_media_profile,
 }
 
@@ -32,7 +30,7 @@ _DELETE = {
 def _offers(profile: LocalMediaProfileBase, name: str) -> bool:
     """Collection images are only on collection profiles, and subtitles only when one of the profile's Sites has them."""
     if name == "download_collection_assets":
-        return profile.type == LocalMediaProfileType.COLLECTION.value
+        return LocalMediaProfileType(profile.type).for_collections
     if name == "subtitle_mode":
         return profile_download_options(profile.type, profile.site_keys, profile.include_upcoming_sites).subtitles
     return True
@@ -64,7 +62,7 @@ def change_local_media_profiles(s: Session, body: BulkChangeIn[LocalMediaProfile
         changed.append(profile)
     s.flush()
     for profile in changed:
-        if profile.type == LocalMediaProfileType.COLLECTION.value:
+        if LocalMediaProfileType(profile.type).for_collections:
             request_profile_collection_assets(s, profile.id)
     return BulkResultRead(done=len(changed), skipped=left)
 

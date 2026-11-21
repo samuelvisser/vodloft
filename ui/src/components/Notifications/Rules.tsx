@@ -5,7 +5,7 @@ import {useQueryClient} from '@tanstack/react-query'
 import {Controller, useForm} from 'react-hook-form'
 import Select from 'react-select'
 import Switch from 'react-switch'
-import toast from 'react-hot-toast'
+import toast from '../../lib/toast'
 
 import {faIcon} from '../../icons/faIcon'
 import {useCollections} from '../../lib/queries'

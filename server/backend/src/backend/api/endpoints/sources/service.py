@@ -1,20 +1,23 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
-    ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
-    SourceAPIRead, SourceSiteAPIRead,
+    ApiKeyNoteAPIRead, ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
+    NamesAPIRead, SourceAPIRead, SourceSiteAPIRead,
 )
-from backend.db.models import Episode, Collection
+from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase, Settings, Site as SiteRecord
 from backend.security.access import Access
 from backend.types.collection_types import CollectionType
 from backend.services.media_access import access_locked, link_access
 from backend.services.sites import preferred_sources, site_record
 from backend.services.source_requests import asking_source
+from config.network import is_no_internet_error
+from backend.services.users import settings_row
 from backend.utils.helpers import slugify
 from sources import (
     Feature, LinkKind, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, sources_for,
@@ -28,8 +31,24 @@ class LinkNotRecognisedError(LookupError):
     pass
 
 
-def list_sources() -> list[SourceAPIRead]:
-    return [SourceAPIRead.model_validate(source) for source in all_sources()]
+def list_sources(s: Session) -> list[SourceAPIRead]:
+    """Every Source, with which of the Sites it searches are added to VODLoft, and which it can search now."""
+    added = set(s.scalars(select(SiteRecord.key)))
+    return [
+        SourceAPIRead.model_validate(source, context={
+            "added_sites": added,
+            "ready_sites": {site.key for site in source.search_sites if source.search_ready(site)},
+        })
+        for source in all_sources()
+    ]
+
+
+def sources_in_use(s: Session) -> list[str]:
+    """The ids of the Sources the Library has collections, creators, movies or videos from."""
+    return sorted(s.scalars(
+        select(Collection.source_key)
+        .union(select(CreatorAccount.source_key), select(MediaItemBase.source_key))
+    ).all())
 
 
 class SourceFeatureMissingError(LookupError):
@@ -51,6 +70,13 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
     access.check_link(source, url)
     with asking_source(f"{source.name} could not look up this collection"):
         details = source.collection_details(url)
+    try:
+        music = source.music_reason(url, details)
+    except Exception as exc:  # A guess: a failed look leaves the type to the name.
+        if is_no_internet_error(exc):
+            raise
+        logger.info("Could not tell whether %s is music: %s", url, exc)
+        music = None
     author = details.author_name or details.title
     return CollectionDetailsAPIRead(
         source_key=source.id,
@@ -61,23 +87,46 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
         author_name=author,
         author_slug=slugify(author) or details.slug,
         thumbnail_landscape_path=details.image_url,
-        probable_collection_type=CollectionType.PODCAST if names_a_podcast(details.title) else CollectionType.SERIES,
+        probable_collection_type=(
+            CollectionType.MUSIC if music else CollectionType.PODCAST if names_a_podcast(details.title) else CollectionType.SERIES
+        ),
+        music_reason=music,
         seasons=details.seasons,
     )
 
 
-def search_source(access: Access, source: Source, query: str) -> SearchResultsAPIRead:
-    """Search a Source, leaving out results on domains the user may not use."""
+def search_source(access: Access, source: Source, site_key: str, query: str) -> SearchResultsAPIRead:
+    """Search one of a Source's search Sites, leaving out results on domains the user may not use."""
     access.check_source(source)
-    with asking_source(f"{source.name} could not be searched"):
-        answer = source.search(query)
+    site = next((site for site in source.search_sites if site.key == site_key), None)
+    if site is None:
+        raise SourceFeatureMissingError(f"{source.name} cannot search {site_key}")
+    with asking_source(f"{site.name} could not be searched"):
+        answer = source.search(site, query)
     results = SearchResultsAPIRead.model_validate(answer)
     return results.model_copy(update={
         "results": [
-            result.model_copy(update={"access_label": _access_label(source, result.url, result.access)})
+            result.model_copy(update={
+                "access_label": _access_label(source, result.url, result.access),
+                "creator_names": _creator_names(source, result.kind, result.url),
+            })
             for result in results.results if access.allows_link(source.id, result.url)
         ],
     })
+
+
+def _creator_names(source: Source, kind: str, url: str) -> NamesAPIRead | None:
+    """What the Site calls a creator, when a collection result is a creator's own page that can be added as one."""
+    if kind != "collection" or not source.has(Feature.CREATORS) or not source.is_creator_page(url):
+        return None
+    site = source.site_for(url)
+    return NamesAPIRead.model_validate(site.creator_names) if site is not None and site.creators else None
+
+
+def _creator_sections(source: Source, url: str) -> NamesAPIRead | None:
+    """Every type of section a creator has on the link's Site, named together."""
+    site = source.site_for(url)
+    return NamesAPIRead.model_validate(site.section_names) if site is not None else None
 
 
 def _access_label(source: Source, url: str, key: str | None) -> str | None:
@@ -108,11 +157,48 @@ def get_api_status(s: Session, source: Source) -> ApiStatusAPIRead:
     collections = (
         s.query(Collection.sharing_url, func.count(Episode.id))
         .outerjoin(Episode, Episode.collection_id == Collection.id)
-        .filter(Collection.source_key == source.id)
+        .filter(Collection.source_key == source.id, Collection.sharing_url.is_not(None))
         .group_by(Collection.id)
         .all()
     )
     return ApiStatusAPIRead.model_validate(source.api_status([(url, count) for url, count in collections]))
+
+
+API_KEY_NOTE_PAUSE = timedelta(days=7)
+"""How long Remind me later puts off the note that asks for an API key."""
+
+
+def api_key_notes(s: Session) -> list[ApiKeyNoteAPIRead]:
+    """The Sources whose API key would speed up collections or creators in the Library while they have none, unless
+    the user put the note off or turned it off."""
+    settings = s.scalars(select(Settings).order_by(Settings.id).limit(1)).first()
+    if settings is not None and (
+        settings.api_key_note_off
+        or (settings.api_key_note_after is not None and settings.api_key_note_after > datetime.now(timezone.utc))
+    ):
+        return []
+    notes = []
+    for source in all_sources():
+        if not source.has(Feature.API_KEY):
+            continue
+        links = s.scalars(
+            select(Collection.sharing_url).where(Collection.source_key == source.id, Collection.sharing_url.is_not(None))
+            .union(select(CreatorAccount.url).where(CreatorAccount.source_key == source.id, CreatorAccount.url.is_not(None)))
+        ).all()
+        status = source.api_status([(link, 0) for link in links])
+        site = next((site for link in links if (site := source.site_for(link)) is not None and site.takes_api_key), None)
+        if status.key_hint is None and status.collection_count and site is not None:
+            notes.append(ApiKeyNoteAPIRead(source_key=source.id, site_name=site.name))
+    return notes
+
+
+def put_off_api_key_note(s: Session, action: str) -> None:
+    """Put the note that asks for an API key off for a while, or turn it off."""
+    settings = settings_row(s)
+    if action == "never":
+        settings.api_key_note_off = True
+    else:
+        settings.api_key_note_after = datetime.now(timezone.utc) + API_KEY_NOTE_PAUSE
 
 
 def _collection_of_local_episode(s: Session, source: Source, episode_slug: str) -> Collection | None:
@@ -145,6 +231,9 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         access_description=found.description if found is not None else None,
         access_locked=access_locked(source.id, link.access, None),
         preview=ResolvedLinkPreviewAPIRead.model_validate(link),
+        creator_url=link.creator_url,
+        creator_names=NamesAPIRead.model_validate(link.creator_names) if link.creator_names else None,
+        creator_sections=_creator_sections(source, link.creator_url or link.url) if link.creator_names else None,
         candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],
     )
 

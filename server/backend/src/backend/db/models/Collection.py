@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING, TypeAlias
 
-from sqlalchemy import ForeignKey, Text, UniqueConstraint, func
+from sqlalchemy import JSON, ForeignKey, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db import Base
 from backend.db.datetime_types import UTCDateTime
@@ -10,16 +10,22 @@ from backend.db.mixins.MediaContentMetadataMixin import PICTURE_PATH_COMMENT
 from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.CreatedByMixin import CreatedByMixin
 from backend.types.collection_types import EpisodeOrder
+from backend.types.collection_contracts import collection_contract
+from backend.types.link_season_types import ListLayout, LooseVideos, LinkSeasons, OutsideVideos
 
 if TYPE_CHECKING:
     from backend.db.models.media_item import Episode
     from backend.db.models.stream_profile import StreamProfileBase
     from backend.db.models import Season, DownloadProfile, Site
-    from backend.db.models import CustomIndexState
+    from backend.db.models import Creator, CreatorAccount, CustomIndexState, CollectionList
 
 
 def _default_episode_order(context) -> str:
     return EpisodeOrder.default_for(context.get_current_parameters()["episode_identifier"]).value
+
+
+def _default_repeat_videos(context) -> str:
+    return collection_contract(context.get_current_parameters()["type"]).repeat_videos.value
 
 
 class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
@@ -37,12 +43,66 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         ForeignKey("sites.key"), index=True, comment="The Site the collection is on; filled in the background for older collections",
     )
     site_ref: Mapped[Optional[str]] = mapped_column(comment="The Site's own id for the collection")
+    creator_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("creators.id", ondelete="SET NULL"), index=True, comment="The creator it was added through",
+    )
+    creator_account_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("creator_accounts.id", ondelete="SET NULL", use_alter=True), index=True,
+        comment="The creator's account whose feeds and lists it gathers as the user placed them, for a collection of "
+                "the creator's other than the account's own collection",
+    )
     title: Mapped[str]
     description: Mapped[Optional[str]]
-    sharing_url: Mapped[str] = mapped_column(unique=True)
+    sharing_url: Mapped[Optional[str]] = mapped_column(
+        unique=True, comment="The collection's own link; a collection that only holds its link seasons may go without",
+    )
     ytdlp_options: Mapped[str] = mapped_column(
         Text, default="", server_default="",
         comment="Your own yt-dlp options for this Collection, added after the yt-dlp Source's",
+    )
+    link_seasons: Mapped[str] = mapped_column(
+        default=LinkSeasons.OFF.value, server_default=LinkSeasons.OFF.value,
+        comment="Whether the creator's playlists are seasons: off, all or selected",
+    )
+    new_lists: Mapped[dict[str, str]] = mapped_column(
+        JSON, default=dict, server_default="{}",
+        comment="What happens with a list the creator adds, by the kind of list, when only selected lists are seasons: "
+                "ask, add or ignore",
+    )
+    list_layout: Mapped[str] = mapped_column(
+        default=ListLayout.SEASON_EACH.value, server_default=ListLayout.SEASON_EACH.value,
+        comment="How the lists that are seasons are laid out: season_each, or by_year in a season per upload year",
+    )
+    loose_videos: Mapped[str] = mapped_column(
+        default=LooseVideos.ONE_SEASON.value, server_default=LooseVideos.ONE_SEASON.value,
+        comment="Where the videos in none of the playlists that are seasons go: one_season or by_year",
+    )
+    repeat_videos: Mapped[str] = mapped_column(
+        default=_default_repeat_videos, server_default="one_season",
+        comment="What happens with a video that belongs in several of its seasons: one_season, an episode in the first, "
+                "or each_season, an episode in each",
+    )
+    outside_videos: Mapped[str] = mapped_column(
+        default=OutsideVideos.LEAVE_OUT.value, server_default=OutsideVideos.LEAVE_OUT.value,
+        comment=(
+            "What happens with the videos of the playlists that are seasons that the collection's own link does "
+            "not list: leave_out, add, or only, which holds nothing but the videos of those playlists"
+        ),
+    )
+    feeds: Mapped[Optional[list[str]]] = mapped_column(
+        JSON, nullable=True,
+        comment=(
+            "For a creator's own collection, the refs of the creator's feeds its link lists, such as only a YouTube "
+            "channel's Videos; null lists all that its link lists"
+        ),
+    )
+    custom_season_order: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="The user put the seasons in their own order, so a new season goes last instead of where its date puts it",
+    )
+    split_chapters: Mapped[bool] = mapped_column(
+        default=False, server_default="0",
+        comment="Each new video with chapters becomes a season of its own, with an episode per chapter",
     )
     cookies_mode: Mapped[str] = mapped_column(
         default="automatic", server_default="automatic",
@@ -94,6 +154,10 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
 
     # Relationships
     site: Mapped[Optional["Site"]] = relationship(lazy="joined")
+    creator: Mapped[Optional["Creator"]] = relationship(back_populates="collections", foreign_keys=[creator_id])
+    creator_account: Mapped[Optional["CreatorAccount"]] = relationship(
+        back_populates="gathering", foreign_keys=[creator_account_id],
+    )
     episodes: Mapped[list["Episode"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan", order_by="desc(Episode.index)"
     )
@@ -108,6 +172,9 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     )
     custom_index_states: Mapped[list["CustomIndexState"]] = relationship(
         back_populates="collection", cascade="all, delete-orphan"
+    )
+    lists: Mapped[list["CollectionList"]] = relationship(
+        back_populates="collection", cascade="all, delete-orphan", order_by="CollectionList.site_position",
     )
 
     def __repr__(self) -> str:

@@ -90,6 +90,17 @@ class ProfilePlan:
 
 
 @dataclass(frozen=True)
+class PlaylistSeasonPlan:
+    """A playlist of the channel a Collection is made from that is one of its seasons."""
+
+    url: str
+    title: str | None = None
+    """The season's name, as the other program named it."""
+    season_number: int | None = None
+    """The season's number, as the other program numbered it; None lets VODLoft number it."""
+
+
+@dataclass(frozen=True)
 class CollectionPlan:
     external_id: str
     url: str
@@ -105,6 +116,22 @@ class CollectionPlan:
     """Collection artwork and NFO files as (kind, path), such as ("poster", "/downloads/…/poster.jpg")."""
     added_at: datetime | None = None
     """When the other program added the collection, in UTC; None when it doesn't say."""
+    link_seasons: tuple[PlaylistSeasonPlan, ...] = ()
+    """Links that are seasons of the Collection of the channel at ``url``: its playlists, another channel or one
+    video, the one that keeps a video several of them list first. Each adds the videos the channel does not have, so
+    the Collection keeps what the other program had."""
+    loose_season: PlaylistSeasonPlan | None = None
+    """With ``link_seasons``: the season of the channel's videos in none of them, as the other program named and
+    numbered it; None lets VODLoft name it."""
+    creator: bool = False
+    """``url`` is a creator's own page, such as a Bandcamp artist: VODLoft adds the creator, with
+    everything on the page in this one collection."""
+    artist: str | None = None
+    """For music: the artist it is by, as the other program names them. The import gives the artist this name, and
+    the collections of one artist, such as their albums and their music videos, join the same artist."""
+    links_only: bool = False
+    """The Collection holds only what its ``link_seasons`` have and has no link of its own: the other program kept
+    only these playlists, of no one channel. ``url`` is the first of them."""
 
 
 FileKind = Literal["file", "suppressed", "missing"]
@@ -129,6 +156,8 @@ class FilePlan:
     title: str | None = None
     published: str | None = None
     kept: bool = False
+    part: int | None = None
+    """The file is this chapter of the video, counted from 1, for a collection that splits videos by chapter."""
     episode_values: dict[str, str] = field(default_factory=dict)
     """Template values the other program saved for the item, such as ``episode_uploader``, by VODLoft variable."""
     """The other program was told never to delete this file."""
@@ -197,6 +226,9 @@ class ImportPlan:
     """The other program's database version."""
     download_folder: str = "/downloads"
     """The other program's own download folder, which the path map pairs with a VODLoft folder."""
+    creators: bool = False
+    """The other program's collections can join the creators behind their links, as the person chooses. An importer
+    of a program that has nothing like creators leaves it off."""
     probes: tuple[str, ...] = ()
     """Files the importer reads in the download folders, as the other program names them. They find the path
     map before the plan can list any files, such as ytdl-sub's download archives that list them."""

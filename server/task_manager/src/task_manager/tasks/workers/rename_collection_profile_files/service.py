@@ -38,13 +38,15 @@ def run_rename_collection_profile_files(
     local_media_profile_id: int,
     episode_ids: list[int] | tuple[int, ...] | None = None,
     expected_sources: dict[str, str] | None = None,
+    season_folders: bool = True,
     progress=None,
 ) -> TaskResult:
-    """Plan the renames in a short write transaction, then move the files outside it."""
+    """Plan the renames in a short write transaction, then move the files outside it. Without ``season_folders`` each
+    file keeps its folder and only its name changes."""
     update_progress(progress, 0, "Planning file renames")
     planned = run_write_transaction(lambda session: _plan_renames(
         session, collection_id=collection_id, local_media_profile_id=local_media_profile_id,
-        episode_ids=episode_ids, expected_sources=expected_sources,
+        episode_ids=episode_ids, expected_sources=expected_sources, season_folders=season_folders,
     ))
     if isinstance(planned, TaskResult):
         update_progress(progress, 100, planned.summary)
@@ -66,6 +68,7 @@ def _plan_renames(
     local_media_profile_id: int,
     episode_ids,
     expected_sources: dict[str, str] | None,
+    season_folders: bool = True,
 ) -> TaskResult | tuple[list[DownloadRelocation], int, int]:
     """The moves to make, the number of files considered and unchanged; or the result when there is nothing to move.
 
@@ -131,6 +134,8 @@ def _plan_renames(
             filename_mode=effective_filename_mode(profile),
             extension=extension,
         )
+        if not season_folders:
+            destination = source.parent / destination.name
         planned.append((download, source, settle_no_ascii_name(download, destination, session=session)))
 
     destinations = number_shared_destinations([(source, destination) for _download, source, destination in planned])

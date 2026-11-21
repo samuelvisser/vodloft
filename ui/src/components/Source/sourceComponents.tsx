@@ -11,11 +11,18 @@ type SourceComponents = {
     SignIn?: ComponentType
     ApiKey?: ComponentType
     Settings?: ComponentType<SettingsTabProps>
+    /** What an API key makes better, for the note on Home that asks for one. */
+    apiKeyBenefits?: string
 }
 
 const SOURCE_COMPONENTS: Record<string, SourceComponents> = {
     dailywire: {SignIn: DailywireAuthCard, Settings: DailyWireSettingsTab},
-    ytdlp: {ApiKey: YouTubeApiKey, Settings: YouTubeApiSettings},
+    ytdlp: {
+        ApiKey: YouTubeApiKey, Settings: YouTubeApiSettings,
+        apiKeyBenefits: 'With a free YouTube Data API key, a channel of thousands of videos is listed in under a minute '
+            + 'instead of hours, new videos are found sooner, searching YouTube is quicker, and the daily check notices '
+            + 'removed and private videos.',
+    },
 }
 
 export function sourceComponents(sourceId: string): SourceComponents {

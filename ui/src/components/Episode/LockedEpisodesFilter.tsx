@@ -1,20 +1,23 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faIcon} from '../../icons/faIcon'
+import {collectionWords, Noun} from '../../lib/collectionWords'
 
 type LockedEpisodesFilterProps = {
     /** The episodes the list could leave out: those that need an access VODLoft does not have. */
     lockedTotal: number
     shown: boolean
     onChange: (shown: boolean) => void
+    /** What the collection calls its episodes, such as tracks. */
+    noun?: Noun
 }
 
 /** One filter chip that shows or hides the episodes VODLoft has no access to, such as members-only videos.
  * Hidden while the collection has none. Episodes the signed-in account can watch are never hidden. */
-export default function LockedEpisodesFilter({lockedTotal, shown, onChange}: LockedEpisodesFilterProps) {
+export default function LockedEpisodesFilter({lockedTotal, shown, onChange, noun = collectionWords(null).episode}: LockedEpisodesFilterProps) {
     if (lockedTotal === 0) return null
-    const what = `${lockedTotal} ${lockedTotal === 1 ? 'episode' : 'episodes'} VODLoft has no access to, such as members-only ones`
+    const what = `${lockedTotal} ${lockedTotal === 1 ? noun.singular : noun.plural} VODLoft has no access to, such as members-only ones`
     return (
-        <div className="filter-chip-group" role="group" aria-label="Filter locked episodes">
+        <div className="filter-chip-group" role="group" aria-label={`Filter locked ${noun.plural}`}>
             <button
                 type="button"
                 className="filter-chip filter-chip-locked"

@@ -12,7 +12,7 @@ def test_failed_lookup_uses_conditional_path_and_creates_download(tmp_path, monk
     from backend.services import movies as movie_service
     from backend.api.models.media_download import MediaDownloadAPICreate
     from backend.db.core import Base
-    from backend.db.models import Movie, MovieLocalMediaProfile
+    from backend.db.models import Movie, VideoLocalMediaProfile
     from backend.db.models.media_download import MediaDownloadBase
     from backend.integrations.tmdb import MovieReleaseLookupResult
     from config import get_settings
@@ -32,7 +32,7 @@ def test_failed_lookup_uses_conditional_path_and_creates_download(tmp_path, monk
         ),
     )
 
-    profile = MovieLocalMediaProfile(
+    profile = VideoLocalMediaProfile(
         slug="plex-movies",
         name="Plex movies",
         output_template=(

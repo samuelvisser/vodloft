@@ -7,6 +7,7 @@ from pydantic import AliasPath, Field, field_validator, model_validator
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.api.models.collection_example import ExampleCollectionAPIIn
 from backend.api.models.pagination import OffsetPageRead
+from backend.services.errors import FieldValueError
 from backend.services.regex_check import MAX_PATTERN_LENGTH, PatternError, compile_pattern, split_inline_ignore_case
 from backend.types.download_profile_types import (
     DATE_FIELDS,
@@ -35,6 +36,8 @@ class DownloadProfileFilterAPIIn(RequestBase):
     days: int | None = Field(default=None, ge=1)
     count: int | None = Field(default=None, ge=1)
     starting_from: date | None = None
+    until: date | None = None
+    """With ``starting_from`` or alone: published on or before this day."""
 
     @model_validator(mode="after")
     def _validate_filter(self):
@@ -42,10 +45,12 @@ class DownloadProfileFilterAPIIn(RequestBase):
             if self.action == EpisodeFilterAction.SKIP:
                 raise ValueError("A date line can only download or keep episodes")
             if self.field == EpisodeFilterField.DOWNLOADED:
-                if self.days is None or self.count is not None or self.starting_from is not None:
+                if self.days is None or self.count is not None or self.starting_from is not None or self.until is not None:
                     raise ValueError("Choose a number of days")
-            elif sum(value is not None for value in (self.days, self.count, self.starting_from)) != 1:
+            elif sum(value is not None for value in (self.days, self.count, self.starting_from or self.until)) != 1:
                 raise ValueError("Choose a number of days, a number of episodes or a date")
+            if self.starting_from is not None and self.until is not None and self.until < self.starting_from:
+                raise FieldValueError("until", "Choose an end date on or after the start date")
             return self
         if self.field == EpisodeFilterField.TYPES:
             if not self.episode_types:
@@ -86,6 +91,7 @@ class DownloadProfileFilterAPIRead(ResponseBase):
     days: int | None
     count: int | None
     starting_from: date | None
+    until: date | None
 
 
 # ---------- Strict input (create/update) ----------
@@ -97,6 +103,7 @@ class DownloadProfileAPIBaseIn(RequestBase):
     download_with_countdown: bool
     redownload_final: bool
     delete_older_episodes: bool
+    retention_includes_manual: bool = False
     upgrade_check: bool
     upgrade_after_days: int = Field(ge=1, le=365)
     upgrade_repeat: UpgradeRepeat
@@ -151,6 +158,7 @@ class DownloadProfileAPIBaseOut(ResponseBase):
     download_with_countdown: bool
     redownload_final: bool
     delete_older_episodes: bool
+    retention_includes_manual: bool
     upgrade_check: bool
     upgrade_after_days: int
     upgrade_repeat: UpgradeRepeat
