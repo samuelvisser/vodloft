@@ -52,9 +52,13 @@ def _add_missing_profiles(session: Session, profiles) -> None:
     )
 
 
-DEFAULT_SITES = ("https://www.dailywire.com", "https://www.youtube.com", "https://npo.nl")
-"""The Sites a new VODLoft starts with, by their address. Each is stored like any Site the user adds, and can be
-removed like one; what VODLoft offers on it comes from the address alone."""
+DEFAULT_SITES = (
+    "https://www.youtube.com", "https://www.twitch.tv", "https://x.com", "https://www.instagram.com",
+    "https://www.tiktok.com", "https://www.dailywire.com",
+)
+"""The Sites a new VODLoft starts with, by their address, in the order every list of Sites shows them. Each is
+stored like any Site the user adds, and can be removed like one; what VODLoft offers on it comes from the address
+alone."""
 
 
 def _seed_sites(session: Session) -> None:

@@ -184,9 +184,10 @@ def session():
     Base.metadata.create_all(engine)
     use_database(engine)
     s = sessionmaker(bind=engine)()
-    from backend.db.initial_seed import _seed_sites
+    from backend.services.sites import site_record
+    from sources import named_sites
 
-    _seed_sites(s)
+    site_record(s, next(site for site in named_sites() if site.key == "npo"))
     s.commit()
     yield s
     s.close()

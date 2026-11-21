@@ -163,7 +163,9 @@ def test_a_site_without_anything_in_vodloft_can_be_removed(session):
         site_cookies.remove_known_site("twitch")
 
 
-@pytest.mark.parametrize(("key", "address"), [("youtube", "youtube.com"), ("dailywire", "dailywire.com"), ("npo", "npo.nl")])
+@pytest.mark.parametrize(("key", "address"), [
+    ("youtube", "youtube.com"), ("dailywire", "dailywire.com"), ("instagram", "instagram.com"), ("npo", "npo.nl"),
+])
 def test_a_site_vodloft_starts_with_comes_back_whole(session, key, address):
     from backend.api.endpoints.sources import router
     from backend.api.models.source import SiteAddAPIRequest
@@ -171,7 +173,7 @@ def test_a_site_vodloft_starts_with_comes_back_whole(session, key, address):
     from backend.services import site_cookies
 
     _seed_sites(session)
-    session.commit()
+    _site(session, "npo", "NPO Start", "npo.nl")
     before = {site.key: site for site in site_cookies.list_site_authentication(session)}[key]
     assert before.removable
 
@@ -182,7 +184,8 @@ def test_a_site_vodloft_starts_with_comes_back_whole(session, key, address):
     router.add_site_by_link(SiteAddAPIRequest(url=address))
     session.expire_all()
     after = {site.key: site for site in site_cookies.list_site_authentication(session)}[key]
-    # The Daily Wire's own sign-in, YouTube's API key and NPO Start's cookies file all come back.
+    # The Daily Wire's own sign-in, YouTube's API key and NPO Start's cookies file all come back. A Site added
+    # again comes last.
     assert after == before
 
 
@@ -208,6 +211,7 @@ def test_every_site_lists_how_it_authenticates(session):
     from backend.services import site_cookies
 
     _fresh(session)
+    _site(session, "npo", "NPO Start", "npo.nl")
     site_cookies.save_site_cookies(session, "youtube", _file(YOUTUBE))
     sites = {site.key: site for site in site_cookies.list_site_authentication(session)}
     assert sites["dailywire"].sign_in_source_key == "dailywire"
