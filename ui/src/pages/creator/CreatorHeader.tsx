@@ -1,6 +1,7 @@
 import {useLayoutEffect, useRef, useState, type ReactNode} from 'react'
 import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import {capitalized} from '../../types/creator'
+import LinkedText from '../../components/common/LinkedText'
 
 type CreatorHeaderProps = {
     title: string
@@ -34,7 +35,7 @@ function CreatorDescription({text}: {text: string}) {
     }, [text, open])
     return (
         <div className={`creator-description-wrap${cut && !open ? ' is-cut' : ''}`}>
-            <p ref={ref} className={`creator-description${open ? ' is-open' : ''}`}>{text}</p>
+            <p ref={ref} className={`creator-description${open ? ' is-open' : ''}`}><LinkedText text={text}/></p>
             {/* Cut, Read more sits at the end of the second line, as on YouTube; open, Show less follows the text. */}
             {(cut || open) && (
                 <button type="button" className="creator-description-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
