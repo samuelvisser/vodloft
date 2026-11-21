@@ -517,6 +517,24 @@ export async function saveSiteCookies(siteKey: string, content: string | null): 
     return SiteAuthenticationReadSchema.parse(await response.json())
 }
 
+/** Remove a Site that has nothing in VODLoft, with its cookies file, from every list of Sites. */
+export function useRemoveSite() {
+    const queryClient = useQueryClient()
+    return async (siteKey: string) => {
+        const response = await fetch(`${apiUrl()}/sources/sites/${encodeURIComponent(siteKey)}`, {
+            method: 'DELETE',
+            credentials: 'include',
+        })
+        if (!response.ok) throw await responseError(response)
+        await Promise.all([
+            queryClient.invalidateQueries({queryKey: ['siteAuthentication']}),
+            queryClient.invalidateQueries({queryKey: ['sitesSettings']}),
+            queryClient.invalidateQueries({queryKey: ['sourceSites']}),
+            queryClient.invalidateQueries({queryKey: ['localMediaProfileSites']}),
+        ])
+    }
+}
+
 /** The yt-dlp options a Source gives every download. */
 export function useSourceYtdlpOptions(sourceId: string) {
     return useQuery<string, Error, string, readonly ['sourceYtdlpOptions', string]>({

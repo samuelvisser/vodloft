@@ -14,7 +14,7 @@ import threading
 from functools import cache
 from pathlib import Path
 
-from ..contract import DownloadOptions, Site, domain_site, link_host
+from ..contract import DownloadOptions, Site, domain_site, link_host, on_domain
 from ..cookies import site_cookies
 from ..registry import named_site_for
 from .site_contracts import CONTRACTS, MEMBERS_KEY, PREMIUM_KEY, OtherSites
@@ -57,8 +57,13 @@ def site_for(url: str) -> Site:
     extractor = next((candidate for candidate in _extractor_classes() if candidate.suitable(url)), None)
     domain = domain_site(url)
     if extractor is None or extractor.ie_key() == "Generic":
-        # A page only the generic extractor handles is a Site of its own per domain, with what OtherSites offers.
-        return site_of(domain.key, domain.name)
+        # A page only the generic extractor handles, such as a site's home page, is on the site whose domain it is,
+        # or else a Site of its own per domain, with what OtherSites offers.
+        host = link_host(url)
+        contract = next((
+            contract for contract in CONTRACTS.values() if any(on_domain(host, own) for own in contract.domains)
+        ), None)
+        return site_of(contract.key if contract else domain.key, domain.name)
     return site_of(_family(extractor), domain.name)
 
 

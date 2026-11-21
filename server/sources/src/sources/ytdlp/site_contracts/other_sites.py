@@ -34,6 +34,9 @@ class OtherSites:
     """The yt-dlp extractor module the site's contract is for, such as ``youtube``."""
     name: ClassVar[str | None] = None
     """What VODLoft calls the site; None names it after the link's domain."""
+    domains: ClassVar[tuple[str, ...]] = ()
+    """The site's own domains, such as ``instagram.com``. They tell the site of a link to a page none of its
+    extractors handles, such as its home page, which yt-dlp leaves to the generic extractor."""
 
     # yt-dlp chooses among every version a site has, so each has the quality choices, and it gets the subtitles of
     # any site and writes an info file about each video.
@@ -52,7 +55,7 @@ class OtherSites:
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        unknown = {name for name in vars(cls) if not name.startswith("_") and name not in SITE_FIELDS | {"key", "name"}}
+        unknown = {name for name in vars(cls) if not name.startswith("_") and name not in SITE_FIELDS | {"key", "name", "domains"}}
         if unknown:
             raise TypeError(f"{cls.__name__} sets {', '.join(sorted(unknown))}, which a Site does not have")
         if not cls.key:
