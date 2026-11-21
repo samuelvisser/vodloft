@@ -10,6 +10,9 @@ import BulkChangeDialog, {type BulkFieldSpec} from '../../components/ProfileBulk
 import BulkDeleteDialog from '../../components/ProfileBulkEdit/BulkDeleteDialog'
 import {BulkBar} from '../../components/ProfileBulkEdit/BulkEditControls'
 import {bulkAction, bulkDelete, countOf} from '../../components/ProfileBulkEdit/bulkApi'
+import {apiUrl} from '../../lib/api'
+import DialogSwitch from '../../components/common/DialogSwitch'
+import {BulkResultSchema} from '../../types/schemas/profile_bulk'
 import type {BulkSelection} from '../../components/ProfileBulkEdit/useBulkSelection'
 import type {BulkResult} from '../../types/schemas/profile_bulk'
 
@@ -67,7 +70,7 @@ type LibraryBulkEditProps = {
     kind: 'collections' | 'movies'
     selection: BulkSelection<BulkKey>
     /** The names and slugs of everything the tab can choose, by key. */
-    items: ReadonlyMap<BulkKey, {title: string, slug: string}>
+    items: ReadonlyMap<BulkKey, {title: string, slug: string, collectionCount?: number}>
     /** What the library's creators are called, such as hosts. */
     creatorNoun: Noun
 }
@@ -78,12 +81,15 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
     const [dialog, setDialog] = useState<'change' | 'delete' | null>(null)
     const [keys, setKeys] = useState<BulkKey[]>([])
     const [syncing, setSyncing] = useState(false)
+    // Deleting creators keeps their collections, unless this says to delete those too.
+    const [withCollections, setWithCollections] = useState(false)
     const collectionNoun: [string, string] = ['collection', 'collections']
 
     const chosen = selection.ids
     const chosenCollections = idsOf(chosen, 'collection')
     const open = (which: 'change' | 'delete') => {
         setKeys(chosen)
+        setWithCollections(false)
         setDialog(which)
     }
 
@@ -140,6 +146,15 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
         }
     }
 
+    const deleteCreators = async (ids: number[]) => {
+        const response = await fetch(`${apiUrl()}/creators/bulk/delete`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include',
+            body: JSON.stringify({ids, deleteCollections: withCollections}),
+        })
+        if (!response.ok) throw new Error(`The request failed (${response.status})`)
+        return BulkResultSchema.parse(await response.json())
+    }
+
     /** Creators first: deleting one keeps its collections, and a chosen collection of it goes after. */
     const removeAll = async (): Promise<BulkResult> => {
         let done = 0
@@ -147,7 +162,7 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
         for (const kindOf of ['creator', 'collection', 'movie'] as const) {
             const ids = idsOf(keys, kindOf)
             if (!ids.length) continue
-            const result = await bulkDelete(ENDPOINTS[kindOf], ids)
+            const result = kindOf === 'creator' ? await deleteCreators(ids) : await bulkDelete(ENDPOINTS[kindOf], ids)
             done += result.done
             skipped.push(...result.skipped)
         }
@@ -156,12 +171,12 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
 
     if (!selection.active) return null
     const none = chosen.length === 0
-    const creatorsChosen = idsOf(keys, 'creator').length
+    // The chosen creators' collections, which the switch deletes with them.
+    const creatorCollections = idsOf(keys, 'creator').reduce((sum, id) => sum + (items.get(bulkKey('creator', id))?.collectionCount ?? 0), 0)
     const deleteNote = kind === 'movies'
         ? 'This removes the movies, their indexed extras and their download history from VODLoft. Downloaded files already on disk are not removed.'
         : [
             idsOf(keys, 'collection').length > 0 && 'Deleting a collection removes everything VODLoft indexed of it, with its profiles.',
-            creatorsChosen > 0 && `Deleting ${creatorsChosen === 1 ? `a ${creatorNoun.singular}` : creatorNoun.plural} keeps their collections as plain collections.`,
             'Downloaded files already on disk are not removed.',
         ].filter(Boolean).join(' ')
     const partly = (count: number) => !none && count < chosen.length && (
@@ -221,7 +236,17 @@ export default function LibraryBulkEdit({kind, selection, items, creatorNoun}: L
                         selection.clear()
                         void refresh()
                     }}
-                />
+                >
+                    {creatorCollections > 0 && (
+                        <DialogSwitch
+                            checked={withCollections} onChange={setWithCollections}
+                            label={`Also delete their ${countOf(creatorCollections, collectionNoun)}`}
+                            help={withCollections
+                                ? 'They are deleted with everything VODLoft indexed of them.'
+                                : 'Off, they stay in your library as plain collections.'}
+                        />
+                    )}
+                </BulkDeleteDialog>
             )}
         </>
     )

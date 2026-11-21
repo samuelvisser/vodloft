@@ -368,7 +368,7 @@ export default function LibraryPage() {
     const bulkKind = activeType === 'collections' || activeType === 'movies' ? activeType : null
     const canBulkEdit = can('library', 'manage') && (
         (activeType === 'collections' && hasCollections) || (activeType === 'movies' && hasMovies))
-    const bulkItems = useMemo(() => new Map<BulkKey, {title: string, slug: string}>(activeType === 'movies'
+    const bulkItems = useMemo(() => new Map<BulkKey, {title: string, slug: string, collectionCount?: number}>(activeType === 'movies'
         ? (movies ?? []).map((movie) => [bulkKey('movie', movie.id), movie])
         : [
             ...(creators ?? []).map((creator) => [bulkKey('creator', creator.id), creator] as const),

@@ -8,6 +8,7 @@ from pydantic import AliasChoices, AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.pagination import CursorPageRead
+from backend.api.models.profile_bulk import BulkSelectionIn
 from backend.api.models.collection import (
     CollectionIdentificationChangeItemAPIRead, CollectionIdentificationProfileFilesAPIRead,
 )
@@ -486,3 +487,10 @@ class CollectionCreatorLeaveAPIRead(ResponseBase):
     """What removing a collection from its creator changes."""
 
     creator_title: str
+
+
+class CreatorBulkDeleteIn(BulkSelectionIn):
+    """The creators the Library's bulk edit deletes."""
+
+    delete_collections: bool = False
+    """Delete their collections too, instead of keeping them as plain ones."""

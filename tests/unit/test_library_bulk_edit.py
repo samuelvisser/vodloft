@@ -106,7 +106,7 @@ def test_deleting_collections_takes_every_chosen_one(session) -> None:
 
 def test_deleting_creators_keeps_their_collections(session) -> None:
     from backend.api.endpoints.creators.bulk import delete_creators
-    from backend.api.models.profile_bulk import BulkSelectionIn
+    from backend.api.models.creator import CreatorBulkDeleteIn
     from backend.db.models import Collection, Creator
 
     collections = _collections(session)
@@ -116,9 +116,30 @@ def test_deleting_creators_keeps_their_collections(session) -> None:
     collections[0].creator = creator
     session.commit()
 
-    result = delete_creators(session, BulkSelectionIn(ids=[creator.id]))
+    result = delete_creators(session, CreatorBulkDeleteIn(ids=[creator.id]))
     session.commit()
     assert (result.done, result.skipped) == (1, [])
     assert session.query(Creator).count() == 0
     assert session.query(Collection).count() == 4
     assert collections[0].creator_id is None
+
+
+def test_deleting_creators_with_their_collections(session) -> None:
+    from backend.api.endpoints.creators.bulk import delete_creators
+    from backend.api.models.creator import CreatorBulkDeleteIn
+    from backend.db.models import Collection, Creator
+
+    collections = _collections(session)
+    creator = Creator(uuid="c", slug="ben", title="Ben Shapiro")
+    session.add(creator)
+    session.flush()
+    collections[0].creator = creator
+    collections[1].creator = creator
+    session.commit()
+
+    body = CreatorBulkDeleteIn.model_validate({"ids": [creator.id], "deleteCollections": True})
+    result = delete_creators(session, body)
+    session.commit()
+    assert result.done == 1
+    assert session.query(Creator).count() == 0
+    assert [item.slug for item in session.query(Collection).order_by(Collection.id)] == ["show-2", "show-3"]

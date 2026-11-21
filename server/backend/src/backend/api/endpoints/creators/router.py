@@ -20,7 +20,8 @@ from backend.api.endpoints.movies.service import look_up_movies
 
 from . import lookups
 from .bulk import delete_creators
-from backend.api.models.profile_bulk import BulkResultRead, BulkSelectionIn
+from backend.api.models.creator import CreatorBulkDeleteIn
+from backend.api.models.profile_bulk import BulkResultRead
 from .service import (
     CreatorNotFoundError, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
     list_skipped_moved, look_up_creator, lookup_creator_names, record_creator_opened, preview_creator_moves, show_sections, update_creator,
@@ -54,8 +55,9 @@ def lookup_creator(body: CreatorLookupAPIRequest, access: Access = signed_in()):
 
 
 @router.post("/bulk/delete", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
-def creators_bulk_delete(body: BulkSelectionIn):
-    """Take the chosen creators out of the Library. Their collections stay, with their episodes and files."""
+def creators_bulk_delete(body: CreatorBulkDeleteIn):
+    """Take the chosen creators out of the Library. Their collections stay as plain ones, unless
+    ``deleteCollections`` deletes them too."""
     return run_write_transaction(lambda s: delete_creators(s, body))
 
 
@@ -204,9 +206,10 @@ def creator_reconcile(slug: str, body: ReconcileAPIIn):
 
 
 @router.delete("/{slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], status_code=status.HTTP_204_NO_CONTENT)
-def creator_delete(slug: str):
-    """Take the creator out of the Library. Its collections stay, with their episodes and files, as plain collections."""
-    _found(lambda: run_write_transaction(lambda s: delete_creator(s, slug)))
+def creator_delete(slug: str, delete_collections: bool = Query(default=False, alias="deleteCollections")):
+    """Take the creator out of the Library. Its collections stay, with their episodes and files, as plain collections,
+    unless ``deleteCollections`` deletes them too. Downloaded files stay on disk either way."""
+    _found(lambda: run_write_transaction(lambda s: delete_creator(s, slug, with_collections=delete_collections)))
 
 
 @router.post("/{slug}/check", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], status_code=status.HTTP_202_ACCEPTED)
