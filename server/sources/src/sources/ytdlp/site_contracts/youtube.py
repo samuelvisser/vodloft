@@ -25,6 +25,9 @@ class YouTube(OtherSites):
     key = "youtube"
     name = "YouTube"
     domains = ("youtube.com", "youtu.be")
+    # Each search costs YouTube Data API quota, or runs yt-dlp without a key, so it searches when asked.
+    searchable = True
+    costly_search = True
     # yt-dlp tells YouTube's Shorts and livestreams apart from its videos.
     episode_tags = (
         *VIDEO_TAGS,

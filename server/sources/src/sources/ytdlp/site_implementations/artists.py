@@ -9,13 +9,13 @@ from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import ClassVar
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
-from ...contract import CreatorDetails, SectionKind, SectionRef
+from ...contract import CreatorDetails, SearchResults, SectionKind, SectionRef
 from ... import ytdlp_runner as runner
-from .. import sites, thumbnails
+from .. import sites, soundcloud_search, thumbnails
 from ..site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST
 from .other_sites import OtherSitesImplementation
 
@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 _LOOKUPS_AT_ONCE = 6
 _PAGE_TIMEOUT_SECONDS = 15
 _BROWSER = "Mozilla/5.0"
+# SoundCloud's own pages.
+_HOSTS = frozenset({"soundcloud.com", "www.soundcloud.com", "m.soundcloud.com"})
 _OG_IMAGE = re.compile(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"')
 
 
@@ -212,9 +214,16 @@ class SoundCloudImplementation(ArtistImplementation):
     # SoundCloud's own pages, which are not an artist's.
     _own_pages = frozenset({"discover", "search", "stream", "upload", "you", "charts", "pages", "people", "settings", "messages", "jobs"})
 
+    def shared_page(self, url: str) -> str:
+        """SoundCloud's share links lead to the page with tracking parameters only, which are left out."""
+        return urlunsplit(urlsplit(url)._replace(query="", fragment=""))
+
+    def search(self, query: str) -> SearchResults:
+        return soundcloud_search.search(query, self.avatar)
+
     def creator_root(self, url: str) -> str | None:
         parts = urlsplit(url)
-        if (parts.hostname or "").lower() in {"soundcloud.com", "www.soundcloud.com", "m.soundcloud.com"}:
+        if (parts.hostname or "").lower() in _HOSTS:
             first = next((part for part in parts.path.split("/") if part), "")
             if first and first not in self._own_pages:
                 return f"https://soundcloud.com/{first}"

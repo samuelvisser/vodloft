@@ -11,12 +11,19 @@ import logging
 from collections.abc import Callable, Mapping
 from concurrent.futures import Executor, Future
 from typing import ClassVar
+from urllib.parse import urljoin
 
-from ...contract import CollectionDetails, CreatorDetails, SectionRef, SectionRole, Site
+from ...contract import CollectionDetails, CreatorDetails, SearchResults, SectionRef, SectionRole, Site, link_host
+import requests
+
 from ... import ytdlp_runner as runner
+from .. import sites
 from ..site_contracts import YtdlpFeedSectionType
 
 logger = logging.getLogger(__name__)
+
+_SHARE_TIMEOUT_SECONDS = 15
+_BROWSER = "Mozilla/5.0"
 
 Read = Callable[[str], dict]
 """Looks a link up through yt-dlp: its first item, or the video itself."""
@@ -32,6 +39,30 @@ class OtherSitesImplementation:
     def __init__(self, site: Site, read: Read) -> None:
         self.site = site
         self.read = read
+
+    def full_link(self, url: str) -> str:
+        """The page a share link on one of the Site's ``share_hosts`` leads to, when that is the Site's own; any other
+        link as it is."""
+        if link_host(url) not in self.site.share_hosts:
+            return url
+        try:
+            response = requests.head(url, headers={"User-Agent": _BROWSER}, timeout=_SHARE_TIMEOUT_SECONDS, allow_redirects=False)
+        except requests.RequestException as exc:
+            logger.info("Could not follow the share link %s: %s", url, exc)
+            return url
+        target = urljoin(url, response.headers.get("Location") or "")
+        if not response.is_redirect or link_host(target) in self.site.share_hosts or sites.site_for(target).key != self.site.key:
+            return url
+        return self.shared_page(target)
+
+    def shared_page(self, url: str) -> str:
+        """The page a share link led to, as VODLoft keeps it."""
+        return url
+
+    def search(self, query: str) -> SearchResults:
+        """The Site's collections and videos whose name matches the query, on a Site whose contract makes it
+        ``searchable``."""
+        raise runner.YtDlpError(f"VODLoft can't search {self.site.name}")
 
     # Creators
 

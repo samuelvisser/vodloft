@@ -87,7 +87,7 @@ export const router = createBrowserRouter(
       <Route path="library" element={g('library', <LibraryPage />)} />
       <Route path="collections" element={<Navigate to="/library?type=collections" replace />} />
       <Route path="browse" element={g('add_media', <BrowsePage />)} />
-      <Route path="browse/:sourceId" element={g('add_media', <SourceSearchPage />)} />
+      <Route path="browse/:sourceId/:siteKey" element={g('add_media', <SourceSearchPage />)} />
       <Route path="add" element={g('add_media', <AddMediaPage />)} />
       <Route path="quick-download" element={g('quick_downloads', <QuickDownloadPage />)} />
       <Route path="downloads" element={g('managed_downloads', <DownloadsPage />)} />

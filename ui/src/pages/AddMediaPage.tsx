@@ -9,7 +9,7 @@ import SourceBadge from '../components/Source/SourceBadge'
 import {useQueryClient} from '@tanstack/react-query'
 import {addVideo, resolveLink, useMovies, useCollections, useSources, useVideos} from '../lib/queries'
 import {linkTarget, type MediaLinkTarget} from '../lib/sourceControls'
-import {ResolvedLinkRead, SourceFeature, SourceRead, kindNames, searchName, sourceHas} from '../types/schemas/source'
+import {ResolvedLinkRead, SearchSiteRead, SourceFeature, SourceRead, kindNames, sourceHas} from '../types/schemas/source'
 import {capitalized} from '../types/creator'
 import {DrmNotice} from '../components/common/DrmProtected'
 import {AccessNotice} from '../components/common/AccessLocked'
@@ -20,7 +20,8 @@ type AddMediaPageProps = {
     onboarding?: boolean
     onCollection?: (target: MediaLinkTarget) => void
     onMovie?: (target: MediaLinkTarget) => void
-    onBrowse?: (sourceId: string) => void
+    /** Browse a Source's catalogue, or search one of its Sites when a Site is given. */
+    onBrowse?: (sourceId: string, siteKey?: string) => void
     onBack?: () => void
     onSkip?: () => void
     /** The link to look up right away, when it does not come from the page's own address. */
@@ -145,11 +146,15 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         else navigate(`/add-collection?url=${encodeURIComponent(target.url)}`)
     }
 
-    // A Source with a catalogue is browsed; one without is searched.
-    const browseSources = (sources ?? []).filter((source) => canUseSource(source.id) && (sourceHas(source, SourceFeature.BROWSE) || sourceHas(source, SourceFeature.SEARCH)))
-    const browse = (source: SourceRead) => {
-        if (onBrowse) onBrowse(source.id)
-        else if (!sourceHas(source, SourceFeature.BROWSE)) navigate(`/browse/${encodeURIComponent(source.id)}`)
+    // A Source with a catalogue is browsed; one without is searched, each of its search Sites on its own.
+    const browseChoices = (sources ?? []).filter((source) => canUseSource(source.id)).flatMap((source): {source: SourceRead, site?: SearchSiteRead}[] => (
+        sourceHas(source, SourceFeature.BROWSE) ? [{source}]
+            : sourceHas(source, SourceFeature.SEARCH) ? source.searchSites.map((site) => ({source, site}))
+            : []
+    ))
+    const browse = (source: SourceRead, site?: SearchSiteRead) => {
+        if (onBrowse) onBrowse(source.id, site?.key)
+        else if (site) navigate(`/browse/${encodeURIComponent(source.id)}/${encodeURIComponent(site.key)}`)
         else navigate('/browse')
     }
 
@@ -305,14 +310,14 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                 </article>
             )}
 
-            {browseSources.length > 0 && (
+            {browseChoices.length > 0 && (
                 <div className="add-media-browse">
                     <h2>Or browse</h2>
                     <div className="add-media-browse-list">
-                        {browseSources.map((source) => (
-                            <button key={source.id} className="btn" type="button" onClick={() => browse(source)}>
-                                <FontAwesomeIcon icon={faIcon('fass', sourceHas(source, SourceFeature.BROWSE) ? 'compass' : 'magnifying-glass')}/>
-                                {sourceHas(source, SourceFeature.BROWSE) ? `Browse ${source.name}` : `Search ${searchName(source)}`}
+                        {browseChoices.map(({source, site}) => (
+                            <button key={`${source.id}-${site?.key ?? ''}`} className="btn" type="button" onClick={() => browse(source, site)}>
+                                <FontAwesomeIcon icon={faIcon('fass', site ? 'magnifying-glass' : 'compass')}/>
+                                {site ? `Search ${site.name}` : `Browse ${source.name}`}
                             </button>
                         ))}
                     </div>

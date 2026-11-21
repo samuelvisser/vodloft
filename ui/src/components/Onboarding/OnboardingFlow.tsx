@@ -10,7 +10,7 @@ import SourceSearchPage from '../../pages/SourceSearchPage'
 import MoviePage from '../../pages/movie/MoviePage'
 import {useMovies, useSources} from '../../lib/queries'
 import {SiteAuthentication} from '../Source/SiteAuthenticationCard'
-import {ANY_DOMAIN, SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
+import {ANY_DOMAIN, SourceRead} from '../../types/schemas/source'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {CollectionRead} from '../../types/schemas/collection'
 import OnboardingMovieProfileStep from './OnboardingMovieProfileStep'
@@ -56,7 +56,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
     const [selectedCollectionWasPresent, setSelectedCollectionWasPresent] = useState(false)
     const [selectedMovie, setSelectedMovie] = useState<SelectedMedia | null>(null)
     const [movieProfile, setMovieProfile] = useState<LocalMediaProfileRead | null>(null)
-    const [searchSourceId, setSearchSourceId] = useState<string | null>(null)
+    const [search, setSearch] = useState<{sourceId: string, siteKey: string} | null>(null)
     // A search result that is not a collection goes back to the links step, which looks it up.
     const [addUrl, setAddUrl] = useState<string | undefined>(undefined)
     const [isCompleting, setIsCompleting] = useState(false)
@@ -297,13 +297,12 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         initialUrl={addUrl}
                         onCollection={(target: MediaLinkTarget) => void selectCollection(target)}
                         onMovie={(target: MediaLinkTarget) => selectMovie(target)}
-                        onBrowse={(sourceId) => {
-                            const source = sources?.find((item) => item.id === sourceId)
-                            if (sourceHas(source, SourceFeature.BROWSE)) {
+                        onBrowse={(sourceId, siteKey) => {
+                            if (!siteKey) {
                                 setStep('browse')
                                 return
                             }
-                            setSearchSourceId(sourceId)
+                            setSearch({sourceId, siteKey})
                             setStep('search')
                         }}
                         onBack={() => void backToMediaChoice()}
@@ -328,13 +327,14 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                 </main>
             )}
 
-            {step === 'search' && searchSourceId && (
+            {step === 'search' && search && (
                 <main className="onboarding-stage onboarding-stage-narrow">
                     <button className="btn onboarding-movie-back" type="button" onClick={() => setStep('add')}>
                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-left')}/> Back to links
                     </button>
                     <SourceSearchPage
-                        sourceId={searchSourceId}
+                        sourceId={search.sourceId}
+                        siteKey={search.siteKey}
                         onChoose={(result) => {
                             if (result.kind === 'collection') {
                                 void selectCollection({slug: result.slug, title: result.title, url: result.url})

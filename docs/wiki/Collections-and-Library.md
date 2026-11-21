@@ -211,6 +211,12 @@ A video that was deleted or made private gets a **Removed** badge. Its downloade
 With a YouTube Data API key this costs 1 unit per 50 episodes a day. Without a key, or once the quota is used up, titles are refreshed from yt-dlp's listing of the collection instead. yt-dlp cannot tell a removed video from one it did not list, so only the API marks videos as removed.
 
 
+### Search SoundCloud
+
+**Search SoundCloud** on the Add media page finds SoundCloud accounts, albums, playlists and tracks by name, the way SoundCloud's own search does, with follower and track counts. Type a search and choose **Search** or press Enter. Picking an account lets you add it as a creator, with its albums and playlists, or only its tracks; picking an album or playlist continues to the Add Collection wizard; picking a track adds it under **Videos**. No key or account is needed: VODLoft searches the way yt-dlp reaches SoundCloud. If SoundCloud's search ever stops answering, VODLoft searches only its tracks instead, lists the accounts that made them first, and says so above the results.
+
+A link you share from the SoundCloud app, such as `on.soundcloud.com/…`, works like the full link: VODLoft follows it to the page it stands for, so an artist's share link can be added as the creator.
+
 ### Search YouTube
 
 **Search YouTube** on the Add media page finds channels, playlists and videos by name. Type a search and choose **Search** or press Enter; each search costs YouTube API quota, so VODLoft does not search while you type. Picking a channel lets you choose between **Add the creator** and **Only its videos**, as when you paste its link; picking a playlist continues to the Add Collection wizard. Either opens the collection when it is already in your Library; picking a video adds it under **Videos**, as if you had pasted its link.

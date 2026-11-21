@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.security.access import TEMPLATES, Access, LinkNotAllowed, SourceLimit
-from sources import ANY_DOMAIN, Feature, LinkKind, ResolvedLink, SearchResults, Source, registry
+from sources import ANY_DOMAIN, Feature, LinkKind, ResolvedLink, SearchResults, Site, Source, registry
 
 
 class FakeYtdlp(Source):
@@ -19,6 +19,7 @@ class FakeYtdlp(Source):
     name = "Fake yt-dlp"
     domains = (ANY_DOMAIN,)
     features = frozenset({Feature.SEARCH})
+    search_sites = (Site("youtube", "YouTube", searchable=True),)
 
     def resolve(self, url):
         if url.endswith("/redirect"):
@@ -29,7 +30,7 @@ class FakeYtdlp(Source):
             )
         return ResolvedLink(kind=LinkKind.VIDEO, slug="v", url=url, title="Video")
 
-    def search(self, query):
+    def search(self, site, query):
         return SearchResults(results=[
             ResolvedLink(kind=LinkKind.VIDEO, slug="a", url="https://www.youtube.com/watch?v=a", title="A"),
             ResolvedLink(kind=LinkKind.VIDEO, slug="b", url="https://vimeo.com/b", title="B"),
@@ -148,10 +149,10 @@ def test_search_leaves_out_results_on_other_domains(fake_sources):
     from backend.api.endpoints.sources.service import search_source
 
     ytdlp, members = fake_sources
-    assert [r.slug for r in search_source(Access.full(), ytdlp, "x").results] == ["a", "b"]
-    assert [r.slug for r in search_source(_user(YOUTUBE_ONLY), ytdlp, "x").results] == ["a"]
+    assert [r.slug for r in search_source(Access.full(), ytdlp, "youtube", "x").results] == ["a", "b"]
+    assert [r.slug for r in search_source(_user(YOUTUBE_ONLY), ytdlp, "youtube", "x").results] == ["a"]
     with pytest.raises(LinkNotAllowed):
-        search_source(_user({"fake_members": None}), ytdlp, "x")
+        search_source(_user({"fake_members": None}), ytdlp, "youtube", "x")
 
 
 def test_adding_media_checks_the_link(fake_sources):

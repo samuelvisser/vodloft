@@ -22,7 +22,7 @@ from .site_contracts.other_sites import SITE_FIELDS
 from .site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST
 
 __all__ = [
-    "ALBUM_LIST", "MEMBERS_KEY", "PLAYLIST_LIST", "PREMIUM_KEY", "api_key_sites", "cookies_for", "download_options", "site_for", "site_of",
+    "ALBUM_LIST", "MEMBERS_KEY", "PLAYLIST_LIST", "PREMIUM_KEY", "api_key_sites", "cookies_for", "download_options", "search_sites", "site_for", "site_of",
 ]
 
 _PREFIX = "yt_dlp.extractor."
@@ -50,12 +50,15 @@ def _family(extractor) -> str:
 
 
 def site_for(url: str) -> Site:
+    host = link_host(url)
+    if shared := next((key for key, contract in CONTRACTS.items() if host in getattr(contract, "share_hosts", ())), None):
+        # yt-dlp has no extractor of an app's share links; they are their Site's all the same.
+        return site_of(shared, domain_site(url).name)
     extractor = next((candidate for candidate in _extractor_classes() if candidate.suitable(url)), None)
     domain = domain_site(url)
     if extractor is None or extractor.ie_key() == "Generic":
         # A page only the generic extractor handles, such as a site's home page, is on the site whose domain it is,
         # or else a Site of its own per domain, with what OtherSites offers.
-        host = link_host(url)
         contract = next((
             contract for contract in CONTRACTS.values() if any(on_domain(host, own) for own in contract.domains)
         ), None)
@@ -93,6 +96,11 @@ def api_key_sites() -> tuple[Site, ...]:
     """The Sites yt-dlp's API key is for, such as YouTube for the YouTube Data API key, with the domain yt-dlp names
     them by."""
     return tuple(site_of(key, f"{key}.com") for key, contract in sorted(CONTRACTS.items()) if getattr(contract, "takes_api_key", False))
+
+
+def search_sites() -> tuple[Site, ...]:
+    """The Sites VODLoft can search through yt-dlp, such as YouTube and SoundCloud, in the order of their contracts."""
+    return tuple(site_of(key, f"{key}.com") for key, contract in CONTRACTS.items() if getattr(contract, "searchable", False))
 
 
 def _accesses(contract: type[OtherSites]):

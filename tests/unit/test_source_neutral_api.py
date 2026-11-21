@@ -148,7 +148,7 @@ def test_resolve_stops_at_the_first_source_that_recognises_the_link(client):
     body = response.json()
     # A Source that names no kinds itself gets VODLoft's own name for each.
     assert body["source"].pop("kindNames")["movie"] == {"singular": "movie", "plural": "movies", "a": "a movie"}
-    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "sitesLabel": None, "searchLabel": None, "siteKeys": ["stub"], "releaseDate": "start",
+    assert body["source"] == {"id": "stub", "name": "Stub Video", "domains": ["stub.example"], "features": [], "sitesLabel": None, "searchSites": [], "siteKeys": ["stub"], "releaseDate": "start",
         "downloadOptions": {"videoHeights": [360, 480, 720, 1080, 1440, 2160, 4320], "audioOnly": True, "hlsBundle": False, "hlsHeights": [], "subtitles": False, "qualityChoices": False, "infoFile": False},
     }
     assert body["kind"] == "movie"
@@ -316,14 +316,16 @@ def test_a_source_with_search_is_searched_by_name(client, monkeypatch):
     from sources import Feature
 
     stub = registry.get_source("stub")
-    assert client.get("/api/sources/stub/search", params={"q": "clip"}).status_code == 404
+    assert client.get("/api/sources/stub/search", params={"site": "stub", "q": "clip"}).status_code == 404
 
     monkeypatch.setattr(type(stub), "features", frozenset({Feature.SEARCH}))
-    monkeypatch.setattr(stub, "search", lambda query, **_: SearchResults([
+    monkeypatch.setattr(type(stub), "search_sites", (Site("stub", "Stub Site", searchable=True),))
+    assert client.get("/api/sources/stub/search", params={"site": "other", "q": "clip"}).status_code == 404
+    monkeypatch.setattr(stub, "search", lambda site, query: SearchResults([
         ResolvedLink(kind=LinkKind.COLLECTION, slug="clips", url="https://stub.example/collection/clips", title=f"{query} collection",
                      kind_label="Channel", facts=("3 videos",)),
     ], SearchNotice(badge="Search via stub", text="Answered by the stub")), raising=False)
-    body = client.get("/api/sources/stub/search", params={"q": "clip"}).json()
+    body = client.get("/api/sources/stub/search", params={"site": "stub", "q": "clip"}).json()
     assert body == {
         "results": [{
             "kind": "collection", "slug": "clips", "url": "https://stub.example/collection/clips", "title": "clip collection",
