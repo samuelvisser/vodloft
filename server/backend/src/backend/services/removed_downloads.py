@@ -12,7 +12,8 @@ Keep marks the download as kept by hand; Don't keep only records the answer, so 
 treats it like any other download from then on.
 
 On a Site that removes its media itself after a while, such as Twitch with its past broadcasts, an episode that goes
-is removed by the Site's retention: VODLoft expected it to go, so Home does not ask about its downloads.
+once it is older than the least time the Site keeps media is removed by the Site's retention: VODLoft expected it to
+go, so Home does not ask about its downloads. One that goes sooner is missing, as on any other Site.
 
 A video a collection only had because one of its link seasons listed it, which the creator then took out of that
 playlist, is asked about the same way. Don't keep then removes it from the collection, files and all.
@@ -45,15 +46,19 @@ def left_source(s: Session, episode: Episode, *, now: datetime | None = None) ->
     ``s`` is a write transaction's session."""
     from backend.services.sites import episode_site
 
+    now = utc_datetime(now or datetime.now(timezone.utc))
+    retention = episode_site(episode).retention
     episode.removed_from_source = True
-    episode.removed_by_retention = episode_site(episode).retention is not None
+    episode.removed_by_retention = (
+        retention is not None and episode.published_date is not None
+        and now - utc_datetime(episode.published_date) >= retention.kept_for
+    )
     has_files = s.scalar(
         select(EpisodeMediaDownload.id).where(EpisodeMediaDownload.media_item_id == episode.id).limit(1)
     ) is not None
     if has_files:
         return False
     if episode.publish_status in _AFTER_LIVE:
-        now = utc_datetime(now or datetime.now(timezone.utc))
         since = episode.get_meta(_GONE_SINCE)
         if since is None:
             episode.set_meta(_GONE_SINCE, now.isoformat())

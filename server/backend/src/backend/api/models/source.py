@@ -108,7 +108,7 @@ class RetentionResponse(LockableResponse):
         if not self.removed_by_retention or self.site_key is None:
             return None
         site = site_of(self.site_key)
-        return RetentionAPIRead(site_name=site.name, retention=site.retention or "")
+        return RetentionAPIRead(site_name=site.name, retention=site.retention.description if site.retention else "")
 
 
 class DownloadOptionsAPIRead(ResponseBase):

@@ -1,6 +1,7 @@
 from dataclasses import replace
+from datetime import timedelta
 
-from ...contract import LIST_TYPE, VIDEO_TAGS, ApiField, EpisodeTag, GuideStep, Names, SiteApi, RssEpisodeType, SectionKind, SectionRole, SectionType, UpgradeChecks, UpgradeImprovement
+from ...contract import LIST_TYPE, VIDEO_TAGS, ApiField, EpisodeTag, GuideStep, Names, Retention, SiteApi, RssEpisodeType, SectionKind, SectionRole, SectionType, UpgradeChecks, UpgradeImprovement
 from .feed_section_type import YtdlpFeedSectionType
 from .other_sites import CREATOR_PRESETS, OtherSites
 
@@ -31,9 +32,11 @@ class Twitch(OtherSites):
     )
     link_seasons = True
     # Twitch keeps highlights, uploads and clips, but deletes past broadcasts after a while.
-    retention = (
-        "Twitch deletes past broadcasts after 7 to 60 days, depending on the streamer's account. Highlights, uploads "
-        "and clips stay until the streamer deletes them."
+    retention = Retention(
+        # Twitch keeps them 7 days for most streamers and 60 days for Partners, Affiliates and Turbo users.
+        timedelta(days=7),
+        "Twitch deletes past broadcasts after 7 to 60 days, depending on the streamer's account. Highlights, "
+        "uploads and clips stay until the streamer deletes them.",
     )
     # Twitch's own API finds channels by name. It is free, with an application the user registers at dev.twitch.tv.
     searchable = True

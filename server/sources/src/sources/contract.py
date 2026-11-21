@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, ClassVar
@@ -880,6 +880,17 @@ class SiteApi:
 
 
 @dataclass(frozen=True)
+class Retention:
+    """A Site that removes its media itself after a while, such as Twitch its past broadcasts."""
+
+    kept_for: timedelta
+    """The least time the Site keeps media after it is published. Media that leaves the Site sooner is missing, as
+    on any other Site."""
+    description: str
+    """How the Site removes its media, as a sentence."""
+
+
+@dataclass(frozen=True)
 class SiteApiStatus:
     """Which values of a Site's API are set, each by its last few characters or, for one that is not secret, as it
     is; and the last problem the Site reported with them."""
@@ -996,10 +1007,10 @@ class Site:
     costly_search: bool = False
     """Each search of the Site costs something, such as API quota or a slow lookup, so the search page searches when
     asked instead of while the user types."""
-    retention: str | None = None
-    """How the Site removes its media itself after a while, as a sentence, such as Twitch's past broadcasts after 7
-    to 60 days. Media that leaves such a Site is removed by its retention: VODLoft expects it to go, so it does not
-    ask on Home whether to keep its downloads, and says what deleting a download then means."""
+    retention: Retention | None = None
+    """How the Site removes its media itself after a while, such as Twitch its past broadcasts. Media that leaves
+    such a Site once it is older than the Retention's ``kept_for`` is removed by its retention: VODLoft expects it to
+    go, so it does not ask on Home whether to keep its downloads, and says what deleting a download then means."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
