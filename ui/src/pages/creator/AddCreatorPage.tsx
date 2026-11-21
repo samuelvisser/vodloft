@@ -26,6 +26,7 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import SegmentedOptions from '../../components/SegmentedOptions/SegmentedOptions'
 import CreatorHeader from './CreatorHeader'
 import LookupSteps from './LookupSteps'
+import {SECTION_ACTIONS} from './sectionActions'
 import './CreatorPages.css'
 
 /** The starting points, in the words of what this creator has: playlists on YouTube, shows on The Daily Wire. */
@@ -78,16 +79,17 @@ function choicesFor(creator: CreatorLookupRead, section: CreatorSectionRead, mus
         ) as Record<Choice, {label: string}>)
     }
     const spec: Partial<Record<Choice, {label: string}>> = {}
-    if (section.kind === 'feed') spec.main = {label: 'Main collection'}
+    // The same names as where the Edit page says each one is: the creator's main collection is named after them.
+    if (section.kind === 'feed') spec.main = {label: `In ${creator.title}`}
     else if (section.kind === 'list' && creator.linkSeasons) {
         const {season} = collectionWords(music ? 'music' : 'series')
-        spec.main = {label: `Main collection, as ${season.a}`}
-        spec.main_loose = {label: 'Add its contents to the main collection'}
+        spec.main = {label: `${season.Singular} of ${creator.title}`}
+        spec.main_loose = {label: `Add its contents to ${creator.title}`}
     }
-    spec.own = {label: 'A collection of its own'}
-    spec.exclude = {label: 'Skip'}
+    spec.own = {label: SECTION_ACTIONS.own}
+    spec.exclude = {label: SECTION_ACTIONS.skip}
     // Its videos stay out of every collection of the creator, also when another feed or list has them.
-    if (section.kind === 'list') spec.keep_out = {label: 'Skip, and keep its videos out'}
+    if (section.kind === 'list') spec.keep_out = {label: SECTION_ACTIONS.keepOut}
     return createSelectRegistry(`CreatorSection-${creator.ref}-${section.ref}-${music}`, spec as Record<Choice, {label: string}>)
 }
 

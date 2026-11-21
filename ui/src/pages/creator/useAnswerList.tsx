@@ -6,12 +6,14 @@ import {moveCreatorSections} from '../../lib/queries'
 import type {CreatorPageRead, SectionMove} from '../../types/schemas/creator'
 import MoveSectionsDialog, {type PlaceChange} from './MoveSectionsDialog'
 import type {AccountSection} from './CreatorSectionsEditor'
+import {SECTION_ACTIONS} from './sectionActions'
 
-/** A list the creator added that waits for the user's choice. Its videos stay where they would be without it, also
- *  when downloaded, so answering moves them at once: through the same dialog as moving lists on the Edit page, which
- *  also asks before a list keeps its videos out. */
-export function isWaitingList({section}: AccountSection): boolean {
-    return section.status === 'new' && section.kind === 'list' && !section.collectionSlug
+/** A list of the creator that is not in the Library: one that waits for the user's choice, or one they skipped or
+ *  keep out. Its videos stay where the creator's other feeds and lists put them, also when downloaded, so adding it
+ *  moves them at once: through the same dialog as moving lists on the Edit page, which first says what leaves each
+ *  collection, and also asks before a list keeps its videos out. */
+export function isListOutside({section}: AccountSection): boolean {
+    return section.kind === 'list' && !section.collectionSlug
 }
 
 /** Answering waiting lists: ``answer`` opens the move dialog for one, ``answerAll`` for several at once, as the bulk
@@ -24,7 +26,7 @@ export function useAnswerList(creator: CreatorPageRead, onAnswered?: (items: Acc
     const change = (item: AccountSection, move: Omit<SectionMove, 'accountId' | 'ref'>, to: string): PlaceChange => ({
         move: {accountId: item.account.id, ref: item.section.ref, ...move},
         title: item.section.title, names: item.section.names,
-        from: item.section.status === 'new' ? 'Waiting for your choice' : 'Skipped', to,
+        from: item.section.status === 'new' ? 'Waiting for your choice' : item.section.status === 'kept_out' ? SECTION_ACTIONS.keepOut : SECTION_ACTIONS.skip, to,
     })
 
     const answer = (item: AccountSection, move: Omit<SectionMove, 'accountId' | 'ref'>, to: string) => answerAll([item], move, to)

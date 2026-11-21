@@ -21,7 +21,7 @@ from backend.api.endpoints.movies.service import look_up_movies
 from . import lookups
 from .service import (
     CreatorNotFoundError, account_link, account_movies_to_add, creator_movies_to_add, creator_episodes, add_creator, add_sections, combine_creator, look_up_account, split_creator_account, creator_lookup, creator_page, check_creator, delete_creator, list_creators,
-    look_up_creator, lookup_creator_names, record_creator_opened, preview_creator_moves, show_sections, update_creator,
+    list_skipped_moved, look_up_creator, lookup_creator_names, record_creator_opened, preview_creator_moves, show_sections, update_creator,
 )
 
 router = APIRouter(prefix="/creators", tags=["Creators"])
@@ -113,7 +113,8 @@ def creator_update(slug: str, body: CreatorAPIUpdate, access: Access = signed_in
     """Change what happens with the creator's new sections, the genre and rating of its collections, and where its
     feeds and lists go: those move with their videos, after which each collection that changed numbers its episodes
     again, renames its files and rewrites their metadata."""
-    return _found(lambda: run_write_transaction(lambda s: update_creator(s, slug, body, added_by_id=access.user_id)))
+    listed = _found(lambda: list_skipped_moved(slug, body))
+    return _found(lambda: run_write_transaction(lambda s: update_creator(s, slug, body, added_by_id=access.user_id, listed=listed)))
 
 
 @router.post(
@@ -151,7 +152,9 @@ def creator_preview_moves(slug: str, body: CreatorSectionMovesAPIIn):
     """What moving feeds and lists of the creator elsewhere does to each of its collections: the videos that move or
     leave the Library, the downloads deleted, the files renamed, and the episodes that get a new number. Changes
     nothing: saving the creator with these moves makes them."""
-    return _found(lambda: run_write_transaction(lambda s: preview_creator_moves(s, slug, body)))
+    # A skipped list that moves takes its videos along, so the move asks its Site what it has first.
+    listed = _found(lambda: list_skipped_moved(slug, body))
+    return _found(lambda: run_write_transaction(lambda s: preview_creator_moves(s, slug, body, listed)))
 
 
 @router.post(

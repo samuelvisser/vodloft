@@ -222,7 +222,6 @@ export default function ChangeIdentificationDialog({
                     )}
                     {preview.busy && <p className="error" role="alert">{preview.busy}</p>}
                     {error && <p className="error" role="alert">{error}</p>}
-                    <p className="help">Its progress shows on the collection's page.</p>
                 </>
             )}
         </ConfirmDialog>

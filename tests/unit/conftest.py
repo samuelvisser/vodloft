@@ -321,19 +321,23 @@ def folder_snapshot(folder):
 
 @pytest.fixture(autouse=True)
 def restore_database():
-    """Undo ``use_database`` after each test, and stop what a test left running on its database."""
+    """Undo ``use_database`` after each test."""
     from backend.db import core
 
     saved = core._engine, core._SessionLocal
     yield
-    # A task a test started in the background must not run on the next test's database.
+    core._engine, core._SessionLocal = saved
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_teardown(item):
+    """Stop the tasks a test started in the background before its fixtures go. A task still running when a test's
+    engine is disposed crashes the process, and one left waiting must not run on the next test's database."""
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from task_manager.scheduler import scheduler
 
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
     if any(isinstance(started, AsyncIOScheduler) for started in scheduler._started_task_schedulers()):
-        scheduler.shutdown_scheduler(wait=False)
-    core._engine, core._SessionLocal = saved
+        scheduler.shutdown_scheduler(wait=True)
 
 
 def use_database(engine) -> None:

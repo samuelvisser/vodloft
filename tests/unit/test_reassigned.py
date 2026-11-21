@@ -338,14 +338,74 @@ def test_a_playlist_collection_becomes_a_season_and_goes_once_it_is_empty(creato
     assert season.name == "Tool Reviews"
 
 
-def test_a_playlist_season_leaves_the_library_and_a_collection_of_its_own_must_be_deleted_instead(creator, client, session):
+def test_a_playlist_season_leaves_the_library(creator, client, session):
     out = _save(client, "PLcabin", "exclude")
     assert out.status_code == 200, out.text
     sections = {section["ref"]: section for section in out.json()["accounts"][0]["sections"]}
     assert (sections["PLcabin"]["collectionSlug"], sections["PLcabin"]["status"]) == (None, "ignored")
 
-    refused = _save(client, "PLtools", "exclude")
-    assert refused.status_code == 422 and "delete that collection" in refused.text
+
+def test_a_playlist_collection_of_its_own_without_downloads_leaves_the_library_with_its_collection(creator, client, session):
+    from backend.db.models import Collection
+
+    _main, tools = creator
+    tools_id = tools.id
+    _settled()
+    preview = client.post("/api/creators/workshop/moves/preview", json={"moves": [
+        {"accountId": 1, "ref": "PLtools", "target": "exclude"},
+    ]})
+    assert preview.status_code == 200, preview.text
+    assert [(c["slug"], c["state"]) for c in preview.json()["collections"]] == [("PLtools", "deleted")]
+
+    out = _save(client, "PLtools", "exclude")
+
+    assert out.status_code == 200, out.text
+    sections = {section["ref"]: section for section in out.json()["accounts"][0]["sections"]}
+    assert (sections["PLtools"]["collectionSlug"], sections["PLtools"]["status"]) == (None, "ignored")
+    session.expire_all()
+    assert session.get(Collection, tools_id) is None
+
+
+def test_a_playlist_collection_of_its_own_with_downloads_goes_once_its_files_are_deleted(creator, client, session, monkeypatch):
+    from backend.db.models import Collection
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.tasks.workers.remove_skipped_collection import service as worker
+
+    _main, tools = creator
+    tools_id = tools.id
+    download = _download(session, _episode(session, tools, "t1"), _profile(session, "shows"))
+    download.kept = True
+    download_id = download.id
+    session.commit()
+    _settled()
+    preview = client.post("/api/creators/workshop/moves/preview", json={"moves": [
+        {"accountId": 1, "ref": "PLtools", "target": "keep_out"},
+    ]})
+    assert preview.status_code == 200, preview.text
+    [collection] = [c for c in preview.json()["collections"] if c["slug"] == "PLtools"]
+    assert collection["state"] == "deleted"
+    assert [(part["direction"], part["downloadsDeleted"], part["keptDeleted"]) for part in collection["parts"]] == [("leave", 1, 1)]
+
+    out = _save(client, "PLtools", "keep_out")
+
+    assert out.status_code == 200, out.text
+    session.expire_all()
+    # It stays until its files are gone, as a task of the move.
+    assert session.get(Collection, tools_id) is not None
+    move = session.scalars(select(TaskOperation).where(TaskOperation.kind == "creator.move_sections")).one()
+    assert [target.slot_key for target in move.targets] == [f"remove_skipped_collection:collection:{tools_id}"]
+    session.rollback()
+    deleted = []
+    monkeypatch.setattr(worker, "delete_episode_download_artifact", lambda s, download: deleted.append(download.file_path))
+    monkeypatch.setattr(worker, "cancel_active_download_attempts", lambda s, downloads, reason: None)
+
+    assert worker.run_remove_skipped_collection(session, collection_id=tools_id) == 1
+
+    assert len(deleted) == 1
+    session.expire_all()
+    assert session.get(Collection, tools_id) is None
+    assert session.get(EpisodeMediaDownload, download_id) is None
 
 
 def test_a_video_only_the_playlist_collection_has_joins_the_creators_collection_with_its_files(creator, client, session):

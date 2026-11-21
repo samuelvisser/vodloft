@@ -138,3 +138,30 @@ def test_a_creator_set_to_add_new_playlists_not_as_seasons_adds_them_to_its_own_
     session.refresh(main)
     barn = {link.ref: link for link in main.lists}["PLbarn"]
     assert (barn.enabled, barn.as_season) == (True, False)
+
+
+def test_skipping_two_playlists_of_one_collection_at_once_lists_it_again_once(client, session, tube):
+    from backend.db.models import Collection
+    from task_manager.scheduler.db import TaskOperation
+    from test_reassigned import _settled
+
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "PLcabin", "target": "main"}, {"ref": "PLtools", "target": "main"},
+    ]})
+    assert response.status_code == 201, response.text
+    main_id = session.scalar(select(Collection.id).where(Collection.slug == "UCworkshop"))
+    session.commit()
+    _settled()
+
+    saved = client.patch("/api/creators/workshop", json={"moves": [
+        {"accountId": 1, "ref": "PLcabin", "target": "exclude"}, {"ref": "PLtools", "accountId": 1, "target": "exclude"},
+    ]})
+
+    assert saved.status_code == 200, saved.text
+    sections = _sections(saved.json())
+    assert (sections["PLcabin"]["collectionSlug"], sections["PLtools"]["collectionSlug"]) == (None, None)
+    session.expire_all()
+    syncs = session.scalars(select(TaskOperation).where(
+        TaskOperation.kind == "collection.sync", TaskOperation.resource_id == main_id,
+    )).all()
+    assert len(syncs) == 1
