@@ -211,12 +211,13 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
 
 /* Not in your library: one folded line, then faded Library tiles with a button to add each. */
 .creator-more { margin-top: 1.5rem; border: 1px solid rgba(100, 116, 139, .3); border-radius: 14px; background: rgba(148, 163, 184, .035); }
-.creator-more-head { display: flex; align-items: center; gap: 8px; padding-right: 14px; }
+.creator-more-head { display: flex; align-items: center; gap: 8px; padding-right: 14px; border-radius: 13px; cursor: pointer; }
+/* The whole bar lights up, buttons included, and a click anywhere on it folds it open or shut. */
+.creator-more-head:hover { background: rgba(148, 163, 184, .06); }
 .creator-more-summary {
     display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 14px; padding: 12px 14px; border: 0; background: none;
-    color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 14px;
+    color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 13px;
 }
-.creator-more-summary:hover { background: rgba(148, 163, 184, .06); }
 .creator-more-stack { display: flex; flex: 0 0 auto; }
 .creator-more-stack img {
     width: 46px; height: 46px; object-fit: cover; border-radius: 9px; border: 2px solid var(--bg); margin-left: -12px; background: #1e293b;

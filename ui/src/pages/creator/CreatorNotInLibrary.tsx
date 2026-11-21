@@ -175,7 +175,8 @@ export default function CreatorNotInLibrary({creator}: {creator: CreatorPageRead
     const away = items.some(({section}) => section.movieSlug) ? `not with ${creator.title}` : 'not in your library'
     return (
         <section className={`creator-more${open ? ' is-open' : ''}`} aria-label="Not in your library">
-            <div className="creator-more-head">
+            {/* The gaps between the buttons belong to the bar too: a click there folds it like the summary does. */}
+            <div className="creator-more-head" onClick={(event) => { if (event.target === event.currentTarget) toggle() }}>
             <button type="button" className="creator-more-summary" aria-expanded={open} onClick={toggle}>
                 {arts.length > 0 && (
                     <span className="creator-more-stack" aria-hidden="true">
