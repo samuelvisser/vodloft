@@ -10,6 +10,7 @@ options come after them, so they can never change where files go.
 from __future__ import annotations
 
 import contextlib
+import functools
 import io
 import optparse
 import shlex
@@ -89,24 +90,30 @@ class OptionsRefused(ValueError):
 
 def _matched(tokens: list[str]) -> list[tuple[str, str]]:
     """Each option in ``tokens`` as (as written, yt-dlp's name), matched the way yt-dlp's parser matches it."""
+    return [(written, dest) for _start, _end, written, dest in _spans(tokens)]
+
+
+def _spans(tokens: list[str]) -> list[tuple[int, int, str, str]]:
+    """Each option in ``tokens`` as (first token, token after its value, as written, yt-dlp's name)."""
     parser = create_parser()
-    found: list[tuple[str, str]] = []
+    found: list[tuple[int, int, str, str]] = []
     index = 0
     while index < len(tokens):
+        start = index
         token = tokens[index]
         index += 1
         if token == "--":
-            found.extend((rest, "url") for rest in tokens[index:])
+            found.extend((position, position + 1, tokens[position], "url") for position in range(index, len(tokens)))
             break
         if not token.startswith("-") or token == "-":
-            found.append((token, "url"))
+            found.append((start, index, token, "url"))
             continue
         if token.startswith("--"):
             name, equals, _rest = token.partition("=")
             try:
                 name = parser._match_long_opt(name)
             except Exception:
-                found.append((name, "unknown"))
+                found.append((start, index, name, "unknown"))
                 continue
             option = parser._long_opt[name]
             inline = bool(equals)
@@ -114,12 +121,12 @@ def _matched(tokens: list[str]) -> list[tuple[str, str]]:
             name = token[:2]
             option = parser._short_opt.get(name)
             if option is None:
-                found.append((name, "unknown"))
+                found.append((start, index, name, "unknown"))
                 continue
             inline = len(token) > 2
         if option.takes_value():
             index += (option.nargs or 1) - (1 if inline else 0)
-        found.append((name, option.dest or name))
+        found.append((start, index, name, option.dest or name))
     return found
 
 
@@ -184,3 +191,39 @@ def ytdlp_option_arguments(text: str) -> tuple[str, ...]:
             raise OptionsRefused(f"Line {line.line}: {line.message}")
         arguments.extend(shlex.split(line.text, comments=True))
     return tuple(arguments)
+
+
+_UNPLAYABLE = "allow_unplayable_formats"
+
+
+def without_unplayable_formats(arguments: tuple[str, ...]) -> tuple[str, ...]:
+    """``arguments`` without ``--allow-unplayable-formats`` and ``--no-allow-unplayable-formats``.
+
+    With it, yt-dlp merges and converts nothing, so it is only kept for media that needs it.
+    """
+    tokens = list(arguments)
+    return tuple(
+        token for start, end, _written, dest in _spans(tokens) if dest != _UNPLAYABLE for token in tokens[start:end]
+    )
+
+
+@functools.lru_cache(maxsize=256)
+def allows_unplayable_formats(text: str) -> bool:
+    """Whether the options in ``text`` turn on yt-dlp's ``--allow-unplayable-formats``.
+
+    yt-dlp then also offers formats it can not play back, such as ones protected by DRM, and saves them as the
+    site has them. VODLoft only passes the option on: it never changes what yt-dlp downloads. Options that can not
+    be used are never handed to yt-dlp, so they turn nothing on. The last of ``--allow-unplayable-formats`` and
+    ``--no-allow-unplayable-formats`` wins, as in yt-dlp.
+    """
+    try:
+        arguments = ytdlp_option_arguments(text)
+    except OptionsRefused:
+        return False
+    parser = create_parser()
+    allowed = False
+    for written, dest in _matched(list(arguments)):
+        if dest == _UNPLAYABLE:
+            option = parser._long_opt.get(written) or parser._short_opt.get(written)
+            allowed = option is not None and option.action == "store_true"
+    return allowed

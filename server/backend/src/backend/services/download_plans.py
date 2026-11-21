@@ -28,6 +28,7 @@ from backend.services.download_quality import (
 from backend.types.download_profile_types import AutoSubtitles
 from backend.services.source_options import ytdlp_source_options
 from backend.services.throttle_guard import refuses_throttled
+from backend.services.unplayable_formats import tries_unplayable_formats
 from backend.services.movies import update_movie_extra_source_metadata
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat, keeps_tracks
@@ -44,6 +45,7 @@ from downloader.plan import EMBEDS_ARTWORK, EMBEDS_METADATA, DownloadPlan, Sidec
 from downloader.source import resolve_download_source
 from downloader.ytdlp import resolve_ytdlp_source
 from sources import Feature, PlaybackKind, Source, get_source
+from sources.ytdlp_options import without_unplayable_formats
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +96,9 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     option_texts = [("the yt-dlp Source", ytdlp_source_options(session))]
     if episode is not None:
         option_texts.append((f"the Collection '{episode.collection.title}'", episode.collection.ytdlp_options))
+    # Media protected by DRM is only tried with --allow-unplayable-formats, when its Collection's own options have it.
+    # yt-dlp then merges and converts nothing, so other media is downloaded without it.
+    unplayable = media.drm_protected and tries_unplayable_formats(media)
     subtitle_request = ytdlp_subtitles(profile, AutoSubtitles.NEVER)
     default_languages = default_subtitle_languages(profile)
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
@@ -118,12 +123,13 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         if playback.kind is PlaybackKind.YTDLP:
             # The profile's choices for the Site; a setting the Site does not show is off.
             subtitle_request = ytdlp_subtitles(profile, auto_subtitles)
+            custom = custom_ytdlp_options(*option_texts) if media_source.has(Feature.YTDLP_OPTIONS) else ()
             source = resolve_ytdlp_source(
                 playback.url, command=playback.command, preferred_format=preferred, audio_only=audio_only,
                 quality=quality, subtitles=subtitle_request,
                 sponsorblock=sponsorblock, chapters=chapters,
-                custom_options=custom_ytdlp_options(*option_texts) if media_source.has(Feature.YTDLP_OPTIONS) else (),
-                ffmpeg_path=ffmpeg_path, throttle_guard=throttle_guard, section=section,
+                custom_options=custom if unplayable else without_unplayable_formats(custom),
+                ffmpeg_path=ffmpeg_path, throttle_guard=throttle_guard, section=section, unplayable=unplayable,
             )
         elif section is not None:
             raise DownloadError(f"{media_source.name} can only download '{title}' whole, not as a part of its video")
@@ -233,8 +239,9 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     assets: list[SidecarSpec] = []
     artwork_id = None
     # VODLoft embeds into MP4, M4A, MP3, MKV and FLAC; an Opus file takes tags, but artwork only as a sidecar.
-    embeddable = not source.hls_bundle and source.extension in EMBEDS_ARTWORK
-    takes_tags = not source.hls_bundle and source.extension in EMBEDS_METADATA
+    # A file of unplayable formats is kept just as yt-dlp saved it, so nothing is embedded in it.
+    embeddable = not source.hls_bundle and not source.ytdlp_unplayable and source.extension in EMBEDS_ARTWORK
+    takes_tags = not source.hls_bundle and not source.ytdlp_unplayable and source.extension in EMBEDS_METADATA
     if thumbnail is not None and thumbnail_mode is not ThumbnailMode.NO_THUMBNAIL:
         publish_artwork = thumbnail_mode in (ThumbnailMode.SIDECAR, ThumbnailMode.EMBED_AND_SIDECAR)
         embed_artwork = thumbnail_mode in (ThumbnailMode.EMBED, ThumbnailMode.EMBED_AND_SIDECAR) and embeddable
@@ -260,6 +267,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     embed_subtitles = (
         subtitle_mode in (LocalMediaProfileSubtitleMode.EMBED, LocalMediaProfileSubtitleMode.EMBED_AND_SIDECAR)
         and not source.audio_only
+        and not source.ytdlp_unplayable
         and (source.hls_bundle or source.extension in {"mp4", "m4v", "mkv"})
     )
     embedded_subtitle_ids: list[str] = []

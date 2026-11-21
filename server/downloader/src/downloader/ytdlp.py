@@ -196,8 +196,13 @@ def resolve_ytdlp_source(
     ffmpeg_path: str = "ffmpeg",
     throttle_guard: bool = False,
     section: tuple[float, float] | None = None,
+    unplayable: bool = False,
 ) -> ResolvedDownloadSource:
     """``custom_options`` are the user's own yt-dlp options; VODLoft's own come after them and win.
+
+    With ``unplayable``, ``custom_options`` hold ``--allow-unplayable-formats``. yt-dlp then neither merges nor
+    processes formats it can not play back, so the download asks for one file that already has the video and the
+    sound (``ytdlp_unplayable_options``), and nothing is cut, remuxed, converted or embedded in it.
 
     With ``section``, the start and end of one stretch of the video in seconds, only that stretch is downloaded.
 
@@ -206,6 +211,11 @@ def resolve_ytdlp_source(
     """
     if not command:
         raise DownloadError("A yt-dlp download needs the yt-dlp command")
+    if unplayable:
+        return _unplayable_source(
+            url, command=command, preferred_format=preferred_format, audio_only=audio_only, quality=quality,
+            subtitles=subtitles, custom_options=custom_options, ffmpeg_path=ffmpeg_path, section=section,
+        )
     hls = preferred_format == "format_hls"
     if hls and audio_only:
         raise DownloadError("HLS media format cannot be used for an audio-only download")
@@ -245,6 +255,49 @@ def resolve_ytdlp_source(
         ytdlp_sponsorblock=sponsorblock,
         ytdlp_chapters=chapters,
         ytdlp_throttle_guard=throttle_guard and not hls and not audio_only and (height or 0) > THROTTLED_HEIGHT,
+    )
+
+
+def ytdlp_unplayable_options(preferred_format: str, *, audio_only: bool, quality: YtdlpQuality = YtdlpQuality()) -> tuple[str, ...]:
+    """yt-dlp options that pick one MP4 file with video and sound, or one M4A file of sound, for a download with
+    ``--allow-unplayable-formats``, which yt-dlp never merges or converts.
+
+    The resolution and codecs only steer the sort, so a video without them still downloads in the nearest one.
+    """
+    if audio_only:
+        return ("-f", "ba[ext=m4a]/b[ext=m4a]", "-S", f"acodec:{_AUDIO_SORT_NAMES[quality.audio_codec]}")
+    height = FORMAT_HEIGHTS.get(preferred_format)
+    if height is None:
+        raise DownloadError(f"Unsupported preferred format '{preferred_format}'")
+    sort = [f"res:{height}", f"vcodec:{_SORT_NAMES[quality.video_codecs[0]]}", f"acodec:{_AUDIO_SORT_NAMES[quality.audio_codec]}"]
+    if quality.prefer_small:
+        sort += ["+size", "+br"]
+    return ("-f", "b[ext=mp4]", "-S", ",".join(sort))
+
+
+def _unplayable_source(
+    url: str, *, command: tuple[str, ...], preferred_format: str, audio_only: bool, quality: YtdlpQuality,
+    subtitles: YtdlpSubtitles, custom_options: tuple[str, ...], ffmpeg_path: str, section: tuple[float, float] | None,
+) -> ResolvedDownloadSource:
+    if preferred_format == "format_hls":
+        raise DownloadError("An HLS bundle can not be made of unplayable formats, which yt-dlp keeps as one file")
+    if section is not None:
+        raise DownloadError("A part of a video can not be cut from unplayable formats")
+    options = (*custom_options, *ytdlp_unplayable_options(preferred_format, audio_only=audio_only, quality=quality))
+    if os.sep in ffmpeg_path:
+        options += ("--ffmpeg-location", ffmpeg_path)
+    height = FORMAT_HEIGHTS.get(preferred_format)
+    return ResolvedDownloadSource(
+        url=url,
+        format_downloaded="unplayable audio m4a" if audio_only else f"unplayable, up to {height}p",
+        use_hls=False,
+        remux_to_mp4=False,
+        extension="m4a" if audio_only else "mp4",
+        audio_only=audio_only,
+        ytdlp_command=(*command, *options),
+        # yt-dlp writes the subtitle files themselves; nothing is embedded in the media.
+        ytdlp_subtitles=subtitles,
+        ytdlp_unplayable=True,
     )
 
 

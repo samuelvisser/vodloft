@@ -97,6 +97,8 @@ class ResolvedDownloadSource:
     ytdlp_chapters: YtdlpChapters = YtdlpChapters()
     ytdlp_throttle_guard: bool = False
     """Refuse a video yt-dlp only got in a throttled resolution (``ThrottledError``) instead of keeping it."""
+    ytdlp_unplayable: bool = False
+    """yt-dlp downloads it with ``--allow-unplayable-formats``: the file is kept as it comes, with nothing embedded."""
 
 
 @dataclass(frozen=True)

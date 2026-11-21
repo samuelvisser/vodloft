@@ -177,6 +177,8 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
     const fieldRegFor = (index: number) => createSelectRegistry('WhichEpisodesFilterField', Object.fromEntries(
         EpisodeFilterFieldReg.values.filter((field) => {
             if (field === 'seasons') return seasonal || seasons.length > 0 || filters[index]?.field === 'seasons'
+            // Only a collection whose own yt-dlp options allow unplayable formats downloads them.
+            if (field === 'unplayable') return !!result?.unplayableFormats || filters[index]?.field === 'unplayable'
             if (isDateLine({field})) return !filters.some((filter, other) => other !== index && filter.field === field)
             return true
         }).map((field) => [field, field === 'seasons' ? {label: season.singular} : EpisodeFilterFieldReg.spec[field]]),
@@ -349,6 +351,15 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                         }}
                     />
                     <div className="help">With upcoming {season.plural}, {season.a} the collection gets later is added to this filter.</div>
+                </div>
+            )
+        }
+        if (filter.field === 'unplayable') {
+            return (
+                <div className="help">
+                    Matches what yt-dlp can only download because this collection’s yt-dlp options
+                    include <code>--allow-unplayable-formats</code>, such as media protected by DRM. VODLoft saves what
+                    yt-dlp downloads as it is, so it may not play.
                 </div>
             )
         }
