@@ -132,9 +132,10 @@ class YouTubeImplementation(OtherSitesImplementation):
         main = next(type_ for type_ in self.feed_types if type_.key == "videos")
         with ThreadPoolExecutor(max_workers=len(self.feed_types) + 2, thread_name_prefix="channel-lookup") as pool:
             listings = self.read_feeds(root, pool, plan)
+            # The playlists take longest, so their step comes last.
             plan.add(
-                StageSpec(id="playlists", code="read_lists", label=f"Reading the {self.site.section_list_names.plural}"),
                 StageSpec(id="releases", code="read_releases", label="Checking for releases"),
+                StageSpec(id="playlists", code="read_lists", label=f"Reading the {self.site.section_list_names.plural}"),
             )
             playlists = plan.follow("playlists", pool.submit(self.playlists, root))
             releases = plan.follow("releases", pool.submit(self.has_releases, root))

@@ -89,15 +89,16 @@ class ArtistImplementation(OtherSitesImplementation):
         cookies = sites.cookies_for(root)
         # Named by what the Site calls its lists, such as "albums and playlists" on SoundCloud.
         lists = self.site.section_list_names.plural
-        plan.add(
-            StageSpec(id="list", code="list_lists", label=f"Listing the {lists}"),
-            StageSpec(id="read", code="read_lists", label=f"Reading the {lists}"),
-        )
         found: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=_LOOKUPS_AT_ONCE) as pool:
-            # The artist's feeds and pictures are read beside their lists.
+            # The artist's feeds and pictures are read beside their lists. The feeds are quick, so their steps come
+            # first and the lists, which take longest, last.
             listings = self.read_feeds(root, pool, plan)
             pictures = pool.submit(self.pictures, root)
+            plan.add(
+                StageSpec(id="list", code="list_lists", label=f"Listing the {lists}"),
+                StageSpec(id="read", code="read_lists", label=f"Reading the {lists}"),
+            )
             with plan.running("list"):
                 links = self.release_links(root)
                 key_of = self.list_key(root, cookies)
