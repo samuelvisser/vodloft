@@ -198,9 +198,15 @@ def collection_details(source_id: str, url: str = Query(min_length=1, max_length
 
 
 @router.get("/sources/{source_id}/search", dependencies=[requires(Area.ADD_MEDIA, Level.VIEW)], response_model=SearchResultsAPIRead)
-def search(source_id: str, q: str = Query(min_length=1, max_length=200), access: Access = signed_in()):
-    """Find collections and videos at a Source by name."""
-    return search_source(access, _source(source_id, Feature.SEARCH), q)
+def search(
+    source_id: str, site: str = Query(min_length=1, max_length=100), q: str = Query(min_length=1, max_length=200),
+    access: Access = signed_in(),
+):
+    """Find collections and videos by name on one of the Sites a Source searches."""
+    try:
+        return search_source(access, _source(source_id, Feature.SEARCH), site, q)
+    except SourceFeatureMissingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/sources/{source_id}/program", dependencies=[requires(Area.SOURCES, Level.MANAGE)], response_model=ProgramStatusAPIRead)

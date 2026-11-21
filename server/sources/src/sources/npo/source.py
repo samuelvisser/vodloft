@@ -128,7 +128,7 @@ class NpoSource(Source):
     name = "NPO Start"
     domains = ("npo.nl",)
     sites = (Site(
-        account.SITE_KEY, "NPO Start", domains, accesses=(NPO_PLUS,),
+        account.SITE_KEY, "NPO Start", domains, accesses=(NPO_PLUS,), searchable=True,
         # Its programme pages only tell the length, which is all the upgrade check can compare.
         upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,)),
         # Its streams download with yt-dlp, which chooses among their versions. They have no subtitles.
@@ -236,7 +236,7 @@ class NpoSource(Source):
             access=video.access,
         )
 
-    def search(self, query: str) -> SearchResults:
+    def search(self, site: Site, query: str) -> SearchResults:
         query = query.strip()
         if not query:
             return SearchResults([])

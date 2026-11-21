@@ -7,10 +7,11 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
-from ...contract import LIST_TYPE, CollectionDetails, CreatorDetails, SectionRef, link_host, on_domain
+from ...contract import LIST_TYPE, CollectionDetails, CreatorDetails, SearchResults, SectionRef, link_host, on_domain
 from ... import ytdlp_runner as runner
-from .. import sites, thumbnails
-from ..youtube_api import mapping
+from .. import sites, thumbnails, youtube_search
+from ..youtube_api import QuotaExceededError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
+from ..youtube_api.catalogue import Catalogue
 from .other_sites import OtherSitesImplementation
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,25 @@ def _count(number: int) -> str:
 class YouTubeImplementation(OtherSitesImplementation):
     key = "youtube"
     list_keys = frozenset({LIST_TYPE})
+
+    def search(self, query: str) -> SearchResults:
+        """Through the YouTube Data API while the search share has room, else through yt-dlp."""
+        key = api_key.load()
+        if key is None:
+            reason = "no_key"
+        elif quota.status().usage(Share.SEARCH).limit == 0:
+            reason = "off"
+        else:
+            try:
+                catalogue = Catalogue(YouTubeApiClient(key), (Share.SEARCH,))
+                return SearchResults(youtube_search.search_api(catalogue, query), youtube_search.api_notice())
+            except QuotaExceededError as exc:
+                logger.info("Searching YouTube with yt-dlp, because the API quota is used up: %s", exc)
+                reason = "quota"
+            except YouTubeApiError as exc:
+                logger.info("Searching YouTube with yt-dlp, because the API could not: %s", exc)
+                reason = "error"
+        return SearchResults(youtube_search.search_ytdlp(query), youtube_search.ytdlp_notice(reason))
 
     def creator_root(self, url: str) -> str | None:
         return channel_root(collection_url(url))
