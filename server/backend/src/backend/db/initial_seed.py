@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from .core import load_database_models
@@ -50,6 +50,27 @@ def _add_missing_profiles(session: Session, profiles) -> None:
         for profile in profiles
         if profile.slug not in existing_slugs
     )
+
+
+DEFAULT_SITES = (
+    "https://www.youtube.com", "https://www.twitch.tv", "https://www.tiktok.com", "https://soundcloud.com",
+    "https://www.dailywire.com",
+)
+"""The Sites a new VODLoft starts with, by their address, in the order every list of Sites shows them. Each is
+stored like any Site the user adds, and can be removed like one; what VODLoft offers on it comes from the address
+alone."""
+
+
+def _seed_sites(session: Session) -> None:
+    """Make the default Sites the only ones. They come before the profiles, which start with every Site VODLoft
+    knows. A new SQLite database runs every migration first, and one of those adds the Sites older versions always
+    listed, so those rows go: a new database has nothing from them."""
+    from backend.db.models import Site
+    from backend.services.sites import add_site, site_of_link
+
+    session.execute(delete(Site))
+    for address in DEFAULT_SITES:
+        add_site(session, site_of_link(session, address))
 
 
 def _seed_local_media_profiles(session: Session) -> None:
@@ -134,6 +155,7 @@ def _mark_background_migrations_done(session: Session) -> None:
 
 
 _INITIAL_SEED_STEPS: tuple[Callable[[Session], None], ...] = (
+    _seed_sites,
     _seed_local_media_profiles,
     _seed_notification_rules,
     _mark_background_migrations_done,

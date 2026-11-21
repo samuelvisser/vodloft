@@ -9,6 +9,7 @@ PLAYLIST_LIST = "playlist"
 class SoundCloud(OtherSites):
     key = "soundcloud"
     name = "SoundCloud"
+    domains = ("soundcloud.com",)
     audio_only = True
     creators = True
     # Its apps share short links, which redirect to its pages.

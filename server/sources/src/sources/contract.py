@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, ClassVar
@@ -43,6 +43,9 @@ class Feature(StrEnum):
     ``needs_cookies`` tells from a failed download that the cookies file would help."""
     API_KEY = "api_key"
     """An optional key for the service's own API, which makes catalogue lookups faster."""
+    SITE_API = "site_api"
+    """A Site's own free API, set up with credentials the user registers there (``Site.site_api``), with
+    ``site_api_status``, ``save_site_api``, ``test_site_api`` and ``remove_site_api``."""
     QUICK_CHECK = "quick_check"
     """Cheaply finding a listed collection's newest items, with ``latest_items`` and
     ``item_details``, between full scans of the collection."""
@@ -842,12 +845,72 @@ class Access:
     """One sentence on who can watch what needs it, such as "Only NPO Plus subscribers can watch this"."""
 
 
-class ApiKeyRejected(ValueError):
-    """The service does not accept the key; the message says what to do about it."""
+@dataclass(frozen=True)
+class ApiField:
+    """One value a Site's API takes, such as its client ID, and whether it is a secret that is never shown again."""
 
-    def __init__(self, message: str, fix_url: str | None = None):
+    key: str
+    label: str
+    secret: bool = False
+
+
+@dataclass(frozen=True)
+class GuideStep:
+    """One step of how to get something, with a button to the page it is done on."""
+
+    text: str
+    button: str | None = None
+    url: str | None = None
+
+
+@dataclass(frozen=True)
+class SiteApi:
+    """A free API of a Site's own that the user can register VODLoft with, such as Twitch's, and what it makes
+    better. VODLoft works on the Site without it."""
+
+    name: str
+    """What the Site calls it, such as Twitch API."""
+    fields: tuple[ApiField, ...]
+    benefits: str
+    """What it makes better, as a sentence."""
+    steps: tuple[GuideStep, ...] = ()
+    """How to register VODLoft there and get the values of its ``fields``."""
+    searches: bool = False
+    """The Site's search goes through the API, so VODLoft only searches the Site once it is set up."""
+
+
+@dataclass(frozen=True)
+class Retention:
+    """A Site that removes its media itself after a while, such as Twitch its past broadcasts."""
+
+    kept_for: timedelta
+    """The least time the Site keeps media after it is published. Media that leaves the Site sooner is missing, as
+    on any other Site."""
+    description: str
+    """How the Site removes its media, as a sentence."""
+
+
+@dataclass(frozen=True)
+class SiteApiStatus:
+    """Which values of a Site's API are set, each by its last few characters or, for one that is not secret, as it
+    is; and the last problem the Site reported with them."""
+
+    hints: Mapping[str, str]
+    problem: str | None = None
+
+    @property
+    def set_up(self) -> bool:
+        return bool(self.hints)
+
+
+class ApiKeyRejected(ValueError):
+    """The service does not accept the key; the message says what to do about it, and ``field`` which of a Site's
+    API values it is about, when it is about one."""
+
+    def __init__(self, message: str, fix_url: str | None = None, field: str | None = None):
         super().__init__(message)
         self.fix_url = fix_url
+        self.field = field
 
 
 ANY_DOMAIN = "*"
@@ -906,6 +969,9 @@ class Site:
     takes_api_key: bool = False
     """A Source with ``Feature.API_KEY`` that fetches the Site uses its key there, such as yt-dlp's
     YouTube Data API key on YouTube."""
+    site_api: SiteApi | None = None
+    """The Site's own free API that the user can register VODLoft with, through a Source with ``Feature.SITE_API``,
+    such as Twitch's for its search."""
     accesses: tuple[Access, ...] = ()
     """What the Site only gives some of its videos with, such as NPO Plus or a channel membership,
     by the keys its Sources tell."""
@@ -941,6 +1007,10 @@ class Site:
     costly_search: bool = False
     """Each search of the Site costs something, such as API quota or a slow lookup, so the search page searches when
     asked instead of while the user types."""
+    retention: Retention | None = None
+    """How the Site removes its media itself after a while, such as Twitch its past broadcasts. Media that leaves
+    such a Site once it is older than the Retention's ``kept_for`` is removed by its retention: VODLoft expects it to
+    go, so it does not ask on Home whether to keep its downloads, and says what deleting a download then means."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
@@ -1293,6 +1363,27 @@ class Source(ABC):
         """Collections and videos on one of the ``search_sites`` whose name matches the query. Only Sources with
         ``Feature.SEARCH`` implement it."""
         raise NotImplementedError(f"{self.name} cannot be searched")
+
+    def search_ready(self, site: Site) -> bool:
+        """Whether the Source can search the Site now: one whose search goes through its own API
+        (``SiteApi.searches``) only once that API is set up."""
+        return site.site_api is None or not site.site_api.searches or self.site_api_status(site).set_up
+
+    def site_api_status(self, site: Site) -> SiteApiStatus:
+        """Which values of the Site's own API are set. Only Sources with ``Feature.SITE_API`` implement it."""
+        raise NotImplementedError(f"{self.name} uses no API of {site.name}")
+
+    def save_site_api(self, site: Site, values: Mapping[str, str]) -> None:
+        """Test the values of the Site's API with one call and store them. Raises ApiKeyRejected when the Site does
+        not accept them."""
+        raise NotImplementedError(f"{self.name} uses no API of {site.name}")
+
+    def test_site_api(self, site: Site) -> None:
+        """Test the stored values with one call. Raises ApiKeyRejected when the Site does not accept them."""
+        raise NotImplementedError(f"{self.name} uses no API of {site.name}")
+
+    def remove_site_api(self, site: Site) -> None:
+        raise NotImplementedError(f"{self.name} uses no API of {site.name}")
 
     def program_status(self) -> ProgramStatus:
         """The program this Source runs. Only Sources with ``Feature.PROGRAM_UPDATES`` implement it."""

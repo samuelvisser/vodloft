@@ -158,7 +158,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
                 {ep.drmProtected ? <DrmBadge onCover/>
                     // Media the account may watch only shows its open lock on its own page.
                     : ep.access && !ep.accessGranted ? <AccessBadge label={ep.accessLabel} description={ep.accessDescription} onCover/>
-                    : ep.removedFromSource ? <RemovedBadge onCover/>
+                    : ep.removedFromSource && !ep.removedByRetention ? <RemovedBadge onCover/>
                     : reassignedTo ? <ReassignedBadge collectionTitle={reassignedTo} onCover/>
                     : moved && <MovedBadge onCover words={words}/>}
                 {isLive && (

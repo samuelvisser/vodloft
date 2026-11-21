@@ -10,7 +10,7 @@ from backend.api.models.source import (
     ApiKeyNoteAPIRead, ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
     NamesAPIRead, SourceAPIRead, SourceSiteAPIRead,
 )
-from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase, Settings
+from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase, Settings, Site as SiteRecord
 from backend.security.access import Access
 from backend.types.collection_types import CollectionType
 from backend.services.media_access import access_locked, link_access
@@ -31,8 +31,16 @@ class LinkNotRecognisedError(LookupError):
     pass
 
 
-def list_sources() -> list[SourceAPIRead]:
-    return [SourceAPIRead.model_validate(source) for source in all_sources()]
+def list_sources(s: Session) -> list[SourceAPIRead]:
+    """Every Source, with which of the Sites it searches are added to VODLoft, and which it can search now."""
+    added = set(s.scalars(select(SiteRecord.key)))
+    return [
+        SourceAPIRead.model_validate(source, context={
+            "added_sites": added,
+            "ready_sites": {site.key for site in source.search_sites if source.search_ready(site)},
+        })
+        for source in all_sources()
+    ]
 
 
 def sources_in_use(s: Session) -> list[str]:

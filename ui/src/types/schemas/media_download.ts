@@ -3,7 +3,7 @@ import type {TaskOperationRead} from './operation'
 import {z} from "zod";
 
 import {ApiDateTimeSchema} from "./datetime";
-import {LockableFields, SourcedFields} from "./source";
+import {RetentionFields, SourcedFields} from "./source";
 
 
 export const MediaDownloadArtifactStatus = [
@@ -63,7 +63,7 @@ export type MediaDownloadRead = z.infer<typeof MediaDownloadReadSchema>;
 
 export const MediaDownloadViewReadSchema = MediaDownloadReadSchema.extend({
     ...SourcedFields,
-    ...LockableFields,
+    ...RetentionFields,
     mediaSlug: z.string().nullable(),
     mediaTitle: z.string().nullable(),
     episodeSlug: z.string().nullable(),

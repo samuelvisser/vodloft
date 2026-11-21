@@ -226,6 +226,8 @@ class Evaluation:
     """A Keep filter on the downloaded date protects downloads downloaded since each of these."""
     removed_from_source: set[int] = field(default_factory=set)
     """Episodes the Source no longer has: their downloads wait for the person's keep answer."""
+    removed_by_retention: set[int] = field(default_factory=set)
+    """Of those, the ones their Site's retention removed, which VODLoft expected to go: nothing waits for an answer."""
     as_if_at_source: Optional["Evaluation"] = None
     """The same walk with those episodes still at the Source. Retention judges their downloads by it
     once the person chose not to keep them, so the date lines apply to them as before."""
@@ -305,6 +307,7 @@ def _walk(
         kept=kept,
         keep_downloaded_since=keep_downloaded_since,
         removed_from_source={episode.id for episode in episodes if episode.removed_from_source},
+        removed_by_retention={episode.id for episode in episodes if episode.removed_by_retention},
     )
 
 
@@ -348,7 +351,10 @@ def kept_by(evaluation: Evaluation, download) -> Optional[DownloadKeptBy]:
         return DownloadKeptBy.HAND
     if download.media_item_id in evaluation.kept:
         return DownloadKeptBy.KEEP_FILTER
-    if awaits_keep_answer(download, removed_from_source=download.media_item_id in evaluation.removed_from_source):
+    if awaits_keep_answer(
+        download, removed_from_source=download.media_item_id in evaluation.removed_from_source,
+        removed_by_retention=download.media_item_id in evaluation.removed_by_retention,
+    ):
         return DownloadKeptBy.KEEP_QUESTION
     if download.downloaded_at is not None and any(
         download.downloaded_at >= since for since in evaluation.keep_downloaded_since

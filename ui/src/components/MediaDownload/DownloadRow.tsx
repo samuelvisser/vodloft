@@ -91,6 +91,7 @@ export function DownloadRow({
     onCancel,
     note,
     downloadLabel = 'Download',
+    downloadDisabledReason,
     actions,
     children,
 }: {
@@ -101,12 +102,14 @@ export function DownloadRow({
     /** Whether the row's retry is still on its way to the server; it can be canceled meanwhile. */
     starting?: boolean
     /** The retry button, when the row offers one. */
-    retry: {title: string, label: string, onClick: () => void} | null
+    retry: {title: string, label: string, onClick: () => void, disabledReason?: string} | null
     onDownload: () => void
     onCancel: () => void
     /** A line under the profile name, such as why the episode was skipped. */
     note?: ReactNode
     downloadLabel?: string
+    /** Why nothing can be downloaded, which disables the download button. */
+    downloadDisabledReason?: string
     /** Extra buttons before the log button. */
     actions?: ReactNode
     /** Dialogs that belong to the row. */
@@ -138,7 +141,8 @@ export function DownloadRow({
                             type="button"
                             className="btn btn-primary"
                             onClick={onDownload}
-                            disabled={busy}
+                            disabled={busy || downloadDisabledReason !== undefined}
+                            title={downloadDisabledReason}
                             aria-label={`Download ${profile.name}`}
                         >
                             <FontAwesomeIcon icon={faIcon('fass', 'download')}/>
@@ -170,8 +174,8 @@ export function DownloadRow({
                             type="button"
                             className="icon-btn"
                             onClick={retry.onClick}
-                            disabled={busy}
-                            title={retry.title}
+                            disabled={busy || retry.disabledReason !== undefined}
+                            title={retry.disabledReason ?? retry.title}
                             aria-label={retry.label}
                         >
                             <FontAwesomeIcon icon={faIcon('fass', 'rotate-right')}/>

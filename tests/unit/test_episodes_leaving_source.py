@@ -2,6 +2,7 @@
 One that went live and is not published yet waits four hours first."""
 from __future__ import annotations
 
+import importlib
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -10,7 +11,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-NOW = datetime(2026, 11, 18, 10, tzinfo=timezone.utc)
+NOW = datetime.now(timezone.utc)
+"""Now: whether media counts as removed by its Site's retention follows the clock."""
 
 
 @pytest.fixture
@@ -27,12 +29,12 @@ def session():
     engine.dispose()
 
 
-def _episode(session, status="published_final", *, files=False):
+def _episode(session, status="published_final", *, files=False, url="https://example.test/show", age=timedelta(days=1)):
     from backend.db.models import Collection, Episode, EpisodeMediaDownload, LocalMediaProfile, Season
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
 
     collection = Collection(
-        source_key="ytdlp", uuid="c-uuid", slug="show", title="Show", sharing_url="https://example.test/show",
+        source_key="ytdlp", uuid="c-uuid", slug="show", title="Show", sharing_url=url,
         membership_level="FREE", type=CollectionType.PODCAST.value, episode_identifier=EpisodeIdentifier.NUMBERED.value,
         author_name="Host", author_slug="host",
     )
@@ -40,7 +42,7 @@ def _episode(session, status="published_final", *, files=False):
     episode = Episode(
         source_key="ytdlp", uuid="e-uuid", type="episode", collection=collection, season=season, index=1,
         episode_identifier="ep.1", slug="e1", title="Episode", duration=100.0, publish_status=status,
-        sharing_url="https://example.test/e1", published_date=NOW - timedelta(days=1),
+        sharing_url="https://example.test/e1", published_date=NOW - age,
     )
     session.add(episode)
     session.flush()
@@ -94,6 +96,68 @@ def test_a_downloaded_episode_stays_marked_removed_and_home_asks_about_it(sessio
     assert episode.removed_from_source is True
     assert episode.publish_status == "published_final"
     assert [download.media_item_id for download in downloads_awaiting_keep_answer(session)] == [episode_id]
+
+
+def test_a_downloaded_video_its_sites_retention_removed_is_not_asked_about(session):
+    from backend.api.models.episode import EpisodeAPIRead
+    from backend.db.models import Episode
+    from backend.services.removed_downloads import back_at_source, downloads_awaiting_keep_answer
+
+    episode_id = _episode(session, files=True, url="https://www.twitch.tv/spamfish/videos?filter=all", age=timedelta(days=8))
+
+    assert _left(session, episode_id) is False
+    episode = session.get(Episode, episode_id)
+    assert episode.removed_from_source and episode.removed_by_retention
+    # Twitch deletes its past broadcasts itself, so Home does not ask whether to keep the download.
+    assert downloads_awaiting_keep_answer(session) == []
+    assert back_at_source(episode) and not episode.removed_by_retention
+
+
+def test_a_video_that_leaves_before_its_site_keeps_it_is_missing_as_on_any_site(session):
+    from backend.db.models import Episode
+    from backend.services.removed_downloads import downloads_awaiting_keep_answer
+
+    # Twitch keeps past broadcasts at least 7 days.
+    episode_id = _episode(session, files=True, url="https://www.twitch.tv/spamfish/videos?filter=all", age=timedelta(days=6))
+
+    assert _left(session, episode_id) is False
+    episode = session.get(Episode, episode_id)
+    assert episode.removed_from_source and not episode.removed_by_retention
+    assert [download.media_item_id for download in downloads_awaiting_keep_answer(session)] == [episode_id]
+
+
+def test_a_video_that_leaves_half_a_day_early_still_counts_as_removed_by_retention(session):
+    from backend.db.models import Episode
+    from backend.services.removed_downloads import downloads_awaiting_keep_answer
+
+    episode_id = _episode(
+        session, files=True, url="https://www.twitch.tv/spamfish/videos?filter=all", age=timedelta(days=6, hours=13),
+    )
+
+    assert _left(session, episode_id) is False
+    assert session.get(Episode, episode_id).removed_by_retention
+    assert downloads_awaiting_keep_answer(session) == []
+
+
+def test_a_missing_video_counts_as_removed_by_retention_once_its_site_would_have_removed_it(session, monkeypatch):
+    from backend.db.models import Episode
+    media_item = importlib.import_module("backend.db.models.media_item.MediaItemBase")
+    from backend.services.removed_downloads import downloads_awaiting_keep_answer
+
+    episode_id = _episode(session, files=True, url="https://www.twitch.tv/spamfish/videos?filter=all", age=timedelta(days=2))
+    assert _left(session, episode_id) is False
+    assert [download.media_item_id for download in downloads_awaiting_keep_answer(session)] == [episode_id]
+
+    class FiveDaysLater(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW + timedelta(days=5)
+
+    # Nobody answered Home, and the video is now 7 days old: Twitch would have removed it by now anyway.
+    monkeypatch.setattr(media_item, "datetime", FiveDaysLater)
+    session.expire_all()
+    assert session.get(Episode, episode_id).removed_by_retention
+    assert downloads_awaiting_keep_answer(session) == []
 
 
 @pytest.mark.parametrize("status", ["live", "source_processing", "published_preliminary"])

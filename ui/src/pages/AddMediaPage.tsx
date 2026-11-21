@@ -146,10 +146,11 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         else navigate(`/add-collection?url=${encodeURIComponent(target.url)}`)
     }
 
-    // A Source with a catalogue is browsed; one without is searched, each of its search Sites on its own.
+    // A Source with a catalogue is browsed; one without is searched, each of its search Sites on its own. Only the
+    // Sites added to VODLoft are offered.
     const browseChoices = (sources ?? []).filter((source) => canUseSource(source.id)).flatMap((source): {source: SourceRead, site?: SearchSiteRead}[] => (
-        sourceHas(source, SourceFeature.BROWSE) ? [{source}]
-            : sourceHas(source, SourceFeature.SEARCH) ? source.searchSites.map((site) => ({source, site}))
+        sourceHas(source, SourceFeature.BROWSE) ? (source.sites.some((site) => site.added) ? [{source}] : [])
+            : sourceHas(source, SourceFeature.SEARCH) ? source.searchSites.filter((site) => site.added && site.ready).map((site) => ({source, site}))
             : []
     ))
     const browse = (source: SourceRead, site?: SearchSiteRead) => {

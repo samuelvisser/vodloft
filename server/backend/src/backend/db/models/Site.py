@@ -19,6 +19,9 @@ class Site(Base):
     preferred_source_key: Mapped[Optional[str]] = mapped_column(
         comment="The Source asked first for links on this Site, when several Sources handle it",
     )
+    position: Mapped[int] = mapped_column(
+        default=0, server_default="0", comment="Where the Site comes in lists of Sites: the order VODLoft got them in",
+    )
     downloads_paused_until: Mapped[Optional[datetime]] = mapped_column(
         UTCDateTime(), comment="Automatic downloads from the Site wait until then, because it throttled a download",
     )

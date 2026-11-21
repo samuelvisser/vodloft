@@ -107,6 +107,7 @@ def episode_view_columns():
         Episode.access_refused_at.label("access_refused_at"),
         Episode.access_check_at.label("access_check_at"),
         Episode.removed_from_source.label("removed_from_source"),
+        Episode.removed_by_retention.label("removed_by_retention"),
         Episode.title.label("title"),
         Episode.duration.label("duration"),
         Episode.slug.label("slug"),

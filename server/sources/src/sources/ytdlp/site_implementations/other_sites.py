@@ -13,7 +13,7 @@ from concurrent.futures import Executor, Future
 from typing import ClassVar
 from urllib.parse import urljoin
 
-from ...contract import CollectionDetails, CreatorDetails, SearchResults, SectionRef, SectionRole, Site, link_host
+from ...contract import MAIN_TAG, CollectionDetails, CreatorDetails, SearchResults, SectionRef, SectionRole, Site, link_host
 import requests
 
 from ... import ytdlp_runner as runner
@@ -58,6 +58,20 @@ class OtherSitesImplementation:
     def shared_page(self, url: str) -> str:
         """The page a share link led to, as VODLoft keeps it."""
         return url
+
+    def collection_link(self, url: str) -> str:
+        """The page a collection of the link lists, such as a channel's videos for its front page; the link itself
+        when it lists one already."""
+        return url
+
+    def episode_tag(self, info: dict, url: str) -> str:
+        """Which of the Site's episode tags yt-dlp's full lookup of a video gives it."""
+        return MAIN_TAG
+
+    def test_api(self, values: dict[str, str]) -> None:
+        """Ask the Site's own API (``Site.site_api``) once with these values. Raises ApiKeyRejected when the Site does
+        not accept them."""
+        raise runner.YtDlpError(f"VODLoft uses no API of {self.site.name}")
 
     def search(self, query: str) -> SearchResults:
         """The Site's collections and videos whose name matches the query, on a Site whose contract makes it
