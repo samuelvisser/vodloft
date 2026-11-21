@@ -3,7 +3,7 @@ import {queryOptions, type QueryClient} from '@tanstack/react-query'
 import {EpisodeReadViewPageSchema} from '../types/schemas/episode'
 import {SeasonReadSchema} from '../types/schemas/season'
 import {CollectionRead, CollectionReadSchema} from '../types/schemas/collection'
-import {apiUrl} from './api'
+import {ApiError, apiUrl} from './api'
 
 async function fetchParsed<T>(
   url: string,
@@ -11,7 +11,7 @@ async function fetchParsed<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const response = await fetch(url, {signal, credentials: 'include'})
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  if (!response.ok) throw new ApiError(`HTTP ${response.status}`, response.status)
   return schema.parse(await response.json())
 }
 

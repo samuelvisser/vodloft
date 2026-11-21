@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import threading
 
 import pytest
+from progress_plan import PlanTracker, StageSpec
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -46,8 +48,11 @@ class CreatorSource(ListedSource):
     def creator_of(self, url):
         return ROOT if url.startswith("https://tube.example/") else None
 
-    def creator_details(self, ref, progress=lambda step: None):
-        progress("Reading the creator")
+    def creator_details(self, ref, plan=None):
+        plan = plan or PlanTracker()
+        plan.add(StageSpec(id="read", code="read_creator", label="Reading the creator"))
+        with plan.running("read"):
+            pass
         return CreatorDetails(
             ref="UCworkshop", url=ROOT, title="Northwind Workshop", handle="@workshop", facts=("1.2M subscribers",),
             sections=SECTIONS,
@@ -89,17 +94,23 @@ def client(tube, session):
         yield test_client
 
 
+def _steps(lines):
+    """The steps of the last plan a lookup sent, each with its state."""
+    plan = [line["plan"] for line in lines if "plan" in line][-1]
+    return [(stage["label"], stage["state"]) for stage in plan["stages"]]
+
+
 def _lookup(client):
     """The creator lookup's steps, and the creator it found."""
     response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
     lines = [json.loads(line) for line in response.text.splitlines()]
-    return [line["step"] for line in lines[:-1]], lines[-1]["creator"]
+    return [label for label, _state in _steps(lines)], lines[-1]["creator"]
 
 
 def _match(client, slug):
     """The creator the collection's link is of, after the steps of looking it up, and the steps."""
     lines = [json.loads(line) for line in client.get(f"/api/collections/{slug}/creator/match").text.splitlines()]
-    return lines[-1]["match"], [line["step"] for line in lines[:-1]]
+    return lines[-1]["match"], [label for label, _state in _steps(lines)]
 
 
 def _plan(body, preset):
@@ -110,7 +121,7 @@ def _plan(body, preset):
 def test_one_show_folds_feeds_and_playlists_into_one_collection(client):
     steps, body = _lookup(client)
 
-    assert steps == ["Looking the creator up", "Reading the creator", "Checking what is in your library already"]
+    assert steps == ["Reading the creator", "Checking what is in your library already"]
     assert (body["title"], body["creatorNames"]["singular"], body["facts"]) == ("Northwind Workshop", "creator", ["1.2M subscribers"])
     # The creator's own collection lists its Shorts and Live too, and its playlists are seasons of it.
     assert _plan(body, "one_show") == {
@@ -655,18 +666,63 @@ def test_removing_a_collection_from_its_creator_makes_it_plain_again(client, ses
     assert client.post("/api/collections/UCworkshop/creator").status_code == 200
 
 def test_a_failed_lookup_ends_with_what_went_wrong(client, tube, monkeypatch):
-    def refuse(ref, progress=lambda step: None):
-        progress("Reading the creator")
-        raise ValueError("This creator does not exist")
+    def refuse(ref, plan):
+        plan.add(StageSpec(id="read", code="read_creator", label="Reading the creator"))
+        with plan.running("read"):
+            raise ValueError("This creator does not exist")
 
     monkeypatch.setattr(tube, "creator_details", refuse)
     response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
+    lines = [json.loads(line) for line in response.text.splitlines()]
 
-    assert [json.loads(line) for line in response.text.splitlines()] == [
-        {"step": "Looking the creator up", "creatorNames": {"singular": "creator", "plural": "creators", "a": "a creator"}},
-        {"step": "Reading the creator"},
-        {"error": "Could not look up this creator: This creator does not exist"},
-    ]
+    assert lines[0] == {"creatorNames": {"singular": "creator", "plural": "creators", "a": "a creator"}}
+    assert _steps(lines) == [("Reading the creator", "failed")]
+    assert lines[-1] == {"error": "Could not look up this creator: This creator does not exist"}
+
+
+def test_a_creator_found_a_moment_ago_shows_no_steps(client, tube):
+    """Pasting a creator's link looks them up ahead; once that is done, the Add creator page answers at once."""
+    from backend.api.endpoints.creators import service
+
+    service.look_up_creator("tube", ROOT, None)
+    response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
+    lines = [json.loads(line) for line in response.text.splitlines()]
+
+    assert _steps(lines) == [("Checking what is in your library already", "completed")]
+    assert lines[-1]["creator"]["title"] == "Northwind Workshop"
+
+
+def test_a_lookup_that_joins_one_already_running_follows_its_steps(client, tube, monkeypatch):
+    """Pasting a creator's link starts looking them up; the Add creator page then follows that lookup, counts and all."""
+    from backend.api.endpoints.creators import service
+
+    details = tube.creator_details(ROOT)
+    started, release = threading.Event(), threading.Event()
+
+    def slow(ref, plan):
+        plan.add(StageSpec(id="read", code="read_lists", label="Reading the playlists"))
+        with plan.running("read"):
+            plan.progress("read", 0.5, done=1, total=2)
+            started.set()
+            release.wait(5)
+            plan.progress("read", 1.0, done=2, total=2)
+        return details
+
+    monkeypatch.setattr(tube, "creator_details", slow)
+    ahead = threading.Thread(target=service.look_up_creator, args=("tube", ROOT, None))
+    ahead.start()
+    assert started.wait(5)
+    threading.Timer(0.2, release.set).start()
+    response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
+    ahead.join(5)
+    lines = [json.loads(line) for line in response.text.splitlines()]
+
+    plans = [line["plan"] for line in lines if "plan" in line]
+    # It hears the step the lookup is on as it joins, with how far it is, and each count after.
+    counts = [(stage["done"], stage["total"]) for plan in plans for stage in plan["stages"] if stage["id"] == "read"]
+    assert counts[0] == (1, 2) and counts[-1] == (2, 2)
+    assert _steps(lines) == [("Reading the playlists", "completed"), ("Checking what is in your library already", "completed")]
+    assert lines[-1]["creator"]["title"] == "Northwind Workshop"
 
 
 def test_an_artists_collections_hold_music(client, tube, session, monkeypatch):
@@ -784,7 +840,7 @@ def test_a_site_names_its_creators_in_its_own_words(client, tube, monkeypatch):
     response = client.post("/api/creators/lookup", json={"sourceKey": "tube", "url": ROOT})
     lines = [json.loads(line) for line in response.text.splitlines()]
 
-    assert lines[0] == {"step": "Looking the host up", "creatorNames": {"singular": "host", "plural": "hosts", "a": "a host"}}
+    assert lines[0] == {"creatorNames": {"singular": "host", "plural": "hosts", "a": "a host"}}
     assert lines[-1]["creator"]["creatorNames"]["singular"] == "host"
 
 
@@ -1396,6 +1452,21 @@ def test_each_kind_of_list_has_its_own_setting_for_new_ones(client, session, tub
 
     # The album is added by itself; the playlist waits for the user's choice.
     assert ([section.ref for section in result.added], [section.ref for section in result.asked]) == (["PLalbum"], ["PLbarn"])
+
+
+def test_deleting_an_accounts_own_collection_keeps_the_account(client, tube, session):
+    registry.register(ClipsSource())
+    _one_show(client)
+    assert _add_clips(client, into="workshop").status_code == 201
+    page = client.get("/api/creators/workshop").json()
+    clips = next(account for account in page["accounts"] if account["site"]["key"] == "clips")
+
+    assert client.delete(f"/api/collections/{clips['mainCollectionSlug']}").status_code == 200
+
+    page = client.get("/api/creators/workshop").json()
+    assert [account["site"]["key"] for account in page["accounts"]] == ["tube", "clips"]
+    assert page["accounts"][1]["mainCollectionSlug"] is None
+    assert clips["mainCollectionSlug"] not in {collection["slug"] for collection in page["collections"]}
 
 
 def test_a_section_whose_id_is_a_path_gets_a_collection_its_link_can_open(client, session, monkeypatch):

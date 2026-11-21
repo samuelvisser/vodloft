@@ -2,7 +2,7 @@ import {useEffect, useMemo, useState} from 'react'
 import {toast} from '../../lib/toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {ReactNode} from 'react'
-import Select from 'react-select'
+import Select from '../common/ReactSelect'
 import Switch from 'react-switch'
 import {faIcon} from '../../icons/faIcon'
 

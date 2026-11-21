@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
+
+from progress_plan import PlanTracker
 
 from config.settings.site_settings import SITE_SETTINGS, SiteSetting, UpgradeImprovement
 
@@ -1301,12 +1303,13 @@ class Source(ABC):
         """Look up a collection. Only Sources with ``Feature.EPISODE_LISTS`` implement it."""
         raise NotImplementedError(f"{self.name} does not list episodes")
 
-    def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
+    def creator_details(self, ref: str, plan: PlanTracker | None = None) -> CreatorDetails:
         """Look up a creator by its link, or by the ``ref`` it had before. Only Sources with ``Feature.CREATORS``
         implement it.
 
-        A lookup can take a while, so it tells ``progress`` what it is doing, as a short sentence such as
-        "Listing the playlists"."""
+        A lookup can take a while, so it reports its progress by ``plan``: each Site adds the steps it takes to look a
+        creator up, such as reading each of its feeds or listing its playlists, labelled in words such as "Reading
+        the playlists", and runs them, counting how many of how many where a step goes through a known number."""
         raise NotImplementedError(f"{self.name} has no creators")
 
     def creator_of(self, url: str) -> str | None:

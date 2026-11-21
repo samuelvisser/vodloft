@@ -6,13 +6,15 @@ import threading
 import time
 
 import requests
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit
 
 from config import get_settings
 from downloader.ytdlp import is_drm_message, is_unsupported_url_message
+
+from progress_plan import PlanTracker
 
 from ..contract import (
     Chapter,
@@ -586,11 +588,11 @@ class YtDlpSource(Source):
         author = self.collection_details(url).author_url
         return implementation.creator_root(author) if author else None
 
-    def creator_details(self, ref: str, progress: Callable[[str], None] = lambda step: None) -> CreatorDetails:
+    def creator_details(self, ref: str, plan: PlanTracker | None = None) -> CreatorDetails:
         """A creator and the sections of their page, as their Site's implementation finds them: a YouTube channel's
-        tabs and playlists, or a Bandcamp or SoundCloud artist's albums. ``ref`` is the creator's link, or a YouTube
-        channel's ID."""
-        return self._implementation(ref).creator_details(ref, progress)
+        tabs and playlists, or a Bandcamp or SoundCloud artist's albums, by the implementation's plan of steps.
+        ``ref`` is the creator's link, or a YouTube channel's ID."""
+        return self._implementation(ref).creator_details(ref, plan or PlanTracker())
 
     def music_reason(self, url: str, details: CollectionDetails) -> str | None:
         """A link on a Site of music, such as Bandcamp, or a link its Site's implementation can tell is music, such as

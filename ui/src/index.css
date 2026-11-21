@@ -1308,12 +1308,46 @@ a.icon-btn { display: inline-block; text-decoration: none; }
   box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.08);
   padding: 20px;
   animation: scaleIn 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Within the screen: the header and the buttons stay in place and the .modal-body between them scrolls. A dialog
+     without a .modal-body scrolls as a whole instead. */
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* A dialog that grows past the screen instead (Modal's scrollable={false}). */
+.modal.modal-unbounded {
+  max-height: none;
+  display: block;
+  overflow: visible;
+}
+.modal > .modal-header,
+.modal > .modal-actions {
+  flex: none;
+}
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Room for the scrollbar, beside the dialog's own padding. */
+  margin-right: -6px;
+  padding-right: 6px;
+}
+.modal-unbounded > .modal-body {
+  overflow: visible;
 }
 .modal-header {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 8px;
+}
+/* The header's margin is the gap below it: margins don't collapse in the dialog's column. */
+.modal > .modal-header + .modal-text {
+  margin-top: 0;
 }
 .modal-icon {
   width: 36px;

@@ -34,7 +34,6 @@ tr.bulk-row.is-selected > td { background: rgba(59, 130, 246, .12); }
 .bulk-action-bar__actions .btn { display: inline-flex; align-items: center; gap: 7px; }
 
 /* Change settings */
-.bulk-dialog { max-height: calc(100dvh - 48px); overflow-y: auto; }
 .bulk-dialog-subjects { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
 .bulk-subject { padding: 3px 10px; border-radius: 999px; background: rgba(148, 163, 184, .14); font-size: 13px; }
 .bulk-subject.is-more { color: var(--muted); }
@@ -74,6 +73,6 @@ tr.bulk-row.is-selected > td { background: rgba(59, 130, 246, .12); }
   .bulk-field__control { padding-left: 12px; }
   .modal-overlay:has(.bulk-dialog) { padding: 0; place-items: end stretch; }
   .bulk-dialog { max-height: 92dvh; border-radius: 16px 16px 0 0; }
-  .bulk-dialog .modal-actions { position: sticky; bottom: -20px; flex-direction: column-reverse; margin: 0 -20px -20px; padding: 12px 20px; background: inherit; }
+  .bulk-dialog .modal-actions { flex-direction: column-reverse; margin: 0 -20px -20px; padding: 12px 20px; }
   .bulk-dialog .modal-actions .btn { width: 100%; justify-content: center; }
 }
