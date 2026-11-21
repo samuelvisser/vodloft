@@ -5,6 +5,7 @@ import {frontendOperationDefinitions} from './operationDefinitions'
 import {ACTIVE_OPERATION_STATUSES, presentDownloadProgress} from './downloadProgress'
 import {waitingPresentation, workingPresentation} from './progressPresentation'
 import {faIcon} from '../icons/faIcon'
+import {planSteps} from './progressPlan'
 
 /** A step in words: what the task says it does, or for a part of a larger action, which action on what. */
 function stepLabel(stage: PlanStage): string {
@@ -17,10 +18,7 @@ function stepLabel(stage: PlanStage): string {
 function planOf(operation: TaskOperationRead): {steps: ProgressStep[], main?: ProgressStep} | undefined {
     const parsed = PlanSchema.safeParse(operation.progressMeta?.plan)
     if (!parsed.success || parsed.data.stages.length === 0) return undefined
-    const steps = parsed.data.stages.map((stage): ProgressStep => ({
-        id: stage.id, label: stepLabel(stage), state: stage.state,
-        percent: stage.fraction == null ? null : Math.round(stage.fraction * 100),
-    }))
+    const steps = planSteps(parsed.data.stages, stepLabel)
     return {steps, main: steps.find((step) => step.id === parsed.data.main_activity)}
 }
 

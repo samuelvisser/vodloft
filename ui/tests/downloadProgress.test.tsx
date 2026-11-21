@@ -254,3 +254,11 @@ test('a quick download shows the same status, bar and details button as a librar
     assert.match(markup,/42%/);assert.match(markup,/aria-label="Progress details"/);assert.match(markup,/role="progressbar"/)
     assert.match(markup,/For sam · Video · 1080p MP4/)
 })
+test('a running download lists the steps of its plan with the transfer percentage',()=>{
+    const view=presentDownloadProgress(undefined,active())
+    assert.deepEqual(view.steps,[
+        {id:'media',label:'Downloading',state:'running',percent:42},
+        {id:'embed',label:'Embedding artwork and metadata',state:'running',percent:null},
+    ])
+    assert.equal(presentDownloadProgress(undefined,operation({status:'SUCCEEDED'})).steps,undefined)
+})
