@@ -442,7 +442,8 @@ export default function AddCreatorPage() {
     const joiningMovies = keptMovies.filter((plan) => sectionOf.get(plan.ref)?.movieSlug).map((plan) => sectionOf.get(plan.ref)!.movieTitle ?? sectionOf.get(plan.ref)!.title)
     const mainFeed = creator.sections.find((section) => section.kind === 'feed' && section.role === 'main')
     const newCollections: NewCollection[] = [
-        ...(kept.some((plan) => plan.target === 'main' && !plan.intoRef) ? [{key: MAIN_KEY, title: intoTitle ?? creator.title, url: mainFeed?.url ?? creator.url}] : []),
+        // A collection of the main feed left in the library, such as after the creator was deleted, becomes theirs again.
+        ...(kept.some((plan) => plan.target === 'main' && !plan.intoRef) && !mainFeed?.collectionSlug ? [{key: MAIN_KEY, title: intoTitle ?? creator.title, url: mainFeed?.url ?? creator.url}] : []),
         ...kept.filter((plan) => plan.target === 'own' && sectionOf.get(plan.ref)?.kind !== 'item').map((plan) => {
             const section = sectionOf.get(plan.ref)
             return {
