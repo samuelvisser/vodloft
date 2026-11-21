@@ -112,11 +112,13 @@ export function placeLabel(creator: CreatorPageRead, {account, section}: Account
     const title = collection?.title ?? creator.title
     const season = collectionWords(collection?.type).season
     return {
-        main: section.kind === 'feed' ? `In ${title}` : `${season.Singular} of ${title}`,
+        main: section.kind === 'feed'
+            ? collection?.looseSeason ? `In ${title} as ${season.singular} ${collection.looseSeason}` : `In ${title}`
+            : `${season.Singular} of ${title}`,
         main_loose: `Add its contents to ${title}`,
         own: SECTION_ACTIONS.own,
         exclude: SECTION_ACTIONS.skip,
-        keep_out: SECTION_ACTIONS.keepOut,
+        keep_out: SECTION_ACTIONS.keepOut(account.site.mediaNames),
     }[target]
 }
 
@@ -348,8 +350,8 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
         }
         if (section.kind === 'list') {
             actions.push({
-                key: 'keep_out', label: SECTION_ACTIONS.keepOut,
-                run: () => now !== 'keep_out' && answer(item, {target: 'keep_out'}, SECTION_ACTIONS.keepOut),
+                key: 'keep_out', label: SECTION_ACTIONS.keepOut(account.site.mediaNames),
+                run: () => now !== 'keep_out' && answer(item, {target: 'keep_out'}, SECTION_ACTIONS.keepOut(account.site.mediaNames)),
             })
         }
         if (section.status === 'ignored') actions.push({key: 'show', label: SECTION_ACTIONS.show, run: () => void unhide(item)})
@@ -466,7 +468,7 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                                     <span>
                                         {item.section.access
                                             ? 'Only some members can watch this.'
-                                            : facts(item, item.section.movieSlug ? 'In your library' : null, item.section.status === 'ignored' ? 'Hidden on the creator page' : null, item.section.status === 'kept_out' ? 'Keeps its videos out' : null)}
+                                            : facts(item, item.section.movieSlug ? 'In your library' : null, item.section.status === 'ignored' ? 'Hidden on the creator page' : null, item.section.status === 'kept_out' ? `Its ${item.account.site.mediaNames.plural} are blacklisted` : null)}
                                     </span>
                                 </div>
                                 {!selecting && actionSelect(item, false)}

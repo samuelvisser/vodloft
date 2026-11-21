@@ -26,7 +26,7 @@ export function useAnswerList(creator: CreatorPageRead, onAnswered?: (items: Acc
     const change = (item: AccountSection, move: Omit<SectionMove, 'accountId' | 'ref'>, to: string): PlaceChange => ({
         move: {accountId: item.account.id, ref: item.section.ref, ...move},
         title: item.section.title, names: item.section.names,
-        from: item.section.status === 'new' ? 'Waiting for your choice' : item.section.status === 'kept_out' ? SECTION_ACTIONS.keepOut : SECTION_ACTIONS.skip, to,
+        from: item.section.status === 'new' ? 'Waiting for your choice' : item.section.status === 'kept_out' ? SECTION_ACTIONS.keepOut(item.account.site.mediaNames) : SECTION_ACTIONS.skip, to,
     })
 
     const answer = (item: AccountSection, move: Omit<SectionMove, 'accountId' | 'ref'>, to: string) => answerAll([item], move, to)

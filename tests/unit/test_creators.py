@@ -155,6 +155,37 @@ def test_adding_a_creator_makes_its_collection_with_its_playlists_as_seasons(cli
     assert left["PLmembers"] is None and left["PLtools"] == "PLtools"
 
 
+def test_adding_a_creator_puts_sections_into_the_new_collection_of_another(client, session):
+    from backend.db.models import Collection
+
+    plan = [
+        {"ref": "videos", "target": "main"}, {"ref": "PLcabin", "target": "own"},
+        {"ref": "PLtools", "target": "main", "intoRef": "PLcabin"}, {"ref": "shorts", "target": "main", "intoRef": "PLcabin"},
+        {"ref": "streams", "target": "exclude"}, {"ref": "PLmembers", "target": "exclude"},
+    ]
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": plan})
+
+    assert response.status_code == 201, response.text
+    assert [(c["title"], c["links"]) for c in response.json()["collections"]] == [
+        ("Northwind Workshop", ["Videos"]),
+        ("Building the Cabin", ["Shorts", "Building the Cabin", "Tool Reviews"]),
+    ]
+    cabin = session.scalar(select(Collection).where(Collection.slug == "PLcabin"))
+    # The playlist's own collection gathers now: the Tool Reviews are a season of it, and it lists the Shorts.
+    assert cabin.feeds == ["shorts"]
+    assert {(link.ref, link.enabled, link.as_season) for link in cabin.lists if link.enabled} == {
+        ("PLcabin", True, False), ("PLtools", True, True),
+    }
+
+
+def test_a_section_only_joins_the_new_collection_of_a_section_that_gets_one(client):
+    response = client.post("/api/creators", json={"sourceKey": "tube", "url": ROOT, "sections": [
+        {"ref": "videos", "target": "main"}, {"ref": "PLtools", "target": "main", "intoRef": "PLcabin"},
+    ]})
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Tool Reviews can only go into a new collection of another feed or list"
+
+
 def test_adding_a_creator_uses_what_its_lookup_found(client, tube, monkeypatch):
     _steps, found = _lookup(client)
     asked = []
@@ -652,6 +683,32 @@ def test_the_user_decides_whether_a_creator_the_site_isnt_sure_of_is_an_artist(c
     ]})
     assert response.status_code == 201, response.text
     assert set(session.scalars(select(Collection.type))) == {"series"}
+
+
+def test_an_artist_presets_keep_only_the_lists_the_site_marks_as_albums(client, tube, monkeypatch):
+    from dataclasses import replace
+
+    import sys
+
+    albums = SectionType("album", SectionKind.LIST, Names("album", "albums"), albums=True)
+    playlists = SectionType("playlist", SectionKind.LIST, Names("playlist", "playlists"))
+    monkeypatch.setattr(type(tube), "sites", (replace(tube.sites[0], section_types=(VIDEOS, LIVE, SHORTS, albums, playlists)),))
+    sections = tuple(
+        replace(section, type=albums if section.ref == "PLcabin" else playlists) if section.kind is SectionKind.LIST else section
+        for section in SECTIONS
+    )
+    monkeypatch.setattr(sys.modules[__name__], "SECTIONS", sections)
+
+    _steps, body = _lookup(client)
+    assert (body["albumNames"]["plural"], body["skippedListNames"]["plural"]) == ("albums", "playlists")
+    music = lambda preset: {
+        item["ref"]: item["target"] for item in next(p for p in body["presets"] if p["key"] == preset)["musicPlan"]
+    }
+    # The album becomes an album; the playlist starts skipped with both presets.
+    assert (music("one_show")["PLcabin"], music("one_show")["PLtools"]) == ("main", "exclude")
+    assert (music("per_list")["PLcabin"], music("per_list")["PLtools"]) == ("own", "exclude")
+    # A creator who isn't an artist keeps every list.
+    assert (_plan(body, "one_show")["PLcabin"], _plan(body, "one_show")["PLtools"]) == ("main", "main")
 
 
 def test_an_artist_on_a_video_site_keeps_only_their_albums(client, session):

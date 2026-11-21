@@ -332,3 +332,6 @@ ul.creator-order-note { padding-left: 1.1rem; display: flex; flex-direction: col
     background: var(--change-identification-danger-soft);
     color: var(--change-identification-danger);
 }
+
+/* Sets the other collections apart in the Add creator page's choices, from the creator's own and from the rest. */
+.creator-choice-separated { border-top: 1px solid var(--select-menu-border); }
