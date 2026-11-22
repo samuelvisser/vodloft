@@ -162,7 +162,14 @@
 
 .seasons-dialog-list-name .btn { white-space: nowrap; }
 
-.seasons-dialog-season.is-removed .seasons-dialog-season-copy .input { text-decoration: line-through; opacity: .6; }
+/* The seasons saving deletes, under the others, where they can't be moved. */
+.seasons-dialog-leaving { margin-top: .75rem; }
+.seasons-dialog-leaving h4 { margin: 0 0 .35rem; font-size: .875rem; font-weight: 600; opacity: .8; }
+.seasons-dialog-leaving ul { list-style: none; margin: 0; padding: 0; border: 1px dashed rgba(100, 116, 139, 0.4); border-radius: 10px; }
+.seasons-dialog-leaving li { display: flex; align-items: center; gap: .6rem; padding: .45rem .75rem; }
+.seasons-dialog-leaving li + li { border-top: 1px dashed rgba(100, 116, 139, 0.3); }
+.seasons-dialog-leaving .seasons-dialog-link-copy { flex: 1 1 auto; min-width: 0; }
+.seasons-dialog-leaving b { text-decoration: line-through; opacity: .7; overflow-wrap: anywhere; }
 .seasons-dialog-warning {
     display: flex;
     gap: 8px;

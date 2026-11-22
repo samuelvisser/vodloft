@@ -102,7 +102,7 @@ Series can contain multiple seasons. The collection page lets you switch between
 
 The bin next to a season deletes it when you save. Its videos then go where the collection's settings put them, so a season the settings fill, such as a season per year, comes back with the videos that belong in it; the window warns you when that happens and offers to put those videos in one season instead. Seasons the site itself has, such as the shows of The Daily Wire, can't be deleted.
 
-The list of seasons shows what saving will do as soon as you change something in the window: seasons that go are struck through, new ones are marked **New when you save**, and a season that will hold a different number of videos says so. Nothing changes until you save.
+The list of seasons shows what saving will do as soon as you change something in the window: seasons that go move to **Deleted when you save** under the list, where you can keep a season you deleted, new ones are marked **New when you save**, and a season that will hold a different number of videos says so. Nothing changes until you save.
 
 Renaming a season or giving it another number doesn't rename files you already downloaded. To give them their new names, use **Rename all episode files** in the collection's **Actions** menu. Turn on **Rename season folders too** there to move files into the folder of the season they are in now, with its new number. In a collection with playlist seasons, downloaded videos then also move to the playlist season they belong in now.
 
