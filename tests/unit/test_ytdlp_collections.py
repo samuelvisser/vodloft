@@ -683,9 +683,9 @@ def test_a_music_collection_has_a_setting_for_new_albums_and_one_for_new_playlis
     collection = _collection(session, "PLartist", source_key="ytdlp")
     collection.sharing_url = "https://soundcloud.com/artist"
     collection.type, collection.link_seasons = "music", "selected"
-    # Until the user chooses, a Music collection asks about new albums and skips new playlists.
+    # Until the user chooses, a SoundCloud collection adds new albums as seasons and skips new playlists.
     assert [(setting.key, setting.action) for setting in collection_new_lists(collection)] == [
-        ("album", "ask"), ("playlist", "ignore"),
+        ("album", "add"), ("playlist", "ignore"),
     ]
     collection.new_lists = {"album": "add", "playlist": "ask"}
 

@@ -31,12 +31,18 @@ import {useEpisodeTags, useLocalMediaProfiles, useSiteOptions} from "../../lib/q
 import {EpisodeTagRead} from "../../types/schemas/source";
 import {CollectionExamplesContext, useCollectionExamplesQuery} from "../../lib/collectionExamples";
 import {apiUrl} from '../../lib/api'
+import {addCollectionToCreator, setCollectionCreator} from '../../lib/queries'
+import {toast} from '../../lib/toast'
+import {BEHIND_LINK} from '../Creator/creatorTargets'
+import {NO_CREATOR, type CreatorChoice} from './CreatorSwitch'
 
 export type Props = {
     onCancel: () => void
     // Receives the path of the new collection's page once the collection is saved.
     onCreated: (path: string) => void
     initialUrl?: string
+    /** A creator in the Library the collection is added to, such as the host whose page offered it. */
+    initialCreator?: string
 }
 
 const STORAGE_KEY = 'addCollectionWizardV12'
@@ -67,6 +73,7 @@ type WizardState = {
     }
     seasons: SeasonDetachedOut[] | undefined,
     existingFiles?: ExistingFilesChoice,
+    creator?: CreatorChoice,
     globalMessage?: WizardMessage | null
 }
 
@@ -129,7 +136,7 @@ export default function AddCollectionPage(props: Props) {
     )
 }
 
-function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Props & {onStartOver: () => void}) {
+function AddCollectionWizard({onCancel, onCreated, initialUrl, initialCreator, onStartOver}: Props & {onStartOver: () => void}) {
     // A link that opens the wizard for a collection (?url=...) still finds the wizard as it was left for that
     // collection, so a reload keeps the user's place; for another collection it starts over.
     const [persisted] = useState(() => {
@@ -172,6 +179,9 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Pro
     )
 
     const [seasonsSubmit, setSeasonsSubmit] = useState<SeasonDetachedOut[] | undefined>(() => persisted?.seasons ?? [])
+    const [creator, setCreator] = useState<CreatorChoice>(
+        () => initialCreator ? {on: true, target: initialCreator} : persisted?.creator ?? NO_CREATOR,
+    )
     const [existingFiles, setExistingFiles] = useState<ExistingFilesChoice>(
         () => persisted?.existingFiles ?? {enabled: false, folder: '', template: ''},
     )
@@ -230,9 +240,10 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Pro
             },
             seasons: seasonsSubmit,
             existingFiles,
+            creator,
             globalMessage,
         })
-    }, [existingFiles, step, collectionAction, collectionInput, collectionSubmit, localMediaProfileInput, localMediaProfileSubmit,
+    }, [creator, existingFiles, step, collectionAction, collectionInput, collectionSubmit, localMediaProfileInput, localMediaProfileSubmit,
         downloadProfileInput, downloadProfileSubmit, streamProfileInput, streamProfileSubmit, streamEpisodeTypesManuallyChanged,
         seasonsSubmit, globalMessage])
 
@@ -324,6 +335,18 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Pro
             qc.invalidateQueries({queryKey: ['collections']}),
             qc.invalidateQueries({queryKey: ['seasons']}),
         ])
+        if (creator.on) {
+            // The collection is in the Library already; the creator only groups it, so a failure leaves it as it is.
+            setWizardMessage('Adding the collection to its creator...', 'INFO')
+            try {
+                if (creator.target === BEHIND_LINK) await setCollectionCreator(created.slug, true)
+                else await addCollectionToCreator(created.slug, creator.target)
+                await Promise.all([qc.invalidateQueries({queryKey: ['creators']}), qc.invalidateQueries({queryKey: ['creator']})])
+            } catch (exc) {
+                toast.error(`The collection was added, but not to the creator: ${exc instanceof Error ? exc.message : String(exc)}`)
+            }
+            clearWizardMessage()
+        }
         clearWizardState()
         const path = `/collection/${encodeURIComponent(created.slug)}`
         // The scan of existing files waits for the episodes; its review opens on the collection's page.
@@ -397,6 +420,8 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, onStartOver}: Pro
                     onSeasonsSubmit={setSeasonsSubmit}
                     onContinue={() => setStep(2)}
                     onCancel={handleCancel}
+                    creator={creator}
+                    onCreatorChange={setCreator}
                 />
             )}
 

@@ -4,7 +4,9 @@ import CollectionPreviewCard from "./CollectionPreviewCard";
 import {useDailywireShow, useDailywireUserInfo, useListedCollectionDetails, useResolvedLink} from "../../lib/queries";
 import {DAILYWIRE_SOURCE_KEY, SourceFeature, sourceHas} from "../../types/schemas/source";
 import ReadMore from "../../utils/ReadMore";
-import {collectionWords} from "../../lib/collectionWords";
+import {collectionWords, creatorNamesFor} from "../../lib/collectionWords";
+import {can} from "../../lib/access";
+import CreatorSwitch, {type CreatorChoice} from "./CreatorSwitch";
 import {dailywireShowDefaults, listedCollectionDefaults} from "./collectionDefaults";
 import {Controller, SubmitHandler, useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
@@ -29,9 +31,12 @@ type Props = {
     onSeasonsSubmit: (seasons: SeasonDetachedOut[]) => void;
     onContinue: () => void;
     onCancel: () => void;
+    /** Whether the collection is added to a creator once it is in the Library: only a channel can be. */
+    creator: CreatorChoice;
+    onCreatorChange: (choice: CreatorChoice) => void;
 };
 
-export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmitParent, onSeasonsSubmit, onContinue, onCancel,}: Props) {
+export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmitParent, onSeasonsSubmit, onContinue, onCancel, creator, onCreatorChange}: Props) {
     // --- Form: only user-editable fields are in this schema
     const form = useForm<CollectionCreateFormIn>({
         resolver: zodResolver(CollectionCreateFormSchema),
@@ -255,6 +260,12 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         </div>
     )
 
+    // A channel, on a Site with creators, can be added to one of them.
+    const channelCreatorNames = resolved.data?.collectionKind === 'channel' ? resolved.data.creatorNames : null
+    const creatorSwitch = channelCreatorNames && can('library', 'manage') ? (
+        <CreatorSwitch creatorNames={creatorNamesFor(watch("type"), channelCreatorNames)} value={creator} onChange={onCreatorChange}/>
+    ) : null
+
     // --- Render
     return (
         <form className="form" onSubmit={handleSubmit(onSubmit)} noValidate>
@@ -355,6 +366,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                         </div>
                     )}
                     {listed.data && episodeIdentifierField}
+                    {listed.data && creatorSwitch}
                 </>
             )}
 
@@ -446,6 +458,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                             </div>
 
                             {episodeIdentifierField}
+                            {creatorSwitch}
                         </>
                     )}
                 </>

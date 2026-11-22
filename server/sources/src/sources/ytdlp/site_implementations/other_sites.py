@@ -87,14 +87,13 @@ class OtherSitesImplementation:
         when the link belongs to no creator VODLoft knows on the Site."""
         return None
 
-    def creator_page(self, url: str) -> str | None:
-        """The creator whose own page the link is, so that it can be added as the creator instead; None for one of
-        their lists or videos."""
-        return None
-
     def is_creator_page(self, url: str) -> bool:
         """Whether the link stands for all of a creator's uploads, so that a collection of it can make the creator's
         lists its seasons."""
+        return False
+
+    def is_list(self, url: str) -> bool:
+        """Whether the link is one of the Site's lists, rather than a creator's page or one of its feeds."""
         return False
 
     def creator_details(self, ref: str, plan: PlanTracker) -> CreatorDetails:

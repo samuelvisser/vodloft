@@ -40,8 +40,6 @@ class ArtistImplementation(OtherSitesImplementation):
 
     music_pages: ClassVar[frozenset[str]]
     """The artist's pages of all their music."""
-    artist_pages: ClassVar[frozenset[str]] = frozenset({"", "music", "albums", "sets", "tracks", "popular-tracks"})
-    """The artist's pages that list their music, which make adding the artist the obvious choice."""
     single_key: ClassVar[str] = "single"
 
     def page(self, url: str) -> str | None:
@@ -53,12 +51,13 @@ class ArtistImplementation(OtherSitesImplementation):
         rest = _parts(url)[len(_parts(root)):]
         return (rest[0] if rest else "") if len(rest) <= 1 else None
 
-    def creator_page(self, url: str) -> str | None:
-        return self.creator_root(url) if self.page(url) in self.artist_pages else None
-
     def is_creator_page(self, url: str) -> bool:
         """The artist's page of all their music."""
         return self.page(url) in self.music_pages
+
+    def is_list(self, url: str) -> bool:
+        """One of the artist's albums or sets, rather than one of their pages."""
+        return self.creator_root(url) is not None and self.page(url) is None
 
     def season_lists(self, url: str) -> list[SectionRef]:
         """The artist's albums, or a SoundCloud account's albums and playlists, newest first."""

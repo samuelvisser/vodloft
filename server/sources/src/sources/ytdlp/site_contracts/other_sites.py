@@ -10,7 +10,6 @@ from typing import ClassVar
 
 from ...contract import (
     Access,
-    CreatorPreset,
     DownloadOptions,
     Site,
     SiteSetting,
@@ -23,7 +22,6 @@ from ...contract import (
 # site's paid subscription.
 MEMBERS_KEY, PREMIUM_KEY = "members", "premium"
 # The ways a site with creators offers to keep one, the first the default.
-CREATOR_PRESETS = (CreatorPreset.ONE_SHOW, CreatorPreset.PER_LIST, CreatorPreset.PICK)
 # Told by the factory: the Site's key and name, and the link's domain.
 _FACTORY_FIELDS = frozenset({"key", "name", "domains"})
 SITE_FIELDS = frozenset(field.name for field in fields(Site)) - _FACTORY_FIELDS

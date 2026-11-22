@@ -81,12 +81,14 @@ class TwitchImplementation(OtherSitesImplementation):
         rest = _parts(url)[1:]
         return (rest[0].lower() if rest else "") if len(rest) <= 1 else None
 
-    def creator_page(self, url: str) -> str | None:
-        return self.creator_root(url) if self._page(url) in _CHANNEL_PAGES else None
-
     def is_creator_page(self, url: str) -> bool:
         """The channel's Videos page of all its videos, which a collection of the channel lists."""
         return self._page(url) == "videos" and parse_qs(urlsplit(url).query).get("filter", ["all"])[0] == "all"
+
+    def is_list(self, url: str) -> bool:
+        """One of Twitch's collections of a channel's videos."""
+        parts = _parts(url)
+        return (urlsplit(url).hostname or "").lower() in _HOSTS and len(parts) == 2 and parts[0].lower() == "collections"
 
     def collection_link(self, url: str) -> str:
         """The channel's own page shows its stream; the collection of the channel lists all its videos."""

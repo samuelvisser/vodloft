@@ -10,7 +10,7 @@ from downloader.hls import is_master_playlist, media_playlist_segments, parse_ma
 from progress_plan import PlanTracker, StageSpec
 
 from ..contract import (
-    Access, CreatorDetails, CreatorPreset, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
+    Access, CreatorDetails, Names, SectionType, MAIN_TAG, MIN_NEWEST_EPISODES, SectionKind, SectionRef, EpisodeMedia, EpisodePublishStatus, EpisodeTag, Feature, LinkKind, Playback,
     DownloadOptions, PublishStatusLabel, ResolvedLink, RssEpisodeType, SeasonRef, Site, SiteSetting, SiteSettings, Source, StreamMethod,
     ReleaseDate, UpgradeChecks, UpgradeImprovement, UpgradeOffer, VideoDetails, publish_status_labels_with,
 )
@@ -115,6 +115,7 @@ class DailyWireSource(Source):
         # A host has no feed to fold into one show: each of their shows keeps its own seasons.
         creators=True,
         creator_names=HOST,
+        channel_collection_names=Names("show", "shows"),
         section_types=(
             SectionType("show", SectionKind.SHOW, Names("show", "shows")),
             SectionType("movie", SectionKind.ITEM, Names("movie", "movies")),
@@ -131,7 +132,6 @@ class DailyWireSource(Source):
             ),
             EpisodeTag("aux", "Auxiliary", "Extra content for the show", Names("auxiliary episode", "auxiliary episodes"), rss_episode_type=RssEpisodeType.BONUS),
         ),
-        creator_presets=(CreatorPreset.PER_LIST, CreatorPreset.PICK),
     ),)
     kind_names = MappingProxyType({LinkKind.COLLECTION: Names("show", "shows"), LinkKind.CREATOR: HOST})
     features = frozenset({

@@ -488,16 +488,15 @@ def renumber_changes(s: Session, collection: Collection) -> tuple[list[Identific
     ], set(plan.identifiers)
 
 
-def queue_renumber(s: Session, collection: Collection, *, renumber: bool, sections: Sequence[str] = ()) -> TaskOperation:
+def queue_renumber(s: Session, collection: Collection, *, renumber: bool) -> TaskOperation:
     """Number the collection's episodes again the way it numbers them, unless ``renumber`` is False, then rename its
-    files and rewrite their metadata, as after episodes moved in or out of it. Runs as the task that changes a
-    collection's identification, so the collection page shows its progress, and the creator's Edit page on the rows of
-    ``sections``, the feeds and lists that moved.
+    files and rewrite their metadata, as after episodes moved within it. Runs as the task that changes a collection's
+    identification, so the collection page shows its progress.
 
     ``s`` is a write transaction's session."""
     weight = sum(step.weight for step in identification_steps(s, collection, renumbering=renumber))
     operation = create_operation(s, CollectionRenumberOperation(
-        collection, renumber=renumber, sections=sections, work_weight=weight,
+        collection, renumber=renumber, work_weight=weight,
     ))
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
     s.flush()

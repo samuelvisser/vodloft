@@ -546,13 +546,7 @@ def episode_season_place(s: Session, episode_slug: str) -> EpisodeSeasonPlaceAPI
     """Where the episode belongs now that its collection's playlists changed. Reading only: nothing is made."""
     from backend.services.link_seasons import belongs_elsewhere, section_list_names
 
-    from backend.services.reassigned import reassignment_of
-
     episode = _episode_or_404(s, episode_slug)
-    reassigned = reassignment_of(s, episode)
-    if reassigned is not None:
-        target = reassigned.target.collection
-        return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False, collection_slug=target.slug, collection_title=target.title)
     belonging = belongs_elsewhere(s, episode)
     if belonging is None:
         return EpisodeSeasonPlaceAPIRead(belongs_elsewhere=False)

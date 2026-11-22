@@ -79,13 +79,8 @@ def test_every_site_implementation_answers_the_section_types_of_its_contract():
         ), key
 
 
-def test_several_types_of_feed_are_named_feeds_together_and_lists_keep_their_sites_words():
-    from sources import Names
-
-    youtube, soundcloud = site_of("youtube"), site_of("soundcloud")
-    assert youtube.section_feed_names == Names("feed", "feeds")
-    assert youtube.section_names.plural == "feeds and playlists"
-    assert soundcloud.section_feed_names == Names("track", "tracks")
+def test_lists_are_named_together_in_their_sites_words():
+    soundcloud = site_of("soundcloud")
     assert soundcloud.section_list_names.plural == "albums and playlists"
 
 
@@ -110,19 +105,18 @@ def _implementation(url):
     return IMPLEMENTATIONS.get(site.key, OtherSitesImplementation)(site, lambda url: {})
 
 
-@pytest.mark.parametrize(("url", "root", "page"), [
-    ("https://www.twitch.tv/Spamfish", "https://www.twitch.tv/spamfish", True),
-    ("https://m.twitch.tv/spamfish/videos?filter=archives", "https://www.twitch.tv/spamfish", True),
-    ("https://www.twitch.tv/spamfish/clip/SomeClip", "https://www.twitch.tv/spamfish", False),
-    ("https://www.twitch.tv/videos/123", None, False),
-    ("https://www.twitch.tv/directory/category/chess", None, False),
-    ("https://www.tiktok.com/@scout2015", "https://www.tiktok.com/@scout2015", True),
-    ("https://www.tiktok.com/@scout2015/video/6718335390845095173", "https://www.tiktok.com/@scout2015", False),
+@pytest.mark.parametrize(("url", "root"), [
+    ("https://www.twitch.tv/Spamfish", "https://www.twitch.tv/spamfish"),
+    ("https://m.twitch.tv/spamfish/videos?filter=archives", "https://www.twitch.tv/spamfish"),
+    ("https://www.twitch.tv/spamfish/clip/SomeClip", "https://www.twitch.tv/spamfish"),
+    ("https://www.twitch.tv/videos/123", None),
+    ("https://www.twitch.tv/directory/category/chess", None),
+    ("https://www.tiktok.com/@scout2015", "https://www.tiktok.com/@scout2015"),
+    ("https://www.tiktok.com/@scout2015/video/6718335390845095173", "https://www.tiktok.com/@scout2015"),
 ])
-def test_twitch_channels_and_tiktok_accounts_are_creators(url, root, page):
+def test_twitch_channels_and_tiktok_accounts_are_creators(url, root):
     implementation = _implementation(url)
     assert implementation.creator_root(url) == root
-    assert implementation.creator_page(url) == (root if page else None)
 
 
 def test_a_twitch_channels_collection_lists_its_videos_and_clips():
@@ -173,7 +167,7 @@ def test_the_twitch_api_values_are_tested_before_they_are_stored_and_a_stored_se
     assert site_api_keys.load("twitch") is None and not source.search_ready(twitch)
 
 
-def test_twitch_search_lists_channels_that_add_as_creators(monkeypatch, tmp_path):
+def test_twitch_search_lists_channels(monkeypatch, tmp_path):
     from sources import cookies, site_api_keys
     from sources.ytdlp import twitch_api
     from sources.ytdlp.source import YtDlpSource
@@ -186,5 +180,4 @@ def test_twitch_search_lists_channels_that_add_as_creators(monkeypatch, tmp_path
     found = YtDlpSource().search(site_of("twitch"), "spamfish")
     [channel] = found.results
     assert channel.url == "https://www.twitch.tv/spamfish/videos?filter=all"
-    assert channel.creator_url == "https://www.twitch.tv/spamfish"
     assert channel.facts == ("Live now", "Chess")

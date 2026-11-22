@@ -4,7 +4,6 @@ import {zodResolver} from '@hookform/resolvers/zod'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import Switch from 'react-switch'
-import {Link} from 'react-router-dom'
 import toast from '../../lib/toast'
 
 import {apiUrl} from '../../lib/api'
@@ -20,7 +19,7 @@ import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {
     CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, seasonsFormValues,
     type CollectionListRead, type CollectionSeasonsFormIn, type CollectionSeasonsFormOut, type CollectionSeasonsRead,
-    type LinkSeasonAddFormIn, type LinkSeasonAddFormOut, type NewLinkSeason,
+    type LinkSeasonAddFormIn, type LinkSeasonAddFormOut, type NewLinkSeason, type ChannelSeason,
 } from '../../types/schemas/collection_seasons'
 import './SeasonsDialog.css'
 import {collectionWords, CollectionWords, Noun, wordsOf} from '../../lib/collectionWords'
@@ -40,11 +39,11 @@ type Leaving = {episodes: number, withFiles: number, asked?: boolean, repeated?:
 
 /** A creator's videos, or an artist's tracks or music videos, and what the collection calls its seasons. In a Music
  * collection an artist's albums are albums here too, so ``here`` tells them apart where both are meant. */
-type Words = {creator: string, video: string, videos: string, creators: string, season: Noun, episode: Noun, inSeason: string, here: string}
+type Words = {creator: string, channel: string, video: string, videos: string, creators: string, season: Noun, episode: Noun, inSeason: string, here: string}
 const dialogWords = (collection: CollectionWords, view: CollectionSeasonsRead | undefined): Words => ({
     // What the collection calls its creator and what its lists hold, such as an artist's music videos.
     // Shown once the view is there, which brings the words.
-    creator: view?.creatorNames.singular ?? '', creators: view?.creatorNames.plural ?? '',
+    creator: view?.creatorNames.singular ?? '', creators: view?.creatorNames.plural ?? '', channel: view?.channelNames.singular ?? '',
     video: view?.mediaNames.singular ?? '', videos: view?.mediaNames.plural ?? '',
     season: collection.season, episode: collection.episode, inSeason: collection.inSeason,
     here: view && namesOf(view).singular === collection.season.singular ? ' here' : '',
@@ -83,6 +82,17 @@ function registries(names: ListNames, words: Words, view: CollectionSeasonsRead)
             add: {label: `Make it ${words.season.a}${words.here}`, help: `A new ${kind.names.singular} becomes ${words.season.a}${words.here} right away.`},
             ignore: {label: 'Always skip it', help: `A new ${kind.names.singular} stays off. You can switch it on here.`},
         }),
+        // What the channel's own season holds, by the name it then has.
+        channel: createSelectRegistry(`ChannelSeason-${view.channelSeasonNames.everything}-${view.channelSeasonNames.unlisted}-${names.plural}`, {
+            everything: {
+                label: `Everything, as ${view.channelSeasonNames.everything}`,
+                help: `Every ${words.video} of the feeds is in ${view.channelSeasonNames.everything}, also the ones in ${names.a} that is ${words.season.a}${words.here}.`,
+            },
+            unlisted: {
+                label: `What is in no ${names.singular}, as ${view.channelSeasonNames.unlisted}`,
+                help: `${capitalized(words.videos)} in ${names.a} that is ${words.season.a}${words.here} are only there.`,
+            },
+        } as Record<ChannelSeason, {label: string, help: string}>),
         layout: createSelectRegistry(`ListLayout-${names.plural}-${words.creator}-${words.season.a}`, {
             season_each: {label: words.here ? `Each ${names.singular} on its own` : `${capitalized(words.season.a)} per ${words.creator ? `${words.creator} ` : ''}${names.singular}`, help: `Each ${names.singular} is ${words.season.a}${words.here}, or shares one with the ${names.plural} you put together below.`},
             by_year: {label: `Together in ${words.season.plural} by year`, help: `The ${names.plural} still decide which ${words.videos} are in, but every ${words.video} goes to the ${words.season.singular} of its year, as do the ${words.videos} in no ${names.singular}. Downloaded ${words.videos} stay where they are, marked Moved, until you move them.`},
@@ -163,6 +173,10 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const listLayout = watch('listLayout') ?? 'season_each'
     const outsideVideos = watch('outsideVideos') ?? 'leave_out'
     const newLists = watch('newLists') ?? {}
+    const feeds = watch('feeds') ?? []
+    const channelSeason = watch('channelSeason') ?? 'everything'
+    // A feed the collection took before is switched off now.
+    const feedsOff = !!view && view.feeds.some((feed) => feed.on && !feeds.includes(feed.ref))
     const customOrder = watch('customSeasonOrder') ?? false
     const repeatVideos = watch('repeatVideos') ?? 'one_season'
     const removedLinks = watch('removedLinks') ?? []
@@ -201,6 +215,11 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         body: JSON.stringify({
             seasons: data.seasons,
             customSeasonOrder: data.customSeasonOrder,
+            // Every feed on is all of them, also the ones the channel adds later.
+            ...(view?.kind === 'channel' ? {
+                feeds: view.feeds.every((feed) => data.feeds.includes(feed.ref)) ? null : data.feeds,
+                channelSeason: data.channelSeason,
+            } : {}),
             linkSeasons: data.linkSeasonsOn || data.outsideVideos === 'only' ? data.linkSeasonMode : 'off',
             newLists: data.newLists,
             looseVideos: data.looseVideos,
@@ -346,6 +365,49 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
                             {view && names && regs && (
                                 <>
+                                    {view.kind === 'channel' && view.feeds.length > 0 && (
+                                        <section className="seasons-dialog-section" aria-labelledby="seasons-dialog-feeds">
+                                            <h3 id="seasons-dialog-feeds">Feeds</h3>
+                                            <p className="seasons-dialog-muted">
+                                                The parts of the {words.channel} the collection takes its {words.videos} from.
+                                            </p>
+                                            <ul className="seasons-dialog-links">
+                                                {view.feeds.map((feed) => (
+                                                    <li key={feed.ref}>
+                                                        <label className="seasons-dialog-check">
+                                                            <input
+                                                                type="checkbox" checked={feeds.includes(feed.ref)}
+                                                                onChange={(event) => setValue('feeds', event.target.checked
+                                                                    ? view.feeds.map((item) => item.ref).filter((ref) => ref === feed.ref || feeds.includes(ref))
+                                                                    : feeds.filter((ref) => ref !== feed.ref), {shouldDirty: true})}
+                                                            />
+                                                            <span className="seasons-dialog-link-copy"><b>{capitalized(feed.names.plural)}</b></span>
+                                                        </label>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            {feedsOff && (
+                                                <div className="help">
+                                                    The {words.channel} is listed again when you save. Its {words.videos} that no feed or {names.singular} it
+                                                    takes has leave; downloaded ones stay until Home asks whether to keep them.
+                                                </div>
+                                            )}
+                                            {errors.feeds && <div className="error" role="alert">{String(errors.feeds.message ?? errors.feeds.root?.message)}</div>}
+
+                                            <div className="form-row">
+                                                <label htmlFor="seasons-channel-season">The {words.channel}'s own {season.singular}</label>
+                                                <SimpleSelect
+                                                    menuPortalTarget={document.body} menuPlacement="auto"
+                                                    styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                                                    inputId="seasons-channel-season" registry={regs.channel} value={channelSeason}
+                                                    onChange={(value) => setValue('channelSeason', value as ChannelSeason, {shouldDirty: true})}
+                                                />
+                                                <div className="help">{regs.channel.getHelp(channelSeason)}</div>
+                                                {errors.channelSeason && <div className="error" role="alert">{errors.channelSeason.message}</div>}
+                                            </div>
+                                        </section>
+                                    )}
+
                                     {view.linkSeasonsOffered && (
                                         <section className="seasons-dialog-section" aria-labelledby="seasons-dialog-links">
                                             <div className="seasons-dialog-switch-row">
@@ -371,7 +433,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
                                             {(linkSeasonsOn || only) && (
                                                 <>
-                                                    {view.listsPlaylists && !view.creatorSlug && <div className="form-row">
+                                                    {view.listsPlaylists && <div className="form-row">
                                                         <label htmlFor="seasons-link-mode">Which {names.plural}</label>
                                                         <SimpleSelect
                                                             menuPortalTarget={document.body} menuPlacement="auto"
@@ -394,12 +456,10 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                     />
                                                                     <span>{allEnabled ? 'Deselect all' : 'Select all'}</span>
                                                                 </label>
-                                                                {!view.creatorSlug && (
-                                                                    <button type="button" className="btn btn-small" onClick={() => void refreshPlaylists()} disabled={refreshing || !view.listsPlaylists}>
-                                                                        <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} spin={refreshing} aria-hidden="true"/>
-                                                                        <span>{refreshing ? 'Looking…' : `Look for new ${names.plural}`}</span>
-                                                                    </button>
-                                                                )}
+                                                                <button type="button" className="btn btn-small" onClick={() => void refreshPlaylists()} disabled={refreshing || !view.listsPlaylists}>
+                                                                    <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} spin={refreshing} aria-hidden="true"/>
+                                                                    <span>{refreshing ? 'Looking…' : `Look for new ${names.plural}`}</span>
+                                                                </button>
                                                             </div>
                                                             {playlistChoices.length === 0 ? (
                                                                 <p className="seasons-dialog-muted">
@@ -437,15 +497,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         </div>
                                                     )}
 
-                                                    {view.creatorSlug && (
-                                                        <p className="seasons-dialog-muted">
-                                                            The creator <Link className="quiet-link" to={`/creator/${view.creatorSlug}`}>{view.creatorTitle}</Link> looks
-                                                            for new {names.plural} once a day and decides what happens with them. Change that
-                                                            on the {view.creatorNames.singular}'s <Link to={`/edit-creator/${view.creatorSlug}`}>Edit</Link> page.
-                                                        </p>
-                                                    )}
-
-                                                    {mode === 'selected' && view.listsPlaylists && !view.creatorSlug && (
+                                                    {mode === 'selected' && view.listsPlaylists && (
                                                         <div className="form-row">
                                                             <label>When the {words.creator} adds {names.a}</label>
                                                             <NewListSettings

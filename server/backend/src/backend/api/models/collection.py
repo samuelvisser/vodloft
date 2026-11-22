@@ -11,7 +11,7 @@ from backend.api.models.source import NamesAPIRead, SiteAPIRead, SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
-from backend.types.link_season_types import OutsideVideos
+from backend.types.link_season_types import CollectionKind, OutsideVideos
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
@@ -215,6 +215,9 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     """None for a collection that only holds what its link seasons have, and has no link of its own."""
     outside_videos: Optional[OutsideVideos] = None
     """Whether the collection adds videos from its link seasons that its own link lacks, or holds only those."""
+    kind: Optional[CollectionKind] = None
+    """What its own link is: a channel, which takes the channel's lists and can be in a creator, or one list. None
+    for a collection that is not in the Library yet, such as one that is looked up to be added."""
     site: Optional[SiteAPIRead] = None
     """The website the collection is on; None until the background migration finds it for an older collection."""
     author_name: str

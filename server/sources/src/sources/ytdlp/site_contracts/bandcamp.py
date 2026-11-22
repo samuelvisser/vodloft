@@ -1,5 +1,5 @@
 from ...contract import Names, SectionKind, SectionType
-from .other_sites import CREATOR_PRESETS, OtherSites
+from .other_sites import OtherSites
 
 
 class Bandcamp(OtherSites):
@@ -11,7 +11,6 @@ class Bandcamp(OtherSites):
     audio_only = True
     creators = True
     creator_names = Names("artist", "artists")
-    creator_presets = CREATOR_PRESETS
     # An artist has albums, and tracks of their own: singles.
     section_types = (
         SectionType("album", SectionKind.LIST, Names("album", "albums")),

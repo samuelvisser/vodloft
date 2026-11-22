@@ -141,16 +141,6 @@ def test_when_soundclouds_search_fails_the_track_search_answers_and_says_so(sear
     assert track.facts == ("3:49", "1 May 2020", "200.1K plays")
 
 
-def test_an_account_found_can_be_added_as_a_creator(searches):
-    from backend.api.endpoints.sources.service import search_source
-    from backend.security.access import Access
-
-    results = search_source(Access.full(), YtDlpSource(), "soundcloud", "for king and country").results
-
-    assert [(result.slug, result.creator_names and result.creator_names.singular) for result in results[:3]] == [
-        ("forkingandcountry", "creator"), ("eliramzy", "creator"), ("remix", None)]
-
-
 class _Redirect:
     def __init__(self, location: str):
         self.headers = {"Location": location}
@@ -167,7 +157,7 @@ def test_a_share_link_from_the_app_is_the_page_it_leads_to(monkeypatch):
     assert site.key == "soundcloud"
     page = implementation.full_link(SHARE_LINK)
     assert page == "https://soundcloud.com/forkingandcountry"
-    assert implementation.creator_page(page) == "https://soundcloud.com/forkingandcountry"
+    assert implementation.creator_root(page) == "https://soundcloud.com/forkingandcountry"
 
 
 def test_a_share_link_that_leads_off_soundcloud_is_left_as_it_is(monkeypatch):

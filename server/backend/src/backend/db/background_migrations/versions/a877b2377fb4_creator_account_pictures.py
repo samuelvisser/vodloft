@@ -1,9 +1,8 @@
 """Look up the picture and banner of each account of a creator on several Sites.
 
 A creator's account on a second Site, such as their SoundCloud next to their YouTube channel, used to have no
-picture of its own, and its own collection showed the creator's picture from the other Site. This looks each such
-account up on its Site, keeps its picture and banner, and gives its own collection them where it still showed
-another Site's.
+picture of its own, so the creator's page showed the picture from the other Site. This looks each such account up on
+its Site and keeps its picture and banner.
 
 Revision ID: a877b2377fb4
 Revises: ecb0f787c77a
@@ -58,7 +57,7 @@ async def migrate(context) -> None:
         context.update_progress(done, len(accounts), f"Looking up the pictures of account {done + 1} of {len(accounts)}")
         try:
             details = await asyncio.to_thread(get_source(source_key).creator_details, ref)
-        except Exception as exc:  # A Site that is down leaves the account to the daily look.
+        except Exception as exc:  # A Site that is down leaves the account with the picture it has.
             logger.warning("Could not look up the pictures of creator account %s: %s", account_id, exc)
             continue
         await asyncio.to_thread(_store, account_id, details.avatar_url, details.banner_url)

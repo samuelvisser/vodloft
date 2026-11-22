@@ -23,6 +23,7 @@ def _episode(*, collection_metadata=None):
             creator=None,
             lists=[],
             sharing_url="",
+            kind="list",
         ),
         season=None,
         slug="episode-one",

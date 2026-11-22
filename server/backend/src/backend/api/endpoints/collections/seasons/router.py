@@ -1,4 +1,5 @@
-"""A collection's Seasons dialog: rename and order its seasons, and make its creator's playlists seasons."""
+"""A collection's Seasons dialog: rename and order its seasons, choose its channel's feeds, and make the channel's
+playlists seasons."""
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
@@ -6,14 +7,13 @@ from fastapi import APIRouter, HTTPException
 from backend.app import db_session
 from backend.api.models.collection_seasons import (
     CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, CollectionListAddAPIIn, MovedEpisodesAPIRead,
-    ReassignedEpisodesAPIRead,
 )
 from backend.db.core import run_write_transaction
 from backend.security.access import Area, Level
 from backend.security.deps import requires
 
 from .service import (
-    CollectionNotFoundError, link_to_add, look_up_added_link, look_up_links, links_lookup, moved_view, reassigned_view, save_added_link,
+    CollectionNotFoundError, link_to_add, look_up_added_link, look_up_links, links_lookup, moved_view, save_added_link,
     save_listed_links, seasons_view, update_seasons,
 )
 
@@ -32,7 +32,7 @@ def _found(work):
     response_model=CollectionSeasonsAPIRead,
 )
 def collection_seasons_get(collection_slug: str):
-    """The collection's seasons in order, and whether its creator's playlists are seasons."""
+    """The collection's seasons in order, and which feeds it takes, and whether its channel's playlists are seasons."""
     with db_session() as s:
         return _found(lambda: seasons_view(s, collection_slug))
 
@@ -50,25 +50,12 @@ def collection_moved_episodes_get(collection_slug: str):
             s.rollback()
 
 
-@router.get(
-    "/{collection_slug}/season-settings/reassigned-episodes", dependencies=[requires(Area.LIBRARY, Level.VIEW)],
-    response_model=ReassignedEpisodesAPIRead,
-)
-def collection_reassigned_episodes_get(collection_slug: str):
-    """The downloaded episodes that the collection's creator places in another of its collections now."""
-    with db_session() as s:
-        try:
-            return _found(lambda: reassigned_view(s, collection_slug))
-        finally:
-            s.rollback()
-
-
 @router.put(
     "/{collection_slug}/season-settings", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
     response_model=CollectionSeasonsAPIRead,
 )
 def collection_seasons_put(collection_slug: str, body: CollectionSeasonsAPIUpdate):
-    """Rename and order the collection's seasons, and set how its creator's playlists are seasons."""
+    """Rename and order the collection's seasons, choose its channel's feeds, and set how the channel's playlists are seasons."""
     return _found(lambda: run_write_transaction(lambda s: update_seasons(s, collection_slug, body)))
 
 
@@ -77,7 +64,7 @@ def collection_seasons_put(collection_slug: str, body: CollectionSeasonsAPIUpdat
     response_model=CollectionSeasonsAPIRead,
 )
 def link_seasons_refresh(collection_slug: str):
-    """List the playlists of the collection's creator at its Site now."""
+    """List the playlists of the collection's channel at its Site now."""
     with db_session() as s:
         lookup = _found(lambda: links_lookup(s, collection_slug))
     listing = look_up_links(lookup)

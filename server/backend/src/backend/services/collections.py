@@ -7,13 +7,13 @@ from sqlalchemy.orm import Session
 from backend.db.models import Collection
 from backend.operations.collections import CollectionIndexOperation, CollectionSyncOperation
 from backend.services.errors import ServiceError
-from backend.services.sites import place_collection
+from backend.services.sites import collection_kind, place_collection
 from backend.types import work_weights
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
-from backend.types.link_season_types import LinkSeasons, OutsideVideos
+from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos
 from backend.utils.helpers import generate_uuid, slugify
-from sources import Feature, UnknownSourceError, all_sources, get_source
+from sources import Feature, UnknownSourceError, all_sources, get_source, source_site
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
@@ -41,6 +41,7 @@ def add_collection(s: Session, collection: Collection, *, added_by_id: int | Non
     if not source.has(Feature.COLLECTIONS):
         raise ServiceError(f"{source.name} has no shows")
     collection.added_by_id = added_by_id
+    _set_kind(collection)
     if source.has(Feature.EPISODE_LISTS):
         # Indexing puts the episodes in the Source's own seasons, or in a season per
         # upload year. Seasons given here are the Source's, picked for a Download
@@ -48,6 +49,22 @@ def add_collection(s: Session, collection: Collection, *, added_by_id: int | Non
         collection.membership_level = DwMembershipLevel.FREE.value
     place_collection(s, collection)
     s.add(collection)
+
+
+def _set_kind(collection: Collection) -> None:
+    """Tell a new collection what its link is, and give a channel collection the channel's defaults where the request
+    left them: the lists the user picks are seasons, new lists of the channel are added, the videos they have that the
+    channel's feeds don't are added too, and the channel season holds what its Site's channels hold."""
+    collection.kind = collection_kind(collection.sharing_url, collection.source_key).value
+    if collection.kind != CollectionKind.CHANNEL.value:
+        return
+    site = source_site(collection.sharing_url, collection.source_key)
+    if collection.channel_season is None:
+        collection.channel_season = site.channel_season.value
+    if site.link_seasons and collection.link_seasons is None:
+        collection.link_seasons = LinkSeasons.SELECTED.value
+        if collection.outside_videos is None:
+            collection.outside_videos = OutsideVideos.ADD.value
 
 
 def reindex_collection(s: Session, collection: Collection) -> None:

@@ -9,6 +9,7 @@ from pydantic import AliasChoices, AliasPath, Field, ValidationInfo, computed_fi
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.media_access import access_granted, access_locked, site_access
 from backend.types.collection_types import CollectionType
+from backend.types.link_season_types import CollectionKind
 from config.settings.site_settings import UpgradeRepeat
 from sources import Feature, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
@@ -492,12 +493,10 @@ class ResolvedLinkAPIRead(ResponseBase):
     access_locked: bool = False
     """VODLoft does not have that access, so it cannot download the video."""
     preview: ResolvedLinkPreviewAPIRead
-    creator_url: Optional[str] = None
-    """The creator this link is, on a Site with creators, so it can be added as a creator instead."""
+    collection_kind: Optional[CollectionKind] = None
+    """For a collection: whether it is a channel, which can be in a creator, or one list."""
     creator_names: Optional[NamesAPIRead] = None
-    """What the Site calls that creator, such as creator or artist."""
-    creator_sections: Optional[NamesAPIRead] = None
-    """Every type of section that creator has on the Site, named together, such as "albums and singles"."""
+    """For a channel: what its Site calls the creator behind it, such as host on The Daily Wire."""
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
 
@@ -517,9 +516,6 @@ class SearchResultAPIRead(ResponseBase):
     access: Optional[str] = None
     access_label: Optional[str] = None
     """What the result's Site calls the access it needs, such as Members only."""
-    creator_names: Optional[NamesAPIRead] = None
-    """What the Site calls a creator, when the result is a creator's own page, such as a YouTube channel, that can be
-    added as a creator."""
 
 
 class SearchNoticeAPIRead(ResponseBase):
@@ -545,14 +541,12 @@ class SectionTypeAPIRead(ResponseBase):
 
 
 class ListKindAPIRead(ResponseBase):
-    """One kind of list a creator's Sites have, such as a SoundCloud artist's albums or their playlists, with its own
+    """One kind of list a Site's channels have, such as a SoundCloud account's albums or its playlists, with its own
     setting for what happens with a new one."""
 
     key: str = Field(validation_alias=AliasPath("kind", "key"))
     names: NamesAPIRead = Field(validation_alias=AliasPath("kind", "names"))
     """What the Sites call the lists, such as album and albums."""
-    seasons: bool = Field(validation_alias=AliasPath("kind", "seasons"))
-    """The lists can be seasons of the creator's own collection."""
     albums: bool = Field(default=False, validation_alias=AliasPath("kind", "albums"))
     """The kind best describes an artist's albums."""
 
@@ -614,14 +608,20 @@ class SiteAPIRead(ResponseBase):
 
     @computed_field
     @property
-    def section_growing_names(self) -> NamesAPIRead:
-        """What the Site calls the lists and shows its creators add, such as playlists or shows."""
-        return NamesAPIRead.model_validate(site_of(self.key).section_growing_names)
+    def channel_collection_names(self) -> NamesAPIRead:
+        """What the Site calls a collection of a channel's uploads, such as a YouTube channel."""
+        return NamesAPIRead.model_validate(site_of(self.key).channel_collection_names)
+
+    @computed_field
+    @property
+    def list_collection_names(self) -> NamesAPIRead:
+        """What the Site calls a collection of one list, such as a YouTube playlist."""
+        return NamesAPIRead.model_validate(site_of(self.key).list_collection_names)
 
     @computed_field
     @property
     def link_seasons(self) -> bool:
-        """A creator's playlists or albums at the Site can be seasons of the creator's collection."""
+        """A channel's playlists or albums at the Site can be seasons of its collection."""
         return site_of(self.key).link_seasons
 
 

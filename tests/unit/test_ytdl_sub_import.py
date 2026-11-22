@@ -332,6 +332,16 @@ def test_an_upload_takes_the_subscriptions_and_config_files():
 
 # Applying an import -----------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def forget_sites():
+    """Each test's Sources tell the Sites of their links afresh."""
+    from backend.services import sites
+
+    sites._site_of.cache_clear()
+    yield
+    sites._site_of.cache_clear()
+
+
 @pytest.fixture
 def installation(tmp_path, monkeypatch):
     """A ytdl-sub upload, its files under VODLoft's /downloads/tv, and a fake yt-dlp Source."""
@@ -474,6 +484,9 @@ def _artist_import(monkeypatch):
                       section_types=(SectionType("album", SectionKind.LIST, Names("album", "albums")),
                                      SectionType("single", SectionKind.ITEM, Names("single", "singles")))),)
 
+        def creator_of(self, url):
+            return "https://emilyharpist.bandcamp.com"
+
         def creator_details(self, ref, progress=lambda step: None):
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
                                type=self.sites[0].section_type("album"))
@@ -497,17 +510,16 @@ def test_an_imported_discography_adds_the_artist_with_each_album_a_season(instal
     session.expire_all()
 
     creator = session.scalar(select(Creator))
-    assert (creator.title, creator.genre) == ("Emily Hopkins", "Lofi")
     collection = session.scalar(select(Collection))
-    assert (collection.creator_id, collection.type) == (creator.id, "music")
-    # The artist's page is the collection, and each album a link season of it.
-    assert collection.sharing_url == "https://emilyharpist.bandcamp.com"
-    assert [(link.title, link.enabled) for link in collection.lists] == [("Harp", True)]
+    assert (creator.title, collection.creator_id, collection.type, collection.genre) == ("Emily Hopkins", creator.id, "music", "Lofi")
+    # The artist's page is the collection, and each album a link season of it once it is indexed.
+    assert (collection.sharing_url, collection.kind, collection.link_seasons) == ("https://emilyharpist.bandcamp.com", "channel", "selected")
     assert session.scalar(select(CollectionLocalMediaProfile.collection_scope).where(CollectionLocalMediaProfile.name == "Bandcamp")) == "music"
 
 
 def test_an_import_without_creators_makes_the_artist_one_plain_collection(installation, monkeypatch):
     from backend.db.models import Creator, Collection
+    from backend.services.link_seasons import collection_new_lists
     from backend.services import imports
 
     session = installation
@@ -523,9 +535,8 @@ def test_an_import_without_creators_makes_the_artist_one_plain_collection(instal
     collection = session.scalar(select(Collection))
     assert (collection.title, collection.type, collection.creator_id) == ("Emily Hopkins", "music", None)
     # Every album is a season, the ones to come too.
-    assert (collection.sharing_url, collection.link_seasons, collection.new_lists) == (
-        "https://emilyharpist.bandcamp.com", "selected", {"album": "add"},
-    )
+    assert (collection.sharing_url, collection.link_seasons) == ("https://emilyharpist.bandcamp.com", "selected")
+    assert [(setting.key, setting.action) for setting in collection_new_lists(collection)] == [("album", "add")]
 
 
 def test_an_imported_collection_joins_the_creator_behind_its_link(installation, monkeypatch):
@@ -557,8 +568,8 @@ def test_an_imported_collection_joins_the_creator_behind_its_link(installation, 
 
     creator = session.scalar(select(Creator))
     guitar = session.scalar(select(Collection))
-    assert (guitar.creator_id, creator.accounts[0].main_collection_id) == (creator.id, guitar.id)
-    # The playlist is no section of the creator's here, but it stays a season of the collection.
+    assert (guitar.creator_id, creator.title) == (creator.id, "Beyond the Guitar")
+    # The playlist stays a season of the collection.
     assert [link.ref for link in guitar.lists] == ["PLE62gWlWZk5NWVAVuf0Lm9jdv_-_KXs0W"]
 
 
@@ -806,6 +817,7 @@ YouTube Full Albums:
 
 
 def test_an_imported_artist_keeps_ytdl_subs_name_with_their_albums_and_music_videos(installation, monkeypatch):
+    from backend.services.link_seasons import collection_new_lists
     from backend.db.models import Creator, Collection
     from backend.services import import_uploads, imports
     from sources import registry
@@ -837,6 +849,9 @@ Jellyfin Music Videos:
                       section_types=(SectionType("album", SectionKind.LIST, Names("album", "albums"), albums=True),
                                      SectionType("playlist", SectionKind.LIST, Names("playlist", "playlists")))),)
 
+        def creator_of(self, url):
+            return "https://emilyharpist.bandcamp.com"
+
         def creator_details(self, ref, progress=lambda step: None):
             album = SectionRef(ref="album/harp", url="https://emilyharpist.bandcamp.com/album/harp", title="Harp",
                                type=self.sites[0].section_type("album"))
@@ -855,15 +870,14 @@ Jellyfin Music Videos:
     session.expire_all()
 
     creator = session.scalar(select(Creator))
-    # New albums are added as they come out, as the other program did; new playlists are skipped.
-    assert (creator.title, creator.new_lists) == ("Emily Hopkins", {"bandcamp": {"album": "season", "playlist": "ignore"}})
     collections = {collection.title: collection for collection in session.scalars(select(Collection))}
     assert set(collections) == {"Emily Hopkins albums", "Emily Hopkins music videos"}
     albums, videos = collections["Emily Hopkins albums"], collections["Emily Hopkins music videos"]
-    assert (albums.creator_id, videos.creator_id) == (creator.id, creator.id)
+    # The music videos are a playlist, which is in no creator.
+    assert (creator.title, albums.creator_id, videos.creator_id) == ("Emily Hopkins", creator.id, None)
     assert (videos.type, videos.sharing_url, videos.author_name) == ("music", "https://www.youtube.com/playlist?list=PLharp", "Emily Hopkins")
-    # The discography is the artist's albums, not their playlists.
-    assert [link.title for link in albums.lists if link.enabled] == ["Harp"]
+    # New albums are added as they come out, as the other program did; new playlists are skipped.
+    assert [(setting.key, setting.action) for setting in collection_new_lists(albums)] == [("album", "add"), ("playlist", "ignore")]
 
 
 def test_albums_and_music_videos_of_differently_named_subscriptions_pair_by_their_artist(tmp_path):

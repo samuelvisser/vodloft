@@ -16,7 +16,7 @@ A new VODLoft only tells administrators about problems, as a push message to the
 - the disk is almost full;
 - a task keeps failing;
 - a new VODLoft version is out (once per version).
-- a creator you follow adds a playlist or show, when the creator is set to ask you.
+- a channel collection finds a new playlist or album, when it is set to ask you.
 
 A daily summary at 08:00 is already there but switched off, so it is one switch away. New downloads are not a shared
 default, because they are the noisy ones: each person chooses them on their own page.
@@ -53,7 +53,7 @@ Each rule is a sentence: *When an episode is downloaded in any Collection, refre
 
 - **When**: an episode is downloaded, replaced by a better version, or deleted; a download fails; new episodes are found
   but not downloaded (for Collections that download nothing by themselves); a sign-in expires; a task keeps failing;
-  the disk is almost full; an update is out; a creator you follow adds a playlist or show; or, for a daily summary,
+  the disk is almost full; an update is out; a channel collection finds a new playlist; or, for a daily summary,
   anything happens.
 - **In**: any Collection, or only the ones you choose.
 - **Then**: push it to administrators, and/or send it to destinations. Media servers, webhooks and scripts only run for

@@ -18,8 +18,8 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, CreatorAccount, Episode, LocalMediaProfileBase, Movie, Site, Video
 from backend.security.access import Access
-from backend.types.collection_contracts import CollectionWords, collection_contract
-from backend.types.link_season_types import OutsideVideos
+from backend.types.collection_contracts import DEFAULT_WORDS, CollectionWords, collection_contract
+from backend.types.link_season_types import CollectionKind, OutsideVideos
 from backend.services.errors import ServiceError
 from backend.services.local_media_profile_sites import add_upcoming_site
 from sources import EpisodeTag, Names, Site as SourceSite, collection_on_site, get_source, has_site_contract, site_for, source_site, sources_for
@@ -72,6 +72,18 @@ def place_collection(s: Session, collection: Collection) -> None:
     collection.site_key, collection.site_ref = record.key, ref
 
 
+def collection_kind(url: str | None, source_key: str) -> CollectionKind:
+    """What a collection's link is: a channel, a creator's page of all their uploads or one of its feeds, or one
+    list. A collection without a link, and every collection on a Site without creators, is a list: it holds what its
+    link lists, and takes no lists of a channel."""
+    if url is None:
+        return CollectionKind.LIST
+    source = get_source(source_key)
+    if not _site_of(url, source_key).creators or source.is_list(url):
+        return CollectionKind.LIST
+    return CollectionKind.CHANNEL
+
+
 NO_SITE = SourceSite("", "Several sites")
 """What a collection without a link of its own is on before it has any links."""
 
@@ -80,10 +92,10 @@ def collection_site(collection: Collection) -> SourceSite:
     """The Site a collection is on, with what the collection's own Source offers there. A collection without a link of
     its own, which holds what its link seasons have, is on the Site of the first link it got; what each of its
     episodes does on its own Site, such as a download, follows the episode's Site (``episode_site``)."""
-    url = collection.sharing_url or next(
-        (link.url for link in sorted(collection.lists, key=lambda link: link.id or 0)), None,
-    )
-    return _site_of(url, collection.source_key) if url else NO_SITE
+    if collection.sharing_url is not None:
+        return _site_of(collection.sharing_url, collection.source_key)
+    first = next(iter(sorted(collection.lists, key=lambda link: link.id or 0)), None)
+    return _site_of(first.url, first.source_key or collection.source_key) if first is not None else NO_SITE
 
 
 def collection_creator_names(collection: Collection) -> Names:
@@ -96,7 +108,19 @@ def collection_words(collection: Collection, *, audio: bool | None = None) -> Co
     """What a collection calls its seasons and episodes, by its type's contract: the tracks of a Music collection on a
     Site with sound only, such as Bandcamp, and its music videos elsewhere. Pass ``audio`` where the files are meant,
     which a profile for Music that downloads audio only keeps as sound."""
-    return collection_contract(collection.type).words_for(collection_site(collection).audio_only if audio is None else audio)
+    site = collection_site(collection)
+    words = collection_contract(collection.type).words_for(site.audio_only if audio is None else audio)
+    if collection.sharing_url is None or words.season != DEFAULT_WORDS.season:
+        # A collection of links of any Site, or a type that names its seasons itself, such as an artist's albums.
+        return words
+    seasons = site.channel_season_names if collection.kind == CollectionKind.CHANNEL.value else site.list_season_names
+    return replace(words, season=seasons) if seasons is not None else words
+
+
+def collection_names(collection: Collection) -> Names:
+    """What the collection's Site calls a collection of its kind, such as a channel or a playlist on YouTube."""
+    site = collection_site(collection)
+    return site.channel_collection_names if collection.kind == CollectionKind.CHANNEL.value else site.list_collection_names
 
 
 def collection_episode_tags(collection: Collection) -> tuple[EpisodeTag, ...]:

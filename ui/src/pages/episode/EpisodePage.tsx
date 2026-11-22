@@ -1,6 +1,6 @@
 import {sourceControls} from '../../lib/sourceControls'
 import {useState} from 'react'
-import {Link, useLocation, useNavigate, useParams} from 'react-router-dom'
+import {Link, useLocation, useParams} from 'react-router-dom'
 import toast from '../../lib/toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
@@ -20,7 +20,7 @@ import {faIcon} from '../../icons/faIcon'
 import SiteLink from '../../components/common/SiteLink'
 import {DrmBadge, DrmNotice} from '../../components/common/DrmProtected'
 import {RemovedBadge, ExpiredBadge} from '../../components/common/RemovedFromSource'
-import SeasonPlaceNote, {MovedBadge, ReassignedBadge, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
+import SeasonPlaceNote, {MovedBadge, useSeasonPlace} from '../../components/Episode/SeasonPlaceNote'
 import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
 import {can} from '../../lib/access'
 import {AccessNotice, ItemAccessBadge} from '../../components/common/AccessLocked'
@@ -122,12 +122,10 @@ export default function EpisodePage() {
         error: downloadsError,
         hasDomainData: hasDownloadState,
     } = useEpisodeDownloads(episodeId)
-    const navigate = useNavigate()
     const location = useLocation()
     // Its collection's playlists put it in another season, where it waits for the user to move it.
     const {data: seasonPlace} = useSeasonPlace(episodeId)
     const moved = !!seasonPlace?.belongsElsewhere
-    const reassignedTo = seasonPlace?.collectionTitle ?? null
     const [reconciling, setReconciling] = useState(false)
     const collectionProfiles = profiles?.filter((profile) => (
         isCollectionLocalMediaProfileAvailableFor(profile, collection?.type)
@@ -269,12 +267,7 @@ export default function EpisodePage() {
                                     operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),
                                 }] : []),
-                                ...(reassignedTo && can('library', 'manage') ? [{
-                                    label: `Move to ${reassignedTo}`,
-                                    description: `Moves the ${words.episode.singular} to the collection its creator places it in now, with its files`,
-                                    icon: faIcon('fass', 'arrow-right-from-bracket'),
-                                    onSelect: () => setReconciling(true),
-                                }] : moved && can('library', 'manage') ? [{
+                                ...(moved && can('library', 'manage') ? [{
                                     label: `Move to its new ${words.season.singular}`,
                                     description: `Moves the ${words.episode.singular} and renames its files to match`,
                                     icon: faIcon('fass', 'arrow-right-arrow-left'),
@@ -307,7 +300,6 @@ export default function EpisodePage() {
                         {episode.removedBy
                             ? <ExpiredBadge removedBy={episode.removedBy}/>
                             : episode.removedFromSource && <RemovedBadge asText/>}
-                        {reassignedTo && <ReassignedBadge collectionTitle={reassignedTo} asText/>}
                         {moved && <MovedBadge asText words={words}/>}
                         <span className={`episode-status${isLive ? ' is-live' : ''}`} title={sourceStatus?.help}>
                             {isLive && <span className="episode-status-dot" aria-hidden="true"/>}
@@ -349,12 +341,6 @@ export default function EpisodePage() {
                     path={`/episodes/${encodeURIComponent(episode.slug)}`}
                     what={episode.title}
                     onDismiss={() => setReconciling(false)}
-                    onDone={(result) => {
-                        // A Reassigned episode lives in its new collection now.
-                        if (result.collectionSlug && result.collectionSlug !== collectionId) {
-                            navigate(`/collection/${result.collectionSlug}/episode/${result.episodeSlug}`, {replace: true})
-                        }
-                    }}
                 />
 
                 {!!episode.description?.trim() && (

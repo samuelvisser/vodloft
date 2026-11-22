@@ -34,10 +34,6 @@ class TikTokImplementation(OtherSitesImplementation):
         found = _HANDLE.match(first)
         return f"https://www.tiktok.com/@{found.group(1)}" if found else None
 
-    def creator_page(self, url: str) -> str | None:
-        root = self.creator_root(url)
-        return root if root is not None and self.is_creator_page(url) else None
-
     def is_creator_page(self, url: str) -> bool:
         """The account's own page, which lists all its videos."""
         return self.creator_root(url) is not None and len([part for part in urlsplit(url).path.split("/") if part]) == 1

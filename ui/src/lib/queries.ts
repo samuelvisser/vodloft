@@ -27,11 +27,10 @@ import {PlanSchema} from '../types/schemas/progress_plan'
 import type {ProgressStep} from '../types/progress'
 import {SitesSettingsReadSchema, type SitesSettingsRead} from '../types/schemas/siteSettings'
 import {
-    CreatorEpisodePageReadSchema, CreatorLookupReadSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorLookupRead, type CreatorPageRead, type CreatorRead,
-    CollectionCreatorLeaveSchema, CollectionCreatorMatchSchema, type CollectionCreatorLeave, type CollectionCreatorMatch,
-    type SectionPlan, SectionMovesPreviewSchema, type SectionMove, type SectionMovesPreview,
-    ReconcileResultSchema, type ReconcileResult, MovesWaitingSchema,
+    CreatorEpisodePageReadSchema, CreatorOfferingsSchema, CreatorPageReadSchema, CreatorReadSchema, type CreatorPageRead, type CreatorRead,
+    CollectionCreatorMatchSchema, type CollectionCreatorMatch,
 } from '../types/schemas/creator'
+import {MovePreviewSchema, type MovePreview, ReconcileResultSchema, type ReconcileResult, MovesWaitingSchema} from '../types/schemas/reconcile'
 import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
@@ -80,7 +79,7 @@ import {
     ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
     ResolvedLinkReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
-    SourceReadSchema, type Names, NamesSchema,
+    SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
 import {
@@ -858,11 +857,10 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
 }
 
 /** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
-/** Look a creator up at its Site. It can take a minute: ``onPlan`` hears the steps of its plan as they go. */
 /** Reads a creator lookup's answer, sent a line of JSON at a time: tells ``onPlan`` the steps of the lookup's plan each
- * time it changes, and ``onNames`` what the Site calls a creator, and returns the result line after them. */
+ * time it changes, and returns the result line after them. */
 async function readLookup(
-    response: Response, {onPlan, onNames}: {onPlan: (steps: ProgressStep[]) => void, onNames?: (names: Names) => void},
+    response: Response, {onPlan}: {onPlan: (steps: ProgressStep[]) => void},
 ): Promise<Record<string, unknown>> {
     if (!response.ok || !response.body) throw await responseError(response)
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -875,28 +873,11 @@ async function readLookup(
         for (const line of lines.filter((item) => item.trim())) {
             const message = JSON.parse(line) as Record<string, unknown>
             if (message.plan) onPlan(lookupSteps(PlanSchema.parse(message.plan)))
-            else if (message.creatorNames) onNames?.(NamesSchema.parse(message.creatorNames))
             else if (typeof message.error === 'string') throw new ApiError(message.error, 502)
             else return message
         }
         if (done) throw new ApiError('The lookup stopped before it was done', 502)
     }
-}
-
-export async function lookUpCreator(
-    body: {sourceKey: string, url?: string | null, ref?: string | null},
-    on: {onPlan: (steps: ProgressStep[]) => void, onNames: (names: Names) => void},
-    signal?: AbortSignal,
-): Promise<CreatorLookupRead> {
-    const response = await fetch(`${apiUrl()}/creators/lookup`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-        signal,
-    })
-    const result = await readLookup(response, on)
-    return CreatorLookupReadSchema.parse(result.creator)
 }
 
 export function useCreators() {
@@ -934,47 +915,22 @@ export function useCreatorEpisodes(slug: string | undefined) {
     })
 }
 
-/** Add sections of one of a creator's accounts to the creator's collections, or ignore them. Answers with the
- * creator's page. */
-/**
- * Add sections of a creator's account to its collections, or ignore them. A section that becomes a collection of its
- * own takes ``type`` and ``episodeIdentifier`` when they are given, and otherwise those of the creator's collection.
- */
-export function creatorSectionsRequest(slug: string, accountId: number, body: {
-    sections: SectionPlan[]
-    type?: string
-    episodeIdentifier?: string
-}): Promise<Response> {
-    return fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
+/** What the creator has at their Sites beside their channel, such as a Daily Wire host's shows and movies, with what
+ * the Library has of it. Slow: asks each Site. */
+export function useCreatorOfferings(slug: string | undefined, enabled: boolean) {
+    return useQuery({
+        queryKey: ['creator', slug, 'offerings'] as const,
+        enabled: enabled && !!slug && can('library'),
+        staleTime: 5 * 60 * 1000,
+        retry: false,
+        queryFn: ({signal}) => fetchParsed(`${apiUrl()}/creators/${encodeURIComponent(slug ?? '')}/offerings`, CreatorOfferingsSchema, signal),
     })
 }
 
-export async function addCreatorSections(slug: string, accountId: number, sections: SectionPlan[]): Promise<CreatorPageRead> {
-    const response = await creatorSectionsRequest(slug, accountId, {sections})
-    if (!response.ok) throw await responseError(response)
-    return CreatorPageReadSchema.parse(await response.json())
-}
-
-/** Move feeds and lists of a creator elsewhere, with their videos, as saving its Edit page does; ``renumber`` says
- * which collections keep their numbers. Answers with the creator's page. */
-export async function moveCreatorSections(slug: string, moves: SectionMove[], renumber: Record<string, boolean>): Promise<CreatorPageRead> {
-    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({moves, renumber}),
-    })
-    if (!response.ok) throw await responseError(response)
-    return CreatorPageReadSchema.parse(await response.json())
-}
-
-/** Show sections of a creator's account that were hidden on the creator page there again. */
-export async function showCreatorSections(slug: string, accountId: number, refs: string[]): Promise<CreatorPageRead> {
-    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/sections/show`, {
+/** Add movies of one of a creator's accounts to the Library, when they aren't in it yet, and to the creator. Answers
+ * with the creator's page. */
+export async function addCreatorMovies(slug: string, accountId: number, refs: string[]): Promise<CreatorPageRead> {
+    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/accounts/${accountId}/movies`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
@@ -984,30 +940,15 @@ export async function showCreatorSections(slug: string, accountId: number, refs:
     return CreatorPageReadSchema.parse(await response.json())
 }
 
-/** What moving feeds and lists of a creator elsewhere does to each of its collections. Changes nothing: saving the
- * creator with the moves makes them. */
-export async function previewCreatorMoves(slug: string, moves: SectionMove[], signal?: AbortSignal): Promise<SectionMovesPreview> {
-    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/moves/preview`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({moves}),
-        signal,
-    })
-    if (!response.ok) throw await responseError(response)
-    return SectionMovesPreviewSchema.parse(await response.json())
-}
-
-/** What the Move action of a creator, collection or episode does, by its API path such as `/creators/<slug>`:
- * moving its Reassigned and Moved episodes to where they belong now. Changes nothing. */
-export async function previewReconcile(path: string, signal?: AbortSignal): Promise<SectionMovesPreview> {
+/** What the Move action of a collection or episode does, by its API path such as `/collections/<slug>`: moving its
+ * Moved episodes to the seasons they belong in now. Changes nothing. */
+export async function previewReconcile(path: string, signal?: AbortSignal): Promise<MovePreview> {
     const response = await fetch(`${apiUrl()}${path}/reconcile/preview`, {method: 'POST', credentials: 'include', signal})
     if (!response.ok) throw await responseError(response)
-    return SectionMovesPreviewSchema.parse(await response.json())
+    return MovePreviewSchema.parse(await response.json())
 }
 
-/** Move the Reassigned and Moved episodes of a creator, collection or episode, with whether each collection
- * numbers its episodes again. */
+/** Move the Moved episodes of a collection or episode, with whether the collection numbers its episodes again. */
 export async function reconcile(path: string, renumber: Record<string, boolean>): Promise<ReconcileResult> {
     const response = await fetch(`${apiUrl()}${path}/reconcile`, {
         method: 'POST',
@@ -1019,7 +960,7 @@ export async function reconcile(path: string, renumber: Record<string, boolean>)
     return ReconcileResultSchema.parse(await response.json())
 }
 
-/** The creators, and collections of no creator, whose Reassigned or Moved episodes wait to be moved. */
+/** The collections whose Moved episodes wait to be moved. */
 export function useMovesWaiting(enabled = true) {
     return useQuery({
         queryKey: ['movesWaiting'],
@@ -1056,8 +997,7 @@ function collectionCreatorPath(slug: string, rest = ''): string {
     return `${apiUrl()}/collections/${encodeURIComponent(slug)}/creator${rest}`
 }
 
-/** Find the creator behind a collection's links, and which of its sections each link becomes. Slow: asks the site. */
-/** The creator behind a collection's link, with the steps of looking it up so far. */
+/** The creator behind a channel collection's link, with the steps of looking it up so far. Slow: asks the Site. */
 export function useCollectionCreatorMatch(slug: string, enabled: boolean) {
     const [steps, setSteps] = useState<ProgressStep[]>([])
     const query = useQuery<CollectionCreatorMatch, Error>({
@@ -1075,40 +1015,13 @@ export function useCollectionCreatorMatch(slug: string, enabled: boolean) {
     return {...query, steps}
 }
 
-export function useCollectionCreatorLeave(slug: string, enabled: boolean) {
-    return useQuery<CollectionCreatorLeave, Error>({
-        queryKey: ['collection-creator-leave', slug] as const,
-        enabled,
-        retry: false,
-        queryFn: async () => {
-            const response = await fetch(collectionCreatorPath(slug, '/leave'), {credentials: 'include'})
-            if (!response.ok) throw await responseError(response)
-            return CollectionCreatorLeaveSchema.parse(await response.json())
-        },
-    })
-}
-
-/** Add a collection to the creator behind its links, or take it out of its creator again. */
-/** Add the collection to the creator behind its link, or take it out of its creator. ``renumber`` says, by
- * collection slug, which of the creator's collections number their episodes again after what joining moves. */
-export async function setCollectionCreator(
-    slug: string, inCreator: boolean, renumber: Record<string, boolean> = {}, lookupId?: string | null,
-): Promise<void> {
+/** Add the channel collection to the creator behind its link, adding the creator when they aren't in the Library,
+ * or take it out of its creator. ``lookupId`` uses what a match found instead of asking the Site again. */
+export async function setCollectionCreator(slug: string, inCreator: boolean, lookupId?: string | null): Promise<void> {
     const response = await fetch(collectionCreatorPath(slug), inCreator
-        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({renumber, lookupId})}
+        ? {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({lookupId})}
         : {method: 'DELETE', credentials: 'include'})
     if (!response.ok) throw await responseError(response)
-}
-
-/** What adding the collection to the creator behind its link moves between the creator's collections, without
- * changing anything. No collections when nothing moves. */
-export async function previewCollectionJoin(slug: string, lookupId?: string | null, signal?: AbortSignal): Promise<SectionMovesPreview> {
-    const response = await fetch(collectionCreatorPath(slug, '/preview'), {
-        method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({lookupId}), signal,
-    })
-    if (!response.ok) throw await responseError(response)
-    return SectionMovesPreviewSchema.parse(await response.json())
 }
 
 /** Add a collection to a creator in the Library that its link is not on, such as an artist whose music videos are
@@ -1118,12 +1031,6 @@ export async function addCollectionToCreator(slug: string, creatorSlug: string):
         method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({creatorSlug}),
     })
-    if (!response.ok) throw await responseError(response)
-}
-
-/** Look for the creator's new playlists and shows now. */
-export async function checkCreator(slug: string): Promise<void> {
-    const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(slug)}/check`, {method: 'POST', credentials: 'include'})
     if (!response.ok) throw await responseError(response)
 }
 

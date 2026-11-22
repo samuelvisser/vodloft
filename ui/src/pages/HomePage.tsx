@@ -27,7 +27,7 @@ import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 import {formatBytes} from '../utils/formatting'
 import {wordsOf} from '../lib/collectionWords'
-import type {MovesWaiting} from '../types/schemas/creator'
+import type {MovesWaiting} from '../types/schemas/reconcile'
 
 const IN_PROGRESS = ['preparing', 'waiting', 'canceling', 'downloading', 'local_processing'] as const
 const QUEUED = ['pending'] as const
@@ -51,14 +51,11 @@ function mediaContext(download: MediaDownloadViewRead) {
     return download.movieTitle ? 'Movie' : download.collectionTitle || 'Episode'
 }
 
-/** Why a creator's or collection's episodes wait, in its own words. */
+/** Why a collection's episodes wait, in its own words. */
 function movesDetail(item: MovesWaiting) {
     const {episode, season, count} = wordsOf(item.words)
-    const belong = (n: number) => `${count(n)} ${n === 1 ? 'belongs' : 'belong'}`
-    return [
-        item.reassigned ? `${belong(item.reassigned)} in another collection now (Reassigned)` : null,
-        item.moved ? `${belong(item.moved)} in another ${season.singular} now (Moved)` : null,
-    ].filter(Boolean).join('; ') + `. Downloaded ${episode.plural} stay where they are, files and all, until you move them.`
+    return `${count(item.moved)} ${item.moved === 1 ? 'belongs' : 'belong'} in another ${season.singular} now (Moved). `
+        + `Downloaded ${episode.plural} stay where they are, files and all, until you move them.`
 }
 
 export default function HomePage() {
@@ -103,7 +100,7 @@ export default function HomePage() {
     const sourceProblems = sourceProblemsQuery.data ?? []
     // Downloaded episodes whose lists put them elsewhere wait for their Move action, files and all.
     const movesWaiting = useMovesWaiting(can('library', 'view')).data ?? []
-    const episodesWaiting = movesWaiting.reduce((sum, item) => sum + item.reassigned + item.moved, 0)
+    const episodesWaiting = movesWaiting.reduce((sum, item) => sum + item.moved, 0)
     const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0 || sourceProblems.length > 0 || episodesWaiting > 0
     // The keep question has its own card above, so it does not fill Needs attention.
     const needsAnAnswer = hasAttention || keepQuestionEpisodes > 0
@@ -221,7 +218,7 @@ export default function HomePage() {
                         </Link>
                     ))}
                     {movesWaiting.slice(0, HOME_SECTION_LIMIT).map((item) => (
-                        <Link className="operation-alert" key={`moves-${item.kind}-${item.slug}`} to={`/${item.kind}/${item.slug}?move=1`}>
+                        <Link className="operation-alert" key={`moves-${item.slug}`} to={`/collection/${item.slug}?move=1`}>
                             <FontAwesomeIcon icon={faIcon('fass', 'arrow-right-arrow-left')}/>
                             <span>
                                 <strong>{item.title}</strong>

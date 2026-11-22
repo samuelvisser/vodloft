@@ -18,7 +18,7 @@ from ...contract import (
     UpgradeImprovement,
 )
 from .feed_section_type import YtdlpFeedSectionType
-from .other_sites import CREATOR_PRESETS, MEMBERS_KEY, PREMIUM_KEY, OtherSites
+from .other_sites import MEMBERS_KEY, PREMIUM_KEY, OtherSites
 
 
 class YouTube(OtherSites):
@@ -78,7 +78,6 @@ class YouTube(OtherSites):
     # A channel's members-only videos sit among its open ones, so its collections start without them.
     shows_locked = False
     creators = True
-    creator_presets = CREATOR_PRESETS
     # A channel's Videos, Live and Shorts tabs, and its playlists.
     section_types = (
         YtdlpFeedSectionType("videos", Names("video", "videos"), "videos"),
@@ -90,3 +89,6 @@ class YouTube(OtherSites):
     )
     # A channel's playlists can be the seasons of a collection made from the channel.
     link_seasons = True
+    channel_collection_names = Names("channel", "channels")
+    list_collection_names = Names("playlist", "playlists")
+    channel_season_names = Names("playlist", "playlists")

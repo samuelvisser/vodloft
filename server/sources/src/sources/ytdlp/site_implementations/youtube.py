@@ -111,15 +111,16 @@ class YouTubeImplementation(OtherSitesImplementation):
     def creator_root(self, url: str) -> str | None:
         return channel_root(collection_url(url))
 
-    def creator_page(self, url: str) -> str | None:
-        # A channel's Videos tab is the whole channel too.
-        return channel_root(url) if self.is_creator_page(url) else None
-
     def is_creator_page(self, url: str) -> bool:
         """A channel's own link or its Videos tab, which stand for all its uploads. Not one playlist, nor only a
         channel's Shorts or Live tab."""
         ref = mapping.youtube_ref(collection_url(url))
         return ref is not None and ref.kind != "playlist" and ref.tab == "videos" and channel_root(collection_url(url)) is not None
+
+    def is_list(self, url: str) -> bool:
+        """A playlist, such as an album on YouTube Music."""
+        ref = mapping.youtube_ref(collection_url(url))
+        return ref is not None and ref.kind == "playlist"
 
     def creator_details(self, ref: str, plan: PlanTracker) -> CreatorDetails:
         """A channel through yt-dlp, which costs no API quota: its details, the feeds it has, and its playlists.

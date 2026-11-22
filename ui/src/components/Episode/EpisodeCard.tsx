@@ -7,7 +7,7 @@ import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {DrmBadge} from '../common/DrmProtected'
 import {AccessBadge} from '../common/AccessLocked'
 import {RemovedBadge} from '../common/RemovedFromSource'
-import {MovedBadge, ReassignedBadge} from './SeasonPlaceNote'
+import {MovedBadge} from './SeasonPlaceNote'
 import {apiUrl} from '../../lib/api'
 import DurationPill from '../common/DurationPill'
 import EpisodeTypePill from './EpisodeTypePill'
@@ -106,8 +106,6 @@ type Props = {
     downloads?: MediaDownloadViewRead[]
     /** Belongs in another season now, and waits for the user to move it there. */
     moved?: boolean
-    /** The collection its creator places the downloaded episode in now, when that is another one. */
-    reassignedTo?: string
     /** The title of the episode's collection, for a list of episodes from several collections. */
     collectionTitle?: string
     /** What the collection calls its seasons and episodes, such as albums and tracks. */
@@ -115,7 +113,7 @@ type Props = {
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, reassignedTo, collectionTitle, words}: Props) {
+export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, collectionTitle, words}: Props) {
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -159,7 +157,6 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
                     // Media the account may watch only shows its open lock on its own page.
                     : ep.access && !ep.accessGranted ? <AccessBadge label={ep.accessLabel} description={ep.accessDescription} onCover/>
                     : ep.removedFromSource && !ep.removedByRetention ? <RemovedBadge onCover/>
-                    : reassignedTo ? <ReassignedBadge collectionTitle={reassignedTo} onCover/>
                     : moved && <MovedBadge onCover words={words}/>}
                 {isLive && (
                     <span style={LIVE_BADGE_STYLE} aria-label={`${words.episode.Singular} is live`}>

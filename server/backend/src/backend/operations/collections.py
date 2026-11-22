@@ -187,8 +187,8 @@ class CollectionIdentificationChangeOperation(_CollectionOperation):
 
 
 class CollectionRenumberOperation(_CollectionOperation):
-    """Number again: after episodes moved in or out of the collection, such as a creator's Shorts or a playlist, its
-    episodes take their numbers again the way it numbers them, unless the user said not to, then each Local Media
+    """Number again: after episodes moved within the collection, such as to the season of a list, its episodes take
+    their numbers again the way it numbers them, unless the user said not to, then each Local Media
     Profile's files move to their new names and get their new metadata. The same task as changing the identification."""
 
     kind = "collection.renumber"
@@ -197,18 +197,16 @@ class CollectionRenumberOperation(_CollectionOperation):
     task = _CHANGE_IDENTIFICATION_TASK_KEY
 
     def __init__(
-            self, collection: Collection, *, renumber: bool, sections: Sequence[str] = (), work_weight: float | None = None,
+            self, collection: Collection, *, renumber: bool, work_weight: float | None = None,
     ) -> None:
         super().__init__(collection, work_weight=work_weight)
         self.renumber = renumber
-        self.sections = list(sections)
 
     def task_kwargs(self) -> dict[str, object]:
         return {"episode_identifier": self.resource.episode_identifier, "episode_order": None, "renumber": self.renumber}
 
     def context(self) -> dict[str, object]:
-        # The feeds and lists that moved in or out, as "<account id>:<ref>", so their rows show the progress.
-        return {**super().context(), "renumber": self.renumber, "sections": self.sections}
+        return {**super().context(), "renumber": self.renumber}
 
 
 class _CollectionDownloadMaintenanceOperation(_CollectionOperation):

@@ -222,8 +222,6 @@ def _record_download(
         download.downloaded_publish_status = publish_status
         schedule_first_upgrade_check(download, episode_site(download.media), finished)
         episode_downloaded(session, download.media, path=execution.result.path, replaced=is_redownload)
-        from backend.services.reassigned import after_download
-        after_download(session, download.media)
     result_data = {
         "media_download_id": media_download_id, "is_redownload": is_redownload,
         "file_path": execution.result.path, "downloaded_bytes": execution.result.bytes_downloaded,

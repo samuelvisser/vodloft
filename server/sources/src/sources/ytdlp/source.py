@@ -18,7 +18,7 @@ from progress_plan import PlanTracker
 
 from ..contract import (
     Chapter,
-    ANY_DOMAIN, MAIN_TAG, ApiKeyRejected, combined_tags, CreatorDetails, SectionRef, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, ApiKeyRejected, combined_tags, CreatorDetails, SectionRef, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteApiStatus, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
@@ -535,14 +535,11 @@ class YtDlpSource(Source):
     def resolve(self, url: str) -> ResolvedLink | None:
         implementation = self._implementation(url)
         url = implementation.collection_link(implementation.full_link(url))
-        # A creator's own page can be added as the creator instead.
-        channel = self._implementation(url).creator_page(url)
-        creator_names = sites.site_for(channel).creator_names if channel else None
         if collection := self._api_collection(url):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site="YouTube", creator_url=channel, creator_names=creator_names,
+                site="YouTube",
             )
         try:
             info = self._info(url)
@@ -556,7 +553,7 @@ class YtDlpSource(Source):
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site=site, creator_url=channel, creator_names=creator_names,
+                site=site,
             )
         return ResolvedLink(
             kind=LinkKind.VIDEO,
@@ -603,6 +600,10 @@ class YtDlpSource(Source):
         """A link that stands for all of a creator's uploads: a YouTube channel's own link or its Videos tab, or a
         Bandcamp or SoundCloud artist's page of all their music."""
         return self._implementation(url).is_creator_page(url)
+
+    def is_list(self, url: str) -> bool:
+        """A YouTube playlist, or a Bandcamp or SoundCloud album or set."""
+        return self._implementation(url).is_list(url)
 
     def season_lists(self, url: str) -> list[SectionRef]:
         """A YouTube channel's playlists, or an artist's albums, newest first."""

@@ -12,17 +12,22 @@ how its episodes are identified:
 Only episodes with the Source's main tag follow that scheme. Every other tag,
 such as a YouTube Short, counts on its own across the collection: short.1, short.2.
 
-A collection made from a creator's whole channel, on a Site with ``link_seasons``,
-can make the creator's playlists, or an artist's albums, its link seasons: every
-one, or the ones the user keeps on. A link season only takes videos the collection
-itself lists, so a video of another creator in it stays out. A video in a link
+A collection of a whole channel, on a Site with ``link_seasons``, can make the
+channel's playlists, or an artist's albums, its link seasons: every one, or the
+ones the user keeps on. A link season only takes videos the collection itself
+lists, unless it adds the others too, so a video of another channel in it stays
+out. The collection lists only the feeds of its channel it takes, and a video of
+a feed it no longer takes leaves, unless a link season keeps it. A video in a link
 season goes to that season, and a video in several of them to the one that comes
-first. A video in none goes to the season of videos in no playlist, or to its season
-per year, as the collection is set. Once a video has a file it stays where it is,
+first. A video in none goes to the channel season, or to its season per year, as the
+collection is set; a channel season that holds the whole channel has every video
+of its feeds, also those of a link season. Once a video has a file it stays where it is,
 until the user moves it.
 
-A collection made from one of its creator's lists, such as a playlist or an album,
-has that list as its one season, and numbers its videos in the list's order.
+A collection of one list, such as a playlist or an album, has that list as its
+one season, and numbers its videos in the list's order. Each collection checks
+for duplicates among its own episodes only: another collection may have the same
+video.
 
 A collection that splits videos by chapter, at a Source with ``Feature.CHAPTERS``,
 adds each new video with chapters as a season of its own, named after the video,
@@ -46,6 +51,7 @@ downloaded files and is not downloaded again until it is back.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
@@ -56,10 +62,9 @@ from backend.db.models import Collection, Episode, Season
 from backend.db.core import run_write_transaction
 from backend.services.media_access import lock_refused
 from backend.services.notifications.emitters import link_seasons_found
-from backend.services.reassigned import list_left_out, lists_left_out, placed_elsewhere, save_left_out, settle_creator
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
-    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, made_from_list, own_feeds, own_link, section_list_names, place_in_link_seasons, link_seasons_on,
+    SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, made_from_list, own_feeds, section_list_names, place_in_link_seasons, link_seasons_on,
     save_lists,
 )
 from backend.services.metadata_refresh import new_item_metadata_is_final
@@ -126,9 +131,8 @@ def adds_pending(collection: Collection) -> bool:
 
 
 def known_episode_slugs(s: Session, collection: Collection) -> frozenset[str]:
-    """The videos the collection has, and the ones it does not add because another collection of its creator holds
-    them by a list."""
-    return frozenset(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id))) | placed_elsewhere(s, collection)
+    """The videos the collection has."""
+    return frozenset(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id)))
 
 
 def splits_chapters(collection: Collection) -> bool:
@@ -149,7 +153,7 @@ def with_chapters(source: Source, details: VideoDetails) -> VideoDetails:
 
 
 def _list_new_episodes(s: Session, collection: Collection, source: Source, progress) -> list[VideoDetails]:
-    title, url = collection.title, own_link(collection)
+    title, url = collection.title, collection.sharing_url
     if url is None or not lists_own_link(collection):
         # Its link seasons say what it holds, so its own link is not listed.
         return []
@@ -185,8 +189,6 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
             logger.info("Dry run: would add %s (%s)", details.slug, details.title)
         return len(found)
     collection = s.get(Collection, collection_id)
-    # The creator's lists that are not in it keep their videos out, also before their own collections listed them.
-    not_in_it = lists_left_out(s, collection) if collection is not None and lists_own_link(collection) else {}
     listing = None
     if collection is not None and link_seasons_on(collection):
         # The Site's own word for its lists, such as playlists on YouTube or albums on Bandcamp.
@@ -194,7 +196,6 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
         update_progress(progress, _PLAYLISTS_PROGRESS, f"Listing the {lists} of '{title}' at {source.name}")
         listing = list_lists(s, collection, source, also=frozenset(details.slug for details in found))
     s.rollback()
-    left_out = list_left_out(source, not_in_it)
     if found:
         update_progress(progress, _SAVING_PROGRESS, f"Saving {len(found)} new episodes of '{title}'")
 
@@ -203,13 +204,12 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
         update_progress(progress, _SAVING_PROGRESS, f"Saving {len(outside)} videos of the {lists} of '{title}'")
 
     def save(w: Session) -> int:
-        # What the lists have first, so a video that a list not in the collection has stays out, unless one of its
-        # seasons has it too.
-        save_left_out(w, left_out)
         collection = w.get(Collection, collection_id)
         if collection is not None and listing is not None:
             link_seasons_found(w, collection, save_lists(w, collection, listing))
-        added = add_listed_episodes(w, collection_id=collection_id, found=[*found, *outside])
+        added = add_listed_episodes(
+            w, collection_id=collection_id, found=[*found, *outside], sources=listing.sources if listing is not None else None,
+        )
         if outside:
             # The collection's own link does not list them, so they leave when no playlist that is a season does.
             for episode in w.scalars(select(Episode).where(
@@ -219,7 +219,6 @@ def index_listed_collection(s: Session, *, collection_id: int, source: Source, p
         if collection is None:
             return added
         place_in_link_seasons(w, collection)
-        settle_creator(w, collection)
         return added
 
     return run_write_transaction(save)
@@ -262,15 +261,17 @@ class _Placer(SeasonFinder):
 
 def _new_episode(
     s: Session, collection: Collection, season: Season, index: int, identifier: str,
-    details: VideoDetails, *, part: tuple[int, Chapter] | None = None,
+    details: VideoDetails, *, part: tuple[int, Chapter] | None = None, source_key: str | None = None,
 ) -> Episode:
-    """A listed video as an episode, or with ``part``, the chapter of it with that number."""
+    """A listed video as an episode, or with ``part``, the chapter of it with that number. ``source_key`` is the
+    Source that found it, when that is not the collection's: the one of the list it is in."""
     number, chapter = part if part is not None else (None, None)
+    source_key = source_key or collection.source_key
     source_slug = details.slug if chapter is None else f"{details.slug}-part-{number}"
     return Episode(
         uuid=generate_uuid(),
         type=MediaType.EPISODE.value,
-        source_key=collection.source_key,
+        source_key=source_key,
         collection_id=collection.id,
         season_id=season.id,
         index=index,
@@ -283,9 +284,9 @@ def _new_episode(
         metadata_is_final=chapter is not None or (
             details.publish_status not in PENDING_EPISODE_PUBLISH_STATUSES and new_item_metadata_is_final(
                 # A collection of links from several Sites follows each video's own Site.
-                source_key=collection.source_key,
-                site_key=site_for(details.url, collection.source_key).key if holds_only_link_seasons(collection)
-                else collection.site_key,
+                source_key=source_key,
+                site_key=site_for(details.url, source_key).key
+                if holds_only_link_seasons(collection) or source_key != collection.source_key else collection.site_key,
                 published_at=details.published_at,
             )
         ),
@@ -306,9 +307,12 @@ def _new_episode(
     )
 
 
-def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDetails]) -> int:
-    """Save episodes the collection's Source listed, numbered after the ones the collection has. Returns how many were
-    added.
+def add_listed_episodes(
+    s: Session, *, collection_id: int, found: list[VideoDetails], sources: Mapping[str, str] | None = None,
+) -> int:
+    """Save episodes the collection's Source listed, numbered after the ones the collection has. ``sources`` names the
+    Source of each video another Source found, by its slug, such as a video of a list on another Site. Returns how
+    many were added.
 
     ``s`` is a write transaction's session."""
     if not found:
@@ -328,8 +332,6 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
         return 0
 
     known = set(s.scalars(select(Episode.video_slug).where(Episode.collection_id == collection.id, Episode.video_slug.in_(listed))))
-    # A list of another collection of the creator holds it, so it belongs there.
-    known |= placed_elsewhere(s, collection) & set(listed)
     new = [details for slug, details in listed.items() if slug not in known]
     # A collection made from one list numbers its videos in the list's order, as an album numbers its tracks.
     ordered = new if made_from_list(collection) else sorted(new, key=lambda details: _order_key(details, now))
@@ -345,13 +347,16 @@ def add_listed_episodes(s: Session, *, collection_id: int, found: list[VideoDeta
             episodes = [
                 _new_episode(
                     s, collection, season, next_index + offset, placer.part_identifier(season, details, number), details,
-                    part=(number, chapter),
+                    part=(number, chapter), source_key=(sources or {}).get(details.slug),
                 )
                 for offset, (number, chapter) in enumerate(enumerate(chapters, start=1))
             ]
         else:
             season = placer.season(details.season, details.published_at)
-            episodes = [_new_episode(s, collection, season, next_index, placer.identifier(season, details), details)]
+            episodes = [_new_episode(
+                s, collection, season, next_index, placer.identifier(season, details), details,
+                source_key=(sources or {}).get(details.slug),
+            )]
         for episode in episodes:
             s.add(episode)
             s.flush()
@@ -383,7 +388,7 @@ def refresh_listed_collection(s: Session, *, collection_id: int, source: Source)
     collection = s.get(Collection, collection_id)
     if collection is None:
         return RefreshCounts()
-    title, url = collection.title, own_link(collection)
+    title, url = collection.title, collection.sharing_url
     # A collection that only holds its link seasons has no listing of its own to read its videos from.
     one_by_one = url is None or not lists_own_link(collection)
     # The parts of a split video are asked about once, as their video.

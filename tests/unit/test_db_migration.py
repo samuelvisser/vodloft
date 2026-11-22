@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "0b8b8a447385"
+HEAD_REVISION = "295b85b20467"
 
 
 @pytest.fixture
@@ -421,7 +421,7 @@ def test_0_7_0_migration_keeps_what_existing_profiles_and_episodes_did(migration
         ))] == [
             "download_failed", "sign_in_needed", "disk_almost_full", "task_failing", "update_available", "daily_summary",
             # Added for creators in 0.10.0.
-            "creator_sections_found",
+            "new_lists_found",
         ]
 
 
@@ -1376,7 +1376,7 @@ def test_a_channel_knows_its_own_collection_and_installations_get_the_new_sectio
             ), {"id": collection_id, "uuid": f"u{collection_id}", "slug": f"c{collection_id}", "title": title,
                 "url": f"https://example.test/{collection_id}"})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, "0b8b8a447385")
 
     with engine.connect() as connection:
         assert connection.execute(text(
@@ -1910,7 +1910,7 @@ def test_feeds_get_their_types_and_creators_keep_their_new_list_settings_per_sit
             ), {"id": section_id, "account": account_id, "ref": ref, "title": f"Title {section_id}", "kind": kind,
                 "role": role, "type": type_})
 
-    command.upgrade(config, HEAD_REVISION)
+    command.upgrade(config, "0b8b8a447385")
 
     with engine.connect() as connection:
         assert connection.execute(text("SELECT id, type, title FROM creator_sections ORDER BY id")).all() == [

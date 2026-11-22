@@ -177,12 +177,6 @@ export default function BrowsePage({onboarding = false, onCollectionSelect, onMo
                         <section className="catalog-group" key={label} aria-labelledby={`catalog-${grouping}-${groupIndex}`}>
                             <div className="catalog-group-header">
                                 <h2 id={`catalog-${grouping}-${groupIndex}`}>{label}</h2>
-                                {grouping === 'host' && !onboarding && items[0]?.authorSlug && (
-                                    <Link className="btn btn-link" to={`/add-creator?source=${encodeURIComponent(DAILYWIRE_SOURCE_KEY)}&ref=${encodeURIComponent(items[0].authorSlug)}`}>
-                                        All of {label}'s shows and movies
-                                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
-                                    </Link>
-                                )}
                             </div>
                             <div className="catalog-collection-grid">
                                 {items.map((collection) => {

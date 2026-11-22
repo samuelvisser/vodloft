@@ -1,73 +1,28 @@
-"""Creators: who made the work, with an account on one or more Sites, whose sections go into collections.
+"""Creators: who made the work, with an account on one or more Sites.
 
-A creator never indexes anything itself. Adding an account makes the creator's own collection for it, which takes all
-its uploads from its Videos page, and a collection of its own for each section that goes elsewhere. On a Site whose
-lists can be seasons, a list, such as a playlist, that goes into that collection becomes one of its seasons. The
-creator alone decides where each section goes: the daily look at each account finds new sections, also new
-playlists, and the creator's one setting says what happens with them. A show, with seasons of its own, is always a
-collection of its own. A creator can have accounts on several Sites, such as a YouTube channel and a page as a Daily
-Wire host, and collections from any other link can join them too.
+A creator groups its channel collections, possibly of several Sites, such as a YouTube channel and a SoundCloud
+account, and its movies, under one card in the Library. It plays no part in what a collection holds: joining or leaving
+a creator never changes a collection's episodes. Its page also shows what else the creator has at their Sites that is
+not in the Library yet, such as a Daily Wire host's other shows and movies.
 """
 from __future__ import annotations
 
 import logging
-import re
-from collections.abc import Collection as Refs, Sequence
-from dataclasses import dataclass, replace
-from datetime import datetime
+from collections.abc import Iterable, Mapping, Sequence
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import (
-    Creator, CreatorAccount, CreatorSection, Collection, CollectionList, CollectionListItem, Episode, MediaDownloadBase, Movie,
-)
-from backend.services.link_seasons import is_in, lists_own_link, made_from_list, own_link
-from backend.services.collections import add_collection, index_new_collection, reindex_collection
-from backend.services.episode_identification import apply_identification, plan_identification
+from backend.db.models import Creator, CreatorAccount, Collection, Movie
 from backend.services.errors import ServiceError
-from backend.services.season_order import season_year
-from backend.services.sites import collection_site, site_record
-from backend.services.new_lists import (
-    ListKind, NewListSetting, SiteSettings, checked_new_sections, link_season_action, list_kinds, merged_settings,
-    new_sections_settings, site_settings,
-)
-from backend.types.creator_types import NewSectionAction, SectionStatus, SectionTarget
-from backend.types.dailywire_user_info import DwMembershipLevel
+from backend.services.sites import collection_names, collection_site, site_record
 from backend.types.collection_contracts import DEFAULT_WORDS, MUSIC, CollectionWords, collection_contract
-from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
-from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
-from backend.types.season_types import SeasonType
+from backend.types.collection_types import CollectionType
+from backend.types.link_season_types import CollectionKind
 from backend.utils.helpers import generate_uuid, slugify
-from sources import (
-    CreatorDetails, CreatorPreset, Feature, Names, SectionKind, SectionRef, SectionRole, SectionType, Site, UnknownSourceError, get_source,
-    site_of,
-)
+from sources import CreatorDetails, Feature, Names, SectionKind, SectionRef, Site, UnknownSourceError, get_source, site_of
 
 logger = logging.getLogger(__name__)
-
-# Where a section goes that is not added, and its status then: skipped, or a list that keeps its videos out.
-_NOT_ADDED = {SectionTarget.EXCLUDE: SectionStatus.IGNORED.value, SectionTarget.KEEP_OUT: SectionStatus.KEPT_OUT.value}
-
-
-FOLLOW_TASK_KEY = "follow_creators"
-
-
-@dataclass(frozen=True)
-class SectionPlan:
-    """Where one section goes. A section that becomes a collection of its own takes ``type`` and
-    ``episode_identifier`` when they are given, and otherwise those every collection of the creator starts with."""
-
-    ref: str
-    target: SectionTarget
-    type: CollectionType | None = None
-    episode_identifier: EpisodeIdentifier | None = None
-    collection_slug: str | None = None
-    """For a section that goes into a collection that gathers the account's feeds and lists: which one, when it is
-    not the account's own collection."""
-    into_ref: str | None = None
-    """For a section that goes into the collection of its own that another section of the same plans gets, with
-    ``target`` main or main_loose: that section's ref, such as an album that joins a playlist's new collection."""
 
 
 def creator_site(source_key: str, url_or_site_key: str) -> Site:
@@ -82,10 +37,25 @@ def creator_site(source_key: str, url_or_site_key: str) -> Site:
     return site
 
 
-def _usable(section: SectionRef) -> bool:
-    # A section only some members can watch is left for the user to pick; a single item is added on its own page,
-    # unless it is a movie (see preset_plan).
-    return section.access is None and section.kind is not SectionKind.ITEM
+def can_join(collection: Collection) -> bool:
+    """Whether the collection can be in a creator: a channel collection, on a Site with creators."""
+    return collection.kind == CollectionKind.CHANNEL.value and collection.sharing_url is not None and (
+        collection_site(collection).creators and get_source(collection.source_key).has(Feature.CREATORS)
+    )
+
+
+def check_joins(collection: Collection) -> None:
+    """Refuses a collection that can't be in a creator."""
+    if not can_join(collection):
+        site = collection_site(collection)
+        raise ServiceError(
+            f"Only {site.channel_collection_names.a} can be in {site.creator_names.a}, not {collection_names(collection).a}",
+            field="creator_slug",
+        )
+
+
+def account_in_library(s: Session, site_key: str, ref: str) -> CreatorAccount | None:
+    return s.scalar(select(CreatorAccount).where(CreatorAccount.site_key == site_key, CreatorAccount.site_ref == ref))
 
 
 def takes_movies(source_key: str) -> bool:
@@ -93,184 +63,76 @@ def takes_movies(source_key: str) -> bool:
     return get_source(source_key).has(Feature.MOVIES)
 
 
-def preset_plan(
-    details: CreatorDetails, preset: CreatorPreset, *, feeds: bool = True, movies: bool = False,
-    movies_in_library: Refs[str] = (), albums: Refs[str] = (),
-) -> list[SectionPlan]:
-    """What a preset does with each section. The user can change any of it before the creator is added. Without
-    ``feeds``, such as for a music artist on a video site, whose uploads are much more than their albums, the feeds
-    start skipped, so the artist's collection holds only what their lists give it.
-
-    With ``movies``, the creator's single items are movies: the presets add them, and a movie already in the library,
-    by its ref in ``movies_in_library``, joins the creator with every preset.
-
-    ``albums`` are the keys of the list types the Site marks as an artist's albums, such as SoundCloud's albums: when
-    there are any, only lists of those types are kept, and the others, such as playlists, start skipped."""
-    plans = []
-    for section in details.sections:
-        target = SectionTarget.EXCLUDE
-        if movies and section.kind is SectionKind.ITEM:
-            if section.ref in movies_in_library or (preset is not CreatorPreset.PICK and section.access is None):
-                target = SectionTarget.OWN
-        elif preset is not CreatorPreset.PICK and _usable(section):
-            # The creator's own collection lists its Shorts and Live too, tagged, so they need no collection of their own.
-            if section.kind is SectionKind.FEED:
-                target = SectionTarget.MAIN if feeds else SectionTarget.EXCLUDE
-            elif section.kind is SectionKind.LIST and albums and section.type.key not in albums:
-                target = SectionTarget.EXCLUDE
-            elif section.kind is SectionKind.SHOW or preset is CreatorPreset.PER_LIST:
-                target = SectionTarget.OWN
-            else:
-                target = SectionTarget.MAIN
-        plans.append(SectionPlan(section.ref, target))
-    return plans
+def has_offerings(account: CreatorAccount) -> bool:
+    """Whether the account's Site has more of the creator's work than their channel to offer: shows, or movies VODLoft
+    can add."""
+    site = account_site(account)
+    return bool(site.types_of(SectionKind.SHOW)) or (bool(site.types_of(SectionKind.ITEM)) and takes_movies(account.source_key))
 
 
-# What a slug can't have, as it is a part of the link to the collection's page.
-_NOT_IN_LINKS = re.compile(r"[/\\?#%\s]")
+def offered(details: CreatorDetails, source_key: str) -> list[SectionRef]:
+    """What the creator has at their Site that is a collection or a movie of its own beside their channel: a Daily
+    Wire host's shows and movies. A channel's feeds and lists are its collection's to hold."""
+    movies = takes_movies(source_key)
+    return [
+        section for section in details.sections
+        if section.kind is SectionKind.SHOW or (section.kind is SectionKind.ITEM and movies)
+    ]
 
 
-def _link_slug(ref: str) -> str:
-    """A Site's id as a collection's slug: the id itself, since a Source may know a collection by it, unless it has
-    what can't be a part of a link, such as the slashes of a SoundCloud or Bandcamp album's path."""
-    return slugify(ref) if _NOT_IN_LINKS.search(ref) else ref
-
-
-def main_collection_slug(creator_ref: str) -> str:
-    """The slug the creator's own collection on a Site gets: the account's id on the Site."""
-    return _link_slug(creator_ref)
-
-
-def section_collection_slug(creator_ref: str, section: SectionRef | CreatorSection) -> str:
-    """The slug a section's own collection gets: its own id for a list or a show, such as a playlist or a Daily Wire
-    show, whose collection is known by it, and the creator's id with the feed's for a feed."""
-    return _link_slug(f"{creator_ref}-{section.ref}" if section.kind == SectionKind.FEED else section.ref)
-
-
-def _main_feed(sections: Sequence[SectionRef | CreatorSection]) -> SectionRef | CreatorSection | None:
-    return next((section for section in sections if section.kind == SectionKind.FEED and section.role == SectionRole.MAIN), None)
-
-
-def lists_are_seasons(site: Site | None) -> bool:
-    """Whether a list of the creator can be a season of the creator's own collection."""
-    return site is not None and site.link_seasons
-
-
-def _takes_uploads(collection: Collection) -> bool:
-    """Whether the collection lists a creator's uploads: its Videos page, which has its Shorts and Live too, unless it
-    holds only what its link seasons give it. ``takes_feed`` tells which of the feeds it lists."""
-    url = own_link(collection)
-    return (
-        url is not None and collection.outside_videos != OutsideVideos.ONLY.value
-        and get_source(collection.source_key).is_creator_page(url)
-    )
-
-
-def takes_feed(collection: Collection, ref: str) -> bool:
-    """Whether a collection that gathers the creator's feeds lists the creator's feed with this ref."""
-    return _takes_uploads(collection) and (collection.feeds is None or ref in collection.feeds)
-
-
-def sections_in_library(
-    s: Session, source_key: str, creator_ref: str, sections: Sequence[SectionRef | CreatorSection],
-    gatherers: Sequence[Collection] = (),
-) -> dict[str, str]:
-    """The slugs of the collections that already keep a section, by the section's ref: a collection made from its
-    link, one known by the slug its own collection would get, or one of ``gatherers``, the collections that gather
-    the account's feeds and lists, its own collection first, which keep the feeds they list and the lists in them.
-    Works on a creator being looked up and on a saved one."""
-    urls = {section.url: section.ref for section in sections}
-    slugs = {section_collection_slug(creator_ref, section): section.ref for section in sections}
-    main_feed = _main_feed(sections)
-    main_slug = main_collection_slug(creator_ref)
-    slugs[main_slug] = main_feed.ref if main_feed is not None else ""
-    found: dict[str, str] = {}
-    for url, slug, outside, feeds in s.execute(
-        select(Collection.sharing_url, Collection.slug, Collection.outside_videos, Collection.feeds)
-        .where(Collection.source_key == source_key, Collection.sharing_url.in_(urls), Collection.creator_account_id.is_(None))
-    ):
-        # A collection that holds only what its lists give it, such as an artist's albums, doesn't keep its link's
-        # feed, nor does a creator's own collection that the feed wasn't placed in.
-        if outside != OutsideVideos.ONLY.value and (feeds is None or urls[url] in feeds):
-            found.setdefault(urls[url], slug)
-    for slug, outside, feeds in s.execute(
-        select(Collection.slug, Collection.outside_videos, Collection.feeds)
-        .where(Collection.source_key == source_key, Collection.slug.in_(slugs), Collection.creator_account_id.is_(None))
-    ):
-        if slug == main_slug and (outside == OutsideVideos.ONLY.value or (feeds is not None and slugs[slug] not in feeds)):
-            continue
-        if slugs[slug]:
-            found.setdefault(slugs[slug], slug)
-    for position, gatherer in enumerate(gatherers):
-        uploads = _takes_uploads(gatherer)
-        on = gatherer.link_seasons != LinkSeasons.OFF.value
-        lists = {link.ref for link in gatherer.lists if on and is_in(gatherer, link)}
-        for section in sections:
-            if section.ref in lists:
-                # The creator placed the list in the collection; a collection of the list left from before keeps
-                # only what the list no longer has.
-                found[section.ref] = gatherer.slug
-            elif section.kind == SectionKind.FEED and uploads and (gatherer.feeds is None or section.ref in gatherer.feeds):
-                if position == 0:
-                    # A collection of its own, such as one of the creator's Shorts, keeps it before the creator's.
-                    found.setdefault(section.ref, gatherer.slug)
-                else:
-                    # Another collection that gathers feeds names each one it takes.
-                    found[section.ref] = gatherer.slug
+def collections_of(s: Session, source_key: str, site_key: str, sections: Sequence[SectionRef]) -> dict[str, Collection]:
+    """The collections in the Library of the creator's shows, by the show's ref: the collection of its link, or the
+    one the Site knows by its id."""
+    by_url = {section.url: section.ref for section in sections}
+    by_ref = {section.ref for section in sections}
+    found: dict[str, Collection] = {}
+    for collection in s.scalars(select(Collection).where(or_(
+        Collection.sharing_url.in_(by_url), (Collection.site_key == site_key) & Collection.site_ref.in_(by_ref),
+    ))):
+        ref = by_url.get(collection.sharing_url or "") or (collection.site_ref if collection.source_key == source_key else None)
+        if ref is not None:
+            found.setdefault(ref, collection)
     return found
 
 
-def account_in_library(s: Session, site_key: str, ref: str) -> CreatorAccount | None:
-    return s.scalar(select(CreatorAccount).where(CreatorAccount.site_key == site_key, CreatorAccount.site_ref == ref))
-
-
-def movies_in_library(s: Session, source_key: str, sections: Sequence[SectionRef | CreatorSection]) -> dict[str, Movie]:
-    """The movies in the library that are the creator's single items, by the section's ref: the movie known by the
-    item's id or made from its link. Empty where the creator's single items aren't movies."""
-    items = [section for section in sections if section.kind == SectionKind.ITEM]
-    if not items or not takes_movies(source_key):
+def movies_in_library(s: Session, source_key: str, refs: Iterable[str], urls: Mapping[str, str] | None = None) -> dict[str, Movie]:
+    """The movies in the Library among the creator's single items ``refs``, by ref: the movie known by the item's id,
+    or made from its link, by ``urls``, the ref of each item's link. Empty where the creator's single items aren't
+    movies."""
+    refs, urls = set(refs), dict(urls or {})
+    if not refs or not takes_movies(source_key):
         return {}
-    by_slug = {section.ref: section.ref for section in items}
-    by_url = {section.url: section.ref for section in items}
     found: dict[str, Movie] = {}
     for movie in s.scalars(select(Movie).where(
-        Movie.source_key == source_key, or_(Movie.slug.in_(by_slug), Movie.sharing_url.in_(by_url)),
+        Movie.source_key == source_key, or_(Movie.slug.in_(refs), Movie.sharing_url.in_(urls)),
     )):
-        ref = by_slug.get(movie.slug) or by_url.get(movie.sharing_url or "")
+        ref = movie.slug if movie.slug in refs else urls.get(movie.sharing_url or "")
         if ref is not None:
             found.setdefault(ref, movie)
     return found
 
 
-def movies_to_add(
-    s: Session, source_key: str, sections: Sequence[SectionRef | CreatorSection], plans: Sequence[SectionPlan],
-) -> list[str]:
-    """The refs of the creator's movies that the plans add and that aren't in the library yet, which the Source
-    looks up before the write transaction."""
-    if not takes_movies(source_key):
-        return []
-    items = {section.ref for section in sections if section.kind == SectionKind.ITEM}
-    kept = movies_in_library(s, source_key, sections)
-    return [plan.ref for plan in plans if plan.target not in _NOT_ADDED and plan.ref in items and plan.ref not in kept]
+def movies_offered(s: Session, source_key: str, sections: Sequence[SectionRef]) -> dict[str, Movie]:
+    """The movies in the Library of the creator's single items among ``sections``, by the section's ref."""
+    items = [section for section in sections if section.kind is SectionKind.ITEM]
+    return movies_in_library(s, source_key, [item.ref for item in items], {item.url: item.ref for item in items})
 
 
-def join_movies(s: Session, account: CreatorAccount, plans: Sequence[SectionPlan]) -> list[Movie]:
-    """Make the movies the plans pick, which are in the library now, the account's creator's. A movie the plans skip
-    stays as it is. Returns the movies that joined.
+def join_movies(s: Session, creator: Creator, source_key: str, refs: Iterable[str]) -> list[Movie]:
+    """Make the movies of ``refs`` that are in the Library the creator's. Returns the movies that joined.
 
     ``s`` is a write transaction's session."""
-    picked = {plan.ref for plan in plans if plan.target not in _NOT_ADDED}
     joined = []
-    for ref, movie in movies_in_library(s, account.source_key, account.sections).items():
-        if ref in picked and movie.creator_id != account.creator.id:
-            movie.creator = account.creator
+    for movie in movies_in_library(s, source_key, refs).values():
+        if movie.creator_id != creator.id:
+            movie.creator = creator
             joined.append(movie)
     s.flush()
     return joined
 
 
 def _unique_slug(s: Session, model, wanted: str) -> str:
-    """``wanted`` itself while it is free, since a Source may know a collection by it; else a slug made from it."""
+    """``wanted`` itself while it is free; else a slug made from it."""
     if wanted and s.scalar(select(model.id).where(model.slug == wanted)) is None:
         return wanted
     base = slugify(wanted) or "creator"
@@ -280,317 +142,67 @@ def _unique_slug(s: Session, model, wanted: str) -> str:
     return slug
 
 
-@dataclass(frozen=True)
-class NewCollectionSettings:
-    """What every collection made from a creator starts with."""
-
-    type: CollectionType
-    episode_identifier: EpisodeIdentifier
-    membership_level: str
-
-
-def type_of(section: SectionRef | CreatorSection) -> SectionType:
-    """The Site's type of a section, whether it was just looked up or is stored."""
-    return section.type if isinstance(section, SectionRef) else section.section_type
+def _site_key_of(source_key: str) -> str:
+    # A creator without a page of its own, such as a Daily Wire host, is on its Source's one Site.
+    sites = get_source(source_key).sites
+    if len(sites) != 1:
+        raise ServiceError("This creator has no link, and its Site could not be told")
+    return sites[0].key
 
 
-def _own_title(section: SectionRef) -> str | None:
-    """The title a section keeps: a feed is named after its type."""
-    return None if section.kind is SectionKind.FEED else section.title
+def account_of(s: Session, source_key: str, details: CreatorDetails) -> CreatorAccount | None:
+    """The creator's account in the Library, when the creator is in it."""
+    site = creator_site(source_key, details.url or _site_key_of(source_key))
+    return account_in_library(s, site_record(s, site).key, details.ref)
 
 
-def _section_record(section: SectionRef, position: int, status: SectionStatus = SectionStatus.KNOWN) -> CreatorSection:
-    return CreatorSection(
-        ref=section.ref, url=section.url, own_title=_own_title(section), type=section.type.key,
-        item_count=section.item_count, image_path=section.image_url,
-        description=section.description, access=section.access,
-        site_position=position, status=status.value,
-    )
+def new_creator(s: Session, source_key: str, details: CreatorDetails, *, added_by_id: int | None) -> Creator:
+    """Put a creator in the Library with their account at the Site of ``details``, which was looked up before the
+    write transaction. They have no collections yet.
 
-
-def _new_account(s: Session, creator: Creator, source_key: str, site_key: str, details: CreatorDetails) -> CreatorAccount:
-    account = CreatorAccount(
-        source_key=source_key, site_key=site_key, site_ref=details.ref, url=details.url, handle=details.handle,
-        avatar_path=details.avatar_url, banner_path=details.banner_url,
-    )
-    account.sections = [
-        _section_record(section, position) for position, section in enumerate(details.sections)
-    ]
-    creator.accounts.append(account)
-    s.flush()
-    return account
-
-
-def _new_creator(
-    s: Session, source_key: str, site_key: str, details: CreatorDetails, *, added_by_id: int | None,
-    new_lists: SiteSettings | None = None,
-) -> CreatorAccount:
-    """A new creator with their first account, which is returned. ``new_lists`` is what they do with each kind of new
-    list; left out, each kind starts with its default."""
-    creator = Creator(
-        uuid=generate_uuid(), slug=_unique_slug(s, Creator, slugify(details.handle or details.title) or details.ref),
-        title=details.title, description=details.description, avatar_path=details.avatar_url,
-        banner_path=details.banner_url, links=list(details.links), facts=list(details.facts), added_by_id=added_by_id,
-        new_lists={site: dict(actions) for site, actions in (new_lists or {}).items()},
-    )
-    s.add(creator)
-    return _new_account(s, creator, source_key, site_key, details)
-
-
-def add_creator(
-    s: Session, *, source_key: str, details: CreatorDetails, plans: list[SectionPlan], settings: NewCollectionSettings,
-    added_by_id: int | None = None, new_lists: SiteSettings | None = None, into: Creator | None = None,
-) -> tuple[Creator, list[Collection]]:
-    """Put a creator in the Library with the collections their sections go to, and start indexing them. With
-    ``into``, the account joins that creator in the Library instead, such as a host's YouTube channel joining the
-    host, and follows that creator's settings. ``new_lists`` is what the creator does with each type of new list by
-    Site, over
-    the defaults of an artist when ``settings`` makes Music collections, and of anyone else otherwise.
-
-    ``details`` was looked up before the write transaction. Sections already kept by a collection are left where they
-    are. Returns the creator and the collections it made."""
+    ``s`` is a write transaction's session."""
     site = creator_site(source_key, details.url or _site_key_of(source_key))
     record = site_record(s, site)
     existing = account_in_library(s, record.key, details.ref)
     if existing is not None:
-        raise ServiceError(f"{details.title} is already in your library, as {existing.creator.title}", field="into")
-    by_ref = {section.ref: section for section in details.sections}
-    unknown = [plan.ref for plan in plans if plan.ref not in by_ref]
-    if unknown:
-        raise ServiceError(f"{details.title} has no section {unknown[0]}")
-    if into is not None:
-        account = _new_account(s, into, source_key, record.key, details)
-    else:
-        lists = checked_new_sections(list_kinds([site]), new_lists or {}, settings.type is CollectionType.MUSIC)
-        account = _new_creator(s, source_key, record.key, details, added_by_id=added_by_id, new_lists=lists)
-    collections = _place(s, account, plans, settings, added_by_id=added_by_id)
-    join_movies(s, account, plans)
-    if into is not None:
-        # The creator's other own collections now take their Site's name too.
-        _name_main_collections(into, into.title)
-    return account.creator, collections
-
-
-def creator_list_kinds(creator: Creator) -> list[ListKind]:
-    """The kinds of list of the creator's Sites, each with a setting of its own for new ones."""
-    return list_kinds(_sites(creator).values())
-
-
-def creator_new_lists(creator: Creator) -> list[NewListSetting]:
-    """What the creator does with a new list of each kind of their Sites."""
-    return new_sections_settings(creator_list_kinds(creator), creator.new_lists, is_music_creator(creator))
-
-
-def new_link_seasons(creator: Creator, site_key: str) -> dict[str, str]:
-    """What the creator's own collection on ``site_key`` does with a new list of each type: what the creator does
-    with it there."""
-    return {key: link_season_action(action).value for key, action in site_settings(creator_new_lists(creator), site_key).items()}
-
-
-def _make_seasons(account: CreatorAccount, main: Collection, refs: set[str], *, as_season: bool = True) -> None:
-    """Put the lists ``refs`` in a collection that gathers the account's lists: as seasons, or without ``as_season``,
-    with their videos where its videos in no list go. The account's own collection then knows all the account's
-    lists, to switch on later; another collection only knows the lists the creator gives it, so it can switch those
-    off, but never take a list it was not given."""
-    # The creator decides which of their lists are seasons, the ones to come too, so the collection only takes the
-    # ones the creator gives it.
-    main.link_seasons = LinkSeasons.SELECTED.value
-    main.new_lists = new_link_seasons(account.creator, account.site_key)
-    known = {playlist.ref: playlist for playlist in main.lists}
-    for section in account.sections:
-        if section.kind != SectionKind.LIST:
-            continue
-        playlist = known.get(section.ref)
-        if playlist is None and section.ref not in refs and account.main_collection is not main:
-            continue
-        if playlist is None:
-            main.lists.append(CollectionList(
-                ref=section.ref, url=section.url, title=section.title, image_path=section.image_path,
-                item_count=section.item_count, site_position=section.site_position, enabled=section.ref in refs,
-                status=ListStatus.KNOWN.value, as_season=as_season or section.ref not in refs,
-            ))
-        elif section.ref in refs:
-            playlist.enabled, playlist.status, playlist.as_season = True, ListStatus.KNOWN.value, as_season
-
-
-# Where a new section goes, for what the creator does with new ones; a new season otherwise.
-_NEW_SECTION_TARGETS = {NewSectionAction.OWN: SectionTarget.OWN, NewSectionAction.LOOSE: SectionTarget.MAIN_LOOSE}
-
-# What puts a section into the creator's own collection: a list as a season, or with its videos in its other seasons.
-_INTO_MAIN = (SectionTarget.MAIN, SectionTarget.MAIN_LOOSE)
-
-
-def _take_sections(
-    account: CreatorAccount, collection: Collection, plans: list[SectionPlan], sections: dict[str, CreatorSection], *,
-    new: bool,
-) -> None:
-    """Let a collection that gathers the account's feeds and lists take those of the plans."""
-    # The collection lists only the feeds placed in it. Without one, it holds only what its lists give it. An
-    # artist's collection also takes the tracks of their albums that its feeds don't list, such as those on their
-    # Topic channel, so a feed placed in it later shows up too.
-    feeds = {plan.ref for plan in plans if sections[plan.ref].kind == SectionKind.FEED}
-    music = collection.type == CollectionType.MUSIC.value
-    if new:
-        collection.feeds = sorted(feeds)
-        if music:
-            collection.outside_videos = OutsideVideos.ADD.value
-        elif not feeds:
-            collection.outside_videos = OutsideVideos.ONLY.value
-    elif feeds:
-        if collection.feeds is not None:
-            collection.feeds = sorted({*collection.feeds, *feeds})
-        if collection.outside_videos == OutsideVideos.ONLY.value:
-            collection.outside_videos = (OutsideVideos.ADD if music else OutsideVideos.LEAVE_OUT).value
-    for as_season in (True, False):
-        lists = {
-            plan.ref for plan in plans
-            if sections[plan.ref].kind == SectionKind.LIST and (plan.target is SectionTarget.MAIN) == as_season
-        }
-        if lists:
-            _make_seasons(account, collection, lists, as_season=as_season)
-
-
-def _place(
-    s: Session, account: CreatorAccount, plans: list[SectionPlan], settings: NewCollectionSettings, *,
-    added_by_id: int | None,
-) -> list[Collection]:
-    """Give the account's sections to the collections the plans say: the account's own collection, made when it has
-    none yet, or a new collection each. Starts indexing what changed. Returns the collections it made."""
-    creator = account.creator
-    sections = {section.ref: section for section in account.sections}
-    kept = sections_in_library(s, account.source_key, account.site_ref, list(sections.values()), account.gatherers)
-    site = get_source(account.source_key).site_of(account.site_key)
-    wanted = []
-    for plan in plans:
-        if plan.target is SectionTarget.KEEP_OUT and sections[plan.ref].kind == SectionKind.LIST:
-            sections[plan.ref].status = SectionStatus.KEPT_OUT.value
-        if plan.target in _NOT_ADDED or plan.ref in kept:
-            continue
-        section = sections[plan.ref]
-        section.status = SectionStatus.KNOWN.value
-        if section.kind == SectionKind.ITEM:
-            # A single item, such as a movie, is never a collection: join_movies takes the movies.
-            continue
-        # A list goes into the creator's own collection only where lists can be seasons there, and a show, with
-        # seasons of its own, always has a collection of its own.
-        if plan.target in _INTO_MAIN and (
-            section.kind == SectionKind.SHOW or (section.kind == SectionKind.LIST and not lists_are_seasons(site))
-        ):
-            plan = replace(plan, target=SectionTarget.OWN)
-        wanted.append(plan)
-    # Sections that go into the collection of its own that another section gets, by that section's ref.
-    into_new: dict[str, list[SectionPlan]] = {}
-    for plan in wanted:
-        if plan.target in _INTO_MAIN and plan.into_ref is not None:
-            into_new.setdefault(plan.into_ref, []).append(plan)
-    owning = {plan.ref for plan in wanted if plan.target is SectionTarget.OWN}
-    for ref, taking in into_new.items():
-        if ref not in owning or ref in {plan.ref for plan in taking} or (
-            sections[ref].kind == SectionKind.LIST and not lists_are_seasons(site)
-        ) or sections[ref].kind not in (SectionKind.FEED, SectionKind.LIST):
-            raise ServiceError(
-                f"{sections[taking[0].ref].title} can only go into a new collection of another feed or list", field="sections",
-            )
-    wanted = [plan for plan in wanted if plan.into_ref is None or plan.target not in _INTO_MAIN]
-    elsewhere: dict[str, list[SectionPlan]] = {}
-    for plan in wanted:
-        if plan.target in _INTO_MAIN and plan.collection_slug is not None and (
-            account.main_collection is None or plan.collection_slug != account.main_collection.slug
-        ):
-            elsewhere.setdefault(plan.collection_slug, []).append(plan)
-    main_plans = [plan for plan in wanted if plan.target in _INTO_MAIN and plan not in sum(elsewhere.values(), [])]
-    made, changed = [], []
-    for slug, taking in elsewhere.items():
-        target = next((collection for collection in gatherable(account) if collection.slug == slug), None)
-        if target is None:
-            raise ServiceError(f"{sections[taking[0].ref].title} can't go into that collection", field="sections")
-        target = gather(s, account, target)
-        _take_sections(account, target, taking, sections, new=False)
-        changed.append(target)
-    if main_plans:
-        main = account.main_collection
-        if main is None:
-            main, new = make_main_collection(
-                s, account, settings, added_by_id=added_by_id,
-                images=[sections[plan.ref].image_path for plan in main_plans],
-            )
-            if new:
-                made.append(main)
-        if main not in made:
-            changed.append(main)
-        _take_sections(account, main, main_plans, sections, new=main in made)
-    for plan in wanted:
-        if plan.target is not SectionTarget.OWN:
-            continue
-        own = sections[plan.ref]
-        title = own.title if own.kind != SectionKind.FEED else f"{creator.title} {own.title}"
-        collection = _new_collection(
-            s, account, _own_settings(settings, plan, own), title=title, slug=section_collection_slug(account.site_ref, own), url=own.url,
-            description=own.description, image=own.image_path, added_by_id=added_by_id,
-        )
-        made.append(collection)
-        if plan.ref in into_new:
-            # It gathers the feeds and lists that join it, as a collection made from one does on the Edit page.
-            s.flush()
-            _take_sections(account, gather(s, account, collection), into_new[plan.ref], sections, new=False)
-    s.flush()
-    for collection in made:
-        index_new_collection(s, collection)
-    for collection in changed:
-        reindex_collection(s, collection)
-    return made
-
-
-def make_main_collection(
-    s: Session, account: CreatorAccount, settings: NewCollectionSettings, *, added_by_id: int | None,
-    images: Sequence[str | None] = (),
-) -> tuple[Collection, bool]:
-    """Make the account's own collection, for an account that has none, such as one added without its uploads that a
-    list joins now. ``images`` are the pictures of what goes into it, newest first. Returns the collection, and
-    whether it is new: a plain collection of the account's page left from before becomes it again instead."""
-    creator = account.creator
-    main_feed = _main_feed(account.sections)
-    url = main_feed.url if main_feed is not None else account.url
-    if not url:
-        raise ServiceError(f"{creator.title} has no page that lists all of its videos")
-    # A collection of this link left from before, such as when the creator was deleted, which kept their
-    # collections as plain ones, becomes the creator's own collection again.
-    left = s.scalar(select(Collection).where(Collection.sharing_url == url, Collection.creator_id.is_(None)))
-    if left is not None:
-        belong_to(left, creator)
-        left.creator_account = account
-        account.main_collection = left
-        return left, False
-    # The account's own picture on its Site, not that of the creator's other accounts. An artist without a picture of
-    # their own shows their newest album's cover.
-    image = account.avatar_path or next(filter(None, images), None)
-    main = _new_collection(
-        s, account, settings, title=main_collection_title(account), slug=main_collection_slug(account.site_ref), url=url,
-        description=creator.description, image=image, added_by_id=added_by_id,
+        raise ServiceError(f"{details.title} is already in your library, as {existing.creator.title}", field="creator_slug")
+    creator = Creator(
+        uuid=generate_uuid(), slug=_unique_slug(s, Creator, slugify(details.handle or details.title) or details.ref),
+        title=details.title, description=details.description, avatar_path=details.avatar_url,
+        banner_path=details.banner_url, links=list(details.links), facts=list(details.facts), added_by_id=added_by_id,
     )
-    main.background_image_path = account.banner_path
-    account.main_collection = main
-    return main, True
+    creator.accounts.append(CreatorAccount(
+        source_key=source_key, site_key=record.key, site_ref=details.ref, url=details.url, handle=details.handle,
+        avatar_path=details.avatar_url, banner_path=details.banner_url,
+    ))
+    s.add(creator)
+    s.flush()
+    return creator
 
 
-def main_collection_title(account: CreatorAccount) -> str:
-    """What the account's own collection is called: the creator's name, with the Site's after it on a creator with
-    several accounts, such as "for KING + COUNTRY YouTube"."""
-    creator = account.creator
-    if len(creator.accounts) < 2:
-        return creator.title
-    return f"{creator.title} {get_source(account.source_key).site_of(account.site_key).name}"
+def join_creator(s: Session, collection: Collection, creator: Creator) -> None:
+    """Group a channel collection under a creator in the Library. Nothing it holds changes.
+
+    ``s`` is a write transaction's session."""
+    if collection.creator_id is not None:
+        raise ServiceError(f"{collection.title} is already in {collection.creator.title}", field="creator_slug")
+    check_joins(collection)
+    belong_to(collection, creator)
+    s.flush()
 
 
-def _name_main_collections(creator: Creator, *names: str) -> None:
-    """Add its Site's name to the own collection of each of the creator's accounts, now that the creator has several:
-    only to one still named exactly after the creator, by one of ``names`` (the creators' names before they joined).
-    Any other name stays, such as one the user gave or one that already names its Site, so an account that leaves and
-    joins again never gets its Site's name twice."""
-    for account in creator.accounts:
-        main = account.main_collection
-        if main is not None and main.title in names:
-            main.title = main_collection_title(account)
+def join_creator_of(
+    s: Session, collection: Collection, source_key: str, details: CreatorDetails, *, added_by_id: int | None,
+) -> Creator:
+    """Group a channel collection under the creator behind its link, looked up as ``details``: the one in the Library,
+    or a new one made from ``details``.
+
+    ``s`` is a write transaction's session."""
+    check_joins(collection)
+    account = account_of(s, source_key, details)
+    creator = account.creator if account is not None else new_creator(s, source_key, details, added_by_id=added_by_id)
+    join_creator(s, collection, creator)
+    return creator
 
 
 def belong_to(collection: Collection, creator: Creator | None) -> None:
@@ -608,133 +220,11 @@ def rename_creator(creator: Creator, title: str) -> None:
         collection.author_name = title
 
 
-def _own_settings(settings: NewCollectionSettings, plan: SectionPlan, section: CreatorSection) -> NewCollectionSettings:
-    """What a section's collection of its own starts with: the plan's type and identification, where it gives them.
-    An artist's collections always hold music, and only an artist's do. A list, such as a playlist or an album, is the
-    one season of its collection, so unless the plan says otherwise its videos are numbered in the list's order."""
-    identification = plan.episode_identifier or (
-        EpisodeIdentifier.NUMBERED if section.kind == SectionKind.LIST else settings.episode_identifier
-    )
-    if settings.type is CollectionType.MUSIC:
-        return replace(settings, episode_identifier=identification)
-    if plan.type is CollectionType.MUSIC:
-        raise ServiceError(f"{section.title} can only be a Music collection when the creator is a music artist", field="sections")
-    return replace(settings, type=plan.type or settings.type, episode_identifier=identification)
-
-
-def _new_collection(
-    s: Session, account: CreatorAccount, settings: NewCollectionSettings, *, title: str, slug: str, url: str,
-    description: str | None, image: str | None, added_by_id: int | None,
-) -> Collection:
-    creator = account.creator
-    collection = Collection(
-        uuid=generate_uuid(), slug=_unique_slug(s, Collection, slug), source_key=account.source_key, title=title,
-        description=description, sharing_url=url, membership_level=settings.membership_level,
-        type=settings.type.value, episode_identifier=settings.episode_identifier.value, author_name=creator.title,
-        author_slug=slugify(account.handle or creator.title) or account.site_ref, thumbnail_landscape_path=image,
-        genre=creator.genre, content_rating=creator.content_rating,
-    )
-    add_collection(s, collection, added_by_id=added_by_id)
-    belong_to(collection, creator)
-    if made_from_list(collection):
-        # Its one season lists the videos as the list has them, from the first.
-        collection.episode_order = EpisodeOrder.OLDEST_FIRST.value
-    return collection
-
-
-def _settings_of(creator: Creator) -> NewCollectionSettings:
-    """What a collection added to the creator later starts with: the same as the creator's own collection."""
-    model = next((account.main_collection for account in creator.accounts if account.main_collection is not None), None)
-    model = model or next(iter(creator.collections), None)
-    if model is None:
-        return NewCollectionSettings(CollectionType.SERIES, EpisodeIdentifier.SEASONAL, DwMembershipLevel.HIGHEST_ALLOWED.value)
-    return NewCollectionSettings(CollectionType(model.type), EpisodeIdentifier(model.episode_identifier), model.membership_level)
-
-
-def place_sections(
-    s: Session, account: CreatorAccount, plans: list[SectionPlan], *, added_by_id: int | None = None,
-    type: CollectionType | None = None, episode_identifier: EpisodeIdentifier | None = None,
-) -> list[Collection]:
-    """Add sections of a creator's account that is in the Library to the creator's collections, or ignore them.
-
-    A section that becomes a collection of its own gets ``type`` and ``episode_identifier`` when they are given, and
-    otherwise those of the creator's own collection. ``s`` is a write transaction's session."""
-    creator = account.creator
-    sections = {section.ref: section for section in account.sections}
-    unknown = [plan.ref for plan in plans if plan.ref not in sections]
-    if unknown:
-        raise ServiceError(f"{creator.title} has no section {unknown[0]}", field="sections")
-    changed = False
-    for plan in plans:
-        section = sections[plan.ref]
-        if plan.target is SectionTarget.KEEP_OUT and section.kind != SectionKind.LIST:
-            raise ServiceError(f"Only a list can be blacklisted; skip {section.title} instead", field="sections")
-        if plan.target in _NOT_ADDED:
-            # A list kept out keeps its videos out of the creator's collections, also the ones their feeds list; one
-            # that stops keeping them out lets them back in. A skipped list changes nothing.
-            changed = changed or SectionStatus.KEPT_OUT.value in (section.status, _NOT_ADDED[plan.target])
-            section.status = _NOT_ADDED[plan.target]
-    if changed:
-        list_urls = {section.url for section in creator.sections if section.kind == SectionKind.LIST}
-        for collection in creator.collections:
-            if lists_own_link(collection) and collection.sharing_url not in list_urls:
-                reindex_collection(s, collection)
-    adding = [plan for plan in plans if plan.target not in _NOT_ADDED]
-    if not adding:
-        return []
-    settings = _settings_of(creator)
-    settings = replace(
-        settings, type=type or settings.type, episode_identifier=episode_identifier or settings.episode_identifier,
-    )
-    # The identification the user chose is the one a section's collection of its own takes, also for a list.
-    adding = [replace(plan, episode_identifier=plan.episode_identifier or episode_identifier) for plan in adding]
-    made = _place(s, account, adding, settings, added_by_id=added_by_id)
-    join_movies(s, account, adding)
-    return made
-
-
-def show_sections(account: CreatorAccount, refs: list[str]) -> None:
-    """Show sections of a creator's account that the user hid on the creator page there again. They stay out of the
-    Library. ``account`` is from a write transaction's session."""
-    sections = {section.ref: section for section in account.sections}
-    unknown = [ref for ref in refs if ref not in sections]
-    if unknown:
-        raise ServiceError(f"{account.creator.title} has no section {unknown[0]}", field="refs")
-    for ref in refs:
-        if sections[ref].status == SectionStatus.IGNORED.value:
-            sections[ref].status = SectionStatus.KNOWN.value
-
-
-def _as_ref(section: CreatorSection) -> SectionRef:
-    return SectionRef(
-        ref=section.ref, url=section.url, type=section.section_type, title=section.own_title or "",
-    )
-
-
-@dataclass(frozen=True)
-class CreatorSettings:
-    new_lists: SiteSettings
-    """What the creator does with a new list, by Site and the key of its type."""
-    genre: str | None
-    content_rating: str | None
-
-
-def update_creator_settings(s: Session, creator: Creator, settings: CreatorSettings) -> None:
-    """Change what happens with the creator's new sections, and the genre and rating its collections get. A
-    collection that had the creator's old genre or rating gets the new one; one with its own keeps it.
-
-    ``s`` is a write transaction's session."""
-    current: dict[str, dict[str, str]] = {}
-    for setting in creator_new_lists(creator):
-        current.setdefault(setting.site_key, {})[setting.key] = setting.action
-    creator.new_lists = checked_new_sections(
-        creator_list_kinds(creator), merged_settings(current, settings.new_lists), is_music_creator(creator),
-    )
-    for account in creator.accounts:
-        if account.main_collection is not None:
-            account.main_collection.new_lists = new_link_seasons(creator, account.site_key)
-    for field in ("genre", "content_rating"):
-        old, new = getattr(creator, field), getattr(settings, field) or None
+def update_creator_settings(creator: Creator, *, genre: str | None, content_rating: str | None) -> None:
+    """Change the genre and rating the creator's collections get. A collection that had the creator's old genre or
+    rating gets the new one; one with its own keeps it."""
+    for field, new in (("genre", genre or None), ("content_rating", content_rating or None)):
+        old = getattr(creator, field)
         if old == new:
             continue
         for collection in creator.collections:
@@ -743,344 +233,30 @@ def update_creator_settings(s: Session, creator: Creator, settings: CreatorSetti
         setattr(creator, field, new)
 
 
-@dataclass(frozen=True)
-class FollowResult:
-    """What the daily look found on a creator."""
-
-    asked: list[CreatorSection]
-    added: list[CreatorSection]
-    ignored: list[CreatorSection]
-
-
 def take_account_pictures(account: CreatorAccount, *, avatar: str | None, banner: str | None) -> None:
-    """Keep the account's picture and banner on its Site. Its own collection shows them, as its picture and its
-    background, where it still shows what the Site gave before, or what the creator's other accounts have."""
-    main = account.main_collection
-    for field, shown_as, value in (
-        ("avatar_path", "thumbnail_landscape_path", avatar), ("banner_path", "background_image_path", banner),
-    ):
-        if not value:
-            continue
-        from_site = {getattr(account, field), getattr(account.creator, field)}
-        from_site |= {getattr(other, field) for other in account.creator.accounts}
-        if main is not None and getattr(main, shown_as) in from_site:
-            setattr(main, shown_as, value)
-        setattr(account, field, value)
-
-
-def follow_account(s: Session, account: CreatorAccount, details: CreatorDetails, *, now: datetime) -> FollowResult:
-    """Take in what the Site says about a creator's account now: its handle and its sections' titles and counts, the
-    sections it did not have before, which the creator's setting adds, ignores or asks about, new playlists too, and
-    for the creator's first account the creator's name (unless the user gave it one), pictures and facts. Sections the Site no longer lists stay,
-    with what they hold.
-
-    ``details`` was looked up before the write transaction; ``s`` is a write transaction's session."""
-    creator = account.creator
-    take_account_pictures(account, avatar=details.avatar_url, banner=details.banner_url)
-    if creator.accounts[0] is account:
-        # A name the user gave stays.
-        if details.title and details.title != creator.title and not creator.title_from_user:
-            rename_creator(creator, details.title)
-        for field, value in (
-            ("description", details.description),
-            ("avatar_path", details.avatar_url), ("banner_path", details.banner_url),
-            ("links", list(details.links)), ("facts", list(details.facts)),
-        ):
-            if value and getattr(creator, field) != value:
-                setattr(creator, field, value)
-    for field, value in (("handle", details.handle), ("url", details.url)):
-        if value and getattr(account, field) != value:
-            setattr(account, field, value)
-    account.checked_at = now
-    known = {section.ref: section for section in account.sections}
-    found: list[CreatorSection] = []
-    for position, section in enumerate(details.sections):
-        record = known.get(section.ref)
-        if record is None:
-            record = _section_record(section, position, SectionStatus.NEW)
-            account.sections.append(record)
-            found.append(record)
-            continue
-        for field, value in (
-            ("own_title", _own_title(section)), ("url", section.url), ("item_count", section.item_count),
-            ("image_path", section.image_url), ("description", section.description), ("site_position", position),
-            ("access", section.access), ("type", section.type.key),
-        ):
-            if getattr(record, field) != value:
-                setattr(record, field, value)
-    s.flush()
-    main = account.main_collection
-    # A section that is already in the library, such as a show added before the creator, needs no choice, and a
-    # single item, such as a movie, is added from its own page.
-    kept = sections_in_library(s, account.source_key, account.site_ref, found, account.gatherers)
-    for record in found:
-        if record.ref in kept or record.kind == SectionKind.ITEM:
-            record.status = SectionStatus.KNOWN.value
-    found = [record for record in found if record.status == SectionStatus.NEW.value]
-    if not found:
-        return FollowResult([], [], [])
-    # Each kind of list has a setting of its own, such as a SoundCloud artist's albums and their playlists.
-    actions = {key: NewSectionAction(action) for key, action in site_settings(creator_new_lists(creator), account.site_key).items()}
-    kinds = {section.ref: section.type.key for section in details.sections}
-    asked, added, ignored = [], [], []
-    plans = []
-    for record in found:
-        action = actions.get(kinds.get(record.ref, ""), NewSectionAction.ASK)
-        if action is NewSectionAction.IGNORE:
-            record.status = SectionStatus.IGNORED.value
-            ignored.append(record)
-        # A single item, or a section only some members can watch, is never added by itself.
-        elif action is NewSectionAction.ASK or not _usable(_as_ref(record)) or record.access is not None:
-            asked.append(record)
-        else:
-            # A show keeps its own seasons, so it becomes a collection of its own; _place sees to that.
-            plans.append(SectionPlan(record.ref, _NEW_SECTION_TARGETS.get(action, SectionTarget.MAIN)))
-            added.append(record)
-    if plans:
-        place_sections(s, account, plans)
-    return FollowResult(asked, added, ignored)
-
-
-def _site_key_of(source_key: str) -> str:
-    # A creator without a page of its own, such as a Daily Wire host, is on its Source's one Site.
-    sites = get_source(source_key).sites
-    if len(sites) != 1:
-        raise ServiceError("This creator has no link, and its Site could not be told")
-    return sites[0].key
-
-
-def collection_section(
-    s: Session, collection: Collection, source_key: str, details: CreatorDetails, account: CreatorAccount | None,
-) -> tuple[SectionRef | CreatorSection | None, Collection | None]:
-    """The section of the creator's account the collection is: the section at its link, the account's Videos page
-    for a collection of all its uploads, or the section it is known by, such as a playlist added by its own link
-    before. Also another of the creator's collections that keeps that section already, when one does."""
-    sections: Sequence[SectionRef | CreatorSection] = account.sections if account is not None else details.sections
-    section = next((section for section in sections if section.url == collection.sharing_url), None)
-    if section is None and _takes_uploads(collection):
-        section = _main_feed(sections)
-    if section is None:
-        kept = sections_in_library(s, source_key, details.ref, list(sections))
-        ref = next((ref for ref, slug in kept.items() if slug == collection.slug), None)
-        section = next((section for section in sections if section.ref == ref), None)
-    if section is None or account is None:
-        return section, None
-    for other in account.creator.collections:
-        if other.id == collection.id:
-            continue
-        if other in account.gatherers:
-            keeps = (section.kind == SectionKind.FEED and feed_holder(account, section.ref) is other) or (
-                (held := list_holder(account, section.ref)) is not None and held[0] is other
-            )
-        else:
-            keeps = other.sharing_url == section.url or other.slug == section_collection_slug(account.site_ref, section)
-        if keeps:
-            return section, other
-    return section, None
-
-
-@dataclass(frozen=True)
-class Overlap:
-    """A list that a collection joining a creator holds, which another of the creator's collections holds already."""
-
-    ref: str
-    title: str
-    kept_by: Collection
-    can_move_here: bool
-    """The other collection is the creator's own, which can let the list go; a collection of its own can't."""
-
-
-def own_collection(account: CreatorAccount, section: CreatorSection) -> Collection | None:
-    """The collection made from the feed or list alone, unless it gathers the account's feeds and lists now."""
-    slug = section_collection_slug(account.site_ref, section)
-    gathering = account.creator.gathering_ids
-    return next((
-        collection for collection in account.creator.collections
-        if collection.id not in gathering and (collection.sharing_url == section.url or collection.slug == slug)
-    ), None)
-
-
-def gatherable(account: CreatorAccount) -> list[Collection]:
-    """The collections a feed or list of the account can go into besides a collection of its own: those that gather
-    its feeds and lists, the account's own collection first, and the collections made from one of its feeds, or from
-    one of its lists where lists can be seasons, which can gather more of them."""
-    site = get_source(account.source_key).site_of(account.site_key)
-    found = list(account.gatherers)
-    for section in account.sections:
-        if section.kind not in (SectionKind.FEED, SectionKind.LIST):
-            continue
-        if section.kind == SectionKind.LIST and not lists_are_seasons(site):
-            continue
-        own = own_collection(account, section)
-        if own is not None and own not in found:
-            found.append(own)
-    return found
-
-
-def gather(s: Session, account: CreatorAccount, collection: Collection) -> Collection:
-    """Make the collection one that gathers the account's feeds and lists. A collection made from one feed keeps
-    listing only that feed. One made from a list holds that list as a season, its one season so far, and numbers its
-    episodes by season from now on, as a collection of several albums or playlists does."""
-    if collection in account.gatherers:
-        return collection
-    made_of = next((
-        section for section in account.sections if section.kind in (SectionKind.FEED, SectionKind.LIST)
-        and own_collection(account, section) is collection
-    ), None)
-    collection.creator_account = account
-    if made_of is not None and made_of.kind == SectionKind.FEED:
-        collection.feeds = [made_of.ref]
-    elif made_of is not None:
-        theirs = list(s.scalars(select(Episode).where(Episode.collection_id == collection.id, Episode.part_of.is_(None)).order_by(Episode.index)))
-        collection.feeds = []
-        # It holds nothing but what its lists give it, as the creator's collection without feeds does.
-        collection.outside_videos = OutsideVideos.ONLY.value
-        album = next((
-            season for season in sorted(collection.seasons, key=lambda season: season.index)
-            if season.season_type == SeasonType.NORMAL.value and season_year(season) is None and not season.loose
-        ), None)
-        _make_seasons(account, collection, {made_of.ref}, as_season=True)
-        s.flush()
-        link = next(link for link in collection.lists if link.ref == made_of.ref)
-        # The season it has is the list's. Placing the videos puts those of its seasons per year, from before, there.
-        link.season = album
-        for position, episode in enumerate(episode for episode in theirs if not episode.removed_from_source):
-            s.add(CollectionListItem(list_id=link.id, source_slug=episode.source_slug, position=position))
-        for episode in theirs:
-            episode.from_link_season = True
-        number_by_season(s, collection)
-    s.flush()
-    s.expire(account, ["gathering"])
-    return collection
-
-
-def offered_lists(collection: Collection) -> list[CollectionList]:
-    """The lists the collection's Seasons dialog offers to switch on or off. A collection that gathers some of an
-    account's lists only offers the ones it knows, which for one other than the account's own collection are the
-    ones the creator gave it, and not one that another collection of the creator holds now: it can switch its lists
-    off, but never take another's."""
-    account = collection.creator_account or next((
-        account for account in (collection.creator.accounts if collection.creator else [])
-        if account.main_collection_id == collection.id
-    ), None)
-    if account is None:
-        return list(collection.lists)
-    elsewhere = {
-        link.ref for other in account.gatherers if other is not collection for link in other.lists if is_in(other, link)
-    } | {
-        section.ref for section in account.sections if section.kind == SectionKind.LIST and any(
-            other is not collection and (
-                other.sharing_url == section.url or other.slug == section_collection_slug(account.site_ref, section)
-            ) for other in account.creator.collections
-        )
-    }
-    return [link for link in collection.lists if link.added_by_user or link.ref not in elsewhere]
-
-
-def number_by_season(s: Session, collection: Collection) -> None:
-    """Number a collection whose lists are its seasons by season, in each list's order, once its videos are placed
-    in them. A collection with downloaded files keeps its numbering, which its files are named by; the user can
-    change it on its Edit page."""
-    if collection.episode_identifier == EpisodeIdentifier.SEASONAL.value:
-        return
-    with_files = s.scalar(
-        select(MediaDownloadBase.id).join(Episode, Episode.id == MediaDownloadBase.media_item_id)
-        .where(Episode.collection_id == collection.id).limit(1)
-    )
-    if with_files is not None:
-        logger.info("'%s' keeps numbering its episodes as it did, because it has downloaded files", collection.title)
-        return
-    s.flush()
-    apply_identification(s, collection, plan_identification(s, collection, EpisodeIdentifier.SEASONAL))
-    collection.episode_order = EpisodeOrder.default_for(EpisodeIdentifier.SEASONAL).value
-
-
-def list_holder(account: CreatorAccount, ref: str) -> tuple[Collection, CollectionList] | None:
-    """The collection that gathers the account's list with this ref, as a season or not, and the list in it."""
-    for collection in account.gatherers:
-        if collection.link_seasons == LinkSeasons.OFF.value:
-            continue
-        link = next((link for link in collection.lists if link.ref == ref and is_in(collection, link)), None)
-        if link is not None:
-            return collection, link
-    return None
-
-
-def feed_holder(account: CreatorAccount, ref: str) -> Collection | None:
-    """The collection that gathers the account's feed with this ref. Another collection than the account's own names
-    each feed it takes, so it is asked first."""
-    return next((collection for collection in reversed(account.gatherers) if takes_feed(collection, ref)), None)
-
-
-def _list_of_main(account: CreatorAccount, ref: str) -> CollectionList | None:
-    main = account.main_collection
-    if main is None or main.link_seasons == LinkSeasons.OFF.value:
-        return None
-    return next((link for link in main.lists if link.ref == ref and is_in(main, link)), None)
-
-
-def join_overlaps(
-    s: Session, collection: Collection, source_key: str, details: CreatorDetails, account: CreatorAccount | None,
-) -> list[Overlap]:
-    """The lists that would be in two places once the collection joins the creator: the section it is, when the
-    creator's own collection has it as a season, and the lists that are its seasons that another of the creator's
-    collections holds. Once it joins, each is in one place, as the user chooses."""
-    if account is None:
-        return []
-    section, keeper = collection_section(s, collection, source_key, details, account)
-    overlaps: list[Overlap] = []
-    if section is not None and keeper is not None and _list_of_main(account, section.ref) is not None:
-        overlaps.append(Overlap(section.ref, section.title, keeper, True))
-    if collection.link_seasons == LinkSeasons.OFF.value:
-        return overlaps
-    sections = {section.ref: section for section in account.sections if section.kind == SectionKind.LIST}
-    for link in collection.lists:
-        if link.ref not in sections or not is_in(collection, link):
-            continue
-        if _list_of_main(account, link.ref) is not None and account.main_collection_id != collection.id:
-            overlaps.append(Overlap(link.ref, link.title, account.main_collection, True))
-            continue
-        kept = sections_in_library(s, account.source_key, account.site_ref, [sections[link.ref]])
-        other = next((other for other in account.creator.collections if other.slug == kept.get(link.ref) and other.id != collection.id), None)
-        if other is not None:
-            overlaps.append(Overlap(link.ref, link.title, other, False))
-    return overlaps
-
-
-def _switch_off(collection: Collection, ref: str) -> None:
-    """Take a list out of the collection. One that made every list a season keeps the others on. Switched on again,
-    the list is a season."""
-    if collection.link_seasons == LinkSeasons.ALL.value:
-        for link in collection.lists:
-            link.enabled = True
-        collection.link_seasons = LinkSeasons.SELECTED.value
-    for link in collection.lists:
-        if link.ref == ref:
-            link.enabled, link.as_season = False, True
+    """Keep the account's picture and banner on its Site."""
+    if avatar:
+        account.avatar_path = avatar
+    if banner:
+        account.banner_path = banner
 
 
 def leave_creator(s: Session, collection: Collection) -> None:
-    """Make a creator's collection a plain one again. It keeps its episodes, files and settings.
+    """Take a collection out of its creator. Nothing it holds changes.
 
     ``s`` is a write transaction's session."""
-    creator = collection.creator
-    if creator is None:
+    if collection.creator is None:
         raise ServiceError(f"{collection.title} is not in {collection_site(collection).creator_names.a}")
-    for account in creator.accounts:
-        if account.main_collection_id == collection.id:
-            account.main_collection = None
     collection.creator = None
-    collection.creator_account = None
     s.flush()
 
 
 def delete_creator(s: Session, creator: Creator) -> None:
-    """Take a creator out of the Library. Its collections stay, as plain collections with their episodes, files and
-    settings; VODLoft stops looking for the creator's new sections.
+    """Take a creator out of the Library. Its collections and movies stay, with their episodes, files and settings.
 
     ``s`` is a write transaction's session."""
     for collection in list(creator.collections):
-        leave_creator(s, collection)
+        collection.creator = None
     for movie in list(creator.movies):
         movie.creator = None
     s.delete(creator)
@@ -1145,32 +321,13 @@ def creator_kind(creator: Creator) -> str:
     return f"{sites[0].name} {label}" if len(sites) == 1 else label
 
 
-def add_to_creator(s: Session, collection: Collection, creator: Creator) -> None:
-    """Make a collection one of a creator's although its link is somewhere else, such as an artist's music videos
-    on a channel or playlist of their label. It keeps its own link, and the creator's look for new sections leaves
-    it alone. Nothing is indexed again and no file moves.
-
-    ``s`` is a write transaction's session."""
-    if collection.creator_id is not None:
-        raise ServiceError(f"{collection.title} is already in {collection.creator.title}")
-    if collection.sharing_url is not None and any(section.url == collection.sharing_url for section in creator.sections):
-        raise ServiceError(
-            f"{collection.title} is a part of {creator.title}'s own page: add it to the {creator_names(creator).singular} "
-            "behind its link instead", field="creator_slug",
-        )
-    belong_to(collection, creator)
-    s.flush()
-
-
 def combine_creators(s: Session, creator: Creator, other: Creator) -> None:
     """Make ``other`` a part of ``creator``: the same person or group, such as a Daily Wire host and their YouTube
-    channel added apart. Their accounts and collections move over, and ``other`` leaves the Library. Each collection
-    keeps its genre and rating, episodes and files; nothing is indexed again.
+    channel added apart. Their accounts, collections and movies move over, and ``other`` leaves the Library.
 
     ``s`` is a write transaction's session."""
     if other.id == creator.id:
         raise ServiceError(f"{creator.title} can't be combined with themselves", field="other_slug")
-    other_title = other.title
     for account in list(other.accounts):
         other.accounts.remove(account)
         creator.accounts.append(account)
@@ -1185,25 +342,17 @@ def combine_creators(s: Session, creator: Creator, other: Creator) -> None:
     s.flush()
     s.delete(other)
     s.flush()
-    for account in creator.accounts:
-        if account.main_collection is not None:
-            account.main_collection.new_lists = new_link_seasons(creator, account.site_key)
-    # Both creators' own collections now take their Site's name, after the creator's.
-    _name_main_collections(creator, creator.title, other_title)
-    s.flush()
 
 
 def split_account(s: Session, account: CreatorAccount, details: CreatorDetails | None) -> Creator:
-    """Make one of a creator's accounts a creator of their own again, with the collections it keeps: its own
-    collection and those of its sections. Collections that joined the creator by another link stay. Returns the new
-    creator, named after ``details`` when the account could be looked up, and after the creator otherwise.
+    """Make one of a creator's accounts a creator of their own again, with the collections and movies on its Site.
+    Returns the new creator, named after ``details`` when the account could be looked up, and after the creator
+    otherwise.
 
     ``details`` was looked up before the write transaction; ``s`` is a write transaction's session."""
     creator = account.creator
     if len(creator.accounts) < 2:
         raise ServiceError(f"{creator.title} has only this account", field="account_id")
-    kept = set(sections_in_library(s, account.source_key, account.site_ref, account.sections, account.gatherers).values())
-    kept |= {collection.slug for collection in account.gatherers}
     own = Creator(
         uuid=generate_uuid(),
         slug=_unique_slug(s, Creator, slugify((details.handle or details.title) if details else account.handle or creator.title) or account.site_ref),
@@ -1212,18 +361,19 @@ def split_account(s: Session, account: CreatorAccount, details: CreatorDetails |
         avatar_path=details.avatar_url if details else account.avatar_path or creator.avatar_path,
         banner_path=details.banner_url if details else account.banner_path or creator.banner_path,
         links=list(details.links) if details else [], facts=list(details.facts) if details else [],
-        added_by_id=creator.added_by_id, new_lists={site: dict(actions) for site, actions in creator.new_lists.items()}, genre=creator.genre,
-        content_rating=creator.content_rating,
+        added_by_id=creator.added_by_id, genre=creator.genre, content_rating=creator.content_rating,
     )
     s.add(own)
     creator.accounts.remove(account)
     own.accounts.append(account)
-    for collection in list(creator.collections):
-        if collection.slug in kept:
-            belong_to(collection, own)
-    # The account's movies go with it.
-    for movie in movies_in_library(s, account.source_key, account.sections).values():
-        if movie.creator_id == creator.id:
-            movie.creator = own
+    # What is on the account's Site goes with it, unless another of the creator's accounts is on that Site too.
+    shared = any(other.site_key == account.site_key for other in creator.accounts)
+    if not shared:
+        for collection in list(creator.collections):
+            if collection.site_key == account.site_key:
+                belong_to(collection, own)
+        for movie in list(creator.movies):
+            if movie.source_key == account.source_key:
+                movie.creator = own
     s.flush()
     return own

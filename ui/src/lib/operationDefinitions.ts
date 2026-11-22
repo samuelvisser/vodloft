@@ -546,20 +546,6 @@ export const frontendOperationDefinitions = {
         : `${collectionTitle} has its moved episodes in place`
     },
   },
-  'creator.move_sections': {
-    kind: 'creator.move_sections',
-    resourceType: 'creator',
-    label: 'Move',
-    invalidate: (operation, invalidations) => {
-      invalidations.push(['creator', contextString(operation, 'creator_slug')], ['creators'], ['collectionsView'])
-    },
-    success: (operation) => {
-      // What moved, in the Site's words the backend joined, such as "shorts and playlists".
-      const names = operation.context?.names as {plural?: string} | undefined
-      const title = contextString(operation, 'creator_title') || operation.title
-      return names?.plural ? `The ${names.plural} of ${title} are in place` : `${title} is done moving`
-    },
-  },
   'collection.scan_existing_files': {
     kind: 'collection.scan_existing_files',
     resourceType: 'collection',

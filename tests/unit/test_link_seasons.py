@@ -61,13 +61,14 @@ def source(monkeypatch):
     sites._site_of.cache_clear()
 
 
-def _collection(session, *, mode="all", loose="one_season", identifier="seasonal", url=CREATOR, music=False):
+def _collection(session, *, mode="all", loose="one_season", identifier="seasonal", url=CREATOR, music=False, channel_season="unlisted"):
     from backend.db.models import Collection
 
     collection = Collection(
         uuid="uuid-creator", slug="creator", source_key="seasons", title="The Creator", sharing_url=url,
         membership_level="FREE", type="music" if music else "series", episode_identifier=identifier,
         author_name="The Creator", author_slug="the-creator", link_seasons=mode, loose_videos=loose,
+        channel_season=channel_season,
     )
     session.add(collection)
     session.commit()
@@ -195,6 +196,8 @@ def test_a_new_playlist_waits_for_the_users_choice_when_only_selected_ones_are_s
     source.lists = [_list("PLone", "One")]
     source.items = {"PLone": ("a",), "PLtwo": ("b",)}
     collection = _collection(session, mode="selected")
+    collection.new_lists = {LIST_TYPE: "ask"}
+    session.commit()
     _index(session, collection, source)
 
     source.lists = [_list("PLtwo", "Two"), _list("PLone", "One")]
@@ -755,7 +758,7 @@ def test_an_empty_collection_takes_links_the_user_adds(links_source, session):
     assert (collection.sharing_url, collection.site_key, collection.source_key) == (None, None, "seasons")
 
     for ref, title in (("PLmix", "The Mix"), ("PLmore", "More")):
-        link = AddedLink(ref, f"https://seasons.example/playlist?list={ref}", title, None)
+        link = AddedLink(ref, f"https://seasons.example/playlist?list={ref}", title, None, "seasons")
         run_write_transaction(lambda s, link=link: save_added_link(s, slug, link))
     view = seasons_view(session, slug)
     session.rollback()
@@ -933,7 +936,8 @@ def test_an_episode_of_a_list_laid_out_by_year_names_its_list_in_templates(sourc
         slug: _creator_values(session.scalar(select(Episode).where(Episode.source_slug == slug)))["section_title"]
         for slug in ("a", "b")
     }
-    assert titles == {"a": "The Tour", "b": ""}
+    # The video in no list is of the feed that brought it.
+    assert titles == {"a": "The Tour", "b": "Videos"}
 
 
 def test_the_list_of_seasons_says_when_each_ones_newest_episode_came_out(source, session):

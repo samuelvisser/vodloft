@@ -1201,7 +1201,7 @@ _RUN_STATES = {
 
 
 def _parts_plan(operation: TaskOperation, effective_runs: Sequence[TaskRun | None]) -> dict[str, Any]:
-    """The plan of an operation made of parts, such as a creator's move: a step for each task it runs itself and each
+    """The plan of an operation made of parts: a step for each task it runs itself and each
     operation it started, in the same shape as the plan a task reports, so the UI follows both alike. A step is as
     far as its part says, or unmeasured while the part cannot tell."""
     from dataclasses import asdict

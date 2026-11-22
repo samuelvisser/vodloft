@@ -73,18 +73,6 @@ def test_api_results_read_the_text_youtube_escapes_as_html(youtube):
     assert video.title == 'Here\'s what "fast" means & why'
 
 
-def test_a_channel_result_can_be_added_as_a_creator_and_a_playlist_cannot(youtube):
-    from backend.api.endpoints.sources.service import search_source
-    from backend.security.access import Access
-
-    youtube.search_results = [_search_item("channel", "UCv", "Veritasium"), _search_item("playlist", "PL1", "Physics")]
-
-    results = search_source(Access.full(), YtDlpSource(), "youtube", "veritasium").results
-
-    assert [(result.slug, result.creator_names and result.creator_names.singular) for result in results] == [
-        ("UCv", "creator"), ("PL1", None)]
-
-
 def test_the_same_search_within_an_hour_costs_nothing(youtube):
     source = YtDlpSource()
     source.search(YOUTUBE, "veritasium")

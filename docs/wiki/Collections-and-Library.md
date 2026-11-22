@@ -124,13 +124,11 @@ In the Seasons window, **When an episode belongs in several seasons** (in a Musi
 
 Two playlists that share one season still give a video one episode there, and with **Together in seasons by year** a video has one upload year, so it is in one season. When a playlist no longer has a video, only its episode in that season leaves. Switching back to **Only in the first season** removes the extra episodes: ones without downloads go at once, and downloaded ones stay, marked **Removed**, until you answer on Home whether to keep them.
 
-In a creator's collection set to **In each season**, a playlist that is a collection of its own does not take a video out of one of its seasons: an artist's album keeps its tracks when a "Best of" gets a collection of its own. It still takes the videos the collection only had from its feeds.
-
 Several playlists can share one season, such as a "Part 1" and a "Part 2" of the same series. In the Seasons window, pick the other season under **Together with** on a playlist's season. The season keeps its name and holds the videos of its first playlist first, then those of the next, numbered in that order. **Own season** gives a playlist a season of its own again. Either way, downloaded videos move with their files.
 
 When a playlist season is turned off, its downloaded videos move to the season a new video would go to, and their files are renamed and moved with them. A video that was only in the collection because that playlist had it leaves the collection, and **its downloaded files are deleted**. The same happens when you switch back to leaving out other channels' videos. The Seasons window tells you before you save how many videos leave and how many of them have files.
 
-When the creator takes such a video out of the playlist, VODLoft never deletes its files on its own. A video without files leaves the collection. A downloaded one stays, marked **Removed**, and the Home page asks whether to keep it, as for a video its site no longer has. **Keep** keeps it in the collection; **Don't keep** removes it, files and all. If the playlist lists it again, it is back as usual.
+When the channel takes such a video out of the playlist, VODLoft never deletes its files on its own. A video without files leaves the collection. A downloaded one stays, marked **Removed**, and the Home page asks whether to keep it, as for a video its site no longer has. **Keep** keeps it in the collection; **Don't keep** removes it, files and all. If the playlist lists it again, it is back as usual.
 
 A downloaded video stays where it is when it belongs in another season now, for example because it was added to a playlist after it was downloaded, since moving it renames its files. The collection marks it **Moved**, and its page explains where it belongs now. **Move it there** on its page, or **Move to its new season** in its **Actions** menu, moves it and renames its files to match. To move every such video of the collection at once, use **Move episodes** in the collection's **Actions** menu. Both first show what the move does. The **Home** page lists collections with such videos under **Needs attention**.
 
@@ -186,7 +184,7 @@ Single videos come from yt-dlp, which supports YouTube and well over a thousand 
 
 ## YouTube channels and playlists
 
-A YouTube channel or playlist, or a playlist on another site yt-dlp supports, can be added as a collection: paste its link in **Add media** or in the Add Collection wizard and pick Podcast or Series, or find it with **Search YouTube** (below). A channel link adds all of the channel's uploads: its videos, Shorts and livestreams. A link to the channel's Shorts or Live tab adds only those.
+A YouTube channel or playlist, or a playlist on another site yt-dlp supports, can be added as a collection: paste its link in **Add media** or in the Add Collection wizard and pick Podcast or Series, or find it with **Search YouTube** (below). A channel link adds all of the channel's uploads: its videos, Shorts and livestreams, unless you switch a feed off (see [Feeds and the channel's own season](#feeds-and-the-channels-own-season)). A link to the channel's Shorts or Live tab adds only those.
 
 These collections have no seasons of their own, so VODLoft makes one season per upload year. They are added as a Series identified by date by default; pick another episode identification in the Add Collection wizard if you prefer. Seasonal numbers the videos in each year by upload date, such as S2024E01 and S2024E02, and Numbered counts them across the collection. A video found later is numbered after the ones VODLoft already has, so existing file names never change. Download Profiles work as for any other collection. Their streams serve downloaded files only.
 
@@ -213,51 +211,64 @@ With a YouTube Data API key this costs 1 unit per 50 episodes a day. Without a k
 
 ### Search SoundCloud
 
-**Search SoundCloud** on the Add media page finds SoundCloud accounts, albums, playlists and tracks by name, the way SoundCloud's own search does, with follower and track counts. Type a search and choose **Search** or press Enter. Picking an account lets you add it as a creator, with its albums and playlists, or only its tracks; picking an album or playlist continues to the Add Collection wizard; picking a track adds it under **Videos**. No key or account is needed: VODLoft searches the way yt-dlp reaches SoundCloud. If SoundCloud's search ever stops answering, VODLoft searches only its tracks instead, lists the accounts that made them first, and says so above the results.
+**Search SoundCloud** on the Add media page finds SoundCloud accounts, albums, playlists and tracks by name, the way SoundCloud's own search does, with follower and track counts. Type a search and choose **Search** or press Enter. Picking an account, an album or a playlist continues to the Add Collection wizard; picking a track adds it under **Videos**. No key or account is needed: VODLoft searches the way yt-dlp reaches SoundCloud. If SoundCloud's search ever stops answering, VODLoft searches only its tracks instead, lists the accounts that made them first, and says so above the results.
 
-A link you share from the SoundCloud app, such as `on.soundcloud.com/…`, works like the full link: VODLoft follows it to the page it stands for, so an artist's share link can be added as the creator.
+A link you share from the SoundCloud app, such as `on.soundcloud.com/…`, works like the full link: VODLoft follows it to the page it stands for, so an artist's share link can be added as a collection.
 
 ### Search YouTube
 
-**Search YouTube** on the Add media page finds channels, playlists and videos by name. Type a search and choose **Search** or press Enter; each search costs YouTube API quota, so VODLoft does not search while you type. Picking a channel lets you choose between **Add the creator** and **Only its videos**, as when you paste its link; picking a playlist continues to the Add Collection wizard. Either opens the collection when it is already in your Library; picking a video adds it under **Videos**, as if you had pasted its link.
+**Search YouTube** on the Add media page finds channels, playlists and videos by name. Type a search and choose **Search** or press Enter; each search costs YouTube API quota, so VODLoft does not search while you type. Picking a channel or a playlist continues to the Add Collection wizard, or opens the collection when it is already in your Library; picking a video adds it under **Videos**, as if you had pasted its link.
 
 With a YouTube Data API key, a search goes through the API and collections subscriber and video counts, durations and upload dates. It costs about 102 units from the search share, and the line above the results says how many API searches are left today. Without a key, when the search share is used up or set to 0, or when the API fails, VODLoft searches with yt-dlp instead. That takes a few seconds longer and collections fewer details, and the line above the results says why yt-dlp answered. The same search within an hour is answered again without asking YouTube.
 
 ## Creators
 
-A creator is whoever makes the work you follow: the person or group behind a YouTube channel, a host on The Daily Wire, or an artist on Bandcamp or SoundCloud. Adding the creator, instead of one of their links, lets you decide in one go what happens with their videos, livestreams, Shorts and playlists, and the creator gets a card and a page of their own in your Library. Their collections are on that page rather than next to it in the Library, though a search still finds them. The page shows only what is in your Library; the playlists and shows you did not add, new ones waiting for a choice and the creator's accounts are on the creator's **Edit** page. VODLoft calls a creator what their site calls them, so on The Daily Wire every button and page says host instead, and for music it says artist.
+A creator is whoever makes the work you follow: the person or group behind a YouTube channel, a host on The Daily Wire, or an artist on Bandcamp or SoundCloud. In VODLoft a creator only groups collections: it gets a card and a page of its own in your Library, and its collections show on that page instead of next to it in the Library, though a search still finds them. Being part of a creator changes nothing about what a collection holds. Each collection keeps its own link, feeds, playlists, seasons, profiles and files, and decides on its own what it takes in. VODLoft calls a creator what their site calls them, so on The Daily Wire every button and page says host instead, and for music it says artist.
 
-Paste a link to a YouTube channel in **Add media** and choose **Add the creator**; **Only its videos** adds its uploads as one collection, as described above. For The Daily Wire, paste the link to a host's page, such as `https://www.dailywire.com/hosts/jordan-b-peterson`, and choose **Add the host**, or open **Browse**, group the shows by host and choose the link next to a host's name.
+### Channel and list collections
 
-The Add creator page lists the YouTube channel's feeds (Videos, Live and Shorts on YouTube) and its playlists or shows. For each one you choose where it goes:
+Every collection is one of two kinds, from its link:
 
-- **Main collection**: one collection named after the creator. Feeds become a season per year, and a playlist becomes a playlist season (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)). The main collection takes only the feeds you put in it: with only Videos, the channel's livestreams and Shorts stay out until you add those feeds too. A Daily Wire show has seasons of its own, so it always gets a collection of its own.
-- **Add its contents to the main collection**, for a playlist: its videos go into the main collection, but in the seasons the videos in no playlist go to, such as the season per year, instead of a season of their own. Use this for a playlist whose videos you want, without it being excluded from the library.
-- **A collection of its own**: the part becomes a separate collection, for example Shorts that you want to keep apart from the rest.
-- **Skip**: nothing is added, and nothing else changes: the videos of a skipped playlist stay where the creator's other feeds and playlists put them. The part stays listed on the creator's **Edit** page, so you can add it later.
-- **Blacklist its videos**, for a playlist (**Blacklist its tracks** for an artist's playlist): nothing is added, and its videos also stay out of every collection of the creator, even when the Videos feed or another playlist has them. Use it for a playlist of reuploads or sponsored videos. Videos that are already in your Library leave, files and all; the window that asks you to confirm says which.
+- A **channel** collection is made from a creator's own page: a YouTube channel (or only its Shorts or Live tab), an artist on Bandcamp or SoundCloud, or a Daily Wire show. It can make the creator's playlists or albums seasons of its own (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)), and it can be part of a creator.
+- A **list** collection is made from one playlist or album. It holds what that list holds, in the list's order, and can't be part of a creator.
 
-The **Presets** for the creator fill these choices in for you, and you can still change any of them: **One collection** (YouTube only) puts everything in the main collection, with the playlists as named seasons and the rest as seasons by year; **A collection per playlist** (or per show) gives every playlist or show its own collection; **Only what I pick** starts with all feeds and playlists, or all shows, skipped. A playlist or show that is already in your Library stays where it is.
+On a site where VODLoft knows no creators, such as NPO Start, every collection is a list collection.
 
-A video that appears in more than one place is kept once, and a playlist is always in one place only: the main collection, as a season or not, or a collection of its own. In the main collection a video in a playlist season is in that season and not in the season of videos in no playlist. The creator decides which playlists are seasons of its main collection, so that collection's Seasons window doesn't look for new playlists itself; it still lets you name, order and group the seasons, and turn a playlist season off.
+### Feeds and the channel's own season
 
-You can change where a feed or playlist goes later, on the creator's **Edit** page, under **Where the feeds and playlists go**: in the main collection, a collection of its own, or out of your Library. The main feed, such as YouTube's Videos, always stays with the main collection. Nothing moves until you save. Before it does, VODLoft shows for each collection what leaves and joins it, which downloads are deleted, which episodes get a new number, and which files are renamed and get their metadata rewritten. Downloaded files move along without downloading them again. You can tell a collection to keep its numbers instead. While the move runs, the dropdowns of what moved show its progress.
+In the Seasons window of a channel collection (the Albums window for music), **Feeds** lists the parts of the channel the collection takes its videos from, such as Videos, Shorts and Live on YouTube. Switch a feed off to leave its videos out. The channel is listed again when you save: its videos that no feed or playlist of the collection still has leave the collection, and downloaded ones stay until Home asks whether to keep them.
 
-A Daily Wire host's movies are listed under **Movies**. **Add to your library** adds a movie as one of the host's, and **Skip** leaves it out. A movie that is already in your Library shows **In your library**, and **Joins** the host unless you choose **Stays apart**. Adding a movie this way doesn't download it. The host's page shows their movies under their collections. A movie you skipped, or that stayed apart, is listed at the bottom of the host's page with the shows that are not in your Library, and its **+** button adds it to the host later. Taking a host out of your Library keeps their movies in your Library.
+**The channel's own season** chooses what the season of the channel itself holds:
 
-At the bottom, **New collections** has a card for each collection the creator adds, with its collection type and episode identification, side by side where there is room. Each card starts with what the Add Collection wizard would suggest for that link, and you can change it. A music artist's collections are always Music collections, identified by season, so the page only lists them.
+- **What is in no playlist** (the default), as **Videos** (**Singles** for music): a video that is in a playlist season is only there.
+- **Everything**, as **Channel**: every video of the feeds is in it, also the ones in a playlist that is a season, so they are in two seasons.
 
-Collections made from a creator start without Download Profiles; add them on each collection as usual. In the Library, creators show with a round picture next to your collections; the **Kind** filter shows only creators or only collections.
+### Adding a collection to a creator
+
+In the Add Collection wizard, a channel link shows **Add to a creator** (**Add to a host**, **Add to an artist**). Leave it on to group the new collection under the creator behind the link, who is added to your Library when they are not there yet, or pick another creator in your Library. A link to a Daily Wire host's page is not a collection: paste the link to one of their shows instead, and once it is in your Library the host's page offers the rest of their work.
+
+A collection that is already in your Library can join later: choose **Add to creator** in its **Actions** menu. VODLoft finds the creator behind the collection's link, or you pick another one in your Library, for example for an artist's music videos on their label's channel. **Remove from creator** in the same menu makes it a plain collection again. Neither changes anything in the collection: it keeps its episodes, numbers, profiles, files, genre and content rating.
+
+The creator's name becomes the author of their collections, and output templates can use `creator_title`, `creator_handle` and `creator_kind`, and `section_title` and `section_kind` for the playlist or feed an episode came from. See [Local Media Profiles](Local-Media-Profiles#collection-template-variable-reference).
+
+### The creator's page
+
+The creator's page shows their collections in your Library, and their movies. When a creator has more on their site than you have, such as a Daily Wire host's other shows and movies, a folded line at the bottom says so; open it to see them, each with a **+** button. A show not in your Library opens the Add Collection wizard, which adds it to the creator. A movie is added as one of the creator's, without downloading it. Taking a creator out of your Library keeps their collections and movies.
+
+The creator's **Edit** page changes their name, and their **Genre** and **Content rating**. Those are written to the NFO file of each of the creator's collections that has none of its own; changing them here changes the collections that still had the old value.
+
+### A creator on several sites
+
+The same person or group often has a page on more than one site, such as a Daily Wire host who also has a YouTube channel. VODLoft keeps them as one creator, with an account for each site.
+
+- **Combine with another creator** in a creator page's **Actions** menu makes two creators one. The other creator's accounts and collections move over, and they leave your Library as a creator of their own. Their collections keep their seasons, episodes, profiles and files.
+- **Split off** on one of the accounts in the creator page's **Actions** menu undoes that: the account becomes a creator of its own again, named as its site names them, and takes the collections of that site along.
+
+A creator is called what their site calls them while all their accounts are on one site, such as host on The Daily Wire, and an artist when they have a Music collection. On several sites, they are a creator.
 
 ### Music artists
 
-A musician on **Bandcamp** or **SoundCloud** can be added the same way: paste a link to the artist's page, such as `https://artist.bandcamp.com` or `https://soundcloud.com/artist`, and choose **Add the artist**. Their albums are listed newest first, with the year each came out. On SoundCloud a **Tracks** feed holds everything the artist uploaded, so tracks that are on no album have a place too. A Bandcamp track released on its own is listed as a single, which you add from its own page.
-
-Bandcamp only has artists, and The Daily Wire only hosts, so VODLoft knows. Elsewhere the Add creator page asks **What is …?**: the creator as their site calls them, such as a YouTube channel, or a **Music artist**. VODLoft picks one for you: a YouTube channel with a **Releases** tab, or a SoundCloud account with albums, starts as a music artist, and the page says why. Pick the other one if it guessed wrong.
-
-An artist's collections are **Music** collections. **One discography** puts every album in one collection, with each album as a season named after it and the other tracks under **Singles**; **A collection per album** gives each album its own. For an artist on YouTube both leave the channel's Videos, Live and Shorts out: the artist's collection holds only what their playlists give it, each playlist as an album, and a playlist the artist adds later becomes a new album. Download them with a profile for Music that downloads audio only (see [[Local-Media-Profiles#music-tracks-and-music-videos]]), which tags every track with its album, artist and track number, such as 3/10.
-
-Looking up an artist reads each album once, so an artist with many albums takes a minute; the page shows how far it is. YouTube's Releases tab cannot be read yet.
+A musician on **Bandcamp** or **SoundCloud** is added like any channel: paste a link to the artist's page, such as `https://artist.bandcamp.com` or `https://soundcloud.com/artist`, in the Add Collection wizard. VODLoft takes it for Music. Turn on **The artist's albums** in its Albums window to make each album an album of its own, with the other tracks under **Singles**. On SoundCloud a **Tracks** feed holds everything the artist uploaded, so tracks that are on no album have a place too; a Music collection there starts with only the albums switched on, and skips the artist's other playlists until you choose otherwise. To keep one album apart, add the album's own link as a list collection instead. Download them with a profile for Music that downloads audio only (see [[Local-Media-Profiles#music-tracks-and-music-videos]]), which tags every track with its album, artist and track number, such as 3/10.
 
 A creator with a Music collection is called an **artist**, on its page and in the Library.
 
@@ -269,128 +280,14 @@ made from the **Music videos** preset (see [[Local-Media-Profiles#media-server-p
 the artist's name with a `musicvideo` NFO. A new profile for Music starts with Audio only, so choose a video
 download, such as 1080p, and the form moves it to that preset.
 
-Official videos are often on another channel than the albums, such as the artist's label. A collection can join any
-creator in your Library, whatever its link: see [Adding a collection to a creator](#adding-a-collection-to-a-creator-and-removing-it).
+Official videos are often on another channel than the albums, such as the artist's label. **Add to creator** can put
+that collection under the artist anyway: pick the artist from your Library in its window.
 
 ### Full albums: splitting videos by chapter
 
 Some channels upload a whole album as one long video, with a chapter per track. Set **Videos with chapters** to **A part per chapter** on the collection's Edit page, and each new video with chapters becomes a season of its own, named after the video, with an episode per chapter. In a Music collection that makes each video an album and each chapter a track, with its own title, length, track number and file.
 
 Each part downloads only its own stretch of the video, so it works with everything else in VODLoft: Download Profiles, retention, upgrade checks and RSS feeds treat it like any other episode. A feed only offers a part once it is downloaded, because the site itself only has the whole video. A video without chapters stays one episode, and videos already in the collection when you turn this on stay as they are.
-
-### Following a creator
-
-Once a day VODLoft looks at each creator for playlists or shows it did not have before, also for a main collection that has playlist seasons. **Check now** on the creator's page looks right away. What happens with a new one is up to you, under **New playlists** (or shows, or albums) on the Add creator page or in the creator's **Edit** page. A site that knows more than one kind of list has a setting for each, next to each other: a SoundCloud artist has one for **New albums** and one for **New playlists**. The choices are:
-
-- **Ask me** (the default): VODLoft sends a message and shows the new playlist or show at the top of the creator's **Edit** page, where you choose to add it to the main collection as a season or not, give it a collection of its own, or ignore it.
-- **Add it as a season**: a new playlist becomes a season of the creator's main collection. A new Daily Wire show gets a collection of its own, because it has seasons of its own.
-- **Add its contents**: a new playlist's videos go into the creator's main collection, in the seasons of the videos in no playlist.
-- **Add it as a collection**: each new playlist or show becomes a collection.
-- **Skip it**: nothing is added, and you are not asked. Nothing else changes either: the playlist's videos stay where the creator's other feeds and playlists put them.
-
-A music artist starts with every kind of list set to **Add it as an album**. Where the site tells albums from other lists, as SoundCloud does, only the albums are added, and the other kinds, such as the artist's playlists, start at **Skip it**.
-
-Playlists or shows you skipped stay under **Not in your library** on the creator's **Edit** page, each with buttons to add them.
-
-### Editing a creator
-
-The creator's **Edit** page holds:
-
-- **New playlists** (or shows, or albums, one for each kind of list): the choices described under Following a creator.
-- **Genre** and **Content rating**: written to the NFO file of each of the creator's collections that has none of its own. Changing them here changes the collections that still had the old value.
-
-### A video that moves to another collection: Reassigned
-
-A creator keeps each of their videos in one of its collections, and a playlist wins over a feed: a video in a playlist that is a collection of its own belongs in that collection, not in the main collection with the rest of the uploads. A video that is not downloaded yet just goes there. The main collection doesn't add a video that such a playlist has, and leaves one it had.
-
-The same goes for a playlist you blacklisted (**Blacklist its videos**): it keeps its videos out of the creator's main collection too, even though the creator's Videos feed lists them. This always wins, so a video stays out even when a playlist that is a season of the main collection has it too. That way each video of a creator ends up in only one collection. A video that was already downloaded stays where it is, with its files, until you remove it.
-
-A new playlist that waits for your choice changes nothing yet: its videos stay where they would be without it, and keep downloading there, so you don't have to answer right away. When you do answer, on the creator's **Edit** page or in the **Not in your library** list, VODLoft first shows what your choice moves, the same way as moving playlists on the Edit page (see below), and then moves the playlist's videos to their new place at once, downloaded files and all.
-
-When a video is already downloaded, for example because the creator put it in a playlist only after VODLoft downloaded it, it stays where it is, files and all, with a **Reassigned** badge. Its page says which collection it belongs in now. That collection doesn't download it again while it waits. The **Home** page lists every creator and collection with such videos under **Needs attention**, so they don't go unnoticed. You choose when they move:
-
-- **Move to** the collection, on the episode's page or in its **Actions** menu, moves that one.
-- **Move episodes** in a collection's **Actions** menu moves the collection's Reassigned and Moved episodes.
-- **Move episodes** in the creator page's **Actions** menu moves every Reassigned and Moved episode of the creator.
-
-Each of these first shows what the move does to every collection it touches: which episodes leave and join, which files are renamed, and which episodes get a new number, with a switch to keep the numbers as they are. It is the same window as moving playlists on the creator's **Edit** page.
-
-How the files move depends on the new collection's Download Profiles:
-
-- When one of them downloads the episode with the same Local Media Profile, the files are renamed to their new place, and that profile keeps them.
-- When none of them downloads it, or the collection has none, the files are renamed with the Local Media Profile they have, and become a manual download. A manual download always stays manual.
-- When one downloads it with another Local Media Profile, the new collection downloads it again with that profile. The old files are only removed once the new download succeeded, so a failed download loses nothing; until then the episode stays Reassigned in its old collection.
-
-When several Download Profiles download it, the first one in the collection's order decides.
-
-### Moving a playlist or feed to another place
-
-Under **Where the playlists go**, the creator's **Edit** page lists each playlist that is in your Library, and where it is: a **Season of** the main collection, **Add its contents to** the main collection (in it, without a season of its own), or a **Collection of its own**. Pick another place to move it, videos and all:
-
-- **Collection of its own**: the playlist becomes a new collection, and its videos leave the main collection. The new collection starts without Download Profiles, like every collection made from a creator.
-- **Season of** the main collection: the playlist becomes a season again, and its collection goes once its videos have moved. A video in that collection that the playlist no longer lists stays there.
-- **Add its contents to** the main collection: the playlist's videos stay in, or join, the main collection, in the seasons of the videos in no playlist. Turned back into a **Season of** the main collection, they get their season again. Either way, downloaded videos move their files into their new season.
-- **Skip**, for a playlist in the main collection or another collection that holds several: the playlist leaves that collection and moves to **Not in your library** on the creator's **Edit** page. Its videos that the creator's feeds list stay, where the videos in no playlist go. **Blacklist its videos** also takes those out. To take a playlist with a collection of its own out of your Library, delete that collection.
-
-#### Several feeds and playlists in another collection
-
-The creator's main collection is not the only one that can hold several feeds and playlists. Once the creator has
-another collection, such as one made from their Shorts or from a playlist, each feed and playlist also offers
-**Another collection…**, on the **Edit** page and in the **+** menu of what is not in your Library yet. It asks which
-of the creator's collections it goes into, and for a playlist whether it becomes a season of that collection or adds its contents only.
-This way, the livestreams can join the Shorts collection, or a few playlists can share one collection apart from the
-main one.
-
-A collection made from one feed or playlist keeps that feed or playlist as it was: a playlist that was a collection of
-its own stays in it as **Add its contents**, with its videos where they are. That first feed or playlist stays in the
-collection; move the others out of it instead. The channel's main feed, such as YouTube's Videos, always stays in the
-main collection.
-
-Videos that are not downloaded just move. Downloaded videos move their files the way a Reassigned video does, see the section above, so a video the new place downloads with another Local Media Profile is downloaded again there before its old files go. The window that asks you to confirm the move says which of these will happen.
-
-### A creator on several sites
-
-The same person or group often has a page on more than one site, such as a Daily Wire host who also has a YouTube
-channel. VODLoft keeps them as one creator, with an account for each site. Each account brings its own feeds,
-playlists and shows, and its own main collection; VODLoft looks at every account for new ones once a day.
-
-- When you add a creator, **Add creator as** (**Add host as** on The Daily Wire) chooses a creator in your Library who is the same person or group. The new
-  account and its collections join them, and follow their settings.
-- **Combine with another creator** in a creator page's **Actions** menu does the same for two creators you added apart.
-  The other creator's accounts and collections move over and they leave your Library as a creator of their own. Their
-  collections keep their seasons, episodes, profiles and files.
-- **Split off** on an account in the **Accounts** list of a creator's **Edit** page undoes that: the account becomes a creator of its
-  own again, named as its site names them, and takes its main collection and the collections of its playlists and
-  shows along. Collections that joined by another link stay.
-
-A creator is called what their site calls them while all their accounts and collections are on one site, such as host
-on The Daily Wire, and an artist when they have a Music collection. On several sites, they are a creator; each account
-on their page still shows its own site.
-
-### Adding a collection to a creator, and removing it
-
-A collection you added before, from a playlist, a channel's videos or a Daily Wire show, can join its creator later. Choose **Add to creator** (**Add to host** for a Daily Wire show) in the collection's **Actions** menu. VODLoft finds the creator behind the collection's links, adds the creator to your Library if they are not there yet, and shows which of the creator's playlists or shows the collection becomes.
-
-When the creator is new to your Library, the collection joins as it is: it keeps its seasons, episode numbers, profiles and files, and nothing is indexed again.
-
-When the creator is in your Library already, their other collections already hold some of their videos, and each video stays in one collection only:
-
-- A collection of the creator's whole channel becomes the creator's main collection, and keeps only what no other collection of the creator has. Feeds such as Shorts and playlists that are collections of their own keep their videos, so those leave the joining collection.
-- A collection of one playlist (or one feed, such as Shorts) takes it over, also when it was in the creator's main collection. Its videos leave the main collection and move to the joining one.
-
-Before anything changes, the window shows per collection which videos leave or join it, which files move along, and which episodes get a new number, the same as when you move feeds and playlists on the creator's Edit page. Downloaded videos keep their files: they are moved and renamed, not downloaded again. Each collection that gains or loses videos is numbered again afterwards, unless you switch that off for it. A collection whose playlist or channel another collection of the creator already has as its own can't join.
-
-**Add it to** at the top of that window can also choose another creator or artist in your Library. The collection then
-joins it with its own link, for example an artist's music videos that are on their label's channel. The creator's
-daily look for new playlists leaves such a collection alone, and their name is the `creator_title` and `artist` of the
-collection's episodes. A collection of one of the creator's own playlists joins through its link instead.
-
-This works for a collection from any site, also one where VODLoft can't look up creators, such as NPO Start: there
-the window only offers the creators in your Library.
-
-**Remove from creator** in the same menu makes it a plain collection again. It keeps its episodes, profiles, files, genre and content rating.
-
-Output templates can use the creator too: `creator_title`, `creator_handle` and `creator_kind`, and for a video that came from a playlist or show, `section_title` and `section_kind`. See [Local Media Profiles](Local-Media-Profiles#collection-template-variable-reference).
 
 ## NPO Start
 

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query, status
 
 from .service import *
 from ...models.episode import *
-from ...models.creator import CreatorSectionMovesPreviewAPIRead, ReconcileAPIIn, ReconcileAPIRead
+from ...models.reconcile import MovePreviewAPIRead, ReconcileAPIIn, ReconcileAPIRead
 from ..reconcile import episode_scope, move, preview_move
 from ...models.media_download import EpisodeDownloadAPICreate
 from ...models.operations import EpisodeMetadataOperationAccepted, MediaDownloadOperationAccepted, TaskOperationAccepted
@@ -152,11 +152,10 @@ def episode_season_place_get(episode_slug: str):
 
 @router.post(
     "/{episode_slug}/reconcile/preview", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
-    response_model=CreatorSectionMovesPreviewAPIRead,
+    response_model=MovePreviewAPIRead,
 )
 def episode_reconcile_preview(episode_slug: str):
-    """What moving the episode to where it belongs now does: to the collection its creator places it in, or the
-    season its collection's lists put it in. Changes nothing."""
+    """What moving the episode to the season its collection's lists put it in now does. Changes nothing."""
     return run_write_transaction(lambda s: preview_move(s, episode_scope(episode_slug)))
 
 
@@ -164,7 +163,7 @@ def episode_reconcile_preview(episode_slug: str):
     "/{episode_slug}/reconcile", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=ReconcileAPIRead,
 )
 def episode_reconcile(episode_slug: str, body: ReconcileAPIIn):
-    """Move the episode, with its files, to where it belongs now."""
+    """Move the episode, with its files, to the season it belongs in now."""
     return run_write_transaction(lambda s: move(s, episode_scope(episode_slug), body))
 
 

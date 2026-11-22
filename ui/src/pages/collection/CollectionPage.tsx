@@ -4,13 +4,13 @@ import {operationControls as sharedOperationControls} from '../../lib/operationC
 import SiteLink from '../../components/common/SiteLink'
 import CreatorLink from '../../components/Creator/CreatorLink'
 import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
-import {useMovedEpisodes, useReassignedEpisodes} from '../../components/Episode/SeasonPlaceNote'
+import {useMovedEpisodes} from '../../components/Episode/SeasonPlaceNote'
 import {addedByLabel, can} from '../../lib/access'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import Switch from 'react-switch'
-import { useCollectionDownloadProfilesView, useCollectionStreamProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionEpisodeDownloads, useCollectionDownloadedLocalMediaProfiles, useCollectionSeasons, useEpisodeTagsInCollection, useSourceLookup, useCollectionLocked, useCreators } from '../../lib/queries'
+import { useCollectionDownloadProfilesView, useCollectionStreamProfilesView, useEpisodePages, useCollection, useLocalMediaProfiles, useCollectionEpisodeDownloads, useCollectionDownloadedLocalMediaProfiles, useCollectionSeasons, useEpisodeTagsInCollection, useSourceLookup, useCollectionLocked } from '../../lib/queries'
 import SourceBadge from '../../components/Source/SourceBadge'
 import { toast } from '../../lib/toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
@@ -27,7 +27,6 @@ import {getEpisodePreviewTotal, loadEpisodePreviewFromStorage} from '../../lib/c
 import SimpleSelect from '../../components/common/SimpleSelect'
 import CollectionDownloadAllDialog from './CollectionDownloadAllDialog'
 import {AddToCreatorDialog, RemoveFromCreatorDialog} from './CollectionCreatorDialogs'
-import {hasSourceFeature, SourceFeature} from '../../types/schemas/source'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import './CollectionPage.css'
 import {faIcon} from '../../icons/faIcon'
@@ -39,7 +38,7 @@ import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
 import LockedEpisodesFilter from '../../components/Episode/LockedEpisodesFilter'
 import {ApiError, apiFetch, apiUrl, publicAddress} from '../../lib/api'
-import {collectionWords, downloadsBySeason, fileWordsFor, wordsFor} from '../../lib/collectionWords'
+import {downloadsBySeason, fileWordsFor, wordsFor} from '../../lib/collectionWords'
 import {isCollectionLocalMediaProfileAvailableFor, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
 
 const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
@@ -126,9 +125,8 @@ const OPERATION_WAITING_MESSAGE = 'Operation is waiting, it should resume soon.'
 export default function CollectionPage() {
   const { id } = useParams()
   const {data: movedEpisodes} = useMovedEpisodes(id)
-  const {data: reassignedEpisodes} = useReassignedEpisodes(id)
-  // Reassigned and Moved episodes wait for the Move action, which Home links to as well.
-  const waitingCount = (reassignedEpisodes?.size ?? 0) + (movedEpisodes?.size ?? 0)
+  // Moved episodes wait for the Move action, which Home links to as well.
+  const waitingCount = movedEpisodes?.size ?? 0
   const startOperation = useStartOperation()
   const controlOperation = useControlOperation()
   const {isStarting, onStartingChange} = useStartingOperations()
@@ -256,7 +254,6 @@ export default function CollectionPage() {
   const showLocked = storedShowLocked ?? collection?.site?.showsLocked ?? true
   // A Music collection's creator is an artist, as VODLoft calls any creator with Music collections.
   const creatorNames = collection?.creatorNames
-  const {data: libraryCreators} = useCreators()
   const {
     data: episodePagesData,
     isLoading: episodesLoading,
@@ -571,7 +568,7 @@ export default function CollectionPage() {
       label: `Remove from ${creatorNames?.singular}`,
       icon: faIcon('fass', 'link-slash') as [string, string],
       onSelect: () => setCreatorDialog('remove'),
-    }] : hasSourceFeature(collection, SourceFeature.CREATORS) || (libraryCreators?.length ?? 0) > 0 ? [{
+    }] : collection.kind === 'channel' ? [{
       label: `Add to ${creatorNames?.singular}`,
       icon: faIcon('fass', 'circle-user') as [string, string],
       onSelect: () => setCreatorDialog('add'),
@@ -588,7 +585,7 @@ export default function CollectionPage() {
     }] : []),
     ...(waitingCount ? [{
       label: `Move ${fileWords.episode.plural}`,
-      description: `${waitingCount} downloaded ${waitingCount === 1 ? `${fileWords.episode.singular} belongs` : `${fileWords.episode.plural} belong`} in another ${reassignedEpisodes?.size ? 'collection' : words.season.singular} now`,
+      description: `${waitingCount} downloaded ${waitingCount === 1 ? `${fileWords.episode.singular} belongs` : `${fileWords.episode.plural} belong`} in another ${words.season.singular} now`,
       icon: faIcon('fass', 'arrow-right-arrow-left') as [string, string],
       onSelect: () => setReconciling(true),
     }] : []),
@@ -847,7 +844,6 @@ export default function CollectionPage() {
               <EpisodeCard
                 key={ep.id} ep={ep} collectionSlug={id} downloads={downloadsBySlug.get(ep.slug)}
                 moved={movedEpisodes?.has(ep.slug)}
-                reassignedTo={reassignedEpisodes?.get(ep.slug)}
                 words={words}
               />
             ))}
@@ -919,12 +915,9 @@ export default function CollectionPage() {
 
       <AddToCreatorDialog
         open={creatorDialog === 'add'}
-        findsCreator={hasSourceFeature(collection, SourceFeature.CREATORS)}
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
         creatorNames={creatorNames}
-        // A Music collection numbers its music videos as tracks too.
-        words={collectionWords(collection.type, 'audio')}
         onDismiss={() => setCreatorDialog(null)}
       />
       <RemoveFromCreatorDialog
@@ -932,6 +925,7 @@ export default function CollectionPage() {
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
         creatorNames={creatorNames}
+        creatorTitle={collection.creatorTitle}
         onDismiss={() => setCreatorDialog(null)}
       />
 

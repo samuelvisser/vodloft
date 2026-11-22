@@ -19,3 +19,8 @@ class YtdlpFeedSectionType(SectionType):
     ) -> None:
         super().__init__(key, SectionKind.FEED, names, role=role, episode_tag=episode_tag)
         object.__setattr__(self, "path", path)
+
+    @property
+    def feed_ref(self) -> str:
+        """yt-dlp names a creator's feed by its page."""
+        return self.path

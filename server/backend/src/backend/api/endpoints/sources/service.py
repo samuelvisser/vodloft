@@ -8,19 +8,20 @@ from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
     ApiKeyNoteAPIRead, ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
-    NamesAPIRead, SourceAPIRead, SourceSiteAPIRead,
+    SourceAPIRead, SourceSiteAPIRead,
 )
 from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase, Settings, Site as SiteRecord
 from backend.security.access import Access
 from backend.types.collection_types import CollectionType
 from backend.services.media_access import access_locked, link_access
-from backend.services.sites import preferred_sources, site_record
+from backend.services.sites import collection_kind, preferred_sources, site_record
+from backend.types.link_season_types import CollectionKind
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
 from backend.services.users import settings_row
 from backend.utils.helpers import slugify
 from sources import (
-    Feature, LinkKind, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, sources_for,
+    Feature, LinkKind, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, source_site, sources_for,
 )
 
 
@@ -108,25 +109,10 @@ def search_source(access: Access, source: Source, site_key: str, query: str) -> 
         "results": [
             result.model_copy(update={
                 "access_label": _access_label(source, result.url, result.access),
-                "creator_names": _creator_names(source, result.kind, result.url),
             })
             for result in results.results if access.allows_link(source.id, result.url)
         ],
     })
-
-
-def _creator_names(source: Source, kind: str, url: str) -> NamesAPIRead | None:
-    """What the Site calls a creator, when a collection result is a creator's own page that can be added as one."""
-    if kind != "collection" or not source.has(Feature.CREATORS) or not source.is_creator_page(url):
-        return None
-    site = source.site_for(url)
-    return NamesAPIRead.model_validate(site.creator_names) if site is not None and site.creators else None
-
-
-def _creator_sections(source: Source, url: str) -> NamesAPIRead | None:
-    """Every type of section a creator has on the link's Site, named together."""
-    site = source.site_for(url)
-    return NamesAPIRead.model_validate(site.section_names) if site is not None else None
 
 
 def _access_label(source: Source, url: str, key: str | None) -> str | None:
@@ -217,6 +203,7 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         if local_collection is not None:
             collection_slug, collection_url = local_collection.slug, local_collection.sharing_url
     found = link_access(source.id, link.url, link.access)
+    kind = collection_kind(link.url, source.id) if link.kind is LinkKind.COLLECTION else None
     return ResolvedLinkAPIRead(
         source=SourceAPIRead.model_validate(source),
         kind=link.kind,
@@ -231,9 +218,8 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
         access_description=found.description if found is not None else None,
         access_locked=access_locked(source.id, link.access, None),
         preview=ResolvedLinkPreviewAPIRead.model_validate(link),
-        creator_url=link.creator_url,
-        creator_names=NamesAPIRead.model_validate(link.creator_names) if link.creator_names else None,
-        creator_sections=_creator_sections(source, link.creator_url or link.url) if link.creator_names else None,
+        collection_kind=kind,
+        creator_names=source_site(link.url, source.id).creator_names if kind is CollectionKind.CHANNEL else None,
         candidates=[SourceAPIRead.model_validate(candidate) for candidate in candidates],
     )
 

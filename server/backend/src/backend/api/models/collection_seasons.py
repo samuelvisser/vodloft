@@ -1,4 +1,5 @@
-"""A collection's Seasons dialog: its seasons in order, and whether its creator's playlists are seasons."""
+"""A collection's Seasons dialog: its seasons in order, which feeds of its channel it takes, and whether the channel's
+playlists are seasons."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -10,7 +11,7 @@ from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.collection_contract import CollectionWordsAPIRead
 from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead
 from backend.types.link_season_types import (
-    ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
+    ChannelSeason, CollectionKind, ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
 
 
@@ -38,9 +39,6 @@ class CollectionListAPIRead(ResponseBase):
     enabled: bool
     status: ListStatus
     """new while it waits for the user's choice."""
-    as_season: bool = True
-    """Whether the list is a season of its own when it is on; one that is not adds its videos to the other seasons,
-    as its creator's Edit page sets it."""
     season_id: Optional[int] = None
     """The list's season, which other lists may share."""
     season_name: Optional[str] = Field(default=None, validation_alias=AliasPath("season", "name"))
@@ -53,7 +51,16 @@ class CollectionListAPIRead(ResponseBase):
     """How many of those have files."""
     added_by_user: bool = False
     """A link the user added, which they can remove again, rather than one of the playlists of the collection's
-    creator."""
+    channel."""
+
+
+class CollectionFeedAPIRead(ResponseBase):
+    """One feed of a channel collection's channel, such as YouTube's Shorts."""
+
+    ref: str
+    names: NamesAPIRead
+    """What the Site calls the feed's videos, such as shorts; the feed is named after them."""
+    on: bool
 
 
 class CollectionNewListAPIRead(ListKindAPIRead):
@@ -75,9 +82,19 @@ class CollectionSeasonsAPIRead(ResponseBase):
     links_only_offered: bool
     """The collection can hold only what its link seasons have, with links the user adds from any Site of its
     Source."""
+    kind: CollectionKind
+    """What the collection's own link is: a channel, or one list."""
+    feeds: list[CollectionFeedAPIRead]
+    """For a channel collection: the feeds of its channel, and whether it takes each."""
+    channel_season: ChannelSeason
+    """What the season of the channel's own videos holds: everything, or only the videos in no list."""
+    channel_season_names: dict[str, str]
+    """What that season is called with each choice, such as Channel and Videos."""
+    channel_names: NamesAPIRead
+    """What the collection's Site calls a channel, such as channel, or account on SoundCloud."""
     link_seasons: LinkSeasons
     new_lists: list[CollectionNewListAPIRead]
-    """What happens with a list the creator adds, for each kind of list of the collection's Site."""
+    """What happens with a list the channel adds, for each kind of list of the collection's Site."""
     list_layout: ListLayout
     loose_videos: LooseVideos
     repeat_videos: RepeatVideos
@@ -100,9 +117,6 @@ class CollectionSeasonsAPIRead(ResponseBase):
     """Those types of list named together, such as albums and playlists."""
     loose_season: str
     """The name of the season of the videos in none of the lists, such as Videos, Singles or Tracks."""
-    creator_slug: Optional[str] = None
-    """For a creator's own collection: the creator, which finds its new lists and decides what happens with them."""
-    creator_title: Optional[str] = None
     site_order: bool = False
     """The link seasons keep the order the Site gives the lists, as an artist's albums do, instead of by date."""
     words: CollectionWordsAPIRead
@@ -118,33 +132,6 @@ class CollectionSeasonsAPIRead(ResponseBase):
 class MovedEpisodesAPIRead(ResponseBase):
     episode_slugs: list[str]
     """The episodes that belong in another season now, by slug."""
-
-
-class ReassignedEpisodeAPIRead(ResponseBase):
-    """A downloaded video that its creator places in another of its collections now."""
-
-    episode_slug: str = Field(validation_alias=AliasPath("episode", "slug"))
-    collection_slug: str = Field(validation_alias=AliasPath("target", "collection", "slug"))
-    collection_title: str = Field(validation_alias=AliasPath("target", "collection", "title"))
-
-
-class ReassignedEpisodesAPIRead(ResponseBase):
-    episodes: list[ReassignedEpisodeAPIRead]
-
-
-class ReassignedMoveAPIRead(ResponseBase):
-    """What moving reassigned videos did."""
-
-    episodes: int
-    renamed: int
-    """Downloads whose files move to their new collection."""
-    downloading: int
-    """Downloads that the new collection makes again with its own Local Media Profile; the old files go once they
-    succeed."""
-    operation_ids: list[str]
-    episode_slug: Optional[str] = None
-    """For one episode: the episode in its new collection."""
-    collection_slug: Optional[str] = None
 
 
 class SeasonChangeAPIIn(RequestBase):
@@ -167,9 +154,13 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     """Every season of the collection, in its new order."""
     custom_season_order: bool
     """False puts the seasons back in VODLoft's order by date, whatever ``seasons`` says about their order."""
+    feeds: Optional[list[str]] = Field(default=None, max_length=20)
+    """For a channel collection: the refs of the feeds it takes; None takes all of them."""
+    channel_season: Optional[ChannelSeason] = None
+    """None keeps the collection's setting."""
     link_seasons: LinkSeasons = LinkSeasons.OFF
     new_lists: dict[str, NewLinkSeasonAction] = Field(default_factory=dict, max_length=20)
-    """What happens with a list the creator adds, by the key of its kind; a kind left out keeps its setting."""
+    """What happens with a list the channel adds, by the key of its kind; a kind left out keeps its setting."""
     list_layout: ListLayout = ListLayout.SEASON_EACH
     loose_videos: LooseVideos = LooseVideos.ONE_SEASON
     repeat_videos: Optional[RepeatVideos] = None

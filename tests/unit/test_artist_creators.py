@@ -35,20 +35,19 @@ def _implementation(url):
     return IMPLEMENTATIONS.get(site.key, OtherSitesImplementation)(site, lambda link: runner.run_json(link))
 
 
-@pytest.mark.parametrize(("url", "root", "artist_page"), [
-    ("https://tycho.bandcamp.com/music", "https://tycho.bandcamp.com", True),
-    ("https://tycho.bandcamp.com/", "https://tycho.bandcamp.com", True),
-    ("https://tycho.bandcamp.com/album/epoch", "https://tycho.bandcamp.com", False),
-    ("https://bandcamp.com/discover", None, False),
-    ("https://soundcloud.com/flume", "https://soundcloud.com/flume", True),
-    ("https://soundcloud.com/flume/albums", "https://soundcloud.com/flume", True),
-    ("https://soundcloud.com/flume/sets/palaces", "https://soundcloud.com/flume", False),
-    ("https://soundcloud.com/discover", None, False),
+@pytest.mark.parametrize(("url", "root"), [
+    ("https://tycho.bandcamp.com/music", "https://tycho.bandcamp.com"),
+    ("https://tycho.bandcamp.com/", "https://tycho.bandcamp.com"),
+    ("https://tycho.bandcamp.com/album/epoch", "https://tycho.bandcamp.com"),
+    ("https://bandcamp.com/discover", None),
+    ("https://soundcloud.com/flume", "https://soundcloud.com/flume"),
+    ("https://soundcloud.com/flume/albums", "https://soundcloud.com/flume"),
+    ("https://soundcloud.com/flume/sets/palaces", "https://soundcloud.com/flume"),
+    ("https://soundcloud.com/discover", None),
 ])
-def test_a_link_belongs_to_the_artist_whose_page_it_is_on(url, root, artist_page):
+def test_a_link_belongs_to_the_artist_whose_page_it_is_on(url, root):
     implementation = _implementation(url)
     assert implementation.creator_root(url) == root
-    assert (implementation.creator_page(url) is not None) is artist_page
 
 
 def _bandcamp(*args, cookies=None):
