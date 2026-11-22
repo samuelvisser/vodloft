@@ -13,6 +13,9 @@ from backend.services.source_requests import asking_source
 
 from backend.api.endpoints.movies.service import look_up_movies
 
+from .bulk import delete_creators
+from backend.api.models.creator import CreatorBulkDeleteIn
+from backend.api.models.profile_bulk import BulkResultRead
 from .service import (
     CreatorNotFoundError, account_link, add_creator_movies, combine_creator, creator_episodes, creator_offerings,
     creator_page, delete_creator, list_creators, look_up_account, movies_to_add, offering_accounts,
@@ -27,6 +30,13 @@ def _found(work):
         return work()
     except CreatorNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/bulk/delete", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], response_model=BulkResultRead)
+def creators_bulk_delete(body: CreatorBulkDeleteIn):
+    """Take the chosen creators out of the Library. Their collections stay as plain ones, unless
+    ``deleteCollections`` deletes them too."""
+    return run_write_transaction(lambda s: delete_creators(s, body))
 
 
 @router.get("", dependencies=[requires(Area.LIBRARY, Level.VIEW)], response_model=list[CreatorAPIRead])
@@ -118,6 +128,7 @@ def creator_combine(slug: str, body: CreatorCombineAPIIn):
 
 
 @router.delete("/{slug}", dependencies=[requires(Area.LIBRARY, Level.MANAGE)], status_code=status.HTTP_204_NO_CONTENT)
-def creator_delete(slug: str):
-    """Take the creator out of the Library. Their collections and movies stay as they are."""
-    _found(lambda: run_write_transaction(lambda s: delete_creator(s, slug)))
+def creator_delete(slug: str, delete_collections: bool = Query(default=False, alias="deleteCollections")):
+    """Take the creator out of the Library. Their collections and movies stay as they are, unless
+    ``deleteCollections`` deletes the collections too. Downloaded files stay on disk either way."""
+    _found(lambda: run_write_transaction(lambda s: delete_creator(s, slug, with_collections=delete_collections)))

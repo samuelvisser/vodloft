@@ -32,6 +32,9 @@ import type {CollectionReadView} from '../types/schemas/collection'
 import type {CreatorRead} from '../types/schemas/creator'
 import PageHeader, {PageHeaderAction} from '../components/common/PageHeader'
 import {wordsOf} from '../lib/collectionWords'
+import {useSelection} from '../components/ProfileBulkEdit/useBulkSelection'
+import {BulkEditToggle, BulkTileCheck, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
+import LibraryBulkEdit, {bulkKey, type BulkKey} from './library/LibraryBulkEdit'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SITE_FILTER_STORAGE_KEY = 'librarySiteFilter'
@@ -171,6 +174,8 @@ export default function LibraryPage() {
     const [siteFilter, setSiteFilter] = useState(() => loadLibraryChipFilter(LIBRARY_SITE_FILTER_STORAGE_KEY))
     const [kindFilter, setKindFilter] = useState(() => loadLibraryChipFilter(LIBRARY_KIND_FILTER_STORAGE_KEY))
     const [search, setSearch] = useState('')
+    // Bulk edit chooses what the tab shows, as the filters and search show it.
+    const [bulkActive, setBulkActive] = useState(false)
     const searchWords = useMemo(() => foldForSearch(search).split(/\s+/).filter(Boolean), [search])
     const {data: collections, isLoading: collectionsLoading, error: collectionsError} = useCollectionsView()
     const {data: creators} = useCreators()
@@ -352,7 +357,27 @@ export default function LibraryPage() {
         ? requestedType
         : presentTypes[0] ?? 'collections'
 
+    // What Select all takes: the creators, collections or movies the filters show.
+    const matchingKeys = useMemo(() => (
+        activeType === 'collections' ? [
+            ...filteredCreators.map((creator) => bulkKey('creator', creator.id)),
+            ...filteredCollections.map((collection) => bulkKey('collection', collection.id)),
+        ] : activeType === 'movies' ? filteredMovies.map((movie) => bulkKey('movie', movie.id)) : []
+    ), [activeType, filteredCreators, filteredCollections, filteredMovies])
+    const selection = useSelection<BulkKey>(bulkActive, setBulkActive, matchingKeys)
+    const bulkKind = activeType === 'collections' || activeType === 'movies' ? activeType : null
+    const canBulkEdit = can('library', 'manage') && (
+        (activeType === 'collections' && hasCollections) || (activeType === 'movies' && hasMovies))
+    const bulkItems = useMemo(() => new Map<BulkKey, {title: string, slug: string, collectionCount?: number}>(activeType === 'movies'
+        ? (movies ?? []).map((movie) => [bulkKey('movie', movie.id), movie])
+        : [
+            ...(creators ?? []).map((creator) => [bulkKey('creator', creator.id), creator] as const),
+            ...(collections ?? []).map((collection) => [bulkKey('collection', collection.id), collection] as const),
+        ]), [activeType, movies, creators, collections])
+
     const chooseType = (type: MediaType) => {
+        // What is chosen belongs to one tab.
+        selection.stop()
         setParams({type}, {replace: true})
     }
 
@@ -390,7 +415,12 @@ export default function LibraryPage() {
                 title="Library"
                 titleId="library-title"
                 subtitle={<p className="view-description">{hasCreators ? 'Collections, creators, movies and videos' : 'Collections, movies and videos'} indexed by VODLoft.</p>}
-                actions={can('add_media') && <PageHeaderAction icon={faIcon('fass', 'plus')} label="Add media" to="/add"/>}
+                actions={(canBulkEdit || can('add_media')) && (
+                    <>
+                        {canBulkEdit && <BulkEditToggle selection={selection}/>}
+                        {can('add_media') && <PageHeaderAction icon={faIcon('fass', 'plus')} label="Add media" to="/add"/>}
+                    </>
+                )}
             >
                 {showTabs && (
                     <MediaTypeTabs
@@ -413,10 +443,15 @@ export default function LibraryPage() {
                     )}
                     hasFilters={showSort || showChips}
                     activeCount={activeFilterCount}
-                    footer={filtered && (
+                    footer={(filtered || selection.active) && (
                         <div className="filter-bar-count" aria-live="polite">
-                            <strong>{matchingCount.toLocaleString()} matching {matchingCount === 1 ? matchingNoun.singular : matchingNoun.plural}</strong>
-                            <button type="button" className="filter-chip-reset" onClick={resetFilters}>Reset filters</button>
+                            <SelectAll selection={selection} filtered={filtered}/>
+                            {filtered && (
+                                <>
+                                    <strong>{matchingCount.toLocaleString()} matching {matchingCount === 1 ? matchingNoun.singular : matchingNoun.plural}</strong>
+                                    <button type="button" className="filter-chip-reset" onClick={resetFilters}>Reset filters</button>
+                                </>
+                            )}
                         </div>
                     )}
                 >
@@ -462,19 +497,26 @@ export default function LibraryPage() {
                                         key={collection.slug} collection={collection}
                                         // A yt-dlp creator's author is usually the creator itself: do not say its name twice.
                                         subtitle={collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null}
+                                        selection={selection.active ? {
+                                            chosen: selection.selected.has(bulkKey('collection', collection.id)),
+                                            onToggle: () => selection.toggle(bulkKey('collection', collection.id)),
+                                        } : undefined}
                                     />
                                 )
                             }
                             const creator = tile.creator
                             const avatar = toImageUrl(creator.avatarUrl)
                             const banner = toImageUrl(creator.bannerUrl)
-                            return (
-                                <Link className="library-tile library-tile--creator" to={`/creator/${creator.slug}`} key={`creator-${creator.slug}`} role="listitem">
+                            const key = bulkKey('creator', creator.id)
+                            const chosen = selection.selected.has(key)
+                            const content = (
+                                <>
                                     <span className="library-tile-art" style={banner ? {backgroundImage: `url("${banner}")`} : undefined}>
                                         {avatar
                                             ? <img className="library-creator-avatar" src={avatar} alt="" loading="lazy" decoding="async"/>
                                             : <span className="library-creator-avatar library-creator-avatar--empty" aria-hidden="true">{creator.title.slice(0, 2).toUpperCase()}</span>}
                                         {creator.accounts.length === 1 && <SourceBadge sourceKey={creator.accounts[0].sourceKey} className="library-tile-source"/>}
+                                        {selection.active && <BulkTileCheck title={creator.title} chosen={chosen} onToggle={() => selection.toggle(key)}/>}
                                     </span>
                                     <span className="library-tile-copy">
                                         <span className="library-tile-title">{creator.title}</span>
@@ -484,7 +526,18 @@ export default function LibraryPage() {
                                             <span>{wordsOf(creator.words).count(creator.episodeCount)}</span>
                                         </span>
                                     </span>
-                                </Link>
+                                </>
+                            )
+                            // While bulk edit is on, the card chooses the creator instead of opening it.
+                            return selection.active ? (
+                                <div
+                                    className={`library-tile library-tile--creator bulk-tile${chosen ? ' is-selected' : ''}`} key={`creator-${creator.slug}`}
+                                    role="listitem" onClick={() => selection.toggle(key)}
+                                >
+                                    {content}
+                                </div>
+                            ) : (
+                                <Link className="library-tile library-tile--creator" to={`/creator/${creator.slug}`} key={`creator-${creator.slug}`} role="listitem">{content}</Link>
                             )
                         })}
                     </div>
@@ -502,20 +555,35 @@ export default function LibraryPage() {
                                 || movie.logoImagePath,
                             )
                             const download = latestMovieDownload(downloads, movie.slug)
-                            return (
-                                <Link className="movie-poster-card" to={`/movie/${movie.slug}`} key={movie.slug} role="listitem">
+                            const key = bulkKey('movie', movie.id)
+                            const chosen = selection.selected.has(key)
+                            const content = (
+                                <>
                                     <span className="movie-poster-art">
                                         {image
                                             ? <img src={image} alt="" loading="lazy" decoding="async"/>
                                             : <FontAwesomeIcon icon={faIcon('fass', 'clapperboard')}/>
                                         }
-                                        <DownloadStateBadge download={download}/>
+                                        {selection.active
+                                            ? <BulkTileCheck title={movie.title} chosen={chosen} onToggle={() => selection.toggle(key)}/>
+                                            : <DownloadStateBadge download={download}/>}
                                         {movie.drmProtected && <DrmBadge onCover/>}
                                     </span>
                                     <span className="movie-poster-title">{movie.title}</span>
                                     {movie.authorName && <span className="movie-poster-meta">{movie.authorName}</span>}
                                     <SourceBadge sourceKey={movie.sourceKey}/>
-                                </Link>
+                                </>
+                            )
+                            // While bulk edit is on, the card chooses the movie instead of opening it.
+                            return selection.active ? (
+                                <div
+                                    className={`movie-poster-card bulk-tile${chosen ? ' is-selected' : ''}`} key={movie.slug} role="listitem"
+                                    onClick={() => selection.toggle(key)}
+                                >
+                                    {content}
+                                </div>
+                            ) : (
+                                <Link className="movie-poster-card" to={`/movie/${movie.slug}`} key={movie.slug} role="listitem">{content}</Link>
                             )
                         })}
                     </div>
@@ -551,6 +619,7 @@ export default function LibraryPage() {
                     <NoMatches search={searchWords.length > 0} what="videos"/>
                 )
             ) : null}
+            {bulkKind && <LibraryBulkEdit kind={bulkKind} selection={selection} items={bulkItems} creatorNoun={creatorsNoun}/>}
         </section>
     )
 }
