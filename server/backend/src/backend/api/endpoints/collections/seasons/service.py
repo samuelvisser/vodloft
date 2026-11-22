@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.api.models.collection_seasons import CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead
+from backend.api.models.collection_seasons import (
+    CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, MovedEpisodesAPIRead, SeasonsPreviewAPIRead,
+)
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, Season
 from backend.db.models import MediaDownloadBase
 from backend.services.collections import reindex_collection
@@ -377,6 +379,16 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     s.flush()
     s.refresh(collection)
     return seasons_view(s, collection_slug)
+
+
+def preview_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate) -> SeasonsPreviewAPIRead:
+    """The seasons saving the dialog with ``body`` would leave: the save is made and rolled back, so the dialog shows
+    what saving does.
+
+    ``s`` is a write transaction's session; it is rolled back."""
+    view = update_seasons(s, collection_slug, body)
+    s.rollback()
+    return SeasonsPreviewAPIRead(seasons=view.seasons)
 
 
 def _regroup(playlists: dict[int, CollectionList], seasons: dict[int, Season], body: CollectionSeasonsAPIUpdate) -> set[int]:

@@ -185,3 +185,7 @@
     }
     .seasons-dialog-warning svg { color: #fbbf24; }
 }
+/* A season saving the dialog adds, shown where it will be. */
+.seasons-dialog-season.is-new { cursor: default; box-shadow: inset 3px 0 0 #22c55e; }
+.seasons-dialog-season.is-new .seasons-dialog-grip { visibility: hidden; }
+.seasons-dialog-season.is-new .input { font-style: italic; }

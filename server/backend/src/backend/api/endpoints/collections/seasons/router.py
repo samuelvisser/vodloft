@@ -7,13 +7,15 @@ from fastapi import APIRouter, HTTPException
 from backend.app import db_session
 from backend.api.models.collection_seasons import (
     CollectionSeasonsAPIRead, CollectionSeasonsAPIUpdate, CollectionListAddAPIIn, MovedEpisodesAPIRead,
+    SeasonsPreviewAPIRead,
 )
 from backend.db.core import run_write_transaction
 from backend.security.access import Area, Level
 from backend.security.deps import requires
 
 from .service import (
-    CollectionNotFoundError, link_to_add, look_up_added_link, look_up_links, links_lookup, moved_view, save_added_link,
+    CollectionNotFoundError, link_to_add, look_up_added_link, look_up_links, links_lookup, moved_view, preview_seasons,
+    save_added_link,
     save_listed_links, seasons_view, update_seasons,
 )
 
@@ -57,6 +59,15 @@ def collection_moved_episodes_get(collection_slug: str):
 def collection_seasons_put(collection_slug: str, body: CollectionSeasonsAPIUpdate):
     """Rename and order the collection's seasons, choose its channel's feeds, and set how the channel's playlists are seasons."""
     return _found(lambda: run_write_transaction(lambda s: update_seasons(s, collection_slug, body)))
+
+
+@router.post(
+    "/{collection_slug}/season-settings/preview", dependencies=[requires(Area.LIBRARY, Level.MANAGE)],
+    response_model=SeasonsPreviewAPIRead,
+)
+def collection_seasons_preview(collection_slug: str, body: CollectionSeasonsAPIUpdate):
+    """The seasons saving the Seasons dialog with these settings would leave. Nothing is saved."""
+    return _found(lambda: run_write_transaction(lambda s: preview_seasons(s, collection_slug, body)))
 
 
 @router.post(

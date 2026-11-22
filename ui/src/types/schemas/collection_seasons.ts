@@ -31,6 +31,10 @@ export const CollectionSeasonReadSchema = z.object({
 })
 export type CollectionSeasonRead = z.infer<typeof CollectionSeasonReadSchema>
 
+/** The seasons saving the Seasons dialog would leave, in their order. */
+export const SeasonsPreviewReadSchema = z.object({seasons: z.array(CollectionSeasonReadSchema)})
+export type SeasonsPreviewRead = z.infer<typeof SeasonsPreviewReadSchema>
+
 export const CollectionListReadSchema = z.object({
     id: z.number(),
     ref: z.string(),

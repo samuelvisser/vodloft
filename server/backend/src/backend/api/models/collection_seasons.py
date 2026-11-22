@@ -135,6 +135,11 @@ class CollectionSeasonsAPIRead(ResponseBase):
     playlists: list[CollectionListAPIRead]
 
 
+class SeasonsPreviewAPIRead(ResponseBase):
+    seasons: list[CollectionSeasonAPIRead]
+    """The collection's seasons as saving the dialog leaves them, in their order."""
+
+
 class MovedEpisodesAPIRead(ResponseBase):
     episode_slugs: list[str]
     """The episodes that belong in another season now, by slug."""

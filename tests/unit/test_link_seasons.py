@@ -1231,6 +1231,31 @@ def test_a_shared_season_stays_until_every_list_in_it_is_switched_off(source, se
     assert _seasons(session) == [("Videos", 1, ["a", "b", "c", "e"])]
 
 
+def test_the_preview_shows_the_seasons_a_save_would_leave_and_saves_nothing(source, session):
+    from backend.api.endpoints.collections.seasons.service import preview_seasons, seasons_view
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = []
+    source.items = {}
+    collection = _collection(session, mode="selected", loose="by_year")
+    _index(session, collection, source)
+    before = _seasons(session)
+    assert before == [("2024", 2024, ["a"]), ("2025", 2025, ["b"])]
+
+    view = seasons_view(session, "creator")
+    session.rollback()
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=False,
+        link_seasons="selected", loose_videos="one_season", playlists=[],
+    )
+    preview = run_write_transaction(lambda s: preview_seasons(s, "creator", body))
+
+    assert [(season.name, season.episode_count) for season in preview.seasons] == [("Videos", 2)]
+    assert _seasons(session) == before
+
+
 def test_listing_a_collection_again_after_its_links_changed_runs_in_the_background(source, session):
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection

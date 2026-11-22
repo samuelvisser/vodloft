@@ -1,7 +1,7 @@
-import {useEffect, useId, useMemo, useRef, useState} from 'react'
+import {Fragment, useEffect, useId, useMemo, useRef, useState} from 'react'
 import {Controller, useFieldArray, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {useQuery, useQueryClient} from '@tanstack/react-query'
+import {keepPreviousData, useQuery, useQueryClient} from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import Switch from 'react-switch'
 import toast from '../../lib/toast'
@@ -18,7 +18,7 @@ import {capitalized, type ListKind} from '../../types/creator'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {BulkBar} from '../ProfileBulkEdit/BulkEditControls'
 import {
-    CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, seasonsFormValues,
+    CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, SeasonsPreviewReadSchema, seasonsFormValues, type SeasonsPreviewRead,
     type CollectionListRead, type CollectionSeasonsFormIn, type CollectionSeasonsFormOut, type CollectionSeasonsRead,
     type LinkSeasonAddFormIn, type LinkSeasonAddFormOut, type NewLinkSeason, type ChannelSeason, type CollectionSeasonRead,
 } from '../../types/schemas/collection_seasons'
@@ -229,28 +229,61 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             }), {episodes: 0, withFiles: 0})
     }
 
+    /** What saving the dialog sends. */
+    const requestBody = (data: CollectionSeasonsFormOut) => ({
+        seasons: data.seasons,
+        customSeasonOrder: data.customSeasonOrder,
+        // Every feed on is all of them, also the ones the channel adds later.
+        ...(view?.kind === 'channel' ? {
+            feeds: view.feeds.every((feed) => data.feeds.includes(feed.ref)) ? null : data.feeds,
+            channelSeason: data.channelSeason,
+        } : {}),
+        linkSeasons: data.linkSeasonsOn || data.outsideVideos === 'only' ? data.linkSeasonMode : 'off',
+        newLists: data.newLists,
+        looseVideos: data.looseVideos,
+        repeatVideos: data.repeatVideos,
+        listLayout: data.listLayout,
+        outsideVideos: data.outsideVideos,
+        playlists: data.playlists,
+        removedLinks: data.removedLinks,
+        removedSeasons: data.removedSeasons,
+    })
+
+    // The seasons saving the dialog would leave, as the server works them out, so the list below shows a change
+    // as soon as it is made. The names play no part in it, so typing one asks nothing.
+    const formValues = watch()
+    const previewBody = useMemo(() => {
+        if (!view || !isDirty) return null
+        const parsed = CollectionSeasonsFormSchema.safeParse(formValues)
+        if (!parsed.success) return null
+        const named = new Map(view.seasons.map((x) => [x.id, x.name]))
+        return JSON.stringify(requestBody({
+            ...parsed.data, seasons: parsed.data.seasons.map((x) => ({id: x.id, name: named.get(x.id) ?? x.name})),
+        }))
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [view, isDirty, JSON.stringify(formValues)])
+    const [askedPreview, setAskedPreview] = useState<string | null>(null)
+    useEffect(() => {
+        const timer = setTimeout(() => setAskedPreview(previewBody), 300)
+        return () => clearTimeout(timer)
+    }, [previewBody])
+    const {data: previewed} = useQuery<SeasonsPreviewRead | null>({
+        queryKey: [...queryKey, 'preview', askedPreview],
+        enabled: open && !!askedPreview,
+        staleTime: Infinity,
+        gcTime: 0,
+        placeholderData: keepPreviousData,
+        queryFn: ({signal}) => fetch(`${endpoint}/preview`, {
+            signal, method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: askedPreview!,
+        }).then(async (response) => response.ok ? SeasonsPreviewReadSchema.parse(await response.json()) : null),
+    })
+    const after: CollectionSeasonRead[] | null = previewBody && previewed ? previewed.seasons : null
+
     const save = buildServerAwareSubmit<CollectionSeasonsFormIn, CollectionSeasonsFormOut, CollectionSeasonsRead>(form, (data) => fetch(endpoint, {
         method: 'PUT',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            seasons: data.seasons,
-            customSeasonOrder: data.customSeasonOrder,
-            // Every feed on is all of them, also the ones the channel adds later.
-            ...(view?.kind === 'channel' ? {
-                feeds: view.feeds.every((feed) => data.feeds.includes(feed.ref)) ? null : data.feeds,
-                channelSeason: data.channelSeason,
-            } : {}),
-            linkSeasons: data.linkSeasonsOn || data.outsideVideos === 'only' ? data.linkSeasonMode : 'off',
-            newLists: data.newLists,
-            looseVideos: data.looseVideos,
-            repeatVideos: data.repeatVideos,
-            listLayout: data.listLayout,
-            outsideVideos: data.outsideVideos,
-            playlists: data.playlists,
-            removedLinks: data.removedLinks,
-            removedSeasons: data.removedSeasons,
-        }),
+        body: JSON.stringify(requestBody(data)),
     }), {
         parseSuccess: readSeasons,
         fallbackField: 'seasons',
@@ -361,13 +394,48 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     )
     // Deleted seasons the settings, as the form has them now, fill again when you save.
     const byYear = looseVideos === 'by_year' || listLayout === 'by_year'
+    // What saving leaves, once the server has worked it out: each season as it will be, by id. A deleted season the
+    // settings make again comes back under its own slug, and the seasons the settings add are new.
+    const afterById = new Map((after ?? []).map((x) => [x.id, x]))
+    const removedBySlug = new Map(removedSeasons.flatMap((id) => {
+        const removed = seasonsById.get(id)
+        return removed ? [[removed.slug, id] as const] : []
+    }))
+    const madeAgain = new Map((after ?? [])
+        .filter((x) => !seasonsById.has(x.id) && removedBySlug.has(x.slug))
+        .map((x) => [removedBySlug.get(x.slug)!, x]))
+    const afterSave = (id: number) => afterById.get(id) ?? madeAgain.get(id)
+    // Seasons the save adds, each shown before the season it comes before, or last.
+    const added = new Map<number | null, CollectionSeasonRead[]>()
+    let waiting: CollectionSeasonRead[] = []
+    for (const x of after ?? []) {
+        if (seasonsById.has(x.id) || madeAgain.has(removedBySlug.get(x.slug) ?? -1)) {
+            const id = seasonsById.has(x.id) ? x.id : removedBySlug.get(x.slug)!
+            if (waiting.length) added.set(id, waiting)
+            waiting = []
+        } else {
+            waiting.push(x)
+        }
+    }
+    if (waiting.length) added.set(null, waiting)
+    /** A season saving adds, which the list shows where it will be. */
+    const addedRow = (x: CollectionSeasonRead) => (
+        <li key={`new-${x.id}`} className="seasons-dialog-season is-new">
+            <span className="seasons-dialog-grip" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'grip-vertical')}/></span>
+            <span className="seasons-dialog-number" aria-hidden="true">{x.seasonType === 'extra' ? '0' : x.seasonNumber}</span>
+            <span className="seasons-dialog-season-copy">
+                <input className="input" value={x.name} readOnly aria-label={`Name of the new ${words.season.singular} ${x.name}`}/>
+                <span>New when you save · {counted(x.episodeCount, words.video, words.videos)}</span>
+            </span>
+        </li>
+    )
     const comingBack = removedSeasons
         .map((id) => seasonsById.get(id))
-        .filter((removed): removed is CollectionSeasonRead => !!removed && removed.episodeCount > 0 && (
+        .filter((removed): removed is CollectionSeasonRead => !!removed && (after ? !!afterSave(removed.id) : removed.episodeCount > 0 && (
             removed.year !== null ? byYear
                 : removed.loose ? !only && listLayout !== 'by_year' && looseVideos === 'one_season'
                     : listLayout !== 'by_year' && stillSeasons.has(removed.id)
-        ))
+        )))
     const yearsComingBack = comingBack.some((removed) => removed.year !== null)
     const oneSeason = () => {
         setValue('looseVideos', 'one_season', {shouldDirty: true})
@@ -799,13 +867,20 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                             {fields.map((field, index) => {
                                                 const season = seasonsById.get(field.id)
                                                 const extra = season?.seasonType === 'extra'
-                                                // A list's season that no list is a season of any more goes when you save, as one you delete does.
-                                                const leaves = going.has(field.id)
-                                                const removed = leaves || removedSeasons.includes(field.id)
+                                                // What saving does to the season: a list's season that no list is a season of any more goes, as
+                                                // one you delete does, and so does one the settings leave empty.
+                                                const next = after ? afterSave(field.id) : undefined
+                                                const deleted = removedSeasons.includes(field.id)
+                                                const leaves = going.has(field.id) || (after ? !next : deleted)
+                                                const removed = leaves
                                                 if (!leaves) shown += 1
+                                                const counts = season?.episodeCount ?? 0
+                                                const number = leaves ? '–' : next ? (next.seasonType === 'extra' ? '0' : next.seasonNumber)
+                                                    : extra ? '0' : customOrder ? shown : season?.seasonNumber
                                                 return (
+                                                    <Fragment key={field.key}>
+                                                    {(added.get(field.id) ?? []).map(addedRow)}
                                                     <li
-                                                        key={field.key}
                                                         className={`seasons-dialog-season${dragging === index ? ' is-dragging' : ''}${removed ? ' is-removed' : ''}`}
                                                         draggable
                                                         onDragStart={(event) => {
@@ -822,7 +897,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         onDragEnd={() => setDragging(null)}
                                                     >
                                                         <span className="seasons-dialog-grip" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'grip-vertical')}/></span>
-                                                        <span className="seasons-dialog-number" aria-hidden="true">{leaves ? '–' : extra ? '0' : customOrder ? shown : season?.seasonNumber}</span>
+                                                        <span className="seasons-dialog-number" aria-hidden="true">{number}</span>
                                                         <span className="seasons-dialog-season-copy">
                                                             <input
                                                                 className="input" aria-label={`Name of ${words.season.singular} ${index + 1}`}
@@ -830,8 +905,9 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                 {...register(`seasons.${index}.name`)}
                                                             />
                                                             <span>
-                                                                {removed ? 'Deleted when you save · ' : null}
-                                                                {counted(season?.episodeCount ?? 0, words.video, words.videos)}
+                                                                {leaves ? 'Deleted when you save · ' : deleted ? 'Deleted, and made again by the settings when you save · ' : null}
+                                                                {counted(counts, words.video, words.videos)}
+                                                                {next && !leaves && next.episodeCount !== counts ? `, ${counted(next.episodeCount, words.video, words.videos)} when you save` : null}
                                                                 {season?.loose ? ` · ${capitalized(words.videos)} in no ${names.singular}` : null}
                                                             </span>
                                                             {season && !leaves && listLayout !== 'by_year' && listSeasonIds.includes(season.id) && (
@@ -845,12 +921,12 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                             {errors.seasons?.[index]?.name && <span className="error" role="alert">{errors.seasons[index]?.name?.message}</span>}
                                                         </span>
                                                         <span className="seasons-dialog-arrows">
-                                                            {season?.removable && !leaves && (
+                                                            {season?.removable && (deleted || !leaves) && (
                                                                 <button
-                                                                    type="button" aria-label={`${removed ? 'Keep' : 'Delete'} ${form.getValues(`seasons.${index}.name`) || words.season.singular}`}
-                                                                    title={removed ? 'Keep' : 'Delete'} onClick={() => toggleSeasonRemoved(field.id)}
+                                                                    type="button" aria-label={`${deleted ? 'Keep' : 'Delete'} ${form.getValues(`seasons.${index}.name`) || words.season.singular}`}
+                                                                    title={deleted ? 'Keep' : 'Delete'} onClick={() => toggleSeasonRemoved(field.id)}
                                                                 >
-                                                                    <FontAwesomeIcon icon={faIcon('fass', removed ? 'rotate-left' : 'trash')}/>
+                                                                    <FontAwesomeIcon icon={faIcon('fass', deleted ? 'rotate-left' : 'trash')}/>
                                                                 </button>
                                                             )}
                                                             <button type="button" aria-label={`Move ${words.season.singular} ${index + 1} up`} disabled={index === 0} onClick={() => moveSeason(index, index - 1)}>
@@ -861,8 +937,10 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                             </button>
                                                         </span>
                                                     </li>
+                                                    </Fragment>
                                                 )
                                             })}
+                                            {(added.get(null) ?? []).map(addedRow)}
                                         </ol>
                                         {fields.length === 0 && <p className="seasons-dialog-muted">This collection has no {season.plural} yet.</p>}
                                         {errors.seasons?.message && <div className="error" role="alert">{errors.seasons.message}</div>}
