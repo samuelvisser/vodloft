@@ -40,22 +40,26 @@ type Props = {
  * episodes of videos in another season already, which leave once a video has one season only. */
 type Leaving = {episodes: number, withFiles: number, asked?: boolean, repeated?: number}
 
-/** A creator's videos, or an artist's tracks or music videos, and what the collection calls its seasons. In a Music
- * collection an artist's albums are albums here too, so ``here`` tells them apart where both are meant. */
-type Words = {creator: string, channel: string, video: string, videos: string, creators: string, season: Noun, episode: Noun, inSeason: string, here: string}
+/** A creator's videos, or an artist's tracks or music videos, and what the collection calls its seasons. */
+type Words = {creator: string, channel: string, video: string, videos: string, creators: string, season: Noun, episode: Noun, inSeason: string}
 const dialogWords = (collection: CollectionWords, view: CollectionSeasonsRead | undefined): Words => ({
     // What the collection calls its creator and what its lists hold, such as an artist's music videos.
     // Shown once the view is there, which brings the words.
     creator: view?.creatorNames.singular ?? '', creators: view?.creatorNames.plural ?? '', channel: view?.channelNames.singular ?? '',
     video: view?.mediaNames.singular ?? '', videos: view?.mediaNames.plural ?? '',
     season: collection.season, episode: collection.episode, inSeason: collection.inSeason,
-    here: view && view.sectionListNames.singular === collection.season.singular ? ' here' : '',
 })
 
 /** What the collection's Site calls its lists, all its types of list together, such as "albums and playlists" on
- * SoundCloud, and the season of the videos in none of them. */
+ * SoundCloud, as the creator's: creator playlists, so they are not taken for the collection's own seasons, which a
+ * YouTube channel collection also calls playlists. And the season of the videos in none of them. */
 type ListNames = {singular: string, plural: string, a: string, looseSeason: string}
-const namesOf = (view: CollectionSeasonsRead, looseSeason: string): ListNames => ({...view.sectionListNames, looseSeason})
+const namesOf = (view: CollectionSeasonsRead, looseSeason: string): ListNames => ({
+    singular: `${view.creatorNames.singular} ${view.sectionListNames.singular}`,
+    plural: `${view.creatorNames.singular} ${view.sectionListNames.plural}`,
+    a: `${view.creatorNames.a} ${view.sectionListNames.singular}`,
+    looseSeason,
+})
 
 const counted = (count: number, singular: string, plural: string) => `${count} ${count === 1 ? singular : plural}`
 
@@ -71,33 +75,33 @@ async function readSeasons(response: Response): Promise<CollectionSeasonsRead> {
 function registries(names: ListNames, words: Words, view: CollectionSeasonsRead) {
     const outside = {
         leave_out: {label: 'Only include media already in the collection', help: `${capitalized(names.a)} only takes the ${words.videos} the collection's own link has.`},
-        add: {label: 'Include media that is not in the collection', help: `They join the collection in their ${names.singular}'s ${words.season.singular}${words.here}. Switching a ${names.singular} or this setting off removes them again, files and all. When the ${words.creator} takes a downloaded one out, Home asks whether to keep it.`},
+        add: {label: 'Include media that is not in the collection', help: `They join the collection in their ${names.singular}'s ${words.season.singular} in VODLoft. Switching off ${names.a} or this setting removes them again, files and all. When the ${words.creator} takes a downloaded one out, Home asks whether to keep it.`},
         only: {label: `Include only what the ${names.plural} contain`, help: `The collection holds nothing but the ${words.videos} of its ${names.plural}, also other ${words.creators}', and you can add links of your own, from any site. Its own ${words.videos} in no ${names.singular} leave.`},
     }
     return {
         mode: createSelectRegistry(`LinkSeasonMode-${names.plural}`, {
-            all: {label: `Every ${names.singular}`, help: `Every ${names.singular}, also the ones to come, is ${words.season.a}${words.here}.`},
-            selected: {label: `Only the ${names.plural} I pick`, help: `Only the ${names.plural} switched on below are ${words.season.plural}${words.here}.`},
+            all: {label: `Every ${names.singular}`, help: `Every ${names.singular}, also the ones to come, is ${words.season.a} in VODLoft.`},
+            selected: {label: `Only the ${names.plural} I pick`, help: `Only the ${names.plural} switched on below are ${words.season.plural} in VODLoft.`},
         }),
         // One for each kind of list of the Site, such as a SoundCloud artist's albums and their playlists.
-        newLinks: (kind: ListKind) => createSelectRegistry(`NewLinkSeasons-${kind.key}-${kind.names.singular}-${words.season.a}${words.here}`, {
-            ask: {label: 'Ask me', help: `VODLoft sends a message, and the new ${kind.names.singular} waits here for you to switch it on.`},
-            add: {label: `Make it ${words.season.a}${words.here}`, help: `A new ${kind.names.singular} becomes ${words.season.a}${words.here} right away.`},
-            ignore: {label: 'Always skip it', help: `A new ${kind.names.singular} stays off. You can switch it on here.`},
+        newLinks: (kind: ListKind) => createSelectRegistry(`NewLinkSeasons-${kind.key}-${kind.names.singular}-${words.season.a}`, {
+            ask: {label: 'Ask me', help: `VODLoft sends a message, and the new ${words.creator} ${kind.names.singular} waits here for you to switch it on.`},
+            add: {label: `Make it ${words.season.a} in VODLoft`, help: `A new ${words.creator} ${kind.names.singular} becomes ${words.season.a} in VODLoft right away.`},
+            ignore: {label: 'Always skip it', help: `A new ${words.creator} ${kind.names.singular} stays off. You can switch it on here.`},
         }),
         // What the channel's own season holds, by the name it then has.
         channel: createSelectRegistry(`ChannelSeason-${view.channelSeasonNames.everything}-${view.channelSeasonNames.unlisted}-${names.plural}`, {
             everything: {
                 label: `Everything, as ${view.channelSeasonNames.everything}`,
-                help: `Every ${words.video} of the feeds is in ${view.channelSeasonNames.everything}, also the ones in ${names.a} that is ${words.season.a}${words.here}.`,
+                help: `Every ${words.video} of the feeds is in ${view.channelSeasonNames.everything}, also the ones in ${names.a} that is ${words.season.a} in VODLoft.`,
             },
             unlisted: {
                 label: `What is in no ${names.singular}, as ${view.channelSeasonNames.unlisted}`,
-                help: `${capitalized(words.videos)} in ${names.a} that is ${words.season.a}${words.here} are only there.`,
+                help: `${capitalized(words.videos)} in ${names.a} that is ${words.season.a} in VODLoft are only there.`,
             },
         } as Record<ChannelSeason, {label: string, help: string}>),
         layout: createSelectRegistry(`ListLayout-${names.plural}-${words.creator}-${words.season.a}`, {
-            season_each: {label: words.here ? `Each ${names.singular} on its own` : `${capitalized(words.season.a)} per ${words.creator ? `${words.creator} ` : ''}${names.singular}`, help: `Each ${names.singular} is ${words.season.a}${words.here}, or shares one with the ${names.plural} you put together below.`},
+            season_each: {label: `${capitalized(words.season.a)} per ${names.singular}`, help: `Each ${names.singular} is ${words.season.a} in VODLoft, or shares one with the ${names.plural} you put together below.`},
             by_year: {label: `Together in ${words.season.plural} by year`, help: `The ${names.plural} still decide which ${words.videos} are in, but every ${words.video} goes to the ${words.season.singular} of its year, as do the ${words.videos} in no ${names.singular}. When you save, VODLoft offers to move the downloaded ones, files and all.`},
         }),
         loose: createSelectRegistry(`LooseVideos-${names.looseSeason}`, {
@@ -580,10 +584,10 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                             <div className="seasons-dialog-switch-row">
                                                 <div>
                                                     <h3 id="seasons-dialog-links">
-                                                        {words.here || view.siteOrder ? `The ${words.creator}'s ${names.plural}` : `${capitalized(names.plural)} as ${season.plural}`}
+                                                        {view.siteOrder ? capitalized(names.plural) : `${capitalized(names.plural)} as ${season.plural}`}
                                                     </h3>
                                                     <p className="seasons-dialog-muted">
-                                                        Each {names.singular} becomes {season.a}{words.here} of its own, with its {words.videos} in the
+                                                        Each {names.singular} becomes {season.a} of its own in VODLoft, with its {words.videos} in the
                                                         order the {names.singular} has them.
                                                     </p>
                                                 </div>
@@ -732,7 +736,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
 
                                                     {mode === 'selected' && view.listsPlaylists && (
                                                         <div className="form-row">
-                                                            <label>When the {words.creator} adds {names.a}</label>
+                                                            <label>When the {words.creator} adds {view.sectionListNames.a}</label>
                                                             <NewListSettings
                                                                 kinds={view.newLists} valueOf={(kind) => newLists[kind.key]}
                                                                 fallback="ask" idPrefix="seasons-new-links" registryFor={regs.newLinks}
@@ -991,7 +995,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                     <b>{name}</b>
                                                                     <span>
                                                                         {counted(gone?.episodeCount ?? 0, words.video, words.videos)}
-                                                                        {deleted ? '' : going.has(field.id) ? ` · No ${names.singular} in it is ${words.season.a} any more` : ' · The settings leave it empty'}
+                                                                        {deleted ? '' : going.has(field.id) ? ` · No ${names.singular} in it is ${words.season.a} in VODLoft any more` : ' · The settings leave it empty'}
                                                                     </span>
                                                                 </span>
                                                                 {deleted && gone?.removable && (
@@ -1042,7 +1046,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                     <>
                         <p>
                             {counted(confirm.episodes, words.video, words.videos)} {confirm.episodes === 1 ? 'is' : 'are'} in
-                            none of the {names.plural} that are {season.plural}{words.here}. Once VODLoft has listed the {names.plural} again,
+                            none of the {names.plural} that are {season.plural} in VODLoft. Once VODLoft has listed the {names.plural} again,
                             {confirm.episodes === 1 ? ' it leaves' : ' they leave'} the collection.
                         </p>
                         {confirm.withFiles > 0 && (
