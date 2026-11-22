@@ -17,6 +17,7 @@ from sources import Feature, UnknownSourceError, all_sources, get_source, source
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
+from task_manager.scheduler.types import OperationSource
 
 
 class CollectionAdded(dict[str, object]):
@@ -68,9 +69,10 @@ def _set_kind(collection: Collection) -> None:
 
 
 def reindex_collection(s: Session, collection: Collection) -> None:
-    """List a Collection again, as Sync now does, after its links changed."""
+    """List a Collection again, as Sync now does, after its links changed. VODLoft starts it itself, so it runs in the
+    background without a toast when it finishes."""
     s.flush()
-    operation = create_operation(s, CollectionSyncOperation(collection))
+    operation = create_operation(s, CollectionSyncOperation(collection, source=OperationSource.SYSTEM.value))
     queue_operation_target_dispatch(s, operation.id, operation.targets[0].slot_key)
 
 

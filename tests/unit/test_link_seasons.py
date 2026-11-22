@@ -1229,3 +1229,19 @@ def test_a_shared_season_stays_until_every_list_in_it_is_switched_off(source, se
     # With its last list off, the season is deleted.
     _switch_off(session, "PLone", "PLtwo")
     assert _seasons(session) == [("Videos", 1, ["a", "b", "c", "e"])]
+
+
+def test_listing_a_collection_again_after_its_links_changed_runs_in_the_background(source, session):
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection
+    from backend.services.collections import reindex_collection
+    from task_manager.scheduler.db.TaskOperation import TaskOperation
+
+    collection = _collection(session)
+    run_write_transaction(lambda s: reindex_collection(s, s.get(Collection, collection.id)))
+
+    # VODLoft started it, not the user, so finishing it shows no toast.
+    session.expire_all()
+    assert [(operation.kind, operation.source) for operation in session.scalars(select(TaskOperation))] == [
+        ("collection.sync", "SYSTEM"),
+    ]
