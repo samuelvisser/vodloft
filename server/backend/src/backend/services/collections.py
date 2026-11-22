@@ -11,7 +11,7 @@ from backend.services.sites import collection_kind, place_collection
 from backend.types import work_weights
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
-from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos
+from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos, RepeatVideos
 from backend.utils.helpers import generate_uuid, slugify
 from sources import Feature, UnknownSourceError, all_sources, get_source, source_site
 from task_manager.events.transactional import queue_event
@@ -53,9 +53,10 @@ def add_collection(s: Session, collection: Collection, *, added_by_id: int | Non
 
 
 def _set_kind(collection: Collection) -> None:
-    """Tell a new collection what its link is, and give a channel collection the channel's defaults where the request
-    left them: the lists the user picks are seasons, new lists of the channel are added, the videos they have that the
-    channel's feeds don't are added too, and the channel season holds what its Site's channels hold."""
+    """Tell a new collection what its link is, and give a channel collection its Site's defaults where the request
+    left them: the lists the user picks are seasons, or every list, new lists of the channel are added, the videos they
+    have that the channel's feeds don't are added too, a video in several lists is in each where the Site says so, and
+    the channel season holds what its Site's channels hold."""
     collection.kind = collection_kind(collection.sharing_url, collection.source_key).value
     if collection.kind != CollectionKind.CHANNEL.value:
         return
@@ -63,9 +64,11 @@ def _set_kind(collection: Collection) -> None:
     if collection.channel_season is None:
         collection.channel_season = site.channel_season.value
     if site.link_seasons and collection.link_seasons is None:
-        collection.link_seasons = LinkSeasons.SELECTED.value
+        collection.link_seasons = (LinkSeasons.ALL if site.every_list_a_season else LinkSeasons.SELECTED).value
         if collection.outside_videos is None:
             collection.outside_videos = OutsideVideos.ADD.value
+    if site.whole_lists and collection.repeat_videos is None:
+        collection.repeat_videos = RepeatVideos.EACH_SEASON.value
 
 
 def reindex_collection(s: Session, collection: Collection) -> None:

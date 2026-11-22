@@ -1016,6 +1016,12 @@ class Site:
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
+    every_list_a_season: bool = False
+    """A new channel collection makes every one of the channel's lists a season, as YouTube shows a channel with all
+    its playlists. Left out, only the lists the user picks are."""
+    whole_lists: bool = False
+    """A new channel collection puts a video in every list season that has it, so each list is whole. Left out, a
+    video is in the first of them only, unless the collection's type says otherwise."""
     loose_season: str = "Videos"
     """What VODLoft calls the season it makes itself of the videos in none of a collection's link seasons, such as
     Tracks on Bandcamp. A collection type can name it itself (``CollectionContract.loose_season``)."""

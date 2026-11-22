@@ -89,6 +89,8 @@ class YouTube(OtherSites):
     )
     # A channel's playlists can be the seasons of a collection made from the channel.
     link_seasons = True
+    every_list_a_season = True
+    whole_lists = True
     channel_collection_names = Names("channel", "channels")
     list_collection_names = Names("playlist", "playlists")
     channel_season_names = Names("playlist", "playlists")

@@ -325,6 +325,12 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         try {
             const fresh = await fetch(`${endpoint}/links`, {method: 'POST', credentials: 'include'}).then(readSeasons)
             const choices = new Map((form.getValues('playlists') ?? []).map((choice) => [choice.id, choice]))
+            if (!form.formState.isDirty) {
+                // Nothing changed yet, so the lists are simply what the dialog starts from.
+                loadedFor.current = queryClient.setQueryData<CollectionSeasonsRead>(queryKey, fresh) ?? fresh
+                reset(seasonsFormValues(fresh))
+                return
+            }
             keepLoaded(fresh)
             // What the user already switched on or off, or put together, stays.
             setValue('playlists', fresh.playlists.map((playlist) => ({
@@ -338,6 +344,21 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             setRefreshing(false)
         }
     }
+
+    // Picking lists needs the lists, so the dialog looks for them itself when it has none yet.
+    const listedOnOpen = useRef(false)
+    useEffect(() => {
+        if (!open) {
+            listedOnOpen.current = false
+            return
+        }
+        if (!view || listedOnOpen.current || !view.listsPlaylists) return
+        if (linkSeasonsOn && mode === 'selected' && playlistChoices.length === 0) {
+            listedOnOpen.current = true
+            void refreshPlaylists()
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, view, linkSeasonsOn, mode, playlistChoices.length])
 
     const linkForm = useForm<LinkSeasonAddFormIn, unknown, LinkSeasonAddFormOut>({
         resolver: zodResolver(LinkSeasonAddFormSchema),
@@ -629,8 +650,10 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                 </span>
                                                             </div>
                                                             {playlistChoices.length === 0 ? (
-                                                                <p className="seasons-dialog-muted">
-                                                                    VODLoft has not listed the {names.plural} yet. Look for them to pick which are seasons.
+                                                                <p className="seasons-dialog-muted" role="status">
+                                                                    {refreshing ? (
+                                                                        <><FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Looking for the {names.plural}…</>
+                                                                    ) : `VODLoft has not listed the ${names.plural} yet. Look for them to pick which are seasons.`}
                                                                 </p>
                                                             ) : (
                                                                 <ul className="seasons-dialog-links">

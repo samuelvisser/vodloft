@@ -237,3 +237,13 @@ def test_deleting_a_creator_keeps_its_collections(client, session):
 
     collection = _collection(session, "workshop")
     assert collection is not None and collection.creator_id is None
+
+
+def test_a_channel_collection_on_a_site_that_says_so_makes_every_list_a_whole_season(tube, session, monkeypatch):
+    from dataclasses import replace
+
+    monkeypatch.setattr(CreatorSource, "sites", (replace(CreatorSource.sites[0], every_list_a_season=True, whole_lists=True),))
+    _add("workshop", ROOT)
+
+    collection = _collection(session, "workshop")
+    assert (collection.link_seasons, collection.repeat_videos) == ("all", "each_season")
