@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode
 from backend.db.models.stream_profile import IptvStreamProfile
-from backend.services.sites import collection_site
+from backend.services.sites import collection_site, with_main_type
 from backend.services.stream_episodes import get_local_download_for_episode, get_stream_items
 from backend.services.stream_tokens import profiles_for_token
 from backend.types.episode_types import EpisodePublishStatus
@@ -86,7 +86,7 @@ def _round_up(moment: datetime) -> datetime:
 
 
 def _upcoming_episodes(s: Session, profile: IptvStreamProfile, now: datetime) -> list[tuple[datetime, Episode]]:
-    allowed_types = set(profile.ep_id_type_list or [])
+    allowed_types = with_main_type(profile.collection, profile.ep_id_type_list or [])
     if not allowed_types:
         return []
     episodes = s.scalars(

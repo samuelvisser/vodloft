@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, CreatorAccount, Episode, LocalMediaProfileBase, Movie, Site, Video
 from backend.security.access import Access
+from backend.types.download_profile_types import EpIdType
 from backend.types.collection_contracts import DEFAULT_WORDS, CollectionWords, collection_contract
 from backend.types.link_season_types import CollectionKind, OutsideVideos
 from backend.services.errors import ServiceError
@@ -134,6 +135,27 @@ def collection_episode_tags(collection: Collection) -> tuple[EpisodeTag, ...]:
     (``collection_words``), such as tracks in a Music collection on Bandcamp."""
     tags = get_source(collection.source_key).episode_tags_for(collection.sharing_url)
     return episode_tags_named(tags, collection_words(collection))
+
+
+def main_tag_of_type(collection: Collection, episode_type: str) -> str:
+    """The episode type as the collection's Site tells types apart. An auxiliary episode on a Site that has no such
+    type, as a collection numbered by date gives a second video of one date or a video's episode in a second
+    playlist, is of the Site's main type there."""
+    if episode_type != EpIdType.AUX:
+        return episode_type
+    tags = collection_episode_tags(collection)
+    if any(tag.key == episode_type for tag in tags):
+        return episode_type
+    return next((tag.key for tag in tags if tag.main), episode_type)
+
+
+def with_main_type(collection: Collection, episode_types: Iterable[str]) -> set[str]:
+    """Episode types picked from a collection's Site's types, with the auxiliary episodes the Site counts as its main
+    type (``main_tag_of_type``) when that type is picked."""
+    picked = set(episode_types)
+    if main_tag_of_type(collection, EpIdType.AUX) in picked:
+        picked.add(EpIdType.AUX.value)
+    return picked
 
 
 def episode_tags_named(tags: Iterable[EpisodeTag], words: CollectionWords) -> tuple[EpisodeTag, ...]:

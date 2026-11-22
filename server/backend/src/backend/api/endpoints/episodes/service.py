@@ -20,6 +20,7 @@ from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType, EpisodeIdentifier, EpisodeOrder
 from backend.types.episode_types import EpisodePublishStatus
+from backend.services.sites import with_main_type
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.services.episode_download_delay import episode_download_delay_ready_at
 from backend.services.media_access import without_access_clause
@@ -199,6 +200,11 @@ def get_episode_views_by_collection_page(
     """Return one stable cursor page of compact episodes for a collection, optionally of some episode types only,
     and without the episodes that need an access VODLoft does not have."""
     episode_types = sorted(set(episode_types))
+    if episode_types:
+        # The Site's main type also shows the auxiliary episodes it does not tell apart from it.
+        collection = s.scalar(select(Collection).where(Collection.slug == collection_slug))
+        if collection is not None:
+            episode_types = sorted(with_main_type(collection, episode_types))
     collection_count_stmt = (
         select(func.count(Episode.id))
         .join(Collection, Episode.collection_id == Collection.id)

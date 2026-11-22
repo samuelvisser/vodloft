@@ -121,7 +121,7 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
         slug="collection",
         title="Collection",
         description="Description",
-        sharing_url="https://example.test/collection",
+        sharing_url="https://www.dailywire.com/show/collection",
         membership_level="FREE",
         type=CollectionType.PODCAST.value,
         episode_identifier=EpisodeIdentifier.NUMBERED.value,

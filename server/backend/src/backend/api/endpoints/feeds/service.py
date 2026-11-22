@@ -9,7 +9,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from fastapi import Request
 from sqlalchemy.orm import Session
 
-from backend.services.sites import collection_site, episode_site
+from backend.services.sites import collection_site, episode_site, main_tag_of_type
 from backend.services.thumbnails import is_own_thumbnail
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.db.datetime_types import utc_datetime
@@ -120,6 +120,9 @@ def _append_podcast_item_metadata(
         )
     ):
         episode_type = "trailer"
+    elif info.type == EpIdType.AUX and main_tag_of_type(episode.collection, info.type) != info.type:
+        # A Site without auxiliary episodes, such as YouTube, gives a second video of one date one: a full episode.
+        episode_type = "full"
     elif info.type in {EpIdType.AUX, EpIdType.EP_EXTRA}:
         episode_type = "bonus"
     elif info.type != EpIdType.EP and (tag := _episode_tag(episode, info.type)) is not None:

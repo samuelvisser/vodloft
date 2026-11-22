@@ -38,6 +38,7 @@ from backend.db.models import Collection, DownloadProfile, DownloadProfileFilter
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.media_access import AccessLocks
 from backend.services.removed_downloads import awaits_keep_answer
+from backend.services.sites import main_tag_of_type
 from backend.services.regex_check import PatternError, compile_pattern, search, split_inline_ignore_case
 from backend.types.download_profile_types import (
     DATE_FIELDS,
@@ -111,7 +112,10 @@ def filter_matches(item: EpisodeFilter, episode: Episode) -> Optional[bool]:
     pattern that runs out of time counts as not matching, like in the tester.
     """
     if item.field == EpisodeFilterField.TYPES:
-        return _episode_type(episode) in (item.episode_types or ())
+        episode_type = _episode_type(episode)
+        if episode_type is not None and episode.collection is not None:
+            episode_type = main_tag_of_type(episode.collection, episode_type)
+        return episode_type in (item.episode_types or ())
     if item.field == EpisodeFilterField.SEASONS:
         return episode.season is not None and episode.season.slug in (item.season_slugs or ())
     if item.field == EpisodeFilterField.DURATION:

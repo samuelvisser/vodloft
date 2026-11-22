@@ -1005,3 +1005,19 @@ def test_feed_type_follows_the_collection_episode_order(db_session):
     xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
 
     assert "<itunes:type>serial</itunes:type>" in xml
+
+
+def test_a_second_video_of_one_date_on_a_site_without_auxiliary_episodes_is_a_full_episode(db_session):
+    from backend.api.endpoints.feeds.service import render_rss_feed
+    from backend.types.collection_types import EpisodeIdentifier
+
+    collection = _make_collection(db_session, episode_identifier=EpisodeIdentifier.DATE_BASED.value)
+    collection.source_key = "ytdlp"
+    collection.sharing_url = "https://www.youtube.com/@creator"
+    season = _make_season(db_session, collection)
+    _make_episode(db_session, collection, season, index=1, episode_identifier="aux.1")
+    profile = _make_rss_profile(db_session, collection, mode="mp4", use_downloads=False, use_source_stream=True)
+
+    xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
+
+    assert "<itunes:episodeType>full</itunes:episodeType>" in xml
