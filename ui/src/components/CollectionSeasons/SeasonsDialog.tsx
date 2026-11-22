@@ -422,6 +422,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
      * don't make again, or one the settings leave empty. */
     const leavesOnSave = (id: number) => going.has(id) || (after ? !afterSave(id) : removedSeasons.includes(id))
     const staying = fields.map((field) => !leavesOnSave(field.id))
+    // An order only means something with more than one season.
+    const seasonsAfterSave = staying.filter(Boolean).length + [...added.values()].reduce((sum, list) => sum + list.length, 0)
     const leavingSeasons = fields.flatMap((field, index) => staying[index] ? [] : [{field, index}])
     /** A season saving adds, which the list shows where it will be. */
     const addedRow = (x: CollectionSeasonRead) => (
@@ -831,7 +833,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     {' '}Reordering renumbers the {season.plural}. Files keep their names until you rename the collection's files.
                                                 </p>
                                             </div>
-                                            {customOrder && (
+                                            {customOrder && seasonsAfterSave > 1 && (
                                                 <button type="button" className="btn btn-small" onClick={() => setValue('customSeasonOrder', false, {shouldDirty: true})}>
                                                     Automatic order
                                                 </button>

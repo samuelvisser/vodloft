@@ -99,8 +99,8 @@ def arrange_seasons(s: Session, collection: Collection) -> None:
     ``s`` is a write transaction's session."""
     seasons = list(collection.seasons)
     if collection.custom_season_order:
-        # A new season was made last, with the next number, so the user's order and numbers stay.
-        _set_indices(s, sorted(seasons, key=lambda season: season.index))
+        # The user's order stays: a new season was made last. The numbers close up around seasons that went.
+        _close_up(s, collection, sorted(seasons, key=lambda season: season.index))
     elif any(playlist.season_id is not None for playlist in collection.lists) or any(season.loose for season in seasons):
         renumber_seasons(s, collection, _dated_order(s, collection))
     else:
@@ -191,6 +191,21 @@ def renumber_seasons(s: Session, collection: Collection, ordered: list[Season]) 
         if season.season_type == SeasonType.EXTRA.value:
             continue
         number += 1
+        if season.season_number != number:
+            numbers[season.id] = number
+            season.season_number = number
+    s.flush()
+    if numbers and collection.episode_identifier == EpisodeIdentifier.SEASONAL.value:
+        _renumber_episodes(s, collection, numbers)
+
+
+def _close_up(s: Session, collection: Collection, ordered: list[Season]) -> None:
+    """Keep the seasons in this order and number the numbered ones 1, 2, 3 in it, so no number is left out. A season
+    numbered 0, such as Specials, stays 0."""
+    _set_indices(s, ordered)
+    numbers: dict[int, int] = {}
+    numbered = [season for season in ordered if season.season_type != SeasonType.EXTRA.value and season.season_number != 0]
+    for number, season in enumerate(numbered, start=1):
         if season.season_number != number:
             numbers[season.id] = number
             season.season_number = number

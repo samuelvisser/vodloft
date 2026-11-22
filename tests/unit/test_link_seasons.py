@@ -1270,3 +1270,39 @@ def test_listing_a_collection_again_after_its_links_changed_runs_in_the_backgrou
     assert [(operation.kind, operation.source) for operation in session.scalars(select(TaskOperation))] == [
         ("collection.sync", "SYSTEM"),
     ]
+
+
+def _save(session, *, custom: bool, order=None, off=(), preview=False):
+    """Save the Seasons dialog with the seasons in this order of names, or as they are, and these lists off."""
+    from backend.api.endpoints.collections.seasons.service import preview_seasons, seasons_view, update_seasons
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+
+    view = seasons_view(session, "creator")
+    session.rollback()
+    seasons = sorted(view.seasons, key=lambda x: order.index(x.name)) if order else view.seasons
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": x.id, "name": x.name} for x in seasons], custom_season_order=custom,
+        link_seasons="selected", loose_videos=view.loose_videos,
+        playlists=[{"id": p.id, "enabled": p.ref not in off, "season_id": p.season_id} for p in view.playlists],
+    )
+    work = preview_seasons if preview else update_seasons
+    return run_write_transaction(lambda s: work(s, "creator", body))
+
+
+def test_the_seasons_left_after_others_are_deleted_are_numbered_from_one_in_either_order(source, session):
+    source.videos = [_video("a", 2023), _video("b", 2024), _video("c", 2025)]
+    source.lists = [_list("PLone", "Cabin, Part 1"), _list("PLtwo", "Cabin, Part 2")]
+    source.items = {"PLone": ("a",), "PLtwo": ("b",)}
+    collection = _collection(session, mode="selected")
+    _index(session, collection, source)
+    _save(session, custom=True, order=["Cabin, Part 2", "Cabin, Part 1", "Videos"])
+    assert [(name, number) for name, number, _ in _seasons(session)] == [("Cabin, Part 2", 1), ("Cabin, Part 1", 2), ("Videos", 3)]
+
+    # Back in VODLoft's order, the only season left is the first.
+    preview = _save(session, custom=False, off=("PLone", "PLtwo"), preview=True)
+    assert [(x.name, x.season_number) for x in preview.seasons] == [("Videos", 1)]
+
+    # In the user's own order too: the order stays, and the numbers close up.
+    _save(session, custom=True, off=("PLone", "PLtwo"))
+    assert [(name, number) for name, number, _ in _seasons(session)] == [("Videos", 1)]
