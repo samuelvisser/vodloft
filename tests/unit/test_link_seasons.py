@@ -586,6 +586,37 @@ def test_the_downloaded_videos_of_a_playlist_turned_off_move_where_new_videos_wo
     assert session.scalar(select(Episode.episode_identifier).where(Episode.source_slug == "a")).startswith("ep.S01E")
 
 
+def test_a_season_of_a_list_left_over_while_link_seasons_were_off_empties_when_saved(source, session, monkeypatch):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, CollectionList, Season
+
+    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: None)
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session, mode="selected", loose="by_year")
+    _index(session, collection, source)
+    _give_files(session, "a")
+    # As the old creators left it: a season of a list that is off, in a collection whose playlists are off.
+    session.get(Collection, collection.id).link_seasons = "off"
+    session.scalar(select(CollectionList)).enabled = False
+    session.commit()
+    assert _seasons(session) == [("One", 1, ["a"]), ("2025", 2, ["b"])]
+
+    seasons = session.scalars(select(Season).order_by(Season.index)).all()
+    link_id = session.scalar(select(CollectionList.id))
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": x.id, "name": x.name} for x in seasons], custom_season_order=False,
+        link_seasons="selected", loose_videos="by_year", playlists=[{"id": link_id, "enabled": False}],
+    )
+    session.rollback()
+    run_write_transaction(lambda s: update_seasons_call(service, s, body))
+
+    assert _seasons(session) == [("2024", 1, ["a"]), ("2025", 2, ["b"])]
+
+
 def update_seasons_call(service, s, body):
     return service.update_seasons(s, "creator", body)
 

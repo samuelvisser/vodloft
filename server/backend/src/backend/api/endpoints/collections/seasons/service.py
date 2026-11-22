@@ -275,7 +275,9 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         )
     for change in body.seasons:
         seasons[change.id].name = change.name.strip()
-    was_seasons = {link.season_id for link in active_lists(s, collection) if link.season_id is not None}
+    # Every season a list has, also one of a list that is not a season now, such as one the old creators left while
+    # the collection's playlists were off: a season that no list holds after saving empties.
+    was_seasons = {link.season_id for link in playlists.values() if link.season_id is not None}
     was_only = holds_only_link_seasons(collection)
     relist = (
         collection.feeds != feeds
