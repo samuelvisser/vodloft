@@ -144,7 +144,10 @@ export default function CollectionPage() {
     })
   }, [id])
   const sources = useSourceLookup()
+  // A collection whose lists bring in videos it would not have, or only theirs, is browsed by season, as its lists
+  // are its seasons, whatever numbers its episodes.
   const isSeasonal = collection?.episodeIdentifier === 'seasonal'
+    || (!!collection?.outsideVideos && collection.outsideVideos !== 'leave_out')
 
   const [syncStarting, setSyncStarting] = useState(false)
   const [metadataRefreshConfirm, setMetadataRefreshConfirm] = useState(false)

@@ -947,7 +947,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                 {deleted ? `Deleted, and made again${next && next.name !== season?.name ? ` as ${next.name}` : ''} by your settings when you save · ` : null}
                                                                 {counted(counts, words.video, words.videos)}
                                                                 {next && next.episodeCount !== counts ? `, ${counted(next.episodeCount, words.video, words.videos)} when you save` : null}
-                                                                {season?.loose ? ` · ${capitalized(words.videos)} in no ${names.singular}` : null}
+                                                                {season?.loose ? (holdsWholeChannel ? ` · Everything in the collection` : ` · ${capitalized(words.videos)} in no ${names.singular}`) : null}
                                                             </span>
                                                             {season && listLayout !== 'by_year' && listSeasonIds.includes(season.id) && (
                                                                 <SeasonLists
