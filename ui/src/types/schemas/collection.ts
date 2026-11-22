@@ -107,6 +107,8 @@ export const CollectionReadSchema = z.looseObject({
     /** What the collection calls the creator behind it, such as host, or artist in a Music collection. Optional only
      *  for collections kept in the browser by an older VODLoft. */
     creatorNames: NamesSchema.optional(),
+    /** What its Site calls its seasons, such as playlists in a YouTube channel collection; null where its type's word stands. */
+    seasonNames: NamesSchema.nullable().optional(),
     backgroundImagePath: z.string().nullable().optional(),
     logoImagePath: z.string().nullable().optional(),
 

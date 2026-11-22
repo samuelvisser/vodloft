@@ -110,11 +110,17 @@ def collection_words(collection: Collection, *, audio: bool | None = None) -> Co
     which a profile for Music that downloads audio only keeps as sound."""
     site = collection_site(collection)
     words = collection_contract(collection.type).words_for(site.audio_only if audio is None else audio)
-    if collection.sharing_url is None or words.season != DEFAULT_WORDS.season:
-        # A collection of links of any Site, or a type that names its seasons itself, such as an artist's albums.
-        return words
-    seasons = site.channel_season_names if collection.kind == CollectionKind.CHANNEL.value else site.list_season_names
+    seasons = site_season_names(site, collection.type, collection.kind, has_link=collection.sharing_url is not None)
     return replace(words, season=seasons) if seasons is not None else words
+
+
+def site_season_names(site: SourceSite, collection_type: str, kind: str | None, *, has_link: bool) -> Names | None:
+    """What the Site calls the seasons of a collection of its kind, such as playlists in a YouTube channel collection,
+    or None where the collection type's own word stands: in a collection of links of any Site, and in a type that
+    names its seasons itself, such as an artist's albums."""
+    if not has_link or collection_contract(collection_type).words.season != DEFAULT_WORDS.season:
+        return None
+    return site.channel_season_names if kind == CollectionKind.CHANNEL.value else site.list_season_names
 
 
 def collection_names(collection: Collection) -> Names:

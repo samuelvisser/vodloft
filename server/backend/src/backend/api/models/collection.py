@@ -256,6 +256,18 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
         site = site_of(self.site.key) if self.site is not None else Site("", "")
         return NamesAPIRead.model_validate(collection_contract(self.type).creator_names_on(site))
 
+    @computed_field
+    @property
+    def season_names(self) -> Optional[NamesAPIRead]:
+        """What the collection's Site calls its seasons, such as playlists in a YouTube channel collection; None where
+        its type's own word stands, as the collection contracts give it."""
+        from backend.services.sites import site_season_names
+
+        if self.site is None:
+            return None
+        names = site_season_names(site_of(self.site.key), self.type, self.kind, has_link=self.sharing_url is not None)
+        return NamesAPIRead.model_validate(names) if names is not None else None
+
 
 class CollectionAPIRead(_CollectionAPIBaseOut):
     """Response body for a collection."""

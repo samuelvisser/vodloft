@@ -116,6 +116,8 @@ export function newProfileScope(type: string): string {
 interface WordedCollection {
     type?: string | null
     site?: { audioOnly?: boolean } | null
+    /** What the collection's Site calls its seasons, such as playlists in a YouTube channel collection. */
+    seasonNames?: BackendNames | null
 }
 
 /** The words for the files of a collection, kept by the Local Media Profiles it is offered: tracks when every one of
@@ -129,8 +131,9 @@ export function fileWordsFor(
 }
 
 /** The words for a collection, as its Site has it: the episodes of a Music collection on a Site with sound only,
- *  such as Bandcamp, are tracks. Pass ``audio`` where the files are meant, which a profile for Music that
+ *  such as Bandcamp, are tracks, and the seasons of a YouTube channel collection are playlists. Pass ``audio`` where the files are meant, which a profile for Music that
  *  downloads audio only keeps as sound. */
 export function wordsFor(collection: WordedCollection | null | undefined, kind?: MediaKind): CollectionWords {
-    return collectionWords(collection?.type, kind ?? (collection?.site?.audioOnly ? 'audio' : 'video'))
+    const words = collectionWords(collection?.type, kind ?? (collection?.site?.audioOnly ? 'audio' : 'video'))
+    return collection?.seasonNames ? {...words, season: noun(collection.seasonNames)} : words
 }
