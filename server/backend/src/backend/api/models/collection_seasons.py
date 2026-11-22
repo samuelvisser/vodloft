@@ -39,6 +39,8 @@ class CollectionListAPIRead(ResponseBase):
     enabled: bool
     status: ListStatus
     """new while it waits for the user's choice."""
+    as_season: bool = True
+    """Whether the list is a season of its own when it is on; one that is not adds its videos to the other seasons."""
     season_id: Optional[int] = None
     """The list's season, which other lists may share."""
     season_name: Optional[str] = Field(default=None, validation_alias=AliasPath("season", "name"))
@@ -142,6 +144,8 @@ class SeasonChangeAPIIn(RequestBase):
 class CollectionListChangeAPIIn(RequestBase):
     id: int
     enabled: bool
+    as_season: bool = True
+    """False adds the list's videos to the collection's other seasons, without a season of its own."""
     season_id: Optional[int] = None
     """The season the list is in: its own, or that of another of the collection's lists, which it then shares. None
     gives it a season of its own."""

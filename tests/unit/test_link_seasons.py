@@ -267,6 +267,65 @@ def test_the_user_renames_and_orders_the_seasons_and_a_new_one_goes_last(source,
     assert _seasons(session) == [("The One", 1, ["a"]), ("Uploads", 2, ["b"]), ("Two", 3, ["c"])]
 
 
+def test_a_contents_only_list_adds_its_videos_to_the_other_seasons_and_can_be_a_season_again(source, session):
+    from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+
+    source.videos = [_video("a", 2024), _video("b", 2025), _video("c", 2025, 3)]
+    source.lists = [_list("PLone", "One"), _list("PLtwo", "Two")]
+    source.items = {"PLone": ("a",), "PLtwo": ("c",)}
+    collection = _collection(session)
+    _index(session, collection, source)
+    assert [(name, episodes) for name, _number, episodes in _seasons(session)] == [
+        ("Videos", ["b"]), ("One", ["a"]), ("Two", ["c"]),
+    ]
+
+    def save(as_season: bool):
+        view = seasons_view(session, "creator")
+        session.rollback()
+        one = next(playlist for playlist in view.playlists if playlist.ref == "PLone")
+        body = CollectionSeasonsAPIUpdate(
+            seasons=[{"id": season.id, "name": season.name} for season in view.seasons], custom_season_order=False,
+            link_seasons="all", playlists=[{"id": one.id, "enabled": True, "as_season": as_season}],
+        )
+        run_write_transaction(lambda s: update_seasons(s, "creator", body))
+        return view
+
+    save(False)
+    assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [
+        ("Videos", ["a", "b"]), ("Two", ["c"]),
+    ]
+    assert not next(playlist for playlist in seasons_view(session, "creator").playlists if playlist.ref == "PLone").as_season
+    session.rollback()
+
+    save(True)
+    assert [(name, episodes) for name, _number, episodes in _seasons(session) if episodes] == [
+        ("Videos", ["b"]), ("One", ["a"]), ("Two", ["c"]),
+    ]
+
+
+def test_a_collection_of_only_its_lists_has_no_other_seasons_for_a_contents_only_list(source, session):
+    from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+    from backend.services.errors import ServiceError
+
+    source.videos = [_video("a", 2024)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session)
+    _index(session, collection, source)
+    view = seasons_view(session, "creator")
+    session.rollback()
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": season.id, "name": season.name} for season in view.seasons], custom_season_order=False,
+        link_seasons="all", outside_videos="only", playlists=[{"id": view.playlists[0].id, "enabled": True, "as_season": False}],
+    )
+    with pytest.raises(ServiceError, match="no other seasons"):
+        run_write_transaction(lambda s: update_seasons(s, "creator", body))
+
+
 def test_turning_link_seasons_off_puts_the_videos_back_in_a_season_per_year(source, session):
     from backend.api.endpoints.collections.seasons.service import update_seasons
     from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate

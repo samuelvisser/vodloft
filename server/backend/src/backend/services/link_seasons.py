@@ -151,8 +151,9 @@ def is_in(collection: Collection, playlist: CollectionList) -> bool:
 
 
 def is_season(collection: Collection, playlist: CollectionList) -> bool:
-    """Whether the playlist is one of the collection's seasons, as the collection is set."""
-    return is_in(collection, playlist)
+    """Whether the playlist is one of the collection's seasons, as the collection is set. One that is not a season
+    adds its videos to the collection's other seasons."""
+    return playlist.as_season and is_in(collection, playlist)
 
 
 def lists_in(collection: Collection) -> list[CollectionList]:

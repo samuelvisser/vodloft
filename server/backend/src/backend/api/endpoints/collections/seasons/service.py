@@ -233,6 +233,12 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
             f"A collection that holds only what its {lists.plural} have needs its {lists.plural} as "
             f"{collection_contract(collection.type).words.season.plural}", field="link_seasons",
         )
+    if only and any(not change.as_season for change in body.playlists):
+        raise ServiceError(
+            f"A collection that holds only what its {lists.plural} have has no other "
+            f"{collection_contract(collection.type).words.season.plural} to add a {lists.singular}'s contents to",
+            field="playlists",
+        )
     if only and not get_source(collection.source_key).has(Feature.LINK_COLLECTIONS):
         raise ServiceError(f"This collection can't hold only what its {lists.plural} have", field="outside_videos")
     if not only and collection.sharing_url is None:
@@ -303,6 +309,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         # Saving the dialog is the user's choice about a playlist that waited for one.
         playlists[change.id].enabled = change.enabled
         playlists[change.id].status = ListStatus.KNOWN.value
+        playlists[change.id].as_season = change.as_season
     s.flush()
     s.expire(collection, ["lists"])
     current = [season.id for season in sorted(collection.seasons, key=lambda season: season.index)]
@@ -353,7 +360,8 @@ def _regroup(playlists: dict[int, CollectionList], seasons: dict[int, Season], b
     left: set[int] = set()
     for change in body.playlists:
         playlist = playlists.get(change.id)
-        if playlist is None or playlist.season_id == change.season_id:
+        if playlist is None or playlist.season_id == change.season_id or not change.as_season:
+            # A list without a season of its own keeps where its season was until it is a season again.
             continue
         if change.season_id is None and holders.get(playlist.season_id, 0) <= 1:
             # It has a season of its own already.

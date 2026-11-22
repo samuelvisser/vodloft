@@ -13,8 +13,8 @@ with new lists go:
 - Any other collection that gathered some of an account's feeds and lists leaves the creator, as a collection of its
   own link. Creators never shipped, so such a collection is test data, which the user removes by hand.
 
-A list a creator had put among the videos in no list, rather than in a season of its own, is switched off, as only a
-season can hold a list now.
+A list a creator had put among the videos in no list, rather than in a season of its own, stays so: the collection's
+Seasons window now sets that per list.
 
 A collection says whether its link is a channel or a list (set in the background, as only its Source can tell) and
 what its channel season holds: an existing one keeps the videos in no list there. Each list knows the Source that
@@ -128,11 +128,7 @@ def upgrade() -> None:
         batch.drop_column("new_lists")
         batch.drop_column("title_from_user")
 
-    # A list whose videos joined the other seasons, as a creator placed it, is switched off: the videos of its channel's
-    # feeds stay in the channel season.
-    op.execute("UPDATE collection_lists SET enabled = false WHERE as_season = false")
     with op.batch_alter_table("collection_lists") as batch:
-        batch.drop_column("as_season")
         batch.add_column(sa.Column(
             "source_key", sa.String(), nullable=True, comment="Id of the Source that reads the list, as registered in sources",
         ))
@@ -151,10 +147,6 @@ def downgrade() -> None:
         batch.drop_constraint("fk_collection_lists_site_key_sites", type_="foreignkey")
         batch.drop_column("site_key")
         batch.drop_column("source_key")
-        batch.add_column(sa.Column(
-            "as_season", sa.Boolean(), nullable=False, server_default="1",
-            comment="Whether the list is a season of its own, or its videos join the collection's other seasons",
-        ))
     with op.batch_alter_table("creators") as batch:
         batch.add_column(sa.Column(
             "new_lists", sa.JSON(), nullable=False, server_default="{}",

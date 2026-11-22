@@ -16,6 +16,7 @@ import SimpleSelect from '../common/SimpleSelect'
 import NewListSettings from '../common/NewListSettings'
 import {capitalized, type ListKind} from '../../types/creator'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
+import {BulkBar} from '../ProfileBulkEdit/BulkEditControls'
 import {
     CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, seasonsFormValues,
     type CollectionListRead, type CollectionSeasonsFormIn, type CollectionSeasonsFormOut, type CollectionSeasonsRead,
@@ -101,6 +102,11 @@ function registries(names: ListNames, words: Words, view: CollectionSeasonsRead)
             one_season: {label: `One ${words.season.singular}, ${names.looseSeason}`, help: `They share one ${words.season.singular}, shown before the ${names.plural}.`},
             by_year: {label: `${capitalized(words.season.a)} per year`, help: `They get ${words.season.a} per upload year, with the ${names.plural} between them by date.`},
         }),
+        // Whether a list is a season of its own, or only adds its videos to the collection's other seasons.
+        placement: createSelectRegistry(`ListPlacement-${words.season.singular}-${words.videos}`, {
+            season: {label: `${capitalized(words.season.a)} of its own`, help: `Its ${words.videos} are ${words.season.a} named after it.`},
+            contents: {label: 'Contents only', help: `Its ${words.videos} join the other ${words.season.plural}, where ${words.videos} in no ${names.singular} go.`},
+        }),
         // What the collection does with a video in several of its seasons, such as a track on several albums.
         repeat: createSelectRegistry(`RepeatVideos-${words.season.singular}-${words.inSeason}-${words.episode.singular}`, {
             one_season: {
@@ -114,8 +120,7 @@ function registries(names: ListNames, words: Words, view: CollectionSeasonsRead)
         }),
         outside: createSelectRegistry(
             `OutsideVideos-${names.plural}-${view.listsPlaylists}-${view.linksOnlyOffered}`,
-            // The choice is only offered for a creator's collection; holding only the playlists is offered where the
-            // Source can hold a collection of links.
+            // Holding only the playlists is offered where the Source can hold a collection of links.
             (view.linksOnlyOffered ? outside : {leave_out: outside.leave_out, add: outside.add}) as typeof outside,
         ),
     }
@@ -169,6 +174,9 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const linkSeasonsOn = watch('linkSeasonsOn') ?? false
     const mode = watch('linkSeasonMode') ?? 'all'
     const playlistChoices = watch('playlists') ?? []
+    // Bulk edit of the lists: which ones are chosen, by id, while it is on.
+    const [bulk, setBulk] = useState(false)
+    const [chosen, setChosen] = useState<ReadonlySet<number>>(new Set())
     const looseVideos = watch('looseVideos') ?? 'one_season'
     const listLayout = watch('listLayout') ?? 'season_each'
     const outsideVideos = watch('outsideVideos') ?? 'leave_out'
@@ -268,6 +276,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             // What the user already switched on or off, or put together, stays.
             setValue('playlists', fresh.playlists.map((playlist) => ({
                 id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
+                asSeason: choices.get(playlist.id)?.asSeason ?? playlist.asSeason,
                 seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
             })), {shouldDirty: true})
         } catch (exc) {
@@ -296,6 +305,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             // The new link is saved already; what the user changed in the dialog stays.
             setValue('playlists', fresh.playlists.map((playlist) => ({
                 id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
+                asSeason: choices.get(playlist.id)?.asSeason ?? playlist.asSeason,
                 seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
             })))
             setValue('seasons', fresh.seasons.map((season) => form.getValues('seasons')?.find((x) => x.id === season.id) ?? {id: season.id, name: season.name}))
@@ -318,6 +328,22 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         'playlists', playlistChoices.map((choice) => ({...choice, enabled})), {shouldDirty: true},
     )
     const playlistsById = new Map((view?.playlists ?? []).map((playlist) => [playlist.id, playlist]))
+    const bulkIds = playlistChoices.filter((choice) => !playlistsById.get(choice.id)?.addedByUser).map((choice) => choice.id)
+    const allChosen = bulkIds.length > 0 && bulkIds.every((id) => chosen.has(id))
+    const toggleChosen = (id: number) => setChosen((current) => {
+        const next = new Set(current)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+    })
+    const stopBulk = () => {
+        setBulk(false)
+        setChosen(new Set())
+    }
+    /** Change the chosen lists in the form; nothing is saved until the dialog is. */
+    const changeChosen = (change: {enabled?: boolean, asSeason?: boolean}) => setValue(
+        'playlists', playlistChoices.map((choice) => chosen.has(choice.id) ? {...choice, ...change} : choice), {shouldDirty: true},
+    )
     const addedLinks = (view?.playlists ?? []).filter((playlist) => playlist.addedByUser)
     const toggleRemoved = (id: number) => setValue(
         'removedLinks', removedLinks.includes(id) ? removedLinks.filter((x) => x !== id) : [...removedLinks, id], {shouldDirty: true},
@@ -447,19 +473,40 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     {mode === 'selected' && view.listsPlaylists && (
                                                         <div className="form-row">
                                                             <div className="seasons-dialog-list-header">
-                                                                <label className="seasons-dialog-check">
-                                                                    <input
-                                                                        type="checkbox" checked={allEnabled}
-                                                                        ref={(input) => { if (input) input.indeterminate = enabledCount > 0 && !allEnabled }}
-                                                                        onChange={(event) => setAll(event.target.checked)}
-                                                                        disabled={playlistChoices.length === 0}
-                                                                    />
-                                                                    <span>{allEnabled ? 'Deselect all' : 'Select all'}</span>
-                                                                </label>
+                                                                {bulk ? (
+                                                                    <label className="seasons-dialog-check">
+                                                                        <input
+                                                                            type="checkbox" className="bulk-check" checked={allChosen}
+                                                                            ref={(input) => { if (input) input.indeterminate = chosen.size > 0 && !allChosen }}
+                                                                            onChange={() => setChosen(allChosen ? new Set() : new Set(bulkIds))}
+                                                                            disabled={bulkIds.length === 0}
+                                                                        />
+                                                                        <span>{allChosen ? 'Deselect all' : 'Select all'}</span>
+                                                                    </label>
+                                                                ) : (
+                                                                    <label className="seasons-dialog-check">
+                                                                        <input
+                                                                            type="checkbox" checked={allEnabled}
+                                                                            ref={(input) => { if (input) input.indeterminate = enabledCount > 0 && !allEnabled }}
+                                                                            onChange={(event) => setAll(event.target.checked)}
+                                                                            disabled={playlistChoices.length === 0}
+                                                                        />
+                                                                        <span>{allEnabled ? 'Deselect all' : 'Select all'}</span>
+                                                                    </label>
+                                                                )}
+                                                                <span className="seasons-dialog-list-tools">
+                                                                <button
+                                                                    type="button" className={`btn btn-small${bulk ? ' is-toggled' : ''}`} aria-pressed={bulk}
+                                                                    onClick={() => bulk ? stopBulk() : setBulk(true)} disabled={bulkIds.length === 0}
+                                                                >
+                                                                    <FontAwesomeIcon icon={faIcon('fass', bulk ? 'check' : 'list-check')} aria-hidden="true"/>
+                                                                    <span>{bulk ? 'Done' : 'Bulk edit'}</span>
+                                                                </button>
                                                                 <button type="button" className="btn btn-small" onClick={() => void refreshPlaylists()} disabled={refreshing || !view.listsPlaylists}>
                                                                     <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} spin={refreshing} aria-hidden="true"/>
                                                                     <span>{refreshing ? 'Looking…' : `Look for new ${names.plural}`}</span>
                                                                 </button>
+                                                                </span>
                                                             </div>
                                                             {playlistChoices.length === 0 ? (
                                                                 <p className="seasons-dialog-muted">
@@ -471,29 +518,72 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                         const playlist = playlistsById.get(choice.id)
                                                                         if (!playlist || playlist.addedByUser) return null
                                                                         return (
-                                                                            <li key={choice.id}>
+                                                                            <li key={choice.id} className={bulk && chosen.has(choice.id) ? 'is-selected' : undefined}>
                                                                                 <label className="seasons-dialog-check">
-                                                                                    <input
-                                                                                        type="checkbox" checked={choice.enabled}
-                                                                                        onChange={(event) => setValue(`playlists.${index}.enabled`, event.target.checked, {shouldDirty: true})}
-                                                                                    />
+                                                                                    {bulk ? (
+                                                                                        <input
+                                                                                            type="checkbox" className="bulk-check" checked={chosen.has(choice.id)}
+                                                                                            aria-label={`Choose ${playlist.title}`} onChange={() => toggleChosen(choice.id)}
+                                                                                        />
+                                                                                    ) : (
+                                                                                        <input
+                                                                                            type="checkbox" checked={choice.enabled}
+                                                                                            onChange={(event) => setValue(`playlists.${index}.enabled`, event.target.checked, {shouldDirty: true})}
+                                                                                        />
+                                                                                    )}
                                                                                     <span className="seasons-dialog-link-copy">
                                                                                         <b>{playlist.title}</b>
                                                                                         <span>
                                                                                             {playlist.status === 'new' && <span className="seasons-dialog-badge">New</span>}
                                                                                             {[
+                                                                                                bulk ? (choice.enabled ? (only ? 'On' : regs.placement.getLabel(choice.asSeason ? 'season' : 'contents')) : 'Off') : null,
                                                                                                 playlist.itemCount !== null ? counted(playlist.itemCount, words.video, `${words.videos}`) : null,
                                                                                                 playlist.firstVideoAt ? `since ${new Date(playlist.firstVideoAt).getFullYear()}` : null,
                                                                                             ].filter(Boolean).join(' · ')}
                                                                                         </span>
                                                                                     </span>
                                                                                 </label>
+                                                                                {!bulk && choice.enabled && !only && (
+                                                                                    <div className="seasons-dialog-link-placement">
+                                                                                        <SimpleSelect
+                                                                                            menuPortalTarget={document.body} menuPlacement="auto"
+                                                                                            styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
+                                                                                            inputId={`seasons-placement-${choice.id}`} aria-label={`What ${playlist.title} is`}
+                                                                                            registry={regs.placement} value={choice.asSeason ? 'season' : 'contents'}
+                                                                                            onChange={(value) => setValue(`playlists.${index}.asSeason`, value !== 'contents', {shouldDirty: true})}
+                                                                                        />
+                                                                                    </div>
+                                                                                )}
                                                                             </li>
                                                                         )
                                                                     })}
                                                                 </ul>
                                                             )}
                                                             {errors.playlists && <div className="error" role="alert">{String(errors.playlists.message ?? errors.playlists.root?.message)}</div>}
+                                                            {bulk && (
+                                                                <BulkBar
+                                                                    count={chosen.size} prompt={`Choose ${names.plural} to change`}
+                                                                    onClear={() => setChosen(new Set())} onStop={stopBulk}
+                                                                >
+                                                                    <button type="button" className="btn" disabled={!chosen.size} onClick={() => changeChosen({enabled: true})}>
+                                                                        <FontAwesomeIcon icon={faIcon('fass', 'toggle-on')} aria-hidden="true"/> Switch on
+                                                                    </button>
+                                                                    <button type="button" className="btn" disabled={!chosen.size} onClick={() => changeChosen({enabled: false})}>
+                                                                        <FontAwesomeIcon icon={faIcon('fass', 'toggle-off')} aria-hidden="true"/> Switch off
+                                                                    </button>
+                                                                    {!only && (
+                                                                        <>
+                                                                            <button type="button" className="btn" disabled={!chosen.size} onClick={() => changeChosen({enabled: true, asSeason: true})}>
+                                                                                <FontAwesomeIcon icon={faIcon('fass', 'layer-group')} aria-hidden="true"/> {regs.placement.getLabel('season')}
+                                                                            </button>
+                                                                            <button type="button" className="btn" disabled={!chosen.size} onClick={() => changeChosen({enabled: true, asSeason: false})}>
+                                                                                <FontAwesomeIcon icon={faIcon('fass', 'list')} aria-hidden="true"/> Contents only
+                                                                            </button>
+                                                                        </>
+                                                                    )}
+                                                                </BulkBar>
+                                                            )}
+                                                            {bulk && <div className="help">The changes are saved with the rest of the dialog.</div>}
                                                         </div>
                                                     )}
 

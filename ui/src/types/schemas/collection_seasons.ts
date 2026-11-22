@@ -36,6 +36,8 @@ export const CollectionListReadSchema = z.object({
     itemCount: z.number().nullable(),
     enabled: z.boolean(),
     status: z.enum(['known', 'new']),
+    /** Whether the list is a season of its own when it is on; one that is not adds its videos to the other seasons. */
+    asSeason: z.boolean().default(true),
     /** The list's season, which other lists may share. */
     seasonId: z.number().nullable().default(null),
     seasonName: z.string().nullable(),
@@ -123,7 +125,7 @@ export const CollectionSeasonsFormSchema = z.object({
     repeatVideos: z.enum(RepeatVideosValues).default('one_season'),
     outsideVideos: z.enum(OutsideVideosValues).default('leave_out'),
     /** Each list, whether it is a season, and the season it is in: its own, or another list's that it shares. */
-    playlists: z.array(z.object({id: z.number(), enabled: z.boolean(), seasonId: z.number().nullable()})).default([]),
+    playlists: z.array(z.object({id: z.number(), enabled: z.boolean(), asSeason: z.boolean().default(true), seasonId: z.number().nullable()})).default([]),
     /** Links you added that go when you save. */
     removedLinks: z.array(z.number()).default([]),
 })
@@ -150,7 +152,7 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         looseVideos: view.looseVideos,
         repeatVideos: view.repeatVideos,
         outsideVideos: view.outsideVideos,
-        playlists: view.playlists.map((playlist) => ({id: playlist.id, enabled: playlist.enabled, seasonId: playlist.seasonId})),
+        playlists: view.playlists.map((playlist) => ({id: playlist.id, enabled: playlist.enabled, asSeason: playlist.asSeason, seasonId: playlist.seasonId})),
         removedLinks: [],
     }
 }

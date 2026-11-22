@@ -65,6 +65,9 @@
 
 .seasons-dialog-links { max-height: min(480px, 45dvh); overflow-y: auto; }
 .seasons-dialog-links li { padding: .5rem .75rem; }
+.seasons-dialog-list-tools { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; }
+.seasons-dialog-links li.is-selected { background: rgba(59, 130, 246, .08); }
+.seasons-dialog-link-placement { margin: .4rem 0 0 1.6rem; max-width: 18rem; }
 .seasons-dialog-links li + li,
 .seasons-dialog-season + .seasons-dialog-season { border-top: 1px solid rgba(100, 116, 139, 0.24); }
 
