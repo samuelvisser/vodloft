@@ -828,7 +828,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 <h3 id="seasons-dialog-order">{season.Plural}</h3>
                                                 <p className="seasons-dialog-muted">
                                                     {customOrder
-                                                        ? `In your own order. A new ${season.singular} goes last.`
+                                                        ? `In your own order. A new ${season.singular} goes last; ${season.a} per year goes by its year.`
                                                         : `In VODLoft's order: by date${view.siteOrder ? `, ${season.plural} as the ${words.creator} orders them` : ''}. Drag ${season.a} to put them in your own order.`}
                                                     {' '}Reordering renumbers the {season.plural}. Files keep their names until you rename the collection's files.
                                                 </p>

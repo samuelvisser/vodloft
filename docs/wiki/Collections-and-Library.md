@@ -98,7 +98,7 @@ Series can contain multiple seasons. The collection page lets you switch between
 
 ### Renaming, ordering and deleting seasons
 
-**Seasons** on a collection's **Edit** page opens the Seasons window. Give a season another name, or drag the seasons, or use the arrows, to put them in another order. The seasons are numbered again in their new order. **Automatic order** puts them back in VODLoft's own order. Turning a playlist or album off deletes its season when you save, unless another playlist or album that is still on shares it (see below).
+**Seasons** on a collection's **Edit** page opens the Seasons window. Give a season another name, or drag the seasons, or use the arrows, to put them in another order. The seasons are numbered again in their new order. **Automatic order** puts them back in VODLoft's own order. In your own order a new season goes last, except a season per year, which goes where its year puts it. Turning a playlist or album off deletes its season when you save, unless another playlist or album that is still on shares it (see below).
 
 The bin next to a season deletes it when you save. Its videos then go where the collection's settings put them, so a season the settings fill, such as a season per year, comes back with the videos that belong in it; the window warns you when that happens and offers to put those videos in one season instead. Seasons the site itself has, such as the shows of The Daily Wire, can't be deleted.
 

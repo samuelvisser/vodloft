@@ -32,7 +32,7 @@ from sqlalchemy import func, inspect, delete, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, MediaDownloadBase, Season
-from backend.services.season_order import arrange_seasons, link_first_videos, season_year
+from backend.services.season_order import arrange_seasons, link_first_videos, made_season, season_year
 from backend.services.seasons import create_season_record
 from backend.services.new_lists import ListKind, NewListSetting, list_kinds, new_link_seasons_settings
 from backend.services.sites import collection_site
@@ -429,6 +429,7 @@ class SeasonFinder:
             self._s, collection_id=collection.id, index=max((x.index for x in collection.seasons), default=0) + 1,
             slug=unique, name=name, season_number=number, update_collection_profiles=True,
         )
+        made_season(self._s, season)
         self._s.refresh(collection)
         self._by_slug[season.slug] = season
         if season_year(season) is not None:

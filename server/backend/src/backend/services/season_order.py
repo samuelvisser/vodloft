@@ -93,14 +93,37 @@ def _dated_order(s: Session, collection: Collection) -> list[Season]:
     return sorted(collection.seasons, key=key)
 
 
+_MADE_SEASONS = "vodloft.made_seasons"
+
+
+def made_season(s: Session, season: Season) -> None:
+    """Remember a season made in this transaction, which ``arrange_seasons`` puts where VODLoft's order has it, also
+    in a collection in the user's own order."""
+    s.info.setdefault(_MADE_SEASONS, set()).add(season.id)
+
+
+def _slot_in(ordered: list[Season], made: set[int], dated: list[Season]) -> list[Season]:
+    """The seasons in this order, each made one right after the season that comes before it in ``dated``."""
+    result = [season for season in ordered if season.id not in made]
+    before = None
+    for season in dated:
+        if season.id in made:
+            result.insert(result.index(before) + 1 if before is not None else 0, season)
+        before = season
+    return result
+
+
 def arrange_seasons(s: Session, collection: Collection) -> None:
     """Put the collection's seasons in order after seasons were added or videos moved.
 
     ``s`` is a write transaction's session."""
     seasons = list(collection.seasons)
     if collection.custom_season_order:
-        # The user's order stays: a new season was made last. The numbers close up around seasons that went.
-        _close_up(s, collection, sorted(seasons, key=lambda season: season.index))
+        # The user's order stays, and a new season goes last, except a season per year made just now: that goes where
+        # its year puts it, so the years stay in order. The numbers close up around seasons that went.
+        made = s.info.pop(_MADE_SEASONS, set()) & {season.id for season in seasons if season_year(season) is not None}
+        ordered = sorted(seasons, key=lambda season: season.index)
+        _close_up(s, collection, _slot_in(ordered, made, _dated_order(s, collection)) if made else ordered)
     elif any(playlist.season_id is not None for playlist in collection.lists) or any(season.loose for season in seasons):
         renumber_seasons(s, collection, _dated_order(s, collection))
     else:
