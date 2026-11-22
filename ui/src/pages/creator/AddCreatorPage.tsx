@@ -577,10 +577,8 @@ export default function AddCreatorPage() {
                                                 fitLabels={choiceLabels}
                                                 value={choiceOf(byRef.get(section.ref))}
                                                 onChange={(value) => choose(section.ref, value as ChoiceKey)}
-                                                menuPortalTarget={document.body} menuPlacement="auto"
-                                                styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                                                 // Lines set the other collections apart from the creator's own and from the rest.
-                                                classNames={{option: ({data}) => separated(registries.get(section.ref)!, data.value) ? 'creator-choice-separated' : ''}}
+                                                classNames={{option: (data) => separated(registries.get(section.ref)!, data.value) ? 'creator-choice-separated' : ''}}
                                             />
                                         </div>
                                     )}

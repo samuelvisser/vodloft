@@ -1,6 +1,5 @@
-import {createContext, useContext, type ComponentProps} from 'react'
+import type {ComponentProps} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {components, type ControlProps, type DropdownIndicatorProps, type SingleValueProps} from 'react-select'
 
 import {faIcon} from '../../icons/faIcon'
 import {presentOperationProgress} from '../../lib/operationProgress'
@@ -12,48 +11,6 @@ import ProgressFill from './ProgressFill'
 import SimpleSelect from './SimpleSelect'
 import './ProgressSelect.css'
 
-type Progress = {
-    presentation: ProgressPresentation
-    activeLabel: string
-    onCancel?: () => void
-    cancelLabel: string
-}
-
-// The running operation, for the field's parts that draw it. Unset while nothing runs.
-const ProgressContext = createContext<Progress | undefined>(undefined)
-
-type Option = {value: string; label: string}
-
-// The whole field is the progress bar: it fills behind the value, the way an Actions menu item fills while its
-// task runs.
-function ProgressControl(props: ControlProps<Option, false>) {
-    const progress = useContext(ProgressContext)
-    return (
-        <components.Control {...props}>
-            {progress && <ProgressFill presentation={progress.presentation} className="progress-select-fill"/>}
-            {props.children}
-        </components.Control>
-    )
-}
-
-// Stacked like ProgressButton: the value as a small uppercase title, and what is happening in bold below it.
-function ProgressSingleValue(props: SingleValueProps<Option, false>) {
-    const progress = useContext(ProgressContext)
-    if (!progress) return <components.SingleValue {...props}/>
-    const {presentation} = progress
-    return (
-        <components.SingleValue {...props} className="progress-select-value">
-            <span className="progress-select-title">{props.data.label}</span>
-            <span className="progress-select-status">
-                {presentation.mode !== 'determinate' && (
-                    <FontAwesomeIcon className="vl-progress-icon" icon={presentation.icon}/>
-                )}
-                {statusText(presentation, progress.activeLabel)}
-            </span>
-        </components.SingleValue>
-    )
-}
-
 function statusText(presentation: ProgressPresentation, activeLabel: string): string {
     if (presentation.mode === 'waiting') return presentation.compactLabel ?? presentation.label
     if (presentation.mode === 'determinate' && presentation.percent != null) {
@@ -62,34 +19,7 @@ function statusText(presentation: ProgressPresentation, activeLabel: string): st
     return activeLabel
 }
 
-function ProgressDropdownIndicator(props: DropdownIndicatorProps<Option, false>) {
-    const progress = useContext(ProgressContext)
-    if (!progress?.onCancel) return <components.DropdownIndicator {...props}/>
-    return (
-        <button
-            type="button"
-            className="progress-select-cancel"
-            title={progress.cancelLabel}
-            aria-label={progress.cancelLabel}
-            // react-select opens its menu on mouse down; the cancel button must not.
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-                event.stopPropagation()
-                progress.onCancel?.()
-            }}
-        >
-            <FontAwesomeIcon icon={faIcon('fass', 'xmark')}/>
-        </button>
-    )
-}
-
-const PROGRESS_COMPONENTS = {
-    Control: ProgressControl,
-    SingleValue: ProgressSingleValue,
-    DropdownIndicator: ProgressDropdownIndicator,
-}
-
-type Props = Omit<ComponentProps<typeof SimpleSelect>, 'components'> & {
+type Props = Omit<ComponentProps<typeof SimpleSelect>, 'controlAddon' | 'dropdownIndicator'> & {
     'aria-describedby'?: string
     /** The operation that changes this field. While it runs, the field shows its progress and can't be changed. */
     definition: FrontendOperationDefinition
@@ -124,27 +54,52 @@ export default function ProgressSelect({
     const presentation = presentOperationProgress(operation)
     const running = presentation?.active ? presentation : undefined
     const target = running && targetValueKey ? operation?.context?.[targetValueKey] : undefined
-    const progress = running && {
-        presentation: running,
-        activeLabel,
-        onCancel,
-        cancelLabel: cancelLabel || `Cancel ${definition.label.toLocaleLowerCase()}`,
-    }
+    const cancelText = cancelLabel || `Cancel ${definition.label.toLocaleLowerCase()}`
 
     return (
         <DisabledReason reason={running ? busyReason : undefined} placement="below-start" as="div">
             {({describedBy, explain}) => (
                 <div className={`progress-select-host${running ? ' is-progress' : ''}`} onClick={running ? explain : undefined}>
-                    <ProgressContext.Provider value={progress || undefined}>
-                        <SimpleSelect
-                            {...props}
-                            value={typeof target === 'string' ? target : value}
-                            className={`${className} progress-select${running ? ` is-progress is-${running.mode}` : ''}${onCancel ? ' has-cancel' : ''}`}
-                            components={PROGRESS_COMPONENTS}
-                            isDisabled={isDisabled || !!running}
-                            aria-describedby={describedBy ?? props['aria-describedby']}
-                        />
-                    </ProgressContext.Provider>
+                    <SimpleSelect
+                        {...props}
+                        value={typeof target === 'string' ? target : value}
+                        className={`${className} progress-select${running ? ` is-progress is-${running.mode}` : ''}${onCancel ? ' has-cancel' : ''}`}
+                        isDisabled={isDisabled || !!running}
+                        aria-describedby={describedBy ?? props['aria-describedby']}
+                        // The whole field is the progress bar: it fills behind the value, the way an Actions menu
+                        // item fills while its task runs.
+                        controlAddon={running && <ProgressFill presentation={running} className="progress-select-fill"/>}
+                        // Stacked like ProgressButton: the value as a small uppercase title, and what is happening in
+                        // bold below it.
+                        formatOptionLabel={running ? (option) => (
+                            <>
+                                <span className="progress-select-title">{option.label}</span>
+                                <span className="progress-select-status">
+                                    {running.mode !== 'determinate' && (
+                                        <FontAwesomeIcon className="vl-progress-icon" icon={running.icon}/>
+                                    )}
+                                    {statusText(running, activeLabel)}
+                                </span>
+                            </>
+                        ) : props.formatOptionLabel}
+                        classNames={running ? {...props.classNames, singleValue: () => 'progress-select-value'} : props.classNames}
+                        dropdownIndicator={running && onCancel ? (
+                            <button
+                                type="button"
+                                className="progress-select-cancel"
+                                title={cancelText}
+                                aria-label={cancelText}
+                                // The field opens its menu on mouse down; the cancel button must not.
+                                onMouseDown={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    onCancel()
+                                }}
+                            >
+                                <FontAwesomeIcon icon={faIcon('fass', 'xmark')}/>
+                            </button>
+                        ) : undefined}
+                    />
                 </div>
             )}
         </DisabledReason>

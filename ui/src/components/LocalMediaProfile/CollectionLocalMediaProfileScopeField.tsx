@@ -1,30 +1,23 @@
+import type {ReactNode} from 'react'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
-import {components, type OptionProps} from 'react-select'
 
 import {CollectionLocalMediaProfileScopeReg, type CollectionLocalMediaProfileScope} from '../../types/local_media_profile'
 import ReadMore from '../../utils/ReadMore'
 import DisabledReason from '../common/DisabledReason'
+import type {SelectOptionState} from '../common/Select'
 import SimpleSelect from '../common/SimpleSelect'
 import {switchProfileKind, useTracksLock} from './musicKind'
 import {ScopeRequestedField} from './ProfileFit'
-
-type Option = {value: string, label: string}
 
 const FROM_TRACKS_REASON = 'This profile already has downloaded music tracks, so what it is available for can\'t change. Duplicate it to start one for something else.'
 const TO_TRACKS_REASON = 'This profile already has downloads and downloads audio only, which for Music keeps tracks. Choose a video download first, or duplicate it to start one for music tracks.'
 
 // An option that can't be chosen explains why, as the items of an Actions menu do.
-function ScopeOption(props: OptionProps<Option, false>) {
-    const reason = props.isDisabled ? (props.selectProps as {disabledOptionReason?: string}).disabledOptionReason : undefined
-    if (!reason) return <components.Option {...props}/>
-    return (
-        <DisabledReason reason={reason} placement="below-start" as="div">
-            {({describedBy}) => <div aria-describedby={describedBy}><components.Option {...props}/></div>}
-        </DisabledReason>
-    )
-}
-
-const SCOPE_COMPONENTS = {Option: ScopeOption}
+const explainDisabledOption = (option: ReactNode, _data: unknown, {isDisabled}: SelectOptionState) => isDisabled ? (
+    <DisabledReason reason={TO_TRACKS_REASON} placement="below-start" as="div">
+        {({describedBy}) => <div aria-describedby={describedBy}>{option}</div>}
+    </DisabledReason>
+) : option
 
 /**
  * What a Collection profile is offered for. A profile for Music keeps tracks, with the tags music players read, when it
@@ -71,9 +64,8 @@ export default function CollectionLocalMediaProfileScopeField({
                                     value={field.value ?? 'podcast-and-series'}
                                     isDisabled={locked}
                                     isOptionDisabled={(option) => tracksBlocked && option.value === 'music'}
-                                    components={SCOPE_COMPONENTS}
+                                    renderOption={explainDisabledOption}
                                     className="select-with-option-reasons"
-                                    {...{disabledOptionReason: TO_TRACKS_REASON}}
                                     onChange={(value) => {
                                         const nextScope = value as CollectionLocalMediaProfileScope
                                         const previousScope = (field.value ?? 'podcast-and-series') as CollectionLocalMediaProfileScope

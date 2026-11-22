@@ -13,7 +13,7 @@ import {
     DownloadProfileUpdateIn, DownloadProfileUpdateOut, DownloadProfileUpdateSchema,
 } from '../../types/schemas/download_profile'
 import {buildServerAwareSubmit} from '../../utils/buildServerAwareSubmit'
-import Select from 'react-select'
+import Select from '../../components/common/Select'
 import {safeReturnPath, useLocalMediaProfileSelectRegistry} from "../../types/local_media_profile";
 import LocalMediaProfileFitNote from '../../components/DownloadProfile/LocalMediaProfileFitNote'
 import RequestedField, {RequestedFieldsProvider} from '../../components/common/RequestedField'
@@ -260,7 +260,6 @@ export default function EditDownloadProfilePage() {
                             render={({field}) => (
                                 <Select
                                     inputId="local-media-profile"
-                                    classNamePrefix="select"
                                     options={mediaProfileReg.options}
                                     value={mediaProfileReg.options.find(o => Number(o.value) === field.value) ?? null}
                                     onChange={(opt) => field.onChange((opt as any) ? Number((opt as any).value) : null)}

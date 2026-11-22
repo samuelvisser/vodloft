@@ -1,7 +1,7 @@
 import {useEffect, useId, useMemo, useState} from 'react'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
-import Select from 'react-select'
+import Select from '../../components/common/Select'
 import toast from '../../lib/toast'
 import {z} from 'zod'
 
@@ -238,7 +238,6 @@ export default function CollectionDownloadAllDialog({
             render={({field}) => (
               <Select
                 inputId={`${selectId}-season`}
-                classNamePrefix="select"
                 isMulti
                 options={seasonRegistry.options}
                 value={seasonRegistry.options.filter((option) => field.value.includes(Number(option.value)))}
@@ -275,7 +274,6 @@ export default function CollectionDownloadAllDialog({
             render={({field}) => (
               <Select
                 inputId={`${selectId}-type`}
-                classNamePrefix="select"
                 isMulti
                 options={tagOptions}
                 value={tagOptions.filter((option) => field.value.includes(option.value))}

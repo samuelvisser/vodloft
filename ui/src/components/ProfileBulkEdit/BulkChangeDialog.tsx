@@ -210,8 +210,6 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields, on
                                                             registry={spec.registry!}
                                                             value={String(field.value ?? '')}
                                                             onChange={field.onChange}
-                                                            menuPortalTarget={document.body}
-                                                            styles={{menuPortal: (base) => ({...base, zIndex: 2000})}}
                                                         />
                                                     )}
                                                 />

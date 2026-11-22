@@ -52,9 +52,6 @@
     font-size: 16px !important;
 }
 
-.logs-level-select .select__control {
-    min-height: 40px;
-}
 
 .logs-pull-toggle {
     display: flex;

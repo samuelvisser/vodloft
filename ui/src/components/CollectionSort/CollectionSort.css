@@ -10,7 +10,7 @@
 }
 .collection-sort:focus-within { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.25); }
 .collection-sort-select { min-width: 190px; }
-/* Part of the pill: no border of its own (the global react-select rules use !important). */
+/* Part of the pill: no border of its own. */
 .collection-sort .collection-sort-select div.select__control,
 .collection-sort .collection-sort-select div.select__control:hover {
     height: 100%;

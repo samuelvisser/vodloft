@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef} from 'react'
 import {type UseFormReturn, useWatch} from 'react-hook-form'
-import Select from 'react-select'
+import Select from '../../components/common/Select'
 
 import {useLocalMediaProfileSites} from '../../lib/queries'
 import {sitesForLocalMediaProfileType, takesUpcomingSites, type LocalMediaProfileType} from '../../types/local_media_profile'
@@ -81,7 +81,6 @@ export default function LocalMediaProfileSitesField({form, mode}: {
                     isSearchable={siteReg.values.length > 8}
                     isClearable
                     closeMenuOnSelect={false}
-                    classNamePrefix="select"
                     placeholder="Choose at least one Site"
                     options={siteReg.options}
                     value={siteReg.options.filter((option) => chosen.includes(option.value))}

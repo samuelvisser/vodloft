@@ -102,7 +102,7 @@
     flex: 1;
 }
 
-/* The add row is part of the list: no border of its own (the global react-select rules use !important). */
+/* The add row is part of the list: no border of its own. */
 .subtitle-languages .subtitle-language__add div.select__control,
 .subtitle-languages .subtitle-language__add div.select__control:hover {
     border: 0 !important;

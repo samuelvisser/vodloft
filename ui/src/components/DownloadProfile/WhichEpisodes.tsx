@@ -2,7 +2,7 @@ import {collectionWords, type Noun} from '../../lib/collectionWords'
 import {Fragment, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent} from 'react'
 import {Controller, useFieldArray, useWatch, type UseFormReturn} from 'react-hook-form'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import Select from 'react-select'
+import Select from '../../components/common/Select'
 import Switch from 'react-switch'
 
 import {faIcon} from '../../icons/faIcon'
@@ -306,7 +306,6 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                     <label htmlFor={`${id}-types`}>Is any of</label>
                     <Select
                         inputId={`${id}-types`} isMulti closeMenuOnSelect={false}
-                        classNamePrefix="select"
                         options={tagOptions}
                         value={tagOptions.filter((option) => (filter.episodeTypes ?? []).includes(option.value))}
                         onChange={(options) => setValue(`${name}.episodeTypes`, options.map((option) => option.value), {shouldDirty: true})}
@@ -339,7 +338,6 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                     </SelectAllLabel>
                     <Select
                         inputId={`${id}-seasons`} isMulti closeMenuOnSelect={false} isClearable
-                        classNamePrefix="select"
                         options={seasonOptions}
                         value={seasonOptions.filter((option) => chosen.includes(option.value))}
                         onChange={(options) => {
@@ -654,7 +652,7 @@ export default function WhichEpisodes({form, episodeIdentifier, tags, seasons, c
                                 <label htmlFor="which-episodes-shown">Show</label>
                                 <SimpleSelect
                                     inputId="which-episodes-shown" registry={shownReg} value={shown} className="which-episodes-shown-select"
-                                    onChange={setShown} menuPlacement="auto"
+                                    onChange={setShown}
                                 />
                             </div>
                         )}
