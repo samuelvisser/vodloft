@@ -650,6 +650,31 @@ def test_downloaded_videos_of_year_seasons_wait_for_the_move_after_a_save_puts_t
     assert _seasons(session) == [("Videos", 1, ["a", "b"])]
 
 
+def test_the_channel_season_takes_its_new_name_when_it_holds_the_whole_channel(source, session, monkeypatch):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Season
+
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session, mode="selected", loose="one_season")
+    _index(session, collection, source)
+    view = service.seasons_view(session, "creator")
+    session.rollback()
+    loose = next(season for season in view.seasons if season.loose)
+    assert loose.name == view.channel_season_names["unlisted"]
+
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=False,
+        link_seasons="selected", loose_videos="one_season", channel_season="everything",
+    )
+    run_write_transaction(lambda s: update_seasons_call(service, s, body))
+
+    assert session.get(Season, loose.id).name == view.channel_season_names["everything"]
+
+
 def update_seasons_call(service, s, body):
     return service.update_seasons(s, "creator", body)
 

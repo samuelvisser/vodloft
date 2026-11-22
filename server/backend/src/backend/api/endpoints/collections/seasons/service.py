@@ -279,6 +279,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     # the collection's playlists were off: a season that no list holds after saving empties.
     was_seasons = {link.season_id for link in playlists.values() if link.season_id is not None}
     was_only = holds_only_link_seasons(collection)
+    was_named = loose_season_name(collection)
     relist = (
         collection.feeds != feeds
         or collection.link_seasons != body.link_seasons
@@ -304,6 +305,13 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     if body.repeat_videos is not None:
         # An episode of a video in each season it belongs in, made or let go of below.
         collection.repeat_videos = RepeatVideos(body.repeat_videos).value
+    # The channel season takes the name its new settings give it, such as Channel once it holds everything, unless
+    # the user named it themselves.
+    named = loose_season_name(collection)
+    if named != was_named:
+        for season in collection.seasons:
+            if season.loose and season.name == was_named:
+                season.name = named
     regrouped = _regroup(playlists, seasons, body)
     for change in body.playlists:
         if change.id not in playlists:
