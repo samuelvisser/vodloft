@@ -22,14 +22,19 @@ _UPGRADE_CHECK_TASK_KEY = "upgrade_check"
 
 def apply_refreshed_details(item: Episode | Video, details: VideoDetails, *, now: datetime | None = None) -> bool:
     """Take the title, description, uploader, length and picture the Source has now. Returns whether any changed.
+    An episode on a Site that names episodes from their description takes the title made from it.
 
     A field the Source left out is kept. So is a lock: a refresh that says nothing about access does not prove
     anyone may download the item, so it only stores the access the Source says the item needs now. The item
     remembers when it was looked up, also when nothing changed.
     """
     item.metadata_refreshed_at = now or datetime.now(timezone.utc)
+    title = details.title
+    if isinstance(item, Episode) and (site := episode_site(item)).titles_from_description:
+        # Named from its description: a refresh without one, such as a listing's, keeps the title.
+        title = site.episode_title(details.title, details.description) if details.description is not None else None
     changes = {
-        "title": details.title, "description": details.description, "author_name": details.author_name,
+        "title": title, "description": details.description, "author_name": details.author_name,
         # A length of zero means the Source did not say.
         "duration": details.duration or None,
         "access": details.access,

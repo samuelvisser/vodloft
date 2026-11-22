@@ -55,6 +55,7 @@ from backend.services.media_access import lock_refused
 from backend.services.notifications.emitters import link_seasons_found
 from backend.services.reassigned import list_left_out, lists_left_out, placed_elsewhere, save_left_out, settle_creator
 from backend.services.season_order import arrange_seasons
+from backend.services.sites import collection_site
 from backend.services.link_seasons import (
     SeasonFinder, SeasonNumbers, holds_only_link_seasons, list_lists, lists_own_link, own_feeds, own_link, section_list_names, place_in_link_seasons, link_seasons_on,
     save_lists,
@@ -264,6 +265,8 @@ def _new_episode(
     """A listed video as an episode, or with ``part``, the chapter of it with that number."""
     number, chapter = part if part is not None else (None, None)
     source_slug = details.slug if chapter is None else f"{details.slug}-part-{number}"
+    # A collection of links from several Sites follows each video's own Site.
+    site = site_for(details.url, collection.source_key) if holds_only_link_seasons(collection) else collection_site(collection)
     return Episode(
         uuid=generate_uuid(),
         type=MediaType.EPISODE.value,
@@ -279,17 +282,15 @@ def _new_episode(
         # A part keeps the title and length of its chapter, so a refresh of the whole video has nothing for it.
         metadata_is_final=chapter is not None or (
             details.publish_status not in PENDING_EPISODE_PUBLISH_STATUSES and new_item_metadata_is_final(
-                # A collection of links from several Sites follows each video's own Site.
                 source_key=collection.source_key,
-                site_key=site_for(details.url, collection.source_key).key if holds_only_link_seasons(collection)
-                else collection.site_key,
+                site_key=site.key if holds_only_link_seasons(collection) else collection.site_key,
                 published_at=details.published_at,
             )
         ),
         scheduled_date=details.scheduled_at,
         sharing_url=details.url,
         published_date=details.published_at,
-        title=details.title if chapter is None else chapter.title,
+        title=site.episode_title(details.title, details.description) if chapter is None else chapter.title,
         description=details.description,
         duration=(details.duration or 0.0) if chapter is None else chapter.end - chapter.start,
         author_name=details.author_name,

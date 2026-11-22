@@ -10,6 +10,8 @@ class Instagram(OtherSites):
     initials = "IG"
     domains = ("instagram.com",)
     icon = "fab:instagram"
+    # yt-dlp titles a post "Video by <account>"; what it is about is in its caption.
+    titles_from_description = True
     # yt-dlp downloads single posts and reels; it can't list an account's posts, so Instagram has no creators.
     # Instagram has no subtitles, and keeps its videos at 1080p at most.
     downloads = replace(OtherSites.downloads, video_heights=(360, 480, 720, 1080), subtitles=False)
