@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "5133229960f5"
+HEAD_REVISION = "e3d9539a8be1"
 
 
 @pytest.fixture
@@ -2218,4 +2218,46 @@ def test_a_channel_collection_with_seasons_of_its_lists_takes_those_lists_again(
         assert dict(connection.execute(text("SELECT id, link_seasons FROM collections")).all()) == {1: "selected", 2: "selected"}
         assert connection.execute(text("SELECT id, enabled, status FROM collection_lists ORDER BY id")).all() == [
             (1, 1, "known"), (2, 0, "new"), (3, 0, "new"), (4, 0, "new"),
+        ]
+
+
+def test_a_playlist_takes_the_season_named_after_it_that_the_old_creators_left_without_it(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "5133229960f5")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+            "author_name, author_slug, source_key, episode_order, link_seasons, kind) VALUES (1, 'uuid-1', 'channel', "
+            "'Channel', 'https://example.test/1', 'free', 'series', 'seasonal', 'Host', 'host', 'ytdlp', 'oldest_first', "
+            "'off', 'channel')"
+        ))
+        # The seasons the old creator filled, one empty and two of one name, and the season of videos in no playlist.
+        for season_id, name, loose in ((1, "VLOGS", False), (2, "Empty", False), (3, "Twice", False), (4, "Twice", False), (5, "Videos", True)):
+            connection.execute(text(
+                "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number, loose) "
+                "VALUES (:id, 1, :id, 's' || :id, :name, 'normal', :id, :loose)"
+            ), {"id": season_id, "name": name, "loose": loose})
+        connection.execute(text("INSERT INTO media_items (id, uuid, type, source_key) VALUES (10, 'episode-10', 'episode', 'ytdlp')"))
+        connection.execute(text(
+            "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
+            "publish_status, sharing_url, source_slug) VALUES (10, 1, 1, 10, 'ep', 'e10', 'published_final', "
+            "'https://example.test', 'e10')"
+        ))
+        for list_id, title in ((1, "VLOGS"), (2, "Empty"), (3, "Twice"), (4, "Videos"), (5, "Other")):
+            connection.execute(text(
+                "INSERT INTO collection_lists (id, collection_id, ref, source_key, url, title, enabled, status) "
+                "VALUES (:id, 1, 'PL' || :id, 'ytdlp', 'https://example.test/PL' || :id, :title, false, 'known')"
+            ), {"id": list_id, "title": title})
+
+    command.upgrade(config, "e3d9539a8be1")
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT link_seasons FROM collections")).scalar() == "selected"
+        # Only a name that picks one season that is not the season of videos in no playlist links them, and only the
+        # playlist whose season holds episodes is switched on.
+        assert connection.execute(text("SELECT id, season_id, enabled FROM collection_lists ORDER BY id")).all() == [
+            (1, 1, 1), (2, 2, 0), (3, None, 0), (4, None, 0), (5, None, 0),
         ]

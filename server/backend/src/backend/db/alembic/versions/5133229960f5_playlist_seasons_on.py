@@ -1,5 +1,8 @@
 """A collection that still has seasons of its lists takes its lists again.
 
+TESTING ONLY: this fixes test databases that ran the old creators, which no release had (collection lists came after
+0.9.1). Leave it out when the migrations are merged into the 0.10.0 release migration.
+
 Under the old creators, a creator placed its lists in its collections whatever the collection's own playlist setting
 said, so a channel collection can hold seasons of its lists while that setting is off. Now only the setting decides,
 and with it off the Seasons window offers no way to switch those lists off, so their seasons stay for good.

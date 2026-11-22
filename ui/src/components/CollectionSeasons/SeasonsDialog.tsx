@@ -341,6 +341,14 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         'playlists', playlistChoices.map((choice) => ({...choice, enabled})), {shouldDirty: true},
     )
     const playlistsById = new Map((view?.playlists ?? []).map((playlist) => [playlist.id, playlist]))
+    // A list's season leaves the list below as soon as no list in it is a season any more, as saving would leave it.
+    const stillSeasons = new Set(playlistChoices
+        .filter((choice) => linkSeasonsOn && (mode === 'all' || choice.enabled) && choice.asSeason && !removedLinks.includes(choice.id))
+        .map((choice) => choice.seasonId))
+    const going = new Set((view?.playlists ?? [])
+        .map((playlist) => playlist.seasonId)
+        .filter((id): id is number => id !== null && !seasonsById.get(id)?.loose && !stillSeasons.has(id)))
+    let shown = 0
     const bulkIds = playlistChoices.filter((choice) => !playlistsById.get(choice.id)?.addedByUser).map((choice) => choice.id)
     const allChosen = bulkIds.length > 0 && bulkIds.every((id) => chosen.has(id))
     const toggleChosen = (id: number) => setChosen((current) => {
@@ -751,6 +759,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                             {fields.map((field, index) => {
                                                 const season = seasonsById.get(field.id)
                                                 const extra = season?.seasonType === 'extra'
+                                                if (going.has(field.id)) return null
+                                                shown += 1
                                                 return (
                                                     <li
                                                         key={field.key}
@@ -770,7 +780,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         onDragEnd={() => setDragging(null)}
                                                     >
                                                         <span className="seasons-dialog-grip" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'grip-vertical')}/></span>
-                                                        <span className="seasons-dialog-number" aria-hidden="true">{extra ? '0' : customOrder ? index + 1 : season?.seasonNumber}</span>
+                                                        <span className="seasons-dialog-number" aria-hidden="true">{extra ? '0' : customOrder ? shown : season?.seasonNumber}</span>
                                                         <span className="seasons-dialog-season-copy">
                                                             <input
                                                                 className="input" aria-label={`Name of ${words.season.singular} ${index + 1}`}
@@ -803,7 +813,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 )
                                             })}
                                         </ol>
-                                        {fields.length === 0 && <p className="seasons-dialog-muted">This collection has no {season.plural} yet.</p>}
+                                        {fields.length === going.size && <p className="seasons-dialog-muted">This collection has no {season.plural} yet.</p>}
                                         {errors.seasons?.message && <div className="error" role="alert">{errors.seasons.message}</div>}
                                         {errors.seasons?.root?.message && <div className="error" role="alert">{errors.seasons.root.message}</div>}
                                     </section>
