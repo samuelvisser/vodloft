@@ -30,6 +30,8 @@ type Props = {
     collectionSlug: string
     collectionTitle: string
     onDismiss: () => void
+    /** Called after a save that left downloaded episodes in another season than the one they belong in now. */
+    onMovesWaiting?: () => void
     /** What the collection calls its seasons and episodes, such as albums and music videos. */
     words?: CollectionWords
 }
@@ -47,13 +49,13 @@ const dialogWords = (collection: CollectionWords, view: CollectionSeasonsRead | 
     creator: view?.creatorNames.singular ?? '', creators: view?.creatorNames.plural ?? '', channel: view?.channelNames.singular ?? '',
     video: view?.mediaNames.singular ?? '', videos: view?.mediaNames.plural ?? '',
     season: collection.season, episode: collection.episode, inSeason: collection.inSeason,
-    here: view && namesOf(view).singular === collection.season.singular ? ' here' : '',
+    here: view && view.sectionListNames.singular === collection.season.singular ? ' here' : '',
 })
 
 /** What the collection's Site calls its lists, all its types of list together, such as "albums and playlists" on
  * SoundCloud, and the season of the videos in none of them. */
 type ListNames = {singular: string, plural: string, a: string, looseSeason: string}
-const namesOf = (view: CollectionSeasonsRead): ListNames => ({...view.sectionListNames, looseSeason: view.looseSeason})
+const namesOf = (view: CollectionSeasonsRead, looseSeason: string): ListNames => ({...view.sectionListNames, looseSeason})
 
 const counted = (count: number, singular: string, plural: string) => `${count} ${count === 1 ? singular : plural}`
 
@@ -96,7 +98,7 @@ function registries(names: ListNames, words: Words, view: CollectionSeasonsRead)
         } as Record<ChannelSeason, {label: string, help: string}>),
         layout: createSelectRegistry(`ListLayout-${names.plural}-${words.creator}-${words.season.a}`, {
             season_each: {label: words.here ? `Each ${names.singular} on its own` : `${capitalized(words.season.a)} per ${words.creator ? `${words.creator} ` : ''}${names.singular}`, help: `Each ${names.singular} is ${words.season.a}${words.here}, or shares one with the ${names.plural} you put together below.`},
-            by_year: {label: `Together in ${words.season.plural} by year`, help: `The ${names.plural} still decide which ${words.videos} are in, but every ${words.video} goes to the ${words.season.singular} of its year, as do the ${words.videos} in no ${names.singular}. Downloaded ${words.videos} stay where they are, marked Moved, until you move them.`},
+            by_year: {label: `Together in ${words.season.plural} by year`, help: `The ${names.plural} still decide which ${words.videos} are in, but every ${words.video} goes to the ${words.season.singular} of its year, as do the ${words.videos} in no ${names.singular}. When you save, VODLoft offers to move the downloaded ones, files and all.`},
         }),
         loose: createSelectRegistry(`LooseVideos-${names.looseSeason}`, {
             one_season: {label: `One ${words.season.singular}, ${names.looseSeason}`, help: `They share one ${words.season.singular}, shown before the ${names.plural}.`},
@@ -127,7 +129,7 @@ function registries(names: ListNames, words: Words, view: CollectionSeasonsRead)
 }
 
 /** The Seasons dialog: rename and reorder a collection's seasons, and choose which of its creator's playlists are seasons. */
-export default function SeasonsDialog({open, collectionSlug, collectionTitle, onDismiss, words: collectionWordsGiven}: Props) {
+export default function SeasonsDialog({open, collectionSlug, collectionTitle, onDismiss, onMovesWaiting, words: collectionWordsGiven}: Props) {
     const queryClient = useQueryClient()
     const titleId = `seasons-dialog-title-${useId()}`
     const endpoint = `${apiUrl()}/collections/${encodeURIComponent(collectionSlug)}/season-settings`
@@ -167,10 +169,6 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     }
 
     // What the Site calls its lists, such as playlists on YouTube, also in a Music collection, whose seasons are albums.
-    const names = useMemo(() => view ? namesOf(view) : undefined, [view])
-    const words = dialogWords(collectionWordsGiven ?? (view ? wordsOf(view.words) : collectionWords(null)), view)
-    const {season} = words
-    const regs = useMemo(() => view && names ? registries(names, words, view) : null, [view, names, words])
     const linkSeasonsOn = watch('linkSeasonsOn') ?? false
     const mode = watch('linkSeasonMode') ?? 'all'
     const playlistChoices = watch('playlists') ?? []
@@ -188,6 +186,15 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const customOrder = watch('customSeasonOrder') ?? false
     const repeatVideos = watch('repeatVideos') ?? 'one_season'
     const removedLinks = watch('removedLinks') ?? []
+    // The channel season is called Channel while it holds the whole channel, as the form is set now, so the names
+    // follow the form before it is saved.
+    const holdsWholeChannel = !!view && view.kind === 'channel' && view.feeds.length > 0 && outsideVideos !== 'only'
+        && feeds.length > 0 && channelSeason === 'everything'
+    const looseSeason = view ? view.channelSeasonNames[holdsWholeChannel ? 'everything' : 'unlisted'] : undefined
+    const names = useMemo(() => view ? namesOf(view, looseSeason!) : undefined, [view, looseSeason])
+    const words = dialogWords(collectionWordsGiven ?? (view ? wordsOf(view.words) : collectionWords(null)), view)
+    const {season} = words
+    const regs = useMemo(() => view && names ? registries(names, words, view) : null, [view, names, words])
     const only = outsideVideos === 'only'
 
     const leaving = (values: CollectionSeasonsFormOut): Leaving => {
@@ -253,7 +260,13 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 queryClient.invalidateQueries({queryKey: ['collection', collectionSlug]}),
             ])
             toast.success(`${season.Plural} saved`)
+            // Downloaded episodes that belong in another season now wait for the Move dialog, which the save opens.
+            const moves = await fetch(`${endpoint}/moved-episodes`, {credentials: 'include'})
+                .then((response) => response.ok ? response.json() : {episodeSlugs: []})
+                .catch(() => ({episodeSlugs: []}))
+            await queryClient.invalidateQueries({queryKey: ['collection', collectionSlug, 'movedEpisodes']})
             onDismiss()
+            if ((moves.episodeSlugs ?? []).length > 0) onMovesWaiting?.()
         },
     })
 

@@ -24,6 +24,7 @@ import ProgressSelect from '../../components/common/ProgressSelect'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
 import {apiUrl} from '../../lib/api'
 import SeasonsDialog from '../../components/CollectionSeasons/SeasonsDialog'
+import ReconcileDialog from '../../components/ReconcileDialog/ReconcileDialog'
 import PageHeader, {PageHeaderAction} from '../../components/common/PageHeader'
 import {collectionWords, wordsFor} from '../../lib/collectionWords'
 import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
@@ -68,6 +69,8 @@ export default function EditCollectionPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [metadataOpen, setMetadataOpen] = useState(false)
+  // The Move dialog, for the downloaded episodes a save of the seasons left in another season.
+  const [moving, setMoving] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   // A message about new playlists opens the Seasons dialog straight away.
   const seasonsOpen = searchParams.get('seasons') === '1'
@@ -599,7 +602,15 @@ export default function EditCollectionPage() {
         collectionSlug={id}
         collectionTitle={collection?.title ?? id}
         onDismiss={() => setSeasonsOpen(false)}
+        onMovesWaiting={() => setMoving(true)}
         words={wordsFor(collection)}
+      />
+
+      <ReconcileDialog
+        open={moving}
+        path={`/collections/${encodeURIComponent(id)}`}
+        what={`the ${wordsFor(collection).episode.plural} of ${collection?.title ?? id}`}
+        onDismiss={() => setMoving(false)}
       />
 
       <CustomMetadataEditor

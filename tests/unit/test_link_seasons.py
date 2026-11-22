@@ -617,6 +617,39 @@ def test_a_season_of_a_list_left_over_while_link_seasons_were_off_empties_when_s
     assert _seasons(session) == [("2024", 1, ["a"]), ("2025", 2, ["b"])]
 
 
+def test_downloaded_videos_of_year_seasons_wait_for_the_move_after_a_save_puts_them_in_one_season(source, session, monkeypatch):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, Season
+    from backend.services.link_seasons import moved_episodes
+    from backend.services.reconcile import ReconcileScope, reconcile
+
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ()}
+    collection = _collection(session, mode="selected", loose="by_year")
+    _index(session, collection, source)
+    _give_files(session, "a")
+    assert _seasons(session) == [("2024", 2024, ["a"]), ("2025", 2025, ["b"])]
+
+    seasons = session.scalars(select(Season).order_by(Season.index)).all()
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": x.id, "name": x.name} for x in seasons], custom_season_order=False,
+        link_seasons="selected", loose_videos="one_season",
+    )
+    session.rollback()
+    run_write_transaction(lambda s: update_seasons_call(service, s, body))
+
+    # The video without files moved at once; the downloaded one waits for the Move dialog the save opens.
+    assert _seasons(session) == [("Videos", 1, ["b"]), ("2024", 2, ["a"])]
+    assert [episode.source_slug for episode in moved_episodes(session, session.get(Collection, collection.id))] == ["a"]
+    session.rollback()
+    run_write_transaction(lambda w: reconcile(w, ReconcileScope.of_collection(w.get(Collection, collection.id)), renumber={}))
+    session.expire_all()
+    assert _seasons(session) == [("Videos", 1, ["a", "b"])]
+
+
 def update_seasons_call(service, s, body):
     return service.update_seasons(s, "creator", body)
 
