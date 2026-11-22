@@ -38,7 +38,7 @@ import {useExistingFilesScans} from '../../components/ExistingFiles/api'
 import EpisodeTypeFilter from '../../components/Episode/EpisodeTypeFilter'
 import LockedEpisodesFilter from '../../components/Episode/LockedEpisodesFilter'
 import {ApiError, apiFetch, apiUrl, publicAddress} from '../../lib/api'
-import {downloadsBySeason, fileWordsFor, wordsFor} from '../../lib/collectionWords'
+import {fileWordsFor, wordsFor} from '../../lib/collectionWords'
 import {isCollectionLocalMediaProfileAvailableFor, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
 
 const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
@@ -177,7 +177,7 @@ export default function CollectionPage() {
     data: seasonsData,
     isLoading: seasonsLoading,
     isPlaceholderData: seasonsPlaceholder,
-  } = useCollectionSeasons(isSeasonal || (collection && downloadsBySeason(collection.type)) ? id : undefined)
+  } = useCollectionSeasons(collection ? id : undefined)
   const seasons = useMemo(
     () => [...(seasonsData ?? [])].sort((a, b) => b.index - a.index),
     [seasonsData],
@@ -192,6 +192,12 @@ export default function CollectionPage() {
     }
     return createSelectRegistry('CollectionSeason', spec, values)
   }, [seasons, words])
+  // A collection that lists every season's episodes together names each one's season, so that a video in several
+  // seasons, such as a channel's and two playlists', is not taken for a duplicate.
+  const seasonNames = useMemo(
+    () => !isSeasonal && seasons.length > 1 ? new Map(seasons.map((season) => [season.id, seasonReg.getLabel(String(season.id))])) : undefined,
+    [isSeasonal, seasons, seasonReg],
+  )
 
   useEffect(() => {
     if (!isSeasonal || seasons.length === 0) {
@@ -844,6 +850,7 @@ export default function CollectionPage() {
               <EpisodeCard
                 key={ep.id} ep={ep} collectionSlug={id} downloads={downloadsBySlug.get(ep.slug)}
                 moved={movedEpisodes?.has(ep.slug)}
+                seasonName={seasonNames?.get(ep.seasonId)}
                 words={words}
               />
             ))}

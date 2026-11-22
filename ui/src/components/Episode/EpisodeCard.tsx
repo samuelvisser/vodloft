@@ -108,12 +108,14 @@ type Props = {
     moved?: boolean
     /** The title of the episode's collection, for a list of episodes from several collections. */
     collectionTitle?: string
+    /** The name of the episode's season, for a list of the episodes of several seasons. */
+    seasonName?: string
     /** What the collection calls its seasons and episodes, such as albums and tracks. */
     words: CollectionWords
 }
 
 /** The episode thumbnail card used on a show's episode list. */
-export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, collectionTitle, words}: Props) {
+export default function EpisodeCard({ep, collectionSlug, downloads, moved = false, collectionTitle, seasonName, words}: Props) {
     const initials = ep.title
         .split(' ')
         .map((w) => w[0])
@@ -138,7 +140,7 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
     const dateText = ep.publishedDate && !DATE_LABEL.test(ep.episodeLabel)
         ? ep.publishedDate.toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'})
         : undefined
-    const metaText = [collectionTitle, numberText, dateText].filter(Boolean).join(' · ')
+    const metaText = [collectionTitle, seasonName, numberText, dateText].filter(Boolean).join(' · ')
 
     const navigate = useNavigate()
     const episodeHref = `/collection/${collectionSlug}/episode/${ep.slug}`
