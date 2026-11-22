@@ -136,6 +136,7 @@ class DailyWireSource(Source):
     kind_names = MappingProxyType({LinkKind.COLLECTION: Names("show", "shows"), LinkKind.CREATOR: HOST})
     features = frozenset({
         Feature.COLLECTIONS,
+        Feature.OWN_SEASONS,
         Feature.MOVIES,
         Feature.MOVIE_EXTRAS,
         Feature.BROWSE,

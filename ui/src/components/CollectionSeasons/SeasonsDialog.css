@@ -161,3 +161,27 @@
 }
 
 .seasons-dialog-list-name .btn { white-space: nowrap; }
+
+.seasons-dialog-season.is-removed .seasons-dialog-season-copy .input { text-decoration: line-through; opacity: .6; }
+.seasons-dialog-warning {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: .75rem;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #fcd34d; /* amber-300 */
+    background: #fffbeb; /* amber-50 */
+    color: #78350f; /* amber-900 */
+}
+.seasons-dialog-warning svg { color: #d97706; flex: none; }
+.seasons-dialog-warning p { margin: 0 0 .5rem; }
+.seasons-dialog-warning p:last-child { margin-bottom: 0; }
+@media (prefers-color-scheme: dark) {
+    .seasons-dialog-warning {
+        border-color: rgba(245, 158, 11, 0.4);
+        background: rgba(245, 158, 11, 0.12);
+        color: #fde68a; /* amber-200 */
+    }
+    .seasons-dialog-warning svg { color: #fbbf24; }
+}

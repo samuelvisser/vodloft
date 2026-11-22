@@ -49,6 +49,9 @@ class Feature(StrEnum):
     SITE_API = "site_api"
     """A Site's own free API, set up with credentials the user registers there (``Site.site_api``), with
     ``site_api_status``, ``save_site_api``, ``test_site_api`` and ``remove_site_api``."""
+    OWN_SEASONS = "own_seasons"
+    """The Source's collections have seasons of the Site's own, such as a show's seasons, which the user can't remove.
+    The seasons VODLoft makes, such as a season per year, the user can."""
     QUICK_CHECK = "quick_check"
     """Cheaply finding a listed collection's newest items, with ``latest_items`` and
     ``item_details``, between full scans of the collection."""

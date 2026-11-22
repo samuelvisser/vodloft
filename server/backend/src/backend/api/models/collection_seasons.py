@@ -27,6 +27,10 @@ class CollectionSeasonAPIRead(ResponseBase):
     episode_count: int = 0
     list_titles: list[str] = Field(default_factory=list)
     """The lists the season holds, when it is a season of lists, in the order their videos go."""
+    removable: bool = False
+    """VODLoft or the user made it, so the user can remove it: its videos go where the settings put them."""
+    year: int | None = None
+    """The year it holds, when VODLoft made it for the videos of one year."""
 
 
 class CollectionListAPIRead(ResponseBase):
@@ -173,6 +177,8 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     playlists: list[CollectionListChangeAPIIn] = Field(default_factory=list, max_length=5000)
     removed_links: list[int] = Field(default_factory=list, max_length=5000)
     """Links the user added that they remove again, by id."""
+    removed_seasons: list[int] = Field(default_factory=list, max_length=2000)
+    """Seasons the user removes, by id. Their videos go where the settings put them, which can be a season like it."""
 
 
 class CollectionListAddAPIIn(RequestBase):

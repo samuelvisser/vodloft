@@ -143,7 +143,9 @@ class NpoSource(Source):
             "Programmes protected by DRM still can't be downloaded."
         ),
     ),)
-    features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES})
+    features = frozenset({
+        Feature.COLLECTIONS, Feature.EPISODE_LISTS, Feature.PAGE_STREAMS, Feature.VIDEOS, Feature.SEARCH, Feature.COOKIES, Feature.OWN_SEASONS,
+    })
     kind_names = MappingProxyType({LinkKind.COLLECTION: Names("series", "series")})
 
     def collection_ref(self, url: str) -> str | None:

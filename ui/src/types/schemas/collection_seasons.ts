@@ -24,6 +24,10 @@ export const CollectionSeasonReadSchema = z.object({
     episodeCount: z.number(),
     /** The playlists or albums the season holds, when it is a season of lists, in the order their videos go. */
     listTitles: z.array(z.string()).default([]),
+    /** VODLoft or the user made the season, so it can be deleted; the settings make it again where they put videos. */
+    removable: z.boolean().default(false),
+    /** The year the season holds, when VODLoft made it for the videos of one year. */
+    year: z.number().nullable().default(null),
 })
 export type CollectionSeasonRead = z.infer<typeof CollectionSeasonReadSchema>
 
@@ -128,6 +132,8 @@ export const CollectionSeasonsFormSchema = z.object({
     playlists: z.array(z.object({id: z.number(), enabled: z.boolean(), asSeason: z.boolean().default(true), seasonId: z.number().nullable()})).default([]),
     /** Links you added that go when you save. */
     removedLinks: z.array(z.number()).default([]),
+    /** Seasons that are deleted when you save. */
+    removedSeasons: z.array(z.number()).default([]),
 })
 
 /** A link you add to a collection that holds only what its playlists have. */
@@ -154,5 +160,6 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         outsideVideos: view.outsideVideos,
         playlists: view.playlists.map((playlist) => ({id: playlist.id, enabled: playlist.enabled, asSeason: playlist.asSeason, seasonId: playlist.seasonId})),
         removedLinks: [],
+        removedSeasons: [],
     }
 }

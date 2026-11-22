@@ -17,12 +17,12 @@ from backend.services.link_seasons import (
     collection_list_kinds, collection_new_lists,
     LinkListing, channel_feeds, holds_only_link_seasons, is_in, leaving_outside, section_list_names,
     lists_playlists, loose_season_name, offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists,
-    active_lists,
+    active_lists, let_go_of_seasons, rehome_removed, season_removable, seasons_with_parts,
 )
 from backend.services.sites import collection_creator_names, collection_site, collection_words, preferred_sources, site_record
 from backend.services.season_moves import queue_season_folder_moves
 from backend.services.season_order import (
-    arrange_seasons, link_first_videos, lists_by_season, match_seasons_of_downloaded, renumber_seasons,
+    arrange_seasons, link_first_videos, lists_by_season, match_seasons_of_downloaded, renumber_seasons, season_year,
 )
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
@@ -50,6 +50,11 @@ class _Season:
     season: object
     episode_count: int
     list_titles: list[str]
+    removable: bool
+
+    @property
+    def year(self) -> int | None:
+        return season_year(self.season)
 
     def __getattr__(self, name):
         return getattr(self.season, name)
@@ -153,6 +158,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         )
     ))
     leaving = outside_only_in(s, collection)
+    with_parts = seasons_with_parts(s, collection)
     outside = s.scalars(select(Episode.id).where(Episode.collection_id == collection.id, Episode.from_link_season)).all()
     with_files = set(s.scalars(select(MediaDownloadBase.media_item_id).where(MediaDownloadBase.media_item_id.in_(outside))))
     only_leaving = _left_by_only(s, collection)
@@ -162,7 +168,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
     return CollectionSeasonsAPIRead.model_validate(_View(
         collection=collection,
         seasons=[
-            _Season(season, counts.get(season.id, 0), by_season.get(season.id, []))
+            _Season(season, counts.get(season.id, 0), by_season.get(season.id, []), season_removable(collection, season, with_parts))
             for season in sorted(collection.seasons, key=lambda season: season.index)
         ],
         link_seasons_offered=offers_link_seasons(collection),
@@ -273,6 +279,16 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
             f"{playlists[stray.id].title} can only join {collection_contract(collection.type).words.season.a} "
             "that holds one of the collection's lists", field="playlists",
         )
+    removed = set(body.removed_seasons)
+    with_parts = seasons_with_parts(s, collection)
+    fixed = next((
+        season for season_id, season in seasons.items() if season_id in removed and not season_removable(collection, season, with_parts)
+    ), None)
+    if removed - set(seasons) or fixed is not None:
+        raise ServiceError(
+            f"{fixed.name if fixed is not None else 'That'} is not {collection_contract(collection.type).words.season.a} "
+            "you can remove", field="seasons",
+        )
     for change in body.seasons:
         seasons[change.id].name = change.name.strip()
     # Every season a list has, also one of a list that is not a season now, such as one the old creators left while
@@ -320,6 +336,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         playlists[change.id].enabled = change.enabled
         playlists[change.id].status = ListStatus.KNOWN.value
         playlists[change.id].as_season = change.as_season
+    removed_slugs = let_go_of_seasons(collection, removed) if removed else {}
     s.flush()
     s.expire(collection, ["lists"])
     current = [season.id for season in sorted(collection.seasons, key=lambda season: season.index)]
@@ -333,7 +350,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         arrange_seasons(s, collection)
     # The downloaded videos of a playlist that stopped being a season go where they would go if they were new, files
     # and all; the ones that leave the collection are removed with their files.
-    lost = (was_seasons - {link.season_id for link in active_lists(s, collection)}) | regrouped
+    lost = (was_seasons - {link.season_id for link in active_lists(s, collection)}) | regrouped | removed
     leaving = {episode.id for episode in leaving_outside(s, collection)}
     # A collection that now holds only what its playlists have keeps no season of videos in none of them, so its
     # downloaded videos there move to their playlist's season too.
@@ -348,8 +365,10 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     # before a video leaves for not being in them.
     relisting = relist and body.link_seasons != LinkSeasons.OFF
     place_in_link_seasons(
-        s, collection, with_files=moving, drop=not (only and not was_only), by_user=True, left=frozenset(regrouped),
+        s, collection, with_files=moving, drop=not (only and not was_only), by_user=True, left=frozenset(regrouped | removed),
     )
+    if removed_slugs:
+        rehome_removed(s, collection, removed_slugs)
     if moving:
         match_seasons_of_downloaded(s, collection, moving)
         queue_season_folder_moves(s, collection, sorted(moving))

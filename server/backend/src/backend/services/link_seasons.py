@@ -945,6 +945,65 @@ def _drop_emptied(s: Session, collection: Collection, season_ids: set[int]) -> N
         s.expire(collection, ["seasons", "lists"])
 
 
+def seasons_with_parts(s: Session, collection: Collection) -> set[int]:
+    """The seasons that hold the parts of a video split by chapter."""
+    return set(s.scalars(
+        select(Episode.season_id).where(Episode.collection_id == collection.id, Episode.part_of.is_not(None)).distinct()
+    ))
+
+
+def season_removable(collection: Collection, season: Season, with_parts: set[int]) -> bool:
+    """Whether the user can remove the season: one that VODLoft or the user made, whose videos go where the
+    collection's settings put them, as new videos would. Not a season the Site has itself, such as a show's seasons,
+    nor the season of extras or of a video split by chapter."""
+    if season.season_type == SeasonType.EXTRA.value or season.id in with_parts:
+        return False
+    if not get_source(collection.source_key).has(Feature.OWN_SEASONS):
+        return True
+    return season.loose or season_year(season) is not None or any(
+        playlist.season_id == season.id for playlist in collection.lists
+    )
+
+
+def let_go_of_seasons(collection: Collection, season_ids: set[int]) -> dict[int, tuple[str, bool]]:
+    """Make the seasons the user removes seasons of nothing: no list's, not the one of the videos in no list, no
+    year's. Their videos then go where the collection's settings put them, into seasons made anew where needed, which
+    take the removed seasons' slugs, so Download Profiles find them again. Returns what each season was, by id: its
+    slug and whether it was the season of videos in no list."""
+    for playlist in collection.lists:
+        if playlist.season_id in season_ids:
+            playlist.season = None
+    slugs: dict[int, tuple[str, bool]] = {}
+    for season in collection.seasons:
+        if season.id in season_ids:
+            slugs[season.id] = (season.slug, season.loose)
+            season.loose = False
+            season.slug = f"removed-{season.id}"
+    return slugs
+
+
+def rehome_removed(s: Session, collection: Collection, slugs: dict[int, tuple[str, bool]]) -> None:
+    """Move what is still in the removed seasons where a new video would go, and remove the seasons. Run after the
+    collection's videos were placed in its seasons. A season its settings put the videos back in, such as the one
+    season of a collection made from one list, stays as it was.
+
+    ``s`` is a write transaction's session."""
+    s.expire(collection, ["seasons", "lists"])
+    finder = SeasonFinder(s, collection)
+    for episode in s.scalars(select(Episode).where(Episode.season_id.in_(slugs)).order_by(Episode.index)).all():
+        finder.move(episode, finder.home_season(episode.published_date))
+    s.flush()
+    filled = set(s.scalars(select(Episode.season_id).where(Episode.season_id.in_(slugs)).distinct()))
+    for season in s.scalars(select(Season).where(Season.id.in_(slugs))).all():
+        if season.id in filled:
+            season.slug, season.loose = slugs[season.id]
+        else:
+            s.delete(season)
+    s.flush()
+    s.expire(collection, ["seasons", "lists"])
+    arrange_seasons(s, collection)
+
+
 def belongs_elsewhere(s: Session, episode: Episode) -> Belonging | None:
     """Where a video belongs now, when its collection's playlists put it in another season than the one it is in.
     None when it is where it belongs."""

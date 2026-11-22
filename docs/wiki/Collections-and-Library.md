@@ -90,15 +90,17 @@ Before anything changes, VODLoft shows what the change would do:
 
 Once you confirm, the collection's page opens and shows the change's progress. VODLoft numbers the episodes again, moves the downloaded files to their new names, and rewrites the metadata in and next to them, without downloading anything again. While the change runs, the Episode identification can't be changed again.
 
-Numbering by season needs every season to have a number. If a season has none, the Seasons window numbers it when you put the seasons in order (see [Renaming and ordering seasons](#renaming-and-ordering-seasons)).
+Numbering by season needs every season to have a number. If a season has none, the Seasons window numbers it when you put the seasons in order (see [Renaming, ordering and deleting seasons](#renaming-ordering-and-deleting-seasons)).
 
 ## Seasons and episodes
 
 Series can contain multiple seasons. The collection page lets you switch between them rather than treating the entire collection as one long list.
 
-### Renaming and ordering seasons
+### Renaming, ordering and deleting seasons
 
-**Seasons** on a collection's **Edit** page opens the Seasons window. Give a season another name, or drag the seasons, or use the arrows, to put them in another order. The seasons are numbered again in their new order. **Automatic order** puts them back in VODLoft's own order. Seasons can't be deleted here; only a playlist or album season goes away, when you turn it off (see below).
+**Seasons** on a collection's **Edit** page opens the Seasons window. Give a season another name, or drag the seasons, or use the arrows, to put them in another order. The seasons are numbered again in their new order. **Automatic order** puts them back in VODLoft's own order. Turning a playlist or album off removes its season (see below).
+
+The bin next to a season deletes it when you save. Its videos then go where the collection's settings put them, so a season the settings fill, such as a season per year, comes back with the videos that belong in it; the window warns you when that happens and offers to put those videos in one season instead. Seasons the site itself has, such as the shows of The Daily Wire, can't be deleted.
 
 Renaming a season or giving it another number doesn't rename files you already downloaded. To give them their new names, use **Rename all episode files** in the collection's **Actions** menu. Turn on **Rename season folders too** there to move files into the folder of the season they are in now, with its new number. In a collection with playlist seasons, downloaded videos then also move to the playlist season they belong in now.
 

@@ -675,6 +675,93 @@ def test_the_channel_season_takes_its_new_name_when_it_holds_the_whole_channel(s
     assert session.get(Season, loose.id).name == view.channel_season_names["everything"]
 
 
+def _remove(session, service, *names, **settings):
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+
+    view = service.seasons_view(session, "creator")
+    session.rollback()
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=False,
+        link_seasons=settings.pop("link_seasons", "selected"), loose_videos=settings.pop("loose_videos", "by_year"),
+        playlists=[{"id": p.id, "enabled": p.enabled, "season_id": p.season_id} for p in view.playlists],
+        removed_seasons=[x.id for x in view.seasons if x.name in names], **settings,
+    )
+    run_write_transaction(lambda s: update_seasons_call(service, s, body))
+    session.expire_all()
+    return view
+
+
+def test_a_removed_season_per_year_comes_back_when_the_settings_put_its_videos_there(source, session, monkeypatch):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.db.models import Season
+
+    moved = []
+    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: moved.append(ids))
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = []
+    source.items = {}
+    collection = _collection(session, mode="selected", loose="by_year")
+    _index(session, collection, source)
+    _give_files(session, "a")
+    view = _remove(session, service, "2024", "2025")
+    assert all(season.removable for season in view.seasons)
+
+    # Made again by the settings, with the same slugs; the downloaded video's files follow it.
+    assert _seasons(session) == [("2024", 2024, ["a"]), ("2025", 2025, ["b"])]
+    assert {season.id for season in session.scalars(select(Season))}.isdisjoint({x.id for x in view.seasons})
+    assert len(moved) == 1
+
+    # In one season instead, they go for good.
+    _remove(session, service, "2024", "2025", loose_videos="one_season")
+    assert [(name, episodes) for name, _number, episodes in _seasons(session)] == [("Videos", ["a", "b"])]
+
+
+def test_a_removed_season_of_a_list_or_a_leftover_season_goes_to_the_seasons_the_settings_give(source, session, monkeypatch):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.db.models import Episode, Season
+
+    monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, collection, ids: None)
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session, mode="selected", loose="one_season")
+    _index(session, collection, source)
+    # A season no setting makes, as an older VODLoft left one.
+    leftover = Season(collection_id=collection.id, index=99, slug="old", name="Old", season_number=9)
+    session.add(leftover)
+    session.flush()
+    session.scalar(select(Episode).where(Episode.source_slug == "b")).season_id = leftover.id
+    session.commit()
+
+    _remove(session, service, "One", "Old", loose_videos="one_season")
+
+    # The list is still a season, so its season is made again; the leftover's video goes to the channel season.
+    assert [(name, episodes) for name, _number, episodes in _seasons(session)] == [("Videos", ["b"]), ("One", ["a"])]
+
+
+def test_a_season_the_site_has_itself_is_not_removable(source, session, monkeypatch):
+    from backend.api.endpoints.collections.seasons import service
+    from backend.db.models import Season
+    from backend.services.errors import ServiceError
+    from sources import Feature
+
+    source.videos = [_video("a", 2024)]
+    source.lists = []
+    source.items = {}
+    collection = _collection(session, mode="selected", loose="one_season")
+    _index(session, collection, source)
+    monkeypatch.setattr(type(source), "features", frozenset({*type(source).features, Feature.OWN_SEASONS}))
+    session.add(Season(collection_id=collection.id, index=99, slug="season-1", name="Season 1", season_number=1))
+    session.commit()
+
+    view = service.seasons_view(session, "creator")
+    session.rollback()
+    assert {x.name: x.removable for x in view.seasons} == {"Videos": True, "Season 1": False}
+    with pytest.raises(ServiceError):
+        _remove(session, service, "Season 1", loose_videos="one_season")
+
+
 def update_seasons_call(service, s, body):
     return service.update_seasons(s, "creator", body)
 

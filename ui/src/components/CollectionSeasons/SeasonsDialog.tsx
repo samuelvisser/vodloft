@@ -20,7 +20,7 @@ import {BulkBar} from '../ProfileBulkEdit/BulkEditControls'
 import {
     CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, seasonsFormValues,
     type CollectionListRead, type CollectionSeasonsFormIn, type CollectionSeasonsFormOut, type CollectionSeasonsRead,
-    type LinkSeasonAddFormIn, type LinkSeasonAddFormOut, type NewLinkSeason, type ChannelSeason,
+    type LinkSeasonAddFormIn, type LinkSeasonAddFormOut, type NewLinkSeason, type ChannelSeason, type CollectionSeasonRead,
 } from '../../types/schemas/collection_seasons'
 import './SeasonsDialog.css'
 import {collectionWords, CollectionWords, Noun, wordsOf} from '../../lib/collectionWords'
@@ -128,6 +128,11 @@ function registries(names: ListNames, words: Words, view: CollectionSeasonsRead)
     }
 }
 
+/** Names in a sentence: A, B and C. */
+function listed(names: string[]): string {
+    return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
 /** The Seasons dialog: rename and reorder a collection's seasons, and choose which of its creator's playlists are seasons. */
 export default function SeasonsDialog({open, collectionSlug, collectionTitle, onDismiss, onMovesWaiting, words: collectionWordsGiven}: Props) {
     const queryClient = useQueryClient()
@@ -186,6 +191,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const customOrder = watch('customSeasonOrder') ?? false
     const repeatVideos = watch('repeatVideos') ?? 'one_season'
     const removedLinks = watch('removedLinks') ?? []
+    const removedSeasons = watch('removedSeasons') ?? []
     // The channel season is called Channel while it holds the whole channel, as the form is set now, so the names
     // follow the form before it is saved.
     const holdsWholeChannel = !!view && view.kind === 'channel' && view.feeds.length > 0 && outsideVideos !== 'only'
@@ -243,6 +249,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             outsideVideos: data.outsideVideos,
             playlists: data.playlists,
             removedLinks: data.removedLinks,
+            removedSeasons: data.removedSeasons,
         }),
     }), {
         parseSuccess: readSeasons,
@@ -349,6 +356,23 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         .map((playlist) => playlist.seasonId)
         .filter((id): id is number => id !== null && !seasonsById.get(id)?.loose && !stillSeasons.has(id)))
     let shown = 0
+    const toggleSeasonRemoved = (id: number) => setValue(
+        'removedSeasons', removedSeasons.includes(id) ? removedSeasons.filter((x) => x !== id) : [...removedSeasons, id], {shouldDirty: true},
+    )
+    // Deleted seasons the settings, as the form has them now, fill again when you save.
+    const byYear = looseVideos === 'by_year' || listLayout === 'by_year'
+    const comingBack = removedSeasons
+        .map((id) => seasonsById.get(id))
+        .filter((removed): removed is CollectionSeasonRead => !!removed && removed.episodeCount > 0 && (
+            removed.year !== null ? byYear
+                : removed.loose ? !only && listLayout !== 'by_year' && looseVideos === 'one_season'
+                    : listLayout !== 'by_year' && stillSeasons.has(removed.id)
+        ))
+    const yearsComingBack = comingBack.some((removed) => removed.year !== null)
+    const oneSeason = () => {
+        setValue('looseVideos', 'one_season', {shouldDirty: true})
+        if (listLayout === 'by_year') setValue('listLayout', 'season_each', {shouldDirty: true})
+    }
     const bulkIds = playlistChoices.filter((choice) => !playlistsById.get(choice.id)?.addedByUser).map((choice) => choice.id)
     const allChosen = bulkIds.length > 0 && bulkIds.every((id) => chosen.has(id))
     const toggleChosen = (id: number) => setChosen((current) => {
@@ -755,16 +779,33 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 {errors.repeatVideos && <div className="error" role="alert">{errors.repeatVideos.message}</div>}
                                             </div>
                                         )}
+                                        {comingBack.length > 0 && (
+                                            <div className="seasons-dialog-warning" role="status">
+                                                <FontAwesomeIcon icon={faIcon('fass', 'circle-info')} aria-hidden="true"/>
+                                                <div>
+                                                    <p>
+                                                        {listed(comingBack.map((removed) => removed.name))} {comingBack.length === 1 ? 'comes' : 'come'} back
+                                                        when you save: the settings above put {words.videos} in {comingBack.length === 1 ? 'it' : 'them'} again.
+                                                    </p>
+                                                    {yearsComingBack && (
+                                                        <button type="button" className="btn btn-small" onClick={oneSeason}>
+                                                            Put them in one {season.singular} instead
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                         <ol className="seasons-dialog-seasons">
                                             {fields.map((field, index) => {
                                                 const season = seasonsById.get(field.id)
                                                 const extra = season?.seasonType === 'extra'
                                                 if (going.has(field.id)) return null
                                                 shown += 1
+                                                const removed = removedSeasons.includes(field.id)
                                                 return (
                                                     <li
                                                         key={field.key}
-                                                        className={`seasons-dialog-season${dragging === index ? ' is-dragging' : ''}`}
+                                                        className={`seasons-dialog-season${dragging === index ? ' is-dragging' : ''}${removed ? ' is-removed' : ''}`}
                                                         draggable
                                                         onDragStart={(event) => {
                                                             setDragging(index)
@@ -784,10 +825,11 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         <span className="seasons-dialog-season-copy">
                                                             <input
                                                                 className="input" aria-label={`Name of ${words.season.singular} ${index + 1}`}
-                                                                aria-invalid={!!errors.seasons?.[index]?.name}
+                                                                aria-invalid={!!errors.seasons?.[index]?.name} readOnly={removed}
                                                                 {...register(`seasons.${index}.name`)}
                                                             />
                                                             <span>
+                                                                {removed ? 'Deleted when you save · ' : null}
                                                                 {counted(season?.episodeCount ?? 0, words.video, words.videos)}
                                                                 {season?.loose ? ` · ${capitalized(words.videos)} in no ${names.singular}` : null}
                                                             </span>
@@ -802,6 +844,14 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                             {errors.seasons?.[index]?.name && <span className="error" role="alert">{errors.seasons[index]?.name?.message}</span>}
                                                         </span>
                                                         <span className="seasons-dialog-arrows">
+                                                            {season?.removable && (
+                                                                <button
+                                                                    type="button" aria-label={`${removed ? 'Keep' : 'Delete'} ${form.getValues(`seasons.${index}.name`) || words.season.singular}`}
+                                                                    title={removed ? 'Keep' : 'Delete'} onClick={() => toggleSeasonRemoved(field.id)}
+                                                                >
+                                                                    <FontAwesomeIcon icon={faIcon('fass', removed ? 'rotate-left' : 'trash')}/>
+                                                                </button>
+                                                            )}
                                                             <button type="button" aria-label={`Move ${words.season.singular} ${index + 1} up`} disabled={index === 0} onClick={() => moveSeason(index, index - 1)}>
                                                                 <FontAwesomeIcon icon={faIcon('fass', 'chevron-up')}/>
                                                             </button>
