@@ -799,9 +799,10 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                             {fields.map((field, index) => {
                                                 const season = seasonsById.get(field.id)
                                                 const extra = season?.seasonType === 'extra'
-                                                if (going.has(field.id)) return null
-                                                shown += 1
-                                                const removed = removedSeasons.includes(field.id)
+                                                // A list's season that no list is a season of any more goes when you save, as one you delete does.
+                                                const leaves = going.has(field.id)
+                                                const removed = leaves || removedSeasons.includes(field.id)
+                                                if (!leaves) shown += 1
                                                 return (
                                                     <li
                                                         key={field.key}
@@ -821,7 +822,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         onDragEnd={() => setDragging(null)}
                                                     >
                                                         <span className="seasons-dialog-grip" aria-hidden="true"><FontAwesomeIcon icon={faIcon('fass', 'grip-vertical')}/></span>
-                                                        <span className="seasons-dialog-number" aria-hidden="true">{extra ? '0' : customOrder ? shown : season?.seasonNumber}</span>
+                                                        <span className="seasons-dialog-number" aria-hidden="true">{leaves ? '–' : extra ? '0' : customOrder ? shown : season?.seasonNumber}</span>
                                                         <span className="seasons-dialog-season-copy">
                                                             <input
                                                                 className="input" aria-label={`Name of ${words.season.singular} ${index + 1}`}
@@ -833,7 +834,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                 {counted(season?.episodeCount ?? 0, words.video, words.videos)}
                                                                 {season?.loose ? ` · ${capitalized(words.videos)} in no ${names.singular}` : null}
                                                             </span>
-                                                            {season && listLayout !== 'by_year' && listSeasonIds.includes(season.id) && (
+                                                            {season && !leaves && listLayout !== 'by_year' && listSeasonIds.includes(season.id) && (
                                                                 <SeasonLists
                                                                     season={field.id} names={names} words={words} lists={listsIn(field.id)}
                                                                     titles={playlistsById} joinRegistry={joinRegistry(field.id)}
@@ -844,7 +845,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                             {errors.seasons?.[index]?.name && <span className="error" role="alert">{errors.seasons[index]?.name?.message}</span>}
                                                         </span>
                                                         <span className="seasons-dialog-arrows">
-                                                            {season?.removable && (
+                                                            {season?.removable && !leaves && (
                                                                 <button
                                                                     type="button" aria-label={`${removed ? 'Keep' : 'Delete'} ${form.getValues(`seasons.${index}.name`) || words.season.singular}`}
                                                                     title={removed ? 'Keep' : 'Delete'} onClick={() => toggleSeasonRemoved(field.id)}
@@ -863,7 +864,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                 )
                                             })}
                                         </ol>
-                                        {fields.length === going.size && <p className="seasons-dialog-muted">This collection has no {season.plural} yet.</p>}
+                                        {fields.length === 0 && <p className="seasons-dialog-muted">This collection has no {season.plural} yet.</p>}
                                         {errors.seasons?.message && <div className="error" role="alert">{errors.seasons.message}</div>}
                                         {errors.seasons?.root?.message && <div className="error" role="alert">{errors.seasons.root.message}</div>}
                                     </section>

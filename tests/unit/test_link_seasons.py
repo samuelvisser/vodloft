@@ -1192,3 +1192,40 @@ def test_the_list_of_seasons_says_when_each_ones_newest_episode_came_out(source,
     assert newest == {
         "Builds": datetime(2024, 2, 1, tzinfo=timezone.utc), "Videos": datetime(2026, 11, 1, tzinfo=timezone.utc),
     }
+
+
+def _switch_off(session, *refs: str):
+    """Save the Seasons dialog with only the lists it names switched off."""
+    from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+
+    view = seasons_view(session, "creator")
+    session.rollback()
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": season.id, "name": season.name} for season in view.seasons],
+        custom_season_order=view.custom_season_order, link_seasons="selected", loose_videos=view.loose_videos,
+        playlists=[
+            {"id": playlist.id, "enabled": playlist.ref not in refs, "season_id": playlist.season_id}
+            for playlist in view.playlists
+        ],
+    )
+    return run_write_transaction(lambda s: update_seasons(s, "creator", body))
+
+
+def test_a_shared_season_stays_until_every_list_in_it_is_switched_off(source, session):
+    source.videos = [_video("a", 2023), _video("b", 2023, 6), _video("c", 2024), _video("e", 2025)]
+    source.lists = [_list("PLtwo", "Cabin, Part 2"), _list("PLone", "Cabin, Part 1")]
+    source.items = {"PLone": ("b", "a"), "PLtwo": ("c",)}
+    collection = _collection(session)
+    _index(session, collection, source)
+    _put_together(session, {"PLtwo": _season_of(session, "PLone")})
+    assert _seasons(session) == [("Videos", 1, ["e"]), ("Cabin, Part 1", 2, ["a", "b", "c"])]
+
+    # The list the season is named after goes; the season stays for the list still in it.
+    _switch_off(session, "PLone")
+    assert _seasons(session) == [("Videos", 1, ["a", "b", "e"]), ("Cabin, Part 1", 2, ["c"])]
+
+    # With its last list off, the season is deleted.
+    _switch_off(session, "PLone", "PLtwo")
+    assert _seasons(session) == [("Videos", 1, ["a", "b", "c", "e"])]
