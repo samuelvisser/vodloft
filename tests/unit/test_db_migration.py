@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "e2734b184864"
+HEAD_REVISION = "5133229960f5"
 
 
 @pytest.fixture
@@ -2174,3 +2174,48 @@ def test_a_collection_slug_with_slashes_becomes_one_a_link_can_hold(migration_da
         found = dict(connection.execute(text("SELECT id, slug FROM collections")).all())
     # A slug that is free already keeps it; one taken by another collection gets a number.
     assert found == {1: "artist-sets-first-album-2", 2: "artist-sets-first-album", 3: "PLcabin", 4: "artist-album-second"}
+
+
+def test_a_channel_collection_with_seasons_of_its_lists_takes_those_lists_again(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "e2734b184864")
+    with engine.begin() as connection:
+        for collection_id, link_seasons in ((1, "off"), (2, "selected")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order, link_seasons) VALUES (:id, :uuid, :slug, 'Channel', "
+                "'https://example.test/' || :id, 'free', 'series', 'seasonal', 'Host', 'host', 'ytdlp', 'oldest_first', :mode)"
+            ), {"id": collection_id, "uuid": f"uuid-{collection_id}", "slug": f"channel-{collection_id}", "mode": link_seasons})
+        # Seasons 1 and 3 hold an episode; season 2 is empty.
+        for season_id, collection_id in ((1, 1), (2, 1), (3, 2)):
+            connection.execute(text(
+                "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number) "
+                "VALUES (:id, :collection, :id, 's' || :id, 'Season', 'regular', :id)"
+            ), {"id": season_id, "collection": collection_id})
+        for episode_id, collection_id, season_id in ((10, 1, 1), (11, 2, 3)):
+            connection.execute(text(
+                "INSERT INTO media_items (id, uuid, type, source_key) VALUES (:id, :uuid, 'episode', 'ytdlp')"
+            ), {"id": episode_id, "uuid": f"episode-{episode_id}"})
+            connection.execute(text(
+                "INSERT INTO media_items_episode (id, collection_id, season_id, \"index\", episode_identifier, slug, "
+                "publish_status, sharing_url, source_slug) VALUES (:id, :collection, :season, :id, 'ep', :slug, "
+                "'published_final', 'https://example.test', :slug)"
+            ), {"id": episode_id, "collection": collection_id, "season": season_id, "slug": f"e{episode_id}"})
+        # List 1 has a season with an episode, list 2 an empty one, list 3 none; list 4 is in a collection that picks
+        # its lists already, switched off by the user.
+        for list_id, collection_id, season_id in ((1, 1, 1), (2, 1, 2), (3, 1, None), (4, 2, 3)):
+            connection.execute(text(
+                "INSERT INTO collection_lists (id, collection_id, ref, source_key, url, title, enabled, status, season_id) "
+                "VALUES (:id, :collection, 'PL' || :id, 'ytdlp', 'https://example.test/PL' || :id, 'List', false, 'new', :season)"
+            ), {"id": list_id, "collection": collection_id, "season": season_id})
+
+    command.upgrade(config, "5133229960f5")
+
+    with engine.connect() as connection:
+        assert dict(connection.execute(text("SELECT id, link_seasons FROM collections")).all()) == {1: "selected", 2: "selected"}
+        assert connection.execute(text("SELECT id, enabled, status FROM collection_lists ORDER BY id")).all() == [
+            (1, 1, "known"), (2, 0, "new"), (3, 0, "new"), (4, 0, "new"),
+        ]
