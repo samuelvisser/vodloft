@@ -22,7 +22,7 @@ from config.settings.site_settings import (
     resolve_site_setting,
     sponsorblock_changes_anything,
 )
-from sources import Feature, Site, all_sources, named_sites, site_of
+from sources import Feature, ProfileSeasons, Site, Source, all_sources, named_sites, site_of
 
 from backend.services.sites import site_removable, sites_in_use
 
@@ -104,6 +104,14 @@ def download_profile_defaults(site: Site) -> dict[str, Any]:
     if not site.settings.offers(SiteSetting.DOWNLOAD_WITH_COUNTDOWN):
         values["download_with_countdown"] = False
     return values
+
+
+def profile_seasons(site: Site, source: Source) -> ProfileSeasons:
+    """Which seasons a new Download Profile of a seasonal collection on the Site picks, beside the upcoming ones: what
+    the Site's contract says, or else the newest where the seasons are the Site's own and all where VODLoft makes them."""
+    if site.profile_seasons is not None:
+        return site.profile_seasons
+    return ProfileSeasons.NEWEST if source.has(Feature.OWN_SEASONS) else ProfileSeasons.ALL
 
 
 def _named_sites() -> list[Site]:

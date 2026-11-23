@@ -18,7 +18,7 @@ from backend.services.sites import SiteLinkError, add_site, episode_tags_named, 
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType
 from backend.services.access_checks import access_changed
-from backend.services.site_settings import download_profile_defaults, offered_settings
+from backend.services.site_settings import download_profile_defaults, offered_settings, profile_seasons
 from backend.services.source_options import save_ytdlp_source_options, ytdlp_source_options
 from config.settings.site_settings import SiteSettingGroup
 
@@ -175,6 +175,7 @@ def site_options(source_id: str, url: str = Query(min_length=1, max_length=2048)
     return SiteOptionsAPIRead(
         settings=offered_settings(site, SiteSettingGroup.DOWNLOAD_PROFILE),
         profile_defaults=DownloadProfileDefaultsAPIRead.model_validate(download_profile_defaults(site)),
+        profile_seasons=profile_seasons(site, source),
         upgrade_checks=UpgradeChecksAPIRead.model_validate(site.upgrade_checks), site_key=site.key, site_name=site.name,
         stream_methods=site.stream_methods,
         stream_video_heights=site.stream_video_heights, stream_file_height=site.stream_file_height,

@@ -915,6 +915,15 @@ class ChannelSeason(StrEnum):
     (``Site.loose_season``), such as Videos, or Singles in a Music collection."""
 
 
+class ProfileSeasons(StrEnum):
+    """Which seasons a new Download Profile of a seasonal collection picks, beside the upcoming ones."""
+
+    NEWEST = "newest"
+    """The newest season only, as for a show whose seasons are the Site's own."""
+    ALL = "all"
+    """Every season, as for an artist whose albums VODLoft makes seasons of."""
+
+
 def initials_of(name: str) -> str:
     """A Site's name in at most two capitals, for a Site whose contract names none: the first letters of its first two
     words, such as SC for SoundCloud or DW for The Daily Wire, or the first two letters of a one-word name. A name that
@@ -1022,6 +1031,10 @@ class Site:
     whole_lists: bool = True
     """A new channel collection puts a video in every list season that has it, so each list is whole. A Site whose
     contract says False puts a video in the first of them only, unless the collection's type says otherwise."""
+    profile_seasons: ProfileSeasons | None = None
+    """Which seasons a new Download Profile of a collection on the Site picks, beside the upcoming ones. Left out, it
+    follows where the seasons come from: the newest where they are the Site's own (a Source with
+    ``Feature.OWN_SEASONS``), every season where VODLoft makes them from lists, years or anything else."""
     loose_season: str | None = None
     """What VODLoft calls the season it makes itself of the videos in none of a collection's link seasons. Left out,
     Videos, or on a Site that is ``audio_only`` Singles. A collection type can name it itself

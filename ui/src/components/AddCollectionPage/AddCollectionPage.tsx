@@ -101,18 +101,15 @@ function chosenProfileSettings(
     return choice
 }
 
-/** The seasons come oldest first; a new profile starts with the latest one. */
-const latestSeasonSlug = (seasons?: SeasonDetachedOut[]) => seasons?.[seasons.length - 1]?.slug
-
-const defaultDownloadProfile = (episodeIdentifier?: string, tags?: EpisodeTagRead[], seasons?: SeasonDetachedOut[]): Partial<DownloadProfileBundleIn> => ({
+const defaultDownloadProfile = (episodeIdentifier?: string, tags?: EpisodeTagRead[]): Partial<DownloadProfileBundleIn> => ({
     ...getZodDefaults(DownloadProfileBundleSchema),
-    filters: defaultEpisodeFilters(episodeIdentifier, tags, latestSeasonSlug(seasons)),
+    filters: defaultEpisodeFilters(episodeIdentifier, tags, undefined, undefined),
 })
 
 const collectionTagsKey = (collection?: CollectionCreatePayloadOut) => (collection ? `${collection.sourceKey} ${collection.sharingUrl}` : undefined)
-/** The starting filters follow the collection's Source tags and its latest season. */
+/** The starting filters follow the collection's Source tags and its seasons. */
 const filterDefaultsKey = (collection?: CollectionCreatePayloadOut, seasons?: SeasonDetachedOut[]) => (
-    collection ? `${collectionTagsKey(collection)} ${latestSeasonSlug(seasons) ?? ''}` : undefined
+    collection ? `${collectionTagsKey(collection)} ${(seasons ?? []).map((season) => season.slug).join(' ')}` : undefined
 )
 
 const defaultStreamProfile = (action?: CollectionAction): Partial<RssStreamProfileBundleIn> => ({
@@ -193,11 +190,13 @@ function AddCollectionWizard({onCancel, onCreated, initialUrl, initialCreator, o
     const tagDefaultsAppliedFor = useRef(persisted?.downloadProfile.input ? filterDefaultsKey(persisted?.collection.submit, persisted?.seasons) : undefined)
     useEffect(() => {
         const key = filterDefaultsKey(collectionSubmit, seasonsSubmit)
-        if (!collectionSubmit || !collectionEpisodeTags || downloadProfileSubmit || tagDefaultsAppliedFor.current === key) return
+        if (!collectionSubmit || !collectionEpisodeTags || !collectionSite || downloadProfileSubmit || tagDefaultsAppliedFor.current === key) return
         tagDefaultsAppliedFor.current = key
-        const filters = defaultEpisodeFilters(collectionSubmit.episodeIdentifier, collectionEpisodeTags, latestSeasonSlug(seasonsSubmit))
+        const filters = defaultEpisodeFilters(
+            collectionSubmit.episodeIdentifier, collectionEpisodeTags, seasonsSubmit, collectionSite.profileSeasons,
+        )
         setDownloadProfileInput((current) => ({...current, filters}))
-    }, [downloadProfileSubmit, collectionEpisodeTags, collectionSubmit, seasonsSubmit])
+    }, [downloadProfileSubmit, collectionEpisodeTags, collectionSite, collectionSubmit, seasonsSubmit])
 
     const downloadProfileSubmitRef = useRef(downloadProfileSubmit)
     const streamProfileSubmitRef = useRef(streamProfileSubmit)

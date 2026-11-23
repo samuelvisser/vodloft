@@ -11,7 +11,7 @@ from backend.services.media_access import access_granted, access_locked, site_ac
 from backend.types.collection_types import CollectionType
 from backend.types.link_season_types import CollectionKind
 from config.settings.site_settings import UpgradeRepeat
-from sources import Feature, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
+from sources import Feature, ProfileSeasons, ReleaseDate, SiteSetting, StreamMethod, UnknownSourceError, UpgradeImprovement, get_source, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH, OptionsRefused, ytdlp_option_arguments
 
 
@@ -394,6 +394,8 @@ class SiteOptionsAPIRead(ResponseBase):
     """The download profile settings the site shows, such as auto-generated subtitles or downloading with the countdown."""
     profile_defaults: DownloadProfileDefaultsAPIRead
     """What a new Download Profile for the collection starts with."""
+    profile_seasons: ProfileSeasons
+    """Which seasons a new Download Profile of a seasonal collection picks, beside the upcoming ones."""
     upgrade_checks: UpgradeChecksAPIRead
     stream_methods: list[StreamMethod] = []
     """How RSS feeds can stream the collection's episodes without downloading them first; none for downloads only."""
