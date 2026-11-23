@@ -12,6 +12,7 @@ class Twitch(OtherSites):
     key = "twitch"
     name = "Twitch"
     initials = "TW"
+    pitch = "Channels, past broadcasts and clips"
     domains = ("twitch.tv",)
     icon = "fab:twitch"
     creators = True

@@ -10,6 +10,7 @@ class SoundCloud(OtherSites):
     key = "soundcloud"
     name = "SoundCloud"
     initials = "SC"
+    pitch = "Artists, albums and playlists"
     domains = ("soundcloud.com",)
     icon = "fab:soundcloud"
     audio_only = True

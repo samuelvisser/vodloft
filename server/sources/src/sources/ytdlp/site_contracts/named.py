@@ -85,6 +85,7 @@ class Vimeo(OtherSites):
     initials = "VM"
     domains = ("vimeo.com",)
     icon = "fab:vimeo-v"
+    pitch = "Channels, showcases and videos"
 
 
 NAMED = (BBC, Bilibili, BitChute, Dailymotion, Facebook, Kick, Nebula, Odysee, Patreon, PeerTube, Reddit, Rumble, Vimeo)

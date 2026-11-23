@@ -4,18 +4,18 @@ from backend.api.models.source import (
     DownloadOptionsAPIRead, DownloadProfileDefaultsAPIRead, SiteOptionsAPIRead, YtdlpOptionLineAPIRead, YtdlpOptionsAPIRead, YtdlpOptionsAPIUpdate, YtdlpOptionsCheckAPIRequest,
     ApiKeyAPIUpdate, ApiKeyNoteAPIIn, ApiKeyNoteAPIRead, ApiStatusAPIRead, EpisodeTagAPIRead, PublishStatusLabelAPIRead, SourceProblemAPIRead, CookiesAPIUpdate, ProgramStatusAPIRead, ResolveAPIRequest, ResolvedLinkAPIRead, MediaLinksAPIRequest, MediaLinksAPIRead, SearchResultsAPIRead,
     CollectionDetailsAPIRead, SourceAPIRead, SourceSiteAPIRead, SourceSiteAPIUpdate, UpgradeChecksAPIRead,
-    SiteAddAPIRequest, SiteAddedAPIRead, SiteApiValuesAPIUpdate, SiteAuthenticationAPIRead,
+    SiteAddAPIRequest, SiteAddedAPIRead, SiteChoiceAPIRead, SitesPickAPIRequest, SiteApiValuesAPIUpdate, SiteAuthenticationAPIRead,
 )
 from backend.app import db_session
 from backend.api.endpoints.creators.service import look_up_creator_ahead
 from sources import ApiKeyRejected, Feature, Source, UnknownSourceError, get_source, source_site
 from sources.ytdlp_options import check_ytdlp_options
 from backend.services.site_cookies import (
-    SiteAuthentication, SiteNotKnownError, list_site_authentication, remove_known_site, remove_site_api, remove_site_cookies,
+    SiteAuthentication, SiteNotKnownError, list_site_authentication, pick_sites, remove_known_site, remove_site_api, remove_site_cookies,
     save_site_api, save_site_cookies, test_site_api,
 )
 from backend.services.errors import ServiceError
-from backend.services.sites import SiteLinkError, add_site, episode_tags_named, media_links, site_of_link
+from backend.services.sites import SiteLinkError, add_site, episode_tags_named, media_links, site_choices, site_of_link
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType
 from backend.services.access_checks import access_changed
@@ -83,6 +83,21 @@ def source_sites():
     """Every Site a Source is made for, with the Sources that can handle its links."""
     with db_session() as s:
         return list_source_sites(s)
+
+
+@router.get("/sources/site-choices", dependencies=[signed_in()], response_model=list[SiteChoiceAPIRead])
+def source_site_choices():
+    """The popular Sites VODLoft suggests, then every other Site it knows, each with whether it is added: what the
+    user picks the Sites they use from, such as in onboarding."""
+    with db_session() as s:
+        return [SiteChoiceAPIRead.model_validate(choice, from_attributes=True) for choice in site_choices(s)]
+
+
+@router.put("/sources/site-choices", status_code=204, dependencies=[requires_any((Area.SOURCES, Level.MANAGE), (Area.SETTINGS, Level.MANAGE))])
+def pick_source_sites(body: SitesPickAPIRequest):
+    """Make the picked Sites the ones VODLoft knows: add the suggested ones it does not know yet, and remove every
+    other Site that has nothing in VODLoft. At least one Site is picked."""
+    pick_sites(body.keys)
 
 
 @router.post("/sources/sites", dependencies=[requires_any((Area.SOURCES, Level.MANAGE), (Area.SETTINGS, Level.MANAGE))], response_model=SiteAddedAPIRead)

@@ -370,6 +370,19 @@ export type SiteAuthenticationRead = z.infer<typeof SiteAuthenticationReadSchema
 export const SiteAddedReadSchema = z.object({key: z.string(), name: z.string()})
 export type SiteAddedRead = z.infer<typeof SiteAddedReadSchema>
 
+/** A Site the user can pick as one they use: a popular one VODLoft suggests, or one already added. */
+export const SiteChoiceReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+    /** What VODLoft adds from the Site, in a few words. */
+    pitch: z.string().nullable(),
+    /** VODLoft knows the Site already. */
+    added: z.boolean(),
+    icon: z.string().nullable(),
+    initials: z.string(),
+})
+export type SiteChoiceRead = z.infer<typeof SiteChoiceReadSchema>
+
 
 /** A collection at a Source with listed episodes, shaped like the fields of a new collection. */
 export const CollectionDetailsReadSchema = z.object({

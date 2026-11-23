@@ -163,8 +163,9 @@ function SiteAuthenticationRow({site, onSaved, alone}: {
     )
 }
 
-/** Every Site VODLoft knows, with how it signs in there: its own sign-in, its API key or its cookies file. */
-export function SiteAuthentication() {
+/** Every Site VODLoft knows, with how it signs in there: its own sign-in, its API key or its cookies file.
+ *  ``addSites`` offers to add another Site by its address below them. */
+export function SiteAuthentication({addSites = true}: {addSites?: boolean} = {}) {
     const queryClient = useQueryClient()
     const {data: sites, isLoading, error: loadError} = useSiteAuthentication()
 
@@ -189,7 +190,7 @@ export function SiteAuthentication() {
                     {sites.map((site) => <SiteAuthenticationRow key={site.key} site={site} onSaved={saved} alone={sites.length === 1}/>)}
                 </SiteRows>
             ) : null}
-            <AddSiteByLink/>
+            {addSites ? <AddSiteByLink/> : null}
         </>
     )
 }

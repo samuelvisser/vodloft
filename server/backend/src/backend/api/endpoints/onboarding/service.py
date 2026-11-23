@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from backend.api.models.onboarding import OnboardingStatusAPIRead
 from backend.db.initial_seed import remove_fresh_start_profiles, seed_fresh_start_profiles
-from backend.db.models import Collection, ImportRun, Settings
+from backend.db.models import Collection, ImportRun, Settings, Site
+from backend.services.errors import ServiceError
 from config import get_settings
 
 
@@ -48,7 +49,10 @@ def undo_start_fresh(s: Session) -> None:
 
 
 def complete_onboarding(s: Session) -> OnboardingStatusAPIRead:
+    """Finish onboarding, which only ends once the user picked at least one Site."""
     settings = _get_or_create_settings(s)
+    if not settings.onboarding_completed and s.scalar(select(Site.key).limit(1)) is None:
+        raise ServiceError("Pick at least one site first", status_code=409)
     if not settings.onboarding_completed and s.scalar(
         select(ImportRun.id).where(ImportRun.status.in_(("running", "waiting", "finished"))).limit(1)
     ) is None:

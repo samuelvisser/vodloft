@@ -157,10 +157,12 @@ def test_fresh_database_upgrades_to_the_head(migration_database):
         assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles_video"
         )).scalar_one() == 2
-        # The movies profile is only for the Sites that have movies.
+        # A new VODLoft has no Sites until onboarding asks which ones the user uses. The movies profile starts
+        # without any, and takes each Site with movies the user adds.
+        assert connection.execute(text("SELECT COUNT(*) FROM sites")).scalar_one() == 0
         assert connection.execute(text(
             "SELECT site_keys, include_upcoming_sites FROM local_media_profiles WHERE slug = 'vodloft-movies'"
-        )).one() == ('["dailywire"]', 0)
+        )).one() == ('[]', 1)
 
     from backend.db.initial_seed import seed_initial_database
 

@@ -75,7 +75,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema,
+    ResolvedLinkReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
     SourceReadSchema, type Names, NamesSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -553,6 +553,7 @@ export function useRemoveSite() {
             queryClient.invalidateQueries({queryKey: ['localMediaProfileSites']}),
             // A profile only for movies shows only while a Site that has movies is added.
             queryClient.invalidateQueries({queryKey: ['localMediaProfilesView']}),
+            queryClient.invalidateQueries({queryKey: ['siteChoices']}),
             // Add Media only offers the search of a Site that is added.
             queryClient.invalidateQueries({queryKey: ['sources']}),
         ])
@@ -757,6 +758,17 @@ export function useSourceSites() {
         queryFn: async ({signal}) => {
             const value = await fetchJSON<unknown>(`${apiUrl()}/sources/sites`, signal)
             return SourceSiteReadSchema.array().parse(value)
+        },
+    })
+}
+
+/** The popular Sites VODLoft suggests, then every other Site it knows, to pick the ones the user uses from. */
+export function useSiteChoices() {
+    return useQuery<SiteChoiceRead[], Error, SiteChoiceRead[], readonly ['siteChoices']>({
+        queryKey: ['siteChoices'] as const,
+        queryFn: async ({signal}) => {
+            const value = await fetchJSON<unknown>(`${apiUrl()}/sources/site-choices`, signal)
+            return SiteChoiceReadSchema.array().parse(value)
         },
     })
 }

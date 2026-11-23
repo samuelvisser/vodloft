@@ -9,6 +9,7 @@ class TikTok(OtherSites):
     key = "tiktok"
     name = "TikTok"
     initials = "TT"
+    pitch = "Accounts and videos"
     domains = ("tiktok.com",)
     icon = "fab:tiktok"
     # yt-dlp titles a video with the start of its caption, hashtags and all.

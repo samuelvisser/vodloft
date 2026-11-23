@@ -30,7 +30,12 @@ type AddSiteData = z.output<typeof AddSiteSchema>
 
 /** Add a Site by a link to it, before VODLoft has anything from it, so it gets its own settings and authentication.
  *  Every list of Sites shows it once it is added. */
-export default function AddSiteByLink() {
+export default function AddSiteByLink({onAdded, help}: {
+    /** Called with the Site once it is added. */
+    onAdded?: (site: SiteAddedRead) => void
+    /** What the field says below it, in place of the usual help. */
+    help?: string
+} = {}) {
     const queryClient = useQueryClient()
     const form = useForm<AddSiteValues>({
         resolver: zodResolver(AddSiteSchema),
@@ -47,14 +52,16 @@ export default function AddSiteByLink() {
         }),
         {
             parseSuccess: async (response) => SiteAddedReadSchema.parse(await response.json()),
-            onSuccess: async (_site, {resetForm}) => {
+            onSuccess: async (site, {resetForm}) => {
                 resetForm({url: ''})
+                onAdded?.(site)
                 await Promise.all([
                     queryClient.invalidateQueries({queryKey: ['siteAuthentication']}),
                     queryClient.invalidateQueries({queryKey: ['sitesSettings']}),
                     queryClient.invalidateQueries({queryKey: ['sourceSites']}),
                     queryClient.invalidateQueries({queryKey: ['localMediaProfileSites']}),
                     queryClient.invalidateQueries({queryKey: ['localMediaProfilesView']}),
+                    queryClient.invalidateQueries({queryKey: ['siteChoices']}),
                     // Add Media only offers the search of a Site that is added.
                     queryClient.invalidateQueries({queryKey: ['sources']}),
                 ])
@@ -74,7 +81,7 @@ export default function AddSiteByLink() {
             </div>
             {errors.url
                 ? <div className="error" role="alert">{String(errors.url.message)}</div>
-                : <div className="site-add__help">A site shows up once you add something from it. Type its address, such as twitch.tv, or paste a link to a page on it to add it now.</div>}
+                : <div className="site-add__help">{help ?? 'A site shows up once you add something from it. Type its address, such as twitch.tv, or paste a link to a page on it to add it now.'}</div>}
         </form>
     )
 }

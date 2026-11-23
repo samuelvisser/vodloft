@@ -43,10 +43,10 @@ def _site(session, key: str, name: str, *domains: str) -> None:
 
 
 def _fresh(session) -> None:
-    """The Sites a new VODLoft starts with."""
-    from backend.db.initial_seed import _seed_sites
+    """The Sites a user picked in onboarding."""
+    from backend.services.sites import add_suggested_sites
 
-    _seed_sites(session)
+    add_suggested_sites(session, ("youtube", "twitch", "tiktok", "soundcloud", "dailywire"))
     session.commit()
 
 
@@ -191,10 +191,9 @@ def test_the_last_site_stays(session):
 def test_a_site_vodloft_starts_with_comes_back_whole(session, key, address):
     from backend.api.endpoints.sources import router
     from backend.api.models.source import SiteAddAPIRequest
-    from backend.db.initial_seed import _seed_sites
     from backend.services import site_cookies
 
-    _seed_sites(session)
+    _fresh(session)
     _site(session, "npo", "NPO Start", "npo.nl")
     before = {site.key: site for site in site_cookies.list_site_authentication(session)}[key]
     assert before.removable
@@ -307,3 +306,43 @@ def test_a_site_that_takes_no_cookies_never_gets_a_cookies_file(session):
     assert _stored("dailywire") is None
     # yt-dlp fetching a Daily Wire link signs in with nothing.
     assert cookies_for("https://www.dailywire.com/episode/an-episode") is None
+
+
+def test_onboarding_suggests_popular_sites_and_any_other_site_vodloft_knows(session):
+    from backend.services.sites import site_choices
+
+    _site(session, "nebula", "Nebula", "nebula.tv")
+    choices = site_choices(session)
+
+    assert [choice.key for choice in choices] == ["youtube", "twitch", "dailywire", "soundcloud", "tiktok", "vimeo", "nebula"]
+    assert [choice.key for choice in choices if choice.added] == ["nebula"]
+    assert all(choice.pitch for choice in choices[:6])
+
+
+def test_picking_sites_keeps_only_those(session):
+    from backend.db.models import Site
+    from backend.services import site_cookies
+
+    _site(session, "nebula", "Nebula", "nebula.tv")
+    site_cookies.pick_sites(["youtube", "dailywire"])
+    session.expire_all()
+    assert {site.key for site in session.query(Site)} == {"youtube", "dailywire"}
+
+    # Going back and picking again adds and drops Sites the same way.
+    site_cookies.pick_sites(["youtube"])
+    session.expire_all()
+    assert {site.key for site in session.query(Site)} == {"youtube"}
+
+
+@pytest.mark.parametrize("keys, message", [([], "Pick at least one site"), (["nowhere"], "does not know the site")])
+def test_picking_sites_needs_at_least_one_known_site(session, keys, message):
+    from backend.db.models import Site
+    from backend.services import site_cookies
+    from backend.services.errors import ServiceError
+
+    _site(session, "nebula", "Nebula", "nebula.tv")
+    with pytest.raises(ServiceError, match=message) as error:
+        site_cookies.pick_sites(keys)
+    assert error.value.field == "keys"
+    session.expire_all()
+    assert {site.key for site in session.query(Site)} == {"nebula"}

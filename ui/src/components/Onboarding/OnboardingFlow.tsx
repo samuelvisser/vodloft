@@ -8,19 +8,19 @@ import type {MediaLinkTarget} from '../../lib/sourceControls'
 import BrowsePage from '../../pages/BrowsePage'
 import SourceSearchPage from '../../pages/SourceSearchPage'
 import MoviePage from '../../pages/movie/MoviePage'
-import {useMovies, useSources} from '../../lib/queries'
+import {useMovies} from '../../lib/queries'
 import {SiteAuthentication} from '../Source/SiteAuthenticationCard'
-import {ANY_DOMAIN, SourceRead, sourceShown} from '../../types/schemas/source'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {CollectionRead} from '../../types/schemas/collection'
 import OnboardingMovieProfileStep from './OnboardingMovieProfileStep'
 import OnboardingMediaStep from './OnboardingMediaStep'
+import OnboardingSitesStep from './OnboardingSitesStep'
 import './Onboarding.css'
 import {faIcon} from '../../icons/faIcon'
 import {apiUrl} from '../../lib/api'
 
 
-type OnboardingStep = 'welcome' | 'sources' | 'security' | 'media' | 'import' | 'add' | 'browse' | 'search' | 'collection' | 'movie-profile' | 'movie'
+type OnboardingStep = 'welcome' | 'sites' | 'site-setup' | 'security' | 'media' | 'import' | 'add' | 'browse' | 'search' | 'collection' | 'movie-profile' | 'movie'
 
 /** The collection or movie picked as the first media, from a link or from browsing. */
 type SelectedMedia = {slug: string; title: string; url: string}
@@ -31,17 +31,11 @@ type Props = {
     onComplete: (path?: string) => void
 }
 
-/** The Source that works with any site comes first, since most people start there; the rest keep their order. */
-function onboardingSourceOrder(sources: SourceRead[]): SourceRead[] {
-    const anySite = (source: SourceRead) => source.domains.includes(ANY_DOMAIN)
-    return [...sources.filter(anySite), ...sources.filter((source) => !anySite(source))]
-}
-
-const STEP_LABELS = ['Welcome', 'Sources', 'Security', 'Your media']
+const STEP_LABELS = ['Welcome', 'Sites', 'Security', 'Your media']
 
 function visibleStepIndex(step: OnboardingStep) {
     if (step === 'welcome') return 0
-    if (step === 'sources') return 1
+    if (step === 'sites' || step === 'site-setup') return 1
     if (step === 'security') return 2
     return 3
 }
@@ -51,7 +45,6 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
     const queryClient = useQueryClient()
     const {data: localMovies} = useMovies()
     const [step, setStep] = useState<OnboardingStep>('welcome')
-    const {data: sources} = useSources()
     const [selectedCollection, setSelectedCollection] = useState<SelectedMedia | null>(null)
     const [selectedCollectionWasPresent, setSelectedCollectionWasPresent] = useState(false)
     const [selectedMovie, setSelectedMovie] = useState<SelectedMedia | null>(null)
@@ -184,38 +177,35 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                     <div className="onboarding-welcome-glow" aria-hidden="true"/>
                     <img className="onboarding-welcome-logo" src="/logo-wide-full.png" alt="VODLoft"/>
                     <p>Bring your library home.</p>
-                    <button className="btn btn-primary onboarding-primary-action" type="button" onClick={() => setStep('sources')}>
+                    <button className="btn btn-primary onboarding-primary-action" type="button" onClick={() => setStep('sites')}>
                         Continue
                         <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
                     </button>
                 </main>
             )}
 
-            {step === 'sources' && (
+            {step === 'sites' && (
+                <main className="onboarding-stage onboarding-stage-narrow">
+                    <OnboardingSitesStep onBack={() => setStep('welcome')} onContinue={() => setStep('site-setup')}/>
+                </main>
+            )}
+
+            {step === 'site-setup' && (
                 <main className="onboarding-stage onboarding-stage-narrow">
                     <div className="onboarding-section-heading">
-                        <span className="onboarding-eyebrow">Sources</span>
-                        <h1>Where your media comes from</h1>
+                        <span className="onboarding-eyebrow">Sites</span>
+                        <h1>Set up your sites</h1>
                         <p>
-                            VODLoft adds collections and movies from these services. Signing in is per site, and
-                            optional: it is only needed for content that requires an account. A free YouTube API key,
-                            on the YouTube row, keeps your YouTube collections up to date much better. You can do all of
-                            this later in Settings › Sources.
+                            All optional. Signing in is only needed for content that requires an account, and a free
+                            YouTube API key keeps your YouTube collections up to date much better. You can do this
+                            later in Settings › Sources too.
                         </p>
                     </div>
-                    <ul className="onboarding-source-list">
-                        {onboardingSourceOrder((sources ?? []).filter(sourceShown)).map((source) => (
-                            <li key={source.id}>
-                                <strong>{source.name}</strong>
-                                {source.sitesLabel ? ` · ${source.sitesLabel}` : ''}
-                            </li>
-                        ))}
-                    </ul>
                     <div className="onboarding-authentication">
-                        <SiteAuthentication/>
+                        <SiteAuthentication addSites={false}/>
                     </div>
                     <div className="onboarding-stage-actions">
-                        <button className="btn" type="button" onClick={() => setStep('welcome')}>Back</button>
+                        <button className="btn" type="button" onClick={() => setStep('sites')}>Back</button>
                         <button className="btn btn-primary" type="button" onClick={() => setStep('security')}>
                             Continue
                         </button>
@@ -269,7 +259,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                     </p>
 
                     <div className="onboarding-stage-actions">
-                        <button className="btn" type="button" onClick={() => setStep('sources')}>Back</button>
+                        <button className="btn" type="button" onClick={() => setStep('site-setup')}>Back</button>
                         <button className="btn btn-primary" type="button" onClick={() => setStep('media')}>
                             Continue to library setup
                         </button>

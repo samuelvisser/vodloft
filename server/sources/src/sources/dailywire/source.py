@@ -113,6 +113,7 @@ class DailyWireSource(Source):
         # A host has no feed to fold into one show: each of their shows keeps its own seasons.
         creators=True,
         movies=True,
+        pitch="Shows and movies, with your membership",
         creator_names=HOST,
         section_types=(
             SectionType("show", SectionKind.SHOW, Names("show", "shows")),

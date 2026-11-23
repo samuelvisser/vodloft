@@ -21,7 +21,8 @@ from sqlalchemy.orm import Session
 
 from backend.db.core import get_session, run_write_transaction
 from backend.db.models import Site as SiteRecord
-from backend.services.sites import SiteLinkError, remove_site, site_of_link, site_record, site_removable, sites_kept
+from backend.services.errors import ServiceError
+from backend.services.sites import SiteLinkError, add_suggested_sites, remove_site, site_choices, site_of_link, site_record, site_removable, sites_kept
 from sources import ANY_DOMAIN, CookiesStatus, Feature, Site, SiteApi, SiteApiStatus, Source, all_sources, site_of, sources_for
 from sources import cookies as cookie_files
 from sources import site_api_keys
@@ -258,6 +259,25 @@ def remove_known_site(site_key: str) -> None:
         cookie_files.remove_site_cookies(site_key)
         _changed(*known)
     logger.info("Removed the site %s", known[0].name)
+
+
+def pick_sites(keys: list[str]) -> None:
+    """Make the picked Sites the ones VODLoft knows, such as in onboarding: add the suggested ones it does not know
+    yet, then remove every other Site that has nothing in VODLoft. A Site picked must be suggested or known, and at
+    least one is picked, so VODLoft always keeps one."""
+    wanted = set(keys)
+    if not wanted:
+        raise ServiceError("Pick at least one site", status_code=422, field="keys")
+    with _reading() as s:
+        choices = {choice.key for choice in site_choices(s)}
+    unknown = sorted(wanted - choices)
+    if unknown:
+        raise ServiceError(f"VODLoft does not know the site '{unknown[0]}'. Add it by its address first", status_code=422, field="keys")
+    run_write_transaction(lambda s: add_suggested_sites(s, wanted))
+    with _reading() as s:
+        dropped = [key for key in _known_sites(s) if key not in wanted and site_removable(key, sites_kept(s))]
+    for key in dropped:
+        remove_known_site(key)
 
 
 def sites_for_cookies(s: Session, content: bytes) -> list[Site]:

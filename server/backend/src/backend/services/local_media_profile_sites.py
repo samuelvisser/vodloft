@@ -16,7 +16,9 @@ from sqlalchemy.orm import Session
 from config.settings.site_settings import SiteSettingGroup
 from sources import ANY_DOMAIN, DownloadOptions, Feature, Site, SiteSetting, Source, all_sources, site_of
 
-from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, LocalMediaProfileType, PreferredFormat
+from backend.types.local_media_profile_types import (
+    PREFERRED_FORMAT_HEIGHTS, LocalMediaProfileType, PreferredFormat, VideoLocalMediaProfileScope,
+)
 
 # The Features of which a Source needs one before a profile of each type can store its media. A Video profile
 # keeps single videos, and movies with their extras.
@@ -111,10 +113,13 @@ def profile_offered_for_site(s: Session, profile, site_key: str | None) -> bool:
 
 
 def add_upcoming_site(s: Session, site_key: str) -> None:
-    """A Site VODLoft sees for the first time joins every profile that includes upcoming Sites."""
+    """A Site VODLoft sees for the first time joins every profile that includes upcoming Sites, and a profile only
+    for movies only takes a Site that has movies."""
     from backend.db.models import LocalMediaProfileBase
 
     for profile in s.scalars(select(LocalMediaProfileBase).where(LocalMediaProfileBase.include_upcoming_sites.is_(True))):
+        if getattr(profile, "video_scope", None) == VideoLocalMediaProfileScope.MOVIES and not site_has_movies(site_key):
+            continue
         if site_key not in profile.site_keys and site_offered_for_type(profile.type, site_key):
             profile.site_keys = [*profile.site_keys, site_key]
 

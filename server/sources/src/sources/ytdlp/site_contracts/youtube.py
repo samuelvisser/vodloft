@@ -25,6 +25,7 @@ class YouTube(OtherSites):
     key = "youtube"
     name = "YouTube"
     initials = "YT"
+    pitch = "Channels, playlists, Shorts and live streams"
     domains = ("youtube.com", "youtu.be")
     icon = "fab:youtube"
     # Each search costs YouTube Data API quota, or runs yt-dlp without a key, so it searches when asked.

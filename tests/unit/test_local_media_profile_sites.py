@@ -13,13 +13,13 @@ def _new_session() -> tuple[Session, object]:
     import backend.db.models  # noqa: F401
     from backend.db import Base
 
-    from backend.db.initial_seed import _seed_sites
+    from backend.services.sites import add_suggested_sites
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    # A new VODLoft starts with the Sites a Source is made for or takes an API key for.
-    _seed_sites(session)
+    # The Sites a user picked in onboarding.
+    add_suggested_sites(session, ("youtube", "twitch", "tiktok", "soundcloud", "dailywire"))
     return session, engine
 
 
@@ -216,3 +216,30 @@ def test_keeping_every_sponsorblock_type_saves_sponsorblock_off():
         CollectionLocalMediaProfileInput.model_validate({**body, "sponsorblock_enabled": None, "sponsorblock_segments": None})
         .fields_kept_on_update()
     )
+
+
+def test_a_profile_only_for_movies_only_takes_new_sites_with_movies() -> None:
+    from backend.db.initial_seed import _seed_local_media_profiles
+    from backend.db.models import LocalMediaProfileBase
+    from backend.services.sites import add_suggested_sites
+
+    import backend.db.models  # noqa: F401
+    from backend.db import Base
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    # A new VODLoft has no Sites yet when its profiles are made.
+    _seed_local_media_profiles(session)
+    session.flush()
+
+    add_suggested_sites(session, ("youtube", "dailywire"))
+    _see_site(session, "rumble", "Rumble")
+    session.flush()
+
+    profiles = {profile.slug: profile.site_keys for profile in session.query(LocalMediaProfileBase)}
+    assert profiles["vodloft-movies"] == ["dailywire"]
+    assert profiles["vodloft-videos"] == ["youtube", "dailywire", "rumble"]
+
+    session.close()
+    engine.dispose()
