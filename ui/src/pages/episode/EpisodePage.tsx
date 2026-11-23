@@ -231,10 +231,10 @@ export default function EpisodePage() {
                 `${base}/episodes/${encodeURIComponent(episode.slug)}/refresh-metadata`,
                 {method: 'POST'},
             )
-            toast.success('Metadata refresh started')
+            toast.success('Info refresh started')
         } catch (error) {
             const detail = error instanceof OperationStartError ? error.message : undefined
-            toast.error(detail || 'Could not start metadata refresh')
+            toast.error(detail || 'Could not start the info refresh')
         } finally {
             setMetadataRefreshStarting(false)
         }
@@ -256,14 +256,14 @@ export default function EpisodePage() {
                         <ActionMenu
                             items={[
                                 ...(sourceControls(collection).metadataRefresh ? [{
-                                    label: 'Refresh metadata',
+                                    label: `Refresh info from ${siteLabel}`,
                                     description: detailsChecked,
                                     icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: metadataRefreshBusy,
                                     disabledReason: metadataRefreshStarting
                                         ? OPERATION_STARTING_MESSAGE
                                         : metadataRefreshOperation
-                                            ? `A metadata refresh is running for this ${words.episode.singular}.`
+                                            ? `VODLoft is refreshing the info of this ${words.episode.singular}.`
                                             : undefined,
                                     operation: metadataRefreshOperation,
                                     onSelect: () => void refreshMetadata(),

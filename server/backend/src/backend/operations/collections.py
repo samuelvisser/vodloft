@@ -134,7 +134,7 @@ class CollectionFileRenameOperation(_CollectionOperation):
 
 
 class CollectionMetadataRewriteOperation(_CollectionOperation):
-    """Rewrite metadata: the tags and NFO files of the collection's downloaded files, for each Local Media Profile."""
+    """Write info into files: the tags and NFO files of the collection's downloaded files, for each Local Media Profile."""
 
     kind = "collection.rewrite_metadata"
 
