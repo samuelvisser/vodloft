@@ -1,10 +1,11 @@
 """Adding a Collection to the Library, the same way wherever it comes from."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Collection
+from backend.db.mixins.HasTaskResourcesMixin import delete_task_rows
+from backend.db.models import Collection, Episode, MediaDownloadBase, MediaItemBase, Metadata
 from backend.operations.collections import CollectionIndexOperation, CollectionSyncOperation
 from backend.services.errors import ServiceError
 from backend.services.new_lists import album_kinds, list_kinds
@@ -136,3 +137,30 @@ def add_links_only_collection(
     s.flush()
     queue_event(s, "collection.added", CollectionAdded(collection))
     return collection
+
+
+def delete_episodes_of(s: Session, collection: Collection) -> None:
+    """Delete every episode of the collection with its downloads, a few statements for the whole collection.
+
+    Deleting the collection on its own would load each episode and each of its downloads to delete them one by
+    one, which takes many seconds for a channel with thousands of videos. The files on disk stay.
+    """
+    episode_ids = set(s.scalars(select(Episode.id).where(Episode.collection_id == collection.id)))
+    if not episode_ids:
+        return
+    episodes = select(Episode.id).where(Episode.collection_id == collection.id).scalar_subquery()
+    download_ids = set(s.scalars(select(MediaDownloadBase.id).where(MediaDownloadBase.media_item_id.in_(episodes))))
+    delete_task_rows(s, {"episode": episode_ids, "media_download": download_ids})
+
+    downloads = select(MediaDownloadBase.id).where(MediaDownloadBase.media_item_id.in_(episodes)).scalar_subquery()
+    for statement in (
+        delete(Metadata).where(Metadata.parent_table == MediaDownloadBase.__metadata_parent_table__,
+                               Metadata.parent_id.in_(downloads)),
+        delete(Metadata).where(Metadata.parent_table == Episode.__tablename__, Metadata.parent_id.in_(episodes)),
+        # Each download's own rows, its assets and its history follow through their foreign keys.
+        delete(MediaDownloadBase).where(MediaDownloadBase.media_item_id.in_(episodes)),
+        # The episode rows follow their media items through their foreign key.
+        delete(MediaItemBase).where(MediaItemBase.id.in_(episodes)),
+    ):
+        s.execute(statement, execution_options={"synchronize_session": False})
+    s.expire(collection, ["episodes", "seasons"])

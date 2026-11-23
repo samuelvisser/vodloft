@@ -48,7 +48,9 @@ from task_manager.scheduler.types import OperationSource
 from backend.api.models.operations import CollectionMetadataRewriteOperationAccepted, TaskOperationAccepted
 from backend.services.episode_identification import preview_identification, request_identification_change
 from backend.services.metadata_rewrite import request_metadata_rewrite
-from backend.services.collections import add_collection, add_links_only_collection, index_new_collection
+from backend.services.collections import (
+    add_collection, add_links_only_collection, delete_episodes_of, index_new_collection,
+)
 from backend.services.link_seasons import holds_only_link_seasons, lists_playlists
 from backend.operations.collections import (
     CollectionDeleteDownloadsOperation,
@@ -373,6 +375,7 @@ def delete_collection(s: Session, collection_slug: str) -> CollectionAPIRead:
         "slug": collection.slug,
     })
 
+    delete_episodes_of(s, collection)
     s.delete(collection)
     s.flush()
 

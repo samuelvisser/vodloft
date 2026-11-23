@@ -153,20 +153,17 @@ def _remember_released_task_callbacks(session: Session, definition_ids: set[int]
             session.info.setdefault(_PENDING_RELEASED_TASK_CALLBACKS_KEY, set()).add(task_meta.terminal_callback)
 
 
-@event.listens_for(Session, "before_flush")
-def _delete_task_rows_of_deleted_resources(session: Session, _flush_context, _instances) -> None:
-    """Delete the scheduler rows of every resource this flush deletes, one statement per table.
+def delete_task_rows(session: Session, ids_by_type: dict[str, set[int]]) -> None:
+    """Delete the scheduler rows of these resources, one statement per table, and drop their pending jobs
+    once the transaction commits.
+
+    A flush calls this for every resource it deletes. Code that deletes resources with its own statements,
+    without loading them, calls it with their ids.
 
     Operation targets, run links and dependencies of a deleted operation or run
     follow through their own foreign keys.
     """
     from task_manager.scheduler.db import TaskOperation, TaskOperationTarget, TaskRun, TaskSchedule
-
-    ids_by_type: dict[str, set[int]] = {}
-    for item in session.deleted:
-        if isinstance(item, HasTaskResourcesMixin) and getattr(item, "id", None) is not None:
-            for resource_type in item._task_resource_values():
-                ids_by_type.setdefault(resource_type, set()).add(int(item.id))
 
     released_definition_ids: set[int] = set()
     for resource_type, ids in ids_by_type.items():
@@ -187,7 +184,20 @@ def _delete_task_rows_of_deleted_resources(session: Session, _flush_context, _in
                     TaskSchedule.resource_type == ResourceType(resource_type), TaskSchedule.resource_id.in_(chunk)),
             ):
                 session.execute(statement, execution_options={"synchronize_session": False})
+        session.info.setdefault(_PENDING_DELETED_RESOURCES_KEY, set()).update(
+            (resource_type, resource_id) for resource_id in ids
+        )
     _remember_released_task_callbacks(session, released_definition_ids)
+
+
+@event.listens_for(Session, "before_flush")
+def _delete_task_rows_of_deleted_resources(session: Session, _flush_context, _instances) -> None:
+    ids_by_type: dict[str, set[int]] = {}
+    for item in session.deleted:
+        if isinstance(item, HasTaskResourcesMixin) and getattr(item, "id", None) is not None:
+            for resource_type in item._task_resource_values():
+                ids_by_type.setdefault(resource_type, set()).add(int(item.id))
+    delete_task_rows(session, ids_by_type)
 
 
 @event.listens_for(Session, "after_flush")
