@@ -128,6 +128,12 @@ const DownloadStorageInspectionSchema = z.object({
     sameFilesystem: z.boolean().nullable(),
 })
 
+const LogFileSettingsSchema = z.object({
+    enabled: z.boolean(),
+    maxMegabytes: z.number(),
+    keptFiles: z.number(),
+})
+
 const YouTubeApiSettingsSchema = z.object({
     dailyQuota: z.number(),
     checksQuota: z.number(),
@@ -220,6 +226,7 @@ const DownloadProfileDefaultsSchema = z.object({
 
 export const SettingsValuesSchema = z.object({
     logLevel: z.enum(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']),
+    logFile: LogFileSettingsSchema,
     timezone: z.string(),
     crypto: CryptoFileSettingsSchema,
     loginSession: SessionSettingsSchema,
@@ -349,6 +356,10 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         pauseStart: z.string().regex(TIME_OF_DAY, 'Use a time like 01:00.'),
         pauseEnd: z.string().regex(TIME_OF_DAY, 'Use a time like 07:00.'),
     }),
+    logFile: LogFileSettingsSchema.extend({
+        maxMegabytes: requiredNumber().int().min(1, 'Must be at least 1 MB.'),
+        keptFiles: requiredNumber().int().min(1, 'Must be at least 1.'),
+    }),
     youtubeApi: YouTubeApiSettingsSchema.extend({
         dailyQuota: requiredNumber().int().min(1, 'Must be at least 1.'),
         checksQuota: requiredNumber().int().min(0, 'Must be 0 or greater.'),
@@ -390,6 +401,9 @@ export const SettingsServerErrors = createServerErrorMapper({
 
 export const SETTINGS_FIELD_PATHS = [
     'logLevel',
+    'logFile.enabled',
+    'logFile.maxMegabytes',
+    'logFile.keptFiles',
     'timezone',
     'crypto.secretKeyFile',
     'crypto.defaultSecretFile',

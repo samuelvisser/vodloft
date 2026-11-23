@@ -16,14 +16,14 @@ def _access_record(path: str) -> logging.LogRecord:
 
 
 def test_logs_endpoint_access_is_not_captured():
-    from backend.logging_buffer import _is_logs_endpoint_access
+    from backend.logging_buffer import is_logs_endpoint_access
 
-    assert _is_logs_endpoint_access(_access_record("/api/logs"))
-    assert _is_logs_endpoint_access(_access_record("/api/logs?limit=20000&level=INFO"))
+    assert is_logs_endpoint_access(_access_record("/api/logs"))
+    assert is_logs_endpoint_access(_access_record("/api/logs?limit=20000&level=INFO"))
 
 
 def test_other_access_logs_are_still_captured():
-    from backend.logging_buffer import _is_logs_endpoint_access
+    from backend.logging_buffer import is_logs_endpoint_access
 
-    assert not _is_logs_endpoint_access(_access_record("/api/pull"))
-    assert not _is_logs_endpoint_access(_access_record("/api/tasks/ledger?limit=100"))
+    assert not is_logs_endpoint_access(_access_record("/api/pull"))
+    assert not is_logs_endpoint_access(_access_record("/api/tasks/ledger?limit=100"))
