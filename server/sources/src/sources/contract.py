@@ -1042,15 +1042,16 @@ class Site:
     link_seasons: bool = False
     """A collection made from a creator's channel can make the channel's lists, such as its playlists, its seasons:
     link seasons, through its Source's ``is_creator_page``, ``season_lists`` and ``list_items``."""
-    every_list_a_season: bool = False
-    """A new channel collection makes every one of the channel's lists a season, as YouTube shows a channel with all
-    its playlists. Left out, only the lists the user picks are."""
-    whole_lists: bool = False
-    """A new channel collection puts a video in every list season that has it, so each list is whole. Left out, a
-    video is in the first of them only, unless the collection's type says otherwise."""
-    loose_season: str = "Videos"
-    """What VODLoft calls the season it makes itself of the videos in none of a collection's link seasons, such as
-    Tracks on Bandcamp. A collection type can name it itself (``CollectionContract.loose_season``)."""
+    every_list_a_season: bool = True
+    """A new channel collection makes every one of the channel's lists a season, as a channel shows all its lists.
+    A Site whose contract says False makes only the lists the user picks seasons."""
+    whole_lists: bool = True
+    """A new channel collection puts a video in every list season that has it, so each list is whole. A Site whose
+    contract says False puts a video in the first of them only, unless the collection's type says otherwise."""
+    loose_season: str | None = None
+    """What VODLoft calls the season it makes itself of the videos in none of a collection's link seasons. Left out,
+    Videos, or on a Site that is ``audio_only`` Singles. A collection type can name it itself
+    (``CollectionContract.loose_season``)."""
     share_hosts: tuple[str, ...] = ()
     """The hosts of the short links the Site's apps share, such as SoundCloud's on.soundcloud.com, which redirect to
     the Site's own pages. Their links are the Site's, and VODLoft follows them to the page they stand for."""
@@ -1082,6 +1083,8 @@ class Site:
             object.__setattr__(self, "downloads", self.downloads.for_audio_only())
         if self.audio_only and self.episode_tags is VIDEO_TAGS:
             object.__setattr__(self, "episode_tags", TRACK_TAGS)
+        if self.loose_season is None:
+            object.__setattr__(self, "loose_season", "Singles" if self.audio_only else "Videos")
         if self.channel_season is None:
             object.__setattr__(
                 self, "channel_season", ChannelSeason.UNLISTED if self.audio_only else ChannelSeason.EVERYTHING,

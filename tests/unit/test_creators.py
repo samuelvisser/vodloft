@@ -145,7 +145,10 @@ def test_a_collection_of_a_channel_is_a_channel_with_the_channel_defaults(tube, 
 
     collection = _collection(session, "workshop")
     assert collection.kind == "channel"
-    assert (collection.link_seasons, collection.outside_videos, collection.channel_season) == ("selected", "add", "everything")
+    # Every list is a season, whole, and the channel season holds the whole channel, as a channel shows itself.
+    assert (collection.link_seasons, collection.outside_videos, collection.repeat_videos, collection.channel_season) == (
+        "all", "add", "each_season", "everything",
+    )
 
 
 def test_a_playlist_and_anything_on_a_site_without_creators_is_a_list(tube, session):
@@ -239,11 +242,31 @@ def test_deleting_a_creator_keeps_its_collections(client, session):
     assert collection is not None and collection.creator_id is None
 
 
-def test_a_channel_collection_on_a_site_that_says_so_makes_every_list_a_whole_season(tube, session, monkeypatch):
+def test_a_site_can_have_a_channel_collection_make_only_the_lists_picked_seasons(tube, session, monkeypatch):
     from dataclasses import replace
 
-    monkeypatch.setattr(CreatorSource, "sites", (replace(CreatorSource.sites[0], every_list_a_season=True, whole_lists=True),))
+    monkeypatch.setattr(CreatorSource, "sites", (replace(CreatorSource.sites[0], every_list_a_season=False, whole_lists=False),))
+    _add("workshop", ROOT)
+    collection = _collection(session, "workshop")
+    assert (collection.link_seasons, collection.repeat_videos) == ("selected", "one_season")
+
+
+def test_a_channel_collection_on_a_site_without_list_seasons_keeps_its_seasons_as_they_are(tube, session, monkeypatch):
+    # Such as a show on The Daily Wire: its seasons are the Site's own, so no default about lists applies.
+    from dataclasses import replace
+
+    monkeypatch.setattr(CreatorSource, "sites", (replace(CreatorSource.sites[0], link_seasons=False),))
     _add("workshop", ROOT)
 
     collection = _collection(session, "workshop")
-    assert (collection.link_seasons, collection.repeat_videos) == ("all", "each_season")
+    assert (collection.link_seasons, collection.repeat_videos) == ("off", "one_season")
+
+
+def test_a_channel_collection_says_in_words_what_its_seasons_will_be(tube, session):
+    from backend.services.link_seasons import seasons_plan
+
+    _add("workshop", ROOT)
+
+    plan = seasons_plan(_collection(session, "workshop"))
+    assert plan.startswith("Every creator playlist becomes a season in VODLoft.")
+    assert "also those in a playlist" in plan

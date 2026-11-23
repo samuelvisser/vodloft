@@ -270,6 +270,19 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
         return NamesAPIRead.model_validate(names) if names is not None else None
 
 
+    @computed_field
+    @property
+    def kind_name(self) -> Optional[str]:
+        """What the collection is on its Site, in the Site's words, as a creator is named: "YouTube channel",
+        "YouTube playlist" or "The Daily Wire show". None for a collection of links without one of its own, and while
+        its Site or kind is not known yet."""
+        if self.site is None or self.kind is None or self.sharing_url is None:
+            return None
+        site = site_of(self.site.key)
+        names = site.channel_collection_names if self.kind == CollectionKind.CHANNEL.value else site.list_collection_names
+        return f"{site.name} {names.singular}"
+
+
 class CollectionAPIRead(_CollectionAPIBaseOut):
     """Response body for a collection."""
     created_at: datetime

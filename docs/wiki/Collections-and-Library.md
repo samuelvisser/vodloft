@@ -108,12 +108,12 @@ Renaming a season or giving it another number doesn't rename files you already d
 
 ### Playlists and albums as seasons
 
-A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundCloud, can make the channel's playlists, or the artist's albums, seasons of their own. Turn on **Playlists as seasons** in the Seasons window (in a Music collection, the Albums window has **The artist's albums**), and choose:
+A collection of a whole YouTube channel, or of an artist on Bandcamp or SoundCloud, can make the channel's playlists, or the artist's albums, seasons of their own. A new channel collection starts with every playlist a season of its own, each one whole (a video in several playlists is in each), and with the videos of other channels in them included. Turn on **Playlists as seasons** in the Seasons window (in a Music collection, the Albums window has **The artist's albums**), and choose:
 
 - **Which playlists**: every playlist, also the ones to come, or only those you switch on in the list. **Look for new playlists** asks the site for the list again. A playlist you switch on is **A season of its own**, or **Contents only**: its videos are then in the collection, but in its other seasons, such as Videos or a season per year, instead of a season named after the playlist. **Bulk edit** above the list lets you pick several playlists and switch them on or off, or make them seasons or contents only, in one go; the changes are saved with the rest of the window.
-- **When the channel adds a playlist**: ask you, make it a season right away, or always skip it. A site that knows more than one kind of list has a setting for each: on SoundCloud, one for new albums and one for new playlists. A Music collection on such a site skips new playlists until you choose otherwise, and when it is set up it starts with only the albums switched on.
-- **Videos in no playlist**: one season called **Videos** (**Singles** for music), or a season per year.
-- **How playlist content fits in the collection** (in the site's own word, such as album), for videos of other channels in these playlists: **Only include media already in the collection** (the default), **Include media that is not in the collection**, in their playlist's season, or **Include only what the playlists contain** (see [Collections of only playlists](#collections-of-only-playlists)).
+- **When the channel adds a playlist**: ask you, make it a season right away, or always skip it. A site that knows more than one kind of list has a setting for each: on SoundCloud, one for new albums and one for new playlists. A Music collection on such a site starts with only the albums, and skips new playlists until you choose otherwise.
+- **Videos in no playlist**: one season, or a season per year.
+- **How playlist content fits in the collection** (in the site's own word, such as album), for videos of other channels in these playlists: **Only include media already in the collection**, **Include media that is not in the collection**, in their playlist's season (the default for a channel), or **Include only what the playlists contain** (see [Collections of only playlists](#collections-of-only-playlists)).
 
 Each playlist season is named after its playlist, and its videos keep the order of the playlist, as do their episode numbers. An album's tracks keep the album's track order. Playlist seasons go in the order of their first video, so with a season per year a 2025 playlist comes after the 2025 season. An artist's albums come after Singles, in the order the artist lists them; you can still reorder them, and **Automatic order** brings back the artist's order. A video that is in more than one playlist goes to the season that comes first, unless the collection is set to put it in each (see [A video in several seasons](#a-video-in-several-seasons)). Files you already downloaded keep their numbers.
 
@@ -244,8 +244,8 @@ In the Seasons window of a channel collection (the Albums window for music), **F
 
 **The channel's own season** chooses what the season of the channel itself holds:
 
-- **What is in no playlist** (the default), as **Videos** (**Singles** for music): a video that is in a playlist season is only there.
-- **Everything**, as **Channel**: every video of the feeds is in it, also the ones in a playlist that is a season, so they are in two seasons.
+- **Everything** (the default), as **Channel**: every video of the feeds is in it, also the ones in a playlist that is a season, so they are in two seasons. The collection's page opens on this season.
+- **What is in no playlist**, as **Videos**: a video that is in a playlist season is only there. On sites with sound only, such as SoundCloud and Bandcamp, this is the default, and the season is called **Singles**.
 
 ### Adding a collection to a creator
 
@@ -272,7 +272,7 @@ A creator is called what their site calls them while all their accounts are on o
 
 ### Music artists
 
-A musician on **Bandcamp** or **SoundCloud** is added like any channel: paste a link to the artist's page, such as `https://artist.bandcamp.com` or `https://soundcloud.com/artist`, in the Add Collection wizard. VODLoft takes it for Music. Turn on **The artist's albums** in its Albums window to make each album an album of its own, with the other tracks under **Singles**. On SoundCloud a **Tracks** feed holds everything the artist uploaded, so tracks that are on no album have a place too; a Music collection there starts with only the albums switched on, and skips the artist's other playlists until you choose otherwise. To keep one album apart, add the album's own link as a list collection instead. Download them with a profile for Music that downloads audio only (see [[Local-Media-Profiles#music-tracks-and-music-videos]]), which tags every track with its album, artist and track number, such as 3/10.
+A musician on **Bandcamp** or **SoundCloud** is added like any channel: paste a link to the artist's page, such as `https://artist.bandcamp.com` or `https://soundcloud.com/artist`, in the Add Collection wizard. VODLoft takes it for Music. Each of the artist's albums becomes an album of its own, with the tracks that are on none of them under **Singles**; on SoundCloud the artist's playlists are left out until you switch them on in its Albums window. On SoundCloud a **Tracks** feed holds everything the artist uploaded, so tracks that are on no album have a place too. To keep one album apart, add the album's own link as a list collection instead. Download them with a profile for Music that downloads audio only (see [[Local-Media-Profiles#music-tracks-and-music-videos]]), which tags every track with its album, artist and track number, such as 3/10.
 
 A creator with a Music collection is called an **artist**, on its page and in the Library.
 

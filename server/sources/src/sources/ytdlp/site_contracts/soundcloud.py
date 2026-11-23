@@ -35,5 +35,3 @@ class SoundCloud(OtherSites):
     list_collection_names = Names.joined((Names("album", "albums"), Names("playlist", "playlists")))
     channel_season_names = Names("album", "albums")
     list_season_names = Names("group", "groups")
-    # What is in none of a collection's albums and playlists is its tracks.
-    loose_season = "Tracks"

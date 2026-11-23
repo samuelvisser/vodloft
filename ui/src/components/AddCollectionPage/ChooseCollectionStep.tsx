@@ -253,7 +253,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                         Auxiliary content like trailers will be identified separately.</p>
                     {listed.data && (seasonsFromSource
                         ? <p>{resolved.data?.source.name} has its own seasons, which VODLoft keeps, and a Seasonal collection keeps its {typeWords.episode.singular} numbers too.</p>
-                        : <p>{resolved.data?.source.name ?? 'This site'} has no seasons, so VODLoft puts the {typeWords.episode.plural} of each upload year in their own {typeWords.season.singular}.</p>)}
+                        : listed.data.seasonsPlans[watch("type") ?? ""] && <p>{listed.data.seasonsPlans[watch("type") ?? ""]}</p>)}
                     {!listed.data && <p>VODLoft suggests one from the collection itself. If you're unsure, select "Numbered".</p>}
                 </ReadMore>
             </div>

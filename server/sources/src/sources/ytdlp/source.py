@@ -552,7 +552,8 @@ class YtDlpSource(Source):
             raise
         site = _site(info)
         if info.get("_type") == "playlist":
-            collection = self._collection(info, url)
+            # Named and pictured as Add collection will name and picture it, such as by a SoundCloud artist's own.
+            collection = implementation.complete_collection(self._collection(info, url), url)
             return ResolvedLink(
                 kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
                 description=collection.description, image_url=collection.image_url, author_name=collection.author_name,

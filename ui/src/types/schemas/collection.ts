@@ -109,6 +109,9 @@ export const CollectionReadSchema = z.looseObject({
     creatorNames: NamesSchema.optional(),
     /** What its Site calls its seasons, such as playlists in a YouTube channel collection; null where its type's word stands. */
     seasonNames: NamesSchema.nullable().optional(),
+    /** What it is on its Site, in the Site's words, such as "YouTube channel" or "YouTube playlist", as a creator is
+     *  named; null for a collection of links of its own. */
+    kindName: z.string().nullable().optional(),
     backgroundImagePath: z.string().nullable().optional(),
     logoImagePath: z.string().nullable().optional(),
 

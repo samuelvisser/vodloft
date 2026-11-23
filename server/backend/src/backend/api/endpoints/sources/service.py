@@ -13,6 +13,8 @@ from backend.api.models.source import (
 from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase, Settings, Site as SiteRecord
 from backend.security.access import Access
 from backend.types.collection_types import CollectionType
+from backend.services.collections import set_kind
+from backend.services.link_seasons import seasons_plan
 from backend.services.media_access import access_locked, link_access
 from backend.services.sites import collection_kind, preferred_sources, site_record
 from backend.types.link_season_types import CollectionKind
@@ -95,7 +97,15 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
         music_reason=music,
         seasons=details.seasons,
         audio_only=source_site(details.url, source.id).audio_only,
+        seasons_plans={type_.value: _seasons_plan(source, details.url, type_) for type_ in CollectionType},
     )
+
+
+def _seasons_plan(source: Source, url: str, type_: CollectionType) -> str:
+    """What the collection's seasons will be once it is added as the type, as adding it sets it up."""
+    collection = Collection(sharing_url=url, source_key=source.id, type=type_.value)
+    set_kind(collection)
+    return seasons_plan(collection)
 
 
 def search_source(access: Access, source: Source, site_key: str, query: str) -> SearchResultsAPIRead:
