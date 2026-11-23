@@ -389,6 +389,8 @@ def _downloads(data: WireLoftData, paths: _Paths) -> list[RecordPlan]:
             continue
         values: dict[str, object] = {name: row[name] for name in _DOWNLOAD_FIELDS}
         values.update(type=row["type"], file_path=paths(row["file_path"]), original_path=row["file_path"])
+        # WireLoft keeps only the latest download's time, the closest it has to the first.
+        values["first_downloaded_at"] = row["downloaded_at"]
         references = {
             "media_item_id": _ref(kind, row["media_item_id"]),
             "local_media_profile_id": _profile_ref(row["local_media_profile_id"]),

@@ -213,7 +213,7 @@ def adopt(
     download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
     download.artifact_error = None
     download.downloaded_bytes = identity.size_bytes
-    download.downloaded_at = found.modified_at
+    download.mark_downloaded(found.modified_at)
     if isinstance(download, EpisodeMediaDownload) and isinstance(media, Episode):
         download.downloaded_publish_status = media.publish_status
         if download.download_profile_id is None:

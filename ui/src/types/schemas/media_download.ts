@@ -48,6 +48,8 @@ export const MediaDownloadReadSchema = z.looseObject({
         category: z.string(), start: z.number(), end: z.number(), action: z.string(),
     })).nullable().optional(),
     downloadedAt: ApiDateTimeSchema.nullable(),
+    /** When the file was first downloaded; downloadedAt is the latest download. */
+    firstDownloadedAt: ApiDateTimeSchema.nullable(),
     redownloadWhenFinal: z.boolean().nullable().optional(),
     kept: z.boolean().nullable().optional(),
     videoHeight: z.int().nullable().optional(),

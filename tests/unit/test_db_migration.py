@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "5c1e8b7d3f20"
+HEAD_REVISION = "b7e4c1a9d052"
 
 
 @pytest.fixture
@@ -2161,3 +2161,31 @@ def test_yt_dlp_options_vodloft_now_refuses_become_comments(migration_database):
     command.downgrade(config, "a4318a92a5ca")
     with engine.connect() as connection:
         assert connection.execute(text("SELECT ytdlp_options FROM collections")).scalar_one() == collection_options
+
+
+def test_downloads_get_the_time_of_their_first_download(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "5c1e8b7d3f20")
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = OFF"))
+        # 1 was downloaded twice, 2 is an adopted file without a completed attempt, 3 has no file.
+        for download_id, downloaded_at in ((1, "2026-11-20 10:00:00"), (2, "2026-11-01 10:00:00"), (3, None)):
+            connection.execute(text(
+                "INSERT INTO media_downloads (id, type, media_item_id, local_media_profile_id, file_path, "
+                "artifact_status, automatic_retry_suppressed, downloaded_at) "
+                "VALUES (:id, 'episode', :id, 1, '', 'absent', 0, :downloaded_at)"
+            ), {"id": download_id, "downloaded_at": downloaded_at})
+        for history_id, occurred_at in ((1, "2026-11-04 10:00:00"), (2, "2026-11-20 10:00:00")):
+            connection.execute(text(
+                "INSERT INTO media_download_history (id, media_download_id, action, metadata, occurred_at) "
+                "VALUES (:id, 1, 'completed', '{}', :occurred_at)"
+            ), {"id": history_id, "occurred_at": occurred_at})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        first = dict(connection.execute(text("SELECT id, first_downloaded_at FROM media_downloads")).all())
+    assert first == {1: "2026-11-04 10:00:00", 2: "2026-11-01 10:00:00", 3: None}
