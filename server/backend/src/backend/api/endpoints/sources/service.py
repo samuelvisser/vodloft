@@ -98,6 +98,7 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
         seasons=details.seasons,
         audio_only=source_site(details.url, source.id).audio_only,
         kind=collection_kind(details.url, source.id),
+        list_type=details.list_type,
         seasons_plans={type_.value: _seasons_plan(source, details.url, type_) for type_ in CollectionType},
     )
 

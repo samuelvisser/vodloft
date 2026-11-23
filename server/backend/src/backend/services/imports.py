@@ -1064,7 +1064,7 @@ def _create_collection(session: Session, plan: CollectionPlan, creators: dict[st
     author = plan.artist or details.author_name or details.title
     collection = Collection(
         uuid=generate_uuid(), slug=details.slug, source_key=source.id, title=plan.title or details.title,
-        description=details.description, sharing_url=details.url,
+        description=details.description, sharing_url=details.url, list_type=details.list_type,
         membership_level="FREE", type=CollectionType(plan.settings.get("type", "series")).value,
         episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
         author_name=author, author_slug=slugify(author) or details.slug,
@@ -1203,6 +1203,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
         have.add(ref)
         added += 1
     if added:
+        collection.keep_a_default_link()
         if collection.link_seasons == LinkSeasons.OFF.value:
             collection.link_seasons = LinkSeasons.SELECTED.value
         # The other program kept every video of these links, also another channel's.

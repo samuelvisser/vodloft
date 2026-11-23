@@ -1,4 +1,5 @@
 from datetime import datetime
+from collections.abc import Iterable
 from typing import Optional, TYPE_CHECKING, TypeAlias
 
 from sqlalchemy import JSON, ForeignKey, Text, UniqueConstraint, func
@@ -46,6 +47,10 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     kind: Mapped[str] = mapped_column(
         default=CollectionKind.CHANNEL.value, server_default=CollectionKind.CHANNEL.value,
         comment="What its own link is: channel, a creator's page of all their uploads, or list, one list or no link",
+    )
+    list_type: Mapped[Optional[str]] = mapped_column(
+        comment="The key of its Site's type of list its link is, such as album or playlist on SoundCloud, where the "
+                "Site has several types its links don't tell apart",
     )
     creator_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("creators.id", ondelete="SET NULL"), index=True,
@@ -186,12 +191,21 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
 
     @property
     def link_image_path(self) -> Optional[str]:
-        """For a collection without a link of its own, whose own pictures come from no Site, the picture of the link
-        season the user chose for it, or else of the first one that has one."""
+        """For a collection without a link of its own, whose own pictures come from no Site, the picture of its default
+        link, or else of the first one that has one."""
         if self.sharing_url is not None:
             return None
-        chosen = [link for link in self.lists if link.picture]
-        return next((link.image_path for link in (*chosen, *self.lists) if link.image_path), None)
+        default = [link for link in self.lists if link.is_default]
+        return next((link.image_path for link in (*default, *self.lists) if link.image_path), None)
+
+    def keep_a_default_link(self, links: "Optional[Iterable[CollectionList]]" = None) -> None:
+        """A collection without a link of its own always has one default link: its first, until the user picks
+        another. ``links`` are the links it keeps, when some are on their way out."""
+        if self.sharing_url is not None:
+            return
+        links = sorted(self.lists if links is None else links, key=lambda link: (link.site_position, link.id or 0))
+        if links and not any(link.is_default for link in links):
+            links[0].is_default = True
 
     def __repr__(self) -> str:
         return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

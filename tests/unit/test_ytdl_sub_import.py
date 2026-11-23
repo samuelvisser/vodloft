@@ -1211,6 +1211,7 @@ def test_an_imported_collection_of_links_lists_them_as_the_users_links(tmp_path,
 
     imports._add_link_seasons(session, links, plan)
 
-    assert [(link.ref, link.added_by_user) for link in links.lists] == [
-        ("PLrick", True), ("https://www.youtube.com/watch?v=live1", True),
+    # Every imported link is the user's, and the first one is the collection's default.
+    assert [(link.ref, link.added_by_user, link.is_default) for link in links.lists] == [
+        ("PLrick", True, True), ("https://www.youtube.com/watch?v=live1", True, False),
     ]

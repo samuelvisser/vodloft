@@ -15,7 +15,7 @@ from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos, RepeatVideos
 from backend.utils.helpers import generate_uuid, slugify
-from sources import Feature, UnknownSourceError, all_sources, get_source, source_site
+from sources import Feature, SectionKind, UnknownSourceError, all_sources, get_source, source_site
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import queue_operation_target_dispatch
@@ -62,7 +62,9 @@ def set_kind(collection: Collection) -> None:
     starts with only the kinds of list that are albums, where its Site tells them apart."""
     collection.kind = collection_kind(collection.sharing_url, collection.source_key).value
     if collection.kind != CollectionKind.CHANNEL.value:
+        _check_list_type(collection)
         return
+    collection.list_type = None
     site = source_site(collection.sharing_url, collection.source_key)
     # The defaults are about the channel's lists, which only a Site whose lists can be seasons has.
     if not site.link_seasons:
@@ -77,6 +79,18 @@ def set_kind(collection: Collection) -> None:
             collection.outside_videos = OutsideVideos.ADD.value
     if site.whole_lists and collection.repeat_videos is None:
         collection.repeat_videos = RepeatVideos.EACH_SEASON.value
+
+
+def _check_list_type(collection: Collection) -> None:
+    """A collection of one list names the type of list its link is only by one its Site has."""
+    if collection.list_type is None:
+        return
+    if collection.sharing_url is None:
+        collection.list_type = None
+        return
+    site = source_site(collection.sharing_url, collection.source_key)
+    if collection.list_type not in {type_.key for type_ in site.types_of(SectionKind.LIST)}:
+        raise ServiceError(f"{site.name} has no type of list {collection.list_type!r}", field="list_type")
 
 
 def reindex_collection(s: Session, collection: Collection) -> None:

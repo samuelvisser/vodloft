@@ -31,7 +31,8 @@ class SoundCloud(OtherSites):
     )
     link_seasons = True
     channel_collection_names = Names("account", "accounts")
-    # A set is an album or a playlist, which its link doesn't tell.
+    # A set is an album or a playlist, which its link doesn't tell. SoundCloud says which when the set is looked up,
+    # and VODLoft keeps that with the collection; this names a set it has not looked up.
     list_collection_names = Names.joined((Names("album", "albums"), Names("playlist", "playlists")))
     channel_season_names = Names("album", "albums")
     list_season_names = Names("group", "groups")
