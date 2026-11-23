@@ -3,19 +3,22 @@ from __future__ import annotations
 import asyncio
 
 from controller.db_utils import db_session
+from task_manager.scheduler.lanes import TaskLane
 from task_manager.scheduler.operation_context import operation_context
 from task_manager.scheduler.registry import task
 from task_manager.scheduler.results import TaskResult
 
 
 def _run(import_run_id: int) -> TaskResult:
+    from backend.db.core import write_priority
     from backend.db.models import ImportRun
     from backend.services.imports import WAITING, apply_run, fail_run
 
     # The work an import starts, such as indexing each new Collection, has operations of its own. Inheriting
     # the import's operation would drop every task that starts after the import's own task has finished.
     try:
-        with operation_context(()):
+        # Someone is watching the import start: its write goes before background checks waiting for theirs.
+        with operation_context(()), write_priority("interactive"):
             counts = apply_run(import_run_id)
     except Exception as exc:
         # The run shows why it stopped instead of running forever.
@@ -60,6 +63,7 @@ def _adopt(import_step_id: int) -> TaskResult:
     description="Apply an import from another program: settings, profiles, collections and Download Profiles.",
     allowed_resource_types=("system",),
     default_max_retries=0,
+    executor_alias=TaskLane.INTERACTIVE,
 )
 async def import_run(*, import_run_id: int | None = None, **_kwargs) -> TaskResult:
     if import_run_id is None:
