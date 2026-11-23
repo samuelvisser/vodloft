@@ -1012,17 +1012,18 @@ def test_an_empty_collection_takes_links_the_user_adds(links_source, session):
     assert [(link.title, link.added_by_user) for link in view.playlists] == [("The Mix", True), ("More", True)]
     assert (view.has_own_link, view.lists_playlists, view.link_seasons_offered) == (False, False, True)
 
-    # Its picture is its first link's, until the user chooses another link's.
+    # Its first link is its default, which gives it its picture, until the user chooses another.
+    assert [link.is_default for link in view.playlists] == [True, False]
     assert session.scalar(select(Collection).where(Collection.slug == slug)).link_image_path == "https://img.example/PLmix"
     session.rollback()
     _update(session, slug, playlists=[
-        {"id": link.id, "enabled": True, "picture": link.title == "More"} for link in view.playlists
+        {"id": link.id, "enabled": True, "is_default": link.title == "More"} for link in view.playlists
     ])
     session.expire_all()
     assert session.scalar(select(Collection).where(Collection.slug == slug)).link_image_path == "https://img.example/PLmore"
     session.rollback()
     with pytest.raises(ServiceError, match="Choose one"):
-        _update(session, slug, playlists=[{"id": link.id, "enabled": True, "picture": True} for link in view.playlists])
+        _update(session, slug, playlists=[{"id": link.id, "enabled": True, "is_default": True} for link in view.playlists])
 
     _index(session, session.scalar(select(Collection).where(Collection.slug == slug)), source)
     # A video in both goes to the first.
@@ -1032,6 +1033,9 @@ def test_an_empty_collection_takes_links_the_user_adds(links_source, session):
     more = next(link for link in view.playlists if link.title == "More")
     _update(session, slug, removed_links=[more.id], playlists=[{"id": more.id, "enabled": True}])
     assert _seasons(session) == [("The Mix", 1, ["x", "y"])]
+    # The default went with it, so the link that stays is the default.
+    assert [link.is_default for link in seasons_view(session, slug).playlists] == [True]
+    session.rollback()
 
 
 def test_a_collection_without_a_link_can_only_hold_its_playlists(links_source, session):

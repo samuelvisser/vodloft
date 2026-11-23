@@ -49,9 +49,9 @@ class CollectionList(Base):
         default=False, server_default="0",
         comment="The user added the link, rather than it being one of the playlists of the collection's channel",
     )
-    picture: Mapped[bool] = mapped_column(
+    is_default: Mapped[bool] = mapped_column(
         default=False, server_default="0",
-        comment="Its picture is the collection's, for a collection without a link of its own; one at most per collection",
+        comment="The default link of a collection without a link of its own, such as the one its picture comes from; such a collection has exactly one",
     )
     season_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("seasons.id", ondelete="SET NULL"), comment="The list's season, once it has one, which other lists of the collection may share",

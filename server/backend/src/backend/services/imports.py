@@ -1197,6 +1197,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
         have.add(ref)
         added += 1
     if added:
+        collection.keep_a_default_link()
         if collection.link_seasons == LinkSeasons.OFF.value:
             collection.link_seasons = LinkSeasons.SELECTED.value
         # The other program kept every video of these links, also another channel's.

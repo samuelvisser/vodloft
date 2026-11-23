@@ -344,7 +344,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
                 asSeason: choices.get(playlist.id)?.asSeason ?? playlist.asSeason,
                 seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
-                picture: choices.get(playlist.id)?.picture ?? playlist.picture,
+                isDefault: choices.get(playlist.id)?.isDefault ?? playlist.isDefault,
             })), {shouldDirty: true})
         } catch (exc) {
             toast.error(exc instanceof Error ? exc.message : String(exc))
@@ -389,7 +389,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
                 asSeason: choices.get(playlist.id)?.asSeason ?? playlist.asSeason,
                 seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
-                picture: choices.get(playlist.id)?.picture ?? playlist.picture,
+                isDefault: choices.get(playlist.id)?.isDefault ?? playlist.isDefault,
             })))
             setValue('seasons', fresh.seasons.map((season) => form.getValues('seasons')?.find((x) => x.id === season.id) ?? {id: season.id, name: season.name}))
             linkForm.reset({url: ''})
@@ -495,14 +495,14 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         'playlists', playlistChoices.map((choice) => chosen.has(choice.id) ? {...choice, ...change} : choice), {shouldDirty: true},
     )
     const addedLinks = (view?.playlists ?? []).filter((playlist) => playlist.addedByUser)
-    // A collection without a link of its own shows the picture of the link chosen for it, or else of its first link
-    // that has one, as the backend picks it.
-    const pictureLinkId = view && !view.hasOwnLink
-        ? playlistChoices.find((choice) => choice.picture && !removedLinks.includes(choice.id))?.id
-            ?? view.playlists.find((playlist) => playlist.imageUrl && !removedLinks.includes(playlist.id))?.id
+    // A collection without a link of its own always has one default link. When the user removes it, the first link
+    // that stays takes over, as the backend does on saving.
+    const defaultLinkId = view && !view.hasOwnLink
+        ? playlistChoices.find((choice) => choice.isDefault && !removedLinks.includes(choice.id))?.id
+            ?? addedLinks.find((link) => !removedLinks.includes(link.id))?.id
         : undefined
-    const choosePicture = (id: number) => setValue(
-        'playlists', playlistChoices.map((choice) => ({...choice, picture: choice.id === id})), {shouldDirty: true},
+    const chooseDefault = (id: number) => setValue(
+        'playlists', playlistChoices.map((choice) => ({...choice, isDefault: choice.id === id})), {shouldDirty: true},
     )
     const toggleRemoved = (id: number) => setValue(
         'removedLinks', removedLinks.includes(id) ? removedLinks.filter((x) => x !== id) : [...removedLinks, id], {shouldDirty: true},
@@ -817,16 +817,16 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                                     <b>{link.title}</b>
                                                                                     <span>{removed ? 'Removed when you save' : link.url}</span>
                                                                                 </span>
-                                                                                {!removed && !view.hasOwnLink && link.imageUrl && (
-                                                                                    pictureLinkId === link.id
-                                                                                        ? <span className="seasons-dialog-picture">Collection picture</span>
+                                                                                {!removed && !view.hasOwnLink && (
+                                                                                    defaultLinkId === link.id
+                                                                                        ? <span className="seasons-dialog-default">Default</span>
                                                                                         : (
                                                                                             <button
                                                                                                 type="button" className="btn btn-small"
-                                                                                                aria-label={`Use the picture of ${link.title} for the collection`}
-                                                                                                onClick={() => choosePicture(link.id)}
+                                                                                                aria-label={`Use ${link.title} as default`}
+                                                                                                onClick={() => chooseDefault(link.id)}
                                                                                             >
-                                                                                                Use its picture
+                                                                                                Use as default
                                                                                             </button>
                                                                                         )
                                                                                 )}
