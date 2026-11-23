@@ -509,11 +509,25 @@ def combine_creator(s: Session, slug: str, body: CreatorCombineAPIIn) -> Creator
     return creator_page(s, slug)
 
 
-def delete_creator(s: Session, slug: str) -> None:
-    """Take the creator out of the Library, and keep its collections and movies as they are.
+def delete_creator(s: Session, slug: str, *, with_collections: bool = False) -> None:
+    """Take the creator out of the Library, and keep its collections and movies as they are, or delete its
+    collections too.
 
     ``s`` is a write transaction's session."""
-    creators.delete_creator(s, _creator(s, slug))
+    remove_creator(s, _creator(s, slug), with_collections=with_collections)
+
+
+def remove_creator(s: Session, creator: Creator, *, with_collections: bool) -> None:
+    """Take ``creator`` out of the Library; ``with_collections`` deletes its collections as their Edit page does,
+    and otherwise they stay as plain ones. ``s`` is a write transaction's session."""
+    if with_collections:
+        # The collections package imports this module, so its service is imported here.
+        from backend.api.endpoints.collections.service import delete_collection
+
+        for collection in list(creator.collections):
+            delete_collection(s, collection.slug)
+        s.expire(creator, ["collections"])
+    creators.delete_creator(s, creator)
 
 
 class CollectionNotFoundError(LookupError):

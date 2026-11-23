@@ -10,6 +10,7 @@ from pydantic import AliasChoices, AliasPath, Field
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
 from backend.api.models.pagination import CursorPageRead
+from backend.api.models.profile_bulk import BulkSelectionIn
 from backend.api.models.collection_contract import CollectionWordsAPIRead
 from backend.api.models.source import NamesAPIRead, SiteAPIRead
 
@@ -203,3 +204,10 @@ class CollectionCreatorJoinAPIIn(RequestBase):
     creator_slug: Optional[str] = Field(default=None, max_length=255)
     """A creator in the Library to join instead of the one behind the collection's link, such as an artist whose
     music videos are on their label's channel."""
+
+
+class CreatorBulkDeleteIn(BulkSelectionIn):
+    """The creators the Library's bulk edit deletes."""
+
+    delete_collections: bool = False
+    """Delete their collections too, instead of keeping them as they are."""

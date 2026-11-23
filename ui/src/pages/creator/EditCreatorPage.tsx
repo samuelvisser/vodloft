@@ -3,6 +3,8 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {toast} from '../../lib/toast'
 import {faIcon} from '../../icons/faIcon'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
+import DialogSwitch from '../../components/common/DialogSwitch'
+import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
 import {Link, useNavigate, useParams} from 'react-router-dom'
 import {useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
@@ -23,6 +25,8 @@ export default function EditCreatorPage() {
     const queryClient = useQueryClient()
     const {data: creator, error} = useCreator(slug)
     const [deleting, setDeleting] = useState(false)
+    // Deleting the creator keeps its collections, unless this says to delete those too.
+    const [withCollections, setWithCollections] = useState(false)
 
     const form = useForm<CreatorUpdateIn, unknown, CreatorUpdateOut>({
         resolver: zodResolver(CreatorUpdateSchema),
@@ -61,7 +65,8 @@ export default function EditCreatorPage() {
     })
 
     const onConfirmDelete = async () => {
-        const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(creator.slug)}`, {method: 'DELETE', credentials: 'include'})
+        const query = withCollections ? '?deleteCollections=true' : ''
+        const response = await fetch(`${apiUrl()}/creators/${encodeURIComponent(creator.slug)}${query}`, {method: 'DELETE', credentials: 'include'})
         if (!response.ok) {
             const data = await response.json().catch(() => null)
             toast.error(typeof data?.detail === 'string' ? data.detail : `The ${creator.creatorNames.singular} could not be deleted (HTTP ${response.status})`)
@@ -69,12 +74,20 @@ export default function EditCreatorPage() {
         }
         setDeleting(false)
         queryClient.removeQueries({queryKey: ['creator', slug]})
+        if (withCollections) {
+            for (const {slug: collectionSlug} of creator.collections) {
+                removeEpisodePreviewFromStorage(collectionSlug)
+                removeSeasonsFromStorage(collectionSlug)
+                queryClient.removeQueries({queryKey: ['collection', collectionSlug]})
+            }
+        }
         await Promise.all([
             queryClient.invalidateQueries({queryKey: ['creators']}),
             queryClient.invalidateQueries({queryKey: ['collections']}),
             queryClient.invalidateQueries({queryKey: ['collectionsView']}),
+            queryClient.invalidateQueries({queryKey: ['libraryCounts']}),
         ])
-        toast.success(`${creator.title} was deleted`)
+        toast.success(withCollections ? `${creator.title} and their collections were deleted` : `${creator.title} was deleted`)
         navigate('/library')
     }
 
@@ -133,16 +146,27 @@ export default function EditCreatorPage() {
             <ConfirmDialog
                 open={deleting}
                 title={`Delete ${creator.creatorNames.singular}`}
-                onDismiss={() => setDeleting(false)}
+                onDismiss={() => { setDeleting(false); setWithCollections(false) }}
                 icon={faIcon('fass', 'trash')}
                 iconTone="danger"
                 confirmButton={{label: 'Delete', onClick: onConfirmDelete, className: 'btn btn-danger'}}
             >
                 <p>
-                    Delete {creator.title}? {creator.collections.length + creator.movies.length > 0
-                        ? 'Their collections and movies stay in your library as they are, each on its own.'
-                        : `Nothing else leaves your library.`}
+                    Delete {creator.title}? {creator.collections.length + creator.movies.length === 0
+                        ? 'Nothing else leaves your library.'
+                        : withCollections
+                            ? (creator.movies.length > 0 ? 'Their movies stay in your library as they are, each on its own.' : '')
+                            : 'Their collections and movies stay in your library as they are, each on its own.'}
                 </p>
+                {creator.collections.length > 0 && (
+                    <DialogSwitch
+                        checked={withCollections} onChange={setWithCollections}
+                        label={creator.collections.length === 1 ? 'Also delete their collection' : `Also delete their ${creator.collections.length} collections`}
+                        help={withCollections
+                            ? 'They are deleted with everything VODLoft indexed of them. Downloaded files stay on disk.'
+                            : 'Off, they stay in your library as plain collections.'}
+                    />
+                )}
             </ConfirmDialog>
         </section>
     )

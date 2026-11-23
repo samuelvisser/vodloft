@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from typing import Literal, Optional, Union
+from typing import ClassVar, Literal, Optional, Union
 from datetime import date, datetime
 
 from pydantic import AliasChoices, AliasPath, computed_field, Field, ValidationInfo, field_validator, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
+from backend.api.models.profile_bulk import BulkChangesIn
 from backend.api.models.source import NamesAPIRead, SiteAPIRead, SourcedResponse
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_contracts import collection_contract
@@ -355,3 +356,30 @@ class CollectionMetadataRewriteAPIRequest(RequestBase):
     """Select one Local Media Profile, or every profile with downloaded files that keeps metadata."""
 
     local_media_profile_id: Optional[int] = Field(default=None, gt=0)
+
+
+class CollectionBulkChangesIn(BulkChangesIn):
+    """The settings the Library's bulk edit gives every chosen Collection; the others keep their own."""
+
+    check_frequency: Optional[CheckFrequency] = None
+    episode_order: Optional[EpisodeOrder] = None
+    split_chapters: Optional[bool] = None
+    cookies_mode: Optional[CookiesMode] = None
+    genre: Optional[str] = Field(default=None, max_length=200)
+    """Empty removes the genre."""
+    content_rating: Optional[str] = Field(default=None, max_length=50)
+    """Empty removes the content rating."""
+
+    nullable: ClassVar[frozenset[str]] = frozenset({"genre", "content_rating"})
+
+    @field_validator("check_frequency")
+    @classmethod
+    def _not_own(cls, value: Optional[CheckFrequency]) -> Optional[CheckFrequency]:
+        if value == CheckFrequency.OWN:
+            raise ValueError("Give a Collection its own schedule on its Edit page")
+        return value
+
+    @field_validator("genre", "content_rating")
+    @classmethod
+    def _strip_metadata(cls, value: Optional[str]) -> Optional[str]:
+        return (value or "").strip() or None

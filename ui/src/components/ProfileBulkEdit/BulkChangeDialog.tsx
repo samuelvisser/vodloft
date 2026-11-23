@@ -22,10 +22,14 @@ type FieldValue = boolean | string | number
 export type BulkFieldSpec = {
     key: string
     label: string
-    kind: 'switch' | 'select' | 'number'
+    /** A text setting may be left empty, which clears it. */
+    kind: 'switch' | 'select' | 'number' | 'text'
     defaultValue: FieldValue
     registry?: SelectRegistry
     min?: number
+    /** The longest text a text setting takes. */
+    maxLength?: number
+    placeholder?: string
     /** How a value the profiles have now reads; the registry's label or On/Off when left out. */
     valueLabel?: (value: string | number | boolean | null) => string
     /** The value as the API takes it, such as a select's id as a number. */
@@ -37,6 +41,7 @@ export type BulkFieldSpec = {
 function valueSchema(spec: BulkFieldSpec) {
     if (spec.kind === 'switch') return z.boolean()
     if (spec.kind === 'number') return z.number({error: 'Enter a number'}).int().min(spec.min ?? 0)
+    if (spec.kind === 'text') return z.string().max(spec.maxLength ?? Infinity, `Keep it to ${spec.maxLength} characters`)
     return z.string().min(1, 'Choose one')
 }
 
@@ -80,14 +85,14 @@ type BulkChangeDialogProps = {
     endpoint: BulkEndpoint
     ids: readonly number[]
     noun: [string, string]
-    /** Names of the chosen profiles that are on screen, to show which ones change. */
+    /** Names of the chosen items that are on screen, to show which ones change. */
     names: string[]
     fields: BulkFieldSpec[]
     onClose: () => void
     onChanged: (result: BulkResult) => void
 }
 
-/** Change settings: tick the settings to give every chosen profile; the rest keep their own value. */
+/** Change settings: tick the settings to give every chosen item, such as a profile; the rest keep their own value. */
 export default function BulkChangeDialog({endpoint, ids, noun, names, fields, onClose, onChanged}: BulkChangeDialogProps) {
     const titleId = useId()
     const [result, setResult] = useState<BulkResult | null>(null)
@@ -159,7 +164,7 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields, on
                             </div>
                         )}
                         <p className="bulk-dialog-hint">
-                            Tick the settings you want to change. Everything you leave unticked keeps its own value on each profile.
+                            Tick the settings you want to change. Everything you leave unticked keeps its own value on each {noun[0]}.
                         </p>
                         {summary.isError && <div className="form-error-card" role="alert">Could not load the current settings.</div>}
                         {summary.isPending ? (
@@ -192,6 +197,18 @@ export default function BulkChangeDialog({endpoint, ids, noun, names, fields, on
                                                                 value={field.value ? 'on' : 'off'}
                                                                 onChange={(value) => field.onChange(value === 'on')}
                                                                 options={[{value: 'on', label: 'On'}, {value: 'off', label: 'Off'}]}
+                                                            />
+                                                        ) : spec.kind === 'text' ? (
+                                                            <input
+                                                                id={controlId}
+                                                                className="input"
+                                                                type="text"
+                                                                aria-label={spec.label}
+                                                                placeholder={spec.placeholder}
+                                                                maxLength={spec.maxLength}
+                                                                value={String(field.value ?? '')}
+                                                                onChange={(event) => field.onChange(event.target.value)}
+                                                                aria-invalid={!!error}
                                                             />
                                                         ) : spec.kind === 'number' ? (
                                                             <NumberInput

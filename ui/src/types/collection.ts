@@ -50,6 +50,32 @@ export const EpisodeOrderReg = createSelectRegistry("EpisodeOrder", {
 });
 export type EpisodeOrderValue = (typeof EpisodeOrderReg)["values"][number];
 
+/** How often VODLoft looks for new episodes of a Collection. */
+export const CheckFrequencyReg = createSelectRegistry("CollectionCheckFrequency", {
+    default: {label: "Like other Collections"},
+    less_often: {label: "Less often"},
+    own: {label: "On its own schedule"},
+});
+export type CheckFrequency = (typeof CheckFrequencyReg)["values"][number];
+
+/** The choices a bulk edit offers: an own schedule is set on each Collection's Edit page. */
+export const BulkCheckFrequencyReg = createSelectRegistry("CollectionBulkCheckFrequency", {
+    default: {label: "Like other Collections"},
+    less_often: {label: "Less often"},
+});
+
+export const SplitChaptersReg = createSelectRegistry("CollectionSplitChapters", {
+    whole: {label: "Keep each video whole"},
+    split: {label: "A part per chapter"},
+});
+
+export const CookiesModeReg = createSelectRegistry("CollectionCookiesMode", {
+    automatic: {label: "Only when needed"},
+    never: {label: "Never"},
+    always: {label: "Always"},
+});
+export type CookiesMode = (typeof CookiesModeReg)["values"][number];
+
 /** How the Library lists its Collections. */
 export const LibraryCollectionSortReg = createSelectRegistry("LibraryCollectionSort", {
     recently_used: {label: "Recently used"},

@@ -6,7 +6,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useCollection, useCollectionSeasons} from '../../lib/queries'
 import SimpleSelect from '../../components/common/SimpleSelect'
-import {createSelectRegistry} from '../../utils/selectRegistry'
 import {faIcon} from '../../icons/faIcon'
 import OptionsEditor from '../../components/common/OptionsEditor/OptionsEditor'
 import ReadMore from '../../utils/ReadMore'
@@ -18,7 +17,7 @@ import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {removeEpisodePreviewFromStorage} from '../../lib/cache'
 import {forgetDeletedCollection} from '../../lib/deletedCollection'
 import {episodeQueryKeys} from '../../lib/collectionQueryOptions'
-import {CollectionTypeReg, CollectionTypeValue, episodeIdentifierRegFor, musicIdentificationAdvice, EpisodeIdentifierValue, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
+import {CheckFrequencyReg, type CheckFrequency, CollectionTypeReg, CollectionTypeValue, CookiesModeReg, type CookiesMode, SplitChaptersReg, episodeIdentifierRegFor, musicIdentificationAdvice, EpisodeIdentifierValue, EpisodeOrderReg, EpisodeOrderValue} from '../../types/collection'
 import ChangeIdentificationDialog from '../../components/ChangeIdentificationDialog/ChangeIdentificationDialog'
 import ProgressSelect from '../../components/common/ProgressSelect'
 import {frontendOperationDefinitions} from '../../lib/operationDefinitions'
@@ -29,25 +28,6 @@ import PageHeader, {PageHeaderAction} from '../../components/common/PageHeader'
 import {collectionWords, wordsFor} from '../../lib/collectionWords'
 import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 
-const CheckFrequencyReg = createSelectRegistry('CollectionCheckFrequency', {
-  default: {label: 'Like other Collections'},
-  less_often: {label: 'Less often'},
-  own: {label: 'On its own schedule'},
-})
-
-const SplitChaptersReg = createSelectRegistry('CollectionSplitChapters', {
-  whole: {label: 'Keep each video whole'},
-  split: {label: 'A part per chapter'},
-})
-
-const CookiesModeReg = createSelectRegistry('CollectionCookiesMode', {
-  automatic: {label: 'Only when needed'},
-  never: {label: 'Never'},
-  always: {label: 'Always'},
-})
-
-type CheckFrequency = 'default' | 'less_often' | 'own'
-type CookiesMode = 'automatic' | 'never' | 'always'
 
 type RouteParams = { id?: string }
 

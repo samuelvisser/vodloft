@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useState, type ReactNode} from 'react'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {faIcon} from '../../icons/faIcon'
 import type {BulkResult} from '../../types/schemas/profile_bulk'
@@ -15,10 +15,14 @@ type BulkDeleteDialogProps = {
     note?: string
     onClose: () => void
     onDeleted: () => void
+    /** Deletes them some other way than ``endpoint``'s bulk delete, such as several kinds at once. */
+    remove?: () => Promise<BulkResult>
+    /** Choices about the delete, such as a switch, under the note. */
+    children?: ReactNode
 }
 
 /** Deletes the chosen profiles after asking, and lists any that had to stay. */
-export default function BulkDeleteDialog({endpoint, ids, noun, names, note, onClose, onDeleted}: BulkDeleteDialogProps) {
+export default function BulkDeleteDialog({endpoint, ids, noun, names, note, onClose, onDeleted, remove: removeThem, children}: BulkDeleteDialogProps) {
     const [busy, setBusy] = useState(false)
     const [failed, setFailed] = useState(false)
     const [result, setResult] = useState<BulkResult | null>(null)
@@ -28,7 +32,7 @@ export default function BulkDeleteDialog({endpoint, ids, noun, names, note, onCl
         setBusy(true)
         setFailed(false)
         try {
-            const deleted = await bulkDelete(endpoint, ids)
+            const deleted = await (removeThem ? removeThem() : bulkDelete(endpoint, ids))
             onDeleted()
             if (deleted.skipped.length) setResult(deleted)
             else onClose()
@@ -80,6 +84,7 @@ export default function BulkDeleteDialog({endpoint, ids, noun, names, note, onCl
                 </ul>
             )}
             {note && <p className="modal-text">{note}</p>}
+            {children}
             <p className="modal-text">This can't be undone.</p>
             {failed && <div className="form-error-card" role="alert">Nothing was deleted. Please try again.</div>}
         </ConfirmDialog>
