@@ -495,7 +495,7 @@ export default function CollectionPage() {
   const metadataRewriteDisabledReason = metadataRewriteOperation
     ? metadataRewriteOperation.status === 'WAITING'
       ? metadataRewriteOperation.message || OPERATION_WAITING_MESSAGE
-      : `VODLoft is writing the info of ${nameInText(collection.title)} into its files.`
+      : `VODLoft is writing the metadata of ${nameInText(collection.title)} into its files.`
     : identificationDisabledReason ?? downloadStateDisabledReason
   const bulkDeleteOperation = deleteDownloadsOperation ?? redownloadOperation
   const deleteDownloadsDisabledReason = bulkDeleteOperation
@@ -619,13 +619,13 @@ export default function CollectionPage() {
       onSelect: () => setFileRenameConfirm(true),
     },
     {
-      label: 'Write info into files',
+      label: 'Write metadata into files',
       icon: faIcon('fass', 'file-lines'),
       disabled: metadataRewriteDisabledReason !== undefined,
       disabledReason: metadataRewriteDisabledReason,
       operation: metadataRewriteOperation,
       starting: isStarting('collection.rewrite_metadata'),
-      controls: operationControls(metadataRewriteOperation, 'writing info into files'),
+      controls: operationControls(metadataRewriteOperation, 'writing metadata into files'),
       onSelect: () => setMetadataRewriteConfirm(true),
     },
     {
@@ -976,7 +976,7 @@ export default function CollectionPage() {
         <p>
           Look every {words.episode.singular} in "{collection.title}" up at {openOnName} again, so changed titles,
           descriptions and thumbnails reach VODLoft. This can take a while and is usually not needed. Downloaded files
-          keep their tags: use Write info into files for those.
+          keep their tags: use Write metadata into files for those.
         </p>
       </ActionConfirmDialogue>
 
@@ -1032,10 +1032,10 @@ export default function CollectionPage() {
         onStartingChange={onStartingChange('collection.rewrite_metadata')}
         requestPath={`/collections/${encodeURIComponent(id)}/rewrite-metadata`}
         resourceLabel={collection.title}
-        title="Write info into files"
+        title="Write metadata into files"
         onDismiss={() => setMetadataRewriteConfirm(false)}
         icon={faIcon('fass', 'file-lines')}
-        confirmLabel="Write into files"
+        confirmLabel="Write metadata"
         disabled={metadataRewriteOperation !== undefined}
         scope_by_local_media_profile
         localMediaProfiles={actionLocalMediaProfiles}
