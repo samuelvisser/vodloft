@@ -149,3 +149,32 @@ def test_the_migration_leaves_a_channel_collections_settings_and_gives_a_list_it
     assert (workshop.kind, workshop.link_seasons, workshop.channel_season) == ("channel", "off", "unlisted")
     assert cabin.kind == "list"
     assert [season.origin for season in cabin.seasons] == ["list"]
+
+
+def test_an_album_collection_by_album_is_numbered_in_the_albums_order(tube, session):
+    """A Music collection of one album, By album as the Add Collection wizard suggests: the album is its one season,
+    its tracks numbered in the album's order."""
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, Episode
+    from backend.services.collections import add_collection
+    from task_manager.tasks.helpers.listed_collections import add_listed_episodes
+
+    def add(s):
+        collection = Collection(
+            uuid="uuid-album", slug="album", source_key="tube", title="Album", sharing_url=PLAYLIST,
+            membership_level="FREE", type="music", episode_identifier="seasonal", author_name="", author_slug="",
+        )
+        add_collection(s, collection)
+        s.flush()
+        return collection.id
+
+    album_id = run_write_transaction(add)
+    found = [_video("b", 2025), _video("a", 2019), _video("c", 2022)]
+    run_write_transaction(lambda w: add_listed_episodes(w, collection_id=album_id, found=found))
+
+    album = _collection(session, "album")
+    assert len(album.seasons) == 1
+    episodes = session.scalars(select(Episode).where(Episode.collection_id == album.id).order_by(Episode.index)).all()
+    assert [(episode.source_slug, episode.episode_identifier) for episode in episodes] == [
+        ("b", "ep.S01E01"), ("a", "ep.S01E02"), ("c", "ep.S01E03"),
+    ]
