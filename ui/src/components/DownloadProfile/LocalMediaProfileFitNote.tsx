@@ -1,4 +1,4 @@
-import {useCallback} from 'react'
+import {useCallback, useMemo} from 'react'
 import {Link} from 'react-router-dom'
 
 import {useLocalMediaProfileSites} from '../../lib/queries'
@@ -49,8 +49,30 @@ export function useLocalMediaProfileFits(collection: CollectionRead | undefined,
 }
 
 /**
+ * The Collection profiles a Download Profile for this collection can use: those available for the collection's kind
+ * and Site. The format a Stream Profile's link asks for doesn't narrow them; the form marks the ones that download it.
+ * `keep` stays offered whatever it is, such as the profile a Download Profile already uses.
+ */
+export function useLocalMediaProfilesForCollection(
+    profiles: readonly LocalMediaProfileRead[] | undefined,
+    collection: CollectionRead | undefined,
+    keep?: number | null,
+): LocalMediaProfileRead[] | undefined {
+    const fits = useLocalMediaProfileFits(collection)
+    const {data: sites} = useLocalMediaProfileSites()
+    return useMemo(() => {
+        if (!profiles) return undefined
+        // Before a collection is chosen, every Collection profile is offered.
+        if (!collection) return profiles.filter((profile) => profile.type === 'collection')
+        // A profile for upcoming Sites fits a new Site only once the known Sites are in.
+        if (!sites) return undefined
+        return profiles.filter((profile) => profile.type === 'collection' && (profile.id === keep || fits(profile)))
+    }, [profiles, collection, sites, keep, fits])
+}
+
+/**
  * Says when the Local Media Profile chosen for a Download Profile doesn't fit its collection, or the format the link
- * that opened the form asks for. Any profile can still be chosen. When none the collection can still take fits, it
+ * that opened the form asks for. When none the collection can still take fits, it
  * offers to create one, and the profile form brings the user back here with it.
  */
 export default function LocalMediaProfileFitNote({profiles, selectedId, used, collection, format, returnTo}: {
