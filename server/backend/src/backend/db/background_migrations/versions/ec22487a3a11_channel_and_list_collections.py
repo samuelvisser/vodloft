@@ -14,7 +14,7 @@ with downloaded files keeps its seasons, because its files are in their folders;
 page.
 
 Revision ID: ec22487a3a11
-Revises: b64eb88d81ac
+Revises: ecb0f787c77a
 """
 
 from __future__ import annotations
@@ -33,19 +33,21 @@ from backend.services.season_order import arrange_seasons, season_year
 from backend.services.sites import collection_kind
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
 from backend.types.link_season_types import CollectionKind
+from backend.types.season_types import SeasonOrigin, SeasonType
 from sources import UnknownSourceError, get_source
 
 logger = logging.getLogger(__name__)
 
 revision = "ec22487a3a11"
-down_revision = "b64eb88d81ac"
+down_revision = "ecb0f787c77a"
 title = "Tell channel collections from collections of one list"
 
 _TITLE = "Making collections of one list one season"
 
 
 def _set_kinds() -> None:
-    """Give every collection its kind, told from its link without asking its Site."""
+    """Give every collection its kind, told from its link without asking its Site. A collection of one list takes
+    its seasons as the list's own, unless it has a season per year."""
     session = get_session()
     try:
         rows = session.execute(select(Collection.id, Collection.sharing_url, Collection.source_key, Collection.kind)).all()
@@ -66,9 +68,14 @@ def _set_kinds() -> None:
     def work(s) -> None:
         for collection in s.scalars(select(Collection).where(Collection.id.in_(changed))):
             collection.kind = changed[collection.id]
-            if collection.kind == CollectionKind.LIST.value:
-                # Only a channel collection is grouped under a creator.
-                collection.creator_id = None
+            if collection.kind != CollectionKind.LIST.value:
+                continue
+            # Only a channel collection is grouped under a creator.
+            collection.creator_id = None
+            if collection.sharing_url is not None:
+                for season in collection.seasons:
+                    if season.season_type == SeasonType.NORMAL.value and not season.loose and season_year(season) is None:
+                        season.origin = SeasonOrigin.LIST.value
 
     run_write_transaction(work)
 
