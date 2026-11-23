@@ -96,7 +96,7 @@ function NumberControl({value, onChange, label, invalid, min, max, unit}: Contro
 function SelectControl({value, onChange, label, registry}: ControlProps & {registry: SelectRegistry}) {
     return (
         <div className="site-settings-choice">
-            <SimpleSelect aria-label={label} registry={registry} value={value} menuPlacement="auto" onChange={onChange}/>
+            <SimpleSelect aria-label={label} registry={registry} value={value} onChange={onChange}/>
         </div>
     )
 }
@@ -244,7 +244,7 @@ const DEFINITIONS: Record<SiteSettingKey, Definition> = {
                         <span title={SponsorBlockCategoryReg.getHelp(category)}>{SponsorBlockCategoryReg.getLabel(category)}</span>
                         <SimpleSelect
                             aria-label={`${SponsorBlockCategoryReg.getLabel(category)}, ${label}`}
-                            registry={sponsorBlockActionReg(category)} value={value[category]} menuPlacement="auto"
+                            registry={sponsorBlockActionReg(category)} value={value[category]}
                             onChange={(action) => onChange({...value, [category]: action})}
                         />
                     </div>

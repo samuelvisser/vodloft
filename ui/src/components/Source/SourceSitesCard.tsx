@@ -28,7 +28,7 @@ function SiteSourceSelect({row, disabled, onChange}: {
             registry={registry}
             value={row.preferredSourceKey ?? row.defaultSourceKey}
             isDisabled={disabled}
-            menuPlacement="auto"
+           
             onChange={onChange}
         />
     )

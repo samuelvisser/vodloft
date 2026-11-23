@@ -3,7 +3,7 @@ import {useQuery} from '@tanstack/react-query'
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
-import Select from 'react-select'
+import Select from '../components/common/Select'
 import {faIcon} from '../icons/faIcon'
 
 import {Column, DataTable} from '../components/DataTable/DataTable'
@@ -292,10 +292,9 @@ export default function TasksPage() {
 
             <div className="task-definition-filter">
                 <label htmlFor="tasks-definition-select">Task</label>
-                <Select<TaskDefinitionOption, false>
+                <Select<TaskDefinitionOption>
                     inputId="tasks-definition-select"
                     className="task-definition-select"
-                    classNamePrefix="select"
                     options={definitionReg.options}
                     value={definitionReg.options.find((option) => option.value === definitionKey) ?? definitionReg.options[0]}
                     onChange={(option) => setDefinitionKey(option?.value ?? '')}

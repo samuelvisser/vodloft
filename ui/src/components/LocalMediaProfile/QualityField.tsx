@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState} from 'react'
 import {useWatch, type UseFormReturn} from 'react-hook-form'
-import Select from 'react-select'
+import Select from '../../components/common/Select'
 import Switch from 'react-switch'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 
@@ -169,9 +169,8 @@ export default function QualityField({form, mode, isCreating}: Props) {
                         link you followed asked for.
                     </>}
                 >
-                <Select<DownloadOption, false>
+                <Select<DownloadOption>
                     inputId="quality-download"
-                    classNamePrefix="select"
                     options={downloadGroups}
                     value={downloadValue}
                     onChange={(choice) => choice && chooseFormat(choice.value)}
@@ -353,7 +352,6 @@ export default function QualityField({form, mode, isCreating}: Props) {
                         <label htmlFor="quality-audio-language">Audio language</label>
                         <Select
                             inputId="quality-audio-language"
-                            classNamePrefix="select"
                             options={AudioLanguageReg.options}
                             value={AudioLanguageReg.options.find((option) => option.value === (audioLanguage ?? 'original')) ?? null}
                             onChange={(option) => setValue('audioLanguage', !option || option.value === 'original' ? null : option.value, OPTIONS)}

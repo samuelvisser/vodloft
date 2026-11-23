@@ -354,8 +354,6 @@ export default function CreatorPage() {
                     <label htmlFor="combine-creator">Who is the same person or group</label>
                     <SimpleSelect
                         inputId="combine-creator" registry={combineRegistry} value={combineWith}
-                        menuPortalTarget={document.body} menuPlacement="auto"
-                        styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                         onChange={(value) => setCombineWith(value ?? '')}
                     />
                 </div>

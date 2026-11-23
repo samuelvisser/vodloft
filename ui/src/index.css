@@ -1612,65 +1612,6 @@ a.icon-btn { display: inline-block; text-decoration: none; }
 }
 
 
-/* React Select global styles (no per-component theme needed). These rules use CSS variables
-   and !important to override react-select inline styles, ensuring dark-mode compatibility. */
-/* Control */
-div[class$="-control"] {
-  background: var(--bg) !important;
-  color: var(--text) !important;
-  border: 1px solid rgba(148, 163, 184, 0.4) !important;
-  box-shadow: none !important;
-  min-height: 38px !important;
-  border-radius: 6px !important;
-}
-div[class$="-control"]:hover { border-color: #60a5fa !important; }
-div[class$="-control"]:focus-within {
-  border-color: #60a5fa !important;
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25) !important;
-}
-/* Value/text */
-div[class$="-value-container"] { color: var(--text) !important; }
-div[class$="-singleValue"] { color: var(--text) !important; }
-div[class$="-placeholder"] { color: var(--muted) !important; }
-div[class$="-control"] input { color: var(--text) !important; }
-/* Indicators */
-div[class$="-indicatorSeparator"] { background-color: rgba(148, 163, 184, 0.4) !important; }
-div[class$="-indicators"] svg { color: var(--muted) !important; fill: currentColor !important; }
-div[class$="-dropdownIndicator"] { color: var(--muted) !important; }
-div[class$="-clearIndicator"] { color: var(--muted) !important; }
-/* Menu (react-select's; an ActionMenu's class also ends in -menu) */
-div[class$="-menu"]:not(.action-menu) {
-  background: var(--select-menu-bg) !important;
-  color: var(--text) !important;
-  border-radius: 8px !important;
-  overflow: hidden;
-}
-div[class$="-menu-list"] { background: var(--select-menu-bg) !important; }
-/* Option states */
-.select__menu {
-  /* Keep dropdowns above later cards, tables, and other normal page content. */
-  z-index: 30 !important;
-}
-
-div[class$="-option"] { background: transparent !important; color: var(--text) !important; }
-div[class$="-option"][aria-selected="true"] { background: #0ea5e9 !important; color: #ffffff !important; }
-/* Disabled option: visually indicate and prevent hover/active highlight */
-div[class$="-option"][aria-disabled="true"],
-.select__option--is-disabled {
-  color: var(--muted) !important;
-  background: transparent !important;
-  cursor: not-allowed !important;
-  opacity: 0.7;
-}
-div[class$="-option"][aria-disabled="true"]:hover,
-.select__option--is-disabled:hover,
-div[class$="-option"][aria-disabled="true"]:active,
-.select__option--is-disabled:active {
-  background: transparent !important;
-}
-/* Normal hover/active for enabled options only */
-div[class$="-option"]:not([aria-disabled="true"]):hover { background: rgba(14, 165, 233, 0.18) !important; }
-div[class$="-option"]:not([aria-disabled="true"]):active { background: rgba(14, 165, 233, 0.26) !important; }
 /* SimpleSelect's fitLabels: the longest label sets the control's width, without taking any height. */
 .simple-select-fit {
   grid-area: 1 / 1 / 2 / 3;
@@ -1684,16 +1625,6 @@ div[class$="-option"]:not([aria-disabled="true"]):active { background: rgba(14, 
   margin: 0 2px;
   white-space: nowrap;
 }
-/* The option react-select highlights for the keyboard: the first result while typing, and
-   wherever the arrow keys move to. Enter chooses it. Needs classNamePrefix="select". */
-div[class$="-option"].select__option--is-focused:not(.select__option--is-disabled):not(.select__option--is-selected) {
-  background: rgba(14, 165, 233, 0.18) !important;
-}
-/* Multi-value (tags) */
-div[class$="-multiValue"] { background: rgba(14, 165, 233, 0.15) !important; }
-div[class$="-multiValueLabel"] { color: var(--text) !important; }
-div[class$="-multiValueRemove"] { color: var(--text) !important; }
-div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !important; color: var(--text) !important; }
 
 .collection-header-row {
   display: flex;
@@ -2511,7 +2442,6 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .filter-bar-top { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; }
 .filter-bar-top .browse-search { min-width: 220px; }
 .filter-bar-select { width: 240px; }
-.filter-bar-select .select__control { min-height: 44px; border-radius: 10px; }
 .filter-bar-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; }
 .filter-bar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .filter-bar-label { margin-right: 2px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }

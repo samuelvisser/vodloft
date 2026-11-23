@@ -162,8 +162,6 @@ function SectionPlace({creator, item, current, value, fitLabels, collectionId, o
             <ProgressSelect
                 inputId={inputId} registry={registry} value={value} fitLabels={fitLabels}
                 className={value !== current ? 'is-changed' : ''}
-                menuPortalTarget={document.body} menuPlacement="auto"
-                styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                 definition={frontendOperationDefinitions['collection.renumber']}
                 resourceId={collectionId}
                 appliesTo={(operation) => {
@@ -372,8 +370,6 @@ export default function CreatorSectionsEditor({creator, part, places = {}, onPla
                     aria-label={`What to do with ${item.section.title}`} registry={registry} value={working ? null : current}
                     placeholder={working ? 'Working…' : 'Choose…'} isLoading={working}
                     isDisabled={busy !== null || unhiding !== null}
-                    menuPortalTarget={document.body} menuPlacement="auto"
-                    styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                     onChange={(value) => actions.find((action) => action.key === value)?.run()}
                 />
             </div>

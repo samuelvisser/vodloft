@@ -144,10 +144,14 @@ Every backend refusal should land under the form field the user can change. Keep
   must show `errors.<field>`, also when it is edited in a dialog.
 - `tests/unit/test_api_errors.py` covers the backend side; extend it when you change this chain.
 
-### React Select
-Whenever you add a Select component anywhere, always use ReactSelect, or components using it like SimpleSelect. 
-Enable search only if there are a lot of items. Keep most select components simple (SimpleSelect). 
+### Select
+Whenever you add a dropdown anywhere, use VODLoft's own `Select` (`ui/src/components/common/Select.tsx`), or
+components built on it like SimpleSelect and LazySearchSelect. Do not add React Select or another dropdown library.
+Enable search only if there are a lot of items. Keep most select components simple (SimpleSelect).
 Select options should always be build with a SelectRegistry.
+
+The menu opens in the top layer and is attached to its field with CSS anchor positioning, so it is never clipped by
+a dialog or a scrolling parent: do not give it a z-index or move it elsewhere in the page.
 
 ## Wiki
 When making big changes, you are allowed to update the VODLoft Wiki, too. 

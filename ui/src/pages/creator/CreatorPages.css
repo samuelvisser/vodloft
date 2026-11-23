@@ -111,8 +111,6 @@
     display: inline-block; margin-left: .4rem; padding: 0 .45rem; border-radius: 999px; font-size: .75rem; font-weight: 600;
     vertical-align: 1px; background: rgba(59, 130, 246, .16); color: #3b82f6;
 }
-.creator-section-place .is-changed .react-select__control,
-.creator-section-place .is-changed [class*="-control"] { border-color: #3b82f6; box-shadow: 0 0 0 1px #3b82f6; }
 /* "In your library", on a row of something the user has already, such as a host's movie. */
 .creator-section-copy .creator-section-chip {
     display: inline-block; margin-right: .25rem; padding: 0 .45rem; border-radius: 999px; opacity: 1;

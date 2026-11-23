@@ -1,6 +1,6 @@
 import {ReactNode, useEffect} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
-import Select from 'react-select'
+import Select from '../../components/common/Select'
 import ReadMore from '../../utils/ReadMore'
 import {RssHlsOutputModes, RssVideoOutputModeReg} from '../../types/stream_profile'
 import StreamAddressField from './StreamAddressField'
@@ -102,7 +102,6 @@ export default function RssStreamProfileForm({
                             render={({field}) => (
                                 <Select
                                     inputId="rss-video-output-mode"
-                                    classNamePrefix="select"
                                     options={RssVideoOutputModeReg.options.filter((option) => hlsVideo || !RssHlsOutputModes.has(option.value))}
                                     value={RssVideoOutputModeReg.options.find(option => option.value === field.value) ?? null}
                                     onChange={(option) => field.onChange((option as any)?.value)}
