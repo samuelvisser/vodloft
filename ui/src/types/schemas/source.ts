@@ -382,6 +382,8 @@ export const CollectionDetailsReadSchema = z.object({
     musicReason: z.string().nullable().optional(),
     /** The collection's own seasons, oldest first; empty when VODLoft makes a season per upload year. */
     seasons: z.array(z.object({slug: z.string(), name: z.string()})),
+    /** The collection's Site has sound only, such as SoundCloud: a Music collection there holds tracks. */
+    audioOnly: z.boolean().default(false),
 })
 export type CollectionDetailsRead = z.infer<typeof CollectionDetailsReadSchema>
 

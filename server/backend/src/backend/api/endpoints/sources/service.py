@@ -93,6 +93,7 @@ def lookup_show_details(access: Access, source: Source, url: str) -> CollectionD
         ),
         music_reason=music,
         seasons=details.seasons,
+        audio_only=source_site(details.url, source.id).audio_only,
     )
 
 

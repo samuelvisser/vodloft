@@ -244,6 +244,8 @@ class CollectionDetailsAPIRead(ResponseBase):
     """Why the collection was taken for music, when it was."""
     # The collection's own seasons, oldest first; empty for a Source that has none.
     seasons: list[CollectionDetailsSeasonAPIRead] = Field(default_factory=list)
+    audio_only: bool = False
+    """The collection's Site has sound only, such as SoundCloud: a Music collection there holds tracks."""
 
 
 class CookiesStatusAPIRead(ResponseBase):
