@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from sources import SECTION_KIND_NAMES, Names, SectionKind, Site
+from sources import Names, SectionKind, Site
 
 from backend.services.errors import ServiceError
 from backend.types.link_season_types import NewLinkSeasonAction
@@ -56,12 +56,6 @@ def album_kinds(kinds: Iterable[ListKind]) -> set[str]:
         return marked
     return {kind.key for kind in kinds if {kind.key.lower(), kind.names.singular.lower(),
                                            kind.names.plural.lower()} & _ALBUM_NAMES}
-
-
-def kinds_names(kinds: Iterable[ListKind]) -> Names:
-    """The types named together, such as "albums and playlists"; VODLoft's own word for lists when there are none."""
-    kinds = list(kinds)
-    return Names.joined(dict.fromkeys(kind.names for kind in kinds)) if kinds else SECTION_KIND_NAMES[SectionKind.LIST]
 
 
 def default_new_link_seasons(kinds: Iterable[ListKind]) -> dict[str, str]:

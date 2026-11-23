@@ -1,5 +1,4 @@
-import {useDailywireShow, useListedCollectionDetails, useResolvedLink} from '../../lib/queries'
-import {SourceFeature, sourceHas, type CollectionDetailsRead} from '../../types/schemas/source'
+import type {CollectionDetailsRead} from '../../types/schemas/source'
 import type {DailywireShowRead} from '../../types/schemas/dailywire_show'
 import {CollectionTypeReg, EpisodeIdentifierReg, type CollectionTypeValue, type EpisodeIdentifierValue} from '../../types/collection'
 
@@ -35,24 +34,4 @@ export function dailywireShowDefaults(show: DailywireShowRead): CollectionDefaul
             ? EpisodeIdentifierReg.Enum.seasonal
             : (EpisodeIdentifierReg.normalize(show.probableEpisodeIdentification) ?? ''),
     }
-}
-
-/**
- * Looks the collection behind a link up the way Add collection does, and suggests its type and identification.
- * ``list`` says the link is one of a creator's lists, such as a playlist or an album.
- */
-export function useCollectionDefaults(url: string | undefined, list = false) {
-    const resolved = useResolvedLink(url)
-    const collection = resolved.data?.kind === 'collection' ? resolved.data : undefined
-    const showSlug = collection && sourceHas(collection.source, SourceFeature.EPISODE_LOOKUPS) ? collection.slug : undefined
-    const listedSource = collection && !showSlug && sourceHas(collection.source, SourceFeature.EPISODE_LISTS) ? collection.source : undefined
-    const show = useDailywireShow(showSlug)
-    const listed = useListedCollectionDetails(listedSource?.id, listedSource ? resolved.data?.url : undefined)
-
-    const defaults: CollectionDefaults | undefined = show.data
-        ? dailywireShowDefaults(show.data)
-        : listed.data ? listedCollectionDefaults(listed.data, list) : undefined
-    const error = resolved.error ?? show.error ?? listed.error
-        ?? (resolved.data && !showSlug && !listedSource ? new Error('VODLoft could not tell what this link points to') : null)
-    return {defaults, error, isLoading: !defaults && !error && !!url}
 }
