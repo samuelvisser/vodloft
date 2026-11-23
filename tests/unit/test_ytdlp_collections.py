@@ -707,3 +707,18 @@ def test_a_music_collection_has_a_setting_for_new_albums_and_one_for_new_playlis
     assert {link.ref: (link.enabled, link.status) for link in collection.lists if link.ref in ("second", "faves")} == {
         "second": (True, "known"), "faves": (False, "new"),
     }
+
+
+def test_collection_to_add_says_whether_its_link_is_one_list(listed, session):
+    from backend.api.endpoints.sources.service import lookup_show_details
+
+    class _Access:
+        def check_link(self, _source, _url):
+            pass
+
+    details = lookup_show_details(_Access(), listed, "https://listed.example/playlist/PL1")
+
+    # A Site without creators has no channels: its collections are lists, which the Add Collection wizard numbers in
+    # the list's order.
+    assert details.kind == "list"
+    assert details.model_dump(by_alias=True)["kind"] == "list"
