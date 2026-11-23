@@ -13,7 +13,7 @@ from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
 from backend.types.link_season_types import CollectionKind, OutsideVideos
-from backend.types.resource_names import LINKS_COLLECTION_NAMES
+from backend.types.resource_names import CUSTOM_COLLECTION_NAMES
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
@@ -220,8 +220,9 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     outside_videos: Optional[OutsideVideos] = None
     """Whether the collection adds videos from its link seasons that its own link lacks, or holds only those."""
     kind: Optional[CollectionKind] = None
-    """What its own link is: a channel, which takes the channel's lists, or one list. None
-    for a collection that is not in the Library yet, such as one that is looked up to be added."""
+    """What its own link is: a channel, which takes the channel's lists and can be in a creator, one list, or none, for
+    a custom collection. None for a collection that is not in the Library yet, such as one that is looked up to be
+    added."""
     list_type: Optional[str] = None
     """For a collection of one list, the key of its Site's type of list it is, such as album or playlist on
     SoundCloud, where its link doesn't tell; None where the Site has one type of list or it is not known."""
@@ -282,11 +283,11 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     def season_names(self) -> Optional[NamesAPIRead]:
         """What the collection's Site calls its seasons, such as playlists in a YouTube channel collection; None where
         its type's own word stands, as the collection contracts give it."""
-        from backend.services.sites import site_season_names
+        from backend.services.sites import NO_SITE, site_season_names
 
-        if self.site is None:
+        if self.site is None and self.kind != CollectionKind.CUSTOM:
             return None
-        names = site_season_names(site_of(self.site.key), self.type, self.kind, has_link=self.sharing_url is not None)
+        names = site_season_names(site_of(self.site.key) if self.site is not None else NO_SITE, self.type, self.kind)
         return NamesAPIRead.model_validate(names) if names is not None else None
 
 
@@ -294,16 +295,16 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     @property
     def kind_name(self) -> Optional[str]:
         """What the collection is on its Site, in the Site's words, as a creator is named: "YouTube channel",
-        "YouTube playlist" or "The Daily Wire show". A collection of links without one of its own is named for its
-        links: "YouTube playlists" when they are on one Site, a custom collection otherwise. None while its kind is not
-        known yet, and while the Site of a collection with a link is not."""
-        if self.sharing_url is None and self.kind is not None:
-            # A collection of links is what its links are when they share a Site: "YouTube playlists".
+        "YouTube playlist" or "The Daily Wire show". A custom collection is named for its lists: "YouTube playlists"
+        when they are on one Site, "Custom collection" otherwise. None while its kind is not known yet, and while the
+        Site of a collection with a link is not."""
+        if self.kind == CollectionKind.CUSTOM:
+            # A custom collection is what its lists are when they share a Site: "YouTube playlists".
             keys = set(self.link_site_keys)
             if len(keys) == 1 and (key := keys.pop()) is not None:
                 site = site_of(key)
                 return f"{site.name} {site.list_collection_names.plural}"
-            return LINKS_COLLECTION_NAMES.singular.capitalize()
+            return CUSTOM_COLLECTION_NAMES.singular.capitalize()
         if self.site is None or self.kind is None:
             return None
         site = site_of(self.site.key)

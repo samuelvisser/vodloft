@@ -1042,6 +1042,9 @@ class Site:
     list_season_names: Names | None = None
     """What the Site calls the seasons of a list collection, such as groups on SoundCloud. Left out, they are named as
     the collection's type names its seasons."""
+    custom_season_names: Names = Names("list", "lists")
+    """What VODLoft calls the seasons of a custom collection on the Site, whose seasons are the lists the user gave
+    it, unless the collection's type names its seasons itself. A custom collection is on the Site of its first list."""
     channel_season: ChannelSeason | None = None
     """What a new channel collection's channel season holds. Left out, the whole channel, or on a Site that is
     ``audio_only`` only what is in none of its lists, such as an artist's singles."""

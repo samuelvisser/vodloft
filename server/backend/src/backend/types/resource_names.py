@@ -15,8 +15,8 @@ RESOURCE_NAMES = {
 }
 """What a task's resource type is called, by the type a task run stores."""
 
-LINKS_COLLECTION_NAMES = Names("custom collection", "custom collections")
-"""What a collection without a link of its own is, when its link seasons are on more than one Site."""
+CUSTOM_COLLECTION_NAMES = Names("custom collection", "custom collections")
+"""What a custom collection is: one without a link of its own, which gets all it holds from the lists the user gives it."""
 
 OWN_LINK_NAMES = Names("link", "links")
 """What a collection without a link of its own calls the links the user gave it, which its seasons come from."""

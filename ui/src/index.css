@@ -2466,6 +2466,7 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .add-media-browse { margin-top: 32px; }
 .add-media-browse h2 { font-size: 16px; }
 .add-media-browse-list { display: flex; gap: 8px; flex-wrap: wrap; }
+.add-media-browse .add-media-browse-text { margin-bottom: 12px; }
 @media (max-width: 520px) {
   .add-media-preview { flex-direction: column; }
 }
