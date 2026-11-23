@@ -148,11 +148,13 @@ Categories = tuple[tuple[str, tuple[str, ...]], ...]
 
 
 def _categories(value: Mapping) -> Categories:
-    """A ``+`` map's categories and their links: each category holds one link or a list of them."""
+    """A ``+`` map's categories and their links: each category holds one link or a list of them. A link can also be
+    a map with its ``url`` and overrides of its own, such as the title of one video."""
     found = []
     for category, links in value.items():
-        links = [links] if isinstance(links, str) else links if isinstance(links, list) else []
-        found.append((str(category), tuple(str(link) for link in links if link)))
+        links = links if isinstance(links, list) else [links]
+        urls = (link.get("url") if isinstance(link, Mapping) else link for link in links)
+        found.append((str(category), tuple(str(url) for url in urls if isinstance(url, str) and url)))
     return tuple(found)
 
 
