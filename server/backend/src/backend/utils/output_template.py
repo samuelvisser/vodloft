@@ -3,7 +3,7 @@ from __future__ import annotations
 import calendar
 import re
 import unicodedata
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import date, datetime, time
@@ -35,6 +35,7 @@ from config.settings.submodels import FilenameRestrictionMode
 if TYPE_CHECKING:
     from backend.db.models import Episode, Movie, MovieExtra, Video
     from backend.db.models.media_download import MediaDownloadBase
+    from backend.utils.music import AlbumPlace
 
 _DOWNLOADS_PREFIX = "/downloads/"
 _MAX_RENDERED_PATH_LENGTH = 4096
@@ -375,8 +376,14 @@ def movie_template_uses_release_date(output_template: str) -> bool:
     )
 
 
-def episode_output_template_values(episode: "Episode") -> dict[str, str]:
-    """Build the complete Collection-profile context for an episode."""
+def episode_output_template_values(
+    episode: "Episode", *, album_places: "Mapping[int, AlbumPlace] | None" = None,
+) -> dict[str, str]:
+    """Build the complete Collection-profile context for an episode.
+
+    Whoever builds it for many episodes passes their ``album_places`` (from ``backend.utils.music.album_places``),
+    so the track numbers do not take a query per episode.
+    """
     episode_identifier = episode.episode_identifier or ""
     ep_info = EpisodeIdentifierInfo.from_identifier(episode_identifier)
     published_at = episode.published_date
@@ -413,7 +420,7 @@ def episode_output_template_values(episode: "Episode") -> dict[str, str]:
         "episode_published_datetime": published_at.strftime("%Y-%m-%d %H:%M:%S") if published_at else "",
         **_date_substitutions(published_at),
         **_creator_values(episode),
-        **_music_values(episode),
+        **_music_values(episode, album_places),
     }
     values.update(custom_metadata_template_values(
         "collection",
@@ -556,11 +563,11 @@ def _episode_list(episode: "Episode"):
     return next((link for link in ordered if link.id in holding), ordered[0])
 
 
-def _music_values(episode: "Episode") -> dict[str, str]:
+def _music_values(episode: "Episode", album_places: "Mapping[int, AlbumPlace] | None") -> dict[str, str]:
     """The episode as a track of an album, for a Music profile."""
     from backend.utils.music import music_track
 
-    track = music_track(episode)
+    track = music_track(episode, album_places)
     number = track.track_number
     return {
         "artist": track.artist,
@@ -696,7 +703,9 @@ def resolve_episode_output_path_with_index_values(
     index_values: dict[str, int],
     filename_mode: FilenameRestrictionMode,
     extension: Optional[str] = None,
+    values: dict[str, str] | None = None,
 ) -> Path:
+    """``values`` are the episode's template values, when the caller already has them."""
     def resolver(key: str, _group: object = ()) -> object:
         if key not in index_definitions:
             return ""
@@ -708,7 +717,7 @@ def resolve_episode_output_path_with_index_values(
 
     return _render_output_path(
         output_template,
-        episode_output_template_values(episode),
+        values if values is not None else episode_output_template_values(episode),
         filename_mode=filename_mode,
         extension=extension,
         allowed_fields=COLLECTION_OUTPUT_TEMPLATE_FIELDS,
