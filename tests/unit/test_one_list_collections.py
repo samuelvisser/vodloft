@@ -47,9 +47,10 @@ def test_a_collection_of_one_list_is_one_season_numbered_in_the_lists_order(tube
 def test_a_collection_of_one_list_takes_no_other_lists(client, session):
     _add("cabin", PLAYLIST)
 
+    # Joining the creator of the channel that made it only groups it: it takes none of the channel's lists.
     response = client.post("/api/collections/cabin/creator", json={})
 
-    assert response.status_code == 422
+    assert response.status_code == 200, response.text
     assert _collection(session, "cabin").lists == []
 
 

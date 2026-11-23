@@ -4,11 +4,11 @@ import {useCreators} from '../../lib/queries'
 import {BEHIND_LINK, useCreatorTargets} from '../Creator/creatorTargets'
 import type {Names} from '../../types/schemas/source'
 
-/** Whether the new channel collection is added to a creator, and to which. */
+/** Whether the new collection is added to a creator, and to which. */
 export type CreatorChoice = {on: boolean, target: string}
 export const NO_CREATOR: CreatorChoice = {on: false, target: BEHIND_LINK}
 
-/** "Add to a creator" on the first page of the Add Collection wizard, for a channel on a Site with creators. Off
+/** "Add to a creator" on the first page of the Add Collection wizard, for a channel or a list on a Site with creators. Off
  *  until the user switches it on; the collection joins once it is added. */
 export default function CreatorSwitch({creatorNames, value, onChange}: {
     /** What the collection calls the creator behind it, such as host, or artist in a Music collection. */

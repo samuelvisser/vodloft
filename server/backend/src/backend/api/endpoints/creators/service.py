@@ -550,10 +550,12 @@ class CollectionLink:
 
 
 def collection_link(s: Session, collection_slug: str) -> CollectionLink:
-    """What looking up the creator behind a channel collection needs, read before the slow lookup."""
+    """What looking up the creator behind a collection's link needs, read before the slow lookup: a channel's own
+    creator, or the channel that made a playlist."""
     collection = _collection(s, collection_slug)
     if collection.creator_id is not None:
         raise ServiceError(f"{name_in_text(collection.title)} is already in {name_in_text(collection.creator.title)}")
+    creators.check_has_link(collection)
     creators.check_joins(collection)
     return CollectionLink(collection.source_key, collection.title, collection.sharing_url)
 

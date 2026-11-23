@@ -161,9 +161,10 @@ export const ResolvedLinkReadSchema = z.object({
         imageUrl: z.string().nullable(),
         authorName: z.string().nullable(),
     }),
-    /** For a collection: whether it is a channel, which can be in a creator, or one list. */
+    /** For a collection: whether it is a channel or one list. */
     collectionKind: z.enum(['channel', 'list']).nullable().optional().default(null),
-    /** For a channel: what its Site calls the creator behind it, such as host on The Daily Wire. */
+    /** For a collection on a Site with creators, which can be in one: what its Site calls the creator behind it, such
+     *  as host on The Daily Wire. */
     creatorNames: NamesSchema.nullable().optional().default(null),
     /** Every Source that claims the link's site, preferred first. */
     candidates: z.array(SourceReadSchema),

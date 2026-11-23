@@ -172,6 +172,9 @@ What comes along:
   [[Collections-and-Library#collections-of-only-playlists]]), so the channel's other videos are not added.
 - Every subscription becomes a collection of its own. You can add a collection to its creator later from its
   Actions menu.
+- A subscription with links on more than one site becomes a collection per site, all in one creator named after
+  the subscription: three YouTube playlists and two SoundCloud sets become a YouTube collection and a SoundCloud
+  collection, such as *Mixed (YouTube)* and *Mixed (SoundCloud)*. Each one adopts the files of its own site.
 - A **Bandcamp** or **SoundCloud Discography** subscription becomes one Music collection of the artist's page, as
   **Add collection** adds it: each album a season, with a Music Local Media Profile that keeps ytdl-sub's folder per
   artist and per album. A SoundCloud artist's playlists are left out, as ytdl-sub only took their albums. New albums
@@ -187,7 +190,8 @@ What comes along:
   into the same artist folder as the ones you already have.
 - An artist with both albums and music videos in ytdl-sub becomes one creator with two collections,
   named after the artist, such as *Emily Hopkins albums* and *Emily Hopkins music videos* (see [[Collections-and-Library#music-videos]]), also when the
-  music videos are on another site or their label's channel. When both download the same link, they share one
+  music videos are on another site, their label's channel or a playlist. Albums and music videos stay two collections: a
+  playlist doesn't become a season of the albums. When both download the same link, they share one
   collection that keeps both profiles.
 - ytdl-sub's **best** audio keeps what the site sends: VODLoft saves it as Opus, or as MP3 on Bandcamp. **FLAC**
   stays FLAC for music.

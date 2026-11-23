@@ -35,14 +35,19 @@ function useRefresh(collectionSlug: string) {
     }
 }
 
-/** "Add to creator", in the words of the Site: group the channel collection under the creator behind its link, or
- *  another creator in the Library. Nothing the collection holds changes. */
-export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorNames, onDismiss}: DialogProps) {
+/** "Add to creator", in the words of the Site: group the collection under the creator behind its link, such as the
+ *  channel that made a playlist, or another creator in the Library. A collection without a link of its own can only
+ *  join one in the Library. Nothing the collection holds changes. */
+export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creatorNames, hasLink, onDismiss}: DialogProps & {
+    /** The collection has a link of its own, with a creator behind it to suggest. */
+    hasLink: boolean
+}) {
     const {data: libraryCreators} = useCreators()
-    const [target, setTarget] = useState(BEHIND_LINK)
-    const targets = useCreatorTargets(collectionSlug, creatorNames, libraryCreators)
+    const [picked, setTarget] = useState<string | null>(null)
+    const target = picked ?? (hasLink ? BEHIND_LINK : libraryCreators?.[0]?.slug ?? '')
+    const targets = useCreatorTargets(collectionSlug, creatorNames, libraryCreators, hasLink)
     const chosen = libraryCreators?.find((other) => other.slug === target)
-    const match = useCollectionCreatorMatch(collectionSlug, open && target === BEHIND_LINK)
+    const match = useCollectionCreatorMatch(collectionSlug, open && hasLink && target === BEHIND_LINK)
     // A lookup found already answers in a moment, so its progress only shows once it takes a while.
     const slowMatch = useSlow(match.isLoading)
     const refresh = useRefresh(collectionSlug)
@@ -81,11 +86,17 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                         inputId="join-creator-target" registry={targets} value={target}
                         menuPortalTarget={document.body} menuPlacement="auto"
                         styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
-                        onChange={(value) => setTarget(value ?? BEHIND_LINK)}
+                        onChange={(value) => setTarget(value ?? null)}
                     />
                 </div>
             )}
-            {!chosen && slowMatch && (
+            {!hasLink && libraryCreators?.length === 0 && (
+                <p>
+                    {nameInText(collectionTitle)} has no link of its own to find {creatorNames?.a} behind. Add
+                    the {creatorNames?.singular} to your library first, then add the collection to them here.
+                </p>
+            )}
+            {!chosen && hasLink && slowMatch && (
                 <div className="creator-skeleton creator-join" aria-busy="true">
                     <LookupSteps steps={match.steps} first={`Finding the ${creatorNames?.singular} behind the link`}/>
                     <div className="creator-join-who" aria-hidden="true">
@@ -97,8 +108,8 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                     </div>
                 </div>
             )}
-            {!chosen && match.error && <p className="text-danger">{match.error.message}</p>}
-            {!chosen && creator && (
+            {!chosen && hasLink && match.error && <p className="text-danger">{match.error.message}</p>}
+            {!chosen && hasLink && creator && (
                 <div className="creator-join">
                     <div className="creator-join-who">
                         {creator.avatarUrl

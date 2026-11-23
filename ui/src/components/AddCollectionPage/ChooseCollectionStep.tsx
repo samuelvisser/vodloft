@@ -260,10 +260,10 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
         </div>
     )
 
-    // A channel, on a Site with creators, can be added to one of them.
-    const channelCreatorNames = resolved.data?.collectionKind === 'channel' ? resolved.data.creatorNames : null
-    const creatorSwitch = channelCreatorNames && can('library', 'manage') ? (
-        <CreatorSwitch creatorNames={creatorNamesFor(watch("type"), channelCreatorNames)} value={creator} onChange={onCreatorChange}/>
+    // A channel or a list, on a Site with creators, can be added to one of them.
+    const siteCreatorNames = resolved.data?.creatorNames ?? null
+    const creatorSwitch = siteCreatorNames && can('library', 'manage') ? (
+        <CreatorSwitch creatorNames={creatorNamesFor(watch("type"), siteCreatorNames)} value={creator} onChange={onCreatorChange}/>
     ) : null
 
     // --- Render

@@ -128,9 +128,10 @@ class CollectionPlan:
     album on the page a season of it, the ones to come too."""
     artist: str | None = None
     """For music: the artist it is by, as the other program names them."""
-    joins_artist: bool = False
-    """The artist has another collection of their own, such as albums on Bandcamp and music videos on YouTube: both
-    join one creator, named after ``artist``."""
+    creator: str | None = None
+    """The creator the Collection joins with the other collections of its group, named as the other program names
+    them: an artist's albums and music videos, such as albums on Bandcamp and music videos on YouTube, or the
+    collections one subscription with links on several Sites becomes, one per Site."""
     links_only: bool = False
     """The Collection holds only what its ``link_seasons`` have and has no link of its own: the other program kept
     only these playlists, of no one channel. ``url`` is the first of them."""

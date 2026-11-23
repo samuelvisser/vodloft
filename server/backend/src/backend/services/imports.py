@@ -1039,9 +1039,10 @@ def _settle_field_keys(session: Session, plan: ImportPlan, links, library: Mappi
     return replace(plan, profiles=profiles, collections=tuple(collections))
 
 
-def _create_collection(session: Session, plan: CollectionPlan, artists: dict[str, Creator]) -> Collection:
-    """A new yt-dlp Collection for the plan, looked up the way Add Collection does. ``artists`` are the creators this
-    import has already put an artist's other collection in, by the name the other program gives the artist."""
+def _create_collection(session: Session, plan: CollectionPlan, creators: dict[str, Creator]) -> Collection:
+    """A new yt-dlp Collection for the plan, looked up the way Add Collection does. ``creators`` are the creators this
+    import has already put another collection of a group in, by the name the other program gives the group, such as
+    an artist's."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
     from backend.types.link_season_types import ChannelSeason, LinkSeasons, RepeatVideos
@@ -1050,7 +1051,10 @@ def _create_collection(session: Session, plan: CollectionPlan, artists: dict[str
 
     source = get_source("ytdlp")
     if plan.links_only:
-        return _create_links_only_collection(session, plan)
+        collection = _create_links_only_collection(session, plan)
+        if plan.creator:
+            _join_group(session, collection, plan, creators)
+        return collection
     details = source.collection_details(plan.url)
     # Music is by the artist the other program names, whoever uploaded it.
     author = plan.artist or details.author_name or details.title
@@ -1071,27 +1075,28 @@ def _create_collection(session: Session, plan: CollectionPlan, artists: dict[str
         collection.repeat_videos = RepeatVideos.ONE_SEASON.value
     add_collection(session, collection)
     _add_link_seasons(session, collection, plan)
-    if plan.joins_artist:
-        _join_artist(session, collection, plan, artists)
+    if plan.creator:
+        _join_group(session, collection, plan, creators)
     index_new_collection(session, collection)
     return collection
 
 
-def _join_artist(session: Session, collection: Collection, plan: CollectionPlan, artists: dict[str, Creator]) -> None:
-    """Group a new channel Collection of an artist with the artist's other collection. It joins the creator the
-    import already put the other one in, also from another Site; otherwise the creator behind its link, and a creator
-    the import adds there takes the other program's name for the artist."""
+def _join_group(session: Session, collection: Collection, plan: CollectionPlan, creators: dict[str, Creator]) -> None:
+    """Group a new Collection with the other collections of its group, such as an artist's albums and music videos,
+    or a subscription's links on another Site. It joins the creator the import already put another one of them in,
+    also from another Site. Otherwise it joins the creator behind its link, the channel that made a playlist, or for a
+    collection of only playlists, behind its first one; a creator the import adds there takes the group's name."""
     from backend.services.creators import can_join, join_creator, rename_creator
 
     if not can_join(collection):
         return
-    artist = artists.get(plan.artist) if plan.artist else None
-    if artist is not None:
-        join_creator(session, collection, artist)
+    creator = creators.get(plan.creator) if plan.creator else None
+    if creator is not None:
+        join_creator(session, collection, creator)
         return
-    creator, made = _join_creator(session, collection)
-    if creator is not None and made and plan.artist and creator.title != plan.artist:
-        rename_creator(creator, plan.artist)
+    creator, made = _join_creator(session, collection, collection.sharing_url or plan.url)
+    if creator is not None and made and plan.creator and creator.title != plan.creator:
+        rename_creator(creator, plan.creator)
 
 
 def _create_links_only_collection(session: Session, plan: CollectionPlan) -> Collection:
@@ -1111,24 +1116,25 @@ def _create_links_only_collection(session: Session, plan: CollectionPlan) -> Col
     return collection
 
 
-def _join_creator(session: Session, collection: Collection) -> tuple[Creator | None, bool]:
-    """Group a new Collection under the creator behind its link, as Add to creator does, when it has one. Returns the
+def _join_creator(session: Session, collection: Collection, url: str) -> tuple[Creator | None, bool]:
+    """Group a new Collection under the creator behind ``url``, as Add to creator does, when it has one. Returns the
     creator, and whether it was added to the library for it."""
-    from backend.services.creators import account_of, join_creator_of
+    from backend.services.creators import account_of, join_creator, new_creator
     from sources import Feature, get_source
 
     source = get_source(collection.source_key)
-    if not source.has(Feature.CREATORS) or collection.sharing_url is None:
+    if not source.has(Feature.CREATORS):
         return None, False
     try:
-        ref = source.creator_of(collection.sharing_url)
+        ref = source.creator_of(url)
         if ref is None:
             return None, False
         details = source.creator_details(ref)
         with session.begin_nested():
-            known = account_of(session, source.id, details)
-            creator = join_creator_of(session, collection, source.id, details, added_by_id=None)
-        return creator, known is None
+            account = account_of(session, source.id, details)
+            creator = account.creator if account is not None else new_creator(session, source.id, details, added_by_id=None)
+            join_creator(session, collection, creator)
+        return creator, account is None
     except Exception as exc:  # noqa: BLE001  (a creator that can't be looked up leaves a plain collection)
         logger.info("Imported %s without its creator: %s", collection.title, exc)
         return None, False
@@ -1200,7 +1206,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
 
 def _upsert_collection(
     session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report,
-    artists: dict[str, Creator],
+    creators: dict[str, Creator],
 ) -> tuple[Collection | None, bool]:
     """The Collection, and whether it was just created (and so is being indexed)."""
     link = links.get(("collection", plan.external_id))
@@ -1214,7 +1220,7 @@ def _upsert_collection(
     if existing is None:
         try:
             with session.begin_nested():
-                existing = _create_collection(session, plan, artists)
+                existing = _create_collection(session, plan, creators)
         except CollectionAlreadyAddedError as exc:
             # The same collection, through another Source or under another link.
             existing = exc.existing
@@ -1229,9 +1235,9 @@ def _upsert_collection(
                 library[_normalise_url(existing.sharing_url)] = existing
             report.add("created", plan.title, "Added to the Library", warnings=[_warning(warning) for warning in plan.warnings])
             report.counts["collections_created"] += 1
-    if plan.joins_artist and plan.artist and existing.creator is not None:
-        # The artist's other collection, such as their music videos, joins this creator.
-        artists.setdefault(plan.artist, existing.creator)
+    if plan.creator and existing.creator is not None:
+        # The group's other collections, such as an artist's music videos, join this creator.
+        creators.setdefault(plan.creator, existing.creator)
     if plan.added_at is not None and (existing.created_at is None or plan.added_at < existing.created_at):
         # The Collection has been in your library since the other program added it.
         existing.created_at = plan.added_at
@@ -1402,13 +1408,14 @@ def _apply_loaded_plan(
         files_by_collection[file.collection_external_id].append(file)
     library = _library_collections(session)
     steps: list[ImportStep] = []
-    artists: dict[str, Creator] = {}
+    # The creators of the groups the import made, by the name the other program gives the group, such as an artist's.
+    creators: dict[str, Creator] = {}
     for collection_plan in selected:
         profile = profiles.get(collection_plan.profile_external_id or "")
         if profile is None:
             continue
         collection, created = _upsert_collection(
-            session, collection_plan, library, links, run, report, artists,
+            session, collection_plan, library, links, run, report, creators,
         )
         if collection is None:
             continue
