@@ -507,6 +507,18 @@ def _duration_rules(sub: Subscription) -> list[dict[str, object]]:
     return rules
 
 
+# A YouTube channel tab ytdl-sub downloads, as the channel's feed VODLoft lists.
+_TAB_FEEDS = {"videos": "videos", "shorts": "shorts", "streams": "live"}
+
+
+def _feeds(url: str) -> list[str] | None:
+    """The one feed of the channel a tab link downloads, such as only its Videos; None for the whole channel."""
+    if _collection_type(url) != "channel":
+        return None
+    feed = _TAB_FEEDS.get(urlsplit(url).path.rstrip("/").rsplit("/", 1)[-1].lower())
+    return [feed] if feed else None
+
+
 def _episode_types(url: str) -> list[str]:
     tab = url.rstrip("/").rsplit("/", 1)[-1].lower()
     return {"shorts": ["short"], "streams": ["livestream"], "videos": ["ep"]}.get(tab, ["ep", "short", "livestream"])
@@ -800,6 +812,8 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
     if full_albums:
         # Each video is an album, and each of its chapters a track.
         custom["split_chapters"] = True
+    if (feeds := _feeds(primary)) is not None:
+        custom["feeds"] = feeds
     metadata = ((("genre", "track_genre", MUSIC_GENRE_DEFAULT),) if music else
                 (("genre", "music_video_genre", MUSIC_VIDEO_GENRE_DEFAULT),) if music_videos else
                 (("genre", "tv_show_genre", TV_SHOW_GENRE_DEFAULT),

@@ -1073,6 +1073,9 @@ def _create_collection(session: Session, plan: CollectionPlan, creators: dict[st
         collection.link_seasons = LinkSeasons.OFF.value
         collection.channel_season = ChannelSeason.UNLISTED.value
         collection.repeat_videos = RepeatVideos.ONE_SEASON.value
+        # A link to one tab of a channel, such as its Videos, lists only that feed, as the other program did.
+        feeds = plan.settings.get("feeds")
+        collection.feeds = list(feeds) if isinstance(feeds, list) else None
     add_collection(session, collection)
     _add_link_seasons(session, collection, plan)
     if plan.creator:
