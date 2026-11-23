@@ -270,6 +270,13 @@ class SoundCloudImplementation(ArtistImplementation):
         name = _PAGE_SUFFIX.sub("", details.title)
         return replace(details, title=name, author_name=details.author_name or name)
 
+    def list_type(self, info: dict, url: str) -> str | None:
+        """A set is an album when SoundCloud gives it a type of release, such as an album, an EP or a single, which
+        yt-dlp calls its album type; a playlist has none, which yt-dlp calls a playlist."""
+        if not self.is_list(url):
+            return None
+        return PLAYLIST_LIST if info.get("album_type") in (None, "", "playlist") else ALBUM_LIST
+
     def pictures(self, root: str) -> tuple[str | None, str | None]:
         """The account's profile picture and banner, which yt-dlp leaves out. Its page shares the picture as its
         og:image, and gives its own script the banner, which SoundCloud calls the account's visual."""

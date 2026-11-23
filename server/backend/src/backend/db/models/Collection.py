@@ -47,6 +47,10 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         default=CollectionKind.CHANNEL.value, server_default=CollectionKind.CHANNEL.value,
         comment="What its own link is: channel, a creator's page of all their uploads, or list, one list or no link",
     )
+    list_type: Mapped[Optional[str]] = mapped_column(
+        comment="The key of its Site's type of list its link is, such as album or playlist on SoundCloud, where the "
+                "Site has several types its links don't tell apart",
+    )
     creator_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("creators.id", ondelete="SET NULL"), index=True,
         comment="The creator it is grouped under in the Library, for a channel collection",

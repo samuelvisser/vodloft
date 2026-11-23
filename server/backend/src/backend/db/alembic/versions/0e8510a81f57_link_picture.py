@@ -1,7 +1,7 @@
 """Let a collection without a link of its own take its picture from the link the user chooses.
 
 Revision ID: 0e8510a81f57
-Revises: 8a47bfd00213
+Revises: d3b9e4a71c52
 Create Date: 2026-11-23
 """
 from __future__ import annotations
@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision = "0e8510a81f57"
-down_revision = "8a47bfd00213"
+down_revision = "d3b9e4a71c52"
 branch_labels = None
 depends_on = None
 

@@ -92,6 +92,11 @@ class OtherSitesImplementation:
         in, such as an artist account's name and picture."""
         return details
 
+    def list_type(self, info: dict, url: str) -> str | None:
+        """Which of the Site's types of list the link is, as yt-dlp describes it, for a Site whose lists come in
+        several types that their links don't tell apart."""
+        return None
+
     def is_creator_page(self, url: str) -> bool:
         """Whether the link stands for all of a creator's uploads, so that a collection of it can make the creator's
         lists its seasons."""

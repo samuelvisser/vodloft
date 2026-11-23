@@ -190,3 +190,29 @@ def test_new_tracks_are_looked_up_in_one_run_and_those_with_drm_are_marked(monke
 
     assert [details.title for details in found] == ["Track 0", "Track 1", "Track 2"]
     assert len(runs) == 2
+
+
+@pytest.mark.parametrize(("album_type", "list_type"), [
+    ("album", "album"), ("ep", "album"), ("single", "album"), ("compilation", "album"), ("playlist", "playlist"),
+])
+def test_a_soundcloud_set_is_an_album_or_a_playlist_as_soundcloud_says(monkeypatch, album_type, list_type):
+    # A set's link doesn't tell, but SoundCloud gives each set a type of release, which a playlist has none of.
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_info", lambda url, *args, **kwargs: {
+        "_type": "playlist", "id": "palaces", "title": "Palaces", "webpage_url": url, "album_type": album_type,
+    })
+
+    assert source.collection_details("https://soundcloud.com/flume/sets/palaces").list_type == list_type
+
+
+def test_only_a_soundcloud_set_has_a_type_of_list(monkeypatch):
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_info", lambda url, *args, **kwargs: {
+        "_type": "playlist", "id": "flume", "title": "Flume (All)", "webpage_url": url,
+    })
+
+    assert source.collection_details("https://soundcloud.com/flume").list_type is None

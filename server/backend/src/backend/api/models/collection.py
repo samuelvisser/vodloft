@@ -50,6 +50,8 @@ class CollectionAPICreate(_CollectionAPIBaseIn):
     type: CollectionType
     episode_identifier: EpisodeIdentifier
     author_slug: str
+    list_type: Optional[str] = None
+    """Which of its Site's types of list the link is, as looking the link up told."""
 
     @computed_field(return_type=str)
     @property
@@ -220,6 +222,9 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     kind: Optional[CollectionKind] = None
     """What its own link is: a channel, which takes the channel's lists and can be in a creator, or one list. None
     for a collection that is not in the Library yet, such as one that is looked up to be added."""
+    list_type: Optional[str] = None
+    """For a collection of one list, the key of its Site's type of list it is, such as album or playlist on
+    SoundCloud, where its link doesn't tell; None where the Site has one type of list or it is not known."""
     site: Optional[SiteAPIRead] = None
     """The website the collection is on; None until the background migration finds it for an older collection."""
     author_name: str
@@ -291,7 +296,7 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
         if self.site is None or self.kind is None:
             return None
         site = site_of(self.site.key)
-        names = site.channel_collection_names if self.kind == CollectionKind.CHANNEL.value else site.list_collection_names
+        names = site.channel_collection_names if self.kind == CollectionKind.CHANNEL.value else site.list_collection_names_of(self.list_type)
         return f"{site.name} {names.singular}"
 
 
