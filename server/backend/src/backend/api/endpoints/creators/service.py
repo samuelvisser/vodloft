@@ -1,7 +1,7 @@
 """The creators API: the Library's creators, their pages, and grouping collections under them."""
 from __future__ import annotations
 
-from backend.utils.helpers import name_in_text
+from backend.utils.helpers import name_in_text, year_range
 import logging
 import threading
 import time
@@ -248,9 +248,10 @@ class _CollectionRead:
 
     @property
     def years(self) -> str:
-        if self.first_published_date is None or self.last_published_date is None:
-            return ""
-        return f"{self.first_published_date.year}-{self.last_published_date.year}"
+        return year_range(
+            self.first_published_date.year if self.first_published_date else None,
+            self.last_published_date.year if self.last_published_date else None,
+        )
 
     @property
     def loose_season(self) -> str | None:

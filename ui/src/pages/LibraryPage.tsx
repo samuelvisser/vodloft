@@ -7,7 +7,7 @@ import {faIcon} from '../icons/faIcon'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import SourceBadge from '../components/Source/SourceBadge'
-import CollectionTile from '../components/CollectionTile/CollectionTile'
+import CollectionTile, {TileStats} from '../components/CollectionTile/CollectionTile'
 import {DrmBadge} from '../components/common/DrmProtected'
 import {AccessBadge} from '../components/common/AccessLocked'
 import FilterBar, {ChipFilter} from '../components/common/FilterBar'
@@ -524,10 +524,11 @@ export default function LibraryPage() {
                                     <span className="library-tile-copy">
                                         <span className="library-tile-title">{creator.title}</span>
                                         <span className="library-tile-author">{creatorKindText(creator)}</span>
-                                        <span className="library-tile-meta">
-                                            <span>{creator.collectionCount} {creator.collectionCount === 1 ? 'collection' : 'collections'}</span>
-                                            <span>{wordsOf(creator.words).count(creator.episodeCount)}</span>
-                                        </span>
+                                        {/* Its episodes come first: when the line is too narrow, the number of collections is left out. */}
+                                        <TileStats parts={[
+                                            wordsOf(creator.words).count(creator.episodeCount),
+                                            `${creator.collectionCount} ${creator.collectionCount === 1 ? 'collection' : 'collections'}`,
+                                        ]}/>
                                     </span>
                                 </>
                             )
