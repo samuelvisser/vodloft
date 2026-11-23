@@ -198,8 +198,10 @@ export default function EpisodePage() {
         || publishStatus === 'published_final'
         || publishStatus === EpisodePublishStatus.publishedFinal
     )
-    // Media protected by DRM or only given to members or subscribers cannot be downloaded.
-    const locked = episode.drmProtected || episode.accessLocked
+    // Media protected by DRM or only given to members or subscribers cannot be downloaded. A collection whose own
+    // yt-dlp options allow unplayable formats lets yt-dlp try media protected by DRM.
+    const drmBlocked = episode.drmProtected && !collection.allowsUnplayableFormats
+    const locked = drmBlocked || episode.accessLocked
     const downloadStateError = (profiles === undefined ? profilesError : null)
         ?? (!hasDownloadState ? downloadsError : null)
 
@@ -302,7 +304,7 @@ export default function EpisodePage() {
                     <h1 id="episode-title" className="episode-title-text">{episode.title}</h1>
                     <div className="episode-summary" aria-label={`${words.episode.Singular} metadata`}>
                         <EpisodeTypePill sourceKey={episode.sourceKey} type={episode.episodeType} asText/>
-                        {episode.drmProtected && <DrmBadge asText/>}
+                        {episode.drmProtected && <DrmBadge asText unplayableAllowed={collection.allowsUnplayableFormats}/>}
                         <ItemAccessBadge item={episode} asText/>
                         {episode.removedBy
                             ? <ExpiredBadge removedBy={episode.removedBy}/>
@@ -367,8 +369,8 @@ export default function EpisodePage() {
                 {isDownloadable && (
                     <div className="episode-downloads" aria-labelledby="episode-downloads-title">
                         <h2 id="episode-downloads-title">Downloads</h2>
-                        {episode.drmProtected && <DrmNotice/>}
-                        {!episode.drmProtected && episode.accessLocked && <AccessNotice item={episode}/>}
+                        {episode.drmProtected && <DrmNotice unplayableAllowed={collection.allowsUnplayableFormats}/>}
+                        {!drmBlocked && episode.accessLocked && <AccessNotice item={episode}/>}
                         {!locked && downloadStateError && (
                             <div className="form-error-card" role="alert">
                                 Could not load download status: {downloadStateError.message}

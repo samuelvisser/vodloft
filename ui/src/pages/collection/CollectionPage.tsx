@@ -848,6 +848,7 @@ export default function CollectionPage() {
                 moved={movedEpisodes?.has(ep.slug)}
                 reassignedTo={reassignedEpisodes?.get(ep.slug)}
                 words={words}
+                unplayableAllowed={collection.allowsUnplayableFormats}
               />
             ))}
           </div>

@@ -20,6 +20,8 @@ export const EpisodeFilterFieldReg = createSelectRegistry('EpisodeFilterField', 
     duration: {label: 'duration'},
     types: {label: 'episode type'},
     seasons: {label: 'season'},
+    /** Only offered when the collection's own yt-dlp options allow unplayable formats. */
+    unplayable: {label: 'formats are unplayable'},
     published: {label: 'published'},
     downloaded: {label: 'downloaded'},
 })
@@ -62,6 +64,8 @@ export const EpisodeFilterSchema = z.object({
         if (!filter.seasonSlugs?.length && !filter.includeUpcoming) {
             ctx.addIssue({code: 'custom', path: ['seasonSlugs'], message: 'Choose at least one, or the upcoming ones'})
         }
+    } else if (filter.field === 'unplayable') {
+        // Matches by itself: there is nothing to choose.
     } else if (filter.field === 'duration') {
         if (!filter.durationOperator || !filter.durationSeconds) {
             ctx.addIssue({code: 'custom', path: ['durationSeconds'], message: 'Choose a duration'})
@@ -219,6 +223,8 @@ export const WhichEpisodesSchema = z.object({
     })).nullable().optional(),
     /** How many episodes the list holds, after episodesShown. */
     episodesTotal: z.int().nullable().optional(),
+    /** The collection's own yt-dlp options allow unplayable formats, so a filter can look at them. */
+    unplayableFormats: z.boolean().default(false),
 })
 export type WhichEpisodes = z.infer<typeof WhichEpisodesSchema>
 

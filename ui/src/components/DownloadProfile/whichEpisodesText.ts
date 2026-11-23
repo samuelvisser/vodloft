@@ -47,6 +47,7 @@ export function filterComplete(filter: FilterLike): boolean {
     if (filter.field === 'types') return !!filter.episodeTypes?.length
     if (filter.field === 'seasons') return !!filter.seasonSlugs?.length || !!filter.includeUpcoming
     if (filter.field === 'duration') return !!filter.durationSeconds && !!filter.durationOperator
+    if (filter.field === 'unplayable') return true
     if (filter.field === 'published') return !!filter.days || !!filter.count || !!filter.startingFrom || !!filter.until
     if (filter.field === 'downloaded') return !!filter.days
     return !!splitIgnoreCase(filter.pattern).pattern
@@ -130,6 +131,7 @@ export function filterSentence(
             part.text === ' and ' ? [{text: ' or '}] : [part]
         ))]
     }
+    if (filter.field === 'unplayable') return [lead, {text: 'formats', strong: true}, {text: ' are unplayable, such as with DRM'}]
     const parts: Part[] = [lead, {text: filter.field, strong: true}]
     if (filter.field === 'duration') {
         const operator = filter.durationOperator === 'longer' ? ' is longer than ' : ' is shorter than '

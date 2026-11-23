@@ -263,6 +263,7 @@ export const CreatorEpisodePageReadSchema = z.object({
     items: z.array(EpisodeReadViewSchema.extend({
         collectionSlug: z.string(),
         collectionTitle: z.string(),
+        unplayableFormatsAllowed: z.boolean().default(false),
     })),
     nextCursor: z.string().nullable().optional(),
     hasMore: z.boolean(),

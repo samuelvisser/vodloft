@@ -116,6 +116,8 @@ export const CollectionReadSchema = z.looseObject({
     thumbnailSquarePath: z.string().nullable().optional(),
     /** Your own yt-dlp options for this Collection, added after its Local Media Profile's. */
     ytdlpOptions: z.string().default(''),
+    /** Its own yt-dlp options include --allow-unplayable-formats, so media protected by DRM can still be downloaded. */
+    allowsUnplayableFormats: z.boolean().default(false),
     genre: z.string().nullable().optional(),
     contentRating: z.string().nullable().optional(),
     cookiesMode: z.enum(['automatic', 'never', 'always']).default('automatic'),

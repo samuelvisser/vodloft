@@ -16,6 +16,7 @@ from config.settings.cron_validation import CronExpressionError, validate_cron_e
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
 from backend.api.models.source import checked_ytdlp_options
+from backend.services.unplayable_formats import options_allow_unplayable_formats
 from sources import Site, site_of
 from sources.ytdlp_options import MAX_OPTIONS_LENGTH
 
@@ -252,6 +253,12 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
         collection; VODLoft's own while the Site is not known yet."""
         site = site_of(self.site.key) if self.site is not None else Site("", "")
         return NamesAPIRead.model_validate(collection_contract(self.type).creator_names_on(site))
+
+    @computed_field
+    @property
+    def allows_unplayable_formats(self) -> bool:
+        """Its own yt-dlp options allow unplayable formats, so its media protected by DRM can still be tried."""
+        return options_allow_unplayable_formats(self.source_key, self.ytdlp_options)
 
 
 class CollectionAPIRead(_CollectionAPIBaseOut):

@@ -60,6 +60,8 @@ class DownloadProfileFilterAPIIn(RequestBase):
             if not self.season_slugs and not self.include_upcoming:
                 raise ValueError("Choose at least one season, or upcoming seasons")
             return self
+        if self.field == EpisodeFilterField.UNPLAYABLE_FORMATS:
+            return self
         if self.field == EpisodeFilterField.DURATION:
             if self.duration_operator is None or self.duration_seconds is None:
                 raise ValueError("A duration filter needs shorter or longer than, and a duration")
@@ -222,6 +224,8 @@ class WhichEpisodesAPIRead(ResponseBase):
     """One page of the Collection's indexed episodes, from episodes_offset; None unless include_episodes."""
     episodes_total: int | None = None
     """How many episodes the list holds with episodes_shown; None unless include_episodes."""
+    unplayable_formats: bool = False
+    """The Collection's own yt-dlp options allow unplayable formats, so its profiles can filter on them."""
 
 
 class SkippedByFilterAPIRead(ResponseBase):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import AliasChoices, AliasPath, Field
+from pydantic import AliasChoices, AliasPath, Field, computed_field
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
@@ -16,6 +16,7 @@ from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionType
 from backend.types.creator_types import NewSectionAction, SectionTarget
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
+from backend.services.unplayable_formats import options_allow_unplayable_formats
 from sources import CreatorPreset
 
 
@@ -287,6 +288,13 @@ class CreatorEpisodeAPIRead(EpisodeAPIReadView):
 
     collection_slug: str
     collection_title: str
+    collection_ytdlp_options: str = Field(default="", exclude=True)
+
+    @computed_field
+    @property
+    def unplayable_formats_allowed(self) -> bool:
+        """Its collection's own yt-dlp options allow unplayable formats, so media protected by DRM can still be tried."""
+        return options_allow_unplayable_formats(self.source_key, self.collection_ytdlp_options)
 
 
 class CreatorEpisodePageAPIRead(CursorPageRead[CreatorEpisodeAPIRead]):

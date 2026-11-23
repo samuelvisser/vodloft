@@ -135,6 +135,8 @@ class DownloadResult:
     """The chapters cut out by their title, when the download was asked to cut any."""
     info_json: str | None = None
     """The video's info file yt-dlp wrote, when the download asked for one."""
+    separate_audio: str | None = None
+    """The sound yt-dlp kept as a file of its own beside the video, when it could not merge them."""
 
 
 # Called periodically during a download with a progress snapshot.

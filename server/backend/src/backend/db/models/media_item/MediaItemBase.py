@@ -29,6 +29,12 @@ class MediaItemBase(Base):
     drm_protected: Mapped[bool] = mapped_column(
         default=False, server_default=false(), comment="The media is protected by DRM and cannot be downloaded",
     )
+    unplayable_formats: Mapped[bool] = mapped_column(
+        default=False, server_default=false(),
+        comment="yt-dlp found no playable formats for the media for another reason than DRM",
+    )
+    """yt-dlp found no playable formats without --allow-unplayable-formats, though the media is not protected by DRM.
+    Only a Collection whose own yt-dlp options allow unplayable formats finds this out, and downloads it with them."""
     access: Mapped[Optional[str]] = mapped_column(
         String(40), comment="Key of the Source's Access the media needs, such as NPO Plus or a channel membership",
     )

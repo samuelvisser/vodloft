@@ -55,6 +55,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.episode_types import EpisodePublishStatus
 from backend.services.media_access import media_access, media_locked
+from backend.services.unplayable_formats import blocked_by_drm
 from backend.services.local_media_profile_sites import profile_offered_for_site
 from backend.services.removed_downloads import answer_keep_question, downloads_awaiting_keep_answer
 from backend.services.sites import collection_site, collection_site_key, movie_site_key, video_site_key
@@ -564,7 +565,7 @@ DRM_PROTECTED_MESSAGE = "Protected by DRM, cannot be downloaded"
 
 
 def _ensure_downloadable(media) -> None:
-    if media.drm_protected:
+    if blocked_by_drm(media):
         raise HTTPException(status_code=422, detail=DRM_PROTECTED_MESSAGE)
     if media_locked(media):
         access = media_access(media)
