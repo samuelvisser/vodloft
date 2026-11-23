@@ -20,7 +20,7 @@ import type {Names} from '../../types/schemas/source'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {BulkBar} from '../ProfileBulkEdit/BulkEditControls'
 import {
-    CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, SeasonsPreviewReadSchema, seasonsFormValues, type SeasonsPreviewRead,
+    AddedLinkReadSchema, type AddedLinkRead, CollectionSeasonsFormSchema, CollectionSeasonsReadSchema, LinkSeasonAddFormSchema, SeasonsPreviewReadSchema, seasonsFormValues, type SeasonsPreviewRead,
     type CollectionListRead, type CollectionSeasonsFormIn, type CollectionSeasonsFormOut, type CollectionSeasonsRead,
     type LinkSeasonAddFormIn, type LinkSeasonAddFormOut, type NewLinkSeason, type ChannelSeason, type CollectionSeasonRead,
 } from '../../types/schemas/collection_seasons'
@@ -165,14 +165,30 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
             return
         }
         if (!view || loadedFor.current === view) return
+        const first = loadedFor.current === null
         loadedFor.current = view
-        reset(seasonsFormValues(view))
+        // A fresh answer while the dialog is open, such as the seasons a link got once VODLoft listed its videos,
+        // keeps what the user changed already.
+        if (first || !isDirty) reset(seasonsFormValues(view))
+        else keepChoices(view)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, view, reset])
 
     /** Show what the server answered without resetting the form to it, which would undo the user's unsaved changes.
      * The cache keeps its own copy of the answer, so that copy is the one the form counts as loaded. */
     const keepLoaded = (fresh: CollectionSeasonsRead) => {
         loadedFor.current = queryClient.setQueryData<CollectionSeasonsRead>(queryKey, fresh) ?? fresh
+    }
+    /** Take the lists and seasons of a fresh answer into the form, keeping what the user changed in the dialog. */
+    const keepChoices = (fresh: CollectionSeasonsRead) => {
+        const choices = new Map((form.getValues('playlists') ?? []).map((choice) => [choice.id, choice]))
+        setValue('playlists', fresh.playlists.map((playlist) => ({
+            id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
+            asSeason: choices.get(playlist.id)?.asSeason ?? playlist.asSeason,
+            seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
+            isDefault: choices.get(playlist.id)?.isDefault ?? playlist.isDefault,
+        })))
+        setValue('seasons', fresh.seasons.map((season) => form.getValues('seasons')?.find((x) => x.id === season.id) ?? {id: season.id, name: season.name}))
     }
 
     // What the Site calls its lists, such as playlists on YouTube, also in a Music collection, whose seasons are albums.
@@ -193,6 +209,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const customOrder = watch('customSeasonOrder') ?? false
     const repeatVideos = watch('repeatVideos') ?? 'one_season'
     const removedLinks = watch('removedLinks') ?? []
+    const newLinks = watch('addedLinks') ?? []
     const removedSeasons = watch('removedSeasons') ?? []
     // The channel season is called Channel while it holds the whole channel, as the form is set now, so the names
     // follow the form before it is saved.
@@ -253,6 +270,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         outsideVideos: data.outsideVideos,
         playlists: data.playlists,
         removedLinks: data.removedLinks,
+        addedLinks: data.addedLinks.map((link) => link.url),
         removedSeasons: data.removedSeasons,
     })
 
@@ -372,28 +390,24 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         resolver: zodResolver(LinkSeasonAddFormSchema),
         defaultValues: LinkSeasonAddFormSchema.parse({}),
     })
-    const addLink = buildServerAwareSubmit<LinkSeasonAddFormIn, LinkSeasonAddFormOut, CollectionSeasonsRead>(linkForm, (data) => fetch(`${endpoint}/added-links`, {
+    const addLink = buildServerAwareSubmit<LinkSeasonAddFormIn, LinkSeasonAddFormOut, AddedLinkRead>(linkForm, (data) => fetch(`${endpoint}/added-links`, {
         method: 'POST',
         credentials: 'include',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({url: data.url}),
     }), {
-        parseSuccess: readSeasons,
+        parseSuccess: async (response) => AddedLinkReadSchema.parse(await response.json()),
         fallbackField: 'url',
         genericMessage: 'Could not add the link',
-        onSuccess: (fresh) => {
-            const choices = new Map((form.getValues('playlists') ?? []).map((choice) => [choice.id, choice]))
-            keepLoaded(fresh)
-            // The new link is saved already; what the user changed in the dialog stays.
-            setValue('playlists', fresh.playlists.map((playlist) => ({
-                id: playlist.id, enabled: choices.get(playlist.id)?.enabled ?? playlist.enabled,
-                asSeason: choices.get(playlist.id)?.asSeason ?? playlist.asSeason,
-                seasonId: choices.has(playlist.id) ? choices.get(playlist.id)!.seasonId : playlist.seasonId,
-                isDefault: choices.get(playlist.id)?.isDefault ?? playlist.isDefault,
-            })))
-            setValue('seasons', fresh.seasons.map((season) => form.getValues('seasons')?.find((x) => x.id === season.id) ?? {id: season.id, name: season.name}))
+        onSuccess: (found) => {
+            // VODLoft only looked the link up: it is saved, and listed, with the rest of the dialog.
+            const pending = form.getValues('addedLinks') ?? []
+            if (pending.some((link) => link.url === found.url)) {
+                linkForm.setError('url', {message: `You added ${found.title} already`})
+                return
+            }
+            setValue('addedLinks', [...pending, found], {shouldDirty: true})
             linkForm.reset({url: ''})
-            toast.success(`Link added. VODLoft is listing its ${fresh.mediaNames.plural}.`)
         },
     })
     const addingLink = linkForm.formState.isSubmitting
@@ -762,7 +776,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     )}
 
                                                     <div className="form-row">
-                                                        <label htmlFor="seasons-layout">{capitalized(names.plural)}</label>
+                                                        <label htmlFor="seasons-layout">Where the {names.plural} go</label>
                                                         <SimpleSelect
                                                             menuPortalTarget={document.body} menuPlacement="auto"
                                                             styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
@@ -807,7 +821,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     {only && (
                                                         <div className="form-row">
                                                             <label htmlFor="seasons-add-link">Your links</label>
-                                                            {addedLinks.length > 0 && (
+                                                            {(addedLinks.length > 0 || newLinks.length > 0) && (
                                                                 <ul className="seasons-dialog-links">
                                                                     {addedLinks.map((link) => {
                                                                         const removed = removedLinks.includes(link.id)
@@ -816,6 +830,13 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                                 <span className="seasons-dialog-link-copy">
                                                                                     <b>{link.title}</b>
                                                                                     <span>{removed ? 'Removed when you save' : link.url}</span>
+                                                                                    {!removed && link.enabled && (
+                                                                                        <span>
+                                                                                            {link.seasonName
+                                                                                                ? `In ${link.seasonName}`
+                                                                                                : `No ${words.season.singular} yet: it gets one once VODLoft has listed its ${words.videos}`}
+                                                                                        </span>
+                                                                                    )}
                                                                                 </span>
                                                                                 {!removed && !view.hasOwnLink && (
                                                                                     defaultLinkId === link.id
@@ -840,6 +861,21 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                             </li>
                                                                         )
                                                                     })}
+                                                                    {newLinks.map((link) => (
+                                                                        <li key={link.url} className="seasons-dialog-added">
+                                                                            <span className="seasons-dialog-link-copy">
+                                                                                <b>{link.title}</b>
+                                                                                <span>{link.url}</span>
+                                                                                <span>Added when you save; VODLoft then lists its {words.videos}</span>
+                                                                            </span>
+                                                                            <button
+                                                                                type="button" className="btn btn-small" aria-label={`Remove ${link.title}`}
+                                                                                onClick={() => setValue('addedLinks', newLinks.filter((x) => x.url !== link.url), {shouldDirty: true})}
+                                                                            >
+                                                                                Remove
+                                                                            </button>
+                                                                        </li>
+                                                                    ))}
                                                                 </ul>
                                                             )}
                                                             {view.outsideVideos === 'only' ? (
@@ -866,8 +902,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                             )}
                                                             {linkForm.formState.errors.url && <div className="error" role="alert">{linkForm.formState.errors.url.message}</div>}
                                                             <div className="help">
-                                                                Each link becomes {words.season.a} of its own, from any site VODLoft can read. A link is added
-                                                                right away; VODLoft then lists its {words.videos}.
+                                                                Each link becomes {words.season.a} of its own, from any site VODLoft can read. A link is saved
+                                                                when you save; VODLoft then lists its {words.videos}.
                                                             </div>
                                                         </div>
                                                     )}

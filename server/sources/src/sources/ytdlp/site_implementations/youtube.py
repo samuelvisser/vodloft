@@ -19,8 +19,10 @@ logger = logging.getLogger(__name__)
 
 _YOUTUBE_CHANNEL = re.compile(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)/?$")
 _CHANNEL_PAGE = re.compile(r"^/(@[^/]+|channel/[^/]+|c/[^/]+|user/[^/]+)(?:/(?:videos|shorts|streams|playlists|featured))?/?$")
-# A playlist's own picture on YouTube. YouTube serves it only under the signed link it lists it with; yt-dlp adds a
-# widest form without the signature, which YouTube answers with a grey placeholder.
+# A playlist's own picture on YouTube. YouTube serves it only under the signed link it lists it with, whose signature
+# holds the time it stops working, within a day; yt-dlp adds a widest form without the signature, which YouTube
+# answers with a grey placeholder.
+_PLAYLIST_PICTURE = re.compile(r"^https?://i\d?\.ytimg\.com/s_p/")
 _UNSIGNED_PLAYLIST_PICTURE = re.compile(r"^https?://i\d?\.ytimg\.com/s_p/[^?]+$")
 _LIVE_STATUSES = {"is_live", "is_upcoming", "was_live", "post_live"}
 
@@ -45,14 +47,17 @@ def channel_root(url: str) -> str | None:
 
 
 def picture(info: dict) -> str | None:
-    """The picture yt-dlp names for a video or playlist, as it names it."""
-    if info.get("thumbnail"):
-        return info["thumbnail"]
-    candidates = [
-        t for t in info.get("thumbnails") or []
+    """The picture yt-dlp names for a video or playlist, as it names it. A playlist's own picture stops working within
+    a day, so a playlist whose videos yt-dlp lists gets its first video's still instead, which stays."""
+    named = [info["thumbnail"]] if info.get("thumbnail") else [
+        t["url"] for t in info.get("thumbnails") or []
         if isinstance(t, dict) and t.get("url") and not _UNSIGNED_PLAYLIST_PICTURE.match(t["url"])
     ]
-    return candidates[-1]["url"] if candidates else None
+    lasting = [url for url in named if not _PLAYLIST_PICTURE.match(url)]
+    if lasting:
+        return lasting[-1]
+    first = next((entry for entry in info.get("entries") or [] if isinstance(entry, dict)), None)
+    return (picture(first) if first is not None else None) or (named[-1] if named else None)
 
 
 def _count(number: int) -> str:

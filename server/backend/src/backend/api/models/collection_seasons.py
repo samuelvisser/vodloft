@@ -3,7 +3,7 @@ playlists are seasons."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
 from pydantic import AliasChoices, AliasPath, Field
 
@@ -126,7 +126,8 @@ class CollectionSeasonsAPIRead(ResponseBase):
     """Those types of list named together, such as albums and playlists."""
     creator_list_names: NamesAPIRead
     """The same lists as the creator's, such as creator playlists or artist albums, so they read apart from the
-    collection's own seasons, which a YouTube channel collection also calls playlists."""
+    collection's own seasons, which a YouTube channel collection also calls playlists. A collection without a link of
+    its own calls them links: the ones the user gave it."""
     loose_season: str
     """The name of the season of the videos in none of the lists, such as Videos, Singles or Tracks."""
     site_order: bool = False
@@ -191,6 +192,10 @@ class CollectionSeasonsAPIUpdate(RequestBase):
     playlists: list[CollectionListChangeAPIIn] = Field(default_factory=list, max_length=5000)
     removed_links: list[int] = Field(default_factory=list, max_length=5000)
     """Links the user added that they remove again, by id."""
+    added_links: list[Annotated[str, Field(min_length=1, max_length=2000, pattern=r"^https?://")]] = Field(
+        default_factory=list, max_length=200,
+    )
+    """Links the user adds to a collection that holds only what its links have, saved with the rest."""
     removed_seasons: list[int] = Field(default_factory=list, max_length=2000)
     """Seasons the user removes, by id. Their videos go where the settings put them, which can be a season like it."""
 
@@ -199,3 +204,11 @@ class CollectionListAddAPIIn(RequestBase):
     """A link the user adds to a collection that holds only its link seasons: a playlist, channel or video."""
 
     url: str = Field(min_length=1, max_length=2000, pattern=r"^https?://")
+
+
+class AddedLinkAPIRead(ResponseBase):
+    """A link the user adds, as VODLoft found it. Nothing is saved until the Seasons dialog is."""
+
+    url: str
+    title: str
+    image_url: Optional[str] = None
