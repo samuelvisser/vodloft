@@ -7,6 +7,7 @@ import json
 import logging
 import re
 from collections import Counter
+from dataclasses import replace
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import ClassVar
@@ -16,7 +17,7 @@ import requests
 
 from progress_plan import PlanTracker, StageSpec
 
-from ...contract import CreatorDetails, SearchResults, SectionKind, SectionRef
+from ...contract import CollectionDetails, CreatorDetails, SearchResults, SectionKind, SectionRef
 from ... import ytdlp_runner as runner
 from .. import sites, soundcloud_search, thumbnails
 from ..site_contracts.soundcloud import ALBUM_LIST, PLAYLIST_LIST
@@ -30,6 +31,8 @@ _PAGE_TIMEOUT_SECONDS = 15
 _BROWSER = "Mozilla/5.0"
 # SoundCloud's own pages.
 _HOSTS = frozenset({"soundcloud.com", "www.soundcloud.com", "m.soundcloud.com"})
+# What yt-dlp adds to the name of a SoundCloud account's page, such as " (All)" or " (Tracks)".
+_PAGE_SUFFIX = re.compile(r" \((?:All|Tracks|Albums|Playlists|Reposts|Likes|Spotlight)\)$")
 _OG_IMAGE = re.compile(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"')
 # What SoundCloud's page knows about the account, for its own script.
 _HYDRATION = re.compile(r"window\.__sc_hydration\s*=\s*(\[.*?\]);\s*</script>", re.S)
@@ -135,10 +138,12 @@ class ArtistImplementation(OtherSitesImplementation):
         """The artist's picture and banner, where the Site shows ones that yt-dlp does not give."""
         return None, None
 
-    def collection_picture(self, url: str) -> str | None:
-        """A collection of all the artist's music is pictured by the artist's picture."""
+    def complete_collection(self, details: CollectionDetails, url: str) -> CollectionDetails:
+        """A collection of all the artist's music is pictured by the artist's picture, which yt-dlp leaves out."""
         root = self.creator_root(url)
-        return self.pictures(root)[0] if root and self.is_creator_page(url) else None
+        if details.image_url is None and root and self.is_creator_page(url):
+            return replace(details, image_url=self.pictures(root)[0])
+        return details
 
     def music(self, sections: list[SectionRef]) -> dict:
         """Whether the creator is a music artist, and how sure the Site is."""
@@ -255,6 +260,15 @@ class SoundCloudImplementation(ArtistImplementation):
 
     def avatar(self, root: str) -> str | None:
         return self.pictures(root)[0]
+
+    def complete_collection(self, details: CollectionDetails, url: str) -> CollectionDetails:
+        """yt-dlp names an account's page after the account and the page, such as "Flume (All)" or "Flume (Tracks)";
+        the collection is the account's, so it takes the account's own name."""
+        details = super().complete_collection(details, url)
+        if not self.is_creator_page(url):
+            return details
+        name = _PAGE_SUFFIX.sub("", details.title)
+        return replace(details, title=name, author_name=details.author_name or name)
 
     def pictures(self, root: str) -> tuple[str | None, str | None]:
         """The account's profile picture and banner, which yt-dlp leaves out. Its page shares the picture as its

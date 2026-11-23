@@ -87,9 +87,10 @@ class OtherSitesImplementation:
         when the link belongs to no creator VODLoft knows on the Site."""
         return None
 
-    def collection_picture(self, url: str) -> str | None:
-        """The picture of a collection of the link that yt-dlp gives none for, such as an artist's account."""
-        return None
+    def complete_collection(self, details: CollectionDetails, url: str) -> CollectionDetails:
+        """The collection of the link as yt-dlp describes it, with what yt-dlp leaves out or names its own way filled
+        in, such as an artist account's name and picture."""
+        return details
 
     def is_creator_page(self, url: str) -> bool:
         """Whether the link stands for all of a creator's uploads, so that a collection of it can make the creator's

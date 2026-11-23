@@ -124,7 +124,7 @@ def test_a_soundcloud_artists_albums_are_told_from_their_playlists(monkeypatch):
     assert (details.music, details.music_known) == (True, False)
 
 
-def test_a_collection_of_a_soundcloud_artists_music_is_pictured_by_the_artist(monkeypatch):
+def test_a_collection_of_a_soundcloud_artists_music_is_named_and_pictured_by_the_artist(monkeypatch):
     # yt-dlp gives an account's page of all its tracks no picture, so the account's own picture stands in for it.
     from sources.ytdlp.source import YtDlpSource
 
@@ -134,6 +134,18 @@ def test_a_collection_of_a_soundcloud_artists_music_is_pictured_by_the_artist(mo
     })
     details = source.collection_details("https://soundcloud.com/flume")
 
+    # yt-dlp names the page "Flume (All)"; the collection is the account's, so it takes the account's name.
+    assert (details.title, details.author_name) == ("Flume", "Flume")
     assert details.image_url == "https://i1.sndcdn.com/avatars-flume-t500x500.jpg"
-    assert _implementation("https://soundcloud.com/flume/sets/palaces").collection_picture(
-        "https://soundcloud.com/flume/sets/palaces") is None
+
+
+def test_an_album_of_a_soundcloud_artist_keeps_its_own_name_and_picture(monkeypatch):
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_info", lambda url, *args, **kwargs: {
+        "_type": "playlist", "id": "palaces", "title": "Palaces (All)", "webpage_url": url,
+    })
+    details = source.collection_details("https://soundcloud.com/flume/sets/palaces")
+
+    assert (details.title, details.image_url) == ("Palaces (All)", None)
