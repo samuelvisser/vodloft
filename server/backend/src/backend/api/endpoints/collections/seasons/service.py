@@ -171,7 +171,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
     return CollectionSeasonsAPIRead.model_validate(_View(
         collection=collection,
         seasons=[
-            _Season(season, counts.get(season.id, 0), by_season.get(season.id, []), season_removable(collection, season, with_parts))
+            _Season(season, counts.get(season.id, 0), by_season.get(season.id, []), season_removable(season, with_parts))
             for season in sorted(collection.seasons, key=lambda season: season.index)
         ],
         link_seasons_offered=offers_link_seasons(collection),
@@ -285,7 +285,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     removed = set(body.removed_seasons)
     with_parts = seasons_with_parts(s, collection)
     fixed = next((
-        season for season_id, season in seasons.items() if season_id in removed and not season_removable(collection, season, with_parts)
+        season for season_id, season in seasons.items() if season_id in removed and not season_removable(season, with_parts)
     ), None)
     if removed - set(seasons) or fixed is not None:
         raise ServiceError(

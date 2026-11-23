@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from backend.api.models.base import RequestBase, ResponseBase
+from backend.types.season_types import SeasonOrigin
 
 
 # ---------- Strict input (create/update) ----------
@@ -40,6 +41,8 @@ class _SeasonAPIBaseOut(ResponseBase):
     slug: str
     season_type: str
     season_number: int
+    origin: SeasonOrigin
+    """Where the season came from: the Site's own, one of its lists, or made by VODLoft."""
 
 
 class SeasonAPIRead(_SeasonAPIBaseOut):

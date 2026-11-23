@@ -32,7 +32,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "e3d9539a8be1"
+HEAD_REVISION = "8a47bfd00213"
 
 
 @pytest.fixture
@@ -2260,4 +2260,44 @@ def test_a_playlist_takes_the_season_named_after_it_that_the_old_creators_left_w
         # playlist whose season holds episodes is switched on.
         assert connection.execute(text("SELECT id, season_id, enabled FROM collection_lists ORDER BY id")).all() == [
             (1, 1, 1), (2, 2, 0), (3, None, 0), (4, None, 0), (5, None, 0),
+        ]
+
+
+def test_each_season_learns_whether_its_site_a_list_or_vodloft_made_it(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "e3d9539a8be1")
+    with engine.begin() as connection:
+        # A Daily Wire show, a YouTube channel with a playlist, and a SoundCloud album made from one list.
+        for collection_id, source_key, kind in ((1, "dailywire", "channel"), (2, "ytdlp", "channel"), (3, "ytdlp", "list")):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order, link_seasons, kind) VALUES (:id, 'uuid-' || :id, "
+                "'c' || :id, 'C', 'https://example.test/' || :id, 'free', 'series', 'seasonal', 'Host', 'host', :source, "
+                "'oldest_first', 'all', :kind)"
+            ), {"id": collection_id, "source": source_key, "kind": kind})
+        seasons = (
+            (1, 1, "season-1", False), (2, 1, "2024", False), (3, 1, "videos", True),
+            (4, 2, "vlogs", False), (5, 2, "2023", False), (6, 2, "videos", True), (7, 2, "a-long-video", False),
+            (8, 3, "the-album", False),
+        )
+        for season_id, collection_id, slug, loose in seasons:
+            connection.execute(text(
+                "INSERT INTO seasons (id, collection_id, \"index\", slug, name, season_type, season_number, loose) "
+                "VALUES (:id, :collection, :id, :slug, :slug, 'normal', :id, :loose)"
+            ), {"id": season_id, "collection": collection_id, "slug": slug, "loose": loose})
+        connection.execute(text(
+            "INSERT INTO collection_lists (id, collection_id, ref, source_key, url, title, enabled, status, season_id) "
+            "VALUES (1, 2, 'PL1', 'ytdlp', 'https://example.test/PL1', 'VLOGS', true, 'known', 4)"
+        ))
+
+    command.upgrade(config, "8a47bfd00213")
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id, origin FROM seasons ORDER BY id")).all() == [
+            (1, "site"), (2, "vodloft"), (3, "vodloft"),
+            (4, "list"), (5, "vodloft"), (6, "vodloft"), (7, "vodloft"),
+            (8, "list"),
         ]

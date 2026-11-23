@@ -61,6 +61,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Collection, Episode, Season
 from backend.db.core import run_write_transaction
 from backend.services.media_access import lock_refused
+from backend.types.season_types import SeasonOrigin
 from backend.services.notifications.emitters import link_seasons_found
 from backend.services.season_order import arrange_seasons
 from backend.services.link_seasons import (
@@ -240,7 +241,7 @@ class _Placer(SeasonFinder):
             # A season picked when the collection was added, before VODLoft knew its number.
             season.season_number = ref.number
         if season is None:
-            season = self.create(slug=ref.slug, name=ref.name, number=ref.number)
+            season = self.create(slug=ref.slug, name=ref.name, number=ref.number, origin=SeasonOrigin.SITE)
         return season
 
     def part_identifier(self, season: Season, details: VideoDetails, number: int) -> str:

@@ -142,6 +142,11 @@ def test_a_playlist_follows_the_year_it_started_in_with_a_season_per_year(source
     assert _seasons(session) == [
         ("2024", 1, ["a"]), ("2025", 2, ["b"]), ("The Tour", 3, ["c"]), ("2026", 4, ["d"]),
     ]
+    # A playlist's season came from a list, a season per year from VODLoft.
+    from backend.db.models import Season
+    assert {season.name: season.origin for season in session.query(Season)} == {
+        "2024": "vodloft", "2025": "vodloft", "The Tour": "list", "2026": "vodloft",
+    }
 
 
 def test_a_video_in_two_playlists_goes_to_the_one_that_comes_first(source, session):
@@ -740,19 +745,21 @@ def test_a_removed_season_of_a_list_or_a_leftover_season_goes_to_the_seasons_the
     assert [(name, episodes) for name, _number, episodes in _seasons(session)] == [("Videos", ["b"]), ("One", ["a"])]
 
 
-def test_a_season_the_site_has_itself_is_not_removable(source, session, monkeypatch):
+def test_a_season_the_site_has_itself_is_not_removable(source, session):
     from backend.api.endpoints.collections.seasons import service
     from backend.db.models import Season
     from backend.services.errors import ServiceError
-    from sources import Feature
+    from backend.types.season_types import SeasonOrigin
 
     source.videos = [_video("a", 2024)]
     source.lists = []
     source.items = {}
     collection = _collection(session, mode="selected", loose="one_season")
     _index(session, collection, source)
-    monkeypatch.setattr(type(source), "features", frozenset({*type(source).features, Feature.OWN_SEASONS}))
-    session.add(Season(collection_id=collection.id, index=99, slug="season-1", name="Season 1", season_number=1))
+    session.add(Season(
+        collection_id=collection.id, index=99, slug="season-1", name="Season 1", season_number=1,
+        origin=SeasonOrigin.SITE.value,
+    ))
     session.commit()
 
     view = service.seasons_view(session, "creator")
