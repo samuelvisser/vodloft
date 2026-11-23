@@ -594,7 +594,6 @@ export default function CollectionPage() {
     }] : []),
     ...(sourceControls(collection).metadataRefresh ? [{
       label: `Refresh info from ${openOnName}`,
-      description: `Looks every ${words.episode.singular} up again`,
       icon: faIcon('fass', 'clipboard-list') as [string, string],
       disabled: metadataRefreshBusy,
       disabledReason: metadataRefreshDisabledReason,
@@ -621,7 +620,6 @@ export default function CollectionPage() {
     },
     {
       label: 'Write info into files',
-      description: 'Updates the tags and NFO files of downloads',
       icon: faIcon('fass', 'file-lines'),
       disabled: metadataRewriteDisabledReason !== undefined,
       disabledReason: metadataRewriteDisabledReason,
