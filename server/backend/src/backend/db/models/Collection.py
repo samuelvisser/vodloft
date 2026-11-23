@@ -186,11 +186,12 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
 
     @property
     def link_image_path(self) -> Optional[str]:
-        """The picture of the first link season that has one, for a collection without a link of its own, whose own
-        pictures come from no Site."""
+        """For a collection without a link of its own, whose own pictures come from no Site, the picture of the link
+        season the user chose for it, or else of the first one that has one."""
         if self.sharing_url is not None:
             return None
-        return next((link.image_path for link in self.lists if link.image_path), None)
+        chosen = [link for link in self.lists if link.picture]
+        return next((link.image_path for link in (*chosen, *self.lists) if link.image_path), None)
 
     def __repr__(self) -> str:
         return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

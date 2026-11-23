@@ -116,6 +116,7 @@
 .seasons-dialog-links li.seasons-dialog-added { display: flex; align-items: center; gap: .6rem; }
 .seasons-dialog-added .seasons-dialog-link-copy > span { overflow-wrap: anywhere; }
 .seasons-dialog-added.is-removed b { text-decoration: line-through; opacity: .6; }
+.seasons-dialog-added .seasons-dialog-picture { flex: none; font-size: .85em; opacity: .75; }
 .seasons-dialog-add-link { display: flex; gap: .5rem; align-items: center; }
 .seasons-dialog-add-link .input { flex: 1 1 auto; min-width: 0; }
 
