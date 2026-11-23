@@ -106,7 +106,8 @@ export const CollectionSeasonsReadSchema = z.object({
     /** Those types of list named together, such as albums and playlists. */
     sectionListNames: NamesSchema,
     /** The same lists as the creator's, such as creator playlists or artist albums, so they read apart from the
-     * collection's own seasons, which a YouTube channel collection also calls playlists. */
+     * collection's own seasons, which a YouTube channel collection also calls playlists. A collection without a link
+     * of its own calls them links: the ones the user gave it. */
     creatorListNames: NamesSchema,
     /** The season of the videos in none of the lists, such as Videos, Singles or Tracks. */
     looseSeason: z.string(),
@@ -147,6 +148,8 @@ export const CollectionSeasonsFormSchema = z.object({
     })).default([]),
     /** Links you added that go when you save. */
     removedLinks: z.array(z.number()).default([]),
+    /** Links you add, which are saved, and listed, when you save. */
+    addedLinks: z.array(z.object({url: z.string(), title: z.string(), imageUrl: z.string().nullable()})).default([]),
     /** Seasons that are deleted when you save. */
     removedSeasons: z.array(z.number()).default([]),
 })
@@ -155,6 +158,9 @@ export const CollectionSeasonsFormSchema = z.object({
 export const LinkSeasonAddFormSchema = z.object({
     url: z.string().trim().min(1, 'Paste a link').regex(/^https?:\/\//, 'Paste a link starting with https://').default(''),
 })
+/** A link you add, as VODLoft found it; nothing is saved until the Seasons dialog is. */
+export const AddedLinkReadSchema = z.object({url: z.string(), title: z.string(), imageUrl: z.string().nullable()})
+export type AddedLinkRead = z.infer<typeof AddedLinkReadSchema>
 export type LinkSeasonAddFormIn = z.input<typeof LinkSeasonAddFormSchema>
 export type LinkSeasonAddFormOut = z.output<typeof LinkSeasonAddFormSchema>
 export type CollectionSeasonsFormIn = z.input<typeof CollectionSeasonsFormSchema>
@@ -178,6 +184,7 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
             isDefault: playlist.isDefault,
         })),
         removedLinks: [],
+        addedLinks: [],
         removedSeasons: [],
     }
 }

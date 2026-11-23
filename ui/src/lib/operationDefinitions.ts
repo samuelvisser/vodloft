@@ -151,6 +151,8 @@ function invalidateCollectionStructure(
   removeSeasonsFromStorage(collectionSlug)
   invalidations.push(
     ['seasons', collectionSlug],
+    // The Seasons dialog, where a link gets its season once its videos are listed.
+    ['collection', collectionSlug, 'seasonSettings'],
   )
 }
 
