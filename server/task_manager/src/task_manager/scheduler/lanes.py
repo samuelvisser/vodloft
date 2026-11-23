@@ -14,10 +14,14 @@ class TaskLane(StrEnum):
     they never crowd out other work or a cancel of that same bulk action."""
     METADATA = "metadata"
     """A metadata refresh queues one task per episode: a few at a time."""
+    INTERACTIVE = "interactive"
+    """Work a person started and is watching, such as applying an import: a lane of its own, so a full
+    default pool of background checks never holds it back."""
     WATCHDOG = "watchdog"
     """The stalled-work watchdog, which must run while every other pool is full."""
 
 
 BULK_WORKERS = 1
 METADATA_WORKERS = 3
+INTERACTIVE_WORKERS = 2
 WATCHDOG_WORKERS = 1

@@ -233,3 +233,21 @@ def test_critical_dispatch_holds_pause_before_job_runs(monkeypatch):
     assert job_id == "critical-job"
     assert captured["kwargs"]["_scheduled_work_pause_token"] == "pause-token"
     assert "released" not in captured
+
+
+def test_an_import_runs_in_the_interactive_lane_beside_a_full_default_pool(monkeypatch):
+    import task_manager.scheduler.scheduler as scheduler_module
+    import task_manager.tasks.workers.import_run  # noqa: F401  (registers the task)
+    from task_manager.scheduler.lanes import INTERACTIVE_WORKERS, TaskLane
+
+    settings = SimpleNamespace(
+        timezone="UTC",
+        scheduler=SimpleNamespace(enabled=False, max_workers=3),
+        download_settings=SimpleNamespace(max_concurrent_downloads=4),
+    )
+    monkeypatch.setattr(scheduler_module, "get_settings", lambda: settings)
+
+    scheduler = scheduler_module._new_scheduler()
+
+    assert scheduler._executors[TaskLane.INTERACTIVE]._pool._max_workers == INTERACTIVE_WORKERS
+    assert scheduler_module._executor_alias_for_task("import_run") == TaskLane.INTERACTIVE

@@ -19,7 +19,7 @@ from backend.db.datetime_types import utc_datetime
 from config import get_settings
 from config.network import is_no_internet_error
 from downloader import MediaUnavailableError
-from .lanes import BULK_WORKERS, METADATA_WORKERS, WATCHDOG_WORKERS, TaskLane
+from .lanes import BULK_WORKERS, INTERACTIVE_WORKERS, METADATA_WORKERS, WATCHDOG_WORKERS, TaskLane
 
 _scheduler: Optional[AsyncIOScheduler] = None
 _critical_scheduler: Optional[AsyncIOScheduler] = None
@@ -213,6 +213,7 @@ def _new_scheduler(loop: asyncio.AbstractEventLoop | None = None) -> AsyncIOSche
             TaskLane.DOWNLOADS: ThreadPoolExecutor(max_workers=download_workers),
             TaskLane.BULK: ThreadPoolExecutor(max_workers=BULK_WORKERS),
             TaskLane.METADATA: ThreadPoolExecutor(max_workers=METADATA_WORKERS),
+            TaskLane.INTERACTIVE: ThreadPoolExecutor(max_workers=INTERACTIVE_WORKERS),
             TaskLane.WATCHDOG: ThreadPoolExecutor(max_workers=WATCHDOG_WORKERS),
         },
     }
