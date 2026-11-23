@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.api.models.collection import CollectionAPIReadView
 from backend.db.models import Episode, Collection
+from backend.utils.helpers import year_range
 
 
 @dataclass(frozen=True)
@@ -52,10 +53,9 @@ def _to_view(
     min_published_date,
     max_published_date,
 ) -> CollectionAPIReadView:
-    years = (
-        f"{min_published_date.year}-{max_published_date.year}"
-        if min_published_date and max_published_date
-        else ""
+    years = year_range(
+        min_published_date.year if min_published_date else None,
+        max_published_date.year if max_published_date else None,
     )
     return CollectionAPIReadView.model_validate(_CollectionViewSource(
         collection=collection,

@@ -35,6 +35,17 @@ type CollectionTileProps = {
     selection?: {chosen: boolean, onToggle: () => void}
 }
 
+/** A card's stats on one line, most important first: the parts that do not fit are left out from the end, and the
+ *  tooltip has them all. */
+export function TileStats({parts}: {parts: (string | null | undefined)[]}) {
+    const shown = parts.filter((part): part is string => !!part)
+    return (
+        <span className="library-tile-meta library-tile-stats" title={shown.join(' • ')}>
+            {shown.map((part) => <span key={part}>{part}</span>)}
+        </span>
+    )
+}
+
 /** A collection as the Library shows it: square artwork, its title, a line under it, and its episodes and years. */
 export default function CollectionTile({collection, subtitle, showSource = true, selection}: CollectionTileProps) {
     // The tile is square, so square artwork comes first when a Source has it.
@@ -58,10 +69,7 @@ export default function CollectionTile({collection, subtitle, showSource = true,
                 <span className="library-tile-status">
                     {/* A collection that is still being indexed has no episodes yet, only progress. */}
                     {!(indexing && collection.episodeCount === 0) && (
-                        <span className="library-tile-meta">
-                            <span>{wordsFor(collection).count(collection.episodeCount)}</span>
-                            {collection.years && <span>{collection.years}</span>}
-                        </span>
+                        <TileStats parts={[wordsFor(collection).count(collection.episodeCount), collection.years]}/>
                     )}
                     {collection.id !== undefined && (
                         <CollectionIndexingProgress

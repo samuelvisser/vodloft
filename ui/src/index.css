@@ -2190,6 +2190,10 @@ div[class$="-multiValueRemove"]:hover { background: rgba(14, 165, 233, 0.25) !im
 .library-tile-meta { display: flex; flex-wrap: wrap; gap: 0 4px; color: var(--muted); font-size: 12px; }
 .library-tile-meta > span { white-space: nowrap; }
 .library-tile-meta > span + span::before { content: "\2022"; margin-right: 4px; }
+/* A card's stats stay on one line: a part that does not fit wraps onto a second line that is clipped away, so the
+   line loses its last, least important parts whole instead of growing. A first part too long by itself ends in an ellipsis. */
+.library-tile-stats { height: 1.4em; overflow: hidden; line-height: 1.4; }
+.library-tile-stats > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .library-tile-status .library-collection-indexing { margin-top: 0; }
 
 .library-empty {
