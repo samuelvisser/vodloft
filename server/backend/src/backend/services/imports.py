@@ -1194,6 +1194,9 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
         site = get_source(collection.source_key).site_for(wanted.url)
         collection.lists.append(CollectionList(
             ref=ref, url=wanted.url, title=wanted.title or ref, site_position=position, enabled=True,
+            # A collection without a link of its own lists no playlists: every link is one the user gave it, which
+            # they see and can remove under their links.
+            added_by_user=collection.sharing_url is None,
             status=ListStatus.KNOWN.value, season=season_of(wanted.season_number, wanted.title, SeasonOrigin.LIST),
             source_key=collection.source_key, site_key=site_record(session, site).key if site is not None else None,
         ))

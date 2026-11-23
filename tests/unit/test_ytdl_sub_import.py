@@ -861,7 +861,10 @@ Jellyfin Music Videos:
         - "https://www.youtube.com/playlist?list=PLrick"
       Concerts:
         - "https://www.youtube.com/watch?v=live1"
-        - "https://www.youtube.com/watch?v=live2"
+        # A link with overrides of its own, as ytdl-sub's examples write a single video.
+        - title: "Never Gonna Give You Up (Glastonbury 2023)"
+          year: "2023"
+          url: "https://www.youtube.com/watch?v=live2"
 """
 
 
@@ -1178,3 +1181,36 @@ def test_an_import_looks_up_the_pictures_of_a_collection_of_links_after_its_writ
     session.expire_all()
     assert [link.image_path for link in collection.lists] == ["https://i.ytimg.com/pl7.jpg", None]
     assert collection.link_image_path == "https://i.ytimg.com/pl7.jpg"
+
+
+def test_an_imported_collection_of_links_lists_them_as_the_users_links(tmp_path, monkeypatch):
+    from backend.db.models import Collection
+    from backend.services import imports
+    from importer.contract import CollectionPlan, PlaylistSeasonPlan
+
+    import backend.api.endpoints.collections.router  # noqa: F401  (loads every model first)
+    import task_manager.scheduler.db  # noqa: F401
+    from backend.db import Base
+
+    engine = create_engine("sqlite+pysqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    links = Collection(
+        uuid="links", slug="links", source_key="ytdlp", title="Rick Astley", sharing_url=None, membership_level="FREE",
+        type="music", episode_identifier="seasonal", author_name="", author_slug="", kind="list",
+    )
+    session.add(links)
+    session.flush()
+    plan = CollectionPlan(
+        external_id="subscription:Rick Astley", title="Rick Astley", url="https://www.youtube.com/playlist?list=PLrick",
+        profile_external_id=None, links_only=True, link_seasons=(
+            PlaylistSeasonPlan("https://www.youtube.com/playlist?list=PLrick", "Music Videos", 1),
+            PlaylistSeasonPlan("https://www.youtube.com/watch?v=live1", "Concerts", 2),
+        ),
+    )
+
+    imports._add_link_seasons(session, links, plan)
+
+    assert [(link.ref, link.added_by_user) for link in links.lists] == [
+        ("PLrick", True), ("https://www.youtube.com/watch?v=live1", True),
+    ]
