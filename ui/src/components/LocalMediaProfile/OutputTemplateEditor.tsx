@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode} from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import {
     autocompletion,
@@ -12,7 +12,6 @@ import type {Extension} from '@codemirror/state'
 import {EditorView, type ViewUpdate} from '@codemirror/view'
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
-import ReadMore from '../../utils/ReadMore'
 import {useLocalMediaProfilePreview} from '../../lib/localMediaProfilePreview'
 import {
     type LocalMediaProfileTemplateSource,
@@ -26,7 +25,8 @@ import CustomIndexAdvisories from './CustomIndexAdvisories'
 import OpaqueOutputTemplateCode from './OpaqueOutputTemplateCode'
 import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStartFields'
 import CollectionRootNote from './CollectionRootNote'
-import {TEMPLATE_FUNCTIONS} from './outputTemplateFunctions'
+import {JINJA_FILTERS, TEMPLATE_FUNCTIONS} from './outputTemplateFunctions'
+import TemplateReference, {type ReferenceEntry} from './TemplateReference'
 import {useSetExampleEpisode} from './ExampleEpisodeContext'
 import {useProfileFit} from './ProfileFit'
 import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
@@ -77,6 +77,8 @@ type TemplateCodeEditorProps = {
     ariaLabel?: string
     /** The help and error text, when they are not the profile form's own. */
     describedBy?: string
+    /** Hears the editor once it exists, so text can be inserted at its cursor. */
+    onCreateEditor?: (view: EditorView) => void
 }
 
 type JinjaStatement = {
@@ -115,65 +117,12 @@ function filterCompletion(label: string, detail: string, info: string): Completi
 }
 
 const vodloftFilterCompletionOptions: Completion[] = TEMPLATE_FUNCTIONS.map(
-    ({name, usage, summary}) => filterCompletion(name, usage, summary),
+    ({name, usage, description}) => filterCompletion(name, usage, description),
 )
 
-const jinjaNativeFilterCompletionOptions: Completion[] = [
-    filterCompletion('abs', 'abs', 'Return the absolute value of a number.'),
-    filterCompletion('attr', 'attr(name)', 'Get an attribute from an object.'),
-    filterCompletion('batch', 'batch(linecount, fill_with=None)', 'Group items into rows with up to linecount items each.'),
-    filterCompletion('capitalize', 'capitalize', 'Capitalize the first character and lowercase the rest.'),
-    filterCompletion('center', 'center(width=80)', 'Center text in a field of the given width.'),
-    filterCompletion('count', 'count', 'Return the number of items in a value.'),
-    filterCompletion('d', "d(default_value='', boolean=False)", 'Alias for the default filter.'),
-    filterCompletion('default', "default(default_value='', boolean=False)", 'Use default_value instead of the value. VODLoft gives an unknown value as empty text, so pass boolean=true to replace empty values too.'),
-    filterCompletion('dictsort', "dictsort(case_sensitive=False, by='key', reverse=False)", 'Sort a dictionary and return key/value pairs.'),
-    filterCompletion('e', 'e', 'Alias for the escape filter.'),
-    filterCompletion('escape', 'escape', 'Escape HTML-special characters.'),
-    filterCompletion('filesizeformat', 'filesizeformat(binary=False)', 'Format a number as a human-readable file size.'),
-    filterCompletion('first', 'first', 'Return the first item in a sequence.'),
-    filterCompletion('float', 'float(default=0.0)', 'Convert a value to a floating-point number.'),
-    filterCompletion('forceescape', 'forceescape', 'Apply HTML escaping even to values already marked safe.'),
-    filterCompletion('format', 'format(*args, **kwargs)', "Fill the value, a printf-style pattern, with the arguments: '%02d' | format(3) gives 03."),
-    filterCompletion('groupby', 'groupby(attribute, default=None, case_sensitive=False)', 'Group items by an attribute.'),
-    filterCompletion('indent', 'indent(width=4, first=False, blank=False)', 'Indent lines in a string.'),
-    filterCompletion('int', 'int(default=0, base=10)', 'Convert a value to a whole number; default when it is not a number, base for another number base such as 16.'),
-    filterCompletion('items', 'items', 'Iterate over the key/value pairs in a mapping.'),
-    filterCompletion('join', "join(d='', attribute=None)", 'Join items into a string, optionally using an attribute from each item.'),
-    filterCompletion('last', 'last', 'Return the last item in a sequence.'),
-    filterCompletion('length', 'length', 'Return the number of items in a value.'),
-    filterCompletion('list', 'list', 'Convert a value to a list.'),
-    filterCompletion('lower', 'lower', 'Convert text to lowercase.'),
-    filterCompletion('map', 'map(*args, **kwargs)', 'Transform a sequence by applying a filter or reading an attribute.'),
-    filterCompletion('max', 'max(case_sensitive=False, attribute=None)', 'Return the largest item in a sequence.'),
-    filterCompletion('min', 'min(case_sensitive=False, attribute=None)', 'Return the smallest item in a sequence.'),
-    filterCompletion('pprint', 'pprint', 'Format a value for debugging.'),
-    filterCompletion('random', 'random', 'Return a random item from a sequence.'),
-    filterCompletion('reject', 'reject(*args, **kwargs)', 'Keep sequence items that fail a Jinja test.'),
-    filterCompletion('rejectattr', 'rejectattr(*args, **kwargs)', 'Keep items whose selected attribute fails a Jinja test.'),
-    filterCompletion('replace', 'replace(old, new, count=None)', 'Replace the text old with new; count replaces only the first so many.'),
-    filterCompletion('reverse', 'reverse', 'Reverse text or iterate over a sequence in reverse.'),
-    filterCompletion('round', "round(precision=0, method='common')", 'Round a number to the requested precision.'),
-    filterCompletion('safe', 'safe', 'Mark a string as safe from HTML escaping.'),
-    filterCompletion('select', 'select(*args, **kwargs)', 'Keep sequence items that pass a Jinja test.'),
-    filterCompletion('selectattr', 'selectattr(*args, **kwargs)', 'Keep items whose selected attribute passes a Jinja test.'),
-    filterCompletion('slice', 'slice(slices, fill_with=None)', 'Split a sequence into the requested number of slices.'),
-    filterCompletion('sort', 'sort(reverse=False, case_sensitive=False, attribute=None)', 'Sort a sequence.'),
-    filterCompletion('string', 'string', 'Convert a value to a string.'),
-    filterCompletion('striptags', 'striptags', 'Remove SGML or XML tags and normalize adjacent whitespace.'),
-    filterCompletion('sum', 'sum(attribute=None, start=0)', 'Add the values in a sequence.'),
-    filterCompletion('title', 'title', 'Convert text to title case.'),
-    filterCompletion('tojson', 'tojson(indent=None)', 'Serialize a value as JSON.'),
-    filterCompletion('trim', 'trim(chars=None)', 'Remove chars, or spaces when you leave it out, from the start and end.'),
-    filterCompletion('truncate', "truncate(length=255, killwords=False, end='...', leeway=None)", 'Shorten text to length characters, ending in end; killwords=true may cut a word in half, leeway lets text that is only that much too long stay whole.'),
-    filterCompletion('unique', 'unique(case_sensitive=False, attribute=None)', 'Return unique items from a sequence.'),
-    filterCompletion('upper', 'upper', 'Convert text to uppercase.'),
-    filterCompletion('urlencode', 'urlencode', 'Encode a value for use in a URL path or query.'),
-    filterCompletion('urlize', 'urlize(trim_url_limit=None, nofollow=False, target=None, rel=None, extra_schemes=None)', 'Convert URLs in text to HTML links.'),
-    filterCompletion('wordcount', 'wordcount', 'Count words in a string.'),
-    filterCompletion('wordwrap', 'wordwrap(width=79, break_long_words=True, wrapstring=None, break_on_hyphens=True)', 'Wrap text to the requested width.'),
-    filterCompletion('xmlattr', 'xmlattr(autospace=True)', 'Build an SGML/XML attribute string from a mapping.'),
-]
+const jinjaNativeFilterCompletionOptions: Completion[] = JINJA_FILTERS.map(
+    ({name, usage, description}) => filterCompletion(name, usage, description),
+)
 
 type CompletionInfoRect = {
     top: number
@@ -406,6 +355,7 @@ export function TemplateCodeEditor({
                                 id = 'mp-path',
                                 ariaLabel = 'Output path template',
                                 describedBy,
+                                onCreateEditor,
                             }: TemplateCodeEditorProps) {
     const canonicalValue = value ?? ''
     const [editorValue, setEditorValue] = useState(() => (
@@ -449,6 +399,7 @@ export function TemplateCodeEditor({
             aria-label={ariaLabel}
             aria-invalid={invalid}
             aria-describedby={describedBy ?? (invalid ? 'mp-path-error' : 'mp-path-help')}
+            onCreateEditor={onCreateEditor}
         />
     )
 }
@@ -677,79 +628,9 @@ function describeTypedCharacter(char: string): string {
     return char
 }
 
-type ReferenceEntry = {
-    code: string
-    description: string
-    readMore?: OutputTemplateVariable['readMore']
-}
-
-function variableEntry(variable: OutputTemplateVariable): ReferenceEntry {
-    return {code: `{{ ${variable.name} }}`, description: variable.description, readMore: variable.readMore}
-}
-
-/** A list of what a template can use, each with what it is. */
-function VariableReference({entries}: {entries: readonly ReferenceEntry[]}) {
-    return (
-        <dl className="output-template-variable-reference">
-            {entries.map((entry) => (
-                <div key={entry.code}>
-                    <dt><code>{entry.code}</code></dt>
-                    <dd>
-                        {entry.readMore ? (
-                            <ReadMore summary={entry.readMore.summary ?? entry.description}>
-                                {entry.readMore.paragraphs.map((paragraph) => (
-                                    <p key={paragraph} dangerouslySetInnerHTML={{__html: paragraph}} />
-                                ))}
-                            </ReadMore>
-                        ) : entry.description}
-                    </dd>
-                </div>
-            ))}
-        </dl>
-    )
-}
-
-/** VODLoft's own functions with their arguments, then the Jinja filters a template can use too. */
-function FunctionReference({offersCustomIndex}: {offersCustomIndex: boolean}) {
-    return (
-        <>
-            <p>
-                Put a function after a value with a <code>|</code>, such
-                as <code>{'{{ year | int }}'}</code>. Give it arguments in brackets, by position or by name.
-            </p>
-            <dl className="output-template-function-reference">
-                {TEMPLATE_FUNCTIONS.filter(({collectionOnly}) => offersCustomIndex || !collectionOnly).map((fn) => (
-                    <div key={fn.name}>
-                        <dt><code>{fn.usage}</code></dt>
-                        <dd>
-                            <p>{fn.summary}</p>
-                            {fn.arguments.length > 0 && (
-                                <ul>
-                                    {fn.arguments.map((argument) => (
-                                        <li key={argument.name}><code>{argument.name}</code> {argument.description}</li>
-                                    ))}
-                                </ul>
-                            )}
-                            {fn.example && (
-                                <p>Example: <code>{fn.example.code}</code> gives {fn.example.result}.</p>
-                            )}
-                        </dd>
-                    </div>
-                ))}
-            </dl>
-            <h5>Jinja filters</h5>
-            <ReadMore summary="Jinja's own filters work too, such as default, format, int, replace, lower and upper.">
-                <dl className="output-template-variable-reference">
-                    {jinjaNativeFilterCompletionOptions.map((option) => (
-                        <div key={option.label}>
-                            <dt><code>{option.detail}</code></dt>
-                            <dd>{typeof option.info === 'string' ? option.info : null}</dd>
-                        </div>
-                    ))}
-                </dl>
-            </ReadMore>
-        </>
-    )
+function referenceEntry(variable: OutputTemplateVariable): ReferenceEntry {
+    const code = `{{ ${variable.name} }}`
+    return {code, insert: code, description: variable.description, readMore: variable.readMore}
 }
 
 export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false, isCreating = false, onCollectionRoot, headerActions}: Props) {
@@ -822,24 +703,44 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
         [customVariables, mode, collectionScope],
     )
     const metadataNames = useMemo(() => new Set(customVariables.map(({name}) => name)), [customVariables])
-    const variableEntries = useMemo(
-        () => variables
-            .filter(({name}) => !metadataNames.has(name) && (mode !== 'collection' || !BUILT_IN_INDEXING_VALUES.has(name)))
-            .map(variableEntry),
+    const referenceVariables = useMemo(
+        () => variables.filter(({name}) => (
+            !metadataNames.has(name) && (mode !== 'collection' || !BUILT_IN_INDEXING_VALUES.has(name))
+        )),
         [metadataNames, mode, variables],
     )
     const builtInIndexEntries = useMemo(
-        () => variables.filter(({name}) => BUILT_IN_INDEXING_VALUES.has(name)).map(variableEntry),
+        () => variables.filter(({name}) => BUILT_IN_INDEXING_VALUES.has(name)).map(referenceEntry),
         [variables],
     )
     const customIndexEntries: ReferenceEntry[] = (indexingValues as IndexingValueEntry[]).map(({key, name, keepNumbers}) => ({
         code: `{{ '${key}' | custom_index }}`,
+        insert: `{{ '${key}' | custom_index }}`,
         description: keepNumbers ? `${name}. Keeps the numbers it gave out.` : name,
     }))
     const metadataEntries = useMemo(
-        () => variables.filter(({name}) => metadataNames.has(name)).map(variableEntry),
+        () => variables.filter(({name}) => metadataNames.has(name)).map(referenceEntry),
         [metadataNames, variables],
     )
+    const [referenceOpen, setReferenceOpen] = useState(false)
+    const closeReference = useCallback(() => setReferenceOpen(false), [])
+    const editorView = useRef<EditorView | null>(null)
+    const insertIntoTemplate = useCallback((text: string) => {
+        const view = editorView.current
+        if (!view) return
+        const {main} = view.state.selection
+        if (main.empty && main.head === 0 && view.state.doc.length > 0) {
+            // The cursor was never placed, so add to the end of the template, before its .ext.
+            const doc = view.state.doc.toString()
+            const end = doc.endsWith('.ext') ? doc.length - '.ext'.length : doc.length
+            view.dispatch({changes: {from: end, insert: text}, selection: {anchor: end + text.length}, scrollIntoView: true})
+        } else {
+            view.dispatch(view.state.replaceSelection(text), {scrollIntoView: true})
+        }
+        // On a phone the reference covers the editor, so close it to show where the text went.
+        if (window.matchMedia('(max-width: 1099px)').matches) setReferenceOpen(false)
+        else view.focus()
+    }, [])
     const [usedVariableNames, setUsedVariableNames] = useState<string[]>([])
     const [provisionalIndexingValueNames, setProvisionalIndexingValueNames] = useState<string[]>([])
     const [replacedTyped, setReplacedTyped] = useState<{mode: string, characters: string[]}>({mode: '', characters: []})
@@ -993,11 +894,19 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                         <div>
                             <label id="template-editor-heading" htmlFor={readOnly ? undefined : 'mp-path'}>Output path template</label>
                             {readOnly
-                                ? <p>Read only. Edit the media profile to change it.</p>
-                                : <p>Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>}
+                                ? <p id="mp-path-help">Read only. Edit the media profile to change it.</p>
+                                : <p id="mp-path-help">Type <code>{'{{'}</code> for variables or <code>{'{%'}</code> for Jinja statements.</p>}
                         </div>
                         <div className="template-editor-heading__actions">
                             {!readOnly && headerActions}
+                            <button
+                                type="button"
+                                className={`btn btn-small template-reference-toggle${referenceOpen ? ' is-active' : ''}`}
+                                aria-expanded={referenceOpen}
+                                onClick={() => setReferenceOpen((open) => !open)}
+                            >
+                                {referenceOpen ? 'Hide reference' : 'Reference'}
+                            </button>
                             <span className="template-language-badge">Jinja</span>
                         </div>
                     </div>
@@ -1018,6 +927,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                                         form.clearErrors('outputTemplate')
                                     }}
                                     onBlur={field.onBlur}
+                                    onCreateEditor={(view) => { editorView.current = view }}
                                 />
                             )}
                         />
@@ -1229,38 +1139,18 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                     </div>
                 </section>
 
-                <div className="help output-template-help" id="mp-path-help">
-                    <ReadMore summary="Jinja syntax and all available variables and functions.">
-                        <div className="output-template-guidance">{help}</div>
-                        <h4>Available variables</h4>
-                        <VariableReference entries={variableEntries} />
-                        {mode === 'collection' && (
-                            <>
-                                <hr className="output-template-help-divider" />
-                                <h4>Indexing values</h4>
-                                <p>Numbers for episodes. VODLoft keeps the built-in ones for every collection.</p>
-                                <h5>Built-in</h5>
-                                <VariableReference entries={builtInIndexEntries} />
-                                <h5>Custom</h5>
-                                {customIndexEntries.length > 0 ? (
-                                    <VariableReference entries={customIndexEntries} />
-                                ) : (
-                                    <p>This profile has no custom Indexing values yet. Add them with the Indexing values button.</p>
-                                )}
-                            </>
-                        )}
-                        {metadataEntries.length > 0 && (
-                            <>
-                                <hr className="output-template-help-divider" />
-                                <h4>{mode === 'video' ? 'Video metadata' : 'Collection metadata'}</h4>
-                                <VariableReference entries={metadataEntries} />
-                            </>
-                        )}
-                        <hr className="output-template-help-divider" />
-                        <h4>Functions</h4>
-                        <FunctionReference offersCustomIndex={mode === 'collection'} />
-                    </ReadMore>
-                </div>
+                {referenceOpen && (
+                    <TemplateReference
+                        mode={mode}
+                        variables={referenceVariables}
+                        builtInIndexes={mode === 'collection' ? builtInIndexEntries : []}
+                        customIndexes={customIndexEntries}
+                        metadata={metadataEntries}
+                        guidance={help}
+                        onInsert={readOnly ? undefined : insertIntoTemplate}
+                        onClose={closeReference}
+                    />
+                )}
             </div>
         </>
     )
