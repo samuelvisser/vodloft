@@ -270,7 +270,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
         outsideVideos: data.outsideVideos,
         playlists: data.playlists,
         removedLinks: data.removedLinks,
-        addedLinks: data.addedLinks.map((link) => link.url),
+        // Links you add are kept only while the collection holds only what its lists have.
+        addedLinks: data.outsideVideos === 'only' ? data.addedLinks.map((link) => link.url) : [],
         removedSeasons: data.removedSeasons,
     })
 
@@ -878,28 +879,24 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                                     ))}
                                                                 </ul>
                                                             )}
-                                                            {view.outsideVideos === 'only' ? (
-                                                                <div className="seasons-dialog-add-link">
-                                                                    <input
-                                                                        id="seasons-add-link" className="input" type="url" inputMode="url"
-                                                                        placeholder="https://…"
-                                                                        aria-invalid={!!linkForm.formState.errors.url}
-                                                                        {...linkForm.register('url')}
-                                                                        onKeyDown={(event) => {
-                                                                            if (event.key === 'Enter') {
-                                                                                event.preventDefault()
-                                                                                void addLink()
-                                                                            }
-                                                                        }}
-                                                                    />
-                                                                    <button type="button" className="btn btn-small" onClick={() => void addLink()} disabled={addingLink}>
-                                                                        <FontAwesomeIcon icon={faIcon('fass', 'plus')} aria-hidden="true"/>
-                                                                        <span>{addingLink ? 'Adding…' : 'Add'}</span>
-                                                                    </button>
-                                                                </div>
-                                                            ) : (
-                                                                <p className="seasons-dialog-muted">Save first, then add links of your own here.</p>
-                                                            )}
+                                                            <div className="seasons-dialog-add-link">
+                                                                <input
+                                                                    id="seasons-add-link" className="input" type="url" inputMode="url"
+                                                                    placeholder="https://…"
+                                                                    aria-invalid={!!linkForm.formState.errors.url}
+                                                                    {...linkForm.register('url')}
+                                                                    onKeyDown={(event) => {
+                                                                        if (event.key === 'Enter') {
+                                                                            event.preventDefault()
+                                                                            void addLink()
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <button type="button" className="btn btn-small" onClick={() => void addLink()} disabled={addingLink}>
+                                                                    <FontAwesomeIcon icon={faIcon('fass', 'plus')} aria-hidden="true"/>
+                                                                    <span>{addingLink ? 'Adding…' : 'Add'}</span>
+                                                                </button>
+                                                            </div>
                                                             {linkForm.formState.errors.url && <div className="error" role="alert">{linkForm.formState.errors.url.message}</div>}
                                                             <div className="help">
                                                                 Each link becomes {words.season.a} of its own, from any site VODLoft can read. A link is saved
@@ -968,6 +965,16 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                         </button>
                                                     )}
                                                 </div>
+                                            </div>
+                                        )}
+                                        {only && newLinks.length > 0 && (
+                                            <div className="seasons-dialog-warning" role="status">
+                                                <FontAwesomeIcon icon={faIcon('fass', 'circle-info')} aria-hidden="true"/>
+                                                <p>
+                                                    When you save, {listed(newLinks.map((link) => link.title))}
+                                                    {newLinks.length === 1 ? ` becomes ${season.a}` : ` each become ${season.a}`} here, once VODLoft
+                                                    has listed {newLinks.length === 1 ? 'its' : 'their'} {words.videos}.
+                                                </p>
                                             </div>
                                         )}
                                         <ol className="seasons-dialog-seasons">

@@ -1378,3 +1378,31 @@ def test_the_seasons_list_marks_the_channel_season_while_it_holds_the_whole_chan
     collection.channel_season = "unlisted"
     session.commit()
     assert not any(season.whole_channel for season in get_seasons_list(session, "creator"))
+
+
+def test_a_channel_collection_takes_links_in_the_same_save_that_makes_it_hold_only_its_playlists(links_source, session):
+    from backend.api.endpoints.collections.seasons.service import AddedLink, link_to_add
+    from backend.db.models import CollectionList
+    from backend.services.errors import ServiceError
+
+    source = links_source
+    source.videos = [_video("a", 2024)]
+    source.lists = [_list("PLbest", "Best Of")]
+    source.items = {"PLbest": ("a",)}
+    collection = _collection(session, mode="all")
+    session.commit()
+    _index(session, collection, source)
+
+    # It does not hold only its playlists yet, but a link can be looked up for the save that makes it.
+    assert link_to_add(session, "creator", "https://seasons.example/playlist?list=PLmine").url.endswith("PLmine")
+    session.rollback()
+    mine = AddedLink("PLmine", "https://seasons.example/playlist?list=PLmine", "Mine", None, "seasons")
+    with pytest.raises(ServiceError, match="holds only"):
+        _update(session, added=[mine])
+    session.rollback()
+
+    _update(session, added=[mine], outside_videos="only")
+    session.expire_all()
+    assert {(link.ref, link.added_by_user) for link in session.scalars(select(CollectionList))} == {
+        ("PLbest", False), ("PLmine", True),
+    }
