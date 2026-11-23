@@ -100,6 +100,9 @@ export const CollectionSeasonsReadSchema = z.object({
     listTypes: z.array(SectionTypeSchema),
     /** Those types of list named together, such as albums and playlists. */
     sectionListNames: NamesSchema,
+    /** The same lists as the creator's, such as creator playlists or artist albums, so they read apart from the
+     * collection's own seasons, which a YouTube channel collection also calls playlists. */
+    creatorListNames: NamesSchema,
     /** The season of the videos in none of the lists, such as Videos, Singles or Tracks. */
     looseSeason: z.string(),
     /** What the collection's Site calls the creator behind it, such as artist in a Music collection. */

@@ -16,6 +16,7 @@ import SimpleSelect from '../common/SimpleSelect'
 import DisabledReason from '../common/DisabledReason'
 import NewListSettings from '../common/NewListSettings'
 import {capitalized, type ListKind} from '../../types/creator'
+import type {Names} from '../../types/schemas/source'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import {BulkBar} from '../ProfileBulkEdit/BulkEditControls'
 import {
@@ -55,13 +56,8 @@ const dialogWords = (collection: CollectionWords, view: CollectionSeasonsRead | 
 /** What the collection's Site calls its lists, all its types of list together, such as "albums and playlists" on
  * SoundCloud, as the creator's: creator playlists, so they are not taken for the collection's own seasons, which a
  * YouTube channel collection also calls playlists. And the season of the videos in none of them. */
-type ListNames = {singular: string, plural: string, a: string, looseSeason: string}
-const namesOf = (view: CollectionSeasonsRead, looseSeason: string): ListNames => ({
-    singular: `${view.creatorNames.singular} ${view.sectionListNames.singular}`,
-    plural: `${view.creatorNames.singular} ${view.sectionListNames.plural}`,
-    a: `${view.creatorNames.a} ${view.sectionListNames.singular}`,
-    looseSeason,
-})
+type ListNames = Names & {looseSeason: string}
+const namesOf = (view: CollectionSeasonsRead, looseSeason: string): ListNames => ({...view.creatorListNames, looseSeason})
 
 const counted = (count: number, singular: string, plural: string) => `${count} ${count === 1 ? singular : plural}`
 

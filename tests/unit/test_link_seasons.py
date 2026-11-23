@@ -254,6 +254,10 @@ def test_the_user_renames_and_orders_the_seasons_and_a_new_one_goes_last(source,
     view = seasons_view(session, "creator")
     session.rollback()
     assert ([t.names.singular for t in view.list_types], view.loose_season, view.link_seasons_offered) == (["playlist"], "Videos", True)
+    # The Site's lists as the creator's, named by the backend, so they read apart from the collection's own seasons.
+    assert view.model_dump(by_alias=True)["creatorListNames"] == {
+        "singular": "creator playlist", "plural": "creator playlists", "a": "a creator playlist",
+    }
     videos, one = view.seasons
     body = CollectionSeasonsAPIUpdate(
         seasons=[{"id": one.id, "name": "The One"}, {"id": videos.id, "name": "Uploads"}], custom_season_order=True,

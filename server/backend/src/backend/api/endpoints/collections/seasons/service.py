@@ -81,6 +81,7 @@ class _View:
     link_seasons_offered: bool
     list_types: object
     section_list_names: Names
+    creator_list_names: Names
     loose_season: str
     site_order: bool
     words: object
@@ -168,6 +169,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
     only_with_files = set(s.scalars(
         select(MediaDownloadBase.media_item_id).where(MediaDownloadBase.media_item_id.in_(only_leaving))
     )) if only_leaving else set()
+    lists = section_list_names(collection)
     return CollectionSeasonsAPIRead.model_validate(_View(
         collection=collection,
         seasons=[
@@ -175,7 +177,8 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
             for season in sorted(collection.seasons, key=lambda season: season.index)
         ],
         link_seasons_offered=offers_link_seasons(collection),
-        list_types=collection_site(collection).types_of(SectionKind.LIST), section_list_names=section_list_names(collection),
+        list_types=collection_site(collection).types_of(SectionKind.LIST), section_list_names=lists,
+        creator_list_names=_creator_lists(collection_creator_names(collection), lists),
         loose_season=loose_season_name(collection), site_order=contract.site_order, words=collection_words(collection),
         creator_names=collection_creator_names(collection), media_names=contract.media_names_on(collection_site(collection)),
         playlists=[_Playlist(playlist, firsts.get(playlist.id), *leaving.get(playlist.id, (0, 0))) for playlist in playlists],
@@ -189,6 +192,11 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         channel_season_names=_channel_season_names(collection),
         channel_names=collection_site(collection).channel_collection_names,
     ))
+
+
+def _creator_lists(creator: Names, lists: Names) -> Names:
+    """The Site's lists as the creator's, such as creator playlists or artist albums."""
+    return Names(f"{creator.singular} {lists.singular}", f"{creator.singular} {lists.plural}", creator.article)
 
 
 def _repeated(s: Session, collection: Collection) -> int:
