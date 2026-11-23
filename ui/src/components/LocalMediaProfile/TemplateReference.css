@@ -1,0 +1,338 @@
+.template-reference {
+    --reference-bg: #ffffff;
+    --reference-soft: #f1f5f9;
+    --reference-border: #d8e1ee;
+    --reference-chip: #e2e8f0;
+    --reference-accent: #2563eb;
+    --reference-accent-soft: #dbeafe;
+    position: fixed;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 14px 16px;
+    background: var(--reference-bg);
+    color: var(--text);
+    border: 1px solid var(--reference-border);
+}
+
+@media (prefers-color-scheme: dark) {
+    .template-reference {
+        --reference-bg: #0f1828;
+        --reference-soft: #172235;
+        --reference-border: #2a3850;
+        --reference-chip: #1e2b42;
+        --reference-accent: #60a5fa;
+        --reference-accent-soft: #1e3a5f;
+    }
+}
+
+/* Wide screens: docked on the right, beside the page, which makes room for it. */
+@media (min-width: 1100px) {
+    .template-reference {
+        top: 16px;
+        right: 16px;
+        bottom: 16px;
+        width: 400px;
+        border-radius: 14px;
+        box-shadow: var(--select-menu-shadow);
+    }
+
+    .template-reference-backdrop {
+        display: none;
+    }
+
+    body.has-template-reference .content {
+        padding-right: 440px;
+    }
+
+    body.has-template-reference .template-workbench {
+        max-width: calc(100vw - 308px - 416px);
+    }
+}
+
+/* Narrow screens: a sheet over the page. */
+@media (max-width: 1099px) {
+    .template-reference {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: 56px;
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .template-reference-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 59;
+        background: rgba(2, 6, 23, 0.45);
+    }
+
+    body.has-template-reference {
+        overflow: hidden;
+    }
+}
+
+.template-reference__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.template-reference__top h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.template-reference__search {
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+.template-reference__tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 10px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--reference-border);
+    scrollbar-width: none;
+}
+
+.template-reference__tab {
+    flex: 0 0 auto;
+    padding: 7px 7px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.template-reference__tab.is-active {
+    color: var(--text);
+    border-bottom-color: var(--reference-accent);
+}
+
+.template-reference__count {
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--reference-chip);
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.template-reference__content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.template-reference code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12.5px;
+    overflow-wrap: anywhere;
+}
+
+.template-reference__note {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.template-reference__note p {
+    margin: 0 0 8px;
+}
+
+.template-reference__group {
+    margin-bottom: 12px;
+}
+
+.template-reference__group h4 {
+    margin: 0 0 4px;
+    color: var(--muted);
+    font-size: 11.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.template-reference__entries {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.template-reference__entries li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 8px;
+    padding: 5px 6px;
+    border-radius: 6px;
+}
+
+.template-reference__entries li:hover,
+.template-reference__entries li:focus-within {
+    background: var(--reference-soft);
+}
+
+.template-reference__entries li > code {
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: var(--reference-soft);
+}
+
+.template-reference__entries li:hover > code {
+    background: var(--reference-accent-soft);
+}
+
+.template-reference__entry-text {
+    flex: 1 1 150px;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.template-reference__entry-text p {
+    margin: 4px 0 0;
+}
+
+.template-reference .template-reference__insert {
+    padding: 2px 8px;
+    font-size: 12px;
+}
+
+/* Insert sits at the right of its row: always on a touch screen, on the row you point at otherwise. */
+.template-reference__entries li {
+    position: relative;
+    padding-right: 64px;
+}
+
+.template-reference__entries li .template-reference__insert {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+}
+
+@media (hover: hover) {
+    .template-reference__entries li {
+        padding-right: 6px;
+    }
+
+    .template-reference__entries li .template-reference__insert {
+        visibility: hidden;
+        box-shadow: -12px 0 10px var(--reference-soft);
+    }
+
+    .template-reference__entries li:hover .template-reference__insert,
+    .template-reference__entries li:focus-within .template-reference__insert {
+        visibility: visible;
+    }
+}
+
+.template-reference__function {
+    margin-bottom: 7px;
+    overflow: hidden;
+    border: 1px solid var(--reference-border);
+    border-radius: 10px;
+}
+
+.template-reference__function-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 11px;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.template-reference__function-head code {
+    flex: 0 0 auto;
+    font-weight: 700;
+}
+
+.template-reference__chevron {
+    flex: 0 0 10px;
+    color: var(--muted);
+    transition: transform 120ms ease;
+}
+
+.template-reference__function.is-open .template-reference__chevron {
+    transform: rotate(90deg);
+}
+
+.template-reference__summary {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.template-reference__function-body {
+    display: grid;
+    gap: 8px;
+    padding: 10px 12px 12px;
+    border-top: 1px solid var(--reference-border);
+    background: var(--reference-soft);
+    font-size: 13px;
+}
+
+.template-reference__function-body p {
+    margin: 0;
+}
+
+.template-reference__arguments {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.template-reference__arguments td {
+    padding: 6px;
+    border-bottom: 1px solid var(--reference-border);
+    vertical-align: top;
+}
+
+.template-reference__arguments td:first-child,
+.template-reference__default {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.template-reference__default {
+    color: var(--muted);
+}
+
+.template-reference__example {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--reference-border);
+    border-radius: 8px;
+    background: var(--reference-bg);
+}
+
+.template-reference__example code {
+    flex: 1 1 100%;
+}
+
+.template-reference__result {
+    flex: 1;
+    font-weight: 600;
+}

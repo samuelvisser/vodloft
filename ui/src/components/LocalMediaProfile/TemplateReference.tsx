@@ -1,0 +1,299 @@
+import {useEffect, useId, useMemo, useState, type ReactNode} from 'react'
+import {createPortal} from 'react-dom'
+import ReadMore from '../../utils/ReadMore'
+import type {LocalMediaProfileMode} from './LocalMediaProfileForm'
+import type {OutputTemplateVariable} from './outputTemplateVariables'
+import {JINJA_FILTERS, TEMPLATE_FUNCTIONS, type TemplateFunction} from './outputTemplateFunctions'
+import './TemplateReference.css'
+
+/** One thing a template can use, as the reference lists it. */
+export type ReferenceEntry = {
+    code: string
+    /** What Insert puts in the template. */
+    insert: string
+    description: string
+    readMore?: OutputTemplateVariable['readMore']
+}
+
+type TabKey = 'variables' | 'indexing' | 'metadata' | 'functions' | 'jinja'
+
+type Props = {
+    mode: LocalMediaProfileMode
+    variables: readonly OutputTemplateVariable[]
+    builtInIndexes: readonly ReferenceEntry[]
+    customIndexes: readonly ReferenceEntry[]
+    metadata: readonly ReferenceEntry[]
+    /** How templates work, at the top of the Variables tab. */
+    guidance: ReactNode
+    /** Puts text at the editor's cursor; left out when the template is read only. */
+    onInsert?: (text: string) => void
+    onClose: () => void
+}
+
+const DATE_PARTS = new Set([
+    'date', 'time', 'datetime', 'year', 'month', 'day', 'hour', 'minute', 'second', 'day_of_year', 'day_of_year_reversed',
+])
+
+/** The heading a variable is listed under, from the part of the media it describes. */
+function variableGroup(name: string, mode: LocalMediaProfileMode): string {
+    if (DATE_PARTS.has(name) || name.startsWith('episode_published_')) return 'Date and time'
+    if (mode === 'video') return name.startsWith('movie_') ? 'Movie it belongs to' : 'Video'
+    if (name.startsWith('collection')) return 'Collection'
+    if (name.startsWith('season') || name.startsWith('album_')) return 'Season'
+    if (name.startsWith('creator_') || name.startsWith('section_')) return 'Creator'
+    if (name === 'artist' || name === 'album' || name.startsWith('track_')) return 'Music'
+    return 'Episode'
+}
+
+function variableEntry(variable: OutputTemplateVariable): ReferenceEntry {
+    const code = `{{ ${variable.name} }}`
+    return {code, insert: code, description: variable.description, readMore: variable.readMore}
+}
+
+function matches(query: string, ...texts: string[]): boolean {
+    return texts.some((text) => text.toLowerCase().includes(query))
+}
+
+function EntryList({entries, onInsert}: {entries: readonly ReferenceEntry[], onInsert?: (text: string) => void}) {
+    return (
+        <ul className="template-reference__entries">
+            {entries.map((entry) => (
+                <li key={entry.code}>
+                    <code>{entry.code}</code>
+                    <div className="template-reference__entry-text">
+                        {entry.readMore ? (
+                            <ReadMore summary={entry.readMore.summary ?? entry.description}>
+                                {entry.readMore.paragraphs.map((paragraph) => (
+                                    <p key={paragraph} dangerouslySetInnerHTML={{__html: paragraph}}/>
+                                ))}
+                            </ReadMore>
+                        ) : entry.description}
+                    </div>
+                    {onInsert && (
+                        <button type="button" className="btn btn-small template-reference__insert" onClick={() => onInsert(entry.insert)}>
+                            Insert
+                        </button>
+                    )}
+                </li>
+            ))}
+        </ul>
+    )
+}
+
+function FunctionRow({fn, open, onToggle, onInsert}: {
+    fn: TemplateFunction, open: boolean, onToggle: () => void, onInsert?: (text: string) => void
+}) {
+    const bodyId = useId()
+    return (
+        <div className={`template-reference__function${open ? ' is-open' : ''}`}>
+            <button type="button" className="template-reference__function-head" aria-expanded={open} aria-controls={bodyId} onClick={onToggle}>
+                <span className="template-reference__chevron" aria-hidden="true">›</span>
+                <code>{fn.name}</code>
+                <span className="template-reference__summary">{fn.summary}</span>
+            </button>
+            {open && (
+                <div className="template-reference__function-body" id={bodyId}>
+                    <p>{fn.description}</p>
+                    <code className="template-reference__usage">{fn.usage}</code>
+                    {fn.arguments.length > 0 && (
+                        <table className="template-reference__arguments">
+                            <tbody>
+                                {fn.arguments.map((argument) => (
+                                    <tr key={argument.name}>
+                                        <td><code>{argument.name}</code></td>
+                                        <td className="template-reference__default">{argument.default}</td>
+                                        <td>{argument.description}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                    {fn.example && (
+                        <div className="template-reference__example">
+                            <code>{fn.example.code}</code>
+                            <span className="template-reference__result"><span aria-hidden="true">→ </span>{fn.example.result}</span>
+                            {onInsert && (
+                                <button type="button" className="btn btn-small template-reference__insert" onClick={() => onInsert(fn.example!.code)}>
+                                    Insert
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    )
+}
+
+/**
+ * Every variable, Indexing value and function a template can use. It docks beside the page on a wide screen,
+ * so the editor and its example output stay in view, and slides up as a sheet on a phone.
+ */
+export default function TemplateReference({mode, variables, builtInIndexes, customIndexes, metadata, guidance, onInsert, onClose}: Props) {
+    const [tab, setTab] = useState<TabKey>('variables')
+    const [query, setQuery] = useState('')
+    const [openFunction, setOpenFunction] = useState<string | null>(null)
+    const offersCustomIndex = mode === 'collection'
+    const functions = useMemo(
+        () => TEMPLATE_FUNCTIONS.filter(({collectionOnly}) => offersCustomIndex || !collectionOnly),
+        [offersCustomIndex],
+    )
+    const variableGroups = useMemo(() => {
+        const groups = new Map<string, ReferenceEntry[]>()
+        for (const variable of variables) {
+            const group = variableGroup(variable.name, mode)
+            groups.set(group, [...(groups.get(group) ?? []), variableEntry(variable)])
+        }
+        return [...groups.entries()]
+    }, [mode, variables])
+    const jinjaEntries = useMemo<ReferenceEntry[]>(
+        () => JINJA_FILTERS.map(({name, usage, description}) => ({code: usage, insert: `| ${name}`, description})),
+        [],
+    )
+    const tabs: {key: TabKey, label: string, count: number}[] = [
+        {key: 'variables', label: 'Variables', count: variables.length},
+        ...(offersCustomIndex ? [{key: 'indexing' as const, label: 'Indexing', count: builtInIndexes.length + customIndexes.length}] : []),
+        ...(metadata.length > 0 ? [{key: 'metadata' as const, label: 'Metadata', count: metadata.length}] : []),
+        {key: 'functions', label: 'Functions', count: functions.length},
+        {key: 'jinja', label: 'Jinja', count: jinjaEntries.length},
+    ]
+    const shownTab = tabs.some(({key}) => key === tab) ? tab : 'variables'
+
+    useEffect(() => {
+        const close = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') onClose()
+        }
+        document.addEventListener('keydown', close)
+        document.body.classList.add('has-template-reference')
+        return () => {
+            document.removeEventListener('keydown', close)
+            document.body.classList.remove('has-template-reference')
+        }
+    }, [onClose])
+
+    const search = query.trim().toLowerCase()
+    const found = search ? {
+        variables: variables.map(variableEntry).filter((entry) => matches(search, entry.code, entry.description)),
+        indexes: [...builtInIndexes, ...customIndexes].filter((entry) => matches(search, entry.code, entry.description)),
+        metadata: metadata.filter((entry) => matches(search, entry.code, entry.description)),
+        functions: functions.filter((fn) => matches(
+            search, fn.name, fn.summary, fn.description, ...fn.arguments.map((argument) => argument.description),
+        )),
+        jinja: jinjaEntries.filter((entry) => matches(search, entry.code, entry.description)),
+    } : null
+
+    const functionRows = (list: readonly TemplateFunction[]) => list.map((fn) => (
+        <FunctionRow
+            key={fn.name}
+            fn={fn}
+            open={openFunction === fn.name || (!!search && list.length === 1)}
+            onToggle={() => setOpenFunction((current) => current === fn.name ? null : fn.name)}
+            onInsert={onInsert}
+        />
+    ))
+
+    let content: ReactNode
+    if (found) {
+        const sections: [string, ReactNode, number][] = [
+            ['Variables', <EntryList entries={found.variables} onInsert={onInsert}/>, found.variables.length],
+            ['Indexing values', <EntryList entries={found.indexes} onInsert={onInsert}/>, found.indexes.length],
+            ['Metadata', <EntryList entries={found.metadata} onInsert={onInsert}/>, found.metadata.length],
+            ['Functions', functionRows(found.functions), found.functions.length],
+            ['Jinja filters', <EntryList entries={found.jinja} onInsert={onInsert}/>, found.jinja.length],
+        ]
+        const shown = sections.filter(([, , count]) => count > 0)
+        content = shown.length === 0
+            ? <p className="template-reference__note">Nothing matches “{query.trim()}”.</p>
+            : shown.map(([title, list, count]) => (
+                <section key={title} className="template-reference__group">
+                    <h4>{title} · {count}</h4>
+                    {list}
+                </section>
+            ))
+    } else if (shownTab === 'variables') {
+        content = (
+            <>
+                <div className="template-reference__note">{guidance}</div>
+                {variableGroups.map(([group, entries]) => (
+                    <section key={group} className="template-reference__group">
+                        <h4>{group}</h4>
+                        <EntryList entries={entries} onInsert={onInsert}/>
+                    </section>
+                ))}
+            </>
+        )
+    } else if (shownTab === 'indexing') {
+        content = (
+            <>
+                <p className="template-reference__note">Numbers for episodes. VODLoft keeps the built-in ones for every collection.</p>
+                <section className="template-reference__group">
+                    <h4>Built-in</h4>
+                    <EntryList entries={builtInIndexes} onInsert={onInsert}/>
+                </section>
+                <section className="template-reference__group">
+                    <h4>Your Indexing values</h4>
+                    {customIndexes.length > 0
+                        ? <EntryList entries={customIndexes} onInsert={onInsert}/>
+                        : <p className="template-reference__note">None yet. Add them with the Indexing values button.</p>}
+                </section>
+            </>
+        )
+    } else if (shownTab === 'metadata') {
+        content = <EntryList entries={metadata} onInsert={onInsert}/>
+    } else if (shownTab === 'functions') {
+        content = (
+            <>
+                <p className="template-reference__note">
+                    Put a function after a value with a <code>|</code>, such as <code>{'{{ year | int }}'}</code>.
+                    Give it arguments in brackets, by position or by name.
+                </p>
+                {functionRows(functions)}
+            </>
+        )
+    } else {
+        content = (
+            <>
+                <p className="template-reference__note">Jinja's own filters work too. Put them after a value with a <code>|</code>.</p>
+                <EntryList entries={jinjaEntries} onInsert={onInsert}/>
+            </>
+        )
+    }
+
+    return createPortal(
+        <>
+            <div className="template-reference-backdrop" onClick={onClose} aria-hidden="true"/>
+            <aside className="template-reference" aria-label="Template reference">
+                <div className="template-reference__top">
+                    <h3>Template reference</h3>
+                    <button type="button" className="btn btn-small" onClick={onClose}>Close</button>
+                </div>
+                <input
+                    type="search"
+                    className="input template-reference__search"
+                    placeholder="Find a variable or function"
+                    aria-label="Find a variable or function"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                />
+                {!search && (
+                    <div className="template-reference__tabs" role="tablist">
+                        {tabs.map(({key, label, count}) => (
+                            <button
+                                key={key}
+                                type="button"
+                                role="tab"
+                                aria-selected={shownTab === key}
+                                className={`template-reference__tab${shownTab === key ? ' is-active' : ''}`}
+                                onClick={() => setTab(key)}
+                            >
+                                {label}<span className="template-reference__count">{count}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+                <div className="template-reference__content">{content}</div>
+            </aside>
+        </>,
+        document.body,
+    )
+}
