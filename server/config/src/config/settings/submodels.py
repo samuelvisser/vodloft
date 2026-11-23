@@ -262,11 +262,6 @@ class YouTubeApiSettings(SubmodelBase):
         ge=0,
         description="Units a day for YouTube searches; 0 makes every search use yt-dlp",
     )
-    min_check_interval_minutes: int = Field(
-        default=10,
-        ge=10,
-        description="Shortest time between two quick checks of the same collection",
-    )
     usage_log_enabled: bool = Field(
         default=False,
         description="Keep a log file of every API call and a summary of each day, which survives restarts",

@@ -799,6 +799,30 @@ class ApiQuotaShare:
 
 
 @dataclass(frozen=True)
+class QuickCheckCollection:
+    """A collection that gets quick checks, as a Source needs it to tell what checking it costs."""
+
+    url: str
+    episode_count: int = 0
+    feeds: frozenset[str] | None = None
+    """The feeds of its channel the collection lists, or None for all that its link lists."""
+    lists_only: bool = False
+    """It holds only the seasons of its lists, so each check reads every one of its lists again."""
+    least_minutes: int = 0
+    """How long the collection waits between two checks anyway, such as six hours when it is checked less often."""
+
+
+@dataclass(frozen=True)
+class QuickCheckCost:
+    """What one quick check of a collection costs, and how long the collection waits between checks anyway."""
+
+    units: int
+    least_minutes: int = 0
+    feeds: int = 0
+    """The feeds a check reads, each a call; a collection that follows all of its channel's feeds reads them as one."""
+
+
+@dataclass(frozen=True)
 class ApiStatus:
     """The API key of a Source with ``Feature.API_KEY``, and how much of today's quota it spent."""
 
@@ -815,6 +839,8 @@ class ApiStatus:
     """The collections the key speeds up."""
     rescan_units: int = 0
     """What one full re-scan of those collections costs, so the settings can say how often each gets checked."""
+    check_costs: tuple[QuickCheckCost, ...] = ()
+    """What a quick check of each of those collections costs."""
 
 
 @dataclass(frozen=True)
@@ -1364,9 +1390,9 @@ class Source(ABC):
         Only Sources with ``Feature.PENDING_CHECKS`` implement it."""
         raise NotImplementedError(f"{self.name} cannot check pending items")
 
-    def quick_check_minutes(self, collections: Sequence[tuple[str, int]]) -> int:
-        """How often each of these collections, given as link and episode count, can
-        get a quick check. ``Feature.QUICK_CHECK`` only."""
+    def quick_check_minutes(self, collections: Sequence[QuickCheckCollection]) -> int:
+        """How often each of these collections can get a quick check, at most: a collection that waits longer
+        anyway keeps its own wait. ``Feature.QUICK_CHECK`` only."""
         raise NotImplementedError(f"{self.name} has no quick check")
 
     @property
@@ -1467,9 +1493,9 @@ class Source(ABC):
         """What the user should fix about this Source right now."""
         return []
 
-    def api_status(self, collections: Sequence[tuple[str, int]] = ()) -> ApiStatus:
-        """The API key and today's quota. ``collections`` are the link and episode count of
-        each of this Source's collections. Only Sources with ``Feature.API_KEY`` implement it."""
+    def api_status(self, collections: Sequence[QuickCheckCollection] = ()) -> ApiStatus:
+        """The API key and today's quota, and what checking ``collections``, this Source's collections, costs.
+        Only Sources with ``Feature.API_KEY`` implement it."""
         raise NotImplementedError(f"{self.name} takes no API key")
 
     def save_api_key(self, key: str) -> None:

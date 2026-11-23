@@ -433,6 +433,12 @@ class ApiQuotaShareAPIRead(ResponseBase):
     limit: int
 
 
+class QuickCheckCostAPIRead(ResponseBase):
+    units: int
+    least_minutes: int
+    feeds: int
+
+
 class ApiKeyNoteAPIRead(ResponseBase):
     """A Source whose API key would speed up collections or creators in the Library, while it has none."""
 
@@ -459,6 +465,8 @@ class ApiStatusAPIRead(ResponseBase):
     # so the settings can say how often each collection gets checked.
     collection_count: int
     rescan_units: int
+    # What one quick check of each of those collections costs, so the settings can say how often each is checked.
+    check_costs: list[QuickCheckCostAPIRead]
 
 
 class ApiKeyAPIUpdate(RequestBase):
