@@ -122,11 +122,6 @@ function DownloadStateBadge({download}: {download?: MediaDownloadViewRead}) {
     return null
 }
 
-function sameName(a: string, b: string) {
-    const plain = (name: string) => name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
-    return plain(a) === plain(b)
-}
-
 /** Lower case without accents, so "beyonce" finds "Beyoncé". */
 function foldForSearch(text: string) {
     return text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
@@ -495,10 +490,8 @@ export default function LibraryPage() {
                                 return (
                                     <CollectionTile
                                         key={collection.slug} collection={collection}
-                                        // What it is on its Site, as a creator's card says. Its author only shows on a collection that
-                                        // has no such name, unless that is its own name: beside the kind it would not fit.
-                                        subtitle={collection.kindName
-                                            || (collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null)}
+                                        // What it is on its Site, as a creator's card says. The card leaves its author out.
+                                        subtitle={collection.kindName ?? null}
                                         selection={selection.active ? {
                                             chosen: selection.selected.has(bulkKey('collection', collection.id)),
                                             onToggle: () => selection.toggle(bulkKey('collection', collection.id)),
