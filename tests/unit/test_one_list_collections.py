@@ -126,10 +126,9 @@ def test_the_migration_puts_the_year_seasons_of_a_playlist_into_one_season_in_th
     assert (cabin.episode_identifier, cabin.episode_order) == ("date_based", "oldest_first")
 
 
-def test_the_migration_gives_a_channel_without_lists_its_sites_channel_season_and_a_list_its_season(tube, session):
+def test_the_migration_leaves_a_channel_collections_settings_and_gives_a_list_its_season(tube, session):
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection
-    from sources import source_site
 
     _add("workshop", ROOT)
     _cabin(session)
@@ -137,6 +136,7 @@ def test_the_migration_gives_a_channel_without_lists_its_sites_channel_season_an
     def as_in_0_9_1(w):
         for collection in w.scalars(select(Collection)):
             collection.kind = "channel"
+            collection.link_seasons = "off"
             collection.channel_season = "unlisted"
             for season in collection.seasons:
                 season.origin = "vodloft"
@@ -145,7 +145,6 @@ def test_the_migration_gives_a_channel_without_lists_its_sites_channel_season_an
     _migrate()
 
     workshop, cabin = _collection(session, "workshop"), _collection(session, "cabin")
-    site = source_site(workshop.sharing_url, workshop.source_key)
-    assert site.link_seasons and site.channel_season.value == "everything"
-    assert workshop.channel_season == "everything"
+    assert (workshop.kind, workshop.link_seasons, workshop.channel_season) == ("channel", "off", "unlisted")
+    assert cabin.kind == "list"
     assert [season.origin for season in cabin.seasons] == ["list"]
