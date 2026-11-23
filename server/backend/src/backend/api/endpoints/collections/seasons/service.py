@@ -19,7 +19,7 @@ from backend.services.new_lists import checked_new_link_seasons
 from backend.services.link_seasons import (
     collection_list_kinds, collection_new_lists,
     LinkListing, channel_feeds, holds_only_link_seasons, is_in, leaving_outside, section_list_names,
-    lists_playlists, loose_season_name, offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists,
+    lists_playlists, loose_season_name, made_from_list, offers_link_seasons, outside_only_in, place_in_link_seasons, save_lists,
     active_lists, let_go_of_seasons, rehome_removed, season_removable, seasons_with_parts,
 )
 from backend.services.sites import collection_creator_names, collection_site, collection_words, preferred_sources, site_record
@@ -92,6 +92,7 @@ class _View:
     outside_with_files: int
     has_own_link: bool
     lists_playlists: bool
+    made_from_list: bool
     links_only_offered: bool
     only_leaving_count: int
     only_leaving_with_files: int
@@ -184,6 +185,7 @@ def seasons_view(s: Session, collection_slug: str) -> CollectionSeasonsAPIRead:
         playlists=[_Playlist(playlist, firsts.get(playlist.id), *leaving.get(playlist.id, (0, 0))) for playlist in playlists],
         outside_count=len(outside), outside_with_files=len(with_files),
         has_own_link=collection.sharing_url is not None, lists_playlists=lists_playlists(collection),
+        made_from_list=made_from_list(collection),
         links_only_offered=get_source(collection.source_key).has(Feature.LINK_COLLECTIONS),
         only_leaving_count=len(only_leaving), only_leaving_with_files=len(only_with_files),
         new_lists=collection_new_lists(collection),

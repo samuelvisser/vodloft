@@ -10,8 +10,8 @@ collection's one season now, with its videos in the list's order. Each such coll
 video of its year seasons; a seasonal one is numbered from now on, as a new one is.
 
 The list is read at its Site for its order, which is why this is not part of the database migration. A collection
-with downloaded files keeps its seasons, because its files are in their folders; the user can change it on its Edit
-page.
+with downloaded files keeps its seasons, because its files are in their folders, and is set to a season per year; the
+user can change it in its Seasons dialog.
 
 Revision ID: ec22487a3a11
 Revises: ecb0f787c77a
@@ -32,7 +32,7 @@ from backend.services.link_seasons import SeasonFinder, made_from_list
 from backend.services.season_order import arrange_seasons, season_year
 from backend.services.sites import collection_kind
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
-from backend.types.link_season_types import CollectionKind
+from backend.types.link_season_types import CollectionKind, LooseVideos
 from backend.types.season_types import SeasonOrigin, SeasonType
 from sources import UnknownSourceError, get_source
 
@@ -76,6 +76,9 @@ def _set_kinds() -> None:
                 for season in collection.seasons:
                     if season.season_type == SeasonType.NORMAL.value and not season.loose and season_year(season) is None:
                         season.origin = SeasonOrigin.LIST.value
+                # Its seasons per year stay until the list is made its one season below, and do when it can't be.
+                if any(season_year(season) is not None for season in collection.seasons):
+                    collection.loose_videos = LooseVideos.BY_YEAR.value
 
     run_write_transaction(work)
 
@@ -148,6 +151,7 @@ def _apply(collection_id: int, order: list[str]) -> None:
             identification = EpisodeIdentifier.NUMBERED
         apply_identification(s, collection, plan_identification(s, collection, identification))
         collection.episode_order = EpisodeOrder.OLDEST_FIRST.value
+        collection.loose_videos = LooseVideos.ONE_SEASON.value
         arrange_seasons(s, collection)
 
     run_write_transaction(work)

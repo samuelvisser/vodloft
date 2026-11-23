@@ -178,3 +178,93 @@ def test_an_album_collection_by_album_is_numbered_in_the_albums_order(tube, sess
     assert [(episode.source_slug, episode.episode_identifier) for episode in episodes] == [
         ("b", "ep.S01E01"), ("a", "ep.S01E02"), ("c", "ep.S01E03"),
     ]
+
+
+def _save_seasons(session, slug: str, loose: str):
+    """Save the Seasons dialog of the collection as it is, with its videos in one season or a season per year."""
+    from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
+    from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
+    from backend.db.core import run_write_transaction
+
+    view = seasons_view(session, slug)
+    session.rollback()
+    body = CollectionSeasonsAPIUpdate(
+        seasons=[{"id": x.id, "name": x.name} for x in view.seasons], custom_season_order=False,
+        link_seasons="off", loose_videos=loose,
+    )
+    return run_write_transaction(lambda s: update_seasons(s, slug, body))
+
+
+def test_a_collection_of_one_list_can_put_its_videos_in_a_season_per_year_and_back(tube, session):
+    cabin_id = _cabin(session).id
+    session.rollback()
+
+    view = _save_seasons(session, "cabin", "by_year")
+
+    assert view.made_from_list and not view.link_seasons_offered
+    assert sorted(season.name for season in view.seasons) == ["2019", "2022", "2025"]
+    session.rollback()
+    assert _seasons_of(session, cabin_id) == {"a": "2019", "b": "2025", "c": "2022"}
+
+    view = _save_seasons(session, "cabin", "one_season")
+
+    assert len(view.seasons) == 1 and view.seasons[0].year is None
+    session.rollback()
+    assert set(_seasons_of(session, cabin_id).values()) == {view.seasons[0].slug}
+
+
+def _seasons_of(session, collection_id: int) -> dict[str, str]:
+    """The slug of each video's season, by the video."""
+    from backend.db.models import Episode
+
+    return {
+        episode.source_slug: episode.season.slug
+        for episode in session.scalars(select(Episode).where(Episode.collection_id == collection_id))
+    }
+
+
+def test_a_new_video_of_a_collection_of_one_list_by_year_goes_to_its_years_season(tube, session):
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Episode
+    from task_manager.tasks.helpers.listed_collections import add_listed_episodes
+
+    cabin_id = _cabin(session).id
+    session.rollback()
+    _save_seasons(session, "cabin", "by_year")
+
+    run_write_transaction(lambda w: add_listed_episodes(w, collection_id=cabin_id, found=[_video("d", 2021)]))
+
+    session.rollback()
+    new = session.scalar(select(Episode).where(Episode.collection_id == cabin_id, Episode.source_slug == "d"))
+    assert new.season.slug == "2021"
+
+
+def test_the_migration_sets_a_list_that_keeps_its_year_seasons_to_a_season_per_year(tube, session, monkeypatch):
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, Episode, Season
+
+    cabin_id = _cabin(session).id
+
+    def as_before(w):
+        collection = w.get(Collection, cabin_id)
+        collection.kind = "channel"
+        album = collection.seasons[0]
+        for episode in w.scalars(select(Episode).where(Episode.collection_id == cabin_id)):
+            year = episode.published_date.year
+            season = Season(collection_id=cabin_id, index=year, slug=str(year), name=str(year), season_number=year)
+            w.add(season)
+            w.flush()
+            episode.season_id = season.id
+        w.flush()
+        w.delete(album)
+    run_write_transaction(as_before)
+
+    def unreadable(url):
+        raise RuntimeError("The list could not be read")
+    monkeypatch.setattr(tube, "list_items", unreadable, raising=False)
+
+    _migrate()
+
+    cabin = _collection(session, "cabin")
+    assert cabin.kind == "list" and cabin.loose_videos == "by_year"
+    assert sorted(season.slug for season in cabin.seasons) == ["2019", "2022", "2025"]
