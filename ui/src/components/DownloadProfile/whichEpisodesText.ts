@@ -150,11 +150,11 @@ export function filterSentence(
 }
 
 /** The most seasons a sentence names; the others are counted. */
-const SEASONS_NAMED = 5
+const SEASONS_NAMED = 3
 
 /**
- * What a seasons line picks: "is any of all albums or upcoming ones" when it picks every season, or else at most five
- * of them, newest first, then how many more: "is A, B, C, D, E, 4 more albums or upcoming albums".
+ * What a seasons line picks: "is any of all albums or upcoming ones" when it picks every season, or else at most three
+ * of them, newest first, then how many more: "is A, B, C, 4 more albums or upcoming albums".
  */
 function seasonsList(
     filter: FilterLike,
