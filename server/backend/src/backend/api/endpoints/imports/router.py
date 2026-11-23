@@ -17,7 +17,7 @@ from backend.services.import_uploads import (
     write_chunk,
 )
 from backend.services.imports import (
-    ImportOptions, ImportServiceError, enable_run_download_profiles, get_importer, last_run, preview, run_view,
+    ImportOptions, ImportServiceError, cancel_run, enable_run_download_profiles, get_importer, last_run, preview, run_view,
     start_run,
 )
 from backend.utils.feed_urls import request_base_url
@@ -169,6 +169,22 @@ def import_run_read(importer_key: str, run_id: int):
         if run is None or run.importer != importer.key:
             raise HTTPException(status_code=404, detail="Import run not found")
         return ImportRunAPIRead.model_validate(run_view(s, run))
+
+
+@router.post("/{importer_key}/runs/{run_id}/cancel", dependencies=_ADMIN, response_model=ImportRunAPIRead)
+def import_run_cancel(importer_key: str, run_id: int):
+    """Stop a run that has not applied its plan yet."""
+    importer = _importer(importer_key)
+    with db_session() as s:
+        run = s.get(ImportRun, run_id)
+        if run is None or run.importer != importer.key:
+            raise HTTPException(status_code=404, detail="Import run not found")
+    try:
+        cancel_run(run_id)
+    except ImportServiceError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    with db_session() as s:
+        return ImportRunAPIRead.model_validate(run_view(s, s.get(ImportRun, run_id)))
 
 
 @router.post("/{importer_key}/runs/{run_id}/enable-download-profiles", dependencies=_ADMIN, response_model=ImportRunAPIRead)

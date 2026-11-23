@@ -10,12 +10,17 @@ from task_manager.scheduler.results import TaskResult
 
 def _run(import_run_id: int) -> TaskResult:
     from backend.db.models import ImportRun
-    from backend.services.imports import WAITING, apply_run
+    from backend.services.imports import WAITING, apply_run, fail_run
 
     # The work an import starts, such as indexing each new Collection, has operations of its own. Inheriting
     # the import's operation would drop every task that starts after the import's own task has finished.
-    with operation_context(()):
-        counts = apply_run(import_run_id)
+    try:
+        with operation_context(()):
+            counts = apply_run(import_run_id)
+    except Exception as exc:
+        # The run shows why it stopped instead of running forever.
+        fail_run(import_run_id, str(exc) or type(exc).__name__)
+        raise
     with db_session() as session:
         run = session.get(ImportRun, import_run_id)
         waits_for_indexing = run is not None and run.status == WAITING
