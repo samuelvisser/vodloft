@@ -121,6 +121,9 @@ class CollectionSeasonsAPIRead(ResponseBase):
     playlists on SoundCloud."""
     section_list_names: NamesAPIRead
     """Those types of list named together, such as albums and playlists."""
+    creator_list_names: NamesAPIRead
+    """The same lists as the creator's, such as creator playlists or artist albums, so they read apart from the
+    collection's own seasons, which a YouTube channel collection also calls playlists."""
     loose_season: str
     """The name of the season of the videos in none of the lists, such as Videos, Singles or Tracks."""
     site_order: bool = False
