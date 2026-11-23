@@ -246,6 +246,11 @@ def update_seasons(
     if sorted(change.id for change in body.seasons) != sorted(seasons):
         season = collection_contract(collection.type).words.season
         raise ServiceError(f"The {season.plural} must name each {season.singular} of the collection exactly once", field="seasons")
+    if added and body.outside_videos != OutsideVideos.ONLY:
+        raise ServiceError(
+            f"Only a collection that holds only what its {section_list_names(collection).plural} have can take links you add",
+            field="outside_videos",
+        )
     for link in added:
         _add_link(s, collection, link)
     if added:
@@ -510,10 +515,9 @@ class AddedLink:
 def link_to_add(s: Session, collection_slug: str, url: str) -> _AddLookup:
     """What looking up a link the user adds needs, read before the slow lookup."""
     collection = _collection(s, collection_slug)
-    if not holds_only_link_seasons(collection):
-        raise ServiceError(
-            f"Only a collection that holds only what its {section_list_names(collection).plural} have can take links you add", field="url",
-        )
+    # The collection may hold only what its lists have from this save on; saving checks that it does.
+    if not get_source(collection.source_key).has(Feature.LINK_COLLECTIONS):
+        raise ServiceError(f"{name_in_text(collection.title)} can't take links you add", field="url")
     url = url.strip()
     # The Source the user asks first for the link's Site reads it, which may be another one than the collection's.
     source = next((source for source in sources_for(url, preferred_sources(s)) if source.has(Feature.EPISODE_LISTS)), None)
