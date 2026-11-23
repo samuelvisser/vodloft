@@ -17,6 +17,7 @@ from ... import ytdlp_runner as runner
 from .. import sites, twitch_api
 from ..site_contracts.twitch import CLIP_TAG
 from .other_sites import OtherSitesImplementation
+from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +105,7 @@ class TwitchImplementation(OtherSitesImplementation):
         if root is None:
             raise runner.YtDlpError("This link is not a Twitch channel")
         progress("Reading the channel, its videos and its collections")
-        with ThreadPoolExecutor(max_workers=len(self.feed_types) + 2, thread_name_prefix="channel-lookup") as pool:
+        with ThreadPoolExecutor(max_workers=len(self.feed_types) + 2, thread_name_prefix="channel-lookup", **keep_call_options()) as pool:
             listings = self.read_feeds(root, pool)
             playlists = pool.submit(self.playlists, root)
             page = pool.submit(self.page_facts, root)

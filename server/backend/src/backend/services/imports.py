@@ -57,6 +57,7 @@ from backend.services.import_filters import filters_from_plan
 from backend.services.local_media_profile_changes import (
     create_collection_local_media_profile, create_video_local_media_profile, update_collection_local_media_profile,
 )
+from backend.services.source_options import ytdlp_call_options
 from backend.services.local_media_profile_inputs import (
     CollectionLocalMediaProfileInput, VideoLocalMediaProfileInput, NewCollectionLocalMediaProfile,
 )
@@ -85,6 +86,7 @@ _PROFILE_FIELDS = (
     "collection_scope", "download_collection_assets", "indexing_values",
     "subtitle_languages", "subtitle_language_mode", "quality_goal", "video_codecs", "container", "audio_codec",
     "audio_language", "audio_format", "show_nfo", "kodi_safe_nfo", "save_info_json", "episode_nfo",
+    "file_date_from_publish_date",
     "episode_title_template", "episode_description_template",
 )
 _DOWNLOAD_PROFILE_FIELDS = ("delete_older_episodes",)
@@ -1429,6 +1431,12 @@ def apply_run(run_id: int) -> dict[str, int]:
 
     The upload is read before the write transaction, which only applies what it found.
     """
+    # The collections and creators it looks up are on yt-dlp's Sites.
+    with ytdlp_call_options("ytdlp"):
+        return _apply_run(run_id)
+
+
+def _apply_run(run_id: int) -> dict[str, int]:
     with get_session() as session:
         run = session.get(ImportRun, run_id)
         if run is None:

@@ -49,6 +49,7 @@ from backend.services.metadata_refresh import (
 )
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode_publication_timing import best_effort_published_date
+from backend.services.source_options import ytdlp_call_options
 from sources import ItemRef, VideoDetails, all_sources, get_source
 from task_manager.tasks.media_download_operations import dispatch_queued_media_download_operations
 from ...helpers.locked_media import open_up
@@ -175,6 +176,12 @@ class _Answers:
 def _look_up(source_key: str, refs: list[ItemRef]) -> _Answers:
     """What the Source says about these items, asking again a couple of times for the ones it could not answer."""
     source = get_source(source_key)
+    # The items of several collections are asked about together, so only the Source's own options apply.
+    with ytdlp_call_options(source):
+        return _ask(source, refs)
+
+
+def _ask(source, refs: list[ItemRef]) -> _Answers:
     answers = _Answers()
     pending = list({ref.slug: ref for ref in refs}.values())
     for attempt in range(_ATTEMPTS):

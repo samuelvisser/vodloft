@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import AliasChoices, AliasPath, Field, computed_field
+from pydantic import AliasChoices, AliasPath, Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.episode import EpisodeAPIReadView
@@ -12,12 +12,13 @@ from backend.api.models.collection import (
     CollectionIdentificationChangeItemAPIRead, CollectionIdentificationProfileFilesAPIRead,
 )
 from backend.api.models.collection_contract import CollectionWordsAPIRead
-from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead, SiteAPIRead
+from backend.api.models.source import ListKindAPIRead, NamesAPIRead, SectionTypeAPIRead, SiteAPIRead, checked_ytdlp_options
 from backend.types.creator_types import NewSectionAction, SectionTarget
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.services.unplayable_formats import options_allow_unplayable_formats
 from sources import CreatorPreset
+from sources.ytdlp_options import MAX_OPTIONS_LENGTH
 
 
 class CreatorLookupAPIRequest(RequestBase):
@@ -259,6 +260,10 @@ class CreatorAPIRead(ResponseBase):
     """Those kinds of list named together, such as albums and playlists, or lists when there are none."""
     genre: Optional[str] = None
     content_rating: Optional[str] = None
+    ytdlp_options: str = ""
+    """Your own yt-dlp options for the creator's collections, after the yt-dlp Source's and before each collection's own."""
+    takes_ytdlp_options: bool = False
+    """One of the creator's accounts or collections comes from a Source that takes yt-dlp options."""
 
 
 class CreatorPageAccountAPIRead(CreatorAccountAPIRead):
@@ -419,10 +424,17 @@ class CreatorAPIUpdate(RequestBase):
     """What the creator does with a new list, by Site and the key of its type; a type left out keeps its setting."""
     genre: Optional[str] = Field(default=None, max_length=200)
     content_rating: Optional[str] = Field(default=None, max_length=50)
+    ytdlp_options: Optional[str] = Field(default=None, max_length=MAX_OPTIONS_LENGTH)
+    """Your own yt-dlp options for the creator's collections; left out, they stay as they are."""
     moves: list[CreatorSectionMoveAPIIn] = Field(default_factory=list, max_length=200)
     """Feeds and lists that go elsewhere, with their videos."""
     renumber: dict[str, bool] = Field(default_factory=dict, max_length=200)
     """By collection slug, whether a collection the moves change numbers its episodes again; left out, it does."""
+
+    @field_validator("ytdlp_options")
+    @classmethod
+    def _validate_ytdlp_options(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else checked_ytdlp_options(value)
 
 
 class CreatorCombineAPIIn(RequestBase):

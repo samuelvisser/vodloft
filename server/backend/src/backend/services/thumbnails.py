@@ -20,6 +20,7 @@ from backend.db.models import MediaItemBase
 from config import get_settings
 from config.network import is_no_internet_error
 from sources import get_source
+from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ def take_first_frames(item_ids: Sequence[int], *, checking: Callable[[int, int],
         s.rollback()
         s.close()
     made = checked = 0
-    with ThreadPoolExecutor(max_workers=_CONCURRENT_CHECKS, thread_name_prefix="first-frame") as pool:
+    with ThreadPoolExecutor(max_workers=_CONCURRENT_CHECKS, thread_name_prefix="first-frame", **keep_call_options()) as pool:
         frames = {
             pool.submit(get_source(source_key).first_frame, url, picture): (item_id, uuid, url)
             for item_id, uuid, source_key, url, picture in items

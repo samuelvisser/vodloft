@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import JSON, ForeignKey, UniqueConstraint, false as sa_false, func
+from sqlalchemy import JSON, ForeignKey, Text, UniqueConstraint, false as sa_false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db import Base
@@ -41,6 +41,10 @@ class Creator(Base):
     )
     genre: Mapped[Optional[str]] = mapped_column(comment="Given to the creator's collections, for their NFO files")
     content_rating: Mapped[Optional[str]] = mapped_column(comment="Given to the creator's collections, for their NFO files")
+    ytdlp_options: Mapped[str] = mapped_column(
+        Text, default="", server_default="",
+        comment="Your own yt-dlp options for the creator's collections, after the yt-dlp Source's and before each collection's own",
+    )
     open_count: Mapped[int] = mapped_column(
         default=0, server_default="0", comment="How often the creator's page was opened",
     )

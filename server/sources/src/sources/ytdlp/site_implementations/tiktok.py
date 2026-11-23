@@ -10,6 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 from ...contract import CreatorDetails
 from ... import ytdlp_runner as runner
 from .other_sites import OtherSitesImplementation
+from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class TikTokImplementation(OtherSitesImplementation):
         if root is None:
             raise runner.YtDlpError("This link is not a TikTok account")
         progress("Reading the account and its videos")
-        with ThreadPoolExecutor(max_workers=len(self.feed_types), thread_name_prefix="account-lookup") as pool:
+        with ThreadPoolExecutor(max_workers=len(self.feed_types), thread_name_prefix="account-lookup", **keep_call_options()) as pool:
             listings = self.read_feeds(root, pool)
             try:
                 info = listings[self.feed_types[0].key].result()

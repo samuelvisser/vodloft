@@ -36,8 +36,9 @@ from backend.types.creator_types import SectionTarget
 from task_manager.scheduler.transactional import queue_task_after_commit
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
-from sources import CreatorDetails, Feature, ItemRef, Names, SectionKind, SectionRef, SectionType, Site, get_source
+from sources import CreatorDetails, Feature, Source, ItemRef, Names, SectionKind, SectionRef, SectionType, Site, get_source
 from backend.services.source_requests import asking_source
+from backend.services.source_options import ytdlp_call_options
 
 
 logger = logging.getLogger(__name__)
@@ -99,7 +100,11 @@ def look_up_creator(
         creators.creator_site(source_key, url)
     elif not ref:
         raise ServiceError("Give the creator's link", field="url")
-    return _shared((source_key, url or ref), lambda: get_source(source_key).creator_details(url or ref, progress))
+    def work() -> CreatorDetails:
+        with ytdlp_call_options(source_key):
+            return get_source(source_key).creator_details(url or ref, progress)
+
+    return _shared((source_key, url or ref), work)
 
 
 def look_up_creator_ahead(source_key: str, url: str) -> None:
@@ -351,6 +356,10 @@ class _CreatorRead:
         return kinds_names(creators.creator_list_kinds(self.creator))
 
     @property
+    def takes_ytdlp_options(self) -> bool:
+        return creators.takes_ytdlp_options(self.creator)
+
+    @property
     def open_count(self) -> int:
         """How often its page and its collections' pages were opened."""
         return self.creator.open_count + sum(collection.open_count for collection in self.creator.collections)
@@ -592,7 +601,7 @@ def update_creator(
         creators.rename_creator(creator, title)
         creator.title_from_user = True
     creators.update_creator_settings(s, creator, creators.CreatorSettings(
-        dict(body.new_lists), body.genre, body.content_rating,
+        dict(body.new_lists), body.genre, body.content_rating, body.ytdlp_options,
     ))
     s.flush()
     if body.moves:
@@ -642,7 +651,8 @@ def account_link(s: Session, slug: str, account_id: int) -> tuple[str, str]:
 def look_up_account(source_key: str, ref: str) -> CreatorDetails | None:
     """Who the account is at its Site now, or None when the Site can't say. Slow: call it outside a transaction."""
     try:
-        return get_source(source_key).creator_details(ref)
+        with ytdlp_call_options(source_key):
+            return get_source(source_key).creator_details(ref)
     except Exception:  # The account splits off all the same, named after the creator it leaves.
         logger.warning("Could not look up creator account %s at %s", ref, source_key, exc_info=True)
         return None
@@ -719,6 +729,11 @@ def look_up_collection_creator(
     source = get_source(link.source_key)
     if not source.has(Feature.CREATORS):
         raise ServiceError(f"{source.name} has no creators")
+    with ytdlp_call_options(link.source_key):
+        return _look_up_collection_creator(source, link, progress)
+
+
+def _look_up_collection_creator(source: Source, link: CollectionLink, progress: Callable[[str], None]) -> CreatorDetails:
     site = source.site_for(link.url)
     label = (site.creator_names if site is not None else Site.creator_names).singular
     progress(f"Finding the {label} behind the link")

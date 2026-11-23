@@ -40,6 +40,7 @@ from backend.db.datetime_types import utc_datetime
 from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode
 from backend.services.removed_downloads import back_at_source, left_source
+from backend.services.source_options import ytdlp_call_options
 from backend.services.pending_episodes import (
     PendingMinutes, checks_pending, monitors_pending, site_follows_pending, site_pending_minutes,
 )
@@ -169,7 +170,10 @@ def _due(s: Session, now: datetime) -> list[_Pending]:
 
 def _check(source_key: str, refs: list[ItemRef]):
     try:
-        return get_source(source_key).check_pending(refs)
+        # The episodes of several collections are checked together, so only the Source's own options apply.
+        source = get_source(source_key)
+        with ytdlp_call_options(source):
+            return source.check_pending(refs)
     except Exception:
         logger.warning("Could not check %d upcoming or live episodes", len(refs), exc_info=True)
         return None

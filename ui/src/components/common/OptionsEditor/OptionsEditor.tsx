@@ -27,6 +27,9 @@ const SETTING_LABELS: Record<string, string> = {
     sponsorblock: 'SponsorBlock, on the Download Profile',
     which_episodes: 'Which episodes, on the Download Profile',
     cookies: 'Cookies, per site in Settings under Sources › Authentication',
+    chapters: 'Chapters, per site on the Local Media Profile',
+    file_date: 'File date from the publish date, on the Local Media Profile',
+    download_speed: 'the download speed limit, in Settings under Downloads',
 }
 
 function statusIcon(status: OptionLine['status']) {

@@ -5,6 +5,7 @@ from collections.abc import Iterable, Mapping
 from typing import Annotated, Literal, Optional
 
 from pydantic import AliasChoices, AliasPath, Field, ValidationInfo, computed_field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.services.media_access import access_granted, access_locked, site_access
@@ -345,7 +346,8 @@ def checked_ytdlp_options(value: str) -> str:
     try:
         ytdlp_option_arguments(value)
     except OptionsRefused as exc:
-        raise ValueError(str(exc)) from None
+        # Without "Value error, " in front, so the form shows the reason as it is.
+        raise PydanticCustomError("ytdlp_options", "{reason}", {"reason": str(exc)}) from None
     return value.strip("\n")
 
 

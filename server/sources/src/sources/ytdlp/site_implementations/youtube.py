@@ -13,6 +13,7 @@ from .. import sites, thumbnails, youtube_search
 from ..youtube_api import QuotaExceededError, Share, YouTubeApiClient, YouTubeApiError, key as api_key, mapping, quota
 from ..youtube_api.catalogue import Catalogue
 from .other_sites import OtherSitesImplementation
+from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +131,7 @@ class YouTubeImplementation(OtherSitesImplementation):
             raise runner.YtDlpError("This link is not a YouTube channel")
         progress("Reading the channel, its videos and its playlists")
         main = next(type_ for type_ in self.feed_types if type_.key == "videos")
-        with ThreadPoolExecutor(max_workers=len(self.feed_types) + 2, thread_name_prefix="channel-lookup") as pool:
+        with ThreadPoolExecutor(max_workers=len(self.feed_types) + 2, thread_name_prefix="channel-lookup", **keep_call_options()) as pool:
             listings = self.read_feeds(root, pool)
             playlists = pool.submit(self.playlists, root)
             releases = pool.submit(self.has_releases, root)

@@ -35,6 +35,7 @@ from backend.services.extra_indexes import is_extra
 from backend.utils.helpers import generate_uuid
 from backend.utils.output_template import episode_output_template_values
 from backend.utils.season_ordering import number_initial_seasons
+from backend.services.source_options import ytdlp_call_options
 from sources import MAIN_TAG, Feature, VideoDetails, get_source
 from task_manager.tasks.helpers.general import datetime_to_string
 
@@ -90,7 +91,8 @@ def newest_episodes(source_key: str, url: str) -> list[VideoDetails]:
         if cached is not None and time.monotonic() - cached[0] < _CACHE_SECONDS:
             _cache.move_to_end(key)
             return cached[1]
-    found = get_source(source_key).newest_episodes(url)
+    with ytdlp_call_options(source_key):
+        found = get_source(source_key).newest_episodes(url)
     with _cache_lock:
         _cache[key] = (time.monotonic(), found)
         _cache.move_to_end(key)

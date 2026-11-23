@@ -363,7 +363,7 @@ class NpoSource(Source):
             return Playback(url=stream_url, drm_protected=True)
         # The stream keeps its audio in a rendition of its own, which yt-dlp joins to the video. The
         # stream's link is signed already, so yt-dlp needs no cookies for it.
-        return Playback(url=stream_url, kind=PlaybackKind.YTDLP, command=runner.command())
+        return Playback(url=stream_url, kind=PlaybackKind.YTDLP, command=runner.command(warnings=True))
 
     @property
     def download_streams(self) -> int | None:

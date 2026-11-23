@@ -177,5 +177,11 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         back_populates="collection", cascade="all, delete-orphan", order_by="CollectionList.site_position",
     )
 
+    @property
+    def ytdlp_option_texts(self) -> tuple[str, ...]:
+        """Your own yt-dlp options for the collection, in the order yt-dlp gets them after the Source's: its creator's,
+        then its own, so that its own win where the two disagree."""
+        return (self.creator.ytdlp_options if self.creator is not None else "", self.ytdlp_options)
+
     def __repr__(self) -> str:
         return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

@@ -475,7 +475,7 @@ export default function EditCollectionPage() {
             )}
             <div className="help" id="collection-ytdlp-options-help">
               <ReadMore summary="Exceptions for this Collection, on top of the yt-dlp Source’s options in Settings. Most Collections leave this empty.">
-                <p>These lines come after the yt-dlp options in Settings, under Sources, so for an option set in both places this Collection’s wins.
+                <p>These lines come after the yt-dlp options in Settings, under Sources{collection?.creatorSlug ? <>, and after those of <Link to={`/edit-creator/${collection.creatorSlug}`}>{collection.creatorTitle ?? 'its creator'}</Link></> : null}, so for an option set in more than one place this Collection’s wins.
                   Each line is checked with yt-dlp’s own parser, and the same options are blocked as in Settings.</p>
               </ReadMore>
             </div>

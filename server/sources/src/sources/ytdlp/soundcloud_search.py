@@ -17,6 +17,7 @@ from ..contract import LinkKind, ResolvedLink, SearchNotice, SearchResults
 from .. import ytdlp_runner as runner
 from ..cookies import site_cookies
 from .search_facts import date, facts, length, plural
+from sources.ytdlp_options import keep_call_options
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ def _accounts(entries: list[dict], avatar: Callable[[str], str | None]) -> list[
     found = {url: first[url] for url in sorted(first, key=lambda url: -tracks[url])[:_ACCOUNTS]}
     if not found:
         return []
-    with ThreadPoolExecutor(max_workers=len(found)) as pool:
+    with ThreadPoolExecutor(max_workers=len(found), **keep_call_options()) as pool:
         pictures = list(pool.map(avatar, found))
     return [
         ResolvedLink(
