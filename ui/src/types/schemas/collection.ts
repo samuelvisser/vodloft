@@ -127,6 +127,8 @@ export const CollectionReadSchema = z.looseObject({
     thumbnailLandscapePath: z.string().nullable().optional(),
     thumbnailPortraitPath: z.string().nullable().optional(),
     thumbnailSquarePath: z.string().nullable().optional(),
+    /** For a collection without a link of its own, the picture of its first link season that has one. */
+    linkImagePath: z.string().nullable().optional(),
     /** Your own yt-dlp options for this Collection, added after its Local Media Profile's. */
     ytdlpOptions: z.string().default(''),
     genre: z.string().nullable().optional(),

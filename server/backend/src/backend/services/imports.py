@@ -1364,7 +1364,42 @@ def apply_run(run_id: int) -> dict[str, int]:
     )
     if cookies_imported:
         remove_secrets(importer)
+    _picture_links(run_id)
     return counts
+
+
+def _picture_links(run_id: int) -> None:
+    """Look up the picture of each link season the run gave a collection of links, which shows it in the Library
+    and on media servers. The other program keeps none, and the lookups are slow, so they come after the run's
+    write. A link that can't be looked up keeps no picture."""
+    from sources import get_source
+
+    from backend.db.models import CollectionList
+
+    with get_session() as session:
+        links = session.execute(
+            select(CollectionList.id, CollectionList.url, CollectionList.source_key)
+            .join(Collection, Collection.id == CollectionList.collection_id)
+            .join(ImportStep, ImportStep.collection_id == Collection.id)
+            .where(ImportStep.run_id == run_id, Collection.sharing_url.is_(None), CollectionList.image_path.is_(None))
+        ).all()
+    pictures: dict[int, str] = {}
+    for link_id, url, source_key in links:
+        try:
+            image = get_source(source_key).collection_details(url).image_url
+        except Exception as exc:  # noqa: BLE001  (a picture is not worth failing the import for)
+            logger.info("No picture for the imported link %s: %s", url, exc)
+            continue
+        if image:
+            pictures[link_id] = image
+    if not pictures:
+        return
+
+    def store(session: Session) -> None:
+        for link in session.scalars(select(CollectionList).where(CollectionList.id.in_(pictures))):
+            link.image_path = link.image_path or pictures[link.id]
+
+    run_write_transaction(store, concurrent=True)
 
 
 def _apply_loaded_plan(

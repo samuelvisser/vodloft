@@ -13,6 +13,7 @@ from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CheckFrequency, CollectionType, CookiesMode, EpisodeIdentifier, EpisodeOrder
 from backend.types.link_season_types import CollectionKind, OutsideVideos
+from backend.types.resource_names import LINKS_COLLECTION_NAMES
 from config.settings.cron_validation import CronExpressionError, validate_cron_expression
 from backend.types.download_profile_types import EpisodeTagKey
 from backend.utils.helpers import generate_uuid
@@ -233,6 +234,9 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     thumbnail_landscape_path: Optional[str] = None
     thumbnail_portrait_path: Optional[str] = None
     thumbnail_square_path: Optional[str] = None
+    link_image_path: Optional[str] = None
+    """For a collection without a link of its own, the picture of its first link season that has one."""
+    link_site_keys: list[Optional[str]] = Field(default_factory=list, exclude=True)
     ytdlp_options: str = ""
     genre: Optional[str] = None
     content_rating: Optional[str] = None
@@ -290,9 +294,17 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     @property
     def kind_name(self) -> Optional[str]:
         """What the collection is on its Site, in the Site's words, as a creator is named: "YouTube channel",
-        "YouTube playlist" or "The Daily Wire show". None for a collection of links without one of its own, and while
-        its Site or kind is not known yet."""
-        if self.site is None or self.kind is None or self.sharing_url is None:
+        "YouTube playlist" or "The Daily Wire show". A collection of links without one of its own is named for its
+        links: "YouTube playlists" when they are on one Site, a custom collection otherwise. None while its kind is not
+        known yet, and while the Site of a collection with a link is not."""
+        if self.sharing_url is None and self.kind is not None:
+            # A collection of links is what its links are when they share a Site: "YouTube playlists".
+            keys = set(self.link_site_keys)
+            if len(keys) == 1 and (key := keys.pop()) is not None:
+                site = site_of(key)
+                return f"{site.name} {site.list_collection_names.plural}"
+            return LINKS_COLLECTION_NAMES.singular.capitalize()
+        if self.site is None or self.kind is None:
             return None
         site = site_of(self.site.key)
         names = site.channel_collection_names if self.kind == CollectionKind.CHANNEL.value else site.list_collection_names_of(self.list_type)
