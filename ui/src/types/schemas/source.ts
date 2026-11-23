@@ -386,6 +386,8 @@ export const CollectionDetailsReadSchema = z.object({
     seasons: z.array(z.object({slug: z.string(), name: z.string()})),
     /** The collection's Site has sound only, such as SoundCloud: a Music collection there holds tracks. */
     audioOnly: z.boolean().default(false),
+    /** What the link is: a channel, or one list, such as a playlist or an album, which is the collection's one season. */
+    kind: z.enum(['channel', 'list']),
     /** What the collection's seasons will be once added, by collection type, as its Site's defaults make them. */
     seasonsPlans: z.record(z.string(), z.string()).default({}),
 })

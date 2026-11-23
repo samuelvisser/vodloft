@@ -9,16 +9,17 @@ export type CollectionDefaults = {
 }
 
 /**
- * At a Source that lists its episodes: the type the backend guessed, from the name or because it is music. One list of
- * a creator's, such as a playlist or an album, is the collection's one season, so it is numbered in the list's order.
- * Otherwise music is seasonal, its albums being the seasons. A series is numbered by the Source's own seasons when it
- * has them, and a podcast or a series without seasons by date.
+ * At a Source that lists its episodes: the type the backend guessed, from the name or because it is music. A
+ * collection of one list, such as a playlist or an album, has the list as its one season, so it is numbered in the
+ * list's order, unless its Site gives it seasons of its own. Otherwise music is seasonal, its albums being the seasons.
+ * A series is numbered by the Source's own seasons when it has them, and a podcast or a series without seasons by date.
  */
-export function listedCollectionDefaults(details: CollectionDetailsRead, list = false): CollectionDefaults {
+export function listedCollectionDefaults(details: CollectionDetailsRead): CollectionDefaults {
     const type = CollectionTypeReg.normalize(details.probableCollectionType) ?? CollectionTypeReg.Enum.series
+    const oneList = details.kind === 'list' && !details.seasons.length
     return {
         type,
-        episodeIdentifier: list ? EpisodeIdentifierReg.Enum.numbered
+        episodeIdentifier: oneList ? EpisodeIdentifierReg.Enum.numbered
             : type === CollectionTypeReg.Enum.music || (type === CollectionTypeReg.Enum.series && details.seasons.length)
             ? EpisodeIdentifierReg.Enum.seasonal
             : EpisodeIdentifierReg.Enum.date_based,
