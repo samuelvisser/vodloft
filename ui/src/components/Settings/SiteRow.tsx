@@ -67,25 +67,30 @@ function RemoveSiteButton({siteKey, name}: {siteKey: string; name: string}) {
 }
 
 /** One Site in a card of per-Site settings: its name, domains and badges, opened to show its body.
- *  ``forceOpen`` keeps it open, such as while one of its settings shows an error. An opened ``removable`` Site,
- *  one with nothing in VODLoft, has a trash button in its header. */
-export default function SiteRow({siteKey, name, domains, badges, removable = false, forceOpen = false, bodyClassName, children}: {
+ *  ``forceOpen`` keeps it open, such as while one of its settings shows an error. The ``alone`` Site of a card
+ *  that lists only one is always open, with nothing to fold. An opened ``removable`` Site, one with nothing in
+ *  VODLoft, has a trash button in its header. */
+export default function SiteRow({siteKey, name, domains, badges, removable = false, forceOpen = false, alone = false, bodyClassName, children}: {
     siteKey: string
     name: string
     domains: readonly string[]
     badges: ReactNode
     removable?: boolean
     forceOpen?: boolean
+    alone?: boolean
     bodyClassName?: string
     children: ReactNode
 }) {
     const [open, setOpen] = useState(false)
-    const shown = open || forceOpen
+    const shown = open || forceOpen || alone
     return (
         <details
-            className={['site-settings-site', shown && removable ? 'site-settings-site--removable' : null].filter(Boolean).join(' ')}
+            className={[
+                'site-settings-site', shown && removable ? 'site-settings-site--removable' : null,
+                alone ? 'site-settings-site--alone' : null,
+            ].filter(Boolean).join(' ')}
             open={shown} onToggle={(event) => setOpen(event.currentTarget.open)}>
-            <summary>
+            <summary onClick={alone ? (event) => event.preventDefault() : undefined}>
                 <span className="site-settings-site__name">
                     <strong>{name}</strong>
                     {domains.length ? <span>{domains.join(', ')}</span> : null}

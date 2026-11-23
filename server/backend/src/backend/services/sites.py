@@ -228,17 +228,30 @@ def sites_in_use(s: Session) -> set[str]:
     return keys
 
 
-def site_removable(site_key: str, in_use: set[str]) -> bool:
-    """Whether the user can remove a Site: any Site that has nothing in VODLoft, also one VODLoft starts with, such
-    as The Daily Wire. Adding it again brings back everything its Sources offer there."""
-    return site_key not in in_use
+def sites_kept(s: Session) -> set[str]:
+    """The Sites the user can't remove: the ones with something in VODLoft, and the last Site left, since VODLoft
+    always keeps at least one."""
+    kept = sites_in_use(s)
+    known = set(s.scalars(select(Site.key)))
+    if len(known) <= 1:
+        kept |= known
+    return kept
+
+
+def site_removable(site_key: str, kept: set[str]) -> bool:
+    """Whether the user can remove a Site, of the ones ``sites_kept`` keeps: any Site that has nothing in VODLoft,
+    also one VODLoft starts with, such as The Daily Wire, while another Site stays. Adding it again brings back
+    everything its Sources offer there."""
+    return site_key not in kept
 
 
 def remove_site(s: Session, site_key: str) -> None:
     """Forget a Site that has nothing in VODLoft, and take it out of the profiles that store media from it. Its
-    settings under ``siteSettings`` stay, so adding it again brings them back."""
-    if not site_removable(site_key, sites_in_use(s)):
+    settings under ``siteSettings`` stay, so adding it again brings them back. The last Site stays."""
+    if site_key in sites_in_use(s):
         raise ServiceError("This site has collections, videos or creators in VODLoft, so it can't be removed", status_code=409)
+    if not site_removable(site_key, sites_kept(s)):
+        raise ServiceError("VODLoft needs at least one site, so the last one can't be removed. Add another site first", status_code=409)
     record = s.get(Site, site_key)
     if record is not None:
         s.delete(record)

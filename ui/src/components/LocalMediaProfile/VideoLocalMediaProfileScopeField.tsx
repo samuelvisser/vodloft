@@ -1,5 +1,6 @@
 import {Controller, type UseFormReturn, useWatch} from 'react-hook-form'
 
+import {useLocalMediaProfileSites} from '../../lib/queries'
 import {VideoLocalMediaProfileScopeReg, type VideoLocalMediaProfileScope} from '../../types/local_media_profile'
 import {DEFAULT_MOVIE_OUTPUT_TEMPLATE, DEFAULT_VIDEO_OUTPUT_TEMPLATE} from '../../types/schemas/video_local_media_profile'
 import SimpleSelect from '../common/SimpleSelect'
@@ -15,6 +16,11 @@ const DEFAULT_TEMPLATES: Record<VideoLocalMediaProfileScope, string> = {
 export default function VideoLocalMediaProfileScopeField({form, isCreating}: {form: UseFormReturn<any>, isCreating: boolean}) {
     const {control, getValues, setValue, formState: {errors}} = form
     const scope = useWatch({control, name: 'videoScope'}) as string | undefined
+    const {data: sites} = useLocalMediaProfileSites()
+    // Without a Site that has movies, a Video profile is for single videos, and its scope chooses nothing. It
+    // keeps Videos and movies, so it is offered for movies once such a Site is added.
+    const movieSites = sites?.sites.some((site) => site.movies)
+    if (sites && !movieSites && (scope ?? 'both') !== 'movies') return null
     return (
         <div className="form-row">
             <label htmlFor="mp-video-scope">Available for</label>

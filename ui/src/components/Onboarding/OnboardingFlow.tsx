@@ -10,7 +10,7 @@ import SourceSearchPage from '../../pages/SourceSearchPage'
 import MoviePage from '../../pages/movie/MoviePage'
 import {useMovies, useSources} from '../../lib/queries'
 import {SiteAuthentication} from '../Source/SiteAuthenticationCard'
-import {ANY_DOMAIN, SourceRead} from '../../types/schemas/source'
+import {ANY_DOMAIN, SourceRead, sourceShown} from '../../types/schemas/source'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {CollectionRead} from '../../types/schemas/collection'
 import OnboardingMovieProfileStep from './OnboardingMovieProfileStep'
@@ -204,7 +204,7 @@ export default function OnboardingFlow({adminPasswordConfigured, onComplete}: Pr
                         </p>
                     </div>
                     <ul className="onboarding-source-list">
-                        {onboardingSourceOrder(sources ?? []).map((source) => (
+                        {onboardingSourceOrder((sources ?? []).filter(sourceShown)).map((source) => (
                             <li key={source.id}>
                                 <strong>{source.name}</strong>
                                 {source.sitesLabel ? ` · ${source.sitesLabel}` : ''}

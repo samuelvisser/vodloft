@@ -14,6 +14,7 @@ from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase
 from backend.security.access import Access
 from backend.types.collection_types import CollectionType
 from backend.services.media_access import access_locked, link_access
+from backend.services.local_media_profile_sites import known_site_keys
 from backend.services.sites import preferred_sources, site_record
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
@@ -286,9 +287,10 @@ def _site_read(site: Site, preferred: dict[str, str]) -> SourceSiteAPIRead:
 
 
 def list_source_sites(s: Session) -> list[SourceSiteAPIRead]:
-    """Every Site a Source is made for, with the Sources that can handle its links."""
+    """Every Site a Source is made for that is added to VODLoft, with the Sources that can handle its links."""
     preferred = preferred_sources(s)
-    return [_site_read(site, preferred) for site in named_sites()]
+    known = known_site_keys(s)
+    return [_site_read(site, preferred) for site in named_sites() if site.key in known]
 
 
 class UnknownSiteError(LookupError):

@@ -138,6 +138,12 @@ export function sourceHas(source: SourceRead | null | undefined, feature: Source
     return !!source?.features.includes(feature)
 }
 
+/** Whether VODLoft shows the Source: one made for some Sites, such as The Daily Wire, only while one of them is
+ *  added to VODLoft; a Source of many sites always. */
+export function sourceShown(source: SourceRead): boolean {
+    return !source.sites.length || source.sites.some((site) => site.added)
+}
+
 /** The links of a description that are on a Site VODLoft knows for media. */
 export const MediaLinksReadSchema = z.object({urls: z.array(z.string())})
 

@@ -150,8 +150,11 @@ def test_a_site_without_anything_in_vodloft_can_be_removed(session):
     from sources import cookies
 
     _site(session, "twitch", "Twitch", "twitch.tv")
+    _site(session, "youtube", "YouTube", "youtube.com")
     cookies.store_site_cookies("twitch", [TWITCH])
-    assert {site.key: site.removable for site in site_cookies.list_site_authentication(session)} == {"twitch": True}
+    assert {site.key: site.removable for site in site_cookies.list_site_authentication(session)} == {
+        "twitch": True, "youtube": True,
+    }
 
     site_cookies.remove_known_site("twitch")
     session.expire_all()
@@ -161,6 +164,25 @@ def test_a_site_without_anything_in_vodloft_can_be_removed(session):
     assert all("twitch" not in profile.site_keys for profile in session.query(LocalMediaProfileBase))
     with pytest.raises(site_cookies.SiteNotKnownError):
         site_cookies.remove_known_site("twitch")
+
+
+def test_the_last_site_stays(session):
+    from backend.db.models import Site
+    from backend.services import site_cookies, site_settings
+    from backend.services.errors import ServiceError
+
+    _site(session, "twitch", "Twitch", "twitch.tv")
+    _site(session, "youtube", "YouTube", "youtube.com")
+    site_cookies.remove_known_site("twitch")
+    session.expire_all()
+
+    # VODLoft always keeps one Site, also when nothing in it is from that Site.
+    assert {site.key: site.removable for site in site_cookies.list_site_authentication(session)} == {"youtube": False}
+    assert [listing.removable for listing in site_settings.list_sites_settings(session)] == [False]
+    with pytest.raises(ServiceError, match="at least one site"):
+        site_cookies.remove_known_site("youtube")
+    session.expire_all()
+    assert session.get(Site, "youtube") is not None
 
 
 @pytest.mark.parametrize(("key", "address"), [

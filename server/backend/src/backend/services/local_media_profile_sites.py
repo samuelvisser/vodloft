@@ -87,12 +87,15 @@ def every_known_site(connection: Connection | Session, profile_type: LocalMediaP
 
 
 def movie_site_keys(connection: Connection | Session) -> list[str]:
-    """The Sites VODLoft knows that have movies, such as The Daily Wire: the Sites a profile made for movies starts
-    with."""
-    return sorted(
-        key for key in known_site_keys(connection)
-        if any(source.has(Feature.MOVIES) for source in _fetching_sources(key))
-    )
+    """The Sites VODLoft knows that have movies, such as The Daily Wire, by their contract: the Sites a profile made
+    for movies starts with."""
+    return sorted(key for key in known_site_keys(connection) if site_has_movies(key))
+
+
+def site_has_movies(site_key: str) -> bool:
+    """Whether the Site has movies VODLoft can add: its contract says so, and a Source that fetches it has
+    ``Feature.MOVIES``."""
+    return site_of(site_key).movies and any(source.has(Feature.MOVIES) for source in _fetching_sources(site_key))
 
 
 def profile_offered_for_site(s: Session, profile, site_key: str | None) -> bool:
@@ -126,6 +129,8 @@ class ProfileSite:
     download_options: DownloadOptions
     settings: list[SiteSetting]
     """The settings only some Sites show that apply to this Site, such as YouTube's SponsorBlock."""
+    movies: bool
+    """The Site has movies, so a Video profile for it can be offered for movies."""
 
 
 @dataclass(frozen=True)
@@ -153,6 +158,7 @@ def profile_sites(s: Session) -> ProfileSites:
         site = replace(site_of(known.key), key=known.key, name=known.name)
         sites.append(ProfileSite(
             site.key, site.name, offered, site.downloads, offered_settings(site, SiteSettingGroup.LOCAL_MEDIA_PROFILE),
+            site_has_movies(known.key),
         ))
     upcoming = [profile_type for profile_type in types if takes_upcoming_sites(profile_type)]
     upcoming_settings = {

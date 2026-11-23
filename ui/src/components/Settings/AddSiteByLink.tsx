@@ -54,6 +54,7 @@ export default function AddSiteByLink() {
                     queryClient.invalidateQueries({queryKey: ['sitesSettings']}),
                     queryClient.invalidateQueries({queryKey: ['sourceSites']}),
                     queryClient.invalidateQueries({queryKey: ['localMediaProfileSites']}),
+                    queryClient.invalidateQueries({queryKey: ['localMediaProfilesView']}),
                     // Add Media only offers the search of a Site that is added.
                     queryClient.invalidateQueries({queryKey: ['sources']}),
                 ])

@@ -45,16 +45,18 @@ export default function LocalMediaProfileSitesField({form, mode}: {
         [...(upcoming ? [UPCOMING_SITES] : []), ...available.map((site) => site.key)],
     ), [available, upcoming])
 
-    // With one Site and nothing to come there is nothing to choose.
-    if (!sites || siteReg.values.length < 2) return null
-
     const chosen = [...(upcoming && includeUpcomingSites ? [UPCOMING_SITES] : []), ...(siteKeys ?? [])]
+    // With one Site there is nothing to choose while the profile has it and every Site still to come, as a new
+    // profile does. A profile without one of them still shows the field, so it can be given back.
+    const allChosen = siteReg.values.every((value) => chosen.includes(value))
+    if (!sites || siteReg.values.length < 2 || (available.length < 2 && allChosen)) return null
+
     const error = errors.siteKeys ?? errors.includeUpcomingSites
     return (
         <div className="form-row">
             <SelectAllLabel
                 htmlFor="mp-sites"
-                allChosen={siteReg.values.every((value) => chosen.includes(value))}
+                allChosen={allChosen}
                 onSelectAll={() => {
                     if (upcoming) setValue('includeUpcomingSites', true, {shouldDirty: true})
                     setValue('siteKeys', available.map((site) => site.key), {shouldDirty: true, shouldValidate: true})

@@ -138,7 +138,12 @@ function badges(site: SiteAuthenticationRead, apiKey: ReturnType<typeof useApiKe
     return shown
 }
 
-function SiteAuthenticationRow({site, onSaved}: {site: SiteAuthenticationRead; onSaved: (site: SiteAuthenticationRead) => void}) {
+function SiteAuthenticationRow({site, onSaved, alone}: {
+    site: SiteAuthenticationRead
+    onSaved: (site: SiteAuthenticationRead) => void
+    /** The only Site listed. */
+    alone: boolean
+}) {
     const {SignIn} = site.signInSourceKey ? sourceComponents(site.signInSourceKey) : {}
     const {ApiKey} = site.apiKeySourceKey ? sourceComponents(site.apiKeySourceKey) : {}
     const apiKeyBadge = useApiKeyBadge(ApiKey ? site.apiKeySourceKey : null)
@@ -146,7 +151,7 @@ function SiteAuthenticationRow({site, onSaved}: {site: SiteAuthenticationRead; o
     return (
         <SiteRow
             siteKey={site.key} name={site.name} domains={site.domains} badges={badges(site, apiKeyBadge)}
-            removable={site.removable}
+            removable={site.removable} alone={alone}
             bodyClassName="source-section__body site-authentication__body"
         >
             {SignIn ? <SignIn/> : null}
@@ -181,7 +186,7 @@ export function SiteAuthentication() {
             {loadError && <p className="source-setting-error" role="alert">Could not load the sites: {loadError.message}</p>}
             {sites?.length ? (
                 <SiteRows>
-                    {sites.map((site) => <SiteAuthenticationRow key={site.key} site={site} onSaved={saved}/>)}
+                    {sites.map((site) => <SiteAuthenticationRow key={site.key} site={site} onSaved={saved} alone={sites.length === 1}/>)}
                 </SiteRows>
             ) : null}
             <AddSiteByLink/>

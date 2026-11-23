@@ -3,15 +3,17 @@ import {NavLink} from 'react-router-dom'
 import Footer from './Footer'
 import Navbar from './Navbar'
 import DownloadsActivity from './DownloadsActivity'
-import type { NavItem } from './navTypes'
+import type { NavContext, NavItem } from './navTypes'
 import {faIcon} from '../../icons/faIcon'
 import {can, canAnySettings} from '../../lib/access'
+import {useSources} from '../../lib/queries'
+import {SourceFeature, sourceHas, sourceShown} from '../../types/schemas/source'
 
 
 const items: NavItem[] = [
     {path: '/', label: 'Home', icon: faIcon('fass', 'house'), end: true, access: ['library']},
     {path: '/library', label: 'Library', icon: faIcon('fass', 'books'), access: ['library']},
-    {path: '/browse', label: 'Browse', icon: faIcon('fass', 'magnifying-glass'), access: () => can('add_media') && !can('library')},
+    {path: '/browse', label: 'Browse', icon: faIcon('fass', 'magnifying-glass'), access: ({browsable}) => browsable && can('add_media') && !can('library')},
     {path: '/quick-download', label: 'Quick download', icon: faIcon('fass', 'bolt'), access: ['quick_downloads']},
     {path: '/downloads', label: 'Downloads', icon: faIcon('fass', 'circle-down'), access: ['managed_downloads'], iconOverlay: DownloadsActivity},
     {
@@ -82,6 +84,10 @@ function useSidebarFit() {
 
 export default function Sidebar() {
     const {sidebarRef, innerRef, navRef, fit} = useSidebarFit()
+    const {data: sources} = useSources()
+    const context: NavContext = {
+        browsable: (sources ?? []).some((source) => sourceHas(source, SourceFeature.BROWSE) && sourceShown(source)),
+    }
 
     return (
         <aside className="sidebar" aria-label="Sidebar" ref={sidebarRef} data-fit={fit}>
@@ -106,7 +112,7 @@ export default function Sidebar() {
 
             <div className="sidebar-inner" ref={innerRef}>
                 <nav className="nav" aria-label="Primary" ref={navRef}>
-                    <Navbar items={visibleNavItems(items)} />
+                    <Navbar items={visibleNavItems(items, context)} />
                 </nav>
             </div>
             <Footer wrapperClass="sidebar-footer" />
@@ -114,18 +120,18 @@ export default function Sidebar() {
     )
 }
 
-function shows(item: NavItem): boolean {
+function shows(item: NavItem, context: NavContext): boolean {
     if (!item.access) return true
-    if (typeof item.access === 'function') return item.access()
+    if (typeof item.access === 'function') return item.access(context)
     const [area, level] = item.access
     return can(area, level ?? 'view')
 }
 
-export function visibleNavItems(navItems: NavItem[]): NavItem[] {
+export function visibleNavItems(navItems: NavItem[], context: NavContext): NavItem[] {
     return navItems.flatMap((item): NavItem[] => {
-        if (!shows(item)) return []
+        if (!shows(item, context)) return []
         if (!item.children) return [item]
-        const children = visibleNavItems(item.children)
+        const children = visibleNavItems(item.children, context)
         return children.length > 0 ? [{...item, children}] : []
     })
 }

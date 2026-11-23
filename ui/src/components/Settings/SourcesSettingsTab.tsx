@@ -1,5 +1,5 @@
 import {useSources} from '../../lib/queries'
-import {ANY_DOMAIN, SourceFeature, SourceRead, sourceHas} from '../../types/schemas/source'
+import {ANY_DOMAIN, SourceFeature, SourceRead, sourceHas, sourceShown} from '../../types/schemas/source'
 import SiteAuthenticationCard from '../Source/SiteAuthenticationCard'
 import SourceSitesCard from '../Source/SourceSitesCard'
 import SourceProgramCard from '../Source/SourceProgramCard'
@@ -65,7 +65,7 @@ export default function SourcesSettingsTab(tabProps: SettingsTabProps) {
                 recognises it. Signing in and API keys are optional, and set up per site under Authentication.
             </p>
             <SiteAuthenticationCard/>
-            {(sources ?? []).map((source) => (
+            {(sources ?? []).filter(sourceShown).map((source) => (
                 <SourceCard key={source.id} source={source} tabProps={tabProps}/>
             ))}
             <SourceSitesCard/>

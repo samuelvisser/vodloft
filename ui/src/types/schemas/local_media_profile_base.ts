@@ -143,6 +143,8 @@ export const LocalMediaProfileSiteReadSchema = z.object({
     downloadOptions: DownloadOptionsSchema,
     /** The settings only some Sites show that apply to this Site, such as autoSubtitles or sponsorblock. */
     settings: z.array(z.string()),
+    /** The Site has movies, so a Video profile for it can be offered for movies. */
+    movies: z.boolean(),
 })
 export type LocalMediaProfileSiteRead = z.infer<typeof LocalMediaProfileSiteReadSchema>
 

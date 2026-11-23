@@ -8,7 +8,7 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 import {toImageUrl} from '../components/Episode/EpisodeCard'
 import MediaTypeTabs, {MediaType} from '../components/MediaTypeTabs/MediaTypeTabs'
 import {useDailywireMovieCatalog, useDailywireShowCatalog, useMovies, useCollections, useSourceLookup} from '../lib/queries'
-import {DAILYWIRE_SOURCE_KEY, SourceFeature, kindNames, sourceHas} from '../types/schemas/source'
+import {DAILYWIRE_SOURCE_KEY, SourceFeature, kindNames, sourceHas, sourceShown} from '../types/schemas/source'
 import {capitalized} from '../types/creator'
 import {
     DailywireCatalogMovieRead,
@@ -47,7 +47,9 @@ export default function BrowsePage({onboarding = false, onCollectionSelect, onMo
     const collectionNames = kindNames(catalogSource, 'collection')
     const collectionsName = capitalized(collectionNames?.plural ?? '')
     const mayUse = canUseSource(DAILYWIRE_SOURCE_KEY)
-    const canBrowse = mayUse && (!catalogSource || sourceHas(catalogSource, SourceFeature.BROWSE))
+    // A catalogue is only browsed while its Site is added to VODLoft.
+    const catalogShown = !catalogSource || sourceShown(catalogSource)
+    const canBrowse = mayUse && catalogShown && (!catalogSource || sourceHas(catalogSource, SourceFeature.BROWSE))
     const initialType = params.get('type') === 'movies' ? 'movies' : 'collections'
     const [activeType, setActiveType] = useState<MediaType>(initialType)
     const [grouping, setGrouping] = useState<ShowGrouping>('host')
@@ -125,7 +127,7 @@ export default function BrowsePage({onboarding = false, onCollectionSelect, onMo
         return (
             <section className="view browse-view" aria-labelledby="browse-title">
                 <h1 id="browse-title">Browse</h1>
-                <p>{mayUse ? `${sourceName} cannot be browsed.` : `Your account may not use ${sourceName}.`} Paste a link on the Add media page instead.</p>
+                <p>{!mayUse ? `Your account may not use ${sourceName}.` : !catalogShown ? `${sourceName} is not added to VODLoft.` : `${sourceName} cannot be browsed.`} Paste a link on the Add media page instead.</p>
                 <Link className="btn btn-primary" to="/add">Add media</Link>
             </section>
         )
