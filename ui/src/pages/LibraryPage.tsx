@@ -524,10 +524,10 @@ export default function LibraryPage() {
                                     <span className="library-tile-copy">
                                         <span className="library-tile-title">{creator.title}</span>
                                         <span className="library-tile-author">{creatorKindText(creator)}</span>
-                                        {/* Its episodes come first: when the line is too narrow, the number of collections is left out. */}
+                                        {/* Its collections come first: when the line is too narrow, the number of episodes is left out. */}
                                         <TileStats parts={[
-                                            wordsOf(creator.words).count(creator.episodeCount),
                                             `${creator.collectionCount} ${creator.collectionCount === 1 ? 'collection' : 'collections'}`,
+                                            wordsOf(creator.words).count(creator.episodeCount),
                                         ]}/>
                                     </span>
                                 </>
