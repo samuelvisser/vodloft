@@ -90,6 +90,8 @@ class CollectionSeasonsAPIRead(ResponseBase):
     Source."""
     kind: CollectionKind
     """What the collection's own link is: a channel, or one list."""
+    made_from_list: bool
+    """The collection is made from one list: the list is its one season, or its videos go in a season per year."""
     feeds: list[CollectionFeedAPIRead]
     """For a channel collection: the feeds of its channel, and whether it takes each."""
     channel_season: ChannelSeason

@@ -70,6 +70,8 @@ export const CollectionSeasonsReadSchema = z.object({
     linksOnlyOffered: z.boolean().default(false),
     /** What the collection's own link is: a channel, or one list. */
     kind: z.enum(['channel', 'list']),
+    /** The collection is made from one list: the list is its one season, or its videos go in a season per year. */
+    madeFromList: z.boolean().default(false),
     /** For a channel collection: the feeds of its channel, and whether it takes each. */
     feeds: z.array(z.object({ref: z.string(), names: NamesSchema, on: z.boolean()})),
     /** What the season of the channel's own videos holds: everything, or only the videos in no list. */
