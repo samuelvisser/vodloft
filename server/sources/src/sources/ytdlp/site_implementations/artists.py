@@ -135,6 +135,11 @@ class ArtistImplementation(OtherSitesImplementation):
         """The artist's picture and banner, where the Site shows ones that yt-dlp does not give."""
         return None, None
 
+    def collection_picture(self, url: str) -> str | None:
+        """A collection of all the artist's music is pictured by the artist's picture."""
+        root = self.creator_root(url)
+        return self.pictures(root)[0] if root and self.is_creator_page(url) else None
+
     def music(self, sections: list[SectionRef]) -> dict:
         """Whether the creator is a music artist, and how sure the Site is."""
         raise NotImplementedError

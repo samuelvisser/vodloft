@@ -122,3 +122,18 @@ def test_a_soundcloud_artists_albums_are_told_from_their_playlists(monkeypatch):
     assert lists == {"flume/sets/palaces": "album", "flume/sets/favourites": "playlist"}
     assert details.facts == ("1 album", "1 playlist")
     assert (details.music, details.music_known) == (True, False)
+
+
+def test_a_collection_of_a_soundcloud_artists_music_is_pictured_by_the_artist(monkeypatch):
+    # yt-dlp gives an account's page of all its tracks no picture, so the account's own picture stands in for it.
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_info", lambda url, *args, **kwargs: {
+        "_type": "playlist", "id": "flume", "title": "Flume (All)", "webpage_url": url,
+    })
+    details = source.collection_details("https://soundcloud.com/flume")
+
+    assert details.image_url == "https://i1.sndcdn.com/avatars-flume-t500x500.jpg"
+    assert _implementation("https://soundcloud.com/flume/sets/palaces").collection_picture(
+        "https://soundcloud.com/flume/sets/palaces") is None
