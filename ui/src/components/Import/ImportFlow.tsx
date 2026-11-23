@@ -1061,7 +1061,8 @@ function RunView({importer, run, onRun, onBack}: {
                         <Link className="btn" to="/existing-files">Match existing files</Link>
                     )}
                     {/* Only before the plan is applied: after that, each collection's indexing is cancelled in Downloads. */}
-                    {run.status === 'running' && (
+                    {/* Cancelling a waiting import keeps what it added; the files it did not adopt yet stay where they are. */}
+                    {(run.status === 'running' || run.status === 'waiting') && (
                         <button type="button" className="btn" disabled={cancelling} onClick={() => void cancel()}>Cancel</button>
                     )}
                     {done && <button type="button" className="btn" onClick={onBack}>Back</button>}
