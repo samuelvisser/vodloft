@@ -605,8 +605,11 @@ a.btn,
     border-right-color: rgba(148, 163, 184, 0.24);
   }
 }
+/* One column that may shrink below its content, so a field with long values (a multi-select full of long names)
+   wraps inside the form instead of pushing the row, and the Select all button beside its label, past the edge. */
 .form-row {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 .input {
