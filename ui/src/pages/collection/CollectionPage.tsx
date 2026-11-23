@@ -587,7 +587,7 @@ export default function CollectionPage() {
       label: `Remove from ${creatorNames?.singular}`,
       icon: faIcon('fass', 'link-slash') as [string, string],
       onSelect: () => setCreatorDialog('remove'),
-    }] : collection.kind === 'channel' ? [{
+    }] : collection.canJoinCreator ? [{
       label: `Add to ${creatorNames?.singular}`,
       icon: faIcon('fass', 'circle-user') as [string, string],
       onSelect: () => setCreatorDialog('add'),
@@ -950,6 +950,7 @@ export default function CollectionPage() {
         collectionSlug={collection.slug}
         collectionTitle={collection.title}
         creatorNames={creatorNames}
+        hasLink={!!collection.sharingUrl}
         onDismiss={() => setCreatorDialog(null)}
       />
       <RemoveFromCreatorDialog

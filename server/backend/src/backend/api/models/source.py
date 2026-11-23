@@ -515,9 +515,10 @@ class ResolvedLinkAPIRead(ResponseBase):
     """VODLoft does not have that access, so it cannot download the video."""
     preview: ResolvedLinkPreviewAPIRead
     collection_kind: Optional[CollectionKind] = None
-    """For a collection: whether it is a channel, which can be in a creator, or one list."""
+    """For a collection: whether it is a channel or one list."""
     creator_names: Optional[NamesAPIRead] = None
-    """For a channel: what its Site calls the creator behind it, such as host on The Daily Wire."""
+    """For a collection on a Site with creators, which can be in one: what its Site calls the creator behind it, such
+    as host on The Daily Wire."""
     # Every Source that claims the link's domain, preferred first, to look the link up with another one.
     candidates: list[SourceAPIRead] = Field(default_factory=list)
 

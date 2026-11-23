@@ -688,6 +688,49 @@ def test_a_tv_show_collection_of_only_playlists_holds_only_them(tmp_path):
     assert not any(warning.subject == "links" for warning in mixed.warnings)
 
 
+def test_a_subscription_with_links_on_several_sites_becomes_a_collection_per_site_in_one_creator(tmp_path):
+    downloads = tmp_path / "downloads"
+    _archive(downloads / "tv" / "Mixed Sites", {
+        "vid-yt": {"upload_date": "2024-01-02", "extractor": "youtube:tab",
+                   "file_names": ["Season 01/s01.e000001 - On YouTube.mp4"]},
+        "vid-sc": {"upload_date": "2024-01-03", "extractor": "soundcloud",
+                   "file_names": ["Season 04/s04.e000001 - On SoundCloud.mp4"]},
+    })
+    plan = _plan(_write(tmp_path / "config", EXAMPLE + """
+    "~Mixed Sites":
+      s01_url: "https://www.youtube.com/playlist?list=PLfirst"
+      s02_url: "https://www.youtube.com/playlist?list=PLsecond"
+      s03_url: "https://www.youtube.com/playlist?list=PLthird"
+      s04_url: "https://soundcloud.com/mixed/sets/first"
+      s05_url: "https://soundcloud.com/mixed/sets/second"
+"""), ("/tv_shows", "/downloads/tv"), downloads)
+
+    mixed = {collection.external_id: collection for collection in plan.collections
+             if collection.external_id.startswith("subscription:Mixed Sites")}
+    youtube, soundcloud = mixed["subscription:Mixed Sites"], mixed["subscription:Mixed Sites:soundcloud"]
+    # The YouTube links are one collection and the SoundCloud ones another, each with its playlists as seasons.
+    assert (youtube.title, youtube.links_only, youtube.creator) == ("Mixed Sites (YouTube)", True, "Mixed Sites")
+    assert [(link.url, link.season_number) for link in youtube.link_seasons] == [
+        ("https://www.youtube.com/playlist?list=PLthird", 3), ("https://www.youtube.com/playlist?list=PLsecond", 2),
+        ("https://www.youtube.com/playlist?list=PLfirst", 1),
+    ]
+    assert (soundcloud.title, soundcloud.links_only, soundcloud.creator) == ("Mixed Sites (SoundCloud)", True, "Mixed Sites")
+    assert [(link.url, link.season_number) for link in soundcloud.link_seasons] == [
+        ("https://soundcloud.com/mixed/sets/second", 5), ("https://soundcloud.com/mixed/sets/first", 4),
+    ]
+    # Each collection takes the files of its own Site.
+    assert sorted((file.collection_external_id, file.media_site_id) for file in plan.files) == [
+        ("subscription:Mixed Sites", "vid-yt"), ("subscription:Mixed Sites:soundcloud", "vid-sc"),
+    ]
+
+
+def test_a_subscription_on_one_site_stays_one_collection(tmp_path):
+    plan = _plan(_write(tmp_path, EXAMPLE))
+
+    beato = {collection.title: collection for collection in plan.collections}["Rick Beato"]
+    assert (beato.external_id, beato.creator) == ("subscription:Rick Beato", None)
+
+
 def test_backwards_episode_orderings_number_the_newest_first(tmp_path):
     plan = _plan(_write(tmp_path, """
 __preset__:
@@ -834,9 +877,9 @@ def test_an_artists_albums_and_music_videos_are_two_collections_of_one_artist(tm
     albums, videos = by_id["subscription:Emily Hopkins"], by_id["subscription:Emily Hopkins:Jellyfin Music Videos"]
     assert (albums.title, albums.artist, albums.artist_page) == ("Emily Hopkins albums", "Emily Hopkins", True)
     assert (videos.title, videos.artist, videos.artist_page) == ("Emily Hopkins music videos", "Emily Hopkins", False)
-    # The music videos are a playlist, which can't join a creator, so both stay on their own.
-    assert (albums.joins_artist, videos.joins_artist) == (False, False)
-    # Albums come first, so music videos of a channel join the creator their albums join.
+    # The music videos are a playlist: still a collection of their own, in the creator of the albums.
+    assert (albums.creator, videos.creator) == ("Emily Hopkins", "Emily Hopkins")
+    # The artist's own page comes first, so the playlist joins the creator its albums join.
     order = [collection.external_id for collection in plan.collections]
     assert order.index(albums.external_id) < order.index(videos.external_id)
     # The same link for both is one collection with both profiles, named after the artist.
@@ -904,7 +947,10 @@ YouTube Full Albums:
     assert plan.profiles[0].settings["audio_format"] == "flac"
 
 
-def test_an_imported_artist_keeps_ytdl_subs_name_with_their_albums_and_music_videos(installation, monkeypatch):
+@pytest.mark.parametrize("videos_url", [
+    "https://www.youtube.com/@EmilyHopkinsHarp", "https://www.youtube.com/playlist?list=PLharp",
+], ids=["channel", "playlist"])
+def test_an_imported_artist_keeps_ytdl_subs_name_with_their_albums_and_music_videos(installation, monkeypatch, videos_url):
     from backend.services.link_seasons import collection_new_lists
     from backend.db.models import Creator, Collection
     from backend.services import import_uploads, imports
@@ -922,8 +968,8 @@ Bandcamp:
   "Emily Hopkins": "https://emilyharpist.bandcamp.com/"
 
 Jellyfin Music Videos:
-  "Emily Hopkins": "https://www.youtube.com/@EmilyHopkinsHarp"
-""".encode()
+  "Emily Hopkins": "%s"
+""".replace("%s", videos_url).encode()
     import_uploads.begin_upload(ytdl_sub.IMPORTER, [("subscriptions.yaml", len(subscriptions))], include_secrets=False)
     import_uploads.write_chunk(ytdl_sub.IMPORTER, "subscriptions.yaml", 0, subscriptions)
     import_uploads.finish_upload(ytdl_sub.IMPORTER)
@@ -962,11 +1008,68 @@ Jellyfin Music Videos:
     collections = {collection.title: collection for collection in session.scalars(select(Collection))}
     assert set(collections) == {"Emily Hopkins albums", "Emily Hopkins music videos"}
     albums, videos = collections["Emily Hopkins albums"], collections["Emily Hopkins music videos"]
-    # The albums and the music videos, on two Sites, share one creator, named as ytdl-sub names the artist.
+    # The albums and the music videos, on two Sites, share one creator, named as ytdl-sub names the artist. A playlist
+    # of music videos stays a collection of its own beside the albums.
     assert (creator.title, albums.creator_id, videos.creator_id) == ("Emily Hopkins", creator.id, creator.id)
-    assert (videos.type, videos.sharing_url, videos.author_name) == ("music", "https://www.youtube.com/@EmilyHopkinsHarp", "Emily Hopkins")
+    assert (videos.type, videos.sharing_url, videos.author_name) == ("music", videos_url, "Emily Hopkins")
     # New albums are added as they come out, as the other program did; new playlists are skipped.
     assert [(setting.key, setting.action) for setting in collection_new_lists(albums)] == [("album", "add"), ("playlist", "ignore")]
+
+
+def test_a_subscriptions_collections_on_two_sites_share_one_creator_named_after_it(installation, monkeypatch):
+    from backend.db.models import Creator, Collection
+    from backend.services import import_uploads, imports
+    from sources import registry
+    from sources.contract import CreatorDetails, Feature, Site
+
+    session = installation
+    subscriptions = """
+__preset__:
+  overrides:
+    tv_show_directory: "/tv_shows"
+
+Plex TV Show Collection:
+  "~Mixed Sites":
+    s01_url: "https://www.youtube.com/playlist?list=PLfirst"
+    s02_url: "https://www.youtube.com/playlist?list=PLsecond"
+    s03_url: "https://soundcloud.com/mixed/sets/first"
+""".encode()
+    import_uploads.begin_upload(ytdl_sub.IMPORTER, [("subscriptions.yaml", len(subscriptions))], include_secrets=False)
+    import_uploads.write_chunk(ytdl_sub.IMPORTER, "subscriptions.yaml", 0, subscriptions)
+    import_uploads.finish_upload(ytdl_sub.IMPORTER)
+    ytdlp = registry._sources["ytdlp"]
+
+    class Creators(type(ytdlp)):
+        domains = ("youtube.com", "soundcloud.com")
+        features = ytdlp.features | {Feature.CREATORS, Feature.LINK_COLLECTIONS}
+        sites = (Site("youtube", "YouTube", ("youtube.com",), creators=True),
+                 Site("soundcloud", "SoundCloud", ("soundcloud.com",), creators=True))
+
+        def creator_of(self, url):
+            # A playlist's creator is the channel that made it.
+            return "https://www.youtube.com/@mixed" if "youtube.com" in url else None
+
+        def creator_details(self, ref, progress=lambda step: None):
+            return CreatorDetails(ref="UCmixed", url="https://www.youtube.com/@mixed", title="mixed")
+
+    monkeypatch.setattr(registry, "_sources", {**registry._sources, "ytdlp": Creators()})
+    run = imports.start_run(session, ytdl_sub.IMPORTER, imports.ImportOptions(collections=(
+        "subscription:Mixed Sites", "subscription:Mixed Sites:soundcloud",
+    )))
+    session.commit()
+    imports.apply_run(run.id)
+    session.expire_all()
+
+    collections = {collection.title: collection for collection in session.scalars(select(Collection))}
+    assert set(collections) == {"Mixed Sites (YouTube)", "Mixed Sites (SoundCloud)"}
+    youtube, soundcloud = collections["Mixed Sites (YouTube)"], collections["Mixed Sites (SoundCloud)"]
+    assert sorted(link.url for link in youtube.lists) == [
+        "https://www.youtube.com/playlist?list=PLfirst", "https://www.youtube.com/playlist?list=PLsecond",
+    ]
+    assert [link.url for link in soundcloud.lists] == ["https://soundcloud.com/mixed/sets/first"]
+    # The creator behind the YouTube playlists, named after the subscription, holds both.
+    creator = session.scalar(select(Creator))
+    assert (creator.title, youtube.creator_id, soundcloud.creator_id) == ("Mixed Sites", creator.id, creator.id)
 
 
 def test_albums_and_music_videos_of_differently_named_subscriptions_pair_by_their_artist(tmp_path):

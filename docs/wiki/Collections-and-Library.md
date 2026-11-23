@@ -233,8 +233,10 @@ A creator is whoever makes the work you follow: the person or group behind a You
 
 Every collection is one of two kinds, from its link:
 
-- A **channel** collection is made from a creator's own page: a YouTube channel (or only its Shorts or Live tab), an artist on Bandcamp or SoundCloud, or a Daily Wire show. It can make the creator's playlists or albums seasons of its own (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)), and it can be part of a creator.
-- A **list** collection is made from one playlist or album. It holds what that list holds, in the list's order, and can't be part of a creator.
+- A **channel** collection is made from a creator's own page: a YouTube channel (or only its Shorts or Live tab), an artist on Bandcamp or SoundCloud, or a Daily Wire show. It can make the creator's playlists or albums seasons of its own (see [Playlists and albums as seasons](#playlists-and-albums-as-seasons)).
+- A **list** collection is made from one playlist or album. It holds what that list holds, in the list's order.
+
+Both kinds can be part of a creator, and so can a collection of only playlists.
 
 On a site where VODLoft knows no creators, such as NPO Start, every collection is a list collection.
 
@@ -249,9 +251,9 @@ In the Seasons window of a channel collection (the Albums window for music), **F
 
 ### Adding a collection to a creator
 
-In the Add Collection wizard, a channel link shows **Add to a creator** (**Add to a host**, **Add to an artist**). Leave it on to group the new collection under the creator behind the link, who is added to your Library when they are not there yet, or pick another creator in your Library. A link to a Daily Wire host's page is not a collection: paste the link to one of their shows instead, and once it is in your Library the host's page offers the rest of their work.
+In the Add Collection wizard, a channel or playlist link on a site with creators shows **Add to a creator** (**Add to a host**, **Add to an artist**). Leave it on to group the new collection under the creator behind the link, who is added to your Library when they are not there yet, or pick another creator in your Library. A link to a Daily Wire host's page is not a collection: paste the link to one of their shows instead, and once it is in your Library the host's page offers the rest of their work.
 
-A collection that is already in your Library can join later: choose **Add to creator** in its **Actions** menu. VODLoft finds the creator behind the collection's link, or you pick another one in your Library, for example for an artist's music videos on their label's channel. **Remove from creator** in the same menu makes it a plain collection again. Neither changes anything in the collection: it keeps its episodes, numbers, profiles, files, genre and content rating.
+A collection that is already in your Library can join later: choose **Add to creator** in its **Actions** menu. VODLoft finds the creator behind the collection's link, which for a playlist is the channel that made it, or you pick another one in your Library, for example for an artist's music videos on their label's channel. A collection of only playlists has no link of its own, so you always pick its creator in your Library. **Remove from creator** in the same menu makes it a plain collection again. Neither changes anything in the collection: it keeps its episodes, numbers, profiles, files, genre and content rating.
 
 The creator's name becomes the author of their collections, and output templates can use `creator_title`, `creator_handle` and `creator_kind`, and `section_title` and `section_kind` for the playlist or feed an episode came from. See [Local Media Profiles](Local-Media-Profiles#collection-template-variable-reference).
 

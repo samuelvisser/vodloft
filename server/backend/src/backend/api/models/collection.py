@@ -219,7 +219,7 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
     outside_videos: Optional[OutsideVideos] = None
     """Whether the collection adds videos from its link seasons that its own link lacks, or holds only those."""
     kind: Optional[CollectionKind] = None
-    """What its own link is: a channel, which takes the channel's lists and can be in a creator, or one list. None
+    """What its own link is: a channel, which takes the channel's lists, or one list. None
     for a collection that is not in the Library yet, such as one that is looked up to be added."""
     list_type: Optional[str] = None
     """For a collection of one list, the key of its Site's type of list it is, such as album or playlist on
@@ -261,6 +261,17 @@ class _CollectionAPIBaseOut(SourcedResponse, CustomMetadataResponseBase):
         collection; VODLoft's own while the Site is not known yet."""
         site = site_of(self.site.key) if self.site is not None else Site("", "")
         return NamesAPIRead.model_validate(collection_contract(self.type).creator_names_on(site))
+
+    @computed_field
+    @property
+    def can_join_creator(self) -> bool:
+        """Whether Add to creator is offered: a collection with a link on a Site with creators, a channel or a list,
+        or one without a link of its own, which joins a creator in the Library by hand."""
+        from backend.services.creators import site_takes_creators
+
+        if self.sharing_url is None:
+            return True
+        return self.site is not None and site_takes_creators(self.source_key, self.site.key)
 
     @computed_field
     @property

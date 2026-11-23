@@ -1,7 +1,7 @@
 """Creators: who made the work, with an account on one or more Sites.
 
-A creator groups its channel collections, possibly of several Sites, such as a YouTube channel and a SoundCloud
-account, and its movies, under one card in the Library. It plays no part in what a collection holds: joining or leaving
+A creator groups its collections, possibly of several Sites, such as a YouTube channel, one of their playlists and a
+SoundCloud account, and its movies, under one card in the Library. It plays no part in what a collection holds: joining or leaving
 a creator never changes a collection's episodes. Its page also shows what else the creator has at their Sites that is
 not in the Library yet, such as a Daily Wire host's other shows and movies.
 """
@@ -15,10 +15,9 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Creator, CreatorAccount, Collection, Movie
 from backend.services.errors import ServiceError
-from backend.services.sites import collection_names, collection_site, site_record
+from backend.services.sites import collection_site, site_record
 from backend.types.collection_contracts import DEFAULT_WORDS, MUSIC, CollectionWords, collection_contract
 from backend.types.collection_types import CollectionType
-from backend.types.link_season_types import CollectionKind
 from backend.utils.helpers import generate_uuid, slugify, name_in_text
 from sources import CreatorDetails, Feature, Names, SectionKind, SectionRef, Site, UnknownSourceError, get_source, site_of
 
@@ -37,19 +36,35 @@ def creator_site(source_key: str, url_or_site_key: str) -> Site:
     return site
 
 
+def takes_creators(source_key: str, site: Site) -> bool:
+    """Whether a collection with a link on ``site`` can be in a creator: the Site has creators, and the collection's
+    Source knows them."""
+    return site.creators and get_source(source_key).has(Feature.CREATORS)
+
+
+def site_takes_creators(source_key: str, site_key: str) -> bool:
+    """``takes_creators`` for the Site with the key, as the collection's Source knows it."""
+    return takes_creators(source_key, _site(source_key, site_key))
+
+
 def can_join(collection: Collection) -> bool:
-    """Whether the collection can be in a creator: a channel collection, on a Site with creators."""
-    return collection.kind == CollectionKind.CHANNEL.value and collection.sharing_url is not None and (
-        collection_site(collection).creators and get_source(collection.source_key).has(Feature.CREATORS)
-    )
+    """Whether the collection can be in a creator: one with a link on a Site with creators, a channel or a list, or
+    one without a link of its own, which joins a creator in the Library by hand."""
+    return collection.sharing_url is None or takes_creators(collection.source_key, collection_site(collection))
 
 
 def check_joins(collection: Collection) -> None:
     """Refuses a collection that can't be in a creator."""
     if not can_join(collection):
         site = collection_site(collection)
+        raise ServiceError(f"{site.name or 'Its Site'} has no {site.creator_names.plural} VODLoft can add", field="creator_slug")
+
+
+def check_has_link(collection: Collection) -> None:
+    """Refuses to look up the creator behind a collection without a link of its own."""
+    if collection.sharing_url is None:
         raise ServiceError(
-            f"Only {site.channel_collection_names.a} can be in {site.creator_names.a}, not {collection_names(collection).a}",
+            f"{name_in_text(collection.title)} has no link of its own to find a creator behind: pick one in your library",
             field="creator_slug",
         )
 
@@ -181,7 +196,7 @@ def new_creator(s: Session, source_key: str, details: CreatorDetails, *, added_b
 
 
 def join_creator(s: Session, collection: Collection, creator: Creator) -> None:
-    """Group a channel collection under a creator in the Library. Nothing it holds changes.
+    """Group a collection under a creator in the Library. Nothing it holds changes.
 
     ``s`` is a write transaction's session."""
     if collection.creator_id is not None:
@@ -194,10 +209,11 @@ def join_creator(s: Session, collection: Collection, creator: Creator) -> None:
 def join_creator_of(
     s: Session, collection: Collection, source_key: str, details: CreatorDetails, *, added_by_id: int | None,
 ) -> Creator:
-    """Group a channel collection under the creator behind its link, looked up as ``details``: the one in the Library,
-    or a new one made from ``details``.
+    """Group a collection under the creator behind its link, looked up as ``details``: the one in the Library, or a
+    new one made from ``details``. A playlist's is the channel that made it.
 
     ``s`` is a write transaction's session."""
+    check_has_link(collection)
     check_joins(collection)
     account = account_of(s, source_key, details)
     creator = account.creator if account is not None else new_creator(s, source_key, details, added_by_id=added_by_id)

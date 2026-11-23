@@ -1,5 +1,5 @@
-"""Creators: a creator groups channel collections and movies, and joining or leaving one changes nothing a collection
-holds. A collection is a channel or one list, told by its link, and only a channel collection can be in a creator."""
+"""Creators: a creator groups collections and movies, and joining or leaving one changes nothing a collection holds. A
+collection is a channel or one list, told by its link, and either can be in a creator on a Site with creators."""
 from __future__ import annotations
 
 import json
@@ -181,16 +181,67 @@ def test_a_channel_collection_joins_the_creator_behind_its_link_and_keeps_what_i
     assert after.author_name == "Northwind Workshop"
 
 
-def test_a_list_collection_cannot_join_a_creator(client, session):
+def test_a_playlist_joins_the_creator_of_the_channel_that_made_it_beside_the_channel(client, session):
+    _add("workshop", ROOT)
+    client.post("/api/collections/workshop/creator", json={})
+    _add("cabin", PLAYLIST)
+    assert client.get("/api/collections/cabin").json()["canJoinCreator"] is True
+
+    lines = [json.loads(line) for line in client.get("/api/collections/cabin/creator/match").text.splitlines()]
+    match = lines[-1]["match"]
+    # The playlist's creator is the channel that made it, who is in the Library already.
+    assert (match["title"], match["creatorSlug"]) == ("Northwind Workshop", "workshop")
+    response = client.post("/api/collections/cabin/creator", json={"lookupId": match["lookupId"]})
+    assert response.status_code == 200, response.text
+
+    page = client.get("/api/creators/workshop").json()
+    # Two collections of one creator: the playlist stays a collection of its own, not a season of the channel.
+    assert sorted(collection["slug"] for collection in page["collections"]) == ["cabin", "workshop"]
+    assert _collection(session, "cabin").kind == "list"
+
+
+def test_a_playlist_joins_another_creator_in_the_library_by_hand(client, session):
     _add("workshop", ROOT)
     client.post("/api/collections/workshop/creator", json={})
     _add("cabin", PLAYLIST)
 
     response = client.post("/api/collections/cabin/creator", json={"creatorSlug": "workshop"})
 
+    assert response.status_code == 200, response.text
+    assert _collection(session, "cabin").creator_id == _collection(session, "workshop").creator_id
+
+
+def test_a_collection_of_only_playlists_joins_a_creator_by_hand_only(client, session):
+    from backend.db.core import run_write_transaction
+    from backend.services.collections import add_links_only_collection
+    from backend.types.collection_types import CollectionType
+
+    _add("workshop", ROOT)
+    client.post("/api/collections/workshop/creator", json={})
+    run_write_transaction(lambda s: add_links_only_collection(s, title="Mixtape", collection_type=CollectionType.SERIES).slug)
+    assert client.get("/api/collections/mixtape").json()["canJoinCreator"] is True
+
+    # It has no link of its own to find a creator behind.
+    response = client.post("/api/collections/mixtape/creator", json={})
     assert response.status_code == 422
-    assert "Only a channel can be in a creator" in response.text
-    assert _collection(session, "cabin").creator_id is None
+    assert "has no link of its own" in response.text
+
+    response = client.post("/api/collections/mixtape/creator", json={"creatorSlug": "workshop"})
+    assert response.status_code == 200, response.text
+    assert _collection(session, "mixtape").creator_id == _collection(session, "workshop").creator_id
+
+
+def test_a_collection_on_a_site_without_creators_cannot_join_one(client, session):
+    _add("workshop", ROOT)
+    client.post("/api/collections/workshop/creator", json={})
+    _add("plain", "https://plain.example/everything", source_key="plain")
+    assert client.get("/api/collections/plain").json()["canJoinCreator"] is False
+
+    response = client.post("/api/collections/plain/creator", json={"creatorSlug": "workshop"})
+
+    assert response.status_code == 422
+    assert "Plain has no creators VODLoft can add" in response.text
+    assert _collection(session, "plain").creator_id is None
 
 
 def test_leaving_a_creator_keeps_the_collection_as_it_is(client, session):
