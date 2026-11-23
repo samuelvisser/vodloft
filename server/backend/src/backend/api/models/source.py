@@ -246,6 +246,9 @@ class CollectionDetailsAPIRead(ResponseBase):
     seasons: list[CollectionDetailsSeasonAPIRead] = Field(default_factory=list)
     audio_only: bool = False
     """The collection's Site has sound only, such as SoundCloud: a Music collection there holds tracks."""
+    seasons_plans: dict[str, str] = Field(default_factory=dict)
+    """What the collection's seasons will be once it is added as each type, in words, as its Site's defaults make
+    them: each list a season, what goes in the channel season, or a season per upload year."""
 
 
 class CookiesStatusAPIRead(ResponseBase):

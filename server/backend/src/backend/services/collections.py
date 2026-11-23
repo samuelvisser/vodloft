@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from backend.db.models import Collection
 from backend.operations.collections import CollectionIndexOperation, CollectionSyncOperation
 from backend.services.errors import ServiceError
+from backend.services.new_lists import album_kinds, list_kinds
 from backend.services.sites import collection_kind, place_collection
 from backend.types import work_weights
+from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import CollectionType, EpisodeIdentifier
 from backend.types.dailywire_user_info import DwMembershipLevel
 from backend.types.link_season_types import CollectionKind, LinkSeasons, OutsideVideos, RepeatVideos
@@ -42,7 +44,7 @@ def add_collection(s: Session, collection: Collection, *, added_by_id: int | Non
     if not source.has(Feature.COLLECTIONS):
         raise ServiceError(f"{source.name} has no shows")
     collection.added_by_id = added_by_id
-    _set_kind(collection)
+    set_kind(collection)
     if source.has(Feature.EPISODE_LISTS):
         # Indexing puts the episodes in the Source's own seasons, or in a season per
         # upload year. Seasons given here are the Source's, picked for a Download
@@ -52,19 +54,25 @@ def add_collection(s: Session, collection: Collection, *, added_by_id: int | Non
     s.add(collection)
 
 
-def _set_kind(collection: Collection) -> None:
+def set_kind(collection: Collection) -> None:
     """Tell a new collection what its link is, and give a channel collection its Site's defaults where the request
-    left them: the lists the user picks are seasons, or every list, new lists of the channel are added, the videos they
-    have that the channel's feeds don't are added too, a video in several lists is in each where the Site says so, and
-    the channel season holds what its Site's channels hold."""
+    left them: every list is a season, or only the lists the user picks, new lists of the channel are added, the videos
+    they have that the channel's feeds don't are added too, a video in several lists is in each where the Site says
+    so, and the channel season holds what its Site's channels hold. A type that takes only albums, such as Music,
+    starts with only the kinds of list that are albums, where its Site tells them apart."""
     collection.kind = collection_kind(collection.sharing_url, collection.source_key).value
     if collection.kind != CollectionKind.CHANNEL.value:
         return
     site = source_site(collection.sharing_url, collection.source_key)
+    # The defaults are about the channel's lists, which only a Site whose lists can be seasons has.
+    if not site.link_seasons:
+        return
     if collection.channel_season is None:
         collection.channel_season = site.channel_season.value
-    if site.link_seasons and collection.link_seasons is None:
-        collection.link_seasons = (LinkSeasons.ALL if site.every_list_a_season else LinkSeasons.SELECTED).value
+    if collection.link_seasons is None:
+        albums_only = collection_contract(collection.type).album_lists and album_kinds(list_kinds(site))
+        every = site.every_list_a_season and not albums_only
+        collection.link_seasons = (LinkSeasons.ALL if every else LinkSeasons.SELECTED).value
         if collection.outside_videos is None:
             collection.outside_videos = OutsideVideos.ADD.value
     if site.whole_lists and collection.repeat_videos is None:

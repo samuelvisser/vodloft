@@ -61,8 +61,8 @@ def test_soundcloud_and_bandcamp_name_their_sections_and_seasons():
         ("tracks", "tracks"), ("album", "albums"), ("playlist", "playlists"), ("single", "singles"),
     ]
     assert [(t.key, t.names.plural) for t in bandcamp.section_types] == [("album", "albums"), ("single", "singles")]
-    assert soundcloud.loose_season == bandcamp.loose_season == "Tracks"
-    # A Music collection still puts what is in no album in Singles.
+    # What is in none of an artist's albums and playlists is their singles, as on every Site with sound only.
+    assert soundcloud.loose_season == bandcamp.loose_season == "Singles"
     from backend.types.collection_contracts import MUSIC
 
     assert MUSIC.loose_season_on(soundcloud) == MUSIC.loose_season_on(bandcamp) == "Singles"

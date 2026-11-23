@@ -1053,6 +1053,7 @@ def _create_collection(
     import has already put in the library, by the name the other program gives them."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
+    from backend.types.link_season_types import ChannelSeason, LinkSeasons, RepeatVideos
     from backend.utils.helpers import generate_uuid, slugify
     from sources import get_source
 
@@ -1072,6 +1073,11 @@ def _create_collection(
             episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
             author_name=author, author_slug=slugify(author) or details.slug,
             thumbnail_landscape_path=details.image_url, split_chapters=bool(plan.settings.get("split_chapters", False)),
+            # A channel keeps what the other program had: its playlists only where the plan names them, the channel's
+            # season of what is in none of them, and a video in one season. A channel collection's own defaults
+            # would add every playlist.
+            link_seasons=LinkSeasons.OFF.value, channel_season=ChannelSeason.UNLISTED.value,
+            repeat_videos=RepeatVideos.ONE_SEASON.value,
         )
         add_collection(session, collection)
         _add_link_seasons(session, collection, plan)

@@ -149,3 +149,17 @@ def test_an_album_of_a_soundcloud_artist_keeps_its_own_name_and_picture(monkeypa
     details = source.collection_details("https://soundcloud.com/flume/sets/palaces")
 
     assert (details.title, details.image_url) == ("Palaces (All)", None)
+
+
+def test_a_soundcloud_artists_link_is_named_and_pictured_by_the_artist_when_looked_up(monkeypatch):
+    # Add media shows the link as Add collection will add it.
+    from sources.ytdlp.source import YtDlpSource
+
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_info", lambda url, *args, **kwargs: {
+        "_type": "playlist", "id": "flume", "title": "Flume (All)", "webpage_url": url,
+    })
+    link = source.resolve("https://soundcloud.com/flume")
+
+    assert (link.title, link.author_name) == ("Flume", "Flume")
+    assert link.image_url == "https://i1.sndcdn.com/avatars-flume-t500x500.jpg"

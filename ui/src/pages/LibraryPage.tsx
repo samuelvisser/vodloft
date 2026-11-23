@@ -495,8 +495,11 @@ export default function LibraryPage() {
                                 return (
                                     <CollectionTile
                                         key={collection.slug} collection={collection}
-                                        // A yt-dlp creator's author is usually the creator itself: do not say its name twice.
-                                        subtitle={collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null}
+                                        // What it is on its Site, as a creator's card says, and its author unless that is its own name.
+                                        subtitle={[
+                                            collection.kindName,
+                                            collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null,
+                                        ].filter(Boolean).join(' · ') || null}
                                         selection={selection.active ? {
                                             chosen: selection.selected.has(bulkKey('collection', collection.id)),
                                             onToggle: () => selection.toggle(bulkKey('collection', collection.id)),

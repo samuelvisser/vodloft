@@ -35,7 +35,7 @@ from backend.db.models import Collection, CollectionList, CollectionListItem, Ep
 from backend.services.season_order import arrange_seasons, link_first_videos, made_season, season_year
 from backend.services.seasons import create_season_record
 from backend.services.new_lists import ListKind, NewListSetting, list_kinds, new_link_seasons_settings
-from backend.services.sites import collection_site
+from backend.services.sites import collection_creator_names, collection_names, collection_site, collection_words
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import EpisodeIdentifier
 from backend.types.season_types import SeasonType
@@ -60,14 +60,16 @@ def section_list_names(collection: Collection) -> Names:
 
 
 def holds_whole_channel(collection: Collection) -> bool:
-    """Whether the collection's channel season holds every video of its feeds, also those its lists have."""
-    return collection.channel_season == ChannelSeason.EVERYTHING.value and lists_own_link(collection)
+    """Whether the collection's channel season holds every video of its feeds, also those its lists have. Only on a
+    Site whose lists can be seasons: elsewhere, such as on The Daily Wire, seasons are the Site's own."""
+    return (collection.channel_season == ChannelSeason.EVERYTHING.value and collection_site(collection).link_seasons
+            and lists_own_link(collection))
 
 
 def loose_season_name(collection: Collection) -> str:
     """The name of the channel season: the Site's name for a channel collection, such as Channel, when it holds the
     whole channel; otherwise the name of the videos in none of the collection's lists, Videos, or as its Site names
-    them, such as Tracks on Bandcamp, unless its type names them itself, such as Singles in a Music collection."""
+    them, such as Singles on SoundCloud, unless its type names them itself, such as Singles in a Music collection."""
     site = collection_site(collection)
     if holds_whole_channel(collection):
         return site.channel_collection_names.singular.capitalize()
@@ -227,6 +229,43 @@ def collection_list_kinds(collection: Collection) -> list[ListKind]:
 def collection_new_lists(collection: Collection) -> list[NewListSetting]:
     """What the collection does with a new list of each kind of its Site."""
     return new_link_seasons_settings(collection_list_kinds(collection), collection.new_lists)
+
+
+def seasons_plan(collection: Collection) -> str:
+    """What a collection's settings make its seasons, in words, such as for a collection about to be added: each list
+    a season, what goes in the channel season, or a season per upload year."""
+    words = collection_words(collection)
+    season, episodes = words.season, words.episode.plural
+    if made_from_list(collection):
+        return f"The {collection_names(collection).singular} is one {season.singular} in VODLoft, its {episodes} in its order."
+    if not lists_playlists(collection) or collection.link_seasons == LinkSeasons.OFF.value:
+        return f"VODLoft puts the {episodes} of each upload year in their own {season.singular}."
+    settings = collection_new_lists(collection)
+    if collection.link_seasons == LinkSeasons.ALL.value:
+        taken, skipped = [setting.kind.names for setting in settings], []
+    else:
+        actions = {setting.key: setting.action for setting in settings}
+        taken = [s.kind.names for s in settings if actions[s.key] == NewLinkSeasonAction.ADD.value]
+        skipped = [s.kind.names for s in settings if actions[s.key] == NewLinkSeasonAction.IGNORE.value]
+    creator = collection_creator_names(collection).singular
+    sentences = []
+    if taken:
+        lists = Names.joined(taken)
+        if collection.list_layout == ListLayout.BY_YEAR.value:
+            sentences.append(f"The {episodes} of every {creator} {lists.singular} go in {season.a} per upload year.")
+        else:
+            sentences.append(f"Every {creator} {lists.singular} becomes {season.a} in VODLoft.")
+    if skipped:
+        sentences.append(f"{Names.joined(skipped).plural.capitalize()} are ignored.")
+    if collection.loose_videos == LooseVideos.BY_YEAR.value:
+        sentences.append(f"The {episodes} in none of them go in {season.a} per upload year.")
+    elif holds_whole_channel(collection):
+        also = f", also those in {Names.joined(taken).a}" if taken else ""
+        sentences.append(f"{loose_season_name(collection)} holds every {words.episode.singular} of the "
+                         f"{collection_names(collection).singular}{also}.")
+    else:
+        sentences.append(f"{episodes.capitalize()} in none of them go in {loose_season_name(collection)}.")
+    return " ".join(sentences)
 
 
 def _new_list_actions(collection: Collection):

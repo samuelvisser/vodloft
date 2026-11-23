@@ -18,5 +18,3 @@ class Bandcamp(OtherSites):
     )
     # An artist's albums are their playlists.
     link_seasons = True
-    # What is in none of a collection's albums is its tracks.
-    loose_season = "Tracks"
