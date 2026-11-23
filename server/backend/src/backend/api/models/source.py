@@ -249,6 +249,9 @@ class CollectionDetailsAPIRead(ResponseBase):
     kind: CollectionKind
     """What the link is: a channel, or one list, such as a playlist or an album, which is the collection's one
     season, its episodes in the list's order."""
+    list_type: Optional[str] = None
+    """Which of its Site's types of list the link is, such as an album or a playlist on SoundCloud, where its link
+    doesn't tell."""
     seasons_plans: dict[str, str] = Field(default_factory=dict)
     """What the collection's seasons will be once it is added as each type, in words, as its Site's defaults make
     them: each list a season, what goes in the channel season, or a season per upload year."""

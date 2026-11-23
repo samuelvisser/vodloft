@@ -1068,7 +1068,7 @@ def _create_collection(
         author = plan.artist or details.author_name or details.title
         collection = Collection(
             uuid=generate_uuid(), slug=details.slug, source_key=source.id, title=plan.title or details.title,
-            description=details.description, sharing_url=details.url,
+            description=details.description, sharing_url=details.url, list_type=details.list_type,
             membership_level="FREE", type=CollectionType(plan.settings.get("type", "series")).value,
             episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
             author_name=author, author_slug=slugify(author) or details.slug,

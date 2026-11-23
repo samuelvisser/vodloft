@@ -709,7 +709,9 @@ class YtDlpSource(Source):
         info = self._info(url)
         if info.get("_type") != "playlist":
             raise runner.YtDlpError("This link is a single video, not a channel or playlist")
-        return self._implementation(url).complete_collection(self._collection(info, url), url)
+        implementation = self._implementation(url)
+        details = replace(self._collection(info, url), list_type=implementation.list_type(info, url))
+        return implementation.complete_collection(details, url)
 
     def list_episodes(
         self, url: str, *, known: frozenset[str], feeds: frozenset[str] | None = None,

@@ -128,7 +128,9 @@ def site_season_names(site: SourceSite, collection_type: str, kind: str | None, 
 def collection_names(collection: Collection) -> Names:
     """What the collection's Site calls a collection of its kind, such as a channel or a playlist on YouTube."""
     site = collection_site(collection)
-    return site.channel_collection_names if collection.kind == CollectionKind.CHANNEL.value else site.list_collection_names
+    if collection.kind == CollectionKind.CHANNEL.value:
+        return site.channel_collection_names
+    return site.list_collection_names_of(collection.list_type)
 
 
 def collection_episode_tags(collection: Collection) -> tuple[EpisodeTag, ...]:

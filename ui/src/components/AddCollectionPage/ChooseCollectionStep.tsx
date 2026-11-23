@@ -163,6 +163,7 @@ export default function ChooseCollectionStep({value, onChange, onSubmit: onSubmi
                 backgroundImagePath: null,
                 logoImagePath: null,
                 sharingUrl: details.sharingUrl,
+                listType: details.listType,
                 authorName: details.authorName,
                 authorSlug: details.authorSlug,
                 authorHeadshotPath: null,

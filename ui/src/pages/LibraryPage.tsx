@@ -495,11 +495,10 @@ export default function LibraryPage() {
                                 return (
                                     <CollectionTile
                                         key={collection.slug} collection={collection}
-                                        // What it is on its Site, as a creator's card says, and its author unless that is its own name.
-                                        subtitle={[
-                                            collection.kindName,
-                                            collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null,
-                                        ].filter(Boolean).join(' · ') || null}
+                                        // What it is on its Site, as a creator's card says. Its author only shows on a collection that
+                                        // has no such name, unless that is its own name: beside the kind it would not fit.
+                                        subtitle={collection.kindName
+                                            || (collection.authorName && !sameName(collection.authorName, collection.title) ? collection.authorName : null)}
                                         selection={selection.active ? {
                                             chosen: selection.selected.has(bulkKey('collection', collection.id)),
                                             onToggle: () => selection.toggle(bulkKey('collection', collection.id)),
