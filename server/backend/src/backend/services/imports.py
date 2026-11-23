@@ -131,8 +131,6 @@ class ImportOptions:
     """Output templates the person edited, by profile external id."""
     feed_base_url: str | None = None
     """VODLoft's own address, from the request that started the run: imported feeds get their URL on it."""
-    as_creators: bool = True
-    """Add each new Collection to the creator behind its links, adding the creator when it is not in the Library."""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -145,7 +143,6 @@ class ImportOptions:
             "merge_profiles": self.merge_profiles,
             "templates": dict(self.templates),
             "feed_base_url": self.feed_base_url,
-            "as_creators": self.as_creators,
         }
 
     @classmethod
@@ -164,7 +161,6 @@ class ImportOptions:
             merge_profiles=bool(data.get("merge_profiles", False)) if data else None,
             templates=dict(data.get("templates") or {}),
             feed_base_url=data.get("feed_base_url"),
-            as_creators=bool(data.get("as_creators", True)),
         )
 
 
@@ -613,8 +609,6 @@ class ImportPreview:
     last_run: ImportRun | None
     merge_profiles: bool
     counts: ImportCounts
-    creators: bool = False
-    """Whether the person chooses to add the collections to their creators."""
 
 
 def last_run(session: Session, importer: Importer) -> ImportRun | None:
@@ -704,7 +698,6 @@ def preview(session: Session, importer: Importer, options: ImportOptions) -> Imp
         warnings=plan.warnings,
         records=records,
         last_run=last_run(session, importer),
-        creators=plan.creators,
         merge_profiles=bool(options.merge_profiles),
         counts=ImportCounts(
             collections=len(records["collections"]) if records else len(plan.collections),
@@ -1046,11 +1039,9 @@ def _settle_field_keys(session: Session, plan: ImportPlan, links, library: Mappi
     return replace(plan, profiles=profiles, collections=tuple(collections))
 
 
-def _create_collection(
-    session: Session, plan: CollectionPlan, as_creators: bool = True, artists: dict[str, Creator] | None = None,
-) -> Collection:
-    """A new yt-dlp Collection for the plan, looked up the way Add Collection does. ``artists`` are the artists this
-    import has already put in the library, by the name the other program gives them."""
+def _create_collection(session: Session, plan: CollectionPlan, artists: dict[str, Creator]) -> Collection:
+    """A new yt-dlp Collection for the plan, looked up the way Add Collection does. ``artists`` are the creators this
+    import has already put an artist's other collection in, by the name the other program gives the artist."""
     from backend.services.collections import add_collection, index_new_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
     from backend.types.link_season_types import ChannelSeason, LinkSeasons, RepeatVideos
@@ -1060,37 +1051,36 @@ def _create_collection(
     source = get_source("ytdlp")
     if plan.links_only:
         return _create_links_only_collection(session, plan)
-    if plan.creator:
-        collection = _create_artist_collection(session, plan)
-    else:
-        details = source.collection_details(plan.url)
-        # Music is by the artist the other program names, whoever uploaded it.
-        author = plan.artist or details.author_name or details.title
-        collection = Collection(
-            uuid=generate_uuid(), slug=details.slug, source_key=source.id, title=plan.title or details.title,
-            description=details.description, sharing_url=details.url,
-            membership_level="FREE", type=CollectionType(plan.settings.get("type", "series")).value,
-            episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
-            author_name=author, author_slug=slugify(author) or details.slug,
-            thumbnail_landscape_path=details.image_url, split_chapters=bool(plan.settings.get("split_chapters", False)),
-            # A channel keeps what the other program had: its playlists only where the plan names them, the channel's
-            # season of what is in none of them, and a video in one season. A channel collection's own defaults
-            # would add every playlist.
-            link_seasons=LinkSeasons.OFF.value, channel_season=ChannelSeason.UNLISTED.value,
-            repeat_videos=RepeatVideos.ONE_SEASON.value,
-        )
-        add_collection(session, collection)
-        _add_link_seasons(session, collection, plan)
-    if as_creators:
-        _join_artist(session, collection, plan, artists or {})
+    details = source.collection_details(plan.url)
+    # Music is by the artist the other program names, whoever uploaded it.
+    author = plan.artist or details.author_name or details.title
+    collection = Collection(
+        uuid=generate_uuid(), slug=details.slug, source_key=source.id, title=plan.title or details.title,
+        description=details.description, sharing_url=details.url,
+        membership_level="FREE", type=CollectionType(plan.settings.get("type", "series")).value,
+        episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
+        author_name=author, author_slug=slugify(author) or details.slug,
+        thumbnail_landscape_path=details.image_url, split_chapters=bool(plan.settings.get("split_chapters", False)),
+    )
+    if not plan.artist_page:
+        # A channel keeps what the other program had: its playlists only where the plan names them, the channel's
+        # season of what is in none of them, and a video in one season. A channel collection's own defaults would add
+        # every playlist. An artist's page keeps those defaults: every album a season, the ones to come too.
+        collection.link_seasons = LinkSeasons.OFF.value
+        collection.channel_season = ChannelSeason.UNLISTED.value
+        collection.repeat_videos = RepeatVideos.ONE_SEASON.value
+    add_collection(session, collection)
+    _add_link_seasons(session, collection, plan)
+    if plan.joins_artist:
+        _join_artist(session, collection, plan, artists)
     index_new_collection(session, collection)
     return collection
 
 
 def _join_artist(session: Session, collection: Collection, plan: CollectionPlan, artists: dict[str, Creator]) -> None:
-    """Group a new channel Collection under its creator. Music joins the artist the import already added for the same
-    artist, such as music videos their albums' artist, also from another Site. Otherwise it joins the creator behind
-    its link, and a creator the import adds there takes the other program's name for the artist."""
+    """Group a new channel Collection of an artist with the artist's other collection. It joins the creator the
+    import already put the other one in, also from another Site; otherwise the creator behind its link, and a creator
+    the import adds there takes the other program's name for the artist."""
     from backend.services.creators import can_join, join_creator, rename_creator
 
     if not can_join(collection):
@@ -1142,40 +1132,6 @@ def _join_creator(session: Session, collection: Collection) -> tuple[Creator | N
     except Exception as exc:  # noqa: BLE001  (a creator that can't be looked up leaves a plain collection)
         logger.info("Imported %s without its creator: %s", collection.title, exc)
         return None, False
-
-
-def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collection:
-    """A channel collection of everything on a creator's page, such as a Bandcamp artist's albums, each album a season
-    of its own and the ones to come too. The channel season holds only what is on no album, as the other program
-    kept each track once."""
-    from backend.services.collections import add_collection
-    from backend.types.collection_types import CollectionType, EpisodeIdentifier
-    from backend.types.link_season_types import ChannelSeason, LinkSeasons, RepeatVideos
-    from backend.utils.helpers import generate_uuid, name_in_text, slugify
-    from sources import SectionKind, get_source
-
-    source = get_source("ytdlp")
-    details = source.creator_details(plan.url)
-    sections = [section for section in details.sections if section.access is None]
-    if not sections:
-        raise ValueError(f"{name_in_text(details.title)} has nothing VODLoft can add")
-    feed = next((section for section in sections if section.kind is SectionKind.FEED), None)
-    collection = Collection(
-        uuid=generate_uuid(), slug=slugify(details.handle or details.title) or details.ref, source_key=source.id,
-        title=plan.title or details.title, description=details.description,
-        sharing_url=feed.url if feed is not None else details.url or plan.url,
-        membership_level="FREE", type=(CollectionType.MUSIC if details.music and details.music_known else CollectionType(plan.settings.get("type", "series"))).value,
-        episode_identifier=EpisodeIdentifier(plan.settings.get("episode_identifier", "date_based")).value,
-        author_name=plan.artist or details.title, author_slug=slugify(details.handle or details.title) or details.ref,
-        thumbnail_landscape_path=details.avatar_url or next((section.image_url for section in sections if section.image_url), None),
-        genre=plan.settings.get("genre"), content_rating=plan.settings.get("content_rating"),
-        link_seasons=LinkSeasons.SELECTED.value, channel_season=ChannelSeason.UNLISTED.value,
-        repeat_videos=RepeatVideos.ONE_SEASON.value,
-    )
-    # A kind of list an artist's albums are not, such as a SoundCloud playlist, starts off, as its channel's defaults
-    # say: the other program took only albums.
-    add_collection(session, collection)
-    return collection
 
 
 def _add_link_seasons(session: Session, collection: Collection, plan: CollectionPlan) -> int:
@@ -1243,8 +1199,8 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
 
 
 def _upsert_collection(
-    session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report, as_creators: bool = True,
-    artists: dict[str, Creator] | None = None,
+    session: Session, plan: CollectionPlan, library, links, run: ImportRun, report: _Report,
+    artists: dict[str, Creator],
 ) -> tuple[Collection | None, bool]:
     """The Collection, and whether it was just created (and so is being indexed)."""
     link = links.get(("collection", plan.external_id))
@@ -1258,7 +1214,7 @@ def _upsert_collection(
     if existing is None:
         try:
             with session.begin_nested():
-                existing = _create_collection(session, plan, as_creators, artists)
+                existing = _create_collection(session, plan, artists)
         except CollectionAlreadyAddedError as exc:
             # The same collection, through another Source or under another link.
             existing = exc.existing
@@ -1273,8 +1229,8 @@ def _upsert_collection(
                 library[_normalise_url(existing.sharing_url)] = existing
             report.add("created", plan.title, "Added to the Library", warnings=[_warning(warning) for warning in plan.warnings])
             report.counts["collections_created"] += 1
-    if artists is not None and plan.artist and existing.creator is not None:
-        # The artist's other music, such as their music videos, joins this artist.
+    if plan.joins_artist and plan.artist and existing.creator is not None:
+        # The artist's other collection, such as their music videos, joins this creator.
         artists.setdefault(plan.artist, existing.creator)
     if plan.added_at is not None and (existing.created_at is None or plan.added_at < existing.created_at):
         # The Collection has been in your library since the other program added it.
@@ -1452,7 +1408,7 @@ def _apply_loaded_plan(
         if profile is None:
             continue
         collection, created = _upsert_collection(
-            session, collection_plan, library, links, run, report, plan.creators and options.as_creators, artists,
+            session, collection_plan, library, links, run, report, artists,
         )
         if collection is None:
             continue

@@ -11,12 +11,13 @@ the rest are reported. A TV Show Collection of a channel and its own playlists b
 whose playlists are seasons, each with its season's number and name, and a video several of them list stays in the
 highest one, as in ytdl-sub.
 
-A Bandcamp or SoundCloud discography becomes the artist, a creator, with its albums the seasons of one Music
-collection, with a Music Local Media Profile that keeps ytdl-sub's folder per artist and per album. An artist's music
-videos are a Music collection of their own, with a Music profile that downloads video; a ``+`` map's categories, such as
-Concerts, are its link seasons. Every music collection names the artist as ytdl-sub does, and an artist's albums and
-music videos join one artist: two collections, "<artist> albums" and "<artist> music videos", or one collection with
-both profiles when they download the same link.
+A Bandcamp or SoundCloud discography becomes a Music collection of the artist's page, as Add Collection adds it, with
+its albums as seasons, with a Music Local Media Profile that keeps ytdl-sub's folder per artist and per album. An
+artist's music videos are a Music collection of their own, with a Music profile that downloads video; a ``+`` map's
+categories, such as Concerts, are its link seasons. Every music collection names the artist as ytdl-sub does.
+Collections are added on their own, except an artist's albums and music videos: two collections, "<artist> albums"
+and "<artist> music videos", that join one creator, or one collection with both profiles when they download the same
+link.
 """
 from __future__ import annotations
 
@@ -629,8 +630,8 @@ def _artist(sub: Subscription, kind: str | None) -> str | None:
 
 
 def _music_refusal(sub: Subscription) -> str | None:
-    """Why a music subscription is not imported, or None for an artist VODLoft adds as a creator, or for full albums,
-    which VODLoft splits into tracks by their chapters."""
+    """Why a music subscription is not imported, or None for an artist's page, which VODLoft adds as a collection with
+    every album a season, or for full albums, which VODLoft splits into tracks by their chapters."""
     applied = set(sub.applied)
     if "YouTube Full Albums" in applied:
         return None
@@ -756,8 +757,7 @@ def _plan_subscription(sub: Subscription, folder: str, path_map: PathMap) -> tup
         link_seasons=tuple(links.playlists),
         loose_season=links.channel_season if links.playlists else None,
         links_only=links.links_only,
-        # An artist's page is the artist; other music, such as music videos, joins the creator behind its link.
-        creator=music and not full_albums,
+        artist_page=music and not full_albums,
         artist=_artist(sub, kind),
     )
     signature = (report.output_template, report.original, repr(sorted(settings.items())))
@@ -894,7 +894,7 @@ def _same_link(first: str, second: str) -> bool:
 
 def _artists(planned: list[_Planned]) -> list[_Planned]:
     """Name an artist's albums and music videos for what they are, and plan the albums first, so the music videos
-    join the artist their albums make. Albums and music videos of the same link are one collection, named after the
+    join the creator their albums join. Albums and music videos of the same link are one collection, named after the
     artist, which keeps both."""
     by_artist: dict[str, dict[str, list[_Planned]]] = {}
     for item in planned:
@@ -904,11 +904,14 @@ def _artists(planned: list[_Planned]) -> list[_Planned]:
         albums, videos = kinds.get("music", []), kinds.get("music_video", [])
         if not albums or not videos:
             continue
+        # Only a channel's collection, such as an artist's page, can join a creator; a playlist's can't.
+        channels = all(_collection_type(item.collection.url) == "channel" for item in (*albums, *videos))
         for item in (*albums, *videos):
             same = any(_same_link(item.collection.url, other.collection.url)
                        for other in (videos if item.kind == "music" else albums))
             title = artist if same else f"{artist} albums" if item.kind == "music" else f"{artist} music videos"
-            item.collection = replace(item.collection, title=title)
+            # Two collections of one artist, such as albums on Bandcamp and music videos on YouTube, share a creator.
+            item.collection = replace(item.collection, title=title, joins_artist=channels and not same)
     # Albums first: a stable sort keeps the rest in ytdl-sub's order.
     return sorted(planned, key=lambda item: item.kind != "music")
 
@@ -959,7 +962,6 @@ def plan_import(data: YtdlSubData, location: ImportLocation) -> ImportPlan:
         warnings=tuple(warnings),
         download_folder=folder,
         probes=probes,
-        creators=True,
     )
 
 
