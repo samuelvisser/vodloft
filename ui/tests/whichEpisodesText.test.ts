@@ -16,12 +16,12 @@ test('a seasons line that picks every season says so instead of naming them', ()
     assert.equal(seasonsLine(slugs, false), 'Only download if the album is any of all albums')
 })
 
-test('a seasons line names at most five seasons, newest first, and counts the others', () => {
+test('a seasons line names at most three seasons, newest first, and counts the others', () => {
     assert.equal(
         seasonsLine(slugs.slice(0, 8), true),
-        'Only download if the album is A8, A7, A6, A5, A4, 3 more albums or upcoming albums',
+        'Only download if the album is A8, A7, A6, 5 more albums or upcoming albums',
     )
-    assert.equal(seasonsLine(['a1', 'a2', 'a3', 'a4', 'a5', 'a6'], false), 'Only download if the album is A6, A5, A4, A3, A2 or 1 more album')
+    assert.equal(seasonsLine(['a1', 'a2', 'a3', 'a4'], false), 'Only download if the album is A4, A3, A2 or 1 more album')
     assert.equal(seasonsLine(['a2'], true), 'Only download if the album is A2 or upcoming albums')
 })
 
