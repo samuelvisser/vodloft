@@ -1151,14 +1151,14 @@ def _create_artist_collection(session: Session, plan: CollectionPlan) -> Collect
     from backend.services.collections import add_collection
     from backend.types.collection_types import CollectionType, EpisodeIdentifier
     from backend.types.link_season_types import ChannelSeason, LinkSeasons, RepeatVideos
-    from backend.utils.helpers import generate_uuid, slugify
+    from backend.utils.helpers import generate_uuid, name_in_text, slugify
     from sources import SectionKind, get_source
 
     source = get_source("ytdlp")
     details = source.creator_details(plan.url)
     sections = [section for section in details.sections if section.access is None]
     if not sections:
-        raise ValueError(f"{details.title} has nothing VODLoft can add")
+        raise ValueError(f"{name_in_text(details.title)} has nothing VODLoft can add")
     feed = next((section for section in sections if section.kind is SectionKind.FEED), None)
     collection = Collection(
         uuid=generate_uuid(), slug=slugify(details.handle or details.title) or details.ref, source_key=source.id,

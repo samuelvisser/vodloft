@@ -25,6 +25,7 @@ import {
 } from '../../types/schemas/collection_seasons'
 import './SeasonsDialog.css'
 import {collectionWords, CollectionWords, Noun, wordsOf} from '../../lib/collectionWords'
+import {nameInText} from '../../lib/nameInText'
 
 type Props = {
     open: boolean
@@ -532,7 +533,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                 <div className="modal seasons-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}
                      onClick={(event) => event.stopPropagation()}>
                     <div className="modal-header">
-                        <h2 id={titleId} className="modal-title">{season.Plural} of {collectionTitle}</h2>
+                        <h2 id={titleId} className="modal-title">{season.Plural} of {nameInText(collectionTitle)}</h2>
                     </div>
                     <form onSubmit={onSubmit} noValidate>
                         <div className="seasons-dialog-content">

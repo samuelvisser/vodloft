@@ -19,7 +19,7 @@ from backend.services.sites import collection_names, collection_site, site_recor
 from backend.types.collection_contracts import DEFAULT_WORDS, MUSIC, CollectionWords, collection_contract
 from backend.types.collection_types import CollectionType
 from backend.types.link_season_types import CollectionKind
-from backend.utils.helpers import generate_uuid, slugify
+from backend.utils.helpers import generate_uuid, slugify, name_in_text
 from sources import CreatorDetails, Feature, Names, SectionKind, SectionRef, Site, UnknownSourceError, get_source, site_of
 
 logger = logging.getLogger(__name__)
@@ -165,7 +165,7 @@ def new_creator(s: Session, source_key: str, details: CreatorDetails, *, added_b
     record = site_record(s, site)
     existing = account_in_library(s, record.key, details.ref)
     if existing is not None:
-        raise ServiceError(f"{details.title} is already in your library, as {existing.creator.title}", field="creator_slug")
+        raise ServiceError(f"{name_in_text(details.title)} is already in your library, as {name_in_text(existing.creator.title)}", field="creator_slug")
     creator = Creator(
         uuid=generate_uuid(), slug=_unique_slug(s, Creator, slugify(details.handle or details.title) or details.ref),
         title=details.title, description=details.description, avatar_path=details.avatar_url,
@@ -185,7 +185,7 @@ def join_creator(s: Session, collection: Collection, creator: Creator) -> None:
 
     ``s`` is a write transaction's session."""
     if collection.creator_id is not None:
-        raise ServiceError(f"{collection.title} is already in {collection.creator.title}", field="creator_slug")
+        raise ServiceError(f"{name_in_text(collection.title)} is already in {name_in_text(collection.creator.title)}", field="creator_slug")
     check_joins(collection)
     belong_to(collection, creator)
     s.flush()
@@ -246,7 +246,7 @@ def leave_creator(s: Session, collection: Collection) -> None:
 
     ``s`` is a write transaction's session."""
     if collection.creator is None:
-        raise ServiceError(f"{collection.title} is not in {collection_site(collection).creator_names.a}")
+        raise ServiceError(f"{name_in_text(collection.title)} is not in {collection_site(collection).creator_names.a}")
     collection.creator = None
     s.flush()
 
@@ -327,7 +327,7 @@ def combine_creators(s: Session, creator: Creator, other: Creator) -> None:
 
     ``s`` is a write transaction's session."""
     if other.id == creator.id:
-        raise ServiceError(f"{creator.title} can't be combined with themselves", field="other_slug")
+        raise ServiceError(f"{name_in_text(creator.title)} can't be combined with themselves", field="other_slug")
     for account in list(other.accounts):
         other.accounts.remove(account)
         creator.accounts.append(account)
@@ -352,7 +352,7 @@ def split_account(s: Session, account: CreatorAccount, details: CreatorDetails |
     ``details`` was looked up before the write transaction; ``s`` is a write transaction's session."""
     creator = account.creator
     if len(creator.accounts) < 2:
-        raise ServiceError(f"{creator.title} has only this account", field="account_id")
+        raise ServiceError(f"{name_in_text(creator.title)} has only this account", field="account_id")
     own = Creator(
         uuid=generate_uuid(),
         slug=_unique_slug(s, Creator, slugify((details.handle or details.title) if details else account.handle or creator.title) or account.site_ref),

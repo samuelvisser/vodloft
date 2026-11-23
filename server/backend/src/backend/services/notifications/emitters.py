@@ -4,6 +4,7 @@ Each one records the event in the caller's transaction, so it is only sent once 
 """
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -62,7 +63,7 @@ def new_episodes_found(session: Session, collection: Collection, count: int) -> 
         return
     emit(
         session, Event.NEW_EPISODES,
-        title=f"{count} new episode{'s' if count != 1 else ''} in {collection.title}",
+        title=f"{count} new episode{'s' if count != 1 else ''} in {name_in_text(collection.title)}",
         body="Nothing downloads them automatically.", collection_id=collection.id,
         url=f"/collection/{collection.slug}", data={"collection": collection.title},
     )
@@ -89,7 +90,7 @@ def link_seasons_found(session: Session, collection: Collection, playlists: list
     lists = section_list_names(collection)
     emit(
         session, Event.NEW_LISTS_FOUND,
-        title=f"New {lists.singular} for {collection.title}" if one else f"{len(playlists)} new {lists.plural} for {collection.title}",
+        title=f"New {lists.singular} for {name_in_text(collection.title)}" if one else f"{len(playlists)} new {lists.plural} for {name_in_text(collection.title)}",
         body=f"{names}. Choose in the collection's {season.plural} whether {f'it becomes {season.a}' if one else f'they become {season.plural}'}.",
         url=f"/edit-collection/{collection.id}?seasons=1",
         data={"collection": collection.title, "playlists": [playlist.title for playlist in playlists]},

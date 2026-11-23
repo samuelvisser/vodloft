@@ -5,6 +5,7 @@ import {collectionWords, type Noun} from './collectionWords'
 import {removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from './cache'
 import {episodeQueryKeys} from './collectionQueryOptions'
 import {quickDownloadFileUrl, quickDownloadToastId} from './quickDownloads'
+import {nameInText} from './nameInText'
 
 export type OperationMessageResolver = (operation: TaskOperationRead) => string
 
@@ -106,9 +107,9 @@ function fileRenameSuccessMessage(operation: TaskOperationRead, title: string): 
     + (resultNumber(operation, 'files_recovered') ?? 0)
   const unchanged = resultNumber(operation, 'files_unchanged') ?? 0
   const considered = resultNumber(operation, 'files_considered') ?? (renamed + unchanged)
-  if (considered === 0) return `No existing files needed renaming for ${title}`
+  if (considered === 0) return `No existing files needed renaming for ${nameInText(title)}`
   const unchangedDetail = unchanged > 0 ? `; ${unchanged} already matched` : ''
-  return `File Rename finished for ${title}: ${renamed} ${plural(renamed, 'file', 'files')} renamed${unchangedDetail}`
+  return `File Rename finished for ${nameInText(title)}: ${renamed} ${plural(renamed, 'file', 'files')} renamed${unchangedDetail}`
 }
 
 function invalidateCollectionEpisodeQueries(
@@ -446,7 +447,7 @@ export const frontendOperationDefinitions = {
     label: 'Collection indexing',
     invalidate: invalidateCollectionStructure,
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       const count = resultNumber(operation, 'episodes_found')
       return count === undefined
         ? `Indexing finished for ${collectionTitle}`
@@ -459,7 +460,7 @@ export const frontendOperationDefinitions = {
     label: 'Sync',
     invalidate: invalidateCollectionStructure,
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       const count = resultNumber(operation, 'episodes_found') ?? 0
       return `Sync finished for ${collectionTitle}: ${count} new ${plural(count, episodeWords(operation).singular, episodeWords(operation).plural)} found`
     },
@@ -470,7 +471,7 @@ export const frontendOperationDefinitions = {
     label: 'Metadata refresh',
     invalidate: invalidateCollectionEpisodeData,
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       const count = operation.progressTotal
       return count === 0
         ? `No ${episodeWords(operation).plural} to refresh in ${collectionTitle}`
@@ -493,7 +494,7 @@ export const frontendOperationDefinitions = {
     label: 'File Rename',
     invalidate: invalidateCollectionFiles,
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       return fileRenameSuccessMessage(operation, collectionTitle)
     },
   },
@@ -503,7 +504,7 @@ export const frontendOperationDefinitions = {
     label: 'Metadata rewrite',
     invalidate: invalidateCollectionFiles,
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       const retagged = resultNumber(operation, 'files_retagged') ?? 0
       const nfos = resultNumber(operation, 'nfos_written') ?? 0
       const failed = resultNumber(operation, 'files_failed') ?? 0
@@ -525,7 +526,7 @@ export const frontendOperationDefinitions = {
       invalidateCollectionFiles(operation, invalidations)
     },
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       return operation.result?.summary
         ? `${collectionTitle}: ${operation.result.summary}`
         : `${collectionTitle} numbers its episodes the new way`
@@ -540,7 +541,7 @@ export const frontendOperationDefinitions = {
       invalidateCollectionFiles(operation, invalidations)
     },
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       return operation.result?.summary
         ? `${collectionTitle}: ${operation.result.summary}`
         : `${collectionTitle} has its moved episodes in place`
@@ -558,7 +559,7 @@ export const frontendOperationDefinitions = {
       )
     },
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       return `Existing files for ${collectionTitle} are ready to review`
     },
   },
@@ -637,7 +638,7 @@ export const frontendOperationDefinitions = {
     label: 'Delete downloads outside its filters',
     invalidate: invalidateDownloadProfileOutOfScope,
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       const deleted = resultNumber(operation, 'downloads_deleted') ?? operation.progressTotal
       return `Deleted ${deleted} ${plural(deleted, 'download', 'downloads')} outside the filters of ${collectionTitle}`
     },
@@ -648,7 +649,7 @@ export const frontendOperationDefinitions = {
     label: 'Bulk delete downloads',
     invalidate: invalidateCollectionDownloadDeletion,
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       const files = resultNumber(operation, 'episode_files')
         ?? resultNumber(operation, 'completed')
         ?? 0
@@ -670,7 +671,7 @@ export const frontendOperationDefinitions = {
     label: 'Bulk download',
     invalidate: invalidateCollectionFiles,
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       const completed = resultNumber(operation, 'downloads_completed')
         ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
@@ -684,7 +685,7 @@ export const frontendOperationDefinitions = {
     label: 'Bulk delete and re-download',
     invalidate: invalidateCollectionFiles,
     success: (operation) => {
-      const collectionTitle = contextString(operation, 'collection_title') || operation.title
+      const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       const files = resultNumber(operation, 'episode_files')
         ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
@@ -790,29 +791,29 @@ export const frontendOperationDefinitions = {
     resourceType: 'media_download',
     label: 'Download',
     invalidate: invalidateMediaDownload,
-    success: (operation) => operation.result?.summary || `Downloaded ${operation.title}`,
+    success: (operation) => operation.result?.summary || `Downloaded ${nameInText(operation.title)}`,
     failed: (operation) => httpErrorMessage(operation.error)
-      ?? `Download failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`,
+      ?? `Download failed for ${nameInText(operation.title)}${operation.error ? `: ${operation.error}` : ''}`,
   },
   'quick.download': {
     kind: 'quick.download',
     resourceType: 'quick_download',
     label: 'Quick download',
     invalidate: invalidateQuickDownloads,
-    success: (operation) => `${operation.title} is ready to download`,
+    success: (operation) => `${nameInText(operation.title)} is ready to download`,
     successAction: quickDownloadFile,
     canceled: (operation) => operation.message && operation.message !== 'Canceled by user'
-      ? `Quick download of ${operation.title} stopped: ${operation.message}`
-      : `Quick download of ${operation.title} was canceled`,
+      ? `Quick download of ${nameInText(operation.title)} stopped: ${operation.message}`
+      : `Quick download of ${nameInText(operation.title)} was canceled`,
     failed: (operation) => operation.result?.summary
-      ?? `Quick download failed for ${operation.title}${operation.error ? `: ${operation.error}` : ''}`,
+      ?? `Quick download failed for ${nameInText(operation.title)}${operation.error ? `: ${operation.error}` : ''}`,
   },
   'quick.delivered': {
     kind: 'quick.delivered',
     resourceType: 'quick_download',
     label: 'Quick download delivered',
     invalidate: invalidateQuickDownloads,
-    success: (operation) => `${operation.title} was downloaded`,
+    success: (operation) => `${nameInText(operation.title)} was downloaded`,
     dismissesToast: quickDownloadDeliveredToast,
   },
 } satisfies Readonly<Record<string, FrontendOperationDefinition>>

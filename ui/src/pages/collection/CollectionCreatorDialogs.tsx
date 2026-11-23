@@ -10,6 +10,7 @@ import {BEHIND_LINK, useCreatorTargets} from '../../components/Creator/creatorTa
 import LookupSteps from '../creator/LookupSteps'
 import {useSlow} from '../../lib/useSlow'
 import '../creator/CreatorPages.css'
+import {nameInText} from '../../lib/nameInText'
 
 type DialogProps = {
     open: boolean
@@ -46,14 +47,15 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
     const slowMatch = useSlow(match.isLoading)
     const refresh = useRefresh(collectionSlug)
     const creator = match.data
-    const into = chosen?.title ?? creator?.creatorTitle ?? creator?.title
+    const intoTitle = chosen?.title ?? creator?.creatorTitle ?? creator?.title
+    const into = intoTitle ? nameInText(intoTitle) : undefined
 
     const add = async () => {
         try {
             if (chosen) await addCollectionToCreator(collectionSlug, chosen.slug)
             else await setCollectionCreator(collectionSlug, true, creator?.lookupId)
             await refresh()
-            toast.success(`${collectionTitle} is now part of ${into}`)
+            toast.success(`${nameInText(collectionTitle)} is now part of ${into}`)
             onDismiss()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : `Could not add the collection to the ${creatorNames?.singular}`)
@@ -63,7 +65,7 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
     return (
         <ConfirmDialog
             open={open}
-            title={`Add ${collectionTitle} to ${creatorNames?.a}`}
+            title={`Add ${nameInText(collectionTitle)} to ${creatorNames?.a}`}
             icon={faIcon('fass', 'circle-user')}
             onDismiss={onDismiss}
             confirmButton={{
@@ -113,8 +115,8 @@ export function AddToCreatorDialog({open, collectionSlug, collectionTitle, creat
                 </div>
             )}
             <p className="help">
-                The {creatorNames?.singular} groups {collectionTitle} with their other collections in your library.
-                Nothing in {collectionTitle} changes.
+                The {creatorNames?.singular} groups {nameInText(collectionTitle)} with their other collections in your library.
+                Nothing in {nameInText(collectionTitle)} changes.
             </p>
         </ConfirmDialog>
     )
@@ -130,7 +132,7 @@ export function RemoveFromCreatorDialog({open, collectionSlug, collectionTitle, 
         try {
             await setCollectionCreator(collectionSlug, false)
             await refresh()
-            toast.success(`${collectionTitle} is no longer part of ${creatorTitle ?? `its ${creatorNames?.singular}`}`)
+            toast.success(`${nameInText(collectionTitle)} is no longer part of ${creatorTitle ? nameInText(creatorTitle) : `its ${creatorNames?.singular}`}`)
             onDismiss()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : `Could not remove the collection from its ${creatorNames?.singular}`)
@@ -140,13 +142,13 @@ export function RemoveFromCreatorDialog({open, collectionSlug, collectionTitle, 
     return (
         <ConfirmDialog
             open={open}
-            title={`Remove from ${creatorTitle ?? creatorNames?.singular}?`}
+            title={`Remove from ${creatorTitle ? nameInText(creatorTitle) : creatorNames?.singular}?`}
             icon={faIcon('fass', 'link-slash')}
             onDismiss={onDismiss}
             confirmButton={{label: `Remove from ${creatorNames?.singular}`, onClick: remove}}
         >
             <p>
-                {collectionTitle} stands on its own in your library again. Nothing in it changes: it keeps its episodes,
+                {nameInText(collectionTitle)} stands on its own in your library again. Nothing in it changes: it keeps its episodes,
                 profiles and files, and its genre and content rating.
             </p>
         </ConfirmDialog>

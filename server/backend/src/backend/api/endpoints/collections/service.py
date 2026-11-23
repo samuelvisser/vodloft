@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 from datetime import datetime, time, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -289,7 +290,7 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
 
     if collection.creator is not None and body.author_name != collection.author_name:
         raise ServiceError(
-            f"The author of a collection of {collection.creator.title} is their name: change it on their Edit page",
+            f"The author of a collection of {name_in_text(collection.creator.title)} is their name: change it on their Edit page",
             field="authorName",
         )
     if body.type is not None and body.type != collection.type:
@@ -340,7 +341,7 @@ def _check_profiles_suit_type(collection: Collection, collection_type: Collectio
     if unsuited:
         names = ", ".join(sorted(set(unsuited)))
         raise ServiceError(
-            f"{collection.title} has Download Profiles that use {names}, which is not offered for "
+            f"{name_in_text(collection.title)} has Download Profiles that use {names}, which is not offered for "
             f"{collection_type.value} collections. Remove those Download Profiles first.",
             field="type",
         )
@@ -405,7 +406,7 @@ def request_collection_metadata_refresh(
     if not refreshes_metadata(collection.source_key):
         raise HTTPException(
             status_code=409,
-            detail=f"The episodes of {collection.title} are kept up to date by the daily catalogue refresh",
+            detail=f"The episodes of {name_in_text(collection.title)} are kept up to date by the daily catalogue refresh",
         )
 
     episodes = (
@@ -422,7 +423,7 @@ def request_collection_metadata_refresh(
         complete_operation(
             s,
             operation.id,
-            summary=f"No episodes to refresh in {collection.title}",
+            summary=f"No episodes to refresh in {name_in_text(collection.title)}",
             data={"episodes_refreshed": 0, "episodes_requested": 0},
         )
     else:
@@ -546,7 +547,7 @@ def request_collection_download_all(
         complete_operation(
             s,
             operation.id,
-            summary=f"No new episodes to download for {collection.title}",
+            summary=f"No new episodes to download for {name_in_text(collection.title)}",
             data={"downloads_completed": 0},
         )
 
@@ -763,7 +764,7 @@ def request_collection_file_rename(
         complete_operation(
             s,
             operation.id,
-            summary=f"No existing files to rename in {collection.title}",
+            summary=f"No existing files to rename in {name_in_text(collection.title)}",
             data={
                 "files_renamed": 0,
                 "files_unchanged": 0,

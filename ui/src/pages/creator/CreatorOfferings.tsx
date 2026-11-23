@@ -10,6 +10,7 @@ import {toImageUrl} from '../../components/Episode/EpisodeCard'
 import CollectionTileArt from '../../components/CollectionTileArt/CollectionTileArt'
 import {joinedNames} from '../../types/creator'
 import type {CreatorOffering, CreatorPageRead} from '../../types/schemas/creator'
+import {nameInText} from '../../lib/nameInText'
 
 // Tiles shown before "Show all": two rows on a computer, two on a phone.
 const DESKTOP_TILES = 12
@@ -37,11 +38,11 @@ export default function CreatorOfferings({creator}: {creator: CreatorPageRead}) 
     if (isLoading) {
         return (
             <p className="creator-note" role="status">
-                <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Looking up what else {creator.title} has…
+                <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/> Looking up what else {nameInText(creator.title)} has…
             </p>
         )
     }
-    if (error) return <p className="creator-note" role="alert">Could not look up what else {creator.title} has: {error.message}</p>
+    if (error) return <p className="creator-note" role="alert">Could not look up what else {nameInText(creator.title)} has: {error.message}</p>
     const several = creator.accounts.length > 1
     const items: Item[] = (data?.accounts ?? [])
         .flatMap((account) => account.offerings.map((offering) => ({accountId: account.accountId, siteName: account.site.name, offering})))
@@ -74,7 +75,7 @@ export default function CreatorOfferings({creator}: {creator: CreatorPageRead}) 
             if (offering.kind === 'show') await addCollectionToCreator(offering.collectionSlug!, creator.slug)
             else queryClient.setQueryData(['creator', creator.slug], await addCreatorMovies(creator.slug, item.accountId, [offering.ref]))
             await refresh(offering.kind === 'item')
-            toast.success(`${offering.title} is now part of ${creator.title}`)
+            toast.success(`${nameInText(offering.title)} is now part of ${nameInText(creator.title)}`)
         } catch (exc) {
             toast.error(exc instanceof Error ? exc.message : String(exc))
         } finally {
@@ -82,7 +83,7 @@ export default function CreatorOfferings({creator}: {creator: CreatorPageRead}) 
         }
     }
 
-    const away = items.some(({offering}) => offering.collectionSlug || offering.movieSlug) ? `not with ${creator.title}` : 'not in your library'
+    const away = items.some(({offering}) => offering.collectionSlug || offering.movieSlug) ? `not with ${nameInText(creator.title)}` : 'not in your library'
     return (
         <section className={`creator-more${open ? ' is-open' : ''}`} aria-label="Not in your library">
             <div className="creator-more-head" onClick={(event) => { if (event.target === event.currentTarget) setOpen(!open) }}>
@@ -94,7 +95,7 @@ export default function CreatorOfferings({creator}: {creator: CreatorPageRead}) 
                     )}
                     <span className="creator-more-text">
                         <b>
-                            <span className="creator-more-long">{creator.title} has {counted}</span>
+                            <span className="creator-more-long">{nameInText(creator.title)} has {counted}</span>
                             <span className="creator-more-short">{counted}</span>
                         </b>
                         <span className="creator-more-sub">
@@ -131,7 +132,7 @@ export default function CreatorOfferings({creator}: {creator: CreatorPageRead}) 
                                         <div className="creator-more-add">
                                             <button
                                                 type="button" className="btn btn-secondary creator-more-plus" disabled={busy !== null}
-                                                aria-label={`Add ${offering.title}`} title={inLibrary ? `Add to ${creator.title}` : 'Add to your library'}
+                                                aria-label={`Add ${offering.title}`} title={inLibrary ? `Add to ${nameInText(creator.title)}` : 'Add to your library'}
                                                 onClick={() => void add(item)}
                                             >
                                                 <FontAwesomeIcon icon={faIcon('fass', busy === key(item) ? 'spinner' : 'plus')} spin={busy === key(item)}/>

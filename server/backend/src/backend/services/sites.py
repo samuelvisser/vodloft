@@ -7,6 +7,7 @@ the Site's own id for it is unique per Site.
 """
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 from collections.abc import Iterable
 from dataclasses import replace
 from functools import lru_cache
@@ -30,7 +31,7 @@ class CollectionAlreadyAddedError(ValueError):
     """The collection is already in VODLoft, possibly through another Source."""
 
     def __init__(self, existing: Collection, site: Site):
-        super().__init__(f"{existing.title} is already in VODLoft, as a collection on {site.name}")
+        super().__init__(f"{name_in_text(existing.title)} is already in VODLoft, as a collection on {site.name}")
         self.existing = existing
 
 

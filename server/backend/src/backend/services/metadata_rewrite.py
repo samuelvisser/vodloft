@@ -8,6 +8,7 @@ and the NFO is written again.
 """
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 import logging
 import os
 from dataclasses import dataclass
@@ -112,7 +113,7 @@ def request_metadata_rewrite(
     ]
     if not profile_ids:
         raise ServiceError(
-            f"{collection.title} has no downloaded files whose Local Media Profile keeps metadata",
+            f"{name_in_text(collection.title)} has no downloaded files whose Local Media Profile keeps metadata",
             field="localMediaProfileId",
         )
     operation = create_operation(s, CollectionMetadataRewriteOperation(collection, local_media_profile_ids=profile_ids))

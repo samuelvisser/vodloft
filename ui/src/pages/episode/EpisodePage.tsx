@@ -32,6 +32,7 @@ import {fileWordsFor, wordsFor} from '../../lib/collectionWords'
 import {addLocalMediaProfilePath} from '../../types/local_media_profile'
 import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
 import LinkedText from '../../components/common/LinkedText'
+import {nameInText} from '../../lib/nameInText'
 
 
 const OPERATION_STARTING_MESSAGE = 'This task is starting...'
@@ -367,7 +368,7 @@ export default function EpisodePage() {
                         )}
                         {!locked && !downloadStateError && profiles !== undefined && !collectionProfiles?.length && (
                             <p>
-                                {profiles.length ? `No Local Media Profile fits ${collection.title} yet.` : 'No Local Media Profiles configured yet.'}{' '}
+                                {profiles.length ? `No Local Media Profile fits ${nameInText(collection.title)} yet.` : 'No Local Media Profiles configured yet.'}{' '}
                                 <Link to={addLocalMediaProfilePath({collectionType: collection.type, siteKey: collection.site?.key, from: collection.title, collectionId: collection.id, returnTo: `${location.pathname}${location.search}`})}>Add one</Link>
                                 {' '}to download this {words.episode.singular}.
                             </p>

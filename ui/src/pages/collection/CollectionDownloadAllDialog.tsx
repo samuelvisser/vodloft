@@ -23,6 +23,7 @@ import NumberInput from '../../components/common/NumberInput'
 import './CollectionDownloadAllDialog.css'
 import {apiUrl} from '../../lib/api'
 import {collectionWords, CollectionWords, downloadsBySeason} from '../../lib/collectionWords'
+import {nameInText} from '../../lib/nameInText'
 
 const LimitByReg = createSelectRegistry('DownloadAllLimitBy', {
   none: {label: 'No limits'},
@@ -189,11 +190,11 @@ export default function CollectionDownloadAllDialog({
         }),
       })
       toast.success(result.queued
-        ? `Queued ${result.episodesQueued} ${episode.singular} downloads for ${collectionTitle}`
-        : `No new ${episode.plural} to download for ${collectionTitle}`)
+        ? `Queued ${result.episodesQueued} ${episode.singular} downloads for ${nameInText(collectionTitle)}`
+        : `No new ${episode.plural} to download for ${nameInText(collectionTitle)}`)
     } catch (error) {
       const detail = error instanceof OperationStartError ? error.message : undefined
-      toast.error(detail || `Could not queue downloads for ${collectionTitle}`)
+      toast.error(detail || `Could not queue downloads for ${nameInText(collectionTitle)}`)
     } finally {
       setStarting(false)
       onStartingChange?.(false)

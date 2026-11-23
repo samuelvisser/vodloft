@@ -1,6 +1,7 @@
 """A collection's Seasons dialog."""
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -232,7 +233,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
     unknown = [change.id for change in [*body.playlists] if change.id not in playlists]
     unknown += [link_id for link_id in body.removed_links if link_id not in playlists]
     if unknown:
-        raise ServiceError(f"{collection.title} has no {lists.singular} {unknown[0]}", field="playlists")
+        raise ServiceError(f"{name_in_text(collection.title)} has no {lists.singular} {unknown[0]}", field="playlists")
     if any(not playlists[link_id].added_by_user for link_id in body.removed_links):
         raise ServiceError(f"Only a link you added can be removed; switch {lists.a} of the channel off instead", field="playlists")
     only = body.outside_videos == OutsideVideos.ONLY
@@ -260,7 +261,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         )
     feed_refs = [feed.ref for feed in _feeds(collection)]
     if body.feeds is not None and not set(body.feeds) <= set(feed_refs):
-        raise ServiceError(f"{collection.title} has no feed {sorted(set(body.feeds) - set(feed_refs))[0]}", field="feeds")
+        raise ServiceError(f"{name_in_text(collection.title)} has no feed {sorted(set(body.feeds) - set(feed_refs))[0]}", field="feeds")
     feeds = None if body.feeds is None or set(body.feeds) == set(feed_refs) else [ref for ref in feed_refs if ref in body.feeds]
     if feeds == [] and (body.outside_videos != OutsideVideos.ADD or body.link_seasons == LinkSeasons.OFF):
         raise ServiceError(
@@ -514,7 +515,7 @@ def save_added_link(s: Session, collection_slug: str, link: AddedLink) -> Collec
     collection = _collection(s, collection_slug)
     same = next((known for known in collection.lists if known.ref == link.ref or known.url == link.url), None)
     if same is not None:
-        raise ServiceError(f"{collection.title} has {same.title} already", field="url")
+        raise ServiceError(f"{name_in_text(collection.title)} has {name_in_text(same.title)} already", field="url")
     site = get_source(link.source_key).site_for(link.url)
     collection.lists.append(CollectionList(
         ref=link.ref, url=link.url, title=link.title, image_path=link.image_url, added_by_user=True, enabled=True,
