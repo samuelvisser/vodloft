@@ -128,7 +128,8 @@ class NpoSource(Source):
     name = "NPO Start"
     domains = ("npo.nl",)
     sites = (Site(
-        account.SITE_KEY, "NPO Start", domains, initials="NP", accesses=(NPO_PLUS,), searchable=True,
+        # A custom icon in VODLoft's Font Awesome Kit: NPO's diamond logo.
+        account.SITE_KEY, "NPO Start", domains, icon="fak:npo-start", initials="NP", accesses=(NPO_PLUS,), searchable=True,
         # Its programme pages only tell the length, which is all the upgrade check can compare.
         upgrade_checks=UpgradeChecks((UpgradeImprovement.LENGTH,)),
         # Its streams download with yt-dlp, which chooses among their versions. They have no subtitles.
