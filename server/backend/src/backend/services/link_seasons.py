@@ -38,7 +38,7 @@ from backend.services.new_lists import ListKind, NewListSetting, list_kinds, new
 from backend.services.sites import collection_creator_names, collection_names, collection_site, collection_words
 from backend.types.collection_contracts import collection_contract
 from backend.types.collection_types import EpisodeIdentifier
-from backend.types.season_types import SeasonType
+from backend.types.season_types import SeasonOrigin, SeasonType
 from backend.types.link_season_types import (
     ChannelSeason, CollectionKind, ListLayout, LooseVideos, NewLinkSeasonAction, LinkSeasons, ListStatus, OutsideVideos, RepeatVideos,
 )
@@ -455,7 +455,7 @@ class SeasonFinder:
         self._loose_one = link_seasons_on(collection) and loose_in_one_season(collection)
         self._one_list = made_from_list(collection)
 
-    def create(self, *, slug: str, name: str, number: int) -> Season:
+    def create(self, *, slug: str, name: str, number: int, origin: SeasonOrigin) -> Season:
         collection = self._collection
         if collection.custom_season_order:
             # The user's order stays: a new season goes last.
@@ -466,7 +466,7 @@ class SeasonFinder:
             unique, suffix = f"{slug}-{suffix}", suffix + 1
         season = create_season_record(
             self._s, collection_id=collection.id, index=max((x.index for x in collection.seasons), default=0) + 1,
-            slug=unique, name=name, season_number=number, update_collection_profiles=True,
+            slug=unique, name=name, season_number=number, origin=origin, update_collection_profiles=True,
         )
         made_season(self._s, season)
         self._s.refresh(collection)
@@ -488,7 +488,7 @@ class SeasonFinder:
         season = next((season for season in self._collection.seasons if season.loose), None)
         if season is None:
             name = loose_season_name(self._collection)
-            season = self.create(slug=name.lower(), name=name, number=self._named_number())
+            season = self.create(slug=name.lower(), name=name, number=self._named_number(), origin=SeasonOrigin.VODLOFT)
             season.loose = True
             self._s.flush()
         return season
@@ -501,7 +501,7 @@ class SeasonFinder:
         ), None)
         if season is None:
             title = self._collection.title
-            season = self.create(slug=slugify(title) or "1", name=title, number=1)
+            season = self.create(slug=slugify(title) or "1", name=title, number=1, origin=SeasonOrigin.LIST)
         return season
 
     def home_season(self, published_at: datetime | None) -> Season:
@@ -515,20 +515,22 @@ class SeasonFinder:
 
     def year_season(self, published_at: datetime | None) -> Season:
         year = (published_at or self._now).year
-        return self._by_year.get(year) or self.create(slug=str(year), name=str(year), number=year)
+        return self._by_year.get(year) or self.create(slug=str(year), name=str(year), number=year, origin=SeasonOrigin.VODLOFT)
 
     def list_season(self, playlist: CollectionList) -> Season:
         """A playlist's season, made when the playlist gets its first video."""
         if playlist.season is None:
             number = self._named_number()
-            playlist.season = self.create(slug=slugify(playlist.title) or str(number), name=playlist.title, number=number)
+            playlist.season = self.create(
+                slug=slugify(playlist.title) or str(number), name=playlist.title, number=number, origin=SeasonOrigin.LIST,
+            )
             self._s.flush()
         return playlist.season
 
     def own_season(self, name: str) -> Season:
         """A season of its own, such as for a video split by chapter."""
         number = self._named_number()
-        return self.create(slug=slugify(name) or str(number), name=name, number=number)
+        return self.create(slug=slugify(name) or str(number), name=name, number=number, origin=SeasonOrigin.VODLOFT)
 
     def move(self, episode: Episode, season: Season) -> None:
         """Move an episode to another season. A seasonal number follows its new season."""
@@ -992,17 +994,13 @@ def seasons_with_parts(s: Session, collection: Collection) -> set[int]:
     ))
 
 
-def season_removable(collection: Collection, season: Season, with_parts: set[int]) -> bool:
+def season_removable(season: Season, with_parts: set[int]) -> bool:
     """Whether the user can remove the season: one that VODLoft or the user made, whose videos go where the
     collection's settings put them, as new videos would. Not a season the Site has itself, such as a show's seasons,
     nor the season of extras or of a video split by chapter."""
     if season.season_type == SeasonType.EXTRA.value or season.id in with_parts:
         return False
-    if not get_source(collection.source_key).has(Feature.OWN_SEASONS):
-        return True
-    return season.loose or season_year(season) is not None or any(
-        playlist.season_id == season.id for playlist in collection.lists
-    )
+    return season.origin != SeasonOrigin.SITE.value
 
 
 def let_go_of_seasons(collection: Collection, season_ids: set[int]) -> dict[int, tuple[str, bool]]:

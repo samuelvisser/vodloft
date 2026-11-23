@@ -477,6 +477,7 @@ def test_without_a_seasons_line_every_season_is_downloaded(db_session):
 
 def test_a_new_season_joins_seasons_lines_that_include_upcoming_seasons(db_session):
     from backend.services.seasons import create_season_record
+    from backend.types.season_types import SeasonOrigin
 
     collection, first = _collection(db_session)
     collection.episode_identifier = "seasonal"
@@ -484,7 +485,8 @@ def test_a_new_season_joins_seasons_lines_that_include_upcoming_seasons(db_sessi
     fixed = _profile(db_session, collection, only_seasons("which-s1"))
 
     create_season_record(
-        db_session, collection_id=collection.id, index=2, slug="which-s2", name="Two", update_collection_profiles=True,
+        db_session, collection_id=collection.id, index=2, slug="which-s2", name="Two", origin=SeasonOrigin.SITE,
+        update_collection_profiles=True,
     )
 
     assert upcoming.filters[0].season_slugs == ["which-s1", "which-s2"]

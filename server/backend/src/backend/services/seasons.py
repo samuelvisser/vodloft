@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Season
 from backend.services.episode_filters import add_upcoming_season
-from backend.types.season_types import SeasonType
+from backend.types.season_types import SeasonOrigin, SeasonType
 from backend.types.collection_contracts import collection_contract
 from backend.utils.season_ordering import season_type_from_name
 from task_manager.events.transactional import queue_event
@@ -17,6 +17,7 @@ def create_season_record(
     index: int,
     slug: str,
     name: str,
+    origin: SeasonOrigin,
     update_collection_profiles: bool = False,
     season_number: int | None = None,
 ) -> Season:
@@ -44,6 +45,7 @@ def create_season_record(
         name=name,
         season_type=season_type.value,
         season_number=season_number,
+        origin=origin.value,
     )
     s.add(season)
     s.flush()

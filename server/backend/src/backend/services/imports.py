@@ -1186,6 +1186,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
     from backend.db.models import CollectionList
     from backend.services.seasons import create_season_record
     from backend.types.link_season_types import LinkSeasons, ListStatus, OutsideVideos
+    from backend.types.season_types import SeasonOrigin
     from backend.utils.helpers import slugify
     from sources import get_source
 
@@ -1195,7 +1196,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
     have = {playlist.ref for playlist in collection.lists}
     seasons = {season.season_number: season for season in collection.seasons}
 
-    def season_of(number: int | None, title: str | None):
+    def season_of(number: int | None, title: str | None, origin: SeasonOrigin):
         """The season with the other program's number, made when the Collection has none yet."""
         if number is None:
             return None
@@ -1206,14 +1207,14 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
                 slug = f"{slug}-{number}"
             seasons[number] = create_season_record(
                 session, collection_id=collection.id, index=max((x.index for x in seasons.values()), default=0) + 1,
-                slug=slug, name=name, season_number=number,
+                slug=slug, name=name, season_number=number, origin=origin,
             )
         return seasons[number]
 
     loose = plan.loose_season
     if loose is not None and not any(season.loose for season in seasons.values()):
         # The channel's videos in none of the playlists keep the season the other program had them in.
-        if (season := season_of(loose.season_number, loose.title)) is not None:
+        if (season := season_of(loose.season_number, loose.title, SeasonOrigin.VODLOFT)) is not None:
             season.loose = True
     added = 0
     for position, wanted in enumerate(sorted(plan.link_seasons, key=lambda p: (p.season_number is None, p.season_number or 0))):
@@ -1224,7 +1225,7 @@ def _add_link_seasons(session: Session, collection: Collection, plan: Collection
         site = get_source(collection.source_key).site_for(wanted.url)
         collection.lists.append(CollectionList(
             ref=ref, url=wanted.url, title=wanted.title or ref, site_position=position, enabled=True,
-            status=ListStatus.KNOWN.value, season=season_of(wanted.season_number, wanted.title),
+            status=ListStatus.KNOWN.value, season=season_of(wanted.season_number, wanted.title, SeasonOrigin.LIST),
             source_key=collection.source_key, site_key=site_record(session, site).key if site is not None else None,
         ))
         have.add(ref)

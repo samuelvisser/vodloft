@@ -30,7 +30,7 @@ from backend.types.collection_types import EpisodeIdentifier
 from backend.types.download_profile_types import EpIdType
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
-from backend.types.season_types import SeasonType
+from backend.types.season_types import SeasonOrigin, SeasonType
 from backend.services.extra_indexes import is_extra
 from backend.utils.helpers import generate_uuid
 from backend.utils.output_template import episode_output_template_values
@@ -150,7 +150,7 @@ def _add(s: Session, form: ExampleCollection, videos: list[VideoDetails]) -> tup
     for season_in, index, season_type, number in number_initial_seasons(list(form.seasons)):
         seasons[season_in.slug] = Season(
             collection=collection, index=index, slug=season_in.slug, name=season_in.name,
-            season_type=season_type.value, season_number=number,
+            season_type=season_type.value, season_number=number, origin=SeasonOrigin.SITE.value,
         )
     now = datetime.now(timezone.utc)
     counters: dict[str, int] = {}
@@ -193,7 +193,7 @@ def _year_season(collection: Collection, seasons: dict[str, Season], video: Vide
     if year not in seasons:
         seasons[year] = Season(
             collection=collection, index=len(seasons) + 1, slug=year, name=year,
-            season_type=SeasonType.NORMAL.value, season_number=int(year),
+            season_type=SeasonType.NORMAL.value, season_number=int(year), origin=SeasonOrigin.VODLOFT.value,
         )
     return seasons[year]
 

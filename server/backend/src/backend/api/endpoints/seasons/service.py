@@ -54,6 +54,7 @@ def create_season(
     update_collection_profiles: bool = False,
 ) -> SeasonAPIRead:
     from backend.services.seasons import create_season_record
+    from backend.types.season_types import SeasonOrigin
 
     season = create_season_record(
         s,
@@ -61,6 +62,8 @@ def create_season(
         index=body.index,
         slug=body.slug,
         name=body.name,
+        # A season the user makes is VODLoft's.
+        origin=SeasonOrigin.VODLOFT,
         update_collection_profiles=update_collection_profiles,
     )
     return SeasonAPIRead.model_validate(season)
