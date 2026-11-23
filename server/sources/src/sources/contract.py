@@ -941,6 +941,36 @@ def initials_of(name: str) -> str:
     return letters.upper()
 
 
+_TITLE_LENGTH = (10, 60)
+"""The least and most characters of a title made from a description (``title_from_description``)."""
+_TITLE_STOP = re.compile(r"[#@]|https?://")
+_TITLE_TRAIL = " \t-–—|:;,"
+
+
+def title_from_description(description: str | None) -> str | None:
+    """A title made from a video's description, for a Site whose videos have none of their own: its first line,
+    up to the first hashtag, mention or link. A first line shorter than the least length goes on with the next
+    one, and one longer than the most ends at the last whole word that fits. None when the description has too
+    little for a title.
+
+    A hashtag or mention within the first characters, such as one the line opens with, is part of the title, so
+    that "@friend and I at the beach #summer" is "@friend and I at the beach"."""
+    shortest, longest = _TITLE_LENGTH
+    text = ""
+    for line in (description or "").splitlines():
+        if line.strip():
+            text = f"{text} {line.strip()}".strip()
+            if len(text) >= shortest:
+                break
+    if stop := _TITLE_STOP.search(text, shortest):
+        text = text[:stop.start()]
+    if len(text) > longest:
+        end = text.rfind(" ", shortest, longest + 1)
+        text = text[:end] if end != -1 else text[:longest]
+    text = text.rstrip(_TITLE_TRAIL)
+    return text if len(text) >= shortest else None
+
+
 @dataclass(frozen=True)
 class Site:
     """One website as the user knows it, such as YouTube or The Daily Wire, whichever Source fetches it.
@@ -1032,6 +1062,11 @@ class Site:
     """How the Site removes its media itself after a while, such as Twitch its past broadcasts. Media that leaves
     such a Site once it is older than the Retention's ``kept_for`` is removed by its retention: VODLoft expects it to
     go, so it does not ask on Home whether to keep its downloads, and says what deleting a download then means."""
+    titles_from_description: bool = False
+    """The Site gives its videos no title of their own, such as Instagram's "Video by <account>", but tells what
+    they are about in their description. The episodes of a collection on it are named from their description
+    (``title_from_description``), or keep the Site's title where it has too little; a single video always keeps
+    the Site's title."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only
@@ -1051,6 +1086,13 @@ class Site:
             object.__setattr__(self, "downloads", self.downloads.for_audio_only())
         if self.audio_only and self.episode_tags is VIDEO_TAGS:
             object.__setattr__(self, "episode_tags", TRACK_TAGS)
+
+    def episode_title(self, title: str, description: str | None) -> str:
+        """What a collection's episode is called: the Site's title for its video, or on a Site with
+        ``titles_from_description``, a title made from the video's description where it has enough for one."""
+        if self.titles_from_description:
+            return title_from_description(description) or title
+        return title
 
     @property
     def media_names(self) -> Names:
