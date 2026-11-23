@@ -23,6 +23,7 @@ type CollectionTileProps = {
         thumbnailSquarePath?: string | null
         thumbnailPortraitPath?: string | null
         thumbnailLandscapePath?: string | null
+        linkImagePath?: string | null
         logoImagePath?: string | null
         authorHeadshotPath?: string | null
     }
@@ -39,7 +40,7 @@ export default function CollectionTile({collection, subtitle, showSource = true,
     // The tile is square, so square artwork comes first when a Source has it.
     const image = toImageUrl(
         collection.thumbnailSquarePath || collection.thumbnailPortraitPath || collection.thumbnailLandscapePath
-        || collection.logoImagePath || collection.authorHeadshotPath,
+        || collection.linkImagePath || collection.logoImagePath || collection.authorHeadshotPath,
     )
     const indexing = !!useActiveOperation('collection.index', 'collection', collection.id ?? null)
     const content = (

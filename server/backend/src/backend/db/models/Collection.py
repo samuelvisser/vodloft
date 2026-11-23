@@ -178,5 +178,19 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
         back_populates="collection", cascade="all, delete-orphan", order_by="CollectionList.site_position",
     )
 
+    @property
+    def link_site_keys(self) -> list[Optional[str]]:
+        """The Site of each link season of a collection without a link of its own, which is on the Sites of its links;
+        none for a collection with a link of its own."""
+        return [] if self.sharing_url is not None else [link.site_key for link in self.lists]
+
+    @property
+    def link_image_path(self) -> Optional[str]:
+        """The picture of the first link season that has one, for a collection without a link of its own, whose own
+        pictures come from no Site."""
+        if self.sharing_url is not None:
+            return None
+        return next((link.image_path for link in self.lists if link.image_path), None)
+
     def __repr__(self) -> str:
         return f"<Show(id={self.id}, slug={self.slug}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"
