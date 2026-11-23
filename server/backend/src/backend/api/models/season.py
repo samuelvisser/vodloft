@@ -48,6 +48,8 @@ class SeasonAPIRead(_SeasonAPIBaseOut):
     updated_at: datetime
     newest_published_at: datetime | None = None
     """When its newest episode came out, in the list of a collection's seasons."""
+    whole_channel: bool = False
+    """The channel season while it holds the whole channel, such as Channel on YouTube: a collection page opens on it."""
 
 
 

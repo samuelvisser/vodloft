@@ -1,6 +1,6 @@
 import DownloadStatusBadge from '../DownloadProgress/DownloadStatusBadge'
 import React from 'react'
-import {useNavigate} from 'react-router-dom'
+import {useLocation, useNavigate} from 'react-router-dom'
 import {linkAreaHandlers} from '../../lib/linkClicks'
 import {EpisodeReadView} from '../../types/schemas/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
@@ -142,7 +142,12 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
         : undefined
     const metaText = [collectionTitle, seasonName, numberText, dateText].filter(Boolean).join(' · ')
 
-    const navigate = useNavigate()
+    const routerNavigate = useNavigate()
+    const location = useLocation()
+    // Opened from its collection's page, the episode's breadcrumb leads back to that page as it was, such as with
+    // the season the user picked.
+    const fromCollection = location.pathname === `/collection/${collectionSlug}` ? location.pathname + location.search : undefined
+    const navigate = (to: string) => routerNavigate(to, {state: fromCollection ? {fromCollection} : undefined})
     const episodeHref = `/collection/${collectionSlug}/episode/${ep.slug}`
     const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {

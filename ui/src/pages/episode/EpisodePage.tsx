@@ -246,7 +246,7 @@ export default function EpisodePage() {
                 <div className="episode-topbar">
                     <Breadcrumb items={[
                         {label: 'Library', to: '/library'},
-                        {label: collection.title, to: `/collection/${collectionId}`},
+                        {label: collection.title, to: (location.state as {fromCollection?: string} | null)?.fromCollection ?? `/collection/${collectionId}`},
                     ]}/>
                     <div className="episode-title-actions">
                         {episode.sharingUrl && (

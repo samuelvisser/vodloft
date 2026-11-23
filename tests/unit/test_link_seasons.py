@@ -1322,3 +1322,19 @@ def test_seasons_per_year_made_in_the_users_own_order_go_by_year(source, session
     assert [(name, number) for name, number, _ in _seasons(session)] == [
         ("2021", 1), ("2022", 2), ("2023", 3), ("Cabin", 4), ("2025", 5),
     ]
+
+
+def test_the_seasons_list_marks_the_channel_season_while_it_holds_the_whole_channel(source, session):
+    from backend.api.endpoints.seasons.service import get_seasons_list
+
+    source.videos = [_video("a", 2024), _video("b", 2025)]
+    source.lists = [_list("PLone", "One")]
+    source.items = {"PLone": ("a",)}
+    collection = _collection(session, channel_season="everything")
+    _index(session, collection, source)
+
+    assert [(season.name, season.whole_channel) for season in get_seasons_list(session, "creator")
+            if season.whole_channel] == [(next(season.name for season in collection.seasons if season.loose), True)]
+    collection.channel_season = "unlisted"
+    session.commit()
+    assert not any(season.whole_channel for season in get_seasons_list(session, "creator"))

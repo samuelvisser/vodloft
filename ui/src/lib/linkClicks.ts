@@ -1,5 +1,4 @@
 import type {MouseEvent} from 'react'
-import type {NavigateFunction} from 'react-router-dom'
 
 // Some clickable areas (table rows, cards) cannot be a single <a> element because they hold their own
 // controls. These helpers give such an area the click behaviour of a link: a normal click opens the page,
@@ -17,7 +16,7 @@ function openInNewTab(href: string) {
     window.open(href, '_blank', 'noopener')
 }
 
-export function linkAreaHandlers(href: string, navigate: NavigateFunction) {
+export function linkAreaHandlers(href: string, navigate: (href: string) => void) {
     return {
         onClick: (event: MouseEvent<HTMLElement>) => {
             if (event.defaultPrevented || startedOnInnerControl(event)) return

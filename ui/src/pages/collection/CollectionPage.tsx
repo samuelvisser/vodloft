@@ -157,6 +157,7 @@ export default function CollectionPage() {
   const [fileRenameProfileId, setFileRenameProfileId] = useState<number | undefined>(undefined)
   const [searchParams, setSearchParams] = useSearchParams()
   const reconciling = searchParams.get('move') === '1'
+  const seasonParam = searchParams.get('season')
   const setReconciling = (open: boolean) => setSearchParams((current) => {
     const next = new URLSearchParams(current)
     if (open) next.set('move', '1')
@@ -210,14 +211,20 @@ export default function CollectionPage() {
 
     setSelectedSeasonId((current) => {
       if (current !== null && seasons.some((season) => season.id === current)) return current
-      // It opens on the season with the newest episode, which is the last one unless a season such as a
+      // The season the page's address names, as it does after the user picked one and came back to the page.
+      const named = seasonParam ? seasons.find((season) => season.slug === seasonParam) : undefined
+      if (named) return named.id
+      // It opens on the channel season while that holds the whole channel, such as Channel on YouTube.
+      const channel = seasons.find((season) => season.wholeChannel)
+      if (channel) return channel.id
+      // Otherwise on the season with the newest episode, which is the last one unless a season such as a
       // channel's Videos keeps growing beside the others.
       const newest = seasons.reduce((best, season) => (
         (season.newestPublishedAt?.getTime() ?? 0) > (best.newestPublishedAt?.getTime() ?? 0) ? season : best
       ), seasons[0])
       return newest.id
     })
-  }, [isSeasonal, seasons])
+  }, [isSeasonal, seasons, seasonParam])
 
   const episodeSeasonId = isSeasonal ? selectedSeasonId : undefined
 
@@ -800,7 +807,16 @@ export default function CollectionPage() {
               className="collection-season-select"
               registry={seasonReg}
               value={selectedSeasonId === null ? null : String(selectedSeasonId)}
-              onChange={(value) => setSelectedSeasonId(Number(value))}
+              onChange={(value) => {
+                const season = seasons.find((item) => item.id === Number(value))
+                setSelectedSeasonId(Number(value))
+                // The address names the season, so going back to the page, or to it from an episode, opens it again.
+                if (season) setSearchParams((current) => {
+                  const next = new URLSearchParams(current)
+                  next.set('season', season.slug)
+                  return next
+                }, {replace: true})
+              }}
               placeholder={`Select ${words.season.a}`}
             />
             {displayedTotal !== undefined && (

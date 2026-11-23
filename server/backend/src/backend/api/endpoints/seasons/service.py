@@ -8,7 +8,8 @@ from fastapi import HTTPException
 
 from backend.db.model_mapping import update_database_fields
 from backend.api.models.season import *
-from backend.db.models import Episode, Season
+from backend.db.models import Collection, Episode, Season
+from backend.services.link_seasons import holds_whole_channel
 
 
 def get_seasons_list(s: Session, collection_slug: str) -> list[SeasonAPIRead]:
@@ -23,7 +24,12 @@ def get_seasons_list(s: Session, collection_slug: str) -> list[SeasonAPIRead]:
         .order_by(Season.id)
         .all()
     )
-    return [SeasonAPIRead.model_validate(season) for season in seasons]
+    collection = s.scalar(select(Collection).where(Collection.slug == collection_slug))
+    whole = collection is not None and holds_whole_channel(collection)
+    return [
+        SeasonAPIRead.model_validate(season).model_copy(update={"whole_channel": whole and season.loose})
+        for season in seasons
+    ]
 
 
 def get_season(s: Session, collection_slug: str, season_slug: str) -> SeasonAPIRead:
