@@ -89,6 +89,7 @@ function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }
     )
 }
 
+const SEASON_LABEL = /^S\d+E\d+$/
 const DATE_LABEL = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
 
 /** "#12" for a numbered episode; a short date such as "18 Jan 2013" for one a Source numbers by its publish date. */
@@ -134,7 +135,12 @@ export default function EpisodeCard({ep, collectionSlug, downloads, moved = fals
     // Identifier semantics are parsed once by the backend. The card only decides
     // how those semantics should be presented: the number of a numbered episode,
     // then its release date, unless the number already is that date.
-    const numberText = ep.episodeType === 'ep' && ep.episodeLabel ? episodeBadgeText(ep.episodeLabel) : undefined
+    // An album's track goes by its number on the album alone, such as Track 3, rather than S01E03.
+    const numberText = ep.episodeType === 'ep' && ep.episodeLabel
+        ? (words.numberedInSeason && SEASON_LABEL.test(ep.episodeLabel) && ep.episodeNumber
+            ? `${words.episode.Singular} ${ep.episodeNumber}`
+            : episodeBadgeText(ep.episodeLabel))
+        : undefined
     // An episode extra is labelled by its own number, such as #2542.10, in the extras' colour.
     const extraNumber = ep.episodeType === 'ep-extra' && ep.episodeLabel ? episodeBadgeText(ep.episodeLabel) : undefined
     const dateText = ep.publishedDate && !DATE_LABEL.test(ep.episodeLabel)

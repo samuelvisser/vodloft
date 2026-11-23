@@ -1,7 +1,11 @@
 import {z} from 'zod'
 import {NamesSchema} from './source'
 
-export const CollectionWordsSchema = z.object({season: NamesSchema, episode: NamesSchema, inSeason: z.string()})
+export const CollectionWordsSchema = z.object({
+    season: NamesSchema, episode: NamesSchema, inSeason: z.string(),
+    /** An episode is named by its number in its season alone, as an album's tracks are: Track 3, not S01E03. */
+    numberedInSeason: z.boolean().default(false),
+})
 
 /** One collection type's words, for episodes of video and for episodes of sound only. */
 export const CollectionContractSchema = z.object({

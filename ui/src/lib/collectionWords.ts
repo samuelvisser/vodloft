@@ -22,6 +22,8 @@ export interface CollectionWords {
     episode: Noun
     /** The word for being in one of its seasons, such as in a season, or on an album. */
     inSeason: string
+    /** An episode is named by its number in its season alone, as an album's tracks are: Track 3, not S01E03. */
+    numberedInSeason: boolean
     /** A number with the word it counts, such as 1 track or 12 tracks. */
     count: (count: number, noun?: Noun) => string
 }
@@ -38,10 +40,10 @@ function noun({singular, plural, a}: BackendNames): Noun {
 }
 
 /** A collection's words as the backend gives them, such as a creator's, in the forms a sentence needs. */
-export function wordsOf(names: {season: BackendNames, episode: BackendNames, inSeason: string}): CollectionWords {
+export function wordsOf(names: {season: BackendNames, episode: BackendNames, inSeason: string, numberedInSeason?: boolean}): CollectionWords {
     const episode = noun(names.episode)
     return {
-        season: noun(names.season), episode, inSeason: names.inSeason,
+        season: noun(names.season), episode, inSeason: names.inSeason, numberedInSeason: names.numberedInSeason ?? false,
         count: (count, counted = episode) => `${count.toLocaleString()} ${count === 1 ? counted.singular : counted.plural}`,
     }
 }

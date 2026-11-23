@@ -14,6 +14,8 @@ class CollectionWordsAPIRead(ResponseBase):
     episode: NamesAPIRead
     in_season: str
     """The word for being in one of its seasons, such as on for a track on an album."""
+    numbered_in_season: bool = False
+    """An episode is named by its number in its season alone, as an album's tracks are: Track 3, not S01E03."""
 
 
 class CollectionContractAPIRead(ResponseBase):
