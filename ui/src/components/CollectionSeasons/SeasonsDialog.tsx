@@ -195,11 +195,6 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const feedsOff = !!view && view.feeds.some((feed) => feed.on && !feeds.includes(feed.ref))
     const customOrder = watch('customSeasonOrder') ?? false
     const repeatVideos = watch('repeatVideos') ?? 'one_season'
-    // Laid out by year, a video has one upload year, so it never belongs in several seasons.
-    const byYear = linkSeasonsOn && listLayout === 'by_year'
-    const repeatByYearReason = names
-        ? `The ${names.plural} are laid out by year, so this setting does nothing: ${words.episode.a} has one upload year, and is ${words.inSeason} the ${words.season.singular} of that year.`
-        : undefined
     const removedLinks = watch('removedLinks') ?? []
     const removedSeasons = watch('removedSeasons') ?? []
     // The channel season is called Channel while it holds the whole channel, as the form is set now, so the names
@@ -209,6 +204,11 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const looseSeason = view ? view.channelSeasonNames[holdsWholeChannel ? 'everything' : 'unlisted'] : undefined
     const names = useMemo(() => view ? namesOf(view, looseSeason!) : undefined, [view, looseSeason])
     const words = dialogWords(collectionWordsGiven ?? (view ? wordsOf(view.words) : collectionWords(null)), view)
+    // Laid out by year, a video has one upload year, so it never belongs in several seasons.
+    const repeatByYear = linkSeasonsOn && listLayout === 'by_year'
+    const repeatByYearReason = names
+        ? `The ${names.plural} are laid out by year, so this setting does nothing: ${words.episode.a} has one upload year, and is ${words.inSeason} the ${words.season.singular} of that year.`
+        : undefined
     const {season} = words
     const regs = useMemo(() => view && names ? registries(names, words, view) : null, [view, names, words])
     const only = outsideVideos === 'only'
@@ -878,14 +878,14 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                                     When {words.episode.a} belongs {words.inSeason} several {season.plural}
                                                 </label>
                                                 {/* Laid out by year, a video has one upload year, so it is in one season. */}
-                                                <DisabledReason reason={byYear ? repeatByYearReason : undefined} placement="below-start" as="div">
+                                                <DisabledReason reason={repeatByYear ? repeatByYearReason : undefined} placement="below-start" as="div">
                                                     {({describedBy, explain}) => (
-                                                        <div onClick={byYear ? explain : undefined}>
+                                                        <div onClick={repeatByYear ? explain : undefined}>
                                                             <SimpleSelect
                                                                 menuPortalTarget={document.body} menuPlacement="auto"
                                                                 styles={{menuPortal: (base) => ({...base, zIndex: 1100})}}
                                                                 inputId="seasons-repeat" registry={regs.repeat} value={repeatVideos}
-                                                                isDisabled={byYear} aria-describedby={describedBy}
+                                                                isDisabled={repeatByYear} aria-describedby={describedBy}
                                                                 onChange={(value) => setValue('repeatVideos', value as CollectionSeasonsFormIn['repeatVideos'], {shouldDirty: true})}
                                                             />
                                                         </div>
