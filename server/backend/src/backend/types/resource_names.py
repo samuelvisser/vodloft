@@ -14,3 +14,6 @@ RESOURCE_NAMES = {
     "system": Names("system", "system"),
 }
 """What a task's resource type is called, by the type a task run stores."""
+
+LINKS_COLLECTION_NAMES = Names("custom collection", "custom collections")
+"""What a collection without a link of its own is, when its link seasons are on more than one Site."""

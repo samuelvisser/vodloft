@@ -861,7 +861,10 @@ Jellyfin Music Videos:
         - "https://www.youtube.com/playlist?list=PLrick"
       Concerts:
         - "https://www.youtube.com/watch?v=live1"
-        - "https://www.youtube.com/watch?v=live2"
+        # A link with overrides of its own, as ytdl-sub's examples write a single video.
+        - title: "Never Gonna Give You Up (Glastonbury 2023)"
+          year: "2023"
+          url: "https://www.youtube.com/watch?v=live2"
 """
 
 
@@ -1095,4 +1098,119 @@ Jellyfin Music Videos:
 
     assert [(collection.title, collection.artist) for collection in plan.collections] == [
         ("Emily Hopkins albums", "Emily Hopkins"), ("Emily Hopkins music videos", "Emily Hopkins"),
+    ]
+
+
+def _links_collection(session, *links):
+    """A collection of links without one of its own, as an import of only playlists makes it."""
+    from backend.db.models import Collection, CollectionList
+    from backend.services.sites import site_record
+    from sources import site_of
+
+    count = len(session.scalars(select(Collection.id)).all())
+    collection = Collection(
+        uuid=f"links-{count}", slug=f"links-{count}", source_key="ytdlp", title="Citation Needed", sharing_url=None,
+        membership_level="FREE", type="series", episode_identifier="seasonal", author_name="", author_slug="",
+        kind="list",
+    )
+    session.add(collection)
+    for position, (url, site_key, image) in enumerate(links):
+        collection.lists.append(CollectionList(
+            ref=url, url=url, title=url, source_key="ytdlp", site_position=position, image_path=image,
+            site_key=site_record(session, site_of(site_key)).key,
+        ))
+    session.commit()
+    return collection
+
+
+def test_a_collection_of_links_is_named_for_its_links_and_shows_the_first_ones_picture():
+    import backend.api.endpoints.collections.router  # noqa: F401  (loads every model first)
+    import task_manager.scheduler.db  # noqa: F401
+    from backend.api.models.collection import CollectionAPIRead
+    from backend.db import Base
+
+    engine = create_engine("sqlite+pysqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    playlists = _links_collection(
+        session,
+        ("https://www.youtube.com/playlist?list=PL7", "youtube", None),
+        ("https://www.youtube.com/playlist?list=PL8", "youtube", "https://i.ytimg.com/pl8.jpg"),
+    )
+    view = CollectionAPIRead.model_validate(playlists).model_dump(by_alias=True)
+    assert (view["kindName"], view["linkImagePath"]) == ("YouTube playlists", "https://i.ytimg.com/pl8.jpg")
+    assert "linkSiteKeys" not in view
+
+    mixed = _links_collection(
+        session,
+        ("https://www.youtube.com/playlist?list=PL9", "youtube", None),
+        ("https://soundcloud.com/earmake/sets/one", "soundcloud", None),
+    )
+    assert CollectionAPIRead.model_validate(mixed).kind_name == "Custom collection"
+
+
+def test_an_import_looks_up_the_pictures_of_a_collection_of_links_after_its_write(installation, monkeypatch):
+    from backend.db.models import ImportRun, ImportStep
+    from backend.services import imports
+    from sources import registry
+    from sources.contract import CollectionDetails
+
+    session = installation
+    collection = _links_collection(
+        session,
+        ("https://www.youtube.com/playlist?list=PL7", "youtube", None),
+        ("https://www.youtube.com/watch?v=concert", "youtube", None),
+    )
+    run = ImportRun(importer=ytdl_sub.IMPORTER.key, status=imports.WAITING, options={}, report=[], counts={})
+    session.add(run)
+    session.flush()
+    session.add(ImportStep(run_id=run.id, collection_id=collection.id, local_media_profile_id=1,
+                           status="waiting", files=[], result={}))
+    session.commit()
+
+    source = registry._sources["ytdlp"]
+
+    def details(url):
+        if "watch?v=" in url:
+            raise ValueError("This link is a single video, not a channel or playlist")
+        return CollectionDetails(slug="PL7", url=url, title="Season 7", author_name="", image_url="https://i.ytimg.com/pl7.jpg")
+
+    monkeypatch.setattr(source, "collection_details", details)
+    imports._picture_links(run.id)
+
+    session.expire_all()
+    assert [link.image_path for link in collection.lists] == ["https://i.ytimg.com/pl7.jpg", None]
+    assert collection.link_image_path == "https://i.ytimg.com/pl7.jpg"
+
+
+def test_an_imported_collection_of_links_lists_them_as_the_users_links(tmp_path, monkeypatch):
+    from backend.db.models import Collection
+    from backend.services import imports
+    from importer.contract import CollectionPlan, PlaylistSeasonPlan
+
+    import backend.api.endpoints.collections.router  # noqa: F401  (loads every model first)
+    import task_manager.scheduler.db  # noqa: F401
+    from backend.db import Base
+
+    engine = create_engine("sqlite+pysqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    session = Session(engine)
+    links = Collection(
+        uuid="links", slug="links", source_key="ytdlp", title="Rick Astley", sharing_url=None, membership_level="FREE",
+        type="music", episode_identifier="seasonal", author_name="", author_slug="", kind="list",
+    )
+    session.add(links)
+    session.flush()
+    plan = CollectionPlan(
+        external_id="subscription:Rick Astley", title="Rick Astley", url="https://www.youtube.com/playlist?list=PLrick",
+        profile_external_id=None, links_only=True, link_seasons=(
+            PlaylistSeasonPlan("https://www.youtube.com/playlist?list=PLrick", "Music Videos", 1),
+            PlaylistSeasonPlan("https://www.youtube.com/watch?v=live1", "Concerts", 2),
+        ),
+    )
+
+    imports._add_link_seasons(session, links, plan)
+
+    assert [(link.ref, link.added_by_user) for link in links.lists] == [
+        ("PLrick", True), ("https://www.youtube.com/watch?v=live1", True),
     ]
