@@ -33,7 +33,7 @@ VODLOFT_0_7_0_REVISION = "c89f1a5ea2ba"
 VODLOFT_0_8_0_REVISION = "bb0e7c5e17cc"
 VODLOFT_0_9_0_REVISION = "2f7a91c4d8e3"
 VODLOFT_0_9_1_REVISION = "5b8e2d4c9a17"
-HEAD_REVISION = "7f3c2a9e5b14"
+HEAD_REVISION = "b5d81e3c7a26"
 
 
 @pytest.fixture
@@ -1593,4 +1593,29 @@ def test_each_collection_of_links_keeps_its_picture_link_or_gets_its_first_as_it
     with engine.connect() as connection:
         assert connection.execute(text("SELECT id, is_default FROM collection_lists ORDER BY id")).all() == [
             (1, 0), (2, 1), (3, 0), (4, 0), (5, 1),
+        ]
+
+
+def test_every_collection_without_a_link_of_its_own_becomes_a_custom_collection(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config
+
+    config = get_alembic_config()
+    command.upgrade(config, "7f3c2a9e5b14")
+    with engine.begin() as connection:
+        for collection_id, sharing_url, kind in (
+            (1, None, "list"), (2, "https://www.youtube.com/@channel", "channel"),
+            (3, "https://www.youtube.com/playlist?list=PL1", "list"),
+        ):
+            connection.execute(text(
+                "INSERT INTO collections (id, uuid, slug, title, sharing_url, membership_level, type, episode_identifier, "
+                "author_name, author_slug, source_key, episode_order, kind) VALUES (:id, 'uuid-' || :id, 'c' || :id, "
+                "'C', :url, 'free', 'series', 'seasonal', '', '', 'ytdlp', 'oldest_first', :kind)"
+            ), {"id": collection_id, "url": sharing_url, "kind": kind})
+
+    command.upgrade(config, HEAD_REVISION)
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id, kind FROM collections ORDER BY id")).all() == [
+            (1, "custom"), (2, "channel"), (3, "list"),
         ]

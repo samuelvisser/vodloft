@@ -71,8 +71,8 @@ export const CollectionSeasonsReadSchema = z.object({
     listsPlaylists: z.boolean().default(false),
     /** The collection can hold only what its playlists have, with links you add from any site. */
     linksOnlyOffered: z.boolean().default(false),
-    /** What the collection's own link is: a channel, or one list. */
-    kind: z.enum(['channel', 'list']),
+    /** What the collection's own link is: a channel, one list, or none, for a custom collection. */
+    kind: z.enum(['channel', 'list', 'custom']),
     /** For a channel collection: the feeds of its channel, and whether it takes each. */
     feeds: z.array(z.object({ref: z.string(), names: NamesSchema, on: z.boolean()})),
     /** What the season of the channel's own videos holds: everything, or only the videos in no list. */

@@ -1008,7 +1008,7 @@ def _links_collection(session, *links):
     collection = Collection(
         uuid=f"links-{count}", slug=f"links-{count}", source_key="ytdlp", title="Citation Needed", sharing_url=None,
         membership_level="FREE", type="series", episode_identifier="seasonal", author_name="", author_slug="",
-        kind="list",
+        kind="custom",
     )
     session.add(collection)
     for position, (url, site_key, image) in enumerate(links):

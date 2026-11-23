@@ -46,7 +46,8 @@ class Collection(Base, HasMetadataMixin, HasTaskResourcesMixin, CreatedByMixin):
     site_ref: Mapped[Optional[str]] = mapped_column(comment="The Site's own id for the collection")
     kind: Mapped[str] = mapped_column(
         default=CollectionKind.CHANNEL.value, server_default=CollectionKind.CHANNEL.value,
-        comment="What its own link is: channel, a creator's page of all their uploads, or list, one list or no link",
+        comment="What its own link is: channel, a creator's page of all their uploads, list, one list, or custom, no link: it "
+                "gets all it holds from the lists the user gives it",
     )
     list_type: Mapped[Optional[str]] = mapped_column(
         comment="The key of its Site's type of list its link is, such as album or playlist on SoundCloud, where the "

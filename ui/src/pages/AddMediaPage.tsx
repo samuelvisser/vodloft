@@ -159,7 +159,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         else navigate('/browse')
     }
 
-    // A collection can start empty and hold only what the links added to it have, at a Source that allows it.
+    // A custom collection starts empty and holds only what the lists added to it have, at a Source that allows it.
     const [emptyOpen, setEmptyOpen] = useState(false)
     const emptyCollections = !onboarding && !onCollection
         && (sources ?? []).some((source) => canUseSource(source.id) && sourceHas(source, SourceFeature.LINK_COLLECTIONS))
@@ -308,14 +308,14 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
 
             {emptyCollections && (
                 <div className="add-media-browse">
-                    <h2>Or start empty</h2>
-                    <p className="view-description">
+                    <h2>Or create a custom collection</h2>
+                    <p className="view-description add-media-browse-text">
                         Make a collection of your own from playlists, creators and videos on any site.
                     </p>
                     <div className="add-media-browse-list">
                         <button className="btn" type="button" onClick={() => setEmptyOpen(true)}>
                             <FontAwesomeIcon icon={faIcon('fass', 'folder-plus')}/>
-                            Add empty collection
+                            Add custom collection
                         </button>
                     </div>
                 </div>

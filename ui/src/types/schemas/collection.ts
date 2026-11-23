@@ -103,8 +103,9 @@ export const CollectionReadSchema = z.looseObject({
     sharingUrl: z.string().nullable(),
     /** 'only' when the collection holds only what its link seasons have, so its own link is optional. */
     outsideVideos: z.enum(OutsideVideosValues).optional(),
-    /** What its own link is: a channel, which takes the channel's lists and can be in a creator, or one list. */
-    kind: z.enum(['channel', 'list']).nullable().default(null),
+    /** What its own link is: a channel, which takes the channel's lists and can be in a creator, one list, or none, for a
+     *  custom collection. */
+    kind: z.enum(['channel', 'list', 'custom']).nullable().default(null),
     /** The website it is on; null for an older collection until VODLoft has found it. */
     site: SiteReadSchema.nullable().optional(),
     /** What the collection calls the creator behind it, such as host, or artist in a Music collection. Optional only

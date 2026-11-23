@@ -1062,6 +1062,81 @@ def test_a_collection_without_a_link_can_only_hold_its_playlists(links_source, s
     assert refused.value.field == "outside_videos"
 
 
+class CreatorLinksSource(LinksSource):
+    """A Site with creators, whose links tell a channel from a playlist."""
+
+    sites = (Site("seasons", "Seasons", ("seasons.example",), link_seasons=True, creators=True),)
+
+    def is_list(self, url):
+        return "playlist?list=" in url
+
+
+@pytest.fixture
+def creator_links_source(monkeypatch):
+    from backend.services import sites
+    from sources import registry
+
+    monkeypatch.setattr(registry, "_sources", {})
+    sites._site_of.cache_clear()
+    yield registry.register(CreatorLinksSource())
+    sites._site_of.cache_clear()
+
+
+def _give_link(session, slug, url):
+    from backend.api.endpoints.collections.service import update_collection
+    from backend.api.models.collection import CollectionAPIUpdate
+    from backend.db.core import run_write_transaction
+
+    run_write_transaction(lambda s: update_collection(s, slug, CollectionAPIUpdate.model_validate({
+        "title": "Mix", "sharingUrl": url, "authorName": "Mix",
+    })))
+    session.expire_all()
+
+
+def test_a_custom_collection_given_a_link_becomes_a_channel_or_a_list_collection(creator_links_source, session):
+    from backend.api.endpoints.collections.seasons.service import AddedLink
+    from backend.api.models.collection import CollectionAPIRead
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection
+    from backend.services.collections import add_links_only_collection
+    from backend.services.errors import ServiceError
+    from backend.types.collection_types import CollectionType
+
+    def collection(slug):
+        return session.scalar(select(Collection).where(Collection.slug == slug))
+
+    for title in ("Channel", "Playlist", "Mix"):
+        run_write_transaction(lambda s, title=title: add_links_only_collection(s, title=title, collection_type=CollectionType.SERIES))
+    session.expire_all()
+    # A collection without a link of its own is a custom collection, whose seasons are its lists.
+    view = CollectionAPIRead.model_validate(collection("mix")).model_dump(by_alias=True)
+    assert (view["kind"], view["kindName"], view["seasonNames"]["plural"]) == ("custom", "Custom collection", "lists")
+    session.rollback()
+
+    _give_link(session, "channel", CREATOR)
+    assert (collection("channel").kind, collection("channel").outside_videos) == ("channel", "only")
+    session.rollback()
+    # Without its link it is a custom collection again.
+    _give_link(session, "channel", "")
+    assert collection("channel").kind == "custom"
+    session.rollback()
+
+    _give_link(session, "playlist", "https://seasons.example/playlist?list=PLown")
+    assert (collection("playlist").kind, collection("playlist").outside_videos) == ("list", "leave_out")
+    session.rollback()
+
+    # One with lists would lose their videos as a collection of one list.
+    _update(session, "mix", added=[AddedLink(
+        "PLmix", "https://seasons.example/playlist?list=PLmix", "The Mix", None, "seasons",
+    )])
+    with pytest.raises(ServiceError) as refused:
+        _give_link(session, "mix", "https://seasons.example/playlist?list=PLother")
+    assert refused.value.field == "sharing_url"
+    session.rollback()
+    assert collection("mix").kind == "custom"
+    session.rollback()
+
+
 def test_an_imported_show_of_only_playlists_holds_them_in_the_other_programs_seasons(links_source, session):
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection
