@@ -7,7 +7,7 @@ const SOURCE_ROOT = fileURLToPath(new URL('../src/', import.meta.url))
 const FALLBACKS_PATH = fileURLToPath(new URL('../src/icons/freeIconFallbacks.json', import.meta.url))
 const VIRTUAL_MODULE = 'virtual:font-awesome-registry'
 const RESOLVED_VIRTUAL_MODULE = `\0${VIRTUAL_MODULE}`
-const PRO_ICON_PACKAGE = '@awesome.me/kit-83fa1ac5a9/icons'
+const PRO_ICON_PACKAGE = '@awesome.me/kit-21a12482f6/icons'
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx'])
 const FREE_PACKS = [
   {
