@@ -20,6 +20,8 @@ const SITE_ICONS: Record<string, IconProp> = {
     'fab:vimeo-v': faIcon('fab', 'vimeo-v'),
     'fab:x-twitter': faIcon('fab', 'x-twitter'),
     'fab:youtube': faIcon('fab', 'youtube'),
+    'fak:dailywire': faIcon('fak', 'dailywire'),
+    'fak:npo-start': faIcon('fak', 'npo-start'),
 }
 
 /** The Site's own icon, or null for a Site without one, which shows a globe with its initials (see SiteIcon). */

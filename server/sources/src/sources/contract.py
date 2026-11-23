@@ -976,7 +976,8 @@ class Site:
     domains: tuple[str, ...] = ()
     icon: str | None = None
     """The Font Awesome icon of the Site, as ``prefix:name``, such as ``fab:youtube``: Font Awesome's brand icon of the
-    Site where it has one. VODLoft shows it where the Site's name does not fit, such as a creator's links on a phone.
+    Site where it has one, or a custom icon in VODLoft's Kit (``fak:``, drawn in ``ui/src/icons/custom``) where Font
+    Awesome has none. VODLoft shows it where the Site's name does not fit, such as a creator's links on a phone.
     A Site without one shows a globe with its ``initials``."""
     initials: str = ""
     """The Site's name in at most two letters, such as YT for YouTube, shown beside a globe where the Site has no

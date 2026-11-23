@@ -298,6 +298,9 @@ Do not replace or remove an intended Pro icon merely because the paid kit is una
 
 Keep both `faIcon()` arguments statically analyzable: use literal strings or conditional expressions whose branches are literal strings. When a Pro icon has no automatic Font Awesome Free equivalent, add a prefix-qualified mapping to `ui/src/icons/freeIconFallbacks.json`.
 
+Custom icons uploaded to the Kit (prefix `fak`), such as the logos of Sites Font Awesome has no brand icon for, keep
+their source SVG in `ui/src/icons/custom/`, named as the icon is in the Kit. Each needs a Free fallback mapping too.
+
 ## Releasing a new version
 Whenever we are about to release a new version, keep the following in mind.
 
