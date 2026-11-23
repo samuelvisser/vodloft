@@ -400,6 +400,21 @@ def test_download_archives_give_every_file_by_video_id_and_find_the_folder(tmp_p
     assert plan.profiles[0].output_template == "/downloads/tv/" + BY_DATE
 
 
+def test_a_link_to_one_tab_of_a_channel_lists_only_that_feed(tmp_path):
+    plan = _plan(_write(tmp_path, """
+Plex TV Show by Date:
+  "Only Videos": "https://www.youtube.com/@novapbs/videos"
+  "Only Shorts": "https://www.youtube.com/@novapbs/shorts"
+  "Only Streams": "https://www.youtube.com/@novapbs/streams"
+  "Everything": "https://www.youtube.com/@novapbs"
+  "A Playlist": "https://www.youtube.com/playlist?list=PLvideos"
+"""))
+
+    feeds = {collection.title: collection.settings.get("feeds") for collection in plan.collections}
+    assert feeds == {"Only Videos": ["videos"], "Only Shorts": ["shorts"], "Only Streams": ["live"],
+                     "Everything": None, "A Playlist": None}
+
+
 def test_an_upload_takes_the_subscriptions_and_config_files():
     assert normalise_upload_path("config/subscriptions.yaml", ytdl_sub.UPLOAD_FILES)[0] == "subscriptions.yaml"
     assert normalise_upload_path("config/config.yaml", ytdl_sub.UPLOAD_FILES)[0] == "config.yaml"
@@ -596,6 +611,26 @@ def test_an_imported_discography_is_one_collection_of_the_artists_page(installat
         "https://emilyharpist.bandcamp.com/", "channel", "all",
     )
     assert session.scalar(select(CollectionLocalMediaProfile.collection_scope).where(CollectionLocalMediaProfile.name == "Bandcamp")) == "music"
+
+
+def test_an_imported_tab_link_keeps_only_its_feed(installation):
+    from backend.db.models import Collection
+    from backend.services import import_uploads, imports
+
+    session = installation
+    subscriptions = """
+Plex TV Show by Date:
+  "Only Videos": "https://www.youtube.com/@novapbs/videos"
+""".encode()
+    import_uploads.begin_upload(ytdl_sub.IMPORTER, [("subscriptions.yaml", len(subscriptions))], include_secrets=False)
+    import_uploads.write_chunk(ytdl_sub.IMPORTER, "subscriptions.yaml", 0, subscriptions)
+    import_uploads.finish_upload(ytdl_sub.IMPORTER)
+    run = imports.start_run(session, ytdl_sub.IMPORTER, imports.ImportOptions())
+    session.commit()
+    imports.apply_run(run.id)
+    session.expire_all()
+
+    assert session.scalar(select(Collection.feeds)) == ["videos"]
 
 
 def test_an_imported_collection_stays_on_its_own(installation, monkeypatch):
