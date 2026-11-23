@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from backend.services.site_settings import download_profile_defaults, local_media_profile_defaults
@@ -739,6 +739,11 @@ def start_run(session: Session, importer: Importer, options: ImportOptions) -> I
             raise ImportServiceError("An import from this program is already running")
         # Its task is gone, as when VODLoft stopped while it ran: it will never finish.
         _fail(running, STOPPED)
+    for waiting in session.scalars(select(ImportRun).where(
+        ImportRun.importer == importer.key, ImportRun.status == WAITING,
+    )):
+        # One whose collections are all done or gone is finished.
+        _finish_run_if_done(session, waiting.id)
     stamp = uploaded_at(importer)
     if stamp is None:
         raise ImportServiceError(f"Upload {importer.name}'s config folder first")
@@ -1791,26 +1796,60 @@ def _run_operation_ids(session: Session, run_id: int) -> tuple[str, ...]:
     ])
 
 
+def _step_operation_ids(session: Session, run_id: int) -> tuple[str, ...]:
+    """The operations still adopting the files of the run's collections."""
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operation_control import active_operation_ids
+
+    from backend.operations.imports import ImportStepOperation
+
+    step_ids = set(session.scalars(select(ImportStep.id).where(ImportStep.run_id == run_id)))
+    operations = session.execute(select(TaskOperation.id, TaskOperation.context).where(
+        TaskOperation.kind == ImportStepOperation.kind,
+    ))
+    return active_operation_ids(session, [
+        operation_id for operation_id, context in operations if (context or {}).get("import_step_id") in step_ids
+    ])
+
+
 def cancel_run(run_id: int) -> None:
-    """Stop a run that has not applied its plan yet. Once it has, its collections are VODLoft's own, and each
-    one's indexing is cancelled in Downloads like any other."""
+    """Stop a run that is still starting, or still waiting to adopt the files of its collections. The collections
+    it added stay, as does each one's indexing, which is cancelled in Downloads like any other; the files it did not
+    adopt yet stay where they are, and the Download Profiles it held off stay off."""
     from task_manager.scheduler.operation_control import cancel_operation
 
     with get_session() as session:
         run = session.get(ImportRun, run_id)
-        if run is None or run.status != RUNNING:
-            raise ImportServiceError("Only an import that is still starting can be cancelled")
-        operation_ids = _run_operation_ids(session, run_id)
+        if run is None or run.status not in (RUNNING, WAITING):
+            raise ImportServiceError("Only an import that has not finished can be cancelled")
+        operation_ids = (*_run_operation_ids(session, run_id), *_step_operation_ids(session, run_id))
     for operation_id in operation_ids:
         cancel_operation(operation_id)
 
     def cancel(session: Session) -> None:
         cancelled = session.get(ImportRun, run_id)
-        if cancelled is None or cancelled.status != RUNNING:
-            raise ImportServiceError("The import applied its plan before it could be cancelled")
+        if cancelled is None or cancelled.status not in (RUNNING, WAITING):
+            raise ImportServiceError("The import finished before it could be cancelled")
+        for step in session.scalars(select(ImportStep).where(
+            ImportStep.run_id == run_id, ImportStep.status == STEP_WAITING,
+        )):
+            step.result = {"counts": {}, "problems": [{"path": None, "error": CANCELLED}]}
+            step.status = STEP_FAILED
         _fail(cancelled, CANCELLED)
 
     run_write_transaction(cancel)
+
+
+def let_go_of_collection(session: Session, collection_id: int) -> None:
+    """Before a Collection is deleted: the imports that waited to adopt its files stop waiting for it, and finish
+    when it was the last one they waited for.
+
+    ``session`` is a write transaction's session."""
+    run_ids = set(session.scalars(select(ImportStep.run_id).where(ImportStep.collection_id == collection_id)))
+    session.execute(delete(ImportStep).where(ImportStep.collection_id == collection_id))
+    session.flush()
+    for run_id in run_ids:
+        _finish_run_if_done(session, run_id)
 
 
 def fail_step(step_id: int, error: str) -> None:

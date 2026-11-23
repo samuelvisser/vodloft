@@ -982,8 +982,48 @@ def test_a_cancelled_import_does_not_apply_its_plan_when_its_turn_comes(installa
     run = session.get(ImportRun, run_id)
     assert (run.status, run.error) == (imports.FAILED, imports.CANCELLED)
     assert session.scalars(select(Collection)).all() == []
-    with pytest.raises(imports.ImportServiceError, match="still starting"):
+    with pytest.raises(imports.ImportServiceError, match="has not finished"):
         imports.cancel_run(run_id)
+
+
+def test_an_import_waiting_for_its_collections_can_be_cancelled(installation):
+    from backend.db.models import Collection, ImportRun, ImportStep
+    from backend.services import imports
+
+    session, _applied = installation
+    run = _run(session, imports.ImportOptions())
+    assert run.status == imports.WAITING
+    run_id = run.id
+    session.rollback()
+
+    imports.cancel_run(run_id)
+
+    session.expire_all()
+    run = session.get(ImportRun, run_id)
+    assert (run.status, run.error) == (imports.FAILED, imports.CANCELLED)
+    assert {step.status for step in session.scalars(select(ImportStep))} == {imports.STEP_FAILED}
+    # What it added stays.
+    assert session.scalars(select(Collection)).all()
+
+
+def test_an_import_stops_waiting_for_the_collections_the_user_deletes(installation):
+    from backend.api.endpoints.collections.service import delete_collection
+    from backend.db.core import run_write_transaction
+    from backend.db.models import Collection, ImportRun
+    from backend.services import imports
+
+    session, _applied = installation
+    run = _run(session, imports.ImportOptions())
+    run_id = run.id
+    slugs = list(session.scalars(select(Collection.slug)))
+    session.rollback()
+
+    for slug in slugs:
+        assert session.get(ImportRun, run_id).status == "waiting"
+        session.rollback()
+        run_write_transaction(lambda s, slug=slug: delete_collection(s, slug))
+        session.expire_all()
+    assert session.get(ImportRun, run_id).status == "finished"
 
 
 def test_an_import_whose_task_stopped_does_not_block_the_next_one(installation):

@@ -375,6 +375,10 @@ def delete_collection(s: Session, collection_slug: str) -> CollectionAPIRead:
         "slug": collection.slug,
     })
 
+    from backend.services.imports import let_go_of_collection
+
+    # An import that waited to adopt its files stops waiting for it.
+    let_go_of_collection(s, collection.id)
     delete_episodes_of(s, collection)
     s.delete(collection)
     s.flush()
