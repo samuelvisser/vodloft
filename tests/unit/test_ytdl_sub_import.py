@@ -297,6 +297,82 @@ def test_full_albums_are_split_into_tracks_by_their_chapters(tmp_path):
     ]
 
 
+def _proof(plan, collection):
+    from backend.services import imports
+    from config.settings.submodels import FilenameRestrictionMode
+
+    profile = next(profile for profile in plan.profiles if profile.external_id == collection.profile_external_id)
+    files = [file for file in plan.files if file.collection_external_id == collection.external_id]
+    return imports.path_proof(profile, files, {collection.external_id: collection.title},
+                              FilenameRestrictionMode.UNRESTRICTED)
+
+
+def test_the_path_check_reads_a_tracks_album_and_number_from_its_folders(tmp_path):
+    downloads = tmp_path / "downloads"
+    (downloads / "music").mkdir(parents=True)
+    (downloads / "music" / ".ytdl-sub-Emily Hopkins-download-archive.json").write_text(json.dumps({
+        "track-1": {"upload_date": "2026-01-05", "extractor": "bandcamp", "file_names": [
+            "Emily Hopkins/[2026] Harp Songs/02 - Second Song.flac", "Emily Hopkins/[2026] Harp Songs/folder.jpg",
+        ]},
+    }))
+    plan = _plan(_write(tmp_path / "config", MUSIC), ("/music", "/downloads/music"), downloads)
+
+    hopkins = next(collection for collection in plan.collections if collection.title == "Emily Hopkins")
+    (track,) = [file for file in plan.files if file.collection_external_id == hopkins.external_id]
+    assert (track.title, track.episode_values) == ("Second Song", {
+        "artist": "Emily Hopkins", "album": "Harp Songs", "track_number": "2", "track_number_padded": "02",
+    })
+    assert _proof(plan, hopkins).identical == 1
+
+
+def test_the_path_check_reads_a_videos_title_and_uploader_from_its_info_file(tmp_path):
+    downloads = tmp_path / "downloads"
+    videos = downloads / "music_videos"
+    (videos / "Rick Astley").mkdir(parents=True)
+    (videos / "Rick Astley" / "Never Gonna Give You Up.info.json").write_text(json.dumps(
+        {"title": "Never Gonna Give You Up", "uploader": "Rick Astley", "duration": 212.4}))
+    _archive_named(videos, "Rick Astley", {
+        "vid-rick": {"upload_date": "2009-10-25", "extractor": "youtube", "file_names": [
+            "Rick Astley/Never Gonna Give You Up.info.json", "Rick Astley/Never Gonna Give You Up.mp4",
+        ]},
+        # Without an info file the check has no title to go on.
+        "vid-none": {"upload_date": "2010-01-01", "extractor": "youtube", "file_names": ["Rick Astley/Other.mp4"]},
+    })
+    plan = _plan(_write(tmp_path / "config", MUSIC_VIDEOS), ("/music_videos", "/downloads/music_videos"), downloads)
+
+    rick = next(collection for collection in plan.collections if collection.title == "Rick Astley")
+    assert {file.media_site_id: (file.title, file.episode_values) for file in plan.files} == {
+        "vid-rick": ("Never Gonna Give You Up",
+                     {"artist": "Rick Astley", "episode_uploader": "Rick Astley", "duration_seconds": "212"}),
+        "vid-none": (None, {"artist": "Rick Astley"}),
+    }
+    assert _proof(plan, rick).identical == 1
+
+
+def test_the_path_check_keeps_each_tv_show_collection_file_in_its_season(tmp_path):
+    downloads = tmp_path / "downloads"
+    _archive(downloads / "Beyond the Guitar", {
+        "vid-one": {"upload_date": "2026-11-18", "extractor": "youtube", "file_names": [
+            "Season 01/s01.e26111801 - Ocarina Songs.mp4"]},
+        "vid-two": {"upload_date": "2015-12-25", "extractor": "youtube", "file_names": [
+            "Season 02/s02.e15122501 - Reys Theme.mp4"]},
+    })
+    plan = _plan(_write(tmp_path / "config", EXAMPLE), ("/tv_shows", "/downloads"), downloads)
+
+    guitar = next(collection for collection in plan.collections if collection.title == "Beyond the Guitar")
+    assert {file.media_site_id: file.episode_values for file in plan.files
+            if file.collection_external_id == guitar.external_id} == {
+        "vid-one": {"season_number": "1"}, "vid-two": {"season_number": "2"},
+    }
+    proof = _proof(plan, guitar)
+    assert (proof.identical, proof.total) == (2, 2), proof.differences
+
+
+def _archive_named(folder: Path, subscription: str, entries: dict) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f".ytdl-sub-{subscription}-download-archive.json").write_text(json.dumps(entries))
+
+
 def test_download_archives_give_every_file_by_video_id_and_find_the_folder(tmp_path):
     downloads = tmp_path / "downloads"
     _archive(downloads / "tv" / "NOVA PBS", {

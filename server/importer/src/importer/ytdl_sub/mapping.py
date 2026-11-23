@@ -48,6 +48,7 @@ from ..ytdlp_templates import (
     render_ytdl_sub,
 )
 from .archive import ArchiveEntry, archive_names, read_archive
+from .info import info_values
 from .presets import (
     DOWNLOAD_HELPERS,
     MUSIC_GENRE_DEFAULT,
@@ -94,6 +95,10 @@ _REVERSED_EPISODES = {
     ),
 }
 _EPISODE_NUMBER = re.compile(r"\.e(\d+) - ")
+# A TV Show Collection's season, as its presets number its files: s01.e000001.
+_SEASON_NUMBER = re.compile(r"(?:^|/)s(\d+)\.e\d+ - [^/]*$")
+# A track as ytdl-sub's music presets name it, from the music folder: <artist>/[<year>] <album>/<NN> - <title>.<ext>.
+_TRACK = re.compile(r"^[^/]+/\[\d{4}\] (?P<album>[^/]+)/(?P<number>\d+) - (?P<title>[^/]+)\.[^./]+$")
 
 _HEIGHTS = ((4320, "format_8k"), (2160, "format_4k"), (1440, "format_1440p"), (1080, "format_1080p"),
             (720, "format_720p"), (480, "format_480p"), (360, "format_360p"))
@@ -814,9 +819,39 @@ def _files(planned: _Planned, location: ImportLocation) -> tuple[list[FilePlan],
                 outside += 1
                 continue
             index = _index_value(entry, planned.index, media)
+            title, values = _known_values(planned, entry, media, location)
             files.append(FilePlan(planned.collection.external_id, entry.uid, mapped, "file", index,
-                                  title=_title(media), published=entry.upload_date, part=part if split else None))
+                                  title=title, published=entry.upload_date, part=part if split else None,
+                                  episode_values=values))
     return files, outside
+
+
+def _known_values(
+    planned: _Planned, entry: ArchiveEntry, media: str, location: ImportLocation,
+) -> tuple[str | None, dict[str, str]]:
+    """The file's title and the template values its saved info, its name and its folders tell, so the preview
+    renders the template the way VODLoft will. The archive itself keeps no titles."""
+    values = _info(planned, entry, location)
+    # The video's own title, as VODLoft takes it from the site; else the one ytdl-sub wrote into the file name.
+    title = values.pop("title", None) or _title(media)
+    if planned.collection.artist and planned.kind in ("music", "music_video"):
+        values["artist"] = planned.collection.artist
+    if planned.kind == "tv_show_collection" and (season := _SEASON_NUMBER.search(media)):
+        values["season_number"] = str(int(season.group(1)))
+    if planned.kind == "music" and (track := _TRACK.match(media)):
+        # A track's title is its own, not the title of the album's video.
+        number = int(track.group("number"))
+        values.update(album=track.group("album"), track_number=str(number), track_number_padded=f"{number:02d}")
+        title = track.group("title")
+    return title, values
+
+
+def _info(planned: _Planned, entry: ArchiveEntry, location: ImportLocation) -> dict[str, str]:
+    """The values of the info file ytdl-sub saved beside the video, or nothing when it saved none."""
+    name = next((name for name in entry.file_names if name.endswith(".info.json")), None)
+    mapped = map_path(posixpath.join(planned.folder, name), location.path_map) if name and planned.folder else None
+    path = location.download_file(mapped) if mapped and location.download_file else None
+    return info_values(path) if path is not None else {}
 
 
 def _variants(planned: list[_Planned]) -> list[ProfilePlan]:
