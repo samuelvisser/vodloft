@@ -55,8 +55,9 @@ export const CollectionListReadSchema = z.object({
     leavingWithFiles: z.number(),
     /** A link the user added, which they can remove again, rather than one of the playlists of the creator. */
     addedByUser: z.boolean().default(false),
-    /** For a collection without a link of its own: the user chose this link's picture for the collection. */
-    picture: z.boolean().default(false),
+    /** For a collection without a link of its own: its default link, such as the one its picture comes from. Such a
+     * collection always has one: its first link, until the user picks another. */
+    isDefault: z.boolean().default(false),
 })
 export type CollectionListRead = z.infer<typeof CollectionListReadSchema>
 
@@ -140,7 +141,7 @@ export const CollectionSeasonsFormSchema = z.object({
     /** Each list, whether it is a season, and the season it is in: its own, or another list's that it shares. */
     playlists: z.array(z.object({
         id: z.number(), enabled: z.boolean(), asSeason: z.boolean().default(true), seasonId: z.number().nullable(),
-        picture: z.boolean().default(false),
+        isDefault: z.boolean().default(false),
     })).default([]),
     /** Links you added that go when you save. */
     removedLinks: z.array(z.number()).default([]),
@@ -172,7 +173,7 @@ export function seasonsFormValues(view: CollectionSeasonsRead): CollectionSeason
         outsideVideos: view.outsideVideos,
         playlists: view.playlists.map((playlist) => ({
             id: playlist.id, enabled: playlist.enabled, asSeason: playlist.asSeason, seasonId: playlist.seasonId,
-            picture: playlist.picture,
+            isDefault: playlist.isDefault,
         })),
         removedLinks: [],
         removedSeasons: [],

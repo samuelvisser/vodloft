@@ -58,8 +58,9 @@ class CollectionListAPIRead(ResponseBase):
     added_by_user: bool = False
     """A link the user added, which they can remove again, rather than one of the playlists of the collection's
     channel."""
-    picture: bool = False
-    """For a collection without a link of its own: the user chose this link's picture for the collection."""
+    is_default: bool = False
+    """For a collection without a link of its own: its default link, such as the one its picture comes from. Such a
+    collection always has one."""
 
 
 class CollectionFeedAPIRead(ResponseBase):
@@ -163,8 +164,9 @@ class CollectionListChangeAPIIn(RequestBase):
     season_id: Optional[int] = None
     """The season the list is in: its own, or that of another of the collection's lists, which it then shares. None
     gives it a season of its own."""
-    picture: bool = False
-    """For a collection without a link of its own: its picture is the collection's. One link at most."""
+    is_default: bool = False
+    """For a collection without a link of its own: the user's default link. One link at most; without one, the first
+    link that stays is the default."""
 
 
 class CollectionSeasonsAPIUpdate(RequestBase):

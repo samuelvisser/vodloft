@@ -290,14 +290,14 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
             f"{playlists[stray.id].title} can only join {collection_contract(collection.type).words.season.a} "
             "that holds one of the collection's lists", field="playlists",
         )
-    pictures = [change for change in body.playlists if change.picture]
-    if pictures and collection.sharing_url is not None:
+    defaults = [change for change in body.playlists if change.is_default]
+    if defaults and collection.sharing_url is not None:
         raise ServiceError(
-            f"{name_in_text(collection.title)} takes its picture from its own link, not from one of its {lists.plural}",
+            f"{name_in_text(collection.title)} has a link of its own, so none of its {lists.plural} is its default",
             field="playlists",
         )
-    if len(pictures) > 1:
-        raise ServiceError(f"Choose one {lists.singular} for the collection's picture", field="playlists")
+    if len(defaults) > 1:
+        raise ServiceError(f"Choose one {lists.singular} as the default", field="playlists")
     removed = set(body.removed_seasons)
     with_parts = seasons_with_parts(s, collection)
     fixed = next((
@@ -355,7 +355,9 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         playlists[change.id].enabled = change.enabled
         playlists[change.id].status = ListStatus.KNOWN.value
         playlists[change.id].as_season = change.as_season
-        playlists[change.id].picture = change.picture
+        playlists[change.id].is_default = change.is_default
+    # Choosing another default, or removing it, leaves one default: the first link that stays, if the user chose none.
+    collection.keep_a_default_link(playlists.values())
     removed_slugs = let_go_of_seasons(collection, removed) if removed else {}
     s.flush()
     s.expire(collection, ["lists"])
@@ -540,6 +542,7 @@ def save_added_link(s: Session, collection_slug: str, link: AddedLink) -> Collec
         site_key=site_record(s, site).key if site is not None else None,
         site_position=max((known.site_position for known in collection.lists), default=-1) + 1,
     ))
+    collection.keep_a_default_link()
     s.flush()
     reindex_collection(s, collection)
     s.refresh(collection)
