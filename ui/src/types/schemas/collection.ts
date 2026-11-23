@@ -71,7 +71,10 @@ const CollectionBasePayloadSchema = CollectionBaseFormSchema.extend({
 })
 
 
-export const CollectionCreatePayloadSchema = CollectionBasePayloadSchema
+export const CollectionCreatePayloadSchema = CollectionBasePayloadSchema.extend({
+    /** Which of its Site's types of list the link is, as looking it up told. */
+    listType: z.string().nullable().default(null),
+})
 export type CollectionCreatePayloadIn = z.input<typeof CollectionCreatePayloadSchema>;
 export type CollectionCreatePayloadOut = z.output<typeof CollectionCreatePayloadSchema>;
 

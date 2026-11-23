@@ -312,6 +312,8 @@ def update_collection(s: Session, collection_slug: str, body: CollectionAPIUpdat
     update_database_fields(collection, body, exclude_fields=(left_out | {"sharing_url"}))
     if moved:
         collection.sharing_url = link
+        # The type of list was the old link's.
+        collection.list_type = None
         # The link of a collection that holds only its playlists is there to offer a channel's playlists.
         if link is not None and holds_only_link_seasons(collection) and not lists_playlists(collection):
             raise ServiceError(
