@@ -5,7 +5,7 @@ of its own for (such as --limit-rate or --remove-chapters). A line with one of t
 its collection fail, so the line becomes a comment: it stays visible in the options, and does nothing.
 
 Revision ID: ee7b43f4d6a1
-Revises: a4318a92a5ca
+Revises: ac034d79c796
 Create Date: 2026-11-21
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from yt_dlp.options import create_parser
 
 
 revision = "ee7b43f4d6a1"
-down_revision = "a4318a92a5ca"
+down_revision = "ac034d79c796"
 branch_labels = None
 depends_on = None
 
