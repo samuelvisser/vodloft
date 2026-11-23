@@ -309,6 +309,8 @@ export const ApiStatusReadSchema = z.object({
     /** The collections the key speeds up, and what one full re-scan of them costs. */
     collectionCount: z.number(),
     rescanUnits: z.number(),
+    /** What one quick check of each of those collections costs, and how long it waits between checks anyway. */
+    checkCosts: z.array(z.object({units: z.number(), leastMinutes: z.number(), feeds: z.number()})),
 })
 export type ApiStatusRead = z.infer<typeof ApiStatusReadSchema>
 

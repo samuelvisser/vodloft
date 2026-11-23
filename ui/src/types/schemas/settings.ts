@@ -138,7 +138,6 @@ const YouTubeApiSettingsSchema = z.object({
     dailyQuota: z.number(),
     checksQuota: z.number(),
     searchQuota: z.number(),
-    minCheckIntervalMinutes: z.number(),
     usageLogEnabled: z.boolean(),
     usageLogMaxLines: z.number(),
 })
@@ -364,7 +363,6 @@ export const SettingsFormSchema = SettingsValuesSchema.extend({
         dailyQuota: requiredNumber().int().min(1, 'Must be at least 1.'),
         checksQuota: requiredNumber().int().min(0, 'Must be 0 or greater.'),
         searchQuota: requiredNumber().int().min(0, 'Must be 0 or greater.'),
-        minCheckIntervalMinutes: requiredNumber().int().min(10, 'Must be at least 10 minutes.'),
         usageLogMaxLines: requiredNumber().int().min(100, 'Must be at least 100 lines.'),
     }).refine(
         (value) => value.checksQuota + value.searchQuota <= value.dailyQuota,
@@ -478,7 +476,6 @@ export const SETTINGS_FIELD_PATHS = [
     'youtubeApi.dailyQuota',
     'youtubeApi.checksQuota',
     'youtubeApi.searchQuota',
-    'youtubeApi.minCheckIntervalMinutes',
     'youtubeApi.usageLogEnabled',
     'youtubeApi.usageLogMaxLines',
     'fileWatcher.enabled',

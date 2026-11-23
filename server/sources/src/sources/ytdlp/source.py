@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import logging
 import threading
 import time
@@ -8,7 +9,7 @@ import time
 import requests
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from urllib.parse import parse_qs, urlsplit
 
 from config import get_settings
@@ -18,7 +19,7 @@ from progress_plan import PlanTracker
 
 from ..contract import (
     Chapter,
-    ANY_DOMAIN, ApiKeyRejected, combined_tags, CreatorDetails, SectionRef, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, ApiQuotaShare, ApiStatus, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
+    ANY_DOMAIN, ApiKeyRejected, combined_tags, CreatorDetails, SectionRef, EpisodePublishStatus, EpisodeTag, ItemRef, ItemRefresh, ApiQuotaShare, ApiStatus, QuickCheckCollection, QuickCheckCost, DownloadOptions, Feature, LinkKind, LinkPreview, LiveStream, MediaStream, MediaTracks, Playback, PlaybackKind, ProgramStatus,
     ResolvedLink, SearchResults, CollectionDetails, Site, SiteApiStatus, SiteSetting, Source, SourceProblem, SponsorBlockSegment, StreamMethod, UpgradeOffer, VideoDetails, VideoFormat, VideoFormats,
     link_host, on_domain,
 )
@@ -420,6 +421,8 @@ class YtDlpSource(Source):
         self._cache_lock = threading.Lock()
         # A channel's handle never changes its ID, so it is looked up once.
         self._channel_ids: dict[str, str] = {}
+        # The check interval of a quota day, worked out once when that day starts, with the checks share it was for.
+        self._check_interval: tuple[tuple[date, int], int] | None = None
 
     @property
     def download_options(self) -> DownloadOptions:
@@ -1215,16 +1218,42 @@ class YtDlpSource(Source):
             self._searches[key] = (now, answer)
         return answer
 
-    def quick_check_minutes(self, collections: Sequence[tuple[str, int]]) -> int:
-        """With a key, as often as the checks share allows after the daily re-scan; RSS needs no quota."""
+    def quick_check_minutes(self, collections: Sequence[QuickCheckCollection]) -> int:
+        """With a key, as often as the checks share allows after the daily re-scan, worked out once a quota day, when
+        Google resets the quota, or when the checks share changes; RSS needs no quota."""
         settings = get_settings().youtube_api
-        counts = [count for url, count in collections if _is_youtube(url)]
         if api_key.load() is None:
-            return settings.min_check_interval_minutes
-        interval = quota.check_interval_minutes(
-            len(counts), quota.rescan_units(counts), settings.checks_quota, settings.min_check_interval_minutes,
-        )
-        return interval or settings.min_check_interval_minutes
+            return quota.MIN_CHECK_MINUTES
+        day = (quota.pacific_day(), settings.checks_quota)
+        if self._check_interval is None or self._check_interval[0] != day:
+            youtube = self._youtube_collections(collections)
+            interval = quota.check_interval_minutes(
+                self._check_costs(youtube), self._rescan_units(youtube), settings.checks_quota,
+            )
+            self._check_interval = (day, interval or quota.MIN_CHECK_MINUTES)
+            logger.info("Quick checks of %d YouTube collections every %d minutes today", len(youtube), self._check_interval[1])
+        return self._check_interval[1]
+
+    @staticmethod
+    def _youtube_collections(collections: Sequence[QuickCheckCollection]) -> list[QuickCheckCollection]:
+        return [collection for collection in collections if mapping.youtube_ref(collection_url(collection.url)) is not None]
+
+    @staticmethod
+    def _rescan_units(collections: Sequence[QuickCheckCollection]) -> int:
+        return quota.rescan_units([collection.episode_count for collection in collections])
+
+    @staticmethod
+    def _check_costs(collections: Sequence[QuickCheckCollection]) -> tuple[QuickCheckCost, ...]:
+        """What a quick check of each YouTube collection costs: a call for each playlist it reads, or for one that
+        holds only its lists, the call that finds them and a page of each 50 of its videos."""
+        costs = []
+        for collection in collections:
+            if collection.lists_only:
+                costs.append(QuickCheckCost(1 + max(math.ceil(collection.episode_count / 50), 1), collection.least_minutes))
+            else:
+                feeds = mapping.youtube_ref(collection_url(collection.url)).feed_playlist_count(collection.feeds)
+                costs.append(QuickCheckCost(feeds, collection.least_minutes, feeds))
+        return tuple(costs)
 
     def video_playback(self, *, slug: str, url: str, use_cookies: bool = True) -> Playback:
         return Playback(url=url, kind=PlaybackKind.YTDLP, command=runner.command(cookies=sites.cookies_for(url, use_cookies)))
@@ -1283,9 +1312,9 @@ class YtDlpSource(Source):
             ))
         return problems
 
-    def api_status(self, collections: Sequence[tuple[str, int]] = ()) -> ApiStatus:
+    def api_status(self, collections: Sequence[QuickCheckCollection] = ()) -> ApiStatus:
         key = api_key.load()
-        counts = [count for url, count in collections if on_domain(link_host(url), "youtube.com")]
+        youtube = self._youtube_collections(collections)
         status = quota.status()
         problem = api_key.problem() if key else None
         return ApiStatus(
@@ -1296,8 +1325,9 @@ class YtDlpSource(Source):
             resets_at=status.resets_at,
             problem=problem.message if problem else None,
             problem_fix_url=problem.fix_url if problem else None,
-            collection_count=len(counts),
-            rescan_units=quota.rescan_units(counts),
+            collection_count=len(youtube),
+            rescan_units=self._rescan_units(youtube),
+            check_costs=self._check_costs(youtube),
         )
 
     @staticmethod

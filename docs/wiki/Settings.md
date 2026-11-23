@@ -207,7 +207,7 @@ These settings are available under **Settings → Automation**.
 | `newEpisodeSchedule.findEpisodesCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__FIND_EPISODES_CRON_ENABLED` | `true` | Enables the recurring new-episode discovery schedule. |
 | `newEpisodeSchedule.findEpisodesCron` | `VL_NEW_EPISODE_SCHEDULE__FIND_EPISODES_CRON` | `*/30 * * * *` | Checks managed collections for new episodes every 30 minutes. YouTube channels and other yt-dlp collections get quick checks instead. |
 | `newEpisodeSchedule.quickCheckCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON_ENABLED` | `true` | Enables quick checks for new videos in yt-dlp collections. |
-| `newEpisodeSchedule.quickCheckCron` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON` | `*/5 * * * *` | Wakes the quick check. Each collection is checked as often as the YouTube API quota allows, and never more often than `youtubeApi.minCheckIntervalMinutes`. |
+| `newEpisodeSchedule.quickCheckCron` | `VL_NEW_EPISODE_SCHEDULE__QUICK_CHECK_CRON` | `*/5 * * * *` | Wakes the quick check. Each collection is checked as often as the YouTube API quota allows, and never more often than every 10 minutes. |
 | `newEpisodeSchedule.fullRescanCronEnabled` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON_ENABLED` | `true` | Enables the full re-scan of collections with quick checks. |
 | `newEpisodeSchedule.fullRescanCron` | `VL_NEW_EPISODE_SCHEDULE__FULL_RESCAN_CRON` | `0 4 * * *` | Lists collections with quick checks in full once a day, to catch anything a quick check missed, and refreshes their episodes (see [[Collections-and-Library#renamed-and-removed-videos]]). |
 | `newEpisodeSchedule.metadataRefreshIntervals` | `VL_NEW_EPISODE_SCHEDULE__METADATA_REFRESH_INTERVALS` | `1h,6h,24h,3d` | The system schedule: follow-up metadata refreshes after publication, for every Site without a schedule of its own. |
@@ -333,11 +333,12 @@ Google gives each project 10,000 units a day, reset at midnight Pacific time. Mo
 | `youtubeApi.dailyQuota` | `VL_YOUTUBE_API__DAILY_QUOTA` | `10000` | What Google gives the project. Only raise it if Google gave you more. |
 | `youtubeApi.checksQuota` | `VL_YOUTUBE_API__CHECKS_QUOTA` | `7000` | Checks for new videos and full re-scans of your YouTube collections. |
 | `youtubeApi.searchQuota` | `VL_YOUTUBE_API__SEARCH_QUOTA` | `2000` | YouTube searches on the Add media page, about 19 a day. When it is used up, or set to `0`, searches use yt-dlp. |
-| `youtubeApi.minCheckIntervalMinutes` | `VL_YOUTUBE_API__MIN_CHECK_INTERVAL_MINUTES` | `10` | The shortest time between two checks of the same collection. |
 | `youtubeApi.usageLogEnabled` | `VL_YOUTUBE_API__USAGE_LOG_ENABLED` | `false` | Keep a usage log file. See below. |
 | `youtubeApi.usageLogMaxLines` | `VL_YOUTUBE_API__USAGE_LOG_MAX_LINES` | `100000` | How many lines the usage log keeps; the oldest are removed first. |
 
 What the checks and search shares leave of the daily total is kept free for adding collections, testing the key and manual refreshes. Adding a collection uses the units kept free first and then the checks share; listing a channel costs about 2 units per 50 videos. The split is under **How to spend the YouTube API quota** on the yt-dlp card, and shows what each share means in practice, such as how often each collection gets checked.
+
+How often that is, VODLoft works out each day when the quota resets. It counts what a day of checks would cost: one unit per check for a collection that follows all of its channel's feeds, one unit per feed for a collection that follows only some of them, and a check at most every six hours for a collection set to be checked less often. It then checks every collection every 10 minutes when the checks share has room for that after the daily re-scan, and less often when it does not, so the checks share lasts the whole day.
 
 To see what VODLoft really spends, look in the log under **Logs**: once a new Pacific day starts, VODLoft logs a summary of what each share used the day before, split by kind of call, and how many calls a full share refused. With debug logging on (`logLevel: DEBUG`), the log also shows every YouTube API call with the share it came from. The log under **Logs** starts empty each time VODLoft restarts. To keep a record over days or weeks, turn on **Keep a usage log**: VODLoft then writes the same lines to `youtube-api-usage.log` in the `yt-dlp` folder next to `config.yml`, whatever the log level.
 

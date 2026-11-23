@@ -34,8 +34,6 @@ logger = logging.getLogger(__name__)
 
 # The cron that wakes the quick check does not fire to the second.
 _SLACK = timedelta(minutes=1)
-_LINKS_ONLY_WAIT = timedelta(hours=1)
-"""How long a collection that only holds its link seasons waits between quick checks at least."""
 _last_checked: dict[int, datetime] = {}
 
 
@@ -79,15 +77,11 @@ def _due_collections(s: Session, now: datetime) -> list[tuple[Collection, Source
     due = []
     for source_key, collections in by_source.items():
         source = get_source(source_key)
-        minutes = source.quick_check_minutes([
-            (collection.sharing_url or "", counts.get(collection.id, 0)) for collection in collections
-        ])
-        for collection in collections:
+        plans = [check_frequency.quick_check_plan(collection, counts.get(collection.id, 0)) for collection in collections]
+        minutes = source.quick_check_minutes(plans)
+        for collection, plan in zip(collections, plans):
             last = _last_checked.get(collection.id)
-            wait = timedelta(minutes=check_frequency.quick_check_minutes(collection, minutes))
-            if not lists_own_link(collection):
-                # Its check reads every one of its lists again, so it waits longer between checks.
-                wait = max(wait, _LINKS_ONLY_WAIT)
+            wait = timedelta(minutes=max(minutes, plan.least_minutes))
             if last is None or now - last >= wait - _SLACK:
                 due.append((collection, source, counts.get(collection.id, 0)))
     return due
