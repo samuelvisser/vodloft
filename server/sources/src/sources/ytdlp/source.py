@@ -39,6 +39,9 @@ _CACHE_SECONDS = 300
 # Pause between per-video lookups while listing a collection, so a large channel
 # does not look like a scraper to the site.
 _LISTING_PAUSE_SECONDS = 1.0
+# How many new videos one yt-dlp run looks up while listing a collection. Starting yt-dlp takes longer than looking
+# up a video, so a batch saves most of the time; the pause comes after each batch.
+_LOOKUP_BATCH = 25
 _UNAVAILABLE_TITLES = {"[Private video]", "[Deleted video]"}
 # yt-dlp reports a livestream that is still live, upcoming or long finished alike.
 # Where a video is in its life, as yt-dlp's live_status says. An upcoming video past its start is delayed.
@@ -748,9 +751,7 @@ class YtDlpSource(Source):
                     for details in self._details_from_api(catalogue, list(entries)):
                         entry = entries.pop(details.slug, {})
                         yield details if details.access else replace(details, access=_access(entry))
-                    for slug, entry in entries.items():
-                        if details := self._from_entry(entry):
-                            yield details
+                    yield from self._from_entries(list(entries.values()))
                 return
         yield from self._list_with_ytdlp(url, known, feeds)
 
@@ -801,13 +802,13 @@ class YtDlpSource(Source):
                 raise
             error = exc
         finally:
-            pacing.pause(_LISTING_PAUSE_SECONDS)
+            pacing.pause(_LISTING_PAUSE_SECONDS, "lookup_spacing")
         try:
             info = runner.run_json("--no-playlist", "--ignore-no-formats-error", url, cookies=sites.cookies_for(url))
         except runner.YtDlpError:
             raise error from None
         finally:
-            pacing.pause(_LISTING_PAUSE_SECONDS)
+            pacing.pause(_LISTING_PAUSE_SECONDS, "lookup_spacing")
         if info.get("live_status") != "is_upcoming":
             raise error
         return info
@@ -830,9 +831,49 @@ class YtDlpSource(Source):
         return ItemRefresh(details=details, removed=frozenset(removed))
 
     def _list_with_ytdlp(self, url: str, known: frozenset[str], feeds: frozenset[str] | None = None) -> Iterator[VideoDetails]:
-        for entry in self._unseen_entries(url, known, feeds).values():
-            if details := self._from_entry(entry):
-                yield details
+        yield from self._from_entries(list(self._unseen_entries(url, known, feeds).values()))
+
+    @staticmethod
+    def _batch_lookup(urls: list[str]) -> dict[str, dict]:
+        """The info of each of the links that one yt-dlp run could look up, by link. What it couldn't is looked up
+        again in one run that also takes videos without playable formats, of which only those protected by DRM
+        (marked as ``_lookup`` marks them) and upcoming ones count, as a lookup on its own would take them."""
+        cookies = sites.cookies_for(urls[0])
+        timeout = runner.LOOKUP_TIMEOUT_SECONDS + 15 * len(urls)
+
+        def run(*options: str, links: list[str]) -> tuple[dict[str, dict], dict[str, str]]:
+            try:
+                infos, errors = runner.run_json_lines(*options, "--no-playlist", *links, cookies=cookies, timeout=timeout)
+            except runner.YtDlpError as exc:
+                logger.info("Looking up %d videos one at a time: %s", len(links), exc)
+                return {}, {}
+            finally:
+                pacing.pause(_LISTING_PAUSE_SECONDS, "lookup_spacing")
+            return {info["original_url"]: info for info in infos if info.get("original_url") in links}, errors
+
+        found, errors = run(links=urls)
+        drm = {video_id for video_id, message in errors.items() if is_drm_message(message)}
+        missing = [url for url in urls if url not in found]
+        if missing and errors:
+            for url, info in run("--allow-unplayable-formats", "--ignore-no-formats-error", links=missing)[0].items():
+                if str(info.get("id")) in drm:
+                    found[url] = {**info, "_has_drm": True}
+                elif info.get("live_status") == "is_upcoming":
+                    found[url] = info
+        return found
+
+    def _from_entries(self, entries: list[dict]) -> Iterator[VideoDetails]:
+        """Listed videos, looked up a batch at a time with one yt-dlp run each, in the listing's order. A video the
+        batch could not look up, such as an upcoming one or one with DRM, is looked up on its own as before."""
+        for start in range(0, len(entries), _LOOKUP_BATCH):
+            batch = [entry for entry in entries[start:start + _LOOKUP_BATCH] if entry.get("url") or entry.get("webpage_url")]
+            urls = [entry.get("url") or entry.get("webpage_url") for entry in batch]
+            found = self._batch_lookup(urls) if len(urls) > 1 else {}
+            for entry, entry_url in zip(batch, urls):
+                if (info := found.get(entry_url)) is not None:
+                    yield self._video(info, entry_url)
+                elif details := self._from_entry(entry):
+                    yield details
 
     def _unseen_entries(self, url: str, known: frozenset[str], feeds: frozenset[str] | None = None) -> dict[str, dict]:
         """The collection's listed videos VODLoft does not know yet, by slug, in the listing's order.

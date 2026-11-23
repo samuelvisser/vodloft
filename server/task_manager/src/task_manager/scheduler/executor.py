@@ -492,6 +492,7 @@ def request_wait_message(reason: str) -> str:
         "daily_wire_request_cooldown": "Waiting for The Daily Wire request cooldown",
         "daily_wire_request_queue": "Waiting for a turn to request The Daily Wire",
         "request_spacing": "Waiting for request spacing",
+        "lookup_spacing": "Pausing between lookups",
         "upstream_retry": "Waiting for The Daily Wire retry interval",
         "retry_backoff": "Waiting to retry the request",
     }.get(reason, "Waiting for an external dependency")

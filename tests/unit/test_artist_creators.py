@@ -163,3 +163,30 @@ def test_a_soundcloud_artists_link_is_named_and_pictured_by_the_artist_when_look
 
     assert (link.title, link.author_name) == ("Flume", "Flume")
     assert link.image_url == "https://i1.sndcdn.com/avatars-flume-t500x500.jpg"
+
+
+def test_new_tracks_are_looked_up_in_one_run_and_those_with_drm_are_marked(monkeypatch):
+    # Starting yt-dlp for every track took longer than looking the tracks up.
+    from sources.ytdlp import source as ytdlp_source
+    from sources.ytdlp.source import YtDlpSource
+
+    links = [f"https://soundcloud.com/flume/track-{n}" for n in range(3)]
+    runs = []
+
+    def lines(*args, cookies=None, timeout=None):
+        runs.append(args)
+        wanted = [arg for arg in args if arg.startswith("https://")]
+        info = lambda url: {"id": url[-1], "original_url": url, "title": f"Track {url[-1]}", "upload_date": "20240101"}
+        if "--allow-unplayable-formats" in args:
+            return [info(url) for url in wanted], {}
+        return [info(url) for url in wanted if not url.endswith("2")], {"2": "This video is DRM protected"}
+
+    monkeypatch.setattr(ytdlp_source.runner, "run_json_lines", lines)
+    monkeypatch.setattr(ytdlp_source.pacing, "pause", lambda *args, **kwargs: None)
+    source = YtDlpSource()
+    monkeypatch.setattr(source, "_from_entry", lambda entry: pytest.fail("looked up on its own"))
+
+    found = list(source._from_entries([{"url": link} for link in links]))
+
+    assert [details.title for details in found] == ["Track 0", "Track 1", "Track 2"]
+    assert len(runs) == 2
