@@ -100,6 +100,7 @@ class AppSettings(SettingsBase):
         return self.database_url or f"sqlite:///{self.database_path.as_posix()}"
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    log_file: LogFileSettings = Field(default_factory=LogFileSettings)
     timezone: str = Field(default="UTC", min_length=1, description="Application timezone")
 
     crypto: CryptoSettings = Field(default=CryptoSettings(

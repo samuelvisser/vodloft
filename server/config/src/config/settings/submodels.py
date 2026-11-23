@@ -650,6 +650,18 @@ class QuickDownloadSettings(SubmodelBase):
         return value
 
 
+class LogFileSettings(SubmodelBase):
+    """A copy of VODLoft's log in ``logs/vodloft.log`` next to config.yml, at the application log level.
+
+    The file starts over in a new part once it reaches ``max_megabytes``, and
+    the oldest of the ``kept_files`` earlier parts is removed.
+    """
+
+    enabled: bool = Field(default=False, description="Write the log to logs/vodloft.log next to config.yml")
+    max_megabytes: int = Field(default=10, ge=1, description="Size at which the log file starts over in a new part")
+    kept_files: int = Field(default=5, ge=1, description="Earlier parts of the log file that are kept")
+
+
 class FileWatcherSettings(SubmodelBase):
     enabled: bool = Field(..., description="Enable the file watcher that keeps downloaded episode files in sync with the database")
     scan_cron_enabled: bool = Field(

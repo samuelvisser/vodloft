@@ -178,9 +178,11 @@ async def _network_aware_http_exception_handler(
 
 
 def create_app() -> FastAPI:
+    from backend.log_file import configure_log_file
     from backend.logging_buffer import install_application_log_handler
     settings = get_settings()
     install_application_log_handler(settings.log_level)
+    configure_log_file(settings)
 
     app = FastAPI(
         title="VODLoft API",
