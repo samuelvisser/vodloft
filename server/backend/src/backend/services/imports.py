@@ -72,11 +72,13 @@ from backend.utils.output_template import (
 )
 from task_manager.events.transactional import queue_event
 
-from .import_uploads import UploadError, remove_secrets, uploaded_at, work_location
+from .import_uploads import remove_secrets, uploaded_at, work_location
 
 logger = logging.getLogger(__name__)
 
 RUNNING, WAITING, FINISHED, FAILED = "running", "waiting", "finished", "failed"
+STOPPED = "The import stopped before it finished"
+CANCELLED = "Cancelled"
 STEP_WAITING, STEP_DONE, STEP_FAILED = "waiting", "done", "failed"
 _SAMPLES = 40
 _PROFILE_FIELDS = (
@@ -730,11 +732,13 @@ def start_run(session: Session, importer: Importer, options: ImportOptions) -> I
     """Record the run and queue the task that applies it."""
     from backend.operations.imports import ImportRunOperation
 
-    running = session.scalar(select(ImportRun.id).where(
+    for running in session.scalars(select(ImportRun).where(
         ImportRun.importer == importer.key, ImportRun.status == RUNNING,
-    ).limit(1))
-    if running is not None:
-        raise ImportServiceError("An import from this program is already running")
+    )):
+        if _run_operation_ids(session, running.id):
+            raise ImportServiceError("An import from this program is already running")
+        # Its task is gone, as when VODLoft stopped while it ran: it will never finish.
+        _fail(running, STOPPED)
     stamp = uploaded_at(importer)
     if stamp is None:
         raise ImportServiceError(f"Upload {importer.name}'s config folder first")
@@ -1353,18 +1357,7 @@ def apply_run(run_id: int) -> dict[str, int]:
             return {}
         importer = get_importer(run.importer)
         options = ImportOptions.from_dict(run.options or {})
-    try:
-        loaded = load_plan(importer, options)
-    except (UploadError, ValueError, OSError) as exc:
-        error = str(exc)
-
-        def fail(session: Session) -> None:
-            failed = session.get(ImportRun, run_id)
-            if failed is not None:
-                failed.status, failed.error, failed.finished_at = FAILED, error, datetime.now(timezone.utc)
-
-        run_write_transaction(fail)
-        raise
+    loaded = load_plan(importer, options)
     # Applying a setting writes the settings file, and a second run would report it as already there.
     counts, cookies_imported = run_write_transaction(
         lambda session: _apply_loaded_plan(session, run_id, options, loaded), reserve=True,
@@ -1378,6 +1371,9 @@ def _apply_loaded_plan(
     session: Session, run_id: int, options: ImportOptions, loaded: LoadedPlan,
 ) -> tuple[dict[str, int], bool]:
     run = session.get(ImportRun, run_id)
+    if run is None or run.status != RUNNING:
+        # Cancelled while it waited for its turn to write.
+        return {}, False
     importer = get_importer(run.importer)
     report = _Report()
     links = _links(session, importer.key)
@@ -1724,6 +1720,58 @@ def run_step(step_id: int) -> dict[str, int]:
                 problem(file["path"], error)
     folder = _scan_folder(step_id)
     return run_write_transaction(lambda session: _finish_step(session, step_id, counts, problems, folder))
+
+
+def _fail(run: ImportRun, error: str) -> None:
+    run.status, run.error, run.finished_at = FAILED, error, datetime.now(timezone.utc)
+
+
+def fail_run(run_id: int, error: str) -> None:
+    """Record that a run stopped before it applied its plan, so it does not stay running."""
+
+    def fail(session: Session) -> None:
+        run = session.get(ImportRun, run_id)
+        if run is not None and run.status == RUNNING:
+            _fail(run, error)
+
+    run_write_transaction(fail)
+
+
+def _run_operation_ids(session: Session, run_id: int) -> tuple[str, ...]:
+    """The run's operations that are still active."""
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operation_control import active_operation_ids
+
+    from backend.operations.imports import ImportRunOperation
+
+    operations = session.execute(select(TaskOperation.id, TaskOperation.context).where(
+        TaskOperation.kind == ImportRunOperation.kind,
+    ))
+    return active_operation_ids(session, [
+        operation_id for operation_id, context in operations if (context or {}).get("import_run_id") == run_id
+    ])
+
+
+def cancel_run(run_id: int) -> None:
+    """Stop a run that has not applied its plan yet. Once it has, its collections are VODLoft's own, and each
+    one's indexing is cancelled in Downloads like any other."""
+    from task_manager.scheduler.operation_control import cancel_operation
+
+    with get_session() as session:
+        run = session.get(ImportRun, run_id)
+        if run is None or run.status != RUNNING:
+            raise ImportServiceError("Only an import that is still starting can be cancelled")
+        operation_ids = _run_operation_ids(session, run_id)
+    for operation_id in operation_ids:
+        cancel_operation(operation_id)
+
+    def cancel(session: Session) -> None:
+        cancelled = session.get(ImportRun, run_id)
+        if cancelled is None or cancelled.status != RUNNING:
+            raise ImportServiceError("The import applied its plan before it could be cancelled")
+        _fail(cancelled, CANCELLED)
+
+    run_write_transaction(cancel)
 
 
 def fail_step(step_id: int, error: str) -> None:

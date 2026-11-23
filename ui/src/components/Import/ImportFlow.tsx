@@ -15,6 +15,7 @@ import {
     IMPORTERS_KEY,
     filesToOffer,
     previewImport,
+    cancelRun,
     enableRunDownloadProfiles,
     readRun,
     removeUpload,
@@ -1006,6 +1007,17 @@ function RunView({importer, run, onRun, onBack}: {
             setEnabling(false)
         }
     }
+    const [cancelling, setCancelling] = useState(false)
+    async function cancel() {
+        setCancelling(true)
+        try {
+            onRun(await cancelRun(importer.key, run.id))
+        } catch (exc) {
+            toast.error(exc instanceof Error ? exc.message : 'The import could not be cancelled')
+        } finally {
+            setCancelling(false)
+        }
+    }
     const {findActive} = useOperations()
     // A waiting step is first indexed, then its files are adopted: each runs as an operation on the Collection.
     const waitingLabel = (collectionId: number | null | undefined, indexed: boolean): string => {
@@ -1047,6 +1059,10 @@ function RunView({importer, run, onRun, onBack}: {
                     )}
                     {run.steps.some((step) => step.matching) && (
                         <Link className="btn" to="/existing-files">Match existing files</Link>
+                    )}
+                    {/* Only before the plan is applied: after that, each collection's indexing is cancelled in Downloads. */}
+                    {run.status === 'running' && (
+                        <button type="button" className="btn" disabled={cancelling} onClick={() => void cancel()}>Cancel</button>
                     )}
                     {done && <button type="button" className="btn" onClick={onBack}>Back</button>}
                 </div>
