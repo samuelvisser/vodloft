@@ -35,6 +35,7 @@ import {wordsOf} from '../lib/collectionWords'
 import {useSelection} from '../components/ProfileBulkEdit/useBulkSelection'
 import {BulkEditToggle, BulkTileCheck, SelectAll} from '../components/ProfileBulkEdit/BulkEditControls'
 import LibraryBulkEdit, {bulkKey, type BulkKey} from './library/LibraryBulkEdit'
+import CreatorTileArt from './library/CreatorTileArt'
 
 const LIBRARY_COLLECTION_TYPE_FILTER_STORAGE_KEY = 'libraryCollectionTypeFilter'
 const LIBRARY_SITE_FILTER_STORAGE_KEY = 'librarySiteFilter'
@@ -514,13 +515,10 @@ export default function LibraryPage() {
                             const chosen = selection.selected.has(key)
                             const content = (
                                 <>
-                                    <span className="library-tile-art" style={banner ? {backgroundImage: `url("${banner}")`} : undefined}>
-                                        {avatar
-                                            ? <img className="library-creator-avatar" src={avatar} alt="" loading="lazy" decoding="async"/>
-                                            : <span className="library-creator-avatar library-creator-avatar--empty" aria-hidden="true">{creator.title.slice(0, 2).toUpperCase()}</span>}
+                                    <CreatorTileArt banner={banner} avatar={avatar} initials={creator.title.slice(0, 2).toUpperCase()}>
                                         {creator.accounts.length === 1 && <SourceBadge sourceKey={creator.accounts[0].sourceKey} className="library-tile-source"/>}
                                         {selection.active && <BulkTileCheck title={creator.title} chosen={chosen} onToggle={() => selection.toggle(key)}/>}
-                                    </span>
+                                    </CreatorTileArt>
                                     <span className="library-tile-copy">
                                         <span className="library-tile-title">{creator.title}</span>
                                         <span className="library-tile-author">{creatorKindText(creator)}</span>
