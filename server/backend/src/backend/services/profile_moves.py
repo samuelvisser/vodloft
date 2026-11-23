@@ -8,6 +8,7 @@ download is left where it is and reported.
 """
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 import logging
 import os
 from collections import Counter, defaultdict
@@ -321,10 +322,10 @@ def _plan_move(
         return None
     plan = plans[0]
     if not plan.in_scope:
-        raise ProfileMoveError(f"{target.name} is not offered for {plan.collection.title}")
+        raise ProfileMoveError(f"{target.name} is not offered for {name_in_text(plan.collection.title)}")
     if plan.blocked:
         raise ProfileMoveError(
-            f"Several episodes of {plan.collection.title} would get the same path in {target.name}"
+            f"Several episodes of {name_in_text(plan.collection.title)} would get the same path in {target.name}"
         )
 
     candidates = [item for item in plan.episodes if item.outcome.moves]

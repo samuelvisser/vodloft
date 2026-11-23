@@ -1,3 +1,4 @@
+import re
 import secrets
 import uuid
 
@@ -26,3 +27,9 @@ def generate_stream_profile_token() -> str:
     """An unguessable secret used to serve a stream profile's feed without authentication."""
     return secrets.token_urlsafe(24)
 
+
+
+def name_in_text(name: str) -> str:
+    """A name as it reads inside a sentence: in quotes when it starts with "for", such as "for KING & COUNTRY", which
+    would otherwise read as part of the sentence; otherwise as it is."""
+    return f'"{name}"' if re.match(r"for\s", name, re.IGNORECASE) else name

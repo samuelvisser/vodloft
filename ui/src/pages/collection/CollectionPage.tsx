@@ -40,6 +40,7 @@ import LockedEpisodesFilter from '../../components/Episode/LockedEpisodesFilter'
 import {ApiError, apiFetch, apiUrl, publicAddress} from '../../lib/api'
 import {fileWordsFor, wordsFor} from '../../lib/collectionWords'
 import {isCollectionLocalMediaProfileAvailableFor, type CollectionLocalMediaProfileContext} from '../../types/local_media_profile'
+import {nameInText} from '../../lib/nameInText'
 
 const EPISODE_TYPE_FILTER_STORAGE_PREFIX = 'collectionEpisodeTypeFilter:'
 
@@ -468,39 +469,39 @@ export default function CollectionPage() {
   const metadataRefreshDisabledReason = metadataRefreshOperation
     ? metadataRefreshOperation.status === 'WAITING'
       ? metadataRefreshOperation.message || OPERATION_WAITING_MESSAGE
-      : `A metadata refresh is running for ${collection.title}.${metadataRefreshOperation.progressTotal > 0
+      : `A metadata refresh is running for ${nameInText(collection.title)}.${metadataRefreshOperation.progressTotal > 0
         ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} ${words.episode.plural} have finished.`
         : ''}`
     : undefined
   const downloadStateUnknown = downloadsLoading && downloadedLocalMediaProfiles === undefined
   const downloadStateFailed = Boolean(downloadsError) && downloadedLocalMediaProfiles === undefined
   const downloadStateDisabledReason = downloadStateUnknown
-    ? `VODLoft is still checking for downloaded ${fileWords.episode.plural} in ${collection.title}.`
+    ? `VODLoft is still checking for downloaded ${fileWords.episode.plural} in ${nameInText(collection.title)}.`
     : downloadStateFailed
-      ? `VODLoft could not determine whether ${collection.title} has downloaded ${fileWords.episode.plural}.`
+      ? `VODLoft could not determine whether ${nameInText(collection.title)} has downloaded ${fileWords.episode.plural}.`
       : downloadLocalMediaProfiles.length === 0
-        ? `No downloaded ${fileWords.episode.plural} exist for ${collection.title}.`
+        ? `No downloaded ${fileWords.episode.plural} exist for ${nameInText(collection.title)}.`
         : undefined
   const identificationDisabledReason = identificationOperation
-    ? `VODLoft is numbering the ${words.episode.plural} of ${collection.title} again and renaming their files.`
+    ? `VODLoft is numbering the ${words.episode.plural} of ${nameInText(collection.title)} again and renaming their files.`
     : undefined
   const fileRenameDisabledReason = fileRenameOperation
     ? fileRenameOperation.status === 'WAITING'
       ? fileRenameOperation.message || OPERATION_WAITING_MESSAGE
-      : `A File Rename operation is running for ${collection.title}.`
+      : `A File Rename operation is running for ${nameInText(collection.title)}.`
     : identificationDisabledReason ?? downloadStateDisabledReason
   const metadataRewriteDisabledReason = metadataRewriteOperation
     ? metadataRewriteOperation.status === 'WAITING'
       ? metadataRewriteOperation.message || OPERATION_WAITING_MESSAGE
-      : `A metadata rewrite is running for ${collection.title}.`
+      : `A metadata rewrite is running for ${nameInText(collection.title)}.`
     : identificationDisabledReason ?? downloadStateDisabledReason
   const bulkDeleteOperation = deleteDownloadsOperation ?? redownloadOperation
   const deleteDownloadsDisabledReason = bulkDeleteOperation
     ? bulkDeleteOperation.status === 'WAITING'
       ? bulkDeleteOperation.message || OPERATION_WAITING_MESSAGE
       : deleteDownloadsOperation
-        ? `A bulk delete downloads operation is running for ${collection.title}.`
-        : `A bulk delete and re-download operation is running for ${collection.title}.`
+        ? `A bulk delete downloads operation is running for ${nameInText(collection.title)}.`
+        : `A bulk delete and re-download operation is running for ${nameInText(collection.title)}.`
     : downloadStateDisabledReason
 
   const controlTaskOperation = async (
@@ -531,16 +532,16 @@ export default function CollectionPage() {
 
   const syncNow = async () => {
     if (syncBusy) {
-      toast(`A sync is in progress for ${collection.title}`)
+      toast(`A sync is in progress for ${nameInText(collection.title)}`)
       return
     }
     setSyncStarting(true)
     try {
       const base = apiUrl()
       await startOperation(`${base}/collections/${encodeURIComponent(id)}/sync`, {method: 'POST'})
-      toast.success(`Sync started for ${collection.title}`)
+      toast.success(`Sync started for ${nameInText(collection.title)}`)
     } catch {
-      toast.error(`Could not start sync for ${collection.title}`)
+      toast.error(`Could not start sync for ${nameInText(collection.title)}`)
     } finally {
       setSyncStarting(false)
     }
@@ -567,7 +568,7 @@ export default function CollectionPage() {
       label: 'Bulk download',
       icon: faIcon('fass', 'download'),
       disabled: downloadAllBusy,
-      disabledReason: downloadAllBusy ? `A bulk download is running for ${collection.title}.` : undefined,
+      disabledReason: downloadAllBusy ? `A bulk download is running for ${nameInText(collection.title)}.` : undefined,
       operation: downloadAllOperation,
       starting: isStarting('collection.download_all'),
       controls: operationControls(downloadAllOperation, 'bulk download'),
@@ -845,8 +846,13 @@ export default function CollectionPage() {
           </div>
         )}
 
-        {isSeasonal && !seasonViewLoading && seasons.length === 0 ? (
-          <div className="collection-season-empty" role="status">No {words.season.plural} are available for {collection.title}.</div>
+        {indexingOperation && (isSeasonal
+          ? !seasonViewLoading && seasons.length === 0
+          : !episodesViewLoading && episodePagesData !== undefined && visibleItems.length === 0 && !typeFiltered && !lockedHidden) ? (
+          // Nothing to show yet because the collection is still being listed for the first time.
+          <div className="collection-season-empty" role="status">{nameInText(collection.title)} is still indexing. Please come back later.</div>
+        ) : isSeasonal && !seasonViewLoading && seasons.length === 0 ? (
+          <div className="collection-season-empty" role="status">No {words.season.plural} are available for {nameInText(collection.title)}.</div>
         ) : episodesViewLoading ? (
           <div className="episodes-grid" role="status" aria-label={`Loading ${words.episode.plural}`} aria-busy="true">
             {Array.from({length: EPISODE_SKELETON_COUNT}, (_, index) => (
@@ -864,7 +870,7 @@ export default function CollectionPage() {
               : `Every ${words.episode.singular}${isSeasonal ? ` in this ${words.season.singular}` : ''} is locked. Turn on Locked to show them.`}
           </div>
         ) : (
-          <div className="episodes-grid" role="list" aria-label={`${collection.title} ${words.episode.plural}`}>
+          <div className="episodes-grid" role="list" aria-label={`${nameInText(collection.title)} ${words.episode.plural}`}>
             {visibleItems.map((ep: any) => (
               <EpisodeCard
                 key={ep.id} ep={ep} collectionSlug={id} downloads={downloadsBySlug.get(ep.slug)}
@@ -973,7 +979,7 @@ export default function CollectionPage() {
       <ReconcileDialog
         open={reconciling}
         path={`/collections/${encodeURIComponent(id)}`}
-        what={`the ${fileWords.episode.plural} of ${collection.title}`}
+        what={`the ${fileWords.episode.plural} of ${nameInText(collection.title)}`}
         onDismiss={() => setReconciling(false)}
       />
 

@@ -18,6 +18,7 @@ import {capitalized, creatorKindText} from '../../types/creator'
 import {CreatorPageReadSchema, CreatorUpdateSchema, type CreatorUpdateIn, type CreatorUpdateOut} from '../../types/schemas/creator'
 import './CreatorPages.css'
 import Breadcrumb from '../../components/common/Breadcrumb/Breadcrumb'
+import {nameInText} from '../../lib/nameInText'
 
 export default function EditCreatorPage() {
     const {slug} = useParams()
@@ -87,7 +88,7 @@ export default function EditCreatorPage() {
             queryClient.invalidateQueries({queryKey: ['collectionsView']}),
             queryClient.invalidateQueries({queryKey: ['libraryCounts']}),
         ])
-        toast.success(withCollections ? `${creator.title} and their collections were deleted` : `${creator.title} was deleted`)
+        toast.success(withCollections ? `${nameInText(creator.title)} and their collections were deleted` : `${nameInText(creator.title)} was deleted`)
         navigate('/library')
     }
 
@@ -152,7 +153,7 @@ export default function EditCreatorPage() {
                 confirmButton={{label: 'Delete', onClick: onConfirmDelete, className: 'btn btn-danger'}}
             >
                 <p>
-                    Delete {creator.title}? {creator.collections.length + creator.movies.length === 0
+                    Delete {nameInText(creator.title)}? {creator.collections.length + creator.movies.length === 0
                         ? 'Nothing else leaves your library.'
                         : withCollections
                             ? (creator.movies.length > 0 ? 'Their movies stay in your library as they are, each on its own.' : '')

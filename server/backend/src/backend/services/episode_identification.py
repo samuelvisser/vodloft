@@ -17,6 +17,7 @@ names and get their new metadata.
 """
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 from collections import defaultdict
 from collections.abc import Container, Sequence
 from dataclasses import dataclass, field
@@ -300,7 +301,7 @@ def collection_busy(s: Session, collection: Collection, doing: str) -> str | Non
     )
     if downloads is not None:
         return (
-            f"Episodes of {collection.title} are downloading or waiting to download. "
+            f"Episodes of {name_in_text(collection.title)} are downloading or waiting to download. "
             f"Let them finish, or cancel them, before {doing}."
         )
     work = s.scalar(
@@ -312,7 +313,7 @@ def collection_busy(s: Session, collection: Collection, doing: str) -> str | Non
         ).limit(1)
     )
     if work is not None:
-        return f"VODLoft is still working on {collection.title}. Try again once that is done."
+        return f"VODLoft is still working on {name_in_text(collection.title)}. Try again once that is done."
     return None
 
 
@@ -573,7 +574,7 @@ def request_identification_change(
     """Start numbering the collection's episodes another way, as an operation whose progress the collection page
     shows. Refuses what would go wrong before anything changes. ``s`` is a write transaction's session."""
     if EpisodeIdentifier(collection.episode_identifier) is identification:
-        raise ServiceError(f"{collection.title} already numbers its episodes this way", field=_FIELD)
+        raise ServiceError(f"{name_in_text(collection.title)} already numbers its episodes this way", field=_FIELD)
     busy = _busy(s, collection)
     if busy is not None:
         raise ServiceError(busy, field=_FIELD)

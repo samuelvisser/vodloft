@@ -1,6 +1,7 @@
 """The creators API: the Library's creators, their pages, and grouping collections under them."""
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 import logging
 import threading
 import time
@@ -552,7 +553,7 @@ def collection_link(s: Session, collection_slug: str) -> CollectionLink:
     """What looking up the creator behind a channel collection needs, read before the slow lookup."""
     collection = _collection(s, collection_slug)
     if collection.creator_id is not None:
-        raise ServiceError(f"{collection.title} is already in {collection.creator.title}")
+        raise ServiceError(f"{name_in_text(collection.title)} is already in {name_in_text(collection.creator.title)}")
     creators.check_joins(collection)
     return CollectionLink(collection.source_key, collection.title, collection.sharing_url)
 
@@ -569,7 +570,7 @@ def look_up_collection_creator(link: CollectionLink, plan: LookupPlan | None = N
     with asking_source(f"Could not look up the {label}"), plan.step("find_creator", f"Finding the {label} behind the link"):
         ref = source.creator_of(link.url)
     if ref is None:
-        raise ServiceError(f"VODLoft found no {label} behind the link of {link.title}")
+        raise ServiceError(f"VODLoft found no {label} behind the link of {name_in_text(link.title)}")
     with asking_source(f"Could not look up the {label}"):
         return _shared((link.source_key, ref), lambda tracker: source.creator_details(ref, tracker), plan)
 

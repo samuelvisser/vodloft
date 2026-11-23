@@ -10,6 +10,7 @@ import {
 import type {CollectionRead} from '../../types/schemas/collection'
 import type {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import RequestedNote from '../common/RequestedNote'
+import {nameInText} from '../../lib/nameInText'
 
 /** Why a Local Media Profile doesn't fit a collection, and the format a link asks for, if it doesn't. */
 function mismatches(
@@ -22,10 +23,10 @@ function mismatches(
     if (!isCollectionLocalMediaProfileAvailableFor(profile, collection.type)) {
         const scope = profile.type === 'collection' ? profile.collectionScope ?? 'podcast-and-series' : undefined
         reasons.push(`This Local Media Profile is available for ${scope ? CollectionLocalMediaProfileScopeReg.getLabelLoose(scope) : 'videos and movies'}, `
-            + `not for ${CollectionTypeReg.getLabelLoose(collection.type)} collections like ${collection.title}.`)
+            + `not for ${CollectionTypeReg.getLabelLoose(collection.type)} collections like ${nameInText(collection.title)}.`)
     }
     if (collection.site && !isLocalMediaProfileAvailableForSite(profile, collection.site.key, knownSiteKeys)) {
-        reasons.push(`It isn't available for ${collection.site.name}, where ${collection.title} is.`)
+        reasons.push(`It isn't available for ${collection.site.name}, where ${nameInText(collection.title)} is.`)
     }
     if (format && profile.preferredFormat !== format) {
         reasons.push(`It downloads ${PreferredFormatReg.getLabelLoose(profile.preferredFormat)}, not the requested ${PreferredFormatReg.getLabelLoose(format)}.`)
@@ -75,13 +76,13 @@ export default function LocalMediaProfileFitNote({profiles, selectedId, used, co
 
     const formatLabel = format ? PreferredFormatReg.getLabelLoose(format) : undefined
     const message = reasons.length ? reasons.join(' ')
-        : formatLabel ? `No Local Media Profile for ${collection.title} downloads ${formatLabel} yet.`
-        : `No Local Media Profile fits ${collection.title} yet.`
+        : formatLabel ? `No Local Media Profile for ${nameInText(collection.title)} downloads ${formatLabel} yet.`
+        : `No Local Media Profile fits ${nameInText(collection.title)} yet.`
     return (
         <RequestedNote>
             {anyFits ? message : (
                 <span className="requested-note__with-action">
-                    <span>{message}{reasons.length > 0 && ` No Local Media Profile fits ${collection.title}${formatLabel ? ` and downloads ${formatLabel}` : ''} yet.`}</span>
+                    <span>{message}{reasons.length > 0 && ` No Local Media Profile fits ${nameInText(collection.title)}${formatLabel ? ` and downloads ${formatLabel}` : ''} yet.`}</span>
                     <Link
                         className="btn btn-small"
                         to={addLocalMediaProfilePath({

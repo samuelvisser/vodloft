@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 from typing import Optional
 
 from fastapi import HTTPException
@@ -100,7 +101,7 @@ def request_movie_redownload(s: Session, movie_slug: str) -> dict[str, bool | in
         complete_operation(
             s,
             operation.id,
-            summary=f"No downloaded media exists for {movie.title}",
+            summary=f"No downloaded media exists for {name_in_text(movie.title)}",
             data={"downloads_requested": 0, "downloads_completed": 0},
         )
     else:
@@ -127,7 +128,7 @@ def request_movie_download_delete(s: Session, movie_slug: str) -> dict[str, bool
         complete_operation(
             s,
             operation.id,
-            summary=f"No downloaded media exists for {movie.title}",
+            summary=f"No downloaded media exists for {name_in_text(movie.title)}",
             data={"files_deleted": 0, "downloads_requested": 0},
         )
     else:

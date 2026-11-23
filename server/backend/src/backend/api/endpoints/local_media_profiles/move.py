@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.utils.helpers import name_in_text
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -48,11 +49,11 @@ def request_move(s: Session, source_slug: str, request: LocalMediaProfileMoveAPI
         if plan is None:
             raise HTTPException(status_code=422, detail=f"{source.name} has no episodes of Collection {collection_id} to move")
         if not plan.in_scope:
-            raise HTTPException(status_code=422, detail=f"{target.name} is not offered for {plan.collection.title}")
+            raise HTTPException(status_code=422, detail=f"{target.name} is not offered for {name_in_text(plan.collection.title)}")
         if plan.blocked:
             raise HTTPException(
                 status_code=422,
-                detail=f"Several episodes of {plan.collection.title} would get the same path in {target.name}",
+                detail=f"Several episodes of {name_in_text(plan.collection.title)} would get the same path in {target.name}",
             )
         moving = sum(item.outcome.moves for item in plan.episodes)
         if not moving:

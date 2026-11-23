@@ -23,6 +23,7 @@ import CreatorHeader from './CreatorHeader'
 import CreatorOfferings from './CreatorOfferings'
 import './CreatorPages.css'
 import {CollectionWords, wordsOf} from '../../lib/collectionWords'
+import {nameInText} from '../../lib/nameInText'
 
 /** How a creator's links to their Sites show: by name, as their Sites' icons, or in the Actions menu. */
 type LinkFit = 'names' | 'icons' | 'menu'
@@ -161,7 +162,7 @@ export default function CreatorPage() {
             await queryClient.invalidateQueries({queryKey: ['creators']})
             await queryClient.invalidateQueries({queryKey: ['collection']})
             await queryClient.invalidateQueries({queryKey: ['collectionsView']})
-            toast.success(`${others.find((other) => other.slug === combineWith)?.title ?? 'The creator'} is now part of ${creator.title}`)
+            toast.success(`${others.find((other) => other.slug === combineWith)?.title ?? 'The creator'} is now part of ${nameInText(creator.title)}`)
             setCombining(false)
             setCombineWith('')
         } catch (exc) {
@@ -279,7 +280,7 @@ export default function CreatorPage() {
 
             <ConfirmDialog
                 open={combining}
-                title={`Combine ${creator.title} with another creator`}
+                title={`Combine ${nameInText(creator.title)} with another creator`}
                 icon={faIcon('fass', 'object-group')}
                 onDismiss={() => setCombining(false)}
                 confirmButton={{label: 'Combine', onClick: combine, disabled: !combineWith}}
