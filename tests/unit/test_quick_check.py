@@ -1,6 +1,7 @@
 """Quick checks for new videos: the API's first page, else RSS, else yt-dlp, and only new videos looked up."""
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -8,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from sources import Feature, ItemRef, VideoDetails, registry
+from sources import Feature, ItemRef, QuickCheckCollection, VideoDetails, registry
 from sources import ytdlp_runner as runner
 from sources.ytdlp import YtDlpSource, youtube_rss
 from sources.ytdlp.youtube_api import Share, key as key_store, quota
@@ -123,13 +124,33 @@ def test_without_a_key_details_come_from_ytdlp(lookups):
 
 
 def test_the_check_interval_follows_the_quota(youtube):
-    source = YtDlpSource()
-    collections = [(f"https://www.youtube.com/channel/UC{n}/videos", 500) for n in range(100)]
-    assert 30 <= source.quick_check_minutes(collections) <= 35
-    assert source.quick_check_minutes(collections[:5]) == 10
+    collections = [QuickCheckCollection(f"https://www.youtube.com/channel/UC{n}/videos", 500) for n in range(100)]
+    assert 30 <= YtDlpSource().quick_check_minutes(collections) <= 35
+    assert YtDlpSource().quick_check_minutes(collections[:5]) == 10
+    # A channel that follows two of its feeds reads two playlists each check.
+    two_feeds = [replace(collection, feeds=frozenset({"videos", "streams"})) for collection in collections]
+    assert 60 <= YtDlpSource().quick_check_minutes(two_feeds) <= 65
+    # All feeds, or one, is one playlist.
+    one_feed = [replace(collection, feeds=frozenset({"shorts"})) for collection in collections]
+    assert 30 <= YtDlpSource().quick_check_minutes(one_feed) <= 35
+    costs = YtDlpSource().api_status(two_feeds[:2] + [replace(collections[2], lists_only=True)]).check_costs
+    assert [(cost.units, cost.feeds) for cost in costs] == [(2, 2), (2, 2), (11, 0)]
     key_store.remove()
     # RSS needs no quota.
+    assert YtDlpSource().quick_check_minutes(collections) == 10
+
+
+def test_the_check_interval_is_worked_out_once_a_quota_day(youtube, monkeypatch):
+    source = YtDlpSource()
+    collections = [QuickCheckCollection(f"https://www.youtube.com/channel/UC{n}/videos", 500) for n in range(100)]
+    today = datetime(2026, 11, 23, 12, tzinfo=timezone.utc)
+    monkeypatch.setattr(quota, "pacific_day", lambda now=None: today.date())
+    assert source.quick_check_minutes(collections[:5]) == 10
+    # More collections later the same day keep today's interval.
     assert source.quick_check_minutes(collections) == 10
+    tomorrow = today + timedelta(days=1)
+    monkeypatch.setattr(quota, "pacific_day", lambda now=None: tomorrow.date())
+    assert 30 <= source.quick_check_minutes(collections) <= 35
 
 
 class QuickSource(ListedSource):

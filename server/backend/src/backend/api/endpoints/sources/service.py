@@ -21,9 +21,10 @@ from backend.types.link_season_types import CollectionKind
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
 from backend.services.users import settings_row
+from backend.services.check_frequency import joins_regular_checks, quick_check_plan
 from backend.utils.helpers import slugify
 from sources import (
-    Feature, LinkKind, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, source_site, sources_for,
+    Feature, LinkKind, QuickCheckCollection, ResolvedLink, Site, Source, UnknownSourceError, all_sources, get_source, named_sites, names_a_podcast, source_site, sources_for,
 )
 
 
@@ -150,15 +151,22 @@ def list_source_problems() -> list[SourceProblemAPIRead]:
 
 
 def get_api_status(s: Session, source: Source) -> ApiStatusAPIRead:
-    """The Source's API status, given its collections so it can say what checking them costs."""
-    collections = (
-        s.query(Collection.sharing_url, func.count(Episode.id))
-        .outerjoin(Episode, Episode.collection_id == Collection.id)
-        .filter(Collection.source_key == source.id, Collection.sharing_url.is_not(None))
-        .group_by(Collection.id)
+    """The Source's API status, given the collections it checks so it can say what checking them costs."""
+    counts = dict(
+        s.query(Episode.collection_id, func.count(Episode.id))
+        .join(Collection, Collection.id == Episode.collection_id)
+        .filter(Collection.source_key == source.id)
+        .group_by(Episode.collection_id)
         .all()
     )
-    return ApiStatusAPIRead.model_validate(source.api_status([(url, count) for url, count in collections]))
+    collections = s.scalars(
+        select(Collection).where(Collection.source_key == source.id, Collection.sharing_url.is_not(None))
+    ).all()
+    plans = [
+        quick_check_plan(collection, counts.get(collection.id, 0))
+        for collection in collections if joins_regular_checks(collection)
+    ]
+    return ApiStatusAPIRead.model_validate(source.api_status(plans))
 
 
 API_KEY_NOTE_PAUSE = timedelta(days=7)
@@ -182,7 +190,7 @@ def api_key_notes(s: Session) -> list[ApiKeyNoteAPIRead]:
             select(Collection.sharing_url).where(Collection.source_key == source.id, Collection.sharing_url.is_not(None))
             .union(select(CreatorAccount.url).where(CreatorAccount.source_key == source.id, CreatorAccount.url.is_not(None)))
         ).all()
-        status = source.api_status([(link, 0) for link in links])
+        status = source.api_status([QuickCheckCollection(link) for link in links])
         site = next((site for link in links if (site := source.site_for(link)) is not None and site.takes_api_key), None)
         if status.key_hint is None and status.collection_count and site is not None:
             notes.append(ApiKeyNoteAPIRead(source_key=source.id, site_name=site.name))
