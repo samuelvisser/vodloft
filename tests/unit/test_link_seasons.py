@@ -991,6 +991,7 @@ def test_an_empty_collection_takes_links_the_user_adds(links_source, session):
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection
     from backend.services.collections import add_links_only_collection
+    from backend.services.errors import ServiceError
     from backend.types.collection_types import CollectionType
 
     source = links_source
@@ -1004,12 +1005,24 @@ def test_an_empty_collection_takes_links_the_user_adds(links_source, session):
     assert (collection.sharing_url, collection.site_key, collection.source_key) == (None, None, "seasons")
 
     for ref, title in (("PLmix", "The Mix"), ("PLmore", "More")):
-        link = AddedLink(ref, f"https://seasons.example/playlist?list={ref}", title, None, "seasons")
+        link = AddedLink(ref, f"https://seasons.example/playlist?list={ref}", title, f"https://img.example/{ref}", "seasons")
         run_write_transaction(lambda s, link=link: save_added_link(s, slug, link))
     view = seasons_view(session, slug)
     session.rollback()
     assert [(link.title, link.added_by_user) for link in view.playlists] == [("The Mix", True), ("More", True)]
     assert (view.has_own_link, view.lists_playlists, view.link_seasons_offered) == (False, False, True)
+
+    # Its picture is its first link's, until the user chooses another link's.
+    assert session.scalar(select(Collection).where(Collection.slug == slug)).link_image_path == "https://img.example/PLmix"
+    session.rollback()
+    _update(session, slug, playlists=[
+        {"id": link.id, "enabled": True, "picture": link.title == "More"} for link in view.playlists
+    ])
+    session.expire_all()
+    assert session.scalar(select(Collection).where(Collection.slug == slug)).link_image_path == "https://img.example/PLmore"
+    session.rollback()
+    with pytest.raises(ServiceError, match="Choose one"):
+        _update(session, slug, playlists=[{"id": link.id, "enabled": True, "picture": True} for link in view.playlists])
 
     _index(session, session.scalar(select(Collection).where(Collection.slug == slug)), source)
     # A video in both goes to the first.

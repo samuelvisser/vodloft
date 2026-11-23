@@ -290,6 +290,14 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
             f"{playlists[stray.id].title} can only join {collection_contract(collection.type).words.season.a} "
             "that holds one of the collection's lists", field="playlists",
         )
+    pictures = [change for change in body.playlists if change.picture]
+    if pictures and collection.sharing_url is not None:
+        raise ServiceError(
+            f"{name_in_text(collection.title)} takes its picture from its own link, not from one of its {lists.plural}",
+            field="playlists",
+        )
+    if len(pictures) > 1:
+        raise ServiceError(f"Choose one {lists.singular} for the collection's picture", field="playlists")
     removed = set(body.removed_seasons)
     with_parts = seasons_with_parts(s, collection)
     fixed = next((
@@ -347,6 +355,7 @@ def update_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIU
         playlists[change.id].enabled = change.enabled
         playlists[change.id].status = ListStatus.KNOWN.value
         playlists[change.id].as_season = change.as_season
+        playlists[change.id].picture = change.picture
     removed_slugs = let_go_of_seasons(collection, removed) if removed else {}
     s.flush()
     s.expire(collection, ["lists"])
