@@ -468,24 +468,24 @@ export const frontendOperationDefinitions = {
   'collection.refresh_metadata': {
     kind: 'collection.refresh_metadata',
     resourceType: 'collection',
-    label: 'Metadata refresh',
+    label: 'Info refresh',
     invalidate: invalidateCollectionEpisodeData,
     success: (operation) => {
       const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       const count = operation.progressTotal
       return count === 0
         ? `No ${episodeWords(operation).plural} to refresh in ${collectionTitle}`
-        : `Metadata refresh completed for ${episodeCount(operation, count)} in ${collectionTitle}`
+        : `Info refresh completed for ${episodeCount(operation, count)} in ${collectionTitle}`
     },
   },
   'episode.refresh_metadata': {
     kind: 'episode.refresh_metadata',
     resourceType: 'episode',
-    label: 'Metadata refresh',
+    label: 'Info refresh',
     invalidate: invalidateEpisode,
     success: (operation) => {
       const episodeTitle = contextString(operation, 'episode_title') || operation.title
-      return `Metadata refresh completed for ${episodeTitle}`
+      return `Info refresh completed for ${episodeTitle}`
     },
   },
   'collection.rename_files': {
@@ -501,20 +501,20 @@ export const frontendOperationDefinitions = {
   'collection.rewrite_metadata': {
     kind: 'collection.rewrite_metadata',
     resourceType: 'collection',
-    label: 'Metadata rewrite',
+    label: 'Writing info into files',
     invalidate: invalidateCollectionFiles,
     success: (operation) => {
       const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       const retagged = resultNumber(operation, 'files_retagged') ?? 0
       const nfos = resultNumber(operation, 'nfos_written') ?? 0
       const failed = resultNumber(operation, 'files_failed') ?? 0
-      if (retagged + nfos === 0 && failed === 0) return `No downloaded files of ${collectionTitle} needed new metadata`
+      if (retagged + nfos === 0 && failed === 0) return `No downloaded files of ${collectionTitle} needed new info`
       const parts = [
         retagged > 0 ? `updated the tags of ${retagged} ${plural(retagged, 'file', 'files')}` : '',
         nfos > 0 ? `wrote ${nfos} NFO ${plural(nfos, 'file', 'files')}` : '',
       ].filter(Boolean)
-      const failedDetail = failed > 0 ? `; ${failed} ${plural(failed, 'file', 'files')} kept their old metadata` : ''
-      return `Metadata rewrite finished for ${collectionTitle}: ${parts.join(' and ') || 'nothing changed'}${failedDetail}`
+      const failedDetail = failed > 0 ? `; ${failed} ${plural(failed, 'file', 'files')} kept their old info` : ''
+      return `Writing info into files finished for ${collectionTitle}: ${parts.join(' and ') || 'nothing changed'}${failedDetail}`
     },
   },
   'collection.change_identification': {

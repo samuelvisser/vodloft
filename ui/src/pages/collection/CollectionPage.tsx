@@ -466,10 +466,12 @@ export default function CollectionPage() {
   const visibleItems = displayedEpisodes
   const episodesViewLoading = episodesInitialLoading || seasonViewLoading
 
+  const openOnName = collection.site?.name ?? (sources.get(collection.sourceKey)?.domains.includes('*') ? (collection.sharingUrl ? siteName(collection.sharingUrl) : null) ?? sources.name(collection.sourceKey) : sources.name(collection.sourceKey))
+
   const metadataRefreshDisabledReason = metadataRefreshOperation
     ? metadataRefreshOperation.status === 'WAITING'
       ? metadataRefreshOperation.message || OPERATION_WAITING_MESSAGE
-      : `A metadata refresh is running for ${nameInText(collection.title)}.${metadataRefreshOperation.progressTotal > 0
+      : `VODLoft is refreshing the info of ${nameInText(collection.title)} from ${openOnName}.${metadataRefreshOperation.progressTotal > 0
         ? ` ${metadataRefreshOperation.progressCurrent}/${metadataRefreshOperation.progressTotal} ${words.episode.plural} have finished.`
         : ''}`
     : undefined
@@ -493,7 +495,7 @@ export default function CollectionPage() {
   const metadataRewriteDisabledReason = metadataRewriteOperation
     ? metadataRewriteOperation.status === 'WAITING'
       ? metadataRewriteOperation.message || OPERATION_WAITING_MESSAGE
-      : `A metadata rewrite is running for ${nameInText(collection.title)}.`
+      : `VODLoft is writing the info of ${nameInText(collection.title)} into its files.`
     : identificationDisabledReason ?? downloadStateDisabledReason
   const bulkDeleteOperation = deleteDownloadsOperation ?? redownloadOperation
   const deleteDownloadsDisabledReason = bulkDeleteOperation
@@ -591,13 +593,13 @@ export default function CollectionPage() {
       onSelect: () => setCreatorDialog('add'),
     }] : []),
     ...(sourceControls(collection).metadataRefresh ? [{
-      label: 'Refresh all metadata',
+      label: `Refresh info from ${openOnName}`,
       icon: faIcon('fass', 'clipboard-list') as [string, string],
       disabled: metadataRefreshBusy,
       disabledReason: metadataRefreshDisabledReason,
       operation: metadataRefreshOperation,
       starting: isStarting('collection.refresh_metadata'),
-      controls: operationControls(metadataRefreshOperation, 'metadata refresh'),
+      controls: operationControls(metadataRefreshOperation, 'info refresh'),
       onSelect: () => setMetadataRefreshConfirm(true),
     }] : []),
     ...(waitingCount ? [{
@@ -617,13 +619,13 @@ export default function CollectionPage() {
       onSelect: () => setFileRenameConfirm(true),
     },
     {
-      label: 'Rewrite metadata of all files',
+      label: 'Write info into files',
       icon: faIcon('fass', 'file-lines'),
       disabled: metadataRewriteDisabledReason !== undefined,
       disabledReason: metadataRewriteDisabledReason,
       operation: metadataRewriteOperation,
       starting: isStarting('collection.rewrite_metadata'),
-      controls: operationControls(metadataRewriteOperation, 'metadata rewrite'),
+      controls: operationControls(metadataRewriteOperation, 'writing info into files'),
       onSelect: () => setMetadataRewriteConfirm(true),
     },
     {
@@ -661,8 +663,6 @@ export default function CollectionPage() {
       href: `/add-stream-profile?collection=${encodeURIComponent(id)}`,
     },
     ]
-
-  const openOnName = collection.site?.name ?? (sources.get(collection.sourceKey)?.domains.includes('*') ? (collection.sharingUrl ? siteName(collection.sharingUrl) : null) ?? sources.name(collection.sourceKey) : sources.name(collection.sourceKey))
 
   return (
     <section className="view collection-view" aria-labelledby="collection-title">
@@ -967,13 +967,17 @@ export default function CollectionPage() {
         onStartingChange={onStartingChange('collection.refresh_metadata')}
         requestPath={`/collections/${encodeURIComponent(id)}/refresh-metadata`}
         resourceLabel={collection.title}
-        title="Refresh all metadata"
+        title={`Refresh info from ${openOnName}`}
         onDismiss={() => setMetadataRefreshConfirm(false)}
         icon={faIcon('fass', 'arrows-rotate')}
-        confirmLabel="Refresh metadata"
+        confirmLabel="Refresh info"
         disabled={metadataRefreshBusy}
       >
-        <p>Refresh metadata for every {words.episode.singular} in "{collection.title}"? This can take a while and is usually not needed.</p>
+        <p>
+          Look every {words.episode.singular} in "{collection.title}" up at {openOnName} again, so changed titles,
+          descriptions and thumbnails reach VODLoft. This can take a while and is usually not needed. Downloaded files
+          keep their tags: use Write info into files for those.
+        </p>
       </ActionConfirmDialogue>
 
       <ReconcileDialog
@@ -1028,17 +1032,18 @@ export default function CollectionPage() {
         onStartingChange={onStartingChange('collection.rewrite_metadata')}
         requestPath={`/collections/${encodeURIComponent(id)}/rewrite-metadata`}
         resourceLabel={collection.title}
-        title="Rewrite metadata of all files"
+        title="Write info into files"
         onDismiss={() => setMetadataRewriteConfirm(false)}
         icon={faIcon('fass', 'file-lines')}
-        confirmLabel="Rewrite metadata"
+        confirmLabel="Write into files"
         disabled={metadataRewriteOperation !== undefined}
         scope_by_local_media_profile
         localMediaProfiles={actionLocalMediaProfiles}
       >
         <p>
-          Write the current titles, descriptions, numbers and other details into the downloaded files of
-          "{collection.title}" and their NFO files, as the Local Media Profile keeps them. Nothing is downloaded again:
+          Write the titles, descriptions, numbers and other details VODLoft has now into the downloaded files of
+          "{collection.title}" and their NFO files, as the Local Media Profile keeps them. Nothing is looked up at
+          {' '}{openOnName} and nothing is downloaded again:
           each file is copied once with its new details, so this needs free space for the largest file.
         </p>
       </ActionConfirmDialogue>

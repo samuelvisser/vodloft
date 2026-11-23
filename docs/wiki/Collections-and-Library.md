@@ -168,7 +168,7 @@ The episode page shows its downloads, formats, file sizes, and download history.
 
 ### Rewriting metadata
 
-**Rewrite metadata of all files** in a collection's **Actions** menu writes the tags inside the downloaded files and their NFO files again, for one Local Media Profile or all of them. Use it after changing a collection's genre or content rating, or a profile's title and description templates, to bring files that were already downloaded up to date. The files are not downloaded again: only their metadata changes. Profiles that keep no metadata are skipped.
+**Write info into files** in a collection's **Actions** menu writes what VODLoft knows about each episode into the downloaded files (their tags) and their NFO files again, for one Local Media Profile or all of them. Use it after changing a collection's genre or content rating, or a profile's title and description templates, to bring files that were already downloaded up to date. The files are not downloaded again: only their metadata changes. Profiles that keep no metadata are skipped.
 
 ## Movies and extras
 
