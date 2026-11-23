@@ -3,7 +3,8 @@
 A collection says what its own link is: a channel, a creator's page of all their uploads or one of its feeds, or one
 list, such as a playlist or an album. Every collection on a Site without creators is a list. Only a channel
 collection takes the lists of its channel and can be in a creator, so a collection of a list that was in one leaves
-it; nothing it holds changes.
+it; nothing it holds changes. A channel collection that takes no lists yet, as every collection of VODLoft 0.9.1,
+gets the channel season its Site's channels have, as a new channel collection does.
 
 A collection of one list used to put its videos in a season per upload year, numbered by date. The list is the
 collection's one season now, with its videos in the list's order. Each such collection gets that season, with every
@@ -14,7 +15,7 @@ with downloaded files keeps its seasons, because its files are in their folders;
 page.
 
 Revision ID: ec22487a3a11
-Revises: b64eb88d81ac
+Revises: ecb0f787c77a
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ import logging
 from sqlalchemy import select
 
 from backend.db.core import get_session, run_write_transaction
-from backend.db.models import Collection, MediaDownloadBase
+from backend.db.models import Collection, CollectionList, MediaDownloadBase
 from backend.db.models.media_item import Episode
 from backend.services.episode_identification import apply_identification, plan_identification
 from backend.services.link_seasons import SeasonFinder, made_from_list
@@ -33,42 +34,62 @@ from backend.services.season_order import arrange_seasons, season_year
 from backend.services.sites import collection_kind
 from backend.types.collection_types import EpisodeIdentifier, EpisodeOrder
 from backend.types.link_season_types import CollectionKind
-from sources import UnknownSourceError, get_source
+from backend.types.season_types import SeasonOrigin, SeasonType
+from sources import UnknownSourceError, get_source, source_site
 
 logger = logging.getLogger(__name__)
 
 revision = "ec22487a3a11"
-down_revision = "b64eb88d81ac"
+down_revision = "ecb0f787c77a"
 title = "Tell channel collections from collections of one list"
 
 _TITLE = "Making collections of one list one season"
 
 
 def _set_kinds() -> None:
-    """Give every collection its kind, told from its link without asking its Site."""
+    """Give every collection its kind, told from its link without asking its Site. A collection of one list takes
+    its seasons as the list's own, unless it has a season per year. A channel collection that takes no lists yet,
+    such as every collection of VODLoft 0.9.1, gets the channel season its Site's channels have, as a new one does."""
     session = get_session()
     try:
-        rows = session.execute(select(Collection.id, Collection.sharing_url, Collection.source_key, Collection.kind)).all()
+        rows = session.execute(select(
+            Collection.id, Collection.sharing_url, Collection.source_key, Collection.kind, Collection.channel_season,
+        )).all()
+        with_lists = set(session.scalars(select(CollectionList.collection_id).distinct()))
     finally:
         session.rollback()
         session.close()
-    changed: dict[int, str] = {}
-    for collection_id, url, source_key, stored in rows:
+    kinds: dict[int, str] = {}
+    channel_seasons: dict[int, str] = {}
+    for collection_id, url, source_key, stored, channel_season in rows:
         try:
             kind = collection_kind(url, source_key).value
         except UnknownSourceError:
             continue
         if kind != stored:
-            changed[collection_id] = kind
-    if not changed:
+            kinds[collection_id] = kind
+        if kind == CollectionKind.CHANNEL.value and url and collection_id not in with_lists:
+            site = source_site(url, source_key)
+            if site.link_seasons and site.channel_season.value != channel_season:
+                channel_seasons[collection_id] = site.channel_season.value
+    if not kinds and not channel_seasons:
         return
 
     def work(s) -> None:
-        for collection in s.scalars(select(Collection).where(Collection.id.in_(changed))):
-            collection.kind = changed[collection.id]
+        for collection in s.scalars(select(Collection).where(Collection.id.in_({*kinds, *channel_seasons}))):
+            if collection.id in channel_seasons:
+                collection.channel_season = channel_seasons[collection.id]
+            if collection.id not in kinds:
+                continue
+            collection.kind = kinds[collection.id]
             if collection.kind == CollectionKind.LIST.value:
                 # Only a channel collection is grouped under a creator.
                 collection.creator_id = None
+                if collection.sharing_url is not None:
+                    for season in collection.seasons:
+                        if (season.season_type == SeasonType.NORMAL.value and not season.loose
+                                and season_year(season) is None):
+                            season.origin = SeasonOrigin.LIST.value
 
     run_write_transaction(work)
 

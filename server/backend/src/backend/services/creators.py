@@ -233,14 +233,6 @@ def update_creator_settings(creator: Creator, *, genre: str | None, content_rati
         setattr(creator, field, new)
 
 
-def take_account_pictures(account: CreatorAccount, *, avatar: str | None, banner: str | None) -> None:
-    """Keep the account's picture and banner on its Site."""
-    if avatar:
-        account.avatar_path = avatar
-    if banner:
-        account.banner_path = banner
-
-
 def leave_creator(s: Session, collection: Collection) -> None:
     """Take a collection out of its creator. Nothing it holds changes.
 
