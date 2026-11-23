@@ -60,8 +60,15 @@ They are deployment options, not keys inside `config.yml`.
 | --- | --- | --- | --- |
 | `databasePath` | `VL_DATABASE_PATH` | `<project>/config/vodloft.db` | Location of the SQLite database. The Docker image sets this to `/config/vodloft.db`. |
 | `logLevel` | `VL_LOG_LEVEL` | `INFO` | Logging detail: `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`. |
+| `logFile.enabled` | `VL_LOG_FILE__ENABLED` | `false` | Also write the log to a file. See below. |
+| `logFile.maxMegabytes` | `VL_LOG_FILE__MAX_MEGABYTES` | `10` | Size at which the log file starts over in a new file. |
+| `logFile.keptFiles` | `VL_LOG_FILE__KEPT_FILES` | `5` | How many earlier log files are kept; the oldest is removed first. |
 | `timezone` | `TZ` | `UTC` | Timezone used for schedules and displayed time-sensitive behavior. Use an [IANA](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List) value such as `Europe/Amsterdam`. |
 | `loginSession.ttlSeconds` | `VL_LOGIN_SESSION__TTL_SECONDS` | `2592000` (30 days) | How long a signed-in browser remains authenticated. |
+
+### Log file
+
+The **Logs** page shows what VODLoft logged since it last started. To keep the log across restarts and updates, turn on **Write the log to a file** under **Settings › General**. VODLoft then writes everything it logs, at the log level you chose, to `vodloft.log` in a `logs` folder next to `config.yml`. In Docker that is `logs/vodloft.log` in the folder you mapped to `/config`. When the file reaches its size limit, VODLoft renames it to `vodloft.log.1` (moving older files up a number) and starts a new one.
 
 ### Administrator password
 
