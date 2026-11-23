@@ -920,7 +920,7 @@ def links_source(monkeypatch):
     sites._site_of.cache_clear()
 
 
-def _update(session, slug="creator", **changes):
+def _update(session, slug="creator", added=(), **changes):
     from backend.api.endpoints.collections.seasons.service import seasons_view, update_seasons
     from backend.api.models.collection_seasons import CollectionSeasonsAPIUpdate
     from backend.db.core import run_write_transaction
@@ -935,7 +935,7 @@ def _update(session, slug="creator", **changes):
         "playlists": [{"id": playlist.id, "enabled": playlist.enabled} for playlist in view.playlists],
         **changes,
     }
-    return run_write_transaction(lambda s: update_seasons(s, slug, CollectionSeasonsAPIUpdate(**body)))
+    return run_write_transaction(lambda s: update_seasons(s, slug, CollectionSeasonsAPIUpdate(**body), added))
 
 
 def test_a_collection_that_holds_only_its_playlists_leaves_the_creators_other_videos_out(links_source, session):
@@ -987,7 +987,7 @@ def test_switching_to_only_the_playlists_removes_the_videos_none_of_them_has(lin
 
 
 def test_an_empty_collection_takes_links_the_user_adds(links_source, session):
-    from backend.api.endpoints.collections.seasons.service import AddedLink, save_added_link, seasons_view
+    from backend.api.endpoints.collections.seasons.service import AddedLink, check_added_link, seasons_view
     from backend.db.core import run_write_transaction
     from backend.db.models import Collection
     from backend.services.collections import add_links_only_collection
@@ -1004,13 +1004,25 @@ def test_an_empty_collection_takes_links_the_user_adds(links_source, session):
     collection = session.scalar(select(Collection).where(Collection.slug == slug))
     assert (collection.sharing_url, collection.site_key, collection.source_key) == (None, None, "seasons")
 
-    for ref, title in (("PLmix", "The Mix"), ("PLmore", "More")):
-        link = AddedLink(ref, f"https://seasons.example/playlist?list={ref}", title, f"https://img.example/{ref}", "seasons")
-        run_write_transaction(lambda s, link=link: save_added_link(s, slug, link))
+    added = [
+        AddedLink(ref, f"https://seasons.example/playlist?list={ref}", title, f"https://img.example/{ref}", "seasons")
+        for ref, title in (("PLmix", "The Mix"), ("PLmore", "More"))
+    ]
+    # Looking a link up saves nothing; the links are saved with the dialog.
+    assert check_added_link(session, slug, added[0]) is added[0]
+    session.rollback()
+    assert seasons_view(session, slug).playlists == []
+    session.rollback()
+    _update(session, slug, added=added)
+    with pytest.raises(ServiceError, match="already"):
+        check_added_link(session, slug, added[0])
+    session.rollback()
     view = seasons_view(session, slug)
     session.rollback()
     assert [(link.title, link.added_by_user) for link in view.playlists] == [("The Mix", True), ("More", True)]
     assert (view.has_own_link, view.lists_playlists, view.link_seasons_offered) == (False, False, True)
+    # It has no creator's playlists, only the user's links.
+    assert (view.creator_list_names.singular, view.creator_list_names.plural) == ("link", "links")
 
     # Its first link is its default, which gives it its picture, until the user chooses another.
     assert [link.is_default for link in view.playlists] == [True, False]

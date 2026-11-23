@@ -17,3 +17,6 @@ RESOURCE_NAMES = {
 
 LINKS_COLLECTION_NAMES = Names("custom collection", "custom collections")
 """What a collection without a link of its own is, when its link seasons are on more than one Site."""
+
+OWN_LINK_NAMES = Names("link", "links")
+"""What a collection without a link of its own calls the links the user gave it, which its seasons come from."""
