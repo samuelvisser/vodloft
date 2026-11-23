@@ -19,11 +19,13 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from enum import StrEnum
 from pathlib import Path
+from typing import Iterable, Sequence
 from zoneinfo import ZoneInfo
 
 from config import get_settings
 
 from ... import ytdlp_runner as runner
+from ...contract import QuickCheckCost
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
 SEARCH_UNITS = 102
@@ -239,16 +241,31 @@ def rescan_units(episode_counts: list[int]) -> int:
     return sum(2 * max(math.ceil(count / 50), 1) for count in episode_counts)
 
 
-def check_interval_minutes(collection_count: int, rescan_cost: int, checks_quota: int, min_interval: int) -> int | None:
-    """How often each collection can get a quick check from what the daily re-scan leaves of the checks share.
+MIN_CHECK_MINUTES = 10
+"""No collection is quick-checked more often than this, however much quota is left."""
+_LONGEST_CHECK_MINUTES = 24 * 60
+_DETAILS_MARGIN = 1.1
+"""A check costs a batch of details on top when something is new; a tenth more covers those."""
 
-    A check costs one unit, plus a batch of details when something is new;
-    the tenth on top covers those. None when the share leaves no room for checks.
-    """
-    if collection_count == 0:
-        return min_interval
+
+def daily_check_units(costs: Iterable[QuickCheckCost], minutes: int) -> float:
+    """The units a day of quick checks costs when each collection is checked every ``minutes``, or less often
+    when it waits longer anyway."""
+    return sum(cost.units * 24 * 60 / max(minutes, cost.least_minutes) for cost in costs) * _DETAILS_MARGIN
+
+
+def check_interval_minutes(costs: Sequence[QuickCheckCost], rescan_cost: int, checks_quota: int) -> int | None:
+    """The shortest time between two quick checks of a collection that keeps a day of checks, together with the
+    daily re-scan, inside the checks share. Never less than ``MIN_CHECK_MINUTES``. None when the share does not
+    leave room for a check of every collection a day."""
     room = checks_quota - rescan_cost
-    if room <= 0:
+    if room <= 0 or daily_check_units(costs, _LONGEST_CHECK_MINUTES) > room:
         return None
-    checks_per_collection = room / (collection_count * 1.1)
-    return max(min_interval, math.ceil(24 * 60 / checks_per_collection))
+    low, high = MIN_CHECK_MINUTES, _LONGEST_CHECK_MINUTES
+    while low < high:
+        middle = (low + high) // 2
+        if daily_check_units(costs, middle) <= room:
+            high = middle
+        else:
+            low = middle + 1
+    return low

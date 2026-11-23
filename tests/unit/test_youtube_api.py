@@ -15,7 +15,7 @@ from sqlalchemy.pool import StaticPool
 
 from config.registry import get_settings, replace_settings
 from config.settings.submodels import YouTubeApiSettings
-from sources import ApiKeyRejected, Feature, get_source
+from sources import ApiKeyRejected, Feature, QuickCheckCost, get_source
 from sources import ytdlp_runner as runner
 from sources.ytdlp.youtube_api import (
     ApiKeyError, ApiNotEnabledError, NotFoundError, QuotaExceededError, Share, TemporaryApiError, YouTubeApiClient,
@@ -151,20 +151,27 @@ def test_the_quota_day_follows_pacific_time():
     assert quota.status(now=morning).usage(Share.CHECKS).used == 0
 
 
-def test_check_interval_follows_the_collection_count_and_the_budget():
+def test_check_interval_follows_what_the_checks_cost_and_the_budget():
     # 100 channels of 500 videos: the daily re-scan costs 2,000 units.
     rescan = quota.rescan_units([500] * 100)
     assert rescan == 2_000
-    assert 30 <= quota.check_interval_minutes(100, rescan, 7_000, 10) <= 35
-    assert quota.check_interval_minutes(20, quota.rescan_units([100] * 20), 7_000, 10) == 10
-    assert quota.check_interval_minutes(100, rescan, 1_000, 10) is None
+    channels = [QuickCheckCost(1)] * 100
+    assert 30 <= quota.check_interval_minutes(channels, rescan, 7_000) <= 35
+    small = quota.rescan_units([100] * 20)
+    assert quota.check_interval_minutes([QuickCheckCost(1)] * 20, small, 7_000) == quota.MIN_CHECK_MINUTES
+    assert quota.check_interval_minutes(channels, rescan, 1_000) is None
+    # Following two feeds of a channel doubles what a check of it costs.
+    assert 60 <= quota.check_interval_minutes([QuickCheckCost(2)] * 100, rescan, 7_000) <= 65
+    # A collection checked every six hours anyway leaves room for the others.
+    rare = [QuickCheckCost(2, 360)] * 50 + [QuickCheckCost(2)] * 50
+    assert quota.check_interval_minutes(rare, rescan, 7_000) < quota.check_interval_minutes([QuickCheckCost(2)] * 100, rescan, 7_000)
+    interval = quota.check_interval_minutes(rare, rescan, 7_000)
+    assert quota.daily_check_units(rare, interval) <= 5_000 < quota.daily_check_units(rare, interval - 1)
 
 
 def test_the_shares_must_fit_in_the_daily_quota():
     with pytest.raises(ValidationError):
         YouTubeApiSettings(daily_quota=10_000, checks_quota=9_000, search_quota=2_000)
-    with pytest.raises(ValidationError):
-        YouTubeApiSettings(min_check_interval_minutes=5)
     assert YouTubeApiSettings().daily_quota == 10_000
 
 
