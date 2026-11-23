@@ -8,7 +8,7 @@ the Site's own id for it is unique per Site.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Optional
 from urllib.parse import urlsplit
@@ -22,7 +22,7 @@ from backend.types.collection_contracts import CollectionWords, collection_contr
 from backend.types.link_season_types import OutsideVideos
 from backend.services.errors import ServiceError
 from backend.services.local_media_profile_sites import add_upcoming_site
-from sources import EpisodeTag, Names, Site as SourceSite, collection_on_site, get_source, has_site_contract, site_for, source_site, sources_for
+from sources import EpisodeTag, Names, Site as SourceSite, collection_on_site, get_source, has_site_contract, site_for, site_of, source_site, sources_for
 
 
 class CollectionAlreadyAddedError(ValueError):
@@ -199,6 +199,46 @@ def media_links(s: Session, access: Access, urls: Iterable[str]) -> list[str]:
     return found
 
 
+SUGGESTED_SITES = (
+    "https://www.youtube.com", "https://www.twitch.tv", "https://www.dailywire.com", "https://soundcloud.com",
+    "https://www.tiktok.com", "https://vimeo.com",
+)
+"""The popular Sites VODLoft suggests where the user picks the Sites they use, such as in onboarding, by their
+address, in the order they are shown. What VODLoft says of each comes from its contract."""
+
+
+@dataclass(frozen=True)
+class SiteChoice:
+    """A Site the user can pick: a suggested one, or one already added."""
+
+    key: str
+    name: str
+    pitch: str | None
+    added: bool
+
+
+def site_choices(s: Session) -> list[SiteChoice]:
+    """The suggested Sites, then every other Site VODLoft knows, such as one the user added by its address, each
+    with whether it is added."""
+    known = {record.key: record.name for record in s.scalars(select(Site).order_by(Site.position, Site.name))}
+    suggested = [site_of_link(s, address) for address in SUGGESTED_SITES]
+    choices = [SiteChoice(site.key, site.name, site.pitch, site.key in known) for site in suggested]
+    taken = {site.key for site in suggested}
+    choices += [
+        SiteChoice(key, name, site_of(key).pitch, True) for key, name in known.items() if key not in taken
+    ]
+    return choices
+
+
+def add_suggested_sites(s: Session, keys: Iterable[str]) -> None:
+    """Add the suggested Sites with the keys that VODLoft does not know yet."""
+    known = set(s.scalars(select(Site.key)))
+    for address in SUGGESTED_SITES:
+        site = site_of_link(s, address)
+        if site.key in keys and site.key not in known:
+            add_site(s, site)
+
+
 def add_site(s: Session, site: SourceSite) -> Site:
     """Remember a Site before VODLoft has anything from it, so it can get its own settings and sign-in."""
     record = site_record(s, site)
@@ -228,17 +268,30 @@ def sites_in_use(s: Session) -> set[str]:
     return keys
 
 
-def site_removable(site_key: str, in_use: set[str]) -> bool:
-    """Whether the user can remove a Site: any Site that has nothing in VODLoft, also one VODLoft starts with, such
-    as The Daily Wire. Adding it again brings back everything its Sources offer there."""
-    return site_key not in in_use
+def sites_kept(s: Session) -> set[str]:
+    """The Sites the user can't remove: the ones with something in VODLoft, and the last Site left, since VODLoft
+    always keeps at least one."""
+    kept = sites_in_use(s)
+    known = set(s.scalars(select(Site.key)))
+    if len(known) <= 1:
+        kept |= known
+    return kept
+
+
+def site_removable(site_key: str, kept: set[str]) -> bool:
+    """Whether the user can remove a Site, of the ones ``sites_kept`` keeps: any Site that has nothing in VODLoft,
+    also one VODLoft starts with, such as The Daily Wire, while another Site stays. Adding it again brings back
+    everything its Sources offer there."""
+    return site_key not in kept
 
 
 def remove_site(s: Session, site_key: str) -> None:
     """Forget a Site that has nothing in VODLoft, and take it out of the profiles that store media from it. Its
-    settings under ``siteSettings`` stay, so adding it again brings them back."""
-    if not site_removable(site_key, sites_in_use(s)):
+    settings under ``siteSettings`` stay, so adding it again brings them back. The last Site stays."""
+    if site_key in sites_in_use(s):
         raise ServiceError("This site has collections, videos or creators in VODLoft, so it can't be removed", status_code=409)
+    if not site_removable(site_key, sites_kept(s)):
+        raise ServiceError("VODLoft needs at least one site, so the last one can't be removed. Add another site first", status_code=409)
     record = s.get(Site, site_key)
     if record is not None:
         s.delete(record)

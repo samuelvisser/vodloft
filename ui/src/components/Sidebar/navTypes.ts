@@ -6,7 +6,13 @@ export type BaseNav = {
   label: string
   icon: IconProp
   /** Shown only to people with at least this level; a submenu also hides when none of its items show. */
-  access?: [Area, Level?] | (() => boolean)
+  access?: [Area, Level?] | ((context: NavContext) => boolean)
+}
+
+/** What decides whether some items show, besides the person's access. */
+export type NavContext = {
+  /** A Source with a catalogue to browse has an added Site, such as The Daily Wire. */
+  browsable: boolean
 }
 
 export type NavLinkItem = BaseNav & {

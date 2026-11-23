@@ -341,6 +341,11 @@ class SiteAddedAPIRead(ResponseBase):
     name: str
 
 
+class SitesPickAPIRequest(RequestBase):
+    keys: list[str] = Field(max_length=200)
+    """The Sites the user uses, by key: suggested ones, or ones added by their address. At least one."""
+
+
 def checked_ytdlp_options(value: str) -> str:
     """Your own yt-dlp options, refused with the first line that can not be used."""
     try:
@@ -557,6 +562,29 @@ class ListKindAPIRead(ResponseBase):
     """The lists can be seasons of the creator's own collection."""
     albums: bool = Field(default=False, validation_alias=AliasPath("kind", "albums"))
     """The kind best describes an artist's albums."""
+
+
+class SiteChoiceAPIRead(ResponseBase):
+    """A Site the user can pick as one they use: a popular one VODLoft suggests, or one already added."""
+
+    key: str
+    name: str
+    pitch: str | None
+    """What VODLoft adds from the Site, in a few words, such as "Channels, playlists, Shorts and live streams"."""
+    added: bool
+    """VODLoft knows the Site already."""
+
+    @computed_field
+    @property
+    def icon(self) -> str | None:
+        """The Site's Font Awesome icon as ``prefix:name``, such as ``fab:youtube``."""
+        return site_of(self.key).icon
+
+    @computed_field
+    @property
+    def initials(self) -> str:
+        """The Site's name in at most two letters, such as YT, shown beside a globe where it has no icon."""
+        return site_of(self.key).initials
 
 
 class SiteAPIRead(ResponseBase):

@@ -304,9 +304,11 @@ type RowProps = Pick<SettingsTabProps, 'updateDraft' | 'errorFor'> & {
     group: SiteSettingGroup
     groupKeys: ReadonlySet<string>
     draft: SettingsValues
+    /** The only Site the card lists. */
+    alone: boolean
 }
 
-function SiteSettingsRow({site, group, groupKeys, draft, updateDraft, errorFor}: RowProps) {
+function SiteSettingsRow({site, group, groupKeys, draft, updateDraft, errorFor, alone}: RowProps) {
     const values = draft.siteSettings[site.key] ?? {}
     const all = site.settings.map((offered) => resolve(offered, values, draft))
     const settings = all.filter((setting) => groupKeys.has(setting.offered.key))
@@ -323,7 +325,7 @@ function SiteSettingsRow({site, group, groupKeys, draft, updateDraft, errorFor}:
         // An error opens the Site, so a refused save shows why.
         <SiteRow
             siteKey={site.key} name={site.name} domains={site.domains} badges={badges(group, settings)}
-            removable={site.removable} forceOpen={errors.some(Boolean)}
+            removable={site.removable} forceOpen={errors.some(Boolean)} alone={alone}
         >
             {shown.map((setting, index) => (
                 <SettingRow
@@ -423,7 +425,7 @@ export default function SiteSettingsCard({groups, draft, updateDraft, errorFor, 
                     {data.sites.map((site) => (
                         <SiteSettingsRow
                             key={site.key} site={site} group={group} groupKeys={groupKeys} draft={draft}
-                            updateDraft={updateDraft} errorFor={errorFor}
+                            updateDraft={updateDraft} errorFor={errorFor} alone={data.sites.length === 1}
                         />
                     ))}
                 </SiteRows>

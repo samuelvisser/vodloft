@@ -294,6 +294,9 @@ def test_a_preferred_source_is_asked_first(client, stub_sources):
 
 
 def test_the_preferred_source_per_site_is_saved(client):
+    # Only a Site added to VODLoft is listed.
+    assert "stub" not in {row["key"] for row in client.get("/api/sources/sites").json()}
+    assert client.post("/api/sources/sites", json={"url": "https://stub.example/"}).status_code == 200
     sites = {row["key"]: row for row in client.get("/api/sources/sites").json()}
     assert sites["stub"] == {
         "key": "stub", "name": "Stub", "domains": ["stub.example"], "sourceKeys": ["stub", "catch_all"],

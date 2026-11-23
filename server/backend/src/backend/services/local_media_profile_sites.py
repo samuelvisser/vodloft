@@ -16,7 +16,9 @@ from sqlalchemy.orm import Session
 from config.settings.site_settings import SiteSettingGroup
 from sources import ANY_DOMAIN, DownloadOptions, Feature, Site, SiteSetting, Source, all_sources, site_of
 
-from backend.types.local_media_profile_types import PREFERRED_FORMAT_HEIGHTS, LocalMediaProfileType, PreferredFormat
+from backend.types.local_media_profile_types import (
+    PREFERRED_FORMAT_HEIGHTS, LocalMediaProfileType, PreferredFormat, VideoLocalMediaProfileScope,
+)
 
 # The Features of which a Source needs one before a profile of each type can store its media. A Video profile
 # keeps single videos, and movies with their extras.
@@ -87,12 +89,15 @@ def every_known_site(connection: Connection | Session, profile_type: LocalMediaP
 
 
 def movie_site_keys(connection: Connection | Session) -> list[str]:
-    """The Sites VODLoft knows that have movies, such as The Daily Wire: the Sites a profile made for movies starts
-    with."""
-    return sorted(
-        key for key in known_site_keys(connection)
-        if any(source.has(Feature.MOVIES) for source in _fetching_sources(key))
-    )
+    """The Sites VODLoft knows that have movies, such as The Daily Wire, by their contract: the Sites a profile made
+    for movies starts with."""
+    return sorted(key for key in known_site_keys(connection) if site_has_movies(key))
+
+
+def site_has_movies(site_key: str) -> bool:
+    """Whether the Site has movies VODLoft can add: its contract says so, and a Source that fetches it has
+    ``Feature.MOVIES``."""
+    return site_of(site_key).movies and any(source.has(Feature.MOVIES) for source in _fetching_sources(site_key))
 
 
 def profile_offered_for_site(s: Session, profile, site_key: str | None) -> bool:
@@ -108,10 +113,13 @@ def profile_offered_for_site(s: Session, profile, site_key: str | None) -> bool:
 
 
 def add_upcoming_site(s: Session, site_key: str) -> None:
-    """A Site VODLoft sees for the first time joins every profile that includes upcoming Sites."""
+    """A Site VODLoft sees for the first time joins every profile that includes upcoming Sites, and a profile only
+    for movies only takes a Site that has movies."""
     from backend.db.models import LocalMediaProfileBase
 
     for profile in s.scalars(select(LocalMediaProfileBase).where(LocalMediaProfileBase.include_upcoming_sites.is_(True))):
+        if getattr(profile, "video_scope", None) == VideoLocalMediaProfileScope.MOVIES and not site_has_movies(site_key):
+            continue
         if site_key not in profile.site_keys and site_offered_for_type(profile.type, site_key):
             profile.site_keys = [*profile.site_keys, site_key]
 
@@ -126,6 +134,8 @@ class ProfileSite:
     download_options: DownloadOptions
     settings: list[SiteSetting]
     """The settings only some Sites show that apply to this Site, such as YouTube's SponsorBlock."""
+    movies: bool
+    """The Site has movies, so a Video profile for it can be offered for movies."""
 
 
 @dataclass(frozen=True)
@@ -153,6 +163,7 @@ def profile_sites(s: Session) -> ProfileSites:
         site = replace(site_of(known.key), key=known.key, name=known.name)
         sites.append(ProfileSite(
             site.key, site.name, offered, site.downloads, offered_settings(site, SiteSettingGroup.LOCAL_MEDIA_PROFILE),
+            site_has_movies(known.key),
         ))
     upcoming = [profile_type for profile_type in types if takes_upcoming_sites(profile_type)]
     upcoming_settings = {

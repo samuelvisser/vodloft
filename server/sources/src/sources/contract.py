@@ -1067,6 +1067,13 @@ class Site:
     they are about in their description. The episodes of a collection on it are named from their description
     (``title_from_description``), or keep the Site's title where it has too little; a single video always keeps
     the Site's title."""
+    pitch: str | None = None
+    """What VODLoft adds from the Site, in a few words, such as YouTube's "Channels, playlists, Shorts and live
+    streams". Shown where the user picks the Sites they use, such as in onboarding."""
+    movies: bool = False
+    """The Site has movies VODLoft can add, such as The Daily Wire's, through a Source with ``Feature.MOVIES``.
+    VODLoft offers what is made for movies, such as a Local Media Profile for movies, only while a Site that has
+    them is added."""
     shows_locked: bool = True
     """A collection on the Site shows what VODLoft has no access to until the user hides it. On a Site
     whose collections mix locked videos among open ones, such as a YouTube channel's members-only

@@ -1,10 +1,12 @@
 # First-Run Setup
 
-On first launch, VODLoft shows the services it can add media from, helps you review security, and either imports your library from Pinchflat or WireLoft or adds your first media. You can skip optional steps and finish them later from the normal interface.
+On first launch, VODLoft asks which sites you use, helps you review security, and either imports your library from Pinchflat or WireLoft or adds your first media. You can skip optional steps and finish them later from the normal interface.
 
-## 1. Sources
+## 1. Sites
 
-VODLoft calls the services it adds media from **Sources**: The Daily Wire, yt-dlp for YouTube and many other sites, and NPO Start. The first-run setup lists each Source, and offers signing in per site as an optional step: The Daily Wire has a sign-in of its own, and other sites, such as YouTube or NPO Start, sign in with a cookies file. See [[Sources]] and [[Settings#authentication]].
+VODLoft downloads from YouTube and over a thousand other sites. The first-run setup shows the popular ones, such as YouTube, Twitch, The Daily Wire and SoundCloud: pick the ones you use. For any other site, type its address, such as `nebula.tv`, or paste a link to a page on it. You need at least one site to continue. If you only use YouTube, pick only YouTube: VODLoft then leaves out everything that is only about other sites. You can add more sites at any time under **Settings → Sources**, and a site is also added when you add something from it.
+
+Next, **Set up your sites** offers signing in per site, as an optional step: The Daily Wire has a sign-in of its own, and other sites, such as YouTube or NPO Start, sign in with a cookies file. See [[Sources]] and [[Settings#authentication]].
 
 YouTube's row also takes an optional, free YouTube Data API key. yt-dlp downloads every video with or without one, but with a key the daily re-scan notices removed and private videos and keeps descriptions and thumbnails current, and adding channels, checking for new videos and searching YouTube get much quicker. See [[Settings#youtube-data-api-key]].
 

@@ -30,6 +30,35 @@ def test_onboarding_status_only_reads(monkeypatch):
     engine.dispose()
 
 
+def _add_a_site(session) -> None:
+    from backend.services.sites import add_site, site_of_link
+
+    add_site(session, site_of_link(session, "https://www.youtube.com"))
+
+
+def test_onboarding_only_ends_with_a_site(monkeypatch):
+    from backend.api.endpoints.onboarding import service
+    from backend.db import Base
+    from backend.services.errors import ServiceError
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(service, "get_settings", lambda: SimpleNamespace(admin_auth=SimpleNamespace(enabled=False)))
+
+    with Session(engine) as session:
+        try:
+            service.complete_onboarding(session)
+        except ServiceError as error:
+            assert error.status_code == 409
+        else:
+            raise AssertionError("onboarding ended without a site")
+
+        _add_a_site(session)
+        assert service.complete_onboarding(session).completed is True
+
+    engine.dispose()
+
+
 def test_complete_onboarding_is_persistent(monkeypatch):
     from backend.api.endpoints.onboarding import service
     from backend.db import Base
@@ -44,6 +73,7 @@ def test_complete_onboarding_is_persistent(monkeypatch):
     )
 
     with Session(engine) as session:
+        _add_a_site(session)
         status = service.complete_onboarding(session)
         session.commit()
 
@@ -72,6 +102,7 @@ def test_finishing_without_an_import_adds_the_fresh_start_profiles_once(monkeypa
     monkeypatch.setattr(service, "get_settings", lambda: SimpleNamespace(admin_auth=SimpleNamespace(enabled=False)))
 
     with Session(engine) as session:
+        _add_a_site(session)
         service.start_fresh(session)
         service.complete_onboarding(session)
         service.complete_onboarding(session)
@@ -92,7 +123,7 @@ def test_finishing_after_an_import_keeps_only_the_imported_profiles(monkeypatch)
 
     with Session(engine) as session:
         session.add(ImportRun(importer="pinchflat", status="finished", options={}, report=[], counts={}))
-        session.flush()
+        _add_a_site(session)
         service.complete_onboarding(session)
         session.commit()
         assert _profiles(session) == []
@@ -114,6 +145,7 @@ def test_going_back_removes_the_fresh_start_profiles_until_a_collection_uses_the
         session.commit()
         assert _profiles(session) == []
 
+        _add_a_site(session)
         service.start_fresh(session)
         service.complete_onboarding(session)
         service.undo_start_fresh(session)

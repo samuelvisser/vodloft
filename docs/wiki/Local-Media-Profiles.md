@@ -103,6 +103,8 @@ Every profile has a **Sites** setting: the sites, such as YouTube or The Daily W
 
 New profiles start with every site VODLoft knows, plus **Include upcoming sites**. With that option, a site VODLoft sees for the first time, for example when you add a link from a new site, is added to the profile's sites automatically. You can still remove it later. A profile meant only for movies leaves it off, so new sites never join it.
 
+While VODLoft knows only one site, such as YouTube, there is nothing to choose: the **Sites** setting is hidden, and the profile is offered for that site and every site added later. In the same way, the choice between videos and movies, and a profile meant only for movies, only show once a site with movies, such as The Daily Wire, is added.
+
 ## Download behavior
 
 **While downloading**, under Files and metadata, chooses how downloads using the profile are written:

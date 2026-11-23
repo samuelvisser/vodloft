@@ -94,6 +94,8 @@ class LocalMediaProfileSiteAPIRead(ResponseBase):
     download_options: DownloadOptionsAPIRead
     settings: list[SiteSetting]
     """The settings only some Sites show that apply to this Site, such as YouTube's SponsorBlock."""
+    movies: bool
+    """The Site has movies, so a Video profile for it can be offered for movies."""
 
 
 class LocalMediaProfileSitesAPIRead(ResponseBase):

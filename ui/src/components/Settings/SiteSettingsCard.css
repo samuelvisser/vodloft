@@ -39,6 +39,16 @@
     transform: rotate(90deg);
 }
 
+/* The only Site of a card is always open, so its header folds nothing. */
+.site-settings-site--alone > summary {
+    cursor: default;
+    user-select: text;
+}
+
+.site-settings-site--alone > summary::before {
+    display: none;
+}
+
 .site-settings-site[open] > summary {
     border-bottom: 1px solid rgba(100, 116, 139, 0.2);
 }

@@ -255,13 +255,13 @@ These are safeguards for unusual Daily Wire publication states. Most users shoul
 
 ## Sources
 
-The Sources tab lists every Source VODLoft can add media from, with what it supports. See [[Sources]] for what each one does. Signing in and API keys are set up per site, under **Authentication** at the top. The Daily Wire's card contains advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
+The Sources tab lists every Source VODLoft can add media from, with what it supports. A Source made for one site, such as The Daily Wire, only shows while that site is added. A site that has nothing in VODLoft can be removed with the trash button on its row, but VODLoft always keeps at least one site. See [[Sources]] for what each one does. Signing in and API keys are set up per site, under **Authentication** at the top. The Daily Wire's card contains advanced integration settings. Ordinary installations should leave the endpoint, OAuth, and pacing values unchanged.
 
 ### Authentication
 
 Signing in is optional, and only needed for content that requires an account, such as members-only or age-restricted
 videos. It is set up per site, so YouTube, Twitch and NPO Start each have their own. **Authentication** lists every site
-VODLoft knows: the sites a Source is made for, and every site you added something from. Each site shows whether it is
+VODLoft knows: the sites you picked in the first-run setup, and every site you added since. Each site shows whether it is
 signed in and whether it has an API key; open it to change that.
 
 - **The Daily Wire** has a sign-in of its own: follow the steps shown and authorize VODLoft on The Daily Wire's site.

@@ -138,6 +138,12 @@ export function sourceHas(source: SourceRead | null | undefined, feature: Source
     return !!source?.features.includes(feature)
 }
 
+/** Whether VODLoft shows the Source: one made for some Sites, such as The Daily Wire, only while one of them is
+ *  added to VODLoft; a Source of many sites always. */
+export function sourceShown(source: SourceRead): boolean {
+    return !source.sites.length || source.sites.some((site) => site.added)
+}
+
 /** The links of a description that are on a Site VODLoft knows for media. */
 export const MediaLinksReadSchema = z.object({urls: z.array(z.string())})
 
@@ -363,6 +369,19 @@ export type SiteAuthenticationRead = z.infer<typeof SiteAuthenticationReadSchema
 /** A Site added by a link to it. */
 export const SiteAddedReadSchema = z.object({key: z.string(), name: z.string()})
 export type SiteAddedRead = z.infer<typeof SiteAddedReadSchema>
+
+/** A Site the user can pick as one they use: a popular one VODLoft suggests, or one already added. */
+export const SiteChoiceReadSchema = z.object({
+    key: z.string(),
+    name: z.string(),
+    /** What VODLoft adds from the Site, in a few words. */
+    pitch: z.string().nullable(),
+    /** VODLoft knows the Site already. */
+    added: z.boolean(),
+    icon: z.string().nullable(),
+    initials: z.string(),
+})
+export type SiteChoiceRead = z.infer<typeof SiteChoiceReadSchema>
 
 
 /** A collection at a Source with listed episodes, shaped like the fields of a new collection. */

@@ -27,6 +27,7 @@ from backend.db.models import (
 )
 from backend.types.local_media_profile_types import CollectionLocalMediaProfileScope, LocalMediaProfileType, VideoLocalMediaProfileScope
 from backend.services.storage_used import is_physical_download, storage_size_bytes_sum
+from backend.services.local_media_profile_sites import movie_site_keys
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from downloader import hls_asset_marker
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
@@ -255,7 +256,12 @@ def _filtered(s: Session, filters: LocalMediaProfileListQuery):
         profile_id for profile_id, site_keys in s.execute(select(LocalMediaProfileBase.id, LocalMediaProfileBase.site_keys))
         if set(site_keys or ()) & set(filters.site)
     ]) if filters.site else None
+    # A profile only for movies, such as VODLoft Movies, stays out of sight until a Site that has movies is added.
+    movies_hidden = (
+        [~(is_video & (video_scope == VideoLocalMediaProfileScope.MOVIES.value))] if not movie_site_keys(s) else []
+    )
     query = s.query(profile).filter(
+        *movies_hidden,
         matches_words(search_words(filters.search), profile.name, profile.output_template),
         matches_any([used_for[value] for value in set(filters.used_for)]),
         matches_format(profile.preferred_format, filters.format),
