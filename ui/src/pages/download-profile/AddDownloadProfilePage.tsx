@@ -2,7 +2,7 @@ import {useCallback, useEffect, useMemo, useRef} from 'react'
 import {Controller, useForm, useWatch} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {useNavigate, useSearchParams} from 'react-router-dom'
-import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionEpisodeTags, useCollectionSeasons, useCollections} from '../../lib/queries'
+import {useDownloadProfilesByCollectionSlug, useLocalMediaProfiles, useCollectionEpisodeTags, useCollectionSeasons, useCollections, useSiteOptions} from '../../lib/queries'
 import DownloadProfileForm from '../../components/DownloadProfile/DownloadProfileForm'
 import {
     DownloadProfileCreateIn, DownloadProfileCreateOut, DownloadProfileCreateSchema, defaultEpisodeFilters,
@@ -109,15 +109,17 @@ export default function AddDownloadProfilePage() {
 
     // The episode tags and seasons to start with answer after the collection is picked.
     const {data: episodeTags} = useCollectionEpisodeTags({collectionId: selectedCollection?.id})
+    // Which seasons a new profile picks follows the collection's Site.
+    const {data: site} = useSiteOptions({collectionId: selectedCollection?.id})
     const seasonal = episodeIdentifier === EpisodeIdentifierReg.Enum.seasonal
     const filtersDefaultedFor = useRef<number | undefined>(undefined)
     useEffect(() => {
-        if (!selectedCollection || !episodeTags || (seasonal && !seasonsData)) return
+        if (!selectedCollection || !episodeTags || (seasonal && (!seasonsData || !site))) return
         if (filtersDefaultedFor.current === selectedCollection.id) return
         filtersDefaultedFor.current = selectedCollection.id
-        const latestSeason = [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)[0]
-        setValue('filters', defaultEpisodeFilters(episodeIdentifier, episodeTags, latestSeason?.slug))
-    }, [selectedCollection, episodeTags, seasonal, seasonsData, episodeIdentifier, setValue])
+        const seasons = [...(seasonsData ?? [])].sort((a, b) => a.index - b.index)
+        setValue('filters', defaultEpisodeFilters(episodeIdentifier, episodeTags, seasons, site?.profileSeasons))
+    }, [selectedCollection, episodeTags, seasonal, seasonsData, site, episodeIdentifier, setValue])
     const filters = useWatch({control: form.control, name: 'filters'})
     // A link from a Stream Profile asks for the episode types and the number of episodes it streams, once the
     // collection's own starting filters are in.
