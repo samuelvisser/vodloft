@@ -26,6 +26,7 @@ import CustomIndexAdvisories from './CustomIndexAdvisories'
 import OpaqueOutputTemplateCode from './OpaqueOutputTemplateCode'
 import OutputTemplateStartFields, {FilenameModeField} from './OutputTemplateStartFields'
 import CollectionRootNote from './CollectionRootNote'
+import {TEMPLATE_FUNCTIONS} from './outputTemplateFunctions'
 import {useSetExampleEpisode} from './ExampleEpisodeContext'
 import {useProfileFit} from './ProfileFit'
 import {outputTemplateSyntaxExtensions} from './outputTemplateCodeMirror'
@@ -113,39 +114,9 @@ function filterCompletion(label: string, detail: string, info: string): Completi
     return {label, type: 'function', detail, info}
 }
 
-const vodloftFilterCompletionOptions: Completion[] = [
-    filterCompletion(
-        'strftime',
-        'strftime(format)',
-        'Format a VODLoft date or time value using Python strftime directives.',
-    ),
-    filterCompletion(
-        'regex_replace',
-        'regex_replace(pattern, replacement, count=0)',
-        'Replace regex matches. count=0 replaces all matches.',
-    ),
-    filterCompletion(
-        'regex_search',
-        'regex_search(pattern)',
-        'Return true when the regex matches anywhere in the value.',
-    ),
-    filterCompletion(
-        'regex_groups',
-        'regex_groups(pattern)',
-        'Return the groups of the first regex match as a list, or an empty list when nothing matches.',
-    ),
-    filterCompletion(
-        'as_typed',
-        'as_typed',
-        'Name the value as if it were typed into the template: in Restricted mode it keeps its spaces. Use it last.',
-    ),
-    filterCompletion(
-        'custom_index',
-        "'key' | custom_index(per=None, start=1, step=1)",
-        'Use this episode\'s number from a defined Indexing Value. per counts separately for each value, ' +
-        'start and step set the first number and how it changes.',
-    ),
-]
+const vodloftFilterCompletionOptions: Completion[] = TEMPLATE_FUNCTIONS.map(
+    ({name, usage, summary}) => filterCompletion(name, usage, summary),
+)
 
 const jinjaNativeFilterCompletionOptions: Completion[] = [
     filterCompletion('abs', 'abs', 'Return the absolute value of a number.'),
@@ -155,7 +126,7 @@ const jinjaNativeFilterCompletionOptions: Completion[] = [
     filterCompletion('center', 'center(width=80)', 'Center text in a field of the given width.'),
     filterCompletion('count', 'count', 'Return the number of items in a value.'),
     filterCompletion('d', "d(default_value='', boolean=False)", 'Alias for the default filter.'),
-    filterCompletion('default', "default(default_value='', boolean=False)", 'Use a fallback when the value is undefined, or optionally false-like.'),
+    filterCompletion('default', "default(default_value='', boolean=False)", 'Use default_value instead of the value. VODLoft gives an unknown value as empty text, so pass boolean=true to replace empty values too.'),
     filterCompletion('dictsort', "dictsort(case_sensitive=False, by='key', reverse=False)", 'Sort a dictionary and return key/value pairs.'),
     filterCompletion('e', 'e', 'Alias for the escape filter.'),
     filterCompletion('escape', 'escape', 'Escape HTML-special characters.'),
@@ -163,10 +134,10 @@ const jinjaNativeFilterCompletionOptions: Completion[] = [
     filterCompletion('first', 'first', 'Return the first item in a sequence.'),
     filterCompletion('float', 'float(default=0.0)', 'Convert a value to a floating-point number.'),
     filterCompletion('forceescape', 'forceescape', 'Apply HTML escaping even to values already marked safe.'),
-    filterCompletion('format', 'format(*args, **kwargs)', 'Apply printf-style formatting to a string.'),
+    filterCompletion('format', 'format(*args, **kwargs)', "Fill the value, a printf-style pattern, with the arguments: '%02d' | format(3) gives 03."),
     filterCompletion('groupby', 'groupby(attribute, default=None, case_sensitive=False)', 'Group items by an attribute.'),
     filterCompletion('indent', 'indent(width=4, first=False, blank=False)', 'Indent lines in a string.'),
-    filterCompletion('int', 'int(default=0, base=10)', 'Convert a value to an integer.'),
+    filterCompletion('int', 'int(default=0, base=10)', 'Convert a value to a whole number; default when it is not a number, base for another number base such as 16.'),
     filterCompletion('items', 'items', 'Iterate over the key/value pairs in a mapping.'),
     filterCompletion('join', "join(d='', attribute=None)", 'Join items into a string, optionally using an attribute from each item.'),
     filterCompletion('last', 'last', 'Return the last item in a sequence.'),
@@ -180,7 +151,7 @@ const jinjaNativeFilterCompletionOptions: Completion[] = [
     filterCompletion('random', 'random', 'Return a random item from a sequence.'),
     filterCompletion('reject', 'reject(*args, **kwargs)', 'Keep sequence items that fail a Jinja test.'),
     filterCompletion('rejectattr', 'rejectattr(*args, **kwargs)', 'Keep items whose selected attribute fails a Jinja test.'),
-    filterCompletion('replace', 'replace(old, new, count=None)', 'Replace occurrences of a substring.'),
+    filterCompletion('replace', 'replace(old, new, count=None)', 'Replace the text old with new; count replaces only the first so many.'),
     filterCompletion('reverse', 'reverse', 'Reverse text or iterate over a sequence in reverse.'),
     filterCompletion('round', "round(precision=0, method='common')", 'Round a number to the requested precision.'),
     filterCompletion('safe', 'safe', 'Mark a string as safe from HTML escaping.'),
@@ -193,8 +164,8 @@ const jinjaNativeFilterCompletionOptions: Completion[] = [
     filterCompletion('sum', 'sum(attribute=None, start=0)', 'Add the values in a sequence.'),
     filterCompletion('title', 'title', 'Convert text to title case.'),
     filterCompletion('tojson', 'tojson(indent=None)', 'Serialize a value as JSON.'),
-    filterCompletion('trim', 'trim(chars=None)', 'Remove leading and trailing characters, or whitespace by default.'),
-    filterCompletion('truncate', "truncate(length=255, killwords=False, end='...', leeway=None)", 'Shorten text to a maximum length.'),
+    filterCompletion('trim', 'trim(chars=None)', 'Remove chars, or spaces when you leave it out, from the start and end.'),
+    filterCompletion('truncate', "truncate(length=255, killwords=False, end='...', leeway=None)", 'Shorten text to length characters, ending in end; killwords=true may cut a word in half, leeway lets text that is only that much too long stay whole.'),
     filterCompletion('unique', 'unique(case_sensitive=False, attribute=None)', 'Return unique items from a sequence.'),
     filterCompletion('upper', 'upper', 'Convert text to uppercase.'),
     filterCompletion('urlencode', 'urlencode', 'Encode a value for use in a URL path or query.'),
@@ -738,6 +709,49 @@ function VariableReference({entries}: {entries: readonly ReferenceEntry[]}) {
     )
 }
 
+/** VODLoft's own functions with their arguments, then the Jinja filters a template can use too. */
+function FunctionReference({offersCustomIndex}: {offersCustomIndex: boolean}) {
+    return (
+        <>
+            <p>
+                Put a function after a value with a <code>|</code>, such
+                as <code>{'{{ year | int }}'}</code>. Give it arguments in brackets, by position or by name.
+            </p>
+            <dl className="output-template-function-reference">
+                {TEMPLATE_FUNCTIONS.filter(({collectionOnly}) => offersCustomIndex || !collectionOnly).map((fn) => (
+                    <div key={fn.name}>
+                        <dt><code>{fn.usage}</code></dt>
+                        <dd>
+                            <p>{fn.summary}</p>
+                            {fn.arguments.length > 0 && (
+                                <ul>
+                                    {fn.arguments.map((argument) => (
+                                        <li key={argument.name}><code>{argument.name}</code> {argument.description}</li>
+                                    ))}
+                                </ul>
+                            )}
+                            {fn.example && (
+                                <p>Example: <code>{fn.example.code}</code> gives {fn.example.result}.</p>
+                            )}
+                        </dd>
+                    </div>
+                ))}
+            </dl>
+            <h5>Jinja filters</h5>
+            <ReadMore summary="Jinja's own filters work too, such as default, format, int, replace, lower and upper.">
+                <dl className="output-template-variable-reference">
+                    {jinjaNativeFilterCompletionOptions.map((option) => (
+                        <div key={option.label}>
+                            <dt><code>{option.detail}</code></dt>
+                            <dd>{typeof option.info === 'string' ? option.info : null}</dd>
+                        </div>
+                    ))}
+                </dl>
+            </ReadMore>
+        </>
+    )
+}
+
 export default function OutputTemplateEditor({form, mode, placeholder, help, readOnly = false, isCreating = false, onCollectionRoot, headerActions}: Props) {
     const {control, formState: {errors}} = form
     const template = useWatch({control, name: 'outputTemplate'}) ?? ''
@@ -1216,7 +1230,7 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                 </section>
 
                 <div className="help output-template-help" id="mp-path-help">
-                    <ReadMore summary="Jinja syntax and all available variables.">
+                    <ReadMore summary="Jinja syntax and all available variables and functions.">
                         <div className="output-template-guidance">{help}</div>
                         <h4>Available variables</h4>
                         <VariableReference entries={variableEntries} />
@@ -1242,6 +1256,9 @@ export default function OutputTemplateEditor({form, mode, placeholder, help, rea
                                 <VariableReference entries={metadataEntries} />
                             </>
                         )}
+                        <hr className="output-template-help-divider" />
+                        <h4>Functions</h4>
+                        <FunctionReference offersCustomIndex={mode === 'collection'} />
                     </ReadMore>
                 </div>
             </div>

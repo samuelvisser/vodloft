@@ -419,6 +419,34 @@
     color: var(--text);
 }
 
+.output-template-function-reference {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+}
+
+.output-template-function-reference dt,
+.output-template-function-reference dd {
+    margin: 0;
+    min-width: 0;
+}
+
+.output-template-function-reference dd {
+    display: grid;
+    gap: 4px;
+    padding-left: 16px;
+}
+
+.output-template-function-reference ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.output-template-function-reference code {
+    overflow-wrap: anywhere;
+    color: var(--text);
+}
+
 @media (max-width: 900px) {
     .template-workbench {
         max-width: calc(100vw - 32px);
