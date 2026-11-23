@@ -501,20 +501,20 @@ export const frontendOperationDefinitions = {
   'collection.rewrite_metadata': {
     kind: 'collection.rewrite_metadata',
     resourceType: 'collection',
-    label: 'Writing info into files',
+    label: 'Writing metadata into files',
     invalidate: invalidateCollectionFiles,
     success: (operation) => {
       const collectionTitle = nameInText(contextString(operation, 'collection_title') || operation.title)
       const retagged = resultNumber(operation, 'files_retagged') ?? 0
       const nfos = resultNumber(operation, 'nfos_written') ?? 0
       const failed = resultNumber(operation, 'files_failed') ?? 0
-      if (retagged + nfos === 0 && failed === 0) return `No downloaded files of ${collectionTitle} needed new info`
+      if (retagged + nfos === 0 && failed === 0) return `No downloaded files of ${collectionTitle} needed new metadata`
       const parts = [
         retagged > 0 ? `updated the tags of ${retagged} ${plural(retagged, 'file', 'files')}` : '',
         nfos > 0 ? `wrote ${nfos} NFO ${plural(nfos, 'file', 'files')}` : '',
       ].filter(Boolean)
-      const failedDetail = failed > 0 ? `; ${failed} ${plural(failed, 'file', 'files')} kept their old info` : ''
-      return `Writing info into files finished for ${collectionTitle}: ${parts.join(' and ') || 'nothing changed'}${failedDetail}`
+      const failedDetail = failed > 0 ? `; ${failed} ${plural(failed, 'file', 'files')} kept their old metadata` : ''
+      return `Writing metadata into files finished for ${collectionTitle}: ${parts.join(' and ') || 'nothing changed'}${failedDetail}`
     },
   },
   'collection.change_identification': {
