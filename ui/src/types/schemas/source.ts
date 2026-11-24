@@ -181,6 +181,16 @@ export const ResolvedLinkReadSchema = z.object({
 })
 export type ResolvedLinkRead = z.infer<typeof ResolvedLinkReadSchema>
 
+/** A quick first look at a link while the full lookup runs, with what the link is when its Source can already tell
+ * from the link alone, so the user can go on with it. */
+export const LinkFirstLookReadSchema = LinkPreviewReadSchema.extend({
+    source: SourceReadSchema,
+    kind: z.enum(['collection', 'movie', 'episode', 'video', 'creator']).nullable().optional().default(null),
+    slug: z.string().nullable().optional().default(null),
+    url: z.string().nullable().optional().default(null),
+})
+export type LinkFirstLookRead = z.infer<typeof LinkFirstLookReadSchema>
+
 export const SearchResultReadSchema = z.object({
     kind: z.enum(['collection', 'movie', 'episode', 'video']),
     slug: z.string(),

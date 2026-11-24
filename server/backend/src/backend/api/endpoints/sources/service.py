@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.api.models.source import (
-    ApiKeyNoteAPIRead, ApiStatusAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
+    ApiKeyNoteAPIRead, ApiStatusAPIRead, LinkFirstLookAPIRead, ProgramStatusAPIRead, SourceProblemAPIRead, ResolvedLinkAPIRead, ResolvedLinkPreviewAPIRead, SearchResultsAPIRead, CollectionDetailsAPIRead,
     SourceAPIRead, SourceSiteAPIRead,
 )
 from backend.db.models import Collection, CreatorAccount, Episode, MediaItemBase, Settings, Site as SiteRecord
@@ -288,17 +289,19 @@ def link_question(s: Session, access: Access, url: str, source_key: str | None =
     return LinkQuestion(url, asked, allowed, source_key is not None)
 
 
-def link_preview(question: LinkQuestion) -> ResolvedLinkPreviewAPIRead | None:
+def link_preview(question: LinkQuestion) -> LinkFirstLookAPIRead | None:
     """A first look at the link from the first Source asked, such as YouTube's title and thumbnail in well under a
-    second, to show while the full lookup runs. None when that Source has no faster way, or it failed: the full
-    lookup reports problems."""
+    second, to show while the full lookup runs, and what the link is when the Source can tell from the link alone. None
+    when that Source has no faster way, or it failed: the full lookup reports problems."""
     source = question.asked[0]
     try:
         preview = source.preview(question.url)
     except Exception:  # noqa: BLE001 - a preview is a nicety.
         logger.debug("No quick preview from %s for %s", source.id, question.url, exc_info=True)
         return None
-    return ResolvedLinkPreviewAPIRead.model_validate(preview) if preview is not None else None
+    if preview is None:
+        return None
+    return LinkFirstLookAPIRead.model_validate(SimpleNamespace(**vars(preview), source=source))
 
 
 def resolve_link(s: Session, access: Access, question: LinkQuestion, plan: PlanTracker | None = None) -> ResolvedLinkAPIRead:

@@ -548,12 +548,17 @@ class CreatorDetails:
 
 @dataclass(frozen=True)
 class LinkPreview:
-    """A first look at a link, from a faster lookup than ``resolve``: enough to show while the rest loads."""
+    """A first look at a link, from a faster lookup than ``resolve``: enough to show while the rest loads. ``kind``,
+    ``slug`` and ``url`` say what the link is when the Source can tell, as ``resolve`` will, so the user can go on with
+    it before the full lookup is done."""
 
     title: str
     image_url: str | None = None
     author_name: str | None = None
     site: str | None = None
+    kind: LinkKind | None = None
+    slug: str | None = None
+    url: str | None = None
 
 
 @dataclass(frozen=True)

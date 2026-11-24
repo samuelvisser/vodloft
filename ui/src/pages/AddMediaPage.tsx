@@ -17,7 +17,7 @@ import {ClearInputButton} from '../components/common/ClearInputButton'
 import AddEmptyCollectionDialog from '../components/AddEmptyCollection/AddEmptyCollectionDialog'
 import LookupSteps from './creator/LookupSteps'
 import type {ProgressStep} from '../types/progress'
-import type {LinkPreviewRead} from '../types/schemas/source'
+import type {LinkFirstLookRead} from '../types/schemas/source'
 import './creator/CreatorPages.css'
 
 type AddMediaPageProps = {
@@ -48,7 +48,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     // What the lookup is doing, step by step, while it runs.
     const [steps, setSteps] = useState<ProgressStep[]>([])
     // A quick first look at the link, such as a YouTube video's title and thumbnail, while the full lookup runs.
-    const [firstLook, setFirstLook] = useState<LinkPreviewRead | null>(null)
+    const [firstLook, setFirstLook] = useState<LinkFirstLookRead | null>(null)
     // The Sources that can handle the link's site, kept while another one is tried.
     const [candidates, setCandidates] = useState<SourceRead[]>([])
     const [askedSource, setAskedSource] = useState<string | null>(null)
@@ -108,9 +108,15 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         void lookUp(url)
     }
 
+    // What the link is: the full lookup's answer, or until it comes, what the first look could already tell from the
+    // link alone, such as a YouTube video. The user can go on with it while the rest loads.
+    const known = link ?? (firstLook?.kind && firstLook.slug && firstLook.url ? {
+        source: firstLook.source, kind: firstLook.kind, slug: firstLook.slug, url: firstLook.url, preview: firstLook,
+        drmProtected: false, accessLocked: false,
+    } : null)
     // A collection link from a Source that cannot add collections yet, such as a playlist at a video site.
-    const collectionsUnsupported = !!link && (link.kind === 'collection' || link.kind === 'episode') && !sourceHas(link.source, SourceFeature.COLLECTIONS)
-    const target = link && !collectionsUnsupported ? linkTarget(link) : null
+    const collectionsUnsupported = !!known && (known.kind === 'collection' || known.kind === 'episode') && !sourceHas(known.source, SourceFeature.COLLECTIONS)
+    const target = known && !collectionsUnsupported ? linkTarget(known) : null
     const localCollection = target?.kind === 'collection'
         ? localCollections?.find((collection) => collection.slug === target.slug && collection.sourceKey === target.sourceKey)
         : undefined
@@ -178,10 +184,10 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         && (sources ?? []).some((source) => canUseSource(source.id) && sourceHas(source, SourceFeature.LINK_COLLECTIONS))
 
     // Hand the link to the Quick download page: one video, episode or movie that can be downloaded.
-    const quickDownloadable = !!link && link.kind !== 'collection' && link.kind !== 'creator' && !link.drmProtected && !link.accessLocked
+    const quickDownloadable = !!known && known.kind !== 'collection' && known.kind !== 'creator' && !known.drmProtected && !known.accessLocked
     const quickDownload = () => {
-        if (!link) return
-        navigate(`/quick-download?url=${encodeURIComponent(link.url)}&source=${encodeURIComponent(link.source.id)}`)
+        if (!known) return
+        navigate(`/quick-download?url=${encodeURIComponent(known.url)}&source=${encodeURIComponent(known.source.id)}`)
     }
 
     const image = toImageUrl(link?.preview.imageUrl)
@@ -191,8 +197,24 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         if (target.kind === 'video') return localVideo ? 'Open video' : addingVideo ? 'Adding video…' : 'Add this video'
         if (target.kind === 'movie') return localMovie ? 'Open movie' : 'Continue with this movie'
         if (localCollection) return 'Open collection'
-        return link?.kind === 'episode' ? 'Add its collection' : 'Continue with this collection'
+        return known?.kind === 'episode' ? 'Add its collection' : 'Continue with this collection'
     })()
+
+    const actions = target && (
+        <div className="add-media-preview-actions">
+            <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>
+                {actionLabel}
+                <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
+            </button>
+            {quickDownloadable && !onboarding && (
+                <button className="btn" type="button" onClick={quickDownload}
+                        title="Download the file without adding it to your library">
+                    <FontAwesomeIcon icon={faIcon('fass', 'bolt')}/>
+                    Quick download
+                </button>
+            )}
+        </div>
+    )
 
     return (
         <section className={`view add-media-view${onboarding ? ' add-media-view--onboarding' : ''}`} aria-labelledby="add-media-title">
@@ -276,6 +298,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                             </div>
                         )}
                         <LookupSteps steps={steps} first="Finding the service the link comes from"/>
+                        {actions}
                     </div>
                 </article>
             )}
@@ -297,19 +320,7 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
                         {link.drmProtected && <DrmNotice/>}
                         {!link.drmProtected && link.accessLocked && <AccessNotice item={link}/>}
                         {target ? (
-                            <div className="add-media-preview-actions">
-                                <button className="btn btn-primary" type="button" onClick={proceed} disabled={addingVideo}>
-                                    {actionLabel}
-                                    <FontAwesomeIcon icon={faIcon('fass', 'arrow-right')}/>
-                                </button>
-                                {quickDownloadable && !onboarding && (
-                                    <button className="btn" type="button" onClick={quickDownload}
-                                            title="Download the file without adding it to your library">
-                                        <FontAwesomeIcon icon={faIcon('fass', 'bolt')}/>
-                                        Quick download
-                                    </button>
-                                )}
-                            </div>
+                            actions
                         ) : link.kind === 'creator' ? (
                             <p role="alert">
                                 This is the page of {kindNames(link.source, 'creator')?.a}. Paste the link to one of

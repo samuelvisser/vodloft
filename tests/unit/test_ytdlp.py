@@ -68,6 +68,73 @@ def test_a_youtube_video_resolves_to_a_video_named_by_its_id(lookups):
     assert "--no-playlist" in calls[0]
 
 
+def test_a_youtube_video_is_one_lookup_by_any_of_its_links(lookups):
+    answers, calls = lookups
+    answers["https://youtu.be/dQw4w9WgXcQ"] = YOUTUBE_VIDEO
+    source = YtDlpSource()
+
+    source.resolve("https://youtu.be/dQw4w9WgXcQ")
+    # Add media adds the video by the link the lookup found, which is the same lookup.
+    source.video_details("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert len(calls) == 1
+
+
+def test_asking_for_a_link_being_looked_up_waits_for_that_lookup(monkeypatch):
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+    calls = []
+
+    def run_json(*args, **_kwargs):
+        calls.append(args)
+        started.set()
+        release.wait(5)
+        return YOUTUBE_VIDEO
+
+    monkeypatch.setattr(runner, "run_json", run_json)
+    source = YtDlpSource()
+    found = {}
+    lookup = threading.Thread(target=lambda: found.setdefault("link", source.resolve("https://youtu.be/dQw4w9WgXcQ")))
+    lookup.start()
+    started.wait(5)
+    adding = threading.Thread(target=lambda: found.setdefault("details", source.video_details("https://www.youtube.com/watch?v=dQw4w9WgXcQ")))
+    adding.start()
+    release.set()
+    lookup.join(5)
+    adding.join(5)
+    assert found["link"].slug == found["details"].slug == "dQw4w9WgXcQ"
+    assert len(calls) == 1
+
+
+def test_a_youtube_link_says_what_it_is_from_the_link_alone(monkeypatch):
+    class _OEmbed:
+        def __init__(self, url):
+            self.url = url
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"title": "From oEmbed", "author_name": "A Channel", "thumbnail_url": "https://i.ytimg.com/x.jpg"}
+
+    asked = []
+    monkeypatch.setattr(
+        "sources.ytdlp.source.requests.get", lambda url, params, timeout: asked.append(params["url"]) or _OEmbed(url),
+    )
+    source = YtDlpSource()
+
+    video = source.preview("https://youtu.be/dQw4w9WgXcQ?si=shared")
+    assert (video.kind, video.slug, video.url) == (LinkKind.VIDEO, "dQw4w9WgXcQ", "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert video.title == "From oEmbed"
+
+    playlist = source.preview("https://www.youtube.com/playlist?list=PL123")
+    assert (playlist.kind, playlist.slug) == (LinkKind.COLLECTION, "PL123")
+
+    # A channel has no oEmbed.
+    assert source.preview("https://www.youtube.com/@a-channel") is None
+    assert len(asked) == 2
+
+
 def test_other_sites_are_prefixed_and_unknown_pages_are_best_effort(lookups):
     answers, _ = lookups
     answers["https://vimeo.com/1"] = {"id": "1", "extractor_key": "Vimeo", "webpage_url_domain": "vimeo.com", "title": "V", "timestamp": 0}

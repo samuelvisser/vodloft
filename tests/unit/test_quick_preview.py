@@ -7,6 +7,7 @@ import pytest
 import requests
 
 from backend.security.access import TEMPLATES, Access, SourceLimit
+from sources import LinkKind
 
 
 def _ytdlp():
@@ -37,11 +38,11 @@ def test_youtube_videos_preview_through_oembed(monkeypatch):
         return _Response({"title": "A video", "author_name": "A channel", "thumbnail_url": "https://i.ytimg.com/x.jpg"})
 
     monkeypatch.setattr(module.requests, "get", fake_get)
-    preview = _ytdlp().preview("https://youtu.be/abc")
+    preview = _ytdlp().preview("https://youtu.be/dQw4w9WgXcQ")
     assert (preview.title, preview.author_name, preview.image_url, preview.site) == (
         "A video", "A channel", "https://i.ytimg.com/x.jpg", "YouTube",
     )
-    assert asked == ["https://youtu.be/abc"]
+    assert asked == ["https://youtu.be/dQw4w9WgXcQ"]
 
 
 def test_other_links_and_failures_have_no_preview(monkeypatch):
@@ -52,9 +53,9 @@ def test_other_links_and_failures_have_no_preview(monkeypatch):
 
     monkeypatch.setattr(module.requests, "get", failing_get)
     source = _ytdlp()
-    assert source.preview("https://youtu.be/abc") is None
+    assert source.preview("https://youtu.be/dQw4w9WgXcQ") is None
     assert source.preview("https://vimeo.com/1") is None
-    # Channels and playlists are shows, not a single video.
+    # A channel has no oEmbed, and a playlist's failed like the video's.
     assert source.preview("https://www.youtube.com/@channel") is None
     assert source.preview("https://www.youtube.com/playlist?list=PL1") is None
 
@@ -65,9 +66,10 @@ def test_a_link_already_looked_up_previews_from_that_lookup(monkeypatch):
     monkeypatch.setattr(module.requests, "get", lambda *a, **k: pytest.fail("no request expected"))
     source = _ytdlp()
     source._cache["https://vimeo.com/1"] = (module.time.monotonic(), {
-        "title": "Cached", "uploader": "Someone", "extractor_key": "Vimeo", "thumbnail": "https://x/t.jpg",
+        "id": "1", "title": "Cached", "uploader": "Someone", "extractor_key": "Vimeo", "thumbnail": "https://x/t.jpg",
     })
-    assert source.preview("https://vimeo.com/1").title == "Cached"
+    preview = source.preview("https://vimeo.com/1")
+    assert (preview.title, preview.kind, preview.slug) == ("Cached", LinkKind.VIDEO, "vimeo-1")
 
 
 def _limited(domains):
@@ -85,7 +87,7 @@ def test_the_preview_respects_domain_limits(monkeypatch):
 
     monkeypatch.setattr(service, "preferred_sources", lambda s: {})
     monkeypatch.setattr(module.requests, "get", lambda *a, **k: _Response({"title": "A video"}))
-    body = QuickDownloadOptionsAPIRequest(url="https://youtu.be/abc")
+    body = QuickDownloadOptionsAPIRequest(url="https://youtu.be/dQw4w9WgXcQ")
     assert service.quick_download_preview(None, _limited(("youtu.be",)), body).title == "A video"
     assert service.quick_download_preview(None, _limited(("vimeo.com",)), body) is None
     assert service.quick_download_preview(None, Access.full(), body).source_key == "ytdlp"

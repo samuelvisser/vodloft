@@ -5,6 +5,7 @@ import math
 import logging
 import threading
 import time
+from concurrent.futures import Future
 
 import requests
 from collections.abc import Iterator, Mapping, Sequence
@@ -113,6 +114,25 @@ def _feeds(ref: mapping.YouTubeRef, feeds: frozenset[str] | None) -> list[dict[s
 def _is_youtube(url: str) -> bool:
     host = link_host(url)
     return on_domain(host, "youtube.com") or host == "youtu.be"
+
+
+def _youtube_video_id(url: str) -> str | None:
+    """The id of the YouTube video a link is to, by whichever of its links, or None for any other link."""
+    if not _is_youtube(url) or mapping.youtube_ref(url) is not None:
+        return None
+    from yt_dlp.extractor.youtube import YoutubeIE
+
+    if YoutubeIE.suitable(url):
+        return YoutubeIE.get_temp_id(url)
+    # A video in a playlist, which yt-dlp looks up as the video alone.
+    return (parse_qs(urlsplit(url).query).get("v") or [None])[0]
+
+
+def _lookup_key(url: str) -> str:
+    """What a lookup of the link is kept by: a YouTube video by its own link, so its short, live and shared links
+    are one lookup."""
+    video_id = _youtube_video_id(url)
+    return mapping.video_url(video_id) if video_id else url
 
 
 def _scheduled_at(info: dict) -> datetime | None:
@@ -425,6 +445,8 @@ class YtDlpSource(Source):
         self._cache: dict[str, tuple[float, dict]] = {}
         self._searches: dict[tuple[str, str], tuple[float, SearchResults]] = {}
         self._cache_lock = threading.Lock()
+        # The lookups running now, by link, which another ask for the same link waits for.
+        self._running: dict[str, Future] = {}
         # A channel's handle never changes its ID, so it is looked up once.
         self._channel_ids: dict[str, str] = {}
         # The check interval of a quota day, worked out once when that day starts, with the checks share it was for.
@@ -452,15 +474,33 @@ class YtDlpSource(Source):
         return combined_tags(sites.site_of(key).episode_tags for key in CONTRACTS)
 
     def _info(self, url: str) -> dict:
-        """The video info for a link. Adding a video right after looking up its link reuses the lookup."""
+        """The video info for a link. Adding a video right after looking up its link reuses the lookup, and asking
+        for a link that is being looked up waits for that lookup, such as adding a video while Add media still looks
+        it up. A YouTube video is the same lookup by whichever of its links."""
+        key = _lookup_key(url)
         now = time.monotonic()
         with self._cache_lock:
-            self._cache = {key: value for key, value in self._cache.items() if now - value[0] < _CACHE_SECONDS}
-            if url in self._cache:
-                return self._cache[url][1]
-        info = _lookup("--no-playlist", "--flat-playlist", "--playlist-items", "1", url)
+            self._cache = {cached: value for cached, value in self._cache.items() if now - value[0] < _CACHE_SECONDS}
+            if key in self._cache:
+                return self._cache[key][1]
+            running = self._running.get(key)
+            if running is not None:
+                ours = None
+            else:
+                running = ours = self._running[key] = Future()
+        if ours is None:
+            return running.result()
+        try:
+            info = _lookup("--no-playlist", "--flat-playlist", "--playlist-items", "1", url)
+        except BaseException as exc:
+            with self._cache_lock:
+                del self._running[key]
+            ours.set_exception(exc)
+            raise
         with self._cache_lock:
-            self._cache[url] = (now, info)
+            self._cache[key] = (now, info)
+            del self._running[key]
+        ours.set_result(info)
         return info
 
     @staticmethod
@@ -512,21 +552,28 @@ class YtDlpSource(Source):
             return None
 
     def preview(self, url: str) -> LinkPreview | None:
-        """The title and thumbnail of a YouTube video from YouTube's oEmbed, in well under a second.
+        """The title and thumbnail of a YouTube video or playlist from YouTube's oEmbed, in well under a second, with
+        what the link is, told from the link alone.
 
-        yt-dlp's full lookup takes several seconds; this shows the video while it
-        runs. A link already looked up is answered from that lookup.
+        yt-dlp's full lookup takes several seconds; this shows the video while it runs, and lets the user go on
+        with it. A video already looked up is answered from that lookup. A channel has no oEmbed.
         """
-        url = collection_url(url)
         with self._cache_lock:
-            cached = self._cache.get(url)
+            cached = self._cache.get(_lookup_key(collection_url(url)))
         if cached is not None and cached[1].get("_type") != "playlist":
             info = cached[1]
             return LinkPreview(
                 title=info.get("title") or url, image_url=_thumbnail(info),
                 author_name=info.get("uploader") or info.get("channel"), site=_site(info),
+                kind=LinkKind.VIDEO, slug=video_slug(info), url=info.get("webpage_url") or url,
             )
-        if not _is_youtube(url) or mapping.youtube_ref(url) is not None:
+        video_id = _youtube_video_id(url)
+        ref = mapping.youtube_ref(url)
+        if video_id is not None:
+            kind, slug, link = LinkKind.VIDEO, video_id, mapping.video_url(video_id)
+        elif ref is not None and ref.kind == "playlist":
+            kind, slug, link = LinkKind.COLLECTION, ref.value, collection_url(url)
+        else:
             return None
         try:
             response = requests.get(
@@ -542,6 +589,7 @@ class YtDlpSource(Source):
             return None
         return LinkPreview(
             title=str(title), image_url=data.get("thumbnail_url"), author_name=data.get("author_name"), site="YouTube",
+            kind=kind, slug=slug, url=link,
         )
 
     def resolve(self, url: str, plan: PlanTracker | None = None) -> ResolvedLink | None:

@@ -366,7 +366,10 @@ def test_a_quick_first_look_comes_before_the_link(client, monkeypatch):
 
     def preview(url):
         previewed.set()
-        return LinkPreview(title="Quick title", image_url="https://img/quick.jpg", author_name="Maker")
+        return LinkPreview(
+            title="Quick title", image_url="https://img/quick.jpg", author_name="Maker",
+            kind=LinkKind.MOVIE, slug="clip-1", url="https://stub.example/watch/clip-1",
+        )
 
     def resolve(url, plan=None):
         # The full lookup takes longer than the first look.
@@ -378,6 +381,11 @@ def test_a_quick_first_look_comes_before_the_link(client, monkeypatch):
     monkeypatch.setattr(stub, "resolve", resolve)
     lines = [json.loads(line) for line in client.post("/api/resolve", json={"url": "https://stub.example/watch/clip-1"}).text.splitlines()]
     first_look = next(line["preview"] for line in lines if "preview" in line)
-    assert first_look == {"title": "Quick title", "description": None, "imageUrl": "https://img/quick.jpg", "authorName": "Maker"}
-    assert lines.index({"preview": first_look}) < len(lines) - 1
+    # What the link is, so Add media can go on with it before the full lookup is done.
+    assert first_look.pop("source")["id"] == "stub"
+    assert first_look == {
+        "title": "Quick title", "description": None, "imageUrl": "https://img/quick.jpg", "authorName": "Maker",
+        "kind": "movie", "slug": "clip-1", "url": "https://stub.example/watch/clip-1",
+    }
+    assert next(index for index, line in enumerate(lines) if "preview" in line) < len(lines) - 1
     assert lines[-1]["link"]["preview"]["title"] == "Full title"

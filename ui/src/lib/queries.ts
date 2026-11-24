@@ -78,7 +78,7 @@ import {VideoRead, VideoReadSchema} from "../types/schemas/video";
 import {
     ApiKeyNoteRead, ApiKeyNoteReadSchema, ApiStatusRead, ApiStatusReadSchema, EpisodeTagRead, EpisodeTagReadSchema, PublishStatusLabelRead, PublishStatusLabelReadSchema, ProgramStatusRead, SourceProblemRead,
     SourceProblemReadSchema, ProgramStatusReadSchema, ResolvedLinkRead,
-    ResolvedLinkReadSchema, LinkPreviewRead, LinkPreviewReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
+    ResolvedLinkReadSchema, LinkFirstLookRead, LinkFirstLookReadSchema, MediaLinksReadSchema, SearchResultsRead, SearchResultsReadSchema, CollectionDetailsRead, CollectionDetailsReadSchema, SourceSiteRead, SourceSiteReadSchema, SiteReadSchema, SourceRead, SiteAuthenticationRead, SiteAuthenticationReadSchema, SiteChoiceRead, SiteChoiceReadSchema,
     SourceReadSchema,
     YtdlpOptionsReadSchema,
 } from "../types/schemas/source";
@@ -1054,7 +1054,7 @@ export async function addCollectionToCreator(slug: string, creatorSlug: string):
  * at the link, such as a YouTube video's title and thumbnail, when one comes before the lookup is done. */
 export async function resolveLink(
     url: string, signal?: AbortSignal, sourceKey?: string,
-    {onPlan = () => {}, onPreview = () => {}}: {onPlan?: (steps: ProgressStep[]) => void, onPreview?: (preview: LinkPreviewRead) => void} = {},
+    {onPlan = () => {}, onPreview = () => {}}: {onPlan?: (steps: ProgressStep[]) => void, onPreview?: (preview: LinkFirstLookRead) => void} = {},
 ): Promise<ResolvedLinkRead> {
     const response = await fetch(`${apiUrl()}/resolve`, {
         method: 'POST',
@@ -1063,7 +1063,7 @@ export async function resolveLink(
         body: JSON.stringify(sourceKey ? {url, sourceKey} : {url}),
         signal,
     })
-    const result = await readLookup(response, {onPlan, onPreview: (preview) => onPreview(LinkPreviewReadSchema.parse(preview))})
+    const result = await readLookup(response, {onPlan, onPreview: (preview) => onPreview(LinkFirstLookReadSchema.parse(preview))})
     return ResolvedLinkReadSchema.parse(result.link)
 }
 
