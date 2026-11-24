@@ -1,0 +1,47 @@
+/* A long profile name or path wraps inside its card instead of running past it. */
+.local-media-profile-card {
+  min-width: 0;
+}
+
+.local-media-profile-card .card-title {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.local-media-profile-card__path {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.local-media-profile-card__path .cm-editor,
+.local-media-profile-card__path .cm-scroller,
+.local-media-profile-card__path .cm-content,
+.local-media-profile-card__path .cm-line {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.local-media-profile-card__path .cm-content,
+.local-media-profile-card__path .cm-line {
+  padding: 0;
+}
+
+.local-media-profile-card__path .cm-scroller {
+  overflow: hidden !important;
+}
+
+/* Folders follow each other as they fit; a folder too long for the card ends in an ellipsis. */
+.local-media-profile-card .local-media-profile-card__path .cm-content,
+.local-media-profile-card .local-media-profile-card__path .cm-line {
+  white-space: normal;
+}
+
+.local-media-profile-card .local-media-profile-card__path .cm-path-section {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}

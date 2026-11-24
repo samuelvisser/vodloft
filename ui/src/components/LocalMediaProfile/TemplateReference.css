@@ -55,6 +55,37 @@
     body.has-template-reference .template-workbench {
         max-width: calc(100vw - 308px - 416px);
     }
+
+    /* In a page's own place for it, such as under the collection card in the Add Collection wizard:
+       that column grows while the reference is open, and the reference fills it to the bottom of the window. */
+    .template-reference.is-in-slot {
+        position: static;
+        flex: 1;
+        width: auto;
+    }
+
+    body.has-template-reference-slot .wizard-sticky-region {
+        grid-template-columns: minmax(450px, 1fr) minmax(0, 540px);
+    }
+
+    body.has-template-reference-slot .wizard-aside {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        height: calc(100vh - 16px);
+    }
+
+    body.has-template-reference-slot .wizard-aside > :first-child {
+        flex: 0 0 auto;
+        align-self: flex-end;
+        width: 100%;
+        max-width: 400px;
+        box-sizing: border-box;
+    }
+
+    .template-reference-slot {
+        display: contents;
+    }
 }
 
 /* Narrow screens: a sheet that slides up over the page and is dragged down to close. */
@@ -90,7 +121,8 @@
         animation: template-reference-fade 220ms ease-out;
     }
 
-    body.has-template-reference {
+    body.has-template-reference,
+    body.has-template-reference-slot {
         overflow: hidden;
     }
 }

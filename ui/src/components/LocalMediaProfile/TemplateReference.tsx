@@ -154,6 +154,10 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
     const [tab, setTab] = useState<TabKey>('variables')
     const [query, setQuery] = useState('')
     const [openFunction, setOpenFunction] = useState<string | null>(null)
+    // A page can give the reference a place of its own, such as under the collection card in the
+    // Add Collection wizard. Without one it docks on the right of the window.
+    const [slot] = useState(() => document.querySelector<HTMLElement>('.template-reference-slot'))
+    const bodyClass = slot ? 'has-template-reference-slot' : 'has-template-reference'
     const offersCustomIndex = mode === 'collection'
     const functions = useMemo(
         () => TEMPLATE_FUNCTIONS.filter(({collectionOnly}) => offersCustomIndex || !collectionOnly),
@@ -189,12 +193,12 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
             if (event.key === 'Escape') onClose()
         }
         document.addEventListener('keydown', close)
-        document.body.classList.add('has-template-reference')
+        document.body.classList.add(bodyClass)
         return () => {
             document.removeEventListener('keydown', close)
-            document.body.classList.remove('has-template-reference')
+            document.body.classList.remove(bodyClass)
         }
-    }, [onClose])
+    }, [onClose, bodyClass])
 
     const search = query.trim().toLowerCase()
     const found = search ? {
@@ -305,7 +309,7 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
         <>
             <div className="template-reference-backdrop" onClick={onClose} aria-hidden="true"/>
             <aside
-                className={`template-reference${dragY > 0 ? ' is-dragging' : ''}`}
+                className={`template-reference${slot ? ' is-in-slot' : ''}${dragY > 0 ? ' is-dragging' : ''}`}
                 aria-label="Template reference"
                 style={dragY > 0 ? {transform: `translateY(${dragY}px)`} : undefined}
             >
@@ -351,6 +355,6 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
                 <div className="template-reference__content">{content}</div>
             </aside>
         </>,
-        document.body,
+        slot ?? document.body,
     )
 }
