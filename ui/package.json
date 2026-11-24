@@ -48,6 +48,6 @@
     "vite": "7.1.5"
   },
   "optionalDependencies": {
-    "@awesome.me/kit-21a12482f6": "^1.0.4"
+    "@awesome.me/kit-21a12482f6": "^1.0.5"
   }
 }
