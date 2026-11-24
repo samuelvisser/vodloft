@@ -23,6 +23,8 @@ export const MovePreviewSchema = z.object({
     type: z.string(),
     episodeIdentifier: z.string(),
     parts: z.array(MovedPartSchema),
+    /** Why they move: what the collection's settings make its seasons now, in words. */
+    seasonsPlan: z.string(),
     /** It can number its episodes again: not when it numbers them by date. */
     renumberOffered: z.boolean(),
     changes: z.array(z.object({title: z.string(), before: z.string(), after: z.string()})),
@@ -46,5 +48,7 @@ export const MovesWaitingSchema = z.object({
     moved: z.number(),
     /** What it calls its seasons and episodes. */
     words: CollectionWordsSchema,
+    /** Why they move: what the collection's settings make its seasons now, in words. */
+    seasonsPlan: z.string(),
 })
 export type MovesWaiting = z.infer<typeof MovesWaitingSchema>

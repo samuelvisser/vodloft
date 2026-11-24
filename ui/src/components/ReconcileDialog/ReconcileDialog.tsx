@@ -1,6 +1,7 @@
 import {useEffect, useState} from 'react'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import Switch from 'react-switch'
+import {Link} from 'react-router-dom'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import toast from '../../lib/toast'
 
@@ -101,6 +102,12 @@ function CollectionMoves({preview, renumber, onRenumber}: {preview: MovePreview,
     const metadata = touched ? preview.profiles.reduce((sum, profile) => sum + profile.metadataRewritten, 0) : 0
     return (
         <section className="move-sections-collection" aria-label={preview.title}>
+            <p className="help move-reason">
+                <b>Why they move:</b> {preview.seasonsPlan}{' '}
+                Not what you want? Change it under{' '}
+                <Link to={`/edit-collection/${encodeURIComponent(preview.slug)}?seasons=1`}>{season.Plural}</Link>
+                {' '}instead of moving them.
+            </p>
             <ul className="change-identification-steps">
                 {preview.parts.map((part, index) => <PartStep key={index} part={part} season={season.singular}/>)}
                 {renumbered.length > 0 && (

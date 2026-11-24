@@ -51,11 +51,11 @@ function mediaContext(download: MediaDownloadViewRead) {
     return download.movieTitle ? 'Movie' : download.collectionTitle || 'Episode'
 }
 
-/** Why a collection's episodes wait, in its own words. */
+/** Why a collection's episodes wait, in its own words: what its seasons settings make its seasons now. */
 function movesDetail(item: MovesWaiting) {
-    const {episode, season, count} = wordsOf(item.words)
-    return `${count(item.moved)} ${item.moved === 1 ? 'belongs' : 'belong'} in another ${season.singular} now (Moved). `
-        + `Downloaded ${episode.plural} stay where they are, files and all, until you move them.`
+    const {season, count} = wordsOf(item.words)
+    return `${count(item.moved)} ${item.moved === 1 ? 'belongs' : 'belong'} in another ${season.singular} now. `
+        + item.seasonsPlan
 }
 
 export default function HomePage() {
@@ -99,7 +99,12 @@ export default function HomePage() {
     const metadataProblems = movies?.filter((movie) => movie.releaseDateLookupStatus === 'error') || []
     const sourceProblems = sourceProblemsQuery.data ?? []
     // Downloaded episodes whose lists put them elsewhere wait for their Move action, files and all.
-    const movesWaiting = useMovesWaiting(can('library', 'view')).data ?? []
+    // Worked out from every collection's episodes when asked, which can take a while: until then, nothing is all clear.
+    const mayViewLibrary = can('library', 'view')
+    const movesWaitingQuery = useMovesWaiting(mayViewLibrary)
+    const movesWaiting = movesWaitingQuery.data ?? []
+    // Pending, not loading: a fetch a remount cancelled leaves it pending and idle until the next one answers.
+    const checkingMoves = mayViewLibrary && movesWaitingQuery.isPending
     const episodesWaiting = movesWaiting.reduce((sum, item) => sum + item.moved, 0)
     const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0 || sourceProblems.length > 0 || episodesWaiting > 0
     // The keep question has its own card above, so it does not fill Needs attention.
@@ -111,6 +116,7 @@ export default function HomePage() {
     )
     const activeSectionIsEmpty = active.length === 0
     const attentionSectionIsEmpty = !problemsQuery.isPending
+        && !checkingMoves
         && movies !== undefined
         && profiles !== undefined
         && !hasAttention
@@ -168,7 +174,11 @@ export default function HomePage() {
                 <FontAwesomeIcon icon={faIcon('fass', needsAnAnswer ? 'triangle-exclamation' : 'circle-check')}/>
                 <div>
                     <strong>{needsAnAnswer ? 'VODLoft needs attention' : 'VODLoft is running normally'}</strong>
-                    <small>{needsAnAnswer ? attentionSummary : 'No download, metadata, profile or Source problems detected'}</small>
+                    <small>
+                        {needsAnAnswer ? attentionSummary
+                            : checkingMoves ? 'Checking for downloads to move…'
+                                : 'No download, metadata, profile or Source problems detected'}
+                    </small>
                 </div>
             </div>
 
@@ -237,7 +247,18 @@ export default function HomePage() {
                             <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/><span><strong>{mediaTitle(download)}</strong><small>{download.errorMessage || `Download is ${download.downloadStatus}`}</small></span><span>View</span>
                         </Link>
                     ))}
-                    {!hasAttention && <div className="operation-empty"><FontAwesomeIcon icon={faIcon('fass', 'circle-check')}/><span>Nothing needs attention</span></div>}
+                    {checkingMoves && (
+                        <div className="operation-empty" role="status">
+                            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin/><span>Checking for downloads to move…</span>
+                        </div>
+                    )}
+                    {movesWaitingQuery.isError && (
+                        <div className="operation-alert" role="alert">
+                            <FontAwesomeIcon icon={faIcon('fass', 'triangle-exclamation')}/>
+                            <span><strong>Downloads to move</strong><small>VODLoft could not check for downloads to move: {movesWaitingQuery.error.message}</small></span>
+                        </div>
+                    )}
+                    {!hasAttention && !checkingMoves && !movesWaitingQuery.isError && <div className="operation-empty"><FontAwesomeIcon icon={faIcon('fass', 'circle-check')}/><span>Nothing needs attention</span></div>}
                 </section>
             </div>
 
