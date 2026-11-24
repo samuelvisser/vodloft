@@ -182,6 +182,12 @@ def test_a_video_with_files_stays_until_it_is_moved_to_where_it_belongs(source, 
     assert belongs_elsewhere(session, episode).link.title == "One"
     # The collection view marks it Moved.
     assert [moved.source_slug for moved in moved_episodes(session, collection)] == ["b"]
+    # Home's Needs attention says why: what the collection's settings make its seasons now.
+    from backend.services.link_seasons import seasons_plan
+    from backend.services.reconcile import waiting_in_library
+    [waiting] = waiting_in_library(session)
+    assert waiting.moved == 1 and waiting.seasons_plan == seasons_plan(collection)
+    assert "playlist" in waiting.seasons_plan
     episode_id = episode.id
     session.commit()
     run_write_transaction(lambda w: reconcile(w, ReconcileScope.of_episode(w.get(Episode, episode_id)), renumber={}))
