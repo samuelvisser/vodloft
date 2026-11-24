@@ -544,21 +544,28 @@ class YtDlpSource(Source):
             title=str(title), image_url=data.get("thumbnail_url"), author_name=data.get("author_name"), site="YouTube",
         )
 
-    def resolve(self, url: str) -> ResolvedLink | None:
+    def resolve(self, url: str, plan: PlanTracker | None = None) -> ResolvedLink | None:
+        plan = plan or PlanTracker()
         implementation = self._implementation(url)
         url = implementation.collection_link(implementation.full_link(url))
-        if collection := self._api_collection(url):
-            return ResolvedLink(
-                kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
-                description=collection.description, image_url=collection.image_url, author_name=collection.author_name,
-                site="YouTube",
-            )
-        try:
-            info = self._info(url)
-        except runner.YtDlpError as exc:
-            if is_unsupported_url_message(str(exc)):
-                return None
-            raise
+        if self._catalogue(adding=True) is not None and mapping.youtube_ref(url) is not None:
+            with plan.step("ytdlp_api", "Asking the YouTube API"):
+                collection = self._api_collection(url)
+            if collection:
+                return ResolvedLink(
+                    kind=LinkKind.COLLECTION, slug=collection.slug, url=collection.url, title=collection.title,
+                    description=collection.description, image_url=collection.image_url,
+                    author_name=collection.author_name, site="YouTube",
+                )
+        with plan.step("ytdlp_info", f"Reading the link at {implementation.site.name} with yt-dlp"):
+            try:
+                info = self._info(url)
+            except runner.YtDlpError as exc:
+                if not is_unsupported_url_message(str(exc)):
+                    raise
+                info = None
+        if info is None:
+            return None
         site = _site(info)
         if info.get("_type") == "playlist":
             # Named and pictured as Add collection will name and picture it, such as by a SoundCloud artist's own.

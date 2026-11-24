@@ -135,7 +135,7 @@ def test_automatic_downloads_skip_protected_episodes(session):
         id, name, domains = "listed", "Listed", ("listed.example",)
         features = frozenset({Feature.COLLECTIONS, Feature.EPISODE_LISTS})
 
-        def resolve(self, url):
+        def resolve(self, url, plan=None):
             return None
 
         def episode_media(self, **_kwargs):

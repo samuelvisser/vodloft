@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from sqlalchemy.orm import Session
 
-from backend.api.endpoints.sources.service import preferred_sources, resolve_link
+from backend.api.endpoints.sources.service import link_question, preferred_sources, resolve_link
 from backend.api.models.operations import TaskOperationRead
 from backend.api.models.source import ResolvedLinkAPIRead
 from backend.api.models.quick_download import (
@@ -70,7 +70,7 @@ def start_quick_download(access: Access, body: QuickDownloadAPICreate) -> dict:
     """
     s = get_session()
     try:
-        link = resolve_link(s, access, body.url, body.source_key)
+        link = resolve_link(s, access, link_question(s, access, body.url, body.source_key))
     finally:
         s.rollback()
         s.close()
@@ -174,7 +174,7 @@ def quick_download_preview(s: Session, access: Access, body: QuickDownloadOption
 
 def quick_download_options(s: Session, access: Access, body: QuickDownloadOptionsAPIRequest) -> QuickDownloadOptionsAPIRead:
     """Look up the link and what it can be downloaded as, or why it cannot be."""
-    link = resolve_link(s, access, body.url, body.source_key)
+    link = resolve_link(s, access, link_question(s, access, body.url, body.source_key))
     source = get_source(link.source.id)
     try:
         check_quick_downloadable(

@@ -21,7 +21,7 @@ class FakeYtdlp(Source):
     features = frozenset({Feature.SEARCH})
     search_sites = (Site("youtube", "YouTube", searchable=True),)
 
-    def resolve(self, url):
+    def resolve(self, url, plan=None):
         if url.endswith("/redirect"):
             return ResolvedLink(kind=LinkKind.VIDEO, slug="away", url="https://vimeo.com/123", title="Away")
         if "youtu.be/" in url:
@@ -43,7 +43,7 @@ class FakeMembers(Source):
     domains = ("members.example",)
     features = frozenset({Feature.MEMBERSHIP_LEVELS})
 
-    def resolve(self, url):
+    def resolve(self, url, plan=None):
         return ResolvedLink(kind=LinkKind.EPISODE, slug="ep", url=url, title="Episode")
 
 
@@ -103,12 +103,16 @@ def test_everyone_without_limits_may_use_every_link():
     assert _user(None).allows_link("fake_ytdlp", "https://vimeo.com/1")
 
 
-def test_a_youtube_only_user_may_look_up_youtube_and_short_links(fake_sources, session):
-    from backend.api.endpoints.sources.service import resolve_link
+def _resolve(session, access, url, source_key=None):
+    from backend.api.endpoints.sources.service import link_question, resolve_link
 
+    return resolve_link(session, access, link_question(session, access, url, source_key))
+
+
+def test_a_youtube_only_user_may_look_up_youtube_and_short_links(fake_sources, session):
     access = _user(YOUTUBE_ONLY)
-    assert resolve_link(s=session, access=access, url="https://www.youtube.com/watch?v=x").source.id == "fake_ytdlp"
-    assert resolve_link(s=session, access=access, url="youtu.be/short").url == "https://www.youtube.com/watch?v=short"
+    assert _resolve(session, access, "https://www.youtube.com/watch?v=x").source.id == "fake_ytdlp"
+    assert _resolve(session, access, "youtu.be/short").url == "https://www.youtube.com/watch?v=short"
 
 
 @pytest.mark.parametrize(
@@ -121,27 +125,21 @@ def test_a_youtube_only_user_may_look_up_youtube_and_short_links(fake_sources, s
     ],
 )
 def test_a_youtube_only_user_is_refused_other_links_with_the_reason(fake_sources, session, url, expected):
-    from backend.api.endpoints.sources.service import resolve_link
-
     with pytest.raises(LinkNotAllowed) as refused:
-        resolve_link(s=session, access=_user(YOUTUBE_ONLY), url=url)
+        _resolve(session, _user(YOUTUBE_ONLY), url)
     assert expected in str(refused.value)
     assert "You may use: Fake yt-dlp (youtube.com, youtu.be)." in str(refused.value)
 
 
 def test_a_source_the_user_may_not_use_is_refused_by_name(fake_sources, session):
-    from backend.api.endpoints.sources.service import resolve_link
-
     with pytest.raises(LinkNotAllowed, match="may not use Fake yt-dlp"):
-        resolve_link(s=session, access=_user({"fake_members": None}), url="https://www.youtube.com/x", source_key="fake_ytdlp")
+        _resolve(session, _user({"fake_members": None}), "https://www.youtube.com/x", "fake_ytdlp")
 
 
 def test_other_candidate_sources_are_left_out_of_the_answer(fake_sources, session):
-    from backend.api.endpoints.sources.service import resolve_link
-
-    full = resolve_link(s=session, access=Access.full(), url="https://members.example/ep")
+    full = _resolve(session, Access.full(), "https://members.example/ep")
     assert [candidate.id for candidate in full.candidates] == ["fake_members", "fake_ytdlp"]
-    limited = resolve_link(s=session, access=_user({"fake_members": None}), url="https://members.example/ep")
+    limited = _resolve(session, _user({"fake_members": None}), "https://members.example/ep")
     assert [candidate.id for candidate in limited.candidates] == ["fake_members"]
 
 

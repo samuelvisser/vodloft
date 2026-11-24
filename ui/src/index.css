@@ -2398,8 +2398,14 @@ a.icon-btn { display: inline-block; text-decoration: none; }
   border: 1px solid rgba(100, 116, 139, 0.24);
   border-radius: 12px;
 }
-.add-media-preview-art { flex: 0 0 96px; width: 96px; }
-.add-media-preview-art img { width: 100%; border-radius: 8px; display: block; }
+/* Artwork keeps one height and its own shape, so a landscape thumbnail is as large as a portrait poster. */
+.add-media-preview-art { flex: 0 0 auto; max-width: 40%; }
+.add-media-preview-art img {
+  display: block; height: 144px; width: auto; max-width: min(256px, 100%); object-fit: cover; border-radius: 8px;
+}
+.add-media-preview--loading.creator-skeleton { flex-direction: row; gap: 16px; }
+.add-media-preview--loading .add-media-preview-art { flex: 0 0 auto; width: 256px; height: 144px; border-radius: 8px; }
+.add-media-preview--loading .add-media-preview-copy { flex: 1 1 auto; gap: 14px; }
 .add-media-preview-copy { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .add-media-preview-copy h2 { margin: 0; font-size: 18px; }
 .add-media-preview-copy p { margin: 0; color: var(--muted); }
@@ -2417,6 +2423,10 @@ a.icon-btn { display: inline-block; text-decoration: none; }
 .add-media-browse .add-media-browse-text { margin-bottom: 12px; }
 @media (max-width: 520px) {
   .add-media-preview { flex-direction: column; }
+  .add-media-preview-art { max-width: 100%; }
+  .add-media-preview-art img { height: 200px; max-width: 100%; }
+  .add-media-preview--loading.creator-skeleton { flex-direction: column; }
+  .add-media-preview--loading .add-media-preview-art { width: 100%; height: 180px; }
 }
 
 /* Settings › Sources */

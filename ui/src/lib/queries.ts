@@ -870,8 +870,7 @@ export function useListedCollectionDetails(sourceId: string | undefined, url: st
     })
 }
 
-/** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source. */
-/** Reads a creator lookup's answer, sent a line of JSON at a time: tells ``onPlan`` the steps of the lookup's plan each
+/** Reads a lookup's answer, such as a creator's or a link's, sent a line of JSON at a time: tells ``onPlan`` the steps of the lookup's plan each
  * time it changes, and returns the result line after them. */
 async function readLookup(
     response: Response, {onPlan}: {onPlan: (steps: ProgressStep[]) => void},
@@ -1048,7 +1047,11 @@ export async function addCollectionToCreator(slug: string, creatorSlug: string):
     if (!response.ok) throw await responseError(response)
 }
 
-export async function resolveLink(url: string, signal?: AbortSignal, sourceKey?: string): Promise<ResolvedLinkRead> {
+/** Ask the backend which Source recognises a link, and what it points to. ``sourceKey`` asks only that Source.
+ * ``onPlan`` hears the steps of the lookup as it goes, such as asking yt-dlp. */
+export async function resolveLink(
+    url: string, signal?: AbortSignal, sourceKey?: string, onPlan: (steps: ProgressStep[]) => void = () => {},
+): Promise<ResolvedLinkRead> {
     const response = await fetch(`${apiUrl()}/resolve`, {
         method: 'POST',
         credentials: 'include',
@@ -1056,8 +1059,8 @@ export async function resolveLink(url: string, signal?: AbortSignal, sourceKey?:
         body: JSON.stringify(sourceKey ? {url, sourceKey} : {url}),
         signal,
     })
-    if (!response.ok) throw await responseError(response)
-    return ResolvedLinkReadSchema.parse(await response.json())
+    const result = await readLookup(response, {onPlan})
+    return ResolvedLinkReadSchema.parse(result.link)
 }
 
 export function useDailywireCatalog() {

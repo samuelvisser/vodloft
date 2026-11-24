@@ -375,7 +375,7 @@ class ToolSource(Source):
     def __init__(self, *, due=True, fails=False):
         self.due, self.fails, self.updates = due, fails, 0
 
-    def resolve(self, url):
+    def resolve(self, url, plan=None):
         return None
 
     def episode_media(self, **_kwargs):

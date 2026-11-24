@@ -15,6 +15,9 @@ import {DrmNotice} from '../components/common/DrmProtected'
 import {AccessNotice} from '../components/common/AccessLocked'
 import {ClearInputButton} from '../components/common/ClearInputButton'
 import AddEmptyCollectionDialog from '../components/AddEmptyCollection/AddEmptyCollectionDialog'
+import LookupSteps from './creator/LookupSteps'
+import type {ProgressStep} from '../types/progress'
+import './creator/CreatorPages.css'
 
 type AddMediaPageProps = {
     onboarding?: boolean
@@ -41,6 +44,8 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
     const [link, setLink] = useState<ResolvedLinkRead | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [resolving, setResolving] = useState(false)
+    // What the lookup is doing, step by step, while it runs.
+    const [steps, setSteps] = useState<ProgressStep[]>([])
     // The Sources that can handle the link's site, kept while another one is tried.
     const [candidates, setCandidates] = useState<SourceRead[]>([])
     const [askedSource, setAskedSource] = useState<string | null>(null)
@@ -58,8 +63,11 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
         setResolving(true)
         setError(null)
         setLink(null)
+        setSteps([])
         try {
-            const resolved = await resolveLink(trimmed, controller.signal, sourceKey)
+            const resolved = await resolveLink(trimmed, controller.signal, sourceKey, (plan) => {
+                if (!controller.signal.aborted) setSteps(plan)
+            })
             if (!controller.signal.aborted) {
                 setLink(resolved)
                 if (resolved.candidates.length) setCandidates(resolved.candidates)
@@ -241,6 +249,20 @@ export default function AddMediaPage({onboarding = false, onCollection, onMovie,
             )}
 
             {error && <div className="form-error-card add-media-error" role="alert">{error}</div>}
+
+            {resolving && (
+                <article className="add-media-preview add-media-preview--loading creator-skeleton" aria-label="Looking up the link" aria-busy="true">
+                    <span className="add-media-preview-art skeleton-block" aria-hidden="true"/>
+                    <div className="add-media-preview-copy">
+                        <LookupSteps steps={steps} first="Finding the service the link comes from"/>
+                        <div className="creator-skeleton-copy" aria-hidden="true">
+                            <span className="skeleton-block creator-skeleton-line creator-skeleton-line--kind"/>
+                            <span className="skeleton-block creator-skeleton-line creator-skeleton-line--title-small"/>
+                            <span className="skeleton-block creator-skeleton-line"/>
+                        </div>
+                    </div>
+                </article>
+            )}
 
             {link && (
                 <article className="add-media-preview" aria-label="Link preview">

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
@@ -21,6 +22,7 @@ from backend.services.local_media_profile_sites import known_site_keys
 from backend.services.sites import collection_kind, preferred_sources, site_record
 from backend.services.source_requests import asking_source
 from config.network import is_no_internet_error
+from progress_plan import PlanTracker, StageSpec
 from backend.services.users import settings_row
 from backend.services.check_frequency import joins_regular_checks, quick_check_plan
 from backend.utils.helpers import slugify
@@ -248,12 +250,22 @@ def _to_read(s: Session, source: Source, link: ResolvedLink, candidates: list[So
     )
 
 
-def resolve_link(s: Session, access: Access, url: str, source_key: str | None = None) -> ResolvedLinkAPIRead:
-    """Ask each Source that claims the link, preferred first, until one recognises it.
+@dataclass(frozen=True)
+class LinkQuestion:
+    """A link and the Sources to ask about it, preferred first, as the user may use them."""
+    url: str
+    asked: list[Source]
+    allowed: list[Source]
+    """Every Source the user may look the link up with, which the UI offers to try instead."""
+    one_source: bool
+    """Only the Source the user picked is asked."""
 
-    With ``source_key`` only that Source is asked. Only Sources and domains the
-    user may use are asked, and the link the Source resolves to must be one the
-    user may use too, so a link cannot redirect them somewhere else.
+
+def link_question(s: Session, access: Access, url: str, source_key: str | None = None) -> LinkQuestion:
+    """Which Sources to ask about a link: each that claims it, preferred first, or only ``source_key``.
+
+    Only Sources and domains the user may use are asked; the link the Source resolves to is checked too, by
+    ``resolve_link``, so a link cannot redirect them somewhere else.
     """
     url = url.strip()
     if "://" not in url:
@@ -270,15 +282,28 @@ def resolve_link(s: Session, access: Access, url: str, source_key: str | None = 
             # Name the domain when the user may use one of the Sources, otherwise the Source.
             usable = [source for source in candidates if access.allows_source(source.id)]
             access.check_link((usable or candidates)[0], url)
+        if not allowed:
+            raise LinkNotRecognisedError("No Source recognises this link")
         asked = allowed
-    for source in asked:
+    return LinkQuestion(url, asked, allowed, source_key is not None)
+
+
+def resolve_link(s: Session, access: Access, question: LinkQuestion, plan: PlanTracker | None = None) -> ResolvedLinkAPIRead:
+    """Ask each Source of the question in turn until one recognises the link. Each Source reports what it asks its
+    Site as steps of ``plan``."""
+    plan = plan or PlanTracker()
+    # The Sources were found from the link before any was asked; the plan starts with that done.
+    plan.add(StageSpec(id="find_service", code="find_service", label="Finding the service the link comes from"))
+    plan.complete("find_service")
+    for source in question.asked:
         with asking_source(f"{source.name} could not look up this link"), ytdlp_call_options(source):
-            link = source.resolve(url)
+            link = source.resolve(question.url, plan)
         if link is not None:
             access.check_link(source, link.url)
-            return _to_read(s, source, link, allowed)
-    if source_key is not None:
-        raise LinkNotRecognisedError(f"{asked[0].name} does not recognise this link")
+            with plan.step("check_library", "Checking what is in your library already"):
+                return _to_read(s, source, link, question.allowed)
+    if question.one_source:
+        raise LinkNotRecognisedError(f"{question.asked[0].name} does not recognise this link")
     raise LinkNotRecognisedError("No Source recognises this link")
 
 

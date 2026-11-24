@@ -209,6 +209,11 @@ class PlanTracker:
             raise
         self.complete(step)
 
+    def step(self, id: str, label: str, *, code: str | None = None):
+        """Adds a step and runs it for as long as the block does, for work that finds its steps as it goes."""
+        self.add(StageSpec(id=id, code=code or id, label=label))
+        return self.running(id)
+
     def follow(self, step: str, future: Future, *, failed: StageState = "failed") -> Future:
         """Runs the step while ``future`` does, for work started at once beside other work: done when it finishes, and
         ``failed``, such as skipped for something that may well not be there, when it raises. Returns a future of the

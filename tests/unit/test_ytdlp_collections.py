@@ -38,7 +38,7 @@ class ListedSource(Source):
         self.videos: list[VideoDetails] = []
         self.known_seen: list[frozenset[str]] = []
 
-    def resolve(self, url):
+    def resolve(self, url, plan=None):
         return None
 
     def episode_media(self, **_kwargs):

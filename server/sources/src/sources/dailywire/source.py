@@ -170,8 +170,8 @@ class DailyWireSource(Source):
         parsed = parse_link(url)
         return parsed[1] if parsed is not None and parsed[0] is LinkKind.COLLECTION else None
 
-    def resolve(self, url: str) -> ResolvedLink | None:
-        return resolve_link(url)
+    def resolve(self, url: str, plan: PlanTracker | None = None) -> ResolvedLink | None:
+        return resolve_link(url, plan)
 
     def newest_episodes(self, url: str) -> list[VideoDetails]:
         """The episodes on the show's page, which lists its newest season's latest ones.

@@ -1311,8 +1311,9 @@ class Source(ABC):
         return combined_tags(site.episode_tags for site in self.sites) or VIDEO_TAGS
 
     @abstractmethod
-    def resolve(self, url: str) -> ResolvedLink | None:
-        """Say what a link points to, or None when this Source does not recognise it."""
+    def resolve(self, url: str, plan: PlanTracker | None = None) -> ResolvedLink | None:
+        """Say what a link points to, or None when this Source does not recognise it. Each request to the Site goes in
+        ``plan`` as a step of its own, such as reading the show, so the lookup can show what it is doing."""
 
     def preview(self, url: str) -> LinkPreview | None:
         """A title and image for a link, faster than ``resolve``, or None when this Source has no faster way."""
