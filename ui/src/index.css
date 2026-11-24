@@ -1041,6 +1041,23 @@ input[type="time"] {
 .table tbody tr:hover td { background: #f8fafc; }
 .mobile-data-list { display: none; }
 
+/* The actions always stay in view: when a table is wider than its box, they sit over its right edge.
+   Their cells need a solid background, so the rows' see-through tints are mixed in here. */
+.table .data-table-actions {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+}
+.table thead th.data-table-actions { z-index: 2; }
+.table tbody td.data-table-actions { background: #fff; }
+.table tbody tr:nth-child(odd) td.data-table-actions { background: #fafbfc; }
+.table tbody tr:hover td.data-table-actions { background: #f8fafc; }
+@media (prefers-color-scheme: dark) {
+  .table tbody td.data-table-actions { background: #0b1220; }
+  .table tbody tr:nth-child(odd) td.data-table-actions { background: #0f1624; }
+  .table tbody tr:hover td.data-table-actions { background: #141b28; }
+}
+
 /* Sortable column headers */
 .th-sort-btn {
   display: inline-flex;
