@@ -94,7 +94,7 @@ wheels = [
 
 [[package]]
 name = "backend"
-version = "0.9.1"
+version = "0.10.0"
 source = { editable = "server/backend" }
 dependencies = [
     { name = "alembic" },
@@ -280,7 +280,7 @@ wheels = [
 
 [[package]]
 name = "config"
-version = "0.7.0"
+version = "0.8.0"
 source = { editable = "server/config" }
 dependencies = [
     { name = "pydantic" },
@@ -415,7 +415,7 @@ wheels = [
 
 [[package]]
 name = "downloader"
-version = "0.8.0"
+version = "0.9.0"
 source = { editable = "server/downloader" }
 dependencies = [
     { name = "progress-plan" },
@@ -489,7 +489,7 @@ wheels = [
 
 [[package]]
 name = "importer"
-version = "0.9.1"
+version = "0.10.0"
 source = { editable = "server/importer" }
 dependencies = [
     { name = "alembic" },
@@ -1050,7 +1050,7 @@ wheels = [
 
 [[package]]
 name = "sources"
-version = "0.8.0"
+version = "0.9.0"
 source = { editable = "server/sources" }
 dependencies = [
     { name = "config" },
@@ -1109,7 +1109,7 @@ wheels = [
 
 [[package]]
 name = "task-manager"
-version = "0.9.0"
+version = "0.10.0"
 source = { editable = "server/task_manager" }
 dependencies = [
     { name = "apscheduler" },
