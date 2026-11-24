@@ -337,6 +337,11 @@
     font-size: 12px;
 }
 
+/* Room between the explanation above the functions and the first of them. */
+.template-reference__note + .template-reference__function {
+    margin-top: 10px;
+}
+
 .template-reference__function {
     margin-bottom: 7px;
     overflow: hidden;
