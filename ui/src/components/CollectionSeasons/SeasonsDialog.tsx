@@ -40,9 +40,9 @@ type Props = {
     words?: CollectionWords
 }
 
-/** What saving removes: ``asked`` when the ones with files stay until Home asks about them. ``repeated`` counts the
+/** What saving removes: ``afterListing`` when they leave once VODLoft has listed the lists again. ``repeated`` counts the
  * episodes of videos in another season already, which leave once a video has one season only. */
-type Leaving = {episodes: number, withFiles: number, asked?: boolean, repeated?: number}
+type Leaving = {episodes: number, withFiles: number, afterListing?: boolean, repeated?: number}
 
 /** A creator's videos, or an artist's tracks or music videos, and what the collection calls its seasons. */
 type Words = {creator: string, channel: string, video: string, videos: string, creators: string, season: Noun, episode: Noun, inSeason: string}
@@ -248,8 +248,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
     const leavingByLists = (values: CollectionSeasonsFormOut): Leaving => {
         if (!view) return {episodes: 0, withFiles: 0}
         if (values.outsideVideos === 'only' && view.outsideVideos !== 'only') {
-            // The playlists are listed again first; the downloaded ones then stay until Home asks about them.
-            return {episodes: view.onlyLeavingCount, withFiles: view.onlyLeavingWithFiles, asked: true}
+            // The playlists are listed again first; then they leave, downloaded ones with their files.
+            return {episodes: view.onlyLeavingCount, withFiles: view.onlyLeavingWithFiles, afterListing: true}
         }
         if (view.linkSeasons === 'off') return {episodes: 0, withFiles: 0}
         if (!values.linkSeasonsOn || (view.outsideVideos === 'add' && values.outsideVideos === 'leave_out')) {
@@ -604,7 +604,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                                             {feedsOff && (
                                                 <div className="help">
                                                     The {words.channel} is listed again when you save. Its {words.videos} that no feed or {names.singular} it
-                                                    takes has leave; downloaded ones stay until Home asks whether to keep them.
+                                                    takes has leave, downloaded ones with their files.
                                                 </div>
                                             )}
                                             {errors.feeds && <div className="error" role="alert">{String(errors.feeds.message ?? errors.feeds.root?.message)}</div>}
@@ -1133,7 +1133,7 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                     },
                 }}
             >
-                {confirm && names && confirm.asked && confirm.episodes > 0 && (
+                {confirm && names && confirm.afterListing && confirm.episodes > 0 && (
                     <>
                         <p>
                             {counted(confirm.episodes, words.video, words.videos)} {confirm.episodes === 1 ? 'is' : 'are'} in
@@ -1142,8 +1142,8 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                         </p>
                         {confirm.withFiles > 0 && (
                             <p>
-                                <strong>{counted(confirm.withFiles, 'of them has', 'of them have')} downloaded files.</strong>{' '}
-                                Those stay, marked Removed, and Home asks whether to keep them.
+                                <strong>{counted(confirm.withFiles, 'of them has', 'of them have')} downloaded files,
+                                which are deleted too.</strong>
                             </p>
                         )}
                     </>
@@ -1152,11 +1152,11 @@ export default function SeasonsDialog({open, collectionSlug, collectionTitle, on
                     <p>
                         {counted(confirm.repeated ?? 0, words.episode.singular, words.episode.plural)} of{' '}
                         {(confirm.repeated ?? 0) === 1 ? `${words.episode.a} that is` : `${words.episode.plural} that are`} {words.inSeason} another{' '}
-                        {season.singular} too {(confirm.repeated ?? 0) === 1 ? 'leaves' : 'leave'} the collection. Downloaded ones stay
-                        until Home asks whether to keep them.
+                        {season.singular} too {(confirm.repeated ?? 0) === 1 ? 'leaves' : 'leave'} the collection. The files of
+                        downloaded ones are deleted too.
                     </p>
                 )}
-                {confirm && names && !confirm.asked && confirm.episodes > 0 && (
+                {confirm && names && !confirm.afterListing && confirm.episodes > 0 && (
                     <>
                         <p>
                             {counted(confirm.episodes, words.video, words.videos)} came from {names.plural} and not from the collection's

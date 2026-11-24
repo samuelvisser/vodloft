@@ -10,6 +10,7 @@ from backend.db.core import run_write_transaction
 from backend.db.models import Collection, Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.link_seasons import held_back, leaving_outside, remove_left_episode
+from backend.services.season_order import arrange_seasons
 from task_manager.tasks.helpers.progress import update_progress
 from task_manager.tasks.helpers.downloads.collection_episode_downloads import (
     cancel_active_download_attempts,
@@ -50,7 +51,16 @@ def run_remove_left_episodes(s: Session, *, collection_id: int, progress=None) -
             return True
 
         removed += run_write_transaction(remove)
+    if removed:
+        # The seasons they emptied went; the others are numbered again, as when videos without files leave.
+        run_write_transaction(lambda w: _arrange(w, collection_id))
     return removed
+
+
+def _arrange(s: Session, collection_id: int) -> None:
+    collection = s.get(Collection, collection_id)
+    if collection is not None:
+        arrange_seasons(s, collection)
 
 
 def _delete_artifact(s: Session, download_id: int) -> None:

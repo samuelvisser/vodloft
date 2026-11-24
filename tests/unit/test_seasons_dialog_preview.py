@@ -47,6 +47,8 @@ def _preview_matches_saving(session, source, collection, change, monkeypatch, *,
     from backend.db.models import Collection
     from backend.services.link_seasons import moved_episodes
     from backend.services.reconcile import ReconcileScope, reconcile
+    from task_manager.tasks.helpers.listed_collections import index_listed_collection
+    from task_manager.tasks.workers.remove_left_episodes.service import run_remove_left_episodes
 
     monkeypatch.setattr(service, "queue_season_folder_moves", lambda s, c, ids: None)
     before = _seasons(session)
@@ -57,8 +59,13 @@ def _preview_matches_saving(session, source, collection, change, monkeypatch, *,
     run_write_transaction(lambda s: service.update_seasons(s, "creator", body))
     session.expire_all()
     if listed:
-        _index(session, session.get(Collection, collection.id), source)
+        # The listing the save asks for is the user's change, as the Seasons dialog's save queues it.
+        index_listed_collection(session, collection_id=collection.id, source=source, by_user=True)
         session.expire_all()
+    # The task the save queued deletes the files of the downloaded videos that left, and then the videos.
+    session.rollback()
+    run_remove_left_episodes(session, collection_id=collection.id)
+    session.expire_all()
     if moved_episodes(session, session.get(Collection, collection.id)):
         session.rollback()
         run_write_transaction(lambda w: reconcile(w, ReconcileScope.of_collection(w.get(Collection, collection.id)), renumber={}))

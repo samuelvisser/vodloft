@@ -421,7 +421,7 @@ def update_seasons(
         match_seasons_of_downloaded(s, collection, moving)
         queue_season_folder_moves(s, collection, sorted(moving))
     if relisting:
-        reindex_collection(s, collection)
+        reindex_collection(s, collection, by_user=True)
     s.flush()
     s.refresh(collection)
     return seasons_view(s, collection_slug)
@@ -429,25 +429,23 @@ def update_seasons(
 
 def preview_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate) -> SeasonsPreviewAPIRead:
     """The seasons saving the dialog with ``body`` would leave: the save is made and rolled back, so the dialog shows
-    what saving does. Downloaded videos that belong in another season after saving wait for the Move dialog the save
-    opens, and the videos a collection that now holds only what its lists have leaves go once its lists are listed
-    again; the preview shows both done, as the collection is once they are.
+    what saving does. What the save sets going happens after it: downloaded videos that leave are removed with their
+    files by a task, a collection that now holds only what its lists have loses the videos in none of them once its
+    lists are listed again, and downloaded videos that belong in another season are moved by the Move dialog the save
+    opens. The preview shows all of it done, as the collection is once it is.
 
     ``s`` is a write transaction's session; it is rolled back."""
-    from backend.services.link_seasons import moved_episodes, remove_left_episode
+    from backend.services.link_seasons import held_back, leaving_outside, moved_episodes, remove_left_episode
 
     was_only = holds_only_link_seasons(_collection(s, collection_slug))
     update_seasons(s, collection_slug, body)
     s.expire_all()
     collection = _collection(s, collection_slug)
+    leaving = {episode.id for episode in leaving_outside(s, collection) if not held_back(episode)}
     if holds_only_link_seasons(collection) and not was_only:
-        # The lists are listed again after saving, and then the videos none of them has leave; the downloaded ones
-        # stay until the user answers the Home page about them.
-        leaving = set(_in_no_list(s, collection))
-        with_files = set(s.scalars(
-            select(MediaDownloadBase.media_item_id).where(MediaDownloadBase.media_item_id.in_(leaving))
-        )) if leaving else set()
-        for episode_id in sorted(leaving - with_files):
+        leaving |= set(_in_no_list(s, collection))
+    if leaving:
+        for episode_id in sorted(leaving):
             remove_left_episode(s, s.get(Episode, episode_id))
         s.expire(collection, ["seasons", "lists"])
         arrange_seasons(s, collection)
