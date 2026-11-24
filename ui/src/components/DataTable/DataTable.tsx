@@ -217,7 +217,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                         )
                     })}
                     {actions && (
-                        <th key="actions" scope="col" style={{width: 100, textAlign: 'right'}}>Actions</th>
+                        <th key="actions" scope="col" className="data-table-actions" style={{width: 100, textAlign: 'right'}}>Actions</th>
                     )}
                 </tr>
                 </thead>
@@ -297,7 +297,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                                     )
                                 })}
                                 {actions && (
-                                    <td key={'actions-cell'} style={{textAlign: 'right'}} data-label={'Actions'}>
+                                    <td key={'actions-cell'} className="data-table-actions" style={{textAlign: 'right'}} data-label={'Actions'}>
                                         <div style={{display: 'inline-flex', gap: 6, flexWrap: 'wrap'}}>
                                             {actions(row).map((a, i) => a.href ? (
                                                 <Link
