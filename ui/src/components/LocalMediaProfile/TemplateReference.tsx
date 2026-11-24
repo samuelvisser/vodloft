@@ -61,24 +61,32 @@ function matches(query: string, ...texts: string[]): boolean {
 }
 
 function EntryList({entries, onInsert}: {entries: readonly ReferenceEntry[], onInsert?: (text: string) => void}) {
+    const [openCode, setOpenCode] = useState<string | null>(null)
     return (
         <ul className="template-reference__entries">
             {entries.map((entry) => {
+                const open = openCode === entry.code
                 const more = [
-                    ...(entry.short ? [entry.description] : []),
+                    ...(entry.short !== undefined ? [entry.description] : []),
                     ...(entry.readMore?.paragraphs ?? []),
                 ]
                 return (
-                    // A row takes focus when tapped, which shows its explanation and Insert on a phone.
-                    <li key={entry.code} tabIndex={onInsert || more.length > 0 ? 0 : undefined}>
-                        <code>{entry.code}</code>
-                        <span className="template-reference__entry-text">{entry.short ?? entry.description}</span>
-                        {onInsert && (
+                    <li key={entry.code} className={open ? 'is-open' : undefined}>
+                        <button
+                            type="button"
+                            className="template-reference__entry-head"
+                            aria-expanded={open}
+                            onClick={() => setOpenCode(open ? null : entry.code)}
+                        >
+                            <code>{entry.code}</code>
+                            <span className="template-reference__entry-text">{entry.short ?? entry.description}</span>
+                        </button>
+                        {open && onInsert && (
                             <button type="button" className="template-reference__button template-reference__insert" onClick={() => onInsert(entry.insert)}>
                                 Insert
                             </button>
                         )}
-                        {more.length > 0 && (
+                        {open && more.length > 0 && (
                             <div className="template-reference__more">
                                 {more.map((paragraph) => (
                                     <p key={paragraph} dangerouslySetInnerHTML={{__html: paragraph}}/>
@@ -160,7 +168,11 @@ export default function TemplateReference({mode, variables, builtInIndexes, cust
         return [...groups.entries()]
     }, [mode, variables])
     const jinjaEntries = useMemo<ReferenceEntry[]>(
-        () => JINJA_FILTERS.map(({name, usage, description}) => ({code: usage, insert: `| ${name}`, description})),
+        () => JINJA_FILTERS.map(({name, usage, description}) => ({
+            code: name, insert: `| ${name}`, description, short: '',
+            // Only the name shows on the row; how to call it is part of what opens.
+            readMore: usage === name ? undefined : {paragraphs: [`<code>${usage}</code>`]},
+        })),
         [],
     )
     const tabs: {key: TabKey, label: string, count: number}[] = [
