@@ -220,6 +220,11 @@ def _left_by_only(s: Session, collection: Collection) -> list[int]:
     """The videos that would leave the collection if it held only what its playlists have now."""
     if holds_only_link_seasons(collection):
         return []
+    return _in_no_list(s, collection)
+
+
+def _in_no_list(s: Session, collection: Collection) -> list[int]:
+    """The collection's videos that none of its lists in it has, as VODLoft last listed them."""
     held = set(s.scalars(
         select(CollectionListItem.source_slug).where(CollectionListItem.list_id.in_(
             [link.id for link in collection.lists if is_in(collection, link)]
@@ -424,10 +429,33 @@ def update_seasons(
 
 def preview_seasons(s: Session, collection_slug: str, body: CollectionSeasonsAPIUpdate) -> SeasonsPreviewAPIRead:
     """The seasons saving the dialog with ``body`` would leave: the save is made and rolled back, so the dialog shows
-    what saving does.
+    what saving does. Downloaded videos that belong in another season after saving wait for the Move dialog the save
+    opens, and the videos a collection that now holds only what its lists have leaves go once its lists are listed
+    again; the preview shows both done, as the collection is once they are.
 
     ``s`` is a write transaction's session; it is rolled back."""
-    view = update_seasons(s, collection_slug, body)
+    from backend.services.link_seasons import moved_episodes, remove_left_episode
+
+    was_only = holds_only_link_seasons(_collection(s, collection_slug))
+    update_seasons(s, collection_slug, body)
+    s.expire_all()
+    collection = _collection(s, collection_slug)
+    if holds_only_link_seasons(collection) and not was_only:
+        # The lists are listed again after saving, and then the videos none of them has leave; the downloaded ones
+        # stay until the user answers the Home page about them.
+        leaving = set(_in_no_list(s, collection))
+        with_files = set(s.scalars(
+            select(MediaDownloadBase.media_item_id).where(MediaDownloadBase.media_item_id.in_(leaving))
+        )) if leaving else set()
+        for episode_id in sorted(leaving - with_files):
+            remove_left_episode(s, s.get(Episode, episode_id))
+        s.expire(collection, ["seasons", "lists"])
+        arrange_seasons(s, collection)
+    waiting = {episode.id for episode in moved_episodes(s, collection)}
+    if waiting:
+        place_in_link_seasons(s, collection, with_files=waiting, drop=False)
+        s.flush()
+    view = seasons_view(s, collection_slug)
     s.rollback()
     return SeasonsPreviewAPIRead(seasons=view.seasons)
 

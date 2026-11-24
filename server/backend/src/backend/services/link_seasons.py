@@ -28,7 +28,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from sqlalchemy import func, inspect, delete, select
+from sqlalchemy import and_, func, inspect, delete, or_, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Collection, CollectionList, CollectionListItem, Episode, MediaDownloadBase, Season
@@ -424,7 +424,9 @@ def save_lists(s: Session, collection: Collection, listing: LinkListing) -> list
 
 
 class SeasonNumbers:
-    """The episode numbers each season of the collection already uses."""
+    """The episode numbers each season of the collection already uses: by its episodes, and by a downloaded episode
+    elsewhere that still has the season's number from before the seasons were numbered again, such as S01E02 in
+    what is the third season now."""
 
     def __init__(self, s: Session):
         self._s = s
@@ -432,8 +434,12 @@ class SeasonNumbers:
 
     def _of(self, season: Season) -> set[int]:
         if season.id not in self._taken:
+            prefix = f"ep.S{season.season_number:02d}E"
             taken = set()
-            for identifier in self._s.scalars(select(Episode.episode_identifier).where(Episode.season_id == season.id)):
+            for identifier in self._s.scalars(select(Episode.episode_identifier).where(or_(
+                Episode.season_id == season.id,
+                and_(Episode.collection_id == season.collection_id, Episode.episode_identifier.startswith(prefix)),
+            ))):
                 number = (identifier or "").rpartition("E")[2]
                 if number.isdigit():
                     taken.add(int(number))
