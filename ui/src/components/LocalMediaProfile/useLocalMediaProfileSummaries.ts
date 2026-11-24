@@ -70,7 +70,7 @@ export function useLocalMediaProfileSummaries(form: UseFormReturn<any>, mode: Lo
             ? `Audio only, ${AudioFormatReg.getLabelLoose(audioFormat)}`
             : format === 'format_hls'
                 ? 'HLS bundle'
-                : `Video up to ${QualityDownloadReg.getLabelLoose(format)}, ${QualityGoalReg.getLabelLoose(goal)}`,
+                : `${mode === 'collection' && scope === 'music' ? 'Music video' : 'Video'} up to ${QualityDownloadReg.getLabelLoose(format)}, ${QualityGoalReg.getLabelLoose(goal)}`,
         `${AudioLanguageReg.getLabelLoose(audioLanguage ?? 'original')} audio`,
     ].join(' · ')
 
